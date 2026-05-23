@@ -9,7 +9,8 @@ class OnboardingStep1 extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(mockOnboardingProvider);
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final accepted = draft.patiencePledgeAccepted;
 
     return OnboardingScrollView(
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 32),
@@ -68,13 +69,19 @@ class OnboardingStep1 extends ConsumerWidget {
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
-                    final isCompleted = state.stepCompleted[1];
                     ref
                         .read(mockOnboardingProvider.notifier)
-                        .setStepCompleted(1, !isCompleted);
+                        .updateDraft(
+                          (current) => current.copyWith(
+                            patiencePledgeAccepted:
+                                !current.patiencePledgeAccepted,
+                            patiencePledgeText:
+                                'I agree to start with tiny steps, pivot schedules dynamically rather than skip them, and give my nervous system time to adapt.',
+                          ),
+                        );
                     ref
                         .read(mockOnboardingProvider.notifier)
-                        .setStepDirty(1, false);
+                        .setStepDirty(1, true);
                   },
                   child: OnboardingGlassCard(
                     padding: const EdgeInsets.symmetric(
@@ -82,29 +89,29 @@ class OnboardingStep1 extends ConsumerWidget {
                       vertical: 16,
                     ),
                     radius: 22,
-                    selected: state.stepCompleted[1],
-                    tint: state.stepCompleted[1]
+                    selected: accepted,
+                    tint: accepted
                         ? OptivusColors.success.withValues(alpha: 0.12)
                         : Colors.white.withValues(alpha: 0.34),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          state.stepCompleted[1]
+                          accepted
                               ? Icons.check_circle
                               : Icons.radio_button_unchecked,
-                          color: state.stepCompleted[1]
+                          color: accepted
                               ? OptivusColors.success
                               : OptivusColors.brandAccent,
                         ),
                         const SizedBox(width: 12),
                         Text(
-                          state.stepCompleted[1]
+                          accepted
                               ? 'Commitment Locked'
                               : 'I Pledge Commitment',
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
-                                color: state.stepCompleted[1]
+                                color: accepted
                                     ? OptivusColors.success
                                     : OptivusColors.textPrimary,
                               ),

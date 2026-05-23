@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/state/mock_app_state.dart';
 
@@ -27,12 +28,11 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   int _startHour = 9;
   int _endHour = 10;
   String _setupMode = 'Manual';
-  String _eatingMode = 'Mixed';
-  String _businessMode = 'Fixed';
-  String _workBestTime = 'Morning';
-  String _workPriority = 'Medium';
+  String? _eatingMode;
+  String? _businessMode;
+  String? _workBestTime;
+  String? _workPriority;
   bool _hardBlock = true;
-  bool _skinSkipped = false;
   String? _editingItemId;
 
   static const _tabs = [
@@ -65,13 +65,18 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   bool _classesEnabled(String role) =>
+      role == LifeRoleDraft.studentKey ||
       role == 'Student' ||
       role == 'Student / School / College' ||
+      role == LifeRoleDraft.studentWorkingKey ||
       role == 'Student + Working Person';
 
   bool _jobEnabled(String role) =>
+      role == LifeRoleDraft.workingKey ||
       role == 'Working Person' ||
+      role == LifeRoleDraft.studentWorkingKey ||
       role == 'Student + Working Person' ||
+      role == LifeRoleDraft.businessKey ||
       role == 'Business / Startup / Freelancer';
 
   bool _classesRequired(String role) => _classesEnabled(role);
@@ -96,29 +101,31 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     final id =
         _editingItemId ??
         'onboarding-$type-${DateTime.now().millisecondsSinceEpoch}';
-    final item = RoutineItem(
+    final block = TimelineBlockDraft(
       id: id,
+      section: _sectionKey(type),
       title: title,
       startMinute: _startHour * 60,
       endMinute: _clampHour(safeEndHour, 1, 24) * 60,
-      blockType: blockType,
+      blockType: _draftBlockType(blockType),
       repeatDays: [_day + 1],
       location: _locationCtrl.text.trim().isEmpty
           ? null
           : _locationCtrl.text.trim(),
-      notes: type,
       mealCategory: type == 'Eating' ? title : null,
       calories: type == 'Eating' ? 420 : null,
       protein: type == 'Eating' ? 24 : null,
-      skincareProducts: type == 'Skin Care' ? [title] : null,
+      skincareProducts: type == 'Skin Care' ? [title] : const [],
     );
 
-    final routineNotifier = ref.read(mockRoutineProvider.notifier);
-    if (_editingItemId == null) {
-      routineNotifier.addRoutineItem(item);
-    } else {
-      routineNotifier.updateRoutineItem(item);
-    }
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: draft.baseTimeline.upsertBlock(block),
+            clearFinalPreview: true,
+          ),
+        );
 
     setState(() {
       controller.clear();
@@ -153,23 +160,33 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   void _copyToOtherDays(RoutineItem item) {
-    final existingDays = item.repeatDays.toSet();
-    final notifier = ref.read(mockRoutineProvider.notifier);
-    for (int day = 1; day <= 7; day++) {
-      if (existingDays.contains(day)) continue;
-      notifier.addRoutineItem(
-        item.copyWith(
-          id: '${item.id}-d$day-${DateTime.now().microsecondsSinceEpoch}',
-          repeatDays: [day],
-        ),
-      );
-    }
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: draft.baseTimeline.upsertBlock(
+              _blockById(
+                    item.id,
+                    draft.baseTimeline.blocks,
+                  )?.copyWith(repeatDays: const [1, 2, 3, 4, 5, 6, 7]) ??
+                  _blockFromRoutine(
+                    item,
+                  ).copyWith(repeatDays: const [1, 2, 3, 4, 5, 6, 7]),
+            ),
+            clearFinalPreview: true,
+          ),
+        );
     ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final profile = ref.watch(mockUserProfileProvider);
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final role = draft.lifeRole.lifeRole ?? '';
+    _businessMode ??= draft.baseTimeline.businessMode;
+    _workBestTime ??= draft.baseTimeline.workBestTime;
+    _workPriority ??= draft.baseTimeline.workPriority;
+    _eatingMode ??= draft.baseTimeline.eatingMode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -195,15 +212,20 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                     children: _tabs.asMap().entries.map((e) {
                       final isSelected = _tabController.index == e.key;
                       return Padding(
-                        padding: EdgeInsets.only(right: e.key == _tabs.length - 1 ? 0 : 8),
+                        padding: EdgeInsets.only(
+                          right: e.key == _tabs.length - 1 ? 0 : 8,
+                        ),
                         child: OnboardingChip(
                           label: e.value,
                           selected: isSelected,
                           onTap: () => _tabController.animateTo(e.key),
-                          accent: e.key == 0 ? OptivusColors.aquaAccent : 
-                                  e.key == 1 ? OptivusColors.brandAccent : 
-                                  e.key == 2 ? OptivusColors.brandAccent :
-                                  OptivusColors.aquaAccent,
+                          accent: e.key == 0
+                              ? OptivusColors.aquaAccent
+                              : e.key == 1
+                              ? OptivusColors.brandAccent
+                              : e.key == 2
+                              ? OptivusColors.brandAccent
+                              : OptivusColors.aquaAccent,
                         ),
                       );
                     }).toList(),
@@ -219,8 +241,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             physics: const NeverScrollableScrollPhysics(),
             children: [
               _section(
-                enabled: _classesEnabled(profile.lifeRole),
-                requiredLabel: _classesRequired(profile.lifeRole)
+                enabled: _classesEnabled(role),
+                requiredLabel: _classesRequired(role)
                     ? 'Required for your role'
                     : 'Disabled by current role',
                 title: 'Classes',
@@ -232,8 +254,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 controllerHint: 'Subject, lab, or lecture',
                 addLabel: 'Add class',
                 blockType: RoutineBlockType.hardBlock,
-                filter: (item) =>
-                    item.notes == 'Classes' || item.id == 'routine-college',
+                filter: (item) => item.notes == 'Classes',
                 chips: const [
                   'Subject name',
                   'Hard block',
@@ -243,8 +264,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 ],
               ),
               _section(
-                enabled: _jobEnabled(profile.lifeRole),
-                requiredLabel: _jobRequired(profile.lifeRole)
+                enabled: _jobEnabled(role),
+                requiredLabel: _jobRequired(role)
                     ? 'Required for your role'
                     : 'Disabled by current role',
                 title: 'Job / Work / Business',
@@ -259,6 +280,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 filter: (item) => item.notes == 'Job / Work / Business',
                 chips: const [
                   'Normal job schedule',
+                  'Hard block',
+                  'Soft block',
                   'Fixed',
                   'Flexible',
                   'Mixed',
@@ -291,7 +314,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     required List<String> chips,
     Widget? extra,
   }) {
-    final items = ref.watch(mockRoutineProvider).where(filter).toList();
+    final items = _draftRoutineItems().where(filter).toList();
     final sectionItems = items
         .where((item) => item.repeatDays.contains(_day + 1))
         .toList();
@@ -363,6 +386,113 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
         ],
       ),
     );
+  }
+
+  List<RoutineItem> _draftRoutineItems() {
+    final baseTimeline = ref.watch(mockOnboardingProvider).draft.baseTimeline;
+    final conflicts = baseTimeline.detectConflicts();
+    return baseTimeline.blocks.map((block) {
+      final conflict = conflicts.where(
+        (item) =>
+            item.firstBlockId == block.id || item.secondBlockId == block.id,
+      );
+      final activeConflict = conflict.where((item) => !item.accepted);
+      return _routineFromBlock(
+        block,
+        hasConflict: activeConflict.isNotEmpty,
+        conflictMessage: activeConflict.isEmpty
+            ? null
+            : 'Real overlap with another timeline block.',
+      );
+    }).toList();
+  }
+
+  RoutineItem _routineFromBlock(
+    TimelineBlockDraft block, {
+    bool hasConflict = false,
+    String? conflictMessage,
+  }) {
+    return RoutineItem(
+      id: block.id,
+      title: block.title,
+      startMinute: block.startMinute,
+      endMinute: block.endMinute,
+      blockType: _routineBlockType(block.blockType),
+      repeatDays: block.repeatDays,
+      location: block.location,
+      notes: _sectionLabel(block.section),
+      mealCategory: block.mealCategory,
+      dishes: block.dishes,
+      calories: block.calories,
+      protein: block.protein,
+      skincareProducts: block.skincareProducts,
+      hasConflict: hasConflict,
+      conflictMessage: conflictMessage,
+    );
+  }
+
+  TimelineBlockDraft _blockFromRoutine(RoutineItem item) {
+    return TimelineBlockDraft(
+      id: item.id,
+      section: _sectionKey(item.notes ?? 'Fixed'),
+      title: item.title,
+      startMinute: item.startMinute,
+      endMinute: item.endMinute,
+      repeatDays: item.repeatDays,
+      location: item.location,
+      blockType: _draftBlockType(item.blockType),
+      mealCategory: item.mealCategory,
+      dishes: item.dishes ?? const [],
+      calories: item.calories,
+      protein: item.protein,
+      skincareProducts: item.skincareProducts ?? const [],
+    );
+  }
+
+  TimelineBlockDraft? _blockById(String id, List<TimelineBlockDraft> blocks) {
+    for (final block in blocks) {
+      if (block.id == id) return block;
+    }
+    return null;
+  }
+
+  String _sectionKey(String label) {
+    return switch (label) {
+      'Classes' => 'classes',
+      'Job / Work / Business' => 'job_work_business',
+      'Eating' => 'eating',
+      'Skin Care' => 'skin_care',
+      _ => 'fixed',
+    };
+  }
+
+  String _sectionLabel(String key) {
+    return switch (key) {
+      'classes' => 'Classes',
+      'job_work_business' => 'Job / Work / Business',
+      'eating' => 'Eating',
+      'skin_care' => 'Skin Care',
+      _ => 'Fixed',
+    };
+  }
+
+  String _draftBlockType(RoutineBlockType type) {
+    return switch (type) {
+      RoutineBlockType.hardBlock => TimelineBlockDraft.hardBlockKey,
+      RoutineBlockType.softBlock => TimelineBlockDraft.softBlockKey,
+      RoutineBlockType.flexibleTask => TimelineBlockDraft.flexibleTaskKey,
+      RoutineBlockType.checkIn => TimelineBlockDraft.checkInKey,
+      _ => TimelineBlockDraft.flexibleTaskKey,
+    };
+  }
+
+  RoutineBlockType _routineBlockType(String type) {
+    return switch (type) {
+      TimelineBlockDraft.hardBlockKey => RoutineBlockType.hardBlock,
+      TimelineBlockDraft.softBlockKey => RoutineBlockType.softBlock,
+      TimelineBlockDraft.checkInKey => RoutineBlockType.checkIn,
+      _ => RoutineBlockType.flexibleTask,
+    };
   }
 
   Widget _setupHeader(
@@ -533,18 +663,38 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           label: 'AI Text placeholder',
           selected: _setupMode == 'AI Text',
           icon: Icons.text_fields_rounded,
-          onTap: () => setState(() => _setupMode = 'AI Text'),
+          onTap: () {
+            setState(() => _setupMode = 'AI Text');
+            _savePendingImportChoice('AI Text');
+          },
           accent: OptivusColors.aquaAccent,
         ),
         OnboardingChip(
           label: 'Photo Upload placeholder',
           selected: _setupMode == 'Photo Upload',
           icon: Icons.document_scanner_rounded,
-          onTap: () => setState(() => _setupMode = 'Photo Upload'),
+          onTap: () {
+            setState(() => _setupMode = 'Photo Upload');
+            _savePendingImportChoice('Photo Upload');
+          },
           accent: const Color(0xFFFF88C9),
         ),
       ],
     );
+  }
+
+  void _savePendingImportChoice(String mode) {
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: draft.baseTimeline.addPendingImport(
+              _tabs[_tabController.index],
+              mode,
+            ),
+          ),
+        );
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
 
   Widget _placeholderImportCard() {
@@ -584,17 +734,37 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: ['Fixed', 'Flexible', 'Mixed']
-                .map(
-                  (mode) => OnboardingChip(
-                    label: mode,
-                    selected: _businessMode == mode,
-                    onTap: () => setState(() => _businessMode = mode),
-                  ),
-                )
-                .toList(),
+            children:
+                const [
+                      _TimelineOption('fixed_business', 'Fixed'),
+                      _TimelineOption('flexible_business', 'Flexible'),
+                      _TimelineOption('mixed_business', 'Mixed'),
+                    ]
+                    .map(
+                      (mode) => OnboardingChip(
+                        label: mode.label,
+                        selected: _businessMode == mode.key,
+                        onTap: () {
+                          setState(() => _businessMode = mode.key);
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .updateDraft(
+                                (draft) => draft.copyWith(
+                                  baseTimeline: draft.baseTimeline.copyWith(
+                                    businessMode: mode.key,
+                                  ),
+                                  clearFinalPreview: true,
+                                ),
+                              );
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .setStepDirty(4, true);
+                        },
+                      ),
+                    )
+                    .toList(),
           ),
-          if (_businessMode == 'Flexible') ...[
+          if (_businessMode == 'flexible_business') ...[
             const SizedBox(height: 12),
             const Text(
               'Flexible business window: 3 hours, best time 10 AM to 1 PM.',
@@ -613,16 +783,37 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: ['Morning', 'Afternoon', 'Evening', 'Night']
-                .map(
-                  (time) => OnboardingChip(
-                    label: time,
-                    selected: _workBestTime == time,
-                    onTap: () => setState(() => _workBestTime = time),
-                    accent: OptivusColors.aquaAccent,
-                  ),
-                )
-                .toList(),
+            children:
+                const [
+                      _TimelineOption('morning', 'Morning'),
+                      _TimelineOption('afternoon', 'Afternoon'),
+                      _TimelineOption('evening', 'Evening'),
+                      _TimelineOption('night', 'Night'),
+                    ]
+                    .map(
+                      (time) => OnboardingChip(
+                        label: time.label,
+                        selected: _workBestTime == time.key,
+                        onTap: () {
+                          setState(() => _workBestTime = time.key);
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .updateDraft(
+                                (draft) => draft.copyWith(
+                                  baseTimeline: draft.baseTimeline.copyWith(
+                                    workBestTime: time.key,
+                                  ),
+                                  clearFinalPreview: true,
+                                ),
+                              );
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .setStepDirty(4, true);
+                        },
+                        accent: OptivusColors.aquaAccent,
+                      ),
+                    )
+                    .toList(),
           ),
           const SizedBox(height: 12),
           const Text(
@@ -633,16 +824,36 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: ['Low', 'Medium', 'High']
-                .map(
-                  (priority) => OnboardingChip(
-                    label: priority,
-                    selected: _workPriority == priority,
-                    onTap: () => setState(() => _workPriority = priority),
-                    accent: OptivusColors.brandAccent,
-                  ),
-                )
-                .toList(),
+            children:
+                const [
+                      _TimelineOption('low', 'Low'),
+                      _TimelineOption('medium', 'Medium'),
+                      _TimelineOption('high', 'High'),
+                    ]
+                    .map(
+                      (priority) => OnboardingChip(
+                        label: priority.label,
+                        selected: _workPriority == priority.key,
+                        onTap: () {
+                          setState(() => _workPriority = priority.key);
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .updateDraft(
+                                (draft) => draft.copyWith(
+                                  baseTimeline: draft.baseTimeline.copyWith(
+                                    workPriority: priority.key,
+                                  ),
+                                  clearFinalPreview: true,
+                                ),
+                              );
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .setStepDirty(4, true);
+                        },
+                        accent: OptivusColors.brandAccent,
+                      ),
+                    )
+                    .toList(),
           ),
         ],
       ),
@@ -1247,27 +1458,27 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                              Text(
-                                item.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: OptivusColors.textPrimary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w900,
+                                Text(
+                                  item.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: OptivusColors.textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${_timeLabel(item.startMinute ~/ 60)} - ${_timeLabel(_clampHour(item.endMinute ~/ 60, 0, 24))} | $dayLabel',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: OptivusColors.textSecondary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${_timeLabel(item.startMinute ~/ 60)} - ${_timeLabel(_clampHour(item.endMinute ~/ 60, 0, 24))} | $dayLabel',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: OptivusColors.textSecondary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
                               ],
                             ),
                           ),
@@ -1438,8 +1649,13 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               tooltip: 'Delete block',
               onTap: () {
                 ref
-                    .read(mockRoutineProvider.notifier)
-                    .deleteRoutineItem(item.id);
+                    .read(mockOnboardingProvider.notifier)
+                    .updateDraft(
+                      (draft) => draft.copyWith(
+                        baseTimeline: draft.baseTimeline.deleteBlock(item.id),
+                        clearFinalPreview: true,
+                      ),
+                    );
                 ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
               },
             ),
@@ -1450,8 +1666,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   Widget _eatingSection() {
-    final routines = ref.watch(mockRoutineProvider);
-    final meals = routines
+    final meals = _draftRoutineItems()
         .where((item) => item.mealCategory != null || item.notes == 'Eating')
         .toList();
     final dayMeals = meals
@@ -1486,26 +1701,48 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               spacing: 8,
               runSpacing: 8,
               children:
-                  [
-                        'Home',
-                        'Hostel',
-                        'PG',
-                        'Flat',
-                        'Mess',
-                        'Staying alone',
-                        'Mixed',
+                  const [
+                        _TimelineOption('home', 'Home'),
+                        _TimelineOption('hostel', 'Hostel'),
+                        _TimelineOption('pg', 'PG'),
+                        _TimelineOption('flat', 'Flat'),
+                        _TimelineOption('mess', 'Mess'),
+                        _TimelineOption('staying_alone', 'Staying alone'),
+                        _TimelineOption('mixed', 'Mixed'),
                       ]
                       .map(
                         (mode) => OnboardingChip(
-                          label: mode,
-                          selected: _eatingMode == mode,
-                          onTap: () => setState(() => _eatingMode = mode),
+                          label: mode.label,
+                          selected: _eatingMode == mode.key,
+                          onTap: () {
+                            setState(() => _eatingMode = mode.key);
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .updateDraft(
+                                  (draft) => draft.copyWith(
+                                    baseTimeline: draft.baseTimeline.copyWith(
+                                      eatingMode: mode.key,
+                                      clearMealPlanning:
+                                          mode.key != 'flat' &&
+                                          mode.key != 'staying_alone',
+                                    ),
+                                    clearFinalPreview: true,
+                                  ),
+                                );
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .setStepDirty(4, true);
+                          },
                           accent: OptivusColors.success,
                         ),
                       )
                       .toList(),
             ),
           ),
+          if (_eatingMode == 'flat' || _eatingMode == 'staying_alone') ...[
+            const SizedBox(height: 12),
+            _mealPlanningCard(),
+          ],
           const SizedBox(height: 12),
           _routineSetupFrame(
             title: 'Your Fixed Meals',
@@ -1526,17 +1763,27 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           _manualAddCard(
             icon: Icons.restaurant_rounded,
             accent: OptivusColors.success,
-            title: _eatingMode == 'Home'
+            title: _eatingMode == 'home'
                 ? 'Add meal time'
                 : 'Add menu / meal plan',
-            hint: _eatingMode == 'Hostel' || _eatingMode == 'Mess'
+            hint:
+                _eatingMode == 'hostel' ||
+                    _eatingMode == 'pg' ||
+                    _eatingMode == 'mess'
                 ? 'Mess menu item or meal slot'
                 : 'Breakfast, lunch, dinner, or snack',
             controller: _mealCtrl,
-            onAdd: () =>
-                _addRoutine('Eating', _mealCtrl, RoutineBlockType.softBlock),
+            onAdd: () => _addRoutine(
+              'Eating',
+              _mealCtrl,
+              _hardBlock
+                  ? RoutineBlockType.hardBlock
+                  : RoutineBlockType.softBlock,
+            ),
             chips: const [
               'Home meal-time',
+              'Hard block',
+              'Soft block',
               'Menu style',
               'Mock kcal',
               'Mock protein',
@@ -1549,15 +1796,141 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     );
   }
 
+  Widget _mealPlanningCard() {
+    final base = ref.watch(mockOnboardingProvider).draft.baseTimeline;
+    void update(BaseTimelineDraft next) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .updateDraft(
+            (draft) =>
+                draft.copyWith(baseTimeline: next, clearFinalPreview: true),
+          );
+      ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
+    }
+
+    return OnboardingGlassCard(
+      tint: OptivusColors.success.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Meal planning',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OnboardingChip(
+                label: 'Plan meals',
+                selected: base.shouldPlanMeals == true,
+                accent: OptivusColors.success,
+                onTap: () => update(base.copyWith(shouldPlanMeals: true)),
+              ),
+              OnboardingChip(
+                label: 'Only remind me',
+                selected: base.shouldPlanMeals == false,
+                onTap: () => update(base.copyWith(shouldPlanMeals: false)),
+              ),
+            ],
+          ),
+          if (base.shouldPlanMeals == true) ...[
+            const SizedBox(height: 12),
+            _mealOptionRow(
+              'Goal',
+              const [
+                _TimelineOption('maintain', 'Maintain'),
+                _TimelineOption('fat_loss', 'Fat loss'),
+                _TimelineOption('muscle_gain', 'Muscle gain'),
+              ],
+              base.mealPlanningGoal,
+              (key) => update(base.copyWith(mealPlanningGoal: key)),
+            ),
+            _mealOptionRow(
+              'Food type',
+              const [
+                _TimelineOption('veg', 'Veg'),
+                _TimelineOption('non_veg', 'Non-veg'),
+                _TimelineOption('mixed', 'Mixed'),
+              ],
+              base.foodType,
+              (key) => update(base.copyWith(foodType: key)),
+            ),
+            _mealOptionRow(
+              'Budget',
+              const [
+                _TimelineOption('low', 'Low'),
+                _TimelineOption('medium', 'Medium'),
+                _TimelineOption('high', 'High'),
+              ],
+              base.mealBudget,
+              (key) => update(base.copyWith(mealBudget: key)),
+            ),
+            _mealOptionRow(
+              'Cooking',
+              const [
+                _TimelineOption('none', 'None'),
+                _TimelineOption('basic', 'Basic'),
+                _TimelineOption('good', 'Good'),
+              ],
+              base.cookingAbility,
+              (key) => update(base.copyWith(cookingAbility: key)),
+            ),
+            _mealOptionRow(
+              'Meals/day',
+              const [
+                _TimelineOption('3', '3'),
+                _TimelineOption('4', '4'),
+                _TimelineOption('5', '5'),
+              ],
+              base.mealsPerDay?.toString(),
+              (key) => update(base.copyWith(mealsPerDay: int.tryParse(key))),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _mealOptionRow(
+    String label,
+    List<_TimelineOption> options,
+    String? selectedKey,
+    ValueChanged<String> onSelect,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
+          ),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: options
+                .map(
+                  (option) => OnboardingChip(
+                    label: option.label,
+                    selected: selectedKey == option.key,
+                    accent: OptivusColors.success,
+                    onTap: () => onSelect(option.key),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _fixedSection() {
-    final routines = ref.watch(mockRoutineProvider);
-    final fixedItems = routines
-        .where(
-          (item) =>
-              item.notes == 'Fixed' ||
-              item.id == 'routine-sleep' ||
-              item.title.toLowerCase().contains('bath'),
-        )
+    final fixedItems = _draftRoutineItems()
+        .where((item) => item.notes == 'Fixed')
         .toList();
     final dayFixedItems = fixedItems
         .where((item) => item.repeatDays.contains(_day + 1))
@@ -1586,8 +1959,13 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                 ),
                 const SizedBox(height: 10),
-                ...ref
-                    .watch(mockRoutineProvider)
+                ..._draftRoutineItems()
+                    .where(
+                      (item) =>
+                          item.notes == 'Classes' ||
+                          item.notes == 'Job / Work / Business' ||
+                          item.notes == 'Eating',
+                    )
                     .take(4)
                     .map(
                       (item) => Padding(
@@ -1673,11 +2051,13 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   Widget _skinCareSection() {
-    final skinItems = ref
-        .watch(mockRoutineProvider)
-        .where(
-          (item) => item.id == 'routine-skincare' || item.notes == 'Skin Care',
-        )
+    final skinSkipped = ref
+        .watch(mockOnboardingProvider)
+        .draft
+        .baseTimeline
+        .skinCareSkipped;
+    final skinItems = _draftRoutineItems()
+        .where((item) => item.notes == 'Skin Care')
         .toList();
     final daySkinItems = skinItems
         .where((item) => item.repeatDays.contains(_day + 1))
@@ -1697,26 +2077,35 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           ),
           const SizedBox(height: 12),
           OnboardingGlassCard(
-            selected: _skinSkipped,
+            selected: skinSkipped,
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    _skinSkipped
+                    skinSkipped
                         ? 'Skin care skipped for now'
                         : 'Set morning or night skin care steps',
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
                 OnboardingActionPill(
-                  label: _skinSkipped ? 'Undo skip' : 'Skip',
-                  icon: _skinSkipped
+                  label: skinSkipped ? 'Undo skip' : 'Skip',
+                  icon: skinSkipped
                       ? Icons.undo_rounded
                       : Icons.skip_next_rounded,
                   accent: OptivusColors.aquaAccent,
                   compact: true,
                   onTap: () {
-                    setState(() => _skinSkipped = !_skinSkipped);
+                    ref
+                        .read(mockOnboardingProvider.notifier)
+                        .updateDraft(
+                          (draft) => draft.copyWith(
+                            baseTimeline: draft.baseTimeline.copyWith(
+                              skinCareSkipped: !skinSkipped,
+                            ),
+                            clearFinalPreview: true,
+                          ),
+                        );
                     ref
                         .read(mockOnboardingProvider.notifier)
                         .setStepDirty(4, true);
@@ -1726,7 +2115,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             ),
           ),
           const SizedBox(height: 12),
-          if (!_skinSkipped) ...[
+          if (!skinSkipped) ...[
             _dayChips(OptivusColors.aquaAccent),
             const SizedBox(height: 12),
             _modeTabs(),
@@ -1842,6 +2231,13 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   Widget _conflictResolver() {
+    final conflicts = ref
+        .watch(mockOnboardingProvider)
+        .draft
+        .baseTimeline
+        .detectConflicts();
+    if (conflicts.isEmpty) return const SizedBox.shrink();
+
     return OnboardingGlassCard(
       tint: OptivusColors.danger.withValues(alpha: 0.08),
       child: Column(
@@ -1856,14 +2252,14 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               ),
               SizedBox(width: 8),
               Text(
-                'Conflict resolver example',
+                'Conflict resolver',
                 style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
               ),
             ],
           ),
           const SizedBox(height: 8),
           const Text(
-            'Lunch overlaps class from 1 PM to 2 PM. Choose how Optivus should treat this type of conflict.',
+            'Real overlaps appear here. Hard-block conflicts must be moved, edited, softened, or explicitly kept.',
             style: TextStyle(
               fontSize: 11,
               color: OptivusColors.textSecondary,
@@ -1871,23 +2267,102 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             ),
           ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: const [
-              OnboardingChip(label: 'Keep both', selected: false),
-              OnboardingChip(
-                label: 'Move lunch',
-                selected: true,
-                accent: OptivusColors.success,
-              ),
-              OnboardingChip(label: 'Edit class', selected: false),
-              OnboardingChip(label: 'Mark lunch flexible', selected: false),
-            ],
-          ),
+          ...conflicts.map(_conflictCard),
         ],
       ),
     );
+  }
+
+  Widget _conflictCard(TimelineConflictDraft conflict) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color:
+              (conflict.isBlocking
+                      ? OptivusColors.danger
+                      : OptivusColors.success)
+                  .withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${conflict.firstTitle} overlaps ${conflict.secondTitle} on ${_days[_clampHour(conflict.day - 1, 0, 6)]}',
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+            ),
+            const SizedBox(height: 9),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OnboardingChip(
+                  label: conflict.accepted ? 'Kept safely' : 'Keep both',
+                  selected: conflict.accepted,
+                  accent: OptivusColors.success,
+                  onTap: () {
+                    ref
+                        .read(mockOnboardingProvider.notifier)
+                        .updateDraft(
+                          (draft) => draft.copyWith(
+                            baseTimeline: draft.baseTimeline.acceptConflict(
+                              conflict.key,
+                            ),
+                            clearFinalPreview: true,
+                          ),
+                        );
+                    ref
+                        .read(mockOnboardingProvider.notifier)
+                        .setStepDirty(4, true);
+                  },
+                ),
+                OnboardingChip(
+                  label: 'Move item',
+                  selected: false,
+                  onTap: () => _editBlockById(conflict.secondBlockId),
+                ),
+                OnboardingChip(
+                  label: 'Edit block',
+                  selected: false,
+                  onTap: () => _editBlockById(conflict.firstBlockId),
+                ),
+                OnboardingChip(
+                  label: 'Mark soft/flexible',
+                  selected: false,
+                  accent: OptivusColors.aquaAccent,
+                  onTap: () => _markBlockSoft(conflict.secondBlockId),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _editBlockById(String id) {
+    final block = _blockById(
+      id,
+      ref.read(mockOnboardingProvider).draft.baseTimeline.blocks,
+    );
+    if (block != null) _editItem(_routineFromBlock(block));
+  }
+
+  void _markBlockSoft(String id) {
+    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+      final block = _blockById(id, draft.baseTimeline.blocks);
+      if (block == null) return draft;
+      return draft.copyWith(
+        baseTimeline: draft.baseTimeline.upsertBlock(
+          block.copyWith(blockType: TimelineBlockDraft.softBlockKey),
+        ),
+        clearFinalPreview: true,
+      );
+    });
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
 }
 
@@ -1931,4 +2406,11 @@ class _SectionStatusRail extends StatelessWidget {
       ],
     );
   }
+}
+
+class _TimelineOption {
+  final String key;
+  final String label;
+
+  const _TimelineOption(this.key, this.label);
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:optivus/state/mock_auth_state.dart';
 import 'package:optivus/state/mock_app_state.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
@@ -17,8 +18,6 @@ class OnboardingFlow extends ConsumerStatefulWidget {
 
 class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   late final PageController _pageController;
-  late final TextEditingController _nameController;
-  late final FocusNode _nameFocus;
 
   double _pageOffset = 0.0;
   int _currentPage = 0;
@@ -29,8 +28,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   void initState() {
     super.initState();
     _pageController = PageController();
-    _nameController = TextEditingController();
-    _nameFocus = FocusNode();
 
     _pageController.addListener(() {
       if (mounted) {
@@ -39,57 +36,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         });
       }
     });
-
-    // Populate current display name if present in mock profile
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final currentProfileName = ref.read(mockUserProfileProvider).displayName;
-      if (currentProfileName.isNotEmpty && currentProfileName != 'Member') {
-        _nameController.text = currentProfileName;
-      }
-    });
   }
 
   @override
   void dispose() {
     _pageController.dispose();
-    _nameController.dispose();
-    _nameFocus.dispose();
     super.dispose();
   }
 
   // Helper validation per step
   String? _validateStep(int step) {
-    switch (step) {
-      case 0:
-        return null; // Bypassed since step 0 is just a welcome screen now
-      case 1:
-        final pledge = ref.read(mockOnboardingProvider).stepCompleted[1];
-        if (!pledge) {
-          return 'Please read and commit to the Patience Pledge to proceed.';
-        }
-        break;
-      case 2:
-        final role = ref.read(mockUserProfileProvider).lifeRole;
-        if (role.isEmpty) {
-          return 'Please select a lifestyle role that matches your schedule.';
-        }
-        break;
-      case 3:
-        final profile = ref.read(mockUserProfileProvider);
-        if (profile.height <= 0 || profile.weight <= 0) {
-          return 'Please enter non-zero height and weight measurements.';
-        }
-        break;
-      case 4:
-        final hasConflicts = ref
-            .read(mockRoutineProvider)
-            .any((r) => r.hasConflict);
-        if (hasConflicts) {
-          return 'Please resolve routine collisions (clashing sleep & shift times).';
-        }
-        break;
-    }
-    return null;
+    final onboarding = ref.read(mockOnboardingProvider);
+    return onboarding.draft.validateStep(step, onboarding.stepCompleted);
   }
 
   // Core Save step action — with double-tap prevention
@@ -113,21 +71,22 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     await Future.delayed(const Duration(milliseconds: 600));
 
     // Save corresponding states
+    final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
     if (step == 0) {
-      final current = ref.read(mockUserProfileProvider);
-      final enteredName = _nameController.text.trim();
-      ref
-          .read(mockUserProfileProvider.notifier)
-          .updateProfile(
-            current.copyWith(
-              displayName: enteredName.isEmpty ? 'Member' : enteredName,
-            ),
-          );
+      onboardingNotifier.updateDraft(
+        (draft) => draft.copyWith(welcomeSaved: true),
+      );
+    } else if (step == 3) {
+      onboardingNotifier.updateDraft(
+        (draft) => draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates()),
+      );
+    } else if (step == 11) {
+      onboardingNotifier.saveFinalPreview();
     }
 
-    ref.read(mockOnboardingProvider.notifier).setStepLoading(step, false);
-    ref.read(mockOnboardingProvider.notifier).setStepCompleted(step, true);
-    ref.read(mockOnboardingProvider.notifier).setStepDirty(step, false);
+    onboardingNotifier.setStepLoading(step, false);
+    onboardingNotifier.setStepCompleted(step, true);
+    onboardingNotifier.setStepDirty(step, false);
 
     if (mounted) setState(() => _isSaving = false);
     return true;
@@ -154,8 +113,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     // Double check gate transition
     if (_currentPage == 11) {
       ref.read(mockUserProfileProvider.notifier).completeOnboarding();
+      ref.read(mockAuthProvider.notifier).completeOnboarding();
       if (mounted) {
-        context.go('/app');
+        context.go('/app?tab=1');
       }
       if (mounted) setState(() => _isNavigating = false);
       return;
@@ -231,6 +191,22 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     );
   }
 
+  void _goToPreviousStep() {
+    if (_currentPage <= 0) {
+      context.go('/');
+      return;
+    }
+
+    final target = _currentPage - 1;
+    _currentPage = target;
+    ref.read(mockOnboardingProvider.notifier).setStep(target);
+    _pageController.animateToPage(
+      target,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   void _onDotTapped(int index) => _navigateToIndicatorStep(index);
 
   void _onIndicatorDraggedTo(int index) => _navigateToIndicatorStep(index);
@@ -244,18 +220,30 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final bool showSave = _currentPage >= 2;
 
     String ctaLabel = 'Next Step';
-    bool ctaEnabled = true;
+    bool ctaEnabled = !_isNavigating && !_isSaving;
 
     if (_currentPage == 0) {
       ctaLabel = 'Get Started';
     } else if (_currentPage == 11) {
       ctaLabel = 'Enter Optivus';
-      ctaEnabled = onboardingState.stepCompleted.sublist(0, 11).every((c) => c);
+      ctaEnabled =
+          !_isNavigating &&
+          !_isSaving &&
+          onboardingState.stepCompleted.take(11).every((c) => c) &&
+          onboardingState.stepCompleted[11] &&
+          !onboardingState.stepDirty[11] &&
+          onboardingState.draft.validateStep(
+                11,
+                onboardingState.stepCompleted,
+              ) ==
+              null;
     }
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, result) {},
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _goToPreviousStep();
+      },
       child: OnboardingStepShell(
         currentPage: _currentPage,
         pageOffset: _pageOffset,
@@ -276,10 +264,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),
           children: [
-            OnboardingStep0(
-              nameController: _nameController,
-              nameFocus: _nameFocus,
-            ),
+            const OnboardingStep0(),
             const OnboardingStep1(),
             const OnboardingStep2(),
             const OnboardingStep3(),

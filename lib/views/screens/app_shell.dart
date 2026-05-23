@@ -12,31 +12,28 @@ import 'package:optivus/features/profile/profile_tab.dart';
 
 // Per-tab gradient definitions using the blueprint OptivusColors tokens exactly
 const List<List<Color>> _tabGradients = [
-  [OptivusColors.homeTop, Colors.white],       // Home: #FFE0E0
-  [OptivusColors.routineTop, Colors.white],    // Routine: #E4FAD4
-  [OptivusColors.trackerTop, Colors.white],    // Tracker: #D6FFFF
-  [OptivusColors.coachTop, Colors.white],      // Coach: #F7E0FF
-  [OptivusColors.goalsTop, Colors.white],      // Goals: #FFD9F2
-  [OptivusColors.profileTop, Colors.white],    // Profile: #FCFFD6
+  [OptivusColors.homeTop, Colors.white], // Home: #FFE0E0
+  [OptivusColors.routineTop, Colors.white], // Routine: #E4FAD4
+  [OptivusColors.trackerTop, Colors.white], // Tracker: #D6FFFF
+  [OptivusColors.coachTop, Colors.white], // Coach: #F7E0FF
+  [OptivusColors.goalsTop, Colors.white], // Goals: #FFD9F2
+  [OptivusColors.profileTop, Colors.white], // Profile: #FCFFD6
 ];
 
 // Per-tab accent colors for active indicator
 const List<Color> _tabAccents = [
-  OptivusColors.homeAccent,     // #F36F78
-  OptivusColors.routineAccent,  // #72C95F
-  OptivusColors.trackerAccent,  // #36C6D4
-  OptivusColors.coachAccent,    // #A56CF0
-  OptivusColors.goalsAccent,    // #EC5FAE
-  OptivusColors.profileAccent,  // #C9B63C
+  OptivusColors.homeAccent, // #F36F78
+  OptivusColors.routineAccent, // #72C95F
+  OptivusColors.trackerAccent, // #36C6D4
+  OptivusColors.coachAccent, // #A56CF0
+  OptivusColors.goalsAccent, // #EC5FAE
+  OptivusColors.profileAccent, // #C9B63C
 ];
 
 class AppShell extends ConsumerStatefulWidget {
   final int initialIndex;
 
-  const AppShell({
-    super.key,
-    this.initialIndex = 0,
-  });
+  const AppShell({super.key, this.initialIndex = 1});
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -44,11 +41,25 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _currentIndex = 0;
+  late final List<Widget?> _tabCache;
 
   @override
   void initState() {
     super.initState();
+    _tabCache = List<Widget?>.filled(_tabGradients.length, null);
     _currentIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
+    _ensureTabLoaded(_currentIndex);
+  }
+
+  void _ensureTabLoaded(int index) {
+    _tabCache[index] ??= switch (index) {
+      0 => const HomeTab(),
+      1 => const RoutineTab(),
+      2 => const TrackerTab(),
+      3 => const CoachTab(),
+      4 => const GoalsTab(),
+      _ => const ProfileTab(),
+    };
   }
 
   @override
@@ -82,14 +93,10 @@ class _AppShellState extends ConsumerState<AppShell> {
               Expanded(
                 child: IndexedStack(
                   index: _currentIndex,
-                  children: const [
-                    HomeTab(),
-                    RoutineTab(),
-                    TrackerTab(),
-                    CoachTab(),
-                    GoalsTab(),
-                    ProfileTab(),
-                  ],
+                  children: List.generate(
+                    _tabGradients.length,
+                    (index) => _tabCache[index] ?? const SizedBox.shrink(),
+                  ),
                 ),
               ),
             ],
@@ -100,6 +107,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         currentIndex: _currentIndex,
         onTap: (index) {
           setState(() {
+            _ensureTabLoaded(index);
             _currentIndex = index;
           });
         },

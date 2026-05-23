@@ -24,21 +24,23 @@ class OnboardingGlassCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: selected ? [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 20,
-            spreadRadius: 0,
-            offset: const Offset(0, 8),
-          ),
-        ] : [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            spreadRadius: 2,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 20,
+                  spreadRadius: 0,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
@@ -46,7 +48,9 @@ class OnboardingGlassCard extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
             decoration: BoxDecoration(
-              color: tint ?? Colors.white.withValues(alpha: selected ? 0.15 : 0.05),
+              color:
+                  tint ??
+                  Colors.white.withValues(alpha: selected ? 0.15 : 0.05),
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
                 color: Colors.white.withValues(alpha: selected ? 0.95 : 0.65),
@@ -95,16 +99,15 @@ class OnboardingGlassCard extends StatelessWidget {
                       imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: OptivusColors.brandAccent.withValues(alpha: 0.2),
+                          color: OptivusColors.brandAccent.withValues(
+                            alpha: 0.2,
+                          ),
                           shape: BoxShape.circle,
                         ),
                       ),
                     ),
                   ),
-                Padding(
-                  padding: padding,
-                  child: child,
-                ),
+                Padding(padding: padding, child: child),
               ],
             ),
           ),
@@ -419,7 +422,9 @@ class OnboardingChoiceTile extends StatelessWidget {
                       selected
                           ? Icons.check_circle_rounded
                           : Icons.circle_outlined,
-                      color: selected ? accent : Colors.black.withValues(alpha: 0.35),
+                      color: selected
+                          ? accent
+                          : Colors.black.withValues(alpha: 0.35),
                     ),
               ],
             ),
@@ -458,9 +463,7 @@ class OnboardingChip extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(14)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: BackdropFilter(
@@ -474,17 +477,21 @@ class OnboardingChip extends StatelessWidget {
                     : Colors.white.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: selected ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.4),
+                  color: selected
+                      ? Colors.white.withValues(alpha: 0.85)
+                      : Colors.white.withValues(alpha: 0.4),
                   width: selected ? 1.5 : 1.0,
                 ),
-                gradient: selected ? null : LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.white.withValues(alpha: 0.25),
-                    Colors.white.withValues(alpha: 0.0),
-                  ],
-                ),
+                gradient: selected
+                    ? null
+                    : LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.25),
+                          Colors.white.withValues(alpha: 0.0),
+                        ],
+                      ),
               ),
               child: Stack(
                 clipBehavior: Clip.none,
@@ -598,7 +605,9 @@ class OnboardingActionPill extends StatelessWidget {
                       : Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(radius),
                   border: Border.all(
-                    color: selected ? Colors.white.withValues(alpha: 0.85) : Colors.white.withValues(alpha: 0.4),
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.85)
+                        : Colors.white.withValues(alpha: 0.4),
                     width: selected ? 1.5 : 1.0,
                   ),
                   gradient: LinearGradient(
@@ -779,9 +788,7 @@ class OnboardingDayDroplet extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-        ),
+        decoration: const BoxDecoration(shape: BoxShape.circle),
         child: ClipOval(
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
@@ -936,7 +943,9 @@ class OnboardingLiquidToggle extends StatelessWidget {
                   AnimatedAlign(
                     duration: const Duration(milliseconds: 180),
                     curve: Curves.easeOutCubic,
-                    alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                    alignment: value
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                     child: Container(
                       width: 26,
                       height: 26,
@@ -946,11 +955,16 @@ class OnboardingLiquidToggle extends StatelessWidget {
                           center: const Alignment(-0.35, -0.35),
                           colors: [
                             Colors.white.withValues(alpha: 0.96),
-                            (value ? accent : Colors.white).withValues(alpha: 0.76),
-                            (value ? accent : OptivusColors.borderSoft).withValues(alpha: 0.36),
+                            (value ? accent : Colors.white).withValues(
+                              alpha: 0.76,
+                            ),
+                            (value ? accent : OptivusColors.borderSoft)
+                                .withValues(alpha: 0.36),
                           ],
                         ),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.86)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.86),
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.1),
@@ -995,11 +1009,14 @@ class _OnboardingLiquidSliderState extends State<OnboardingLiquidSlider> {
   @override
   Widget build(BuildContext context) {
     int selectedIndex = widget.options.indexOf(widget.selectedValue);
-    if (selectedIndex < 0) selectedIndex = 0;
-    
+
     final int steps = widget.options.length - 1;
-    final double targetPercent = steps > 0 ? selectedIndex / steps : 0.0;
-    final double currentPercent = _dragPercent >= 0 ? _dragPercent : targetPercent;
+    final double targetPercent = selectedIndex >= 0 && steps > 0
+        ? selectedIndex / steps
+        : 0.0;
+    final double currentPercent = _dragPercent >= 0
+        ? _dragPercent
+        : targetPercent;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -1014,7 +1031,8 @@ class _OnboardingLiquidSliderState extends State<OnboardingLiquidSlider> {
           onHorizontalDragUpdate: (details) {
             RenderBox box = context.findRenderObject() as RenderBox;
             Offset localOffset = box.globalToLocal(details.globalPosition);
-            double percent = (localOffset.dx - trackHorizontalPadding) / trackWidth;
+            double percent =
+                (localOffset.dx - trackHorizontalPadding) / trackWidth;
             percent = percent.clamp(0.0, 1.0);
             setState(() {
               _dragPercent = percent;
@@ -1026,7 +1044,8 @@ class _OnboardingLiquidSliderState extends State<OnboardingLiquidSlider> {
           onTapDown: (details) {
             RenderBox box = context.findRenderObject() as RenderBox;
             Offset localOffset = box.globalToLocal(details.globalPosition);
-            double percent = (localOffset.dx - trackHorizontalPadding) / trackWidth;
+            double percent =
+                (localOffset.dx - trackHorizontalPadding) / trackWidth;
             percent = percent.clamp(0.0, 1.0);
             _snapTo(percent, steps);
           },
@@ -1072,7 +1091,10 @@ class _OnboardingLiquidSliderState extends State<OnboardingLiquidSlider> {
                         ),
                       ),
                       Positioned(
-                        left: trackHorizontalPadding + (trackWidth * currentPercent) - (thumbSize / 2),
+                        left:
+                            trackHorizontalPadding +
+                            (trackWidth * currentPercent) -
+                            (thumbSize / 2),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 100),
                           width: thumbSize,
@@ -1080,10 +1102,7 @@ class _OnboardingLiquidSliderState extends State<OnboardingLiquidSlider> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.white.withValues(alpha: 0.85),
-                            border: Border.all(
-                              color: Colors.white,
-                              width: 2.0,
-                            ),
+                            border: Border.all(color: Colors.white, width: 2.0),
                             boxShadow: [
                               BoxShadow(
                                 color: widget.accent.withValues(alpha: 0.6),
@@ -1120,19 +1139,26 @@ class _OnboardingLiquidSliderState extends State<OnboardingLiquidSlider> {
                     children: List.generate(widget.options.length, (index) {
                       final percent = steps > 0 ? index / steps : 0.0;
                       final isSelected = index == selectedIndex;
-                      
+
                       const double labelWidth = 80.0;
-                      final double leftOffset = trackHorizontalPadding + (trackWidth * percent) - (labelWidth / 2);
-                      
+                      final double leftOffset =
+                          trackHorizontalPadding +
+                          (trackWidth * percent) -
+                          (labelWidth / 2);
+
                       return Positioned(
                         left: leftOffset,
                         width: labelWidth,
                         child: AnimatedDefaultTextStyle(
                           duration: const Duration(milliseconds: 180),
                           style: TextStyle(
-                            color: isSelected ? OptivusColors.textPrimary : OptivusColors.textSecondary,
+                            color: isSelected
+                                ? OptivusColors.textPrimary
+                                : OptivusColors.textSecondary,
                             fontSize: isSelected ? 11 : 10,
-                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+                            fontWeight: isSelected
+                                ? FontWeight.w900
+                                : FontWeight.w700,
                           ),
                           textAlign: TextAlign.center,
                           child: Text(widget.options[index]),
@@ -1202,7 +1228,9 @@ class OnboardingUnitToggle extends StatelessWidget {
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeOutCubic,
-                alignment: isOption1 ? Alignment.centerLeft : Alignment.centerRight,
+                alignment: isOption1
+                    ? Alignment.centerLeft
+                    : Alignment.centerRight,
                 child: Container(
                   width: pillWidth,
                   height: toggleHeight - 6,
@@ -1229,7 +1257,9 @@ class OnboardingUnitToggle extends StatelessWidget {
                     child: AnimatedDefaultTextStyle(
                       duration: const Duration(milliseconds: 250),
                       style: TextStyle(
-                        color: isOption1 ? Colors.white : OptivusColors.textSecondary,
+                        color: isOption1
+                            ? Colors.white
+                            : OptivusColors.textSecondary,
                         fontWeight: FontWeight.w900,
                         fontSize: 10,
                         letterSpacing: 0.5,
@@ -1245,7 +1275,9 @@ class OnboardingUnitToggle extends StatelessWidget {
                     child: AnimatedDefaultTextStyle(
                       duration: const Duration(milliseconds: 250),
                       style: TextStyle(
-                        color: !isOption1 ? Colors.white : OptivusColors.textSecondary,
+                        color: !isOption1
+                            ? Colors.white
+                            : OptivusColors.textSecondary,
                         fontWeight: FontWeight.w900,
                         fontSize: 10,
                         letterSpacing: 0.5,
@@ -1283,10 +1315,12 @@ class OnboardingLiquidContinuousSlider extends StatefulWidget {
   });
 
   @override
-  State<OnboardingLiquidContinuousSlider> createState() => _OnboardingLiquidContinuousSliderState();
+  State<OnboardingLiquidContinuousSlider> createState() =>
+      _OnboardingLiquidContinuousSliderState();
 }
 
-class _OnboardingLiquidContinuousSliderState extends State<OnboardingLiquidContinuousSlider> {
+class _OnboardingLiquidContinuousSliderState
+    extends State<OnboardingLiquidContinuousSlider> {
   double _dragValue = -1.0;
 
   @override
@@ -1300,10 +1334,10 @@ class _OnboardingLiquidContinuousSliderState extends State<OnboardingLiquidConti
         final double trackWidth = width - (trackHorizontalPadding * 2);
 
         final double range = widget.max - widget.min;
-        double currentPercent = isDragging 
+        double currentPercent = isDragging
             ? (_dragValue - widget.min) / range
             : (widget.value - widget.min) / range;
-        
+
         currentPercent = currentPercent.clamp(0.0, 1.0);
 
         return GestureDetector(
@@ -1311,7 +1345,8 @@ class _OnboardingLiquidContinuousSliderState extends State<OnboardingLiquidConti
           onHorizontalDragUpdate: (details) {
             RenderBox box = context.findRenderObject() as RenderBox;
             Offset localOffset = box.globalToLocal(details.globalPosition);
-            double percent = (localOffset.dx - trackHorizontalPadding) / trackWidth;
+            double percent =
+                (localOffset.dx - trackHorizontalPadding) / trackWidth;
             percent = percent.clamp(0.0, 1.0);
             double newValue = widget.min + (percent * range);
             setState(() {
@@ -1332,7 +1367,8 @@ class _OnboardingLiquidContinuousSliderState extends State<OnboardingLiquidConti
           onTapDown: (details) {
             RenderBox box = context.findRenderObject() as RenderBox;
             Offset localOffset = box.globalToLocal(details.globalPosition);
-            double percent = (localOffset.dx - trackHorizontalPadding) / trackWidth;
+            double percent =
+                (localOffset.dx - trackHorizontalPadding) / trackWidth;
             percent = percent.clamp(0.0, 1.0);
             double newValue = widget.min + (percent * range);
             widget.onChanged(newValue);
@@ -1377,7 +1413,10 @@ class _OnboardingLiquidContinuousSliderState extends State<OnboardingLiquidConti
                     ),
                   ),
                   Positioned(
-                    left: trackHorizontalPadding + (trackWidth * currentPercent) - (thumbSize / 2),
+                    left:
+                        trackHorizontalPadding +
+                        (trackWidth * currentPercent) -
+                        (thumbSize / 2),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 100),
                       width: thumbSize,
@@ -1385,10 +1424,7 @@ class _OnboardingLiquidContinuousSliderState extends State<OnboardingLiquidConti
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.white.withValues(alpha: 0.85),
-                        border: Border.all(
-                          color: Colors.white,
-                          width: 2.0,
-                        ),
+                        border: Border.all(color: Colors.white, width: 2.0),
                         boxShadow: [
                           BoxShadow(
                             color: widget.accent.withValues(alpha: 0.6),
@@ -1415,7 +1451,10 @@ class _OnboardingLiquidContinuousSliderState extends State<OnboardingLiquidConti
                     ),
                   ),
                   Positioned(
-                    left: trackHorizontalPadding + (trackWidth * currentPercent) - 30,
+                    left:
+                        trackHorizontalPadding +
+                        (trackWidth * currentPercent) -
+                        30,
                     top: 36,
                     child: SizedBox(
                       width: 60,

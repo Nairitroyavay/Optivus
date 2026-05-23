@@ -11,6 +11,7 @@ import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/permission_status.dart';
 import 'package:optivus/models/onboarding_state.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/mock_seed_data.dart';
 
 // ==========================================
@@ -54,9 +55,12 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
     // Re-calculate mock estimates on body basics changes
     final double hMeters = (height ?? state.height) / 100.0;
     final double wKg = weight ?? state.weight;
-    final double bmi = wKg / (hMeters * hMeters);
-    final double calories = wKg * 24.0 * 1.3; // Simple Harris-Benedict representation
-    final double protein = wKg * 2.0;
+    final bool canEstimate = hMeters > 0 && wKg > 0;
+    final double bmi = canEstimate ? wKg / (hMeters * hMeters) : 0.0;
+    final double calories = canEstimate
+        ? wKg * 24.0 * 1.3
+        : 0.0; // Simple Harris-Benedict representation
+    final double protein = canEstimate ? wKg * 2.0 : 0.0;
 
     state = state.copyWith(
       ageRange: ageRange ?? state.ageRange,
@@ -86,9 +90,10 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
   }
 }
 
-final mockUserProfileProvider = StateNotifierProvider<MockUserProfileNotifier, UserProfile>((ref) {
-  return MockUserProfileNotifier();
-});
+final mockUserProfileProvider =
+    StateNotifierProvider<MockUserProfileNotifier, UserProfile>((ref) {
+      return MockUserProfileNotifier();
+    });
 
 // ==========================================
 // 2. Routine Items State Notifier
@@ -104,7 +109,7 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
   void updateRoutineItem(RoutineItem updatedItem) {
     state = [
       for (final item in state)
-        if (item.id == updatedItem.id) updatedItem else item
+        if (item.id == updatedItem.id) updatedItem else item,
     ];
     _checkConflicts();
   }
@@ -117,29 +122,40 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
   void toggleSubtask(String routineId, int index) {
     state = [
       for (final item in state)
-        if (item.id == routineId && item.subtasks != null && item.subtasksCompleted != null)
+        if (item.id == routineId &&
+            item.subtasks != null &&
+            item.subtasksCompleted != null)
           item.copyWith(
             subtasksCompleted: [
               for (int i = 0; i < item.subtasksCompleted!.length; i++)
-                if (i == index) !item.subtasksCompleted![i] else item.subtasksCompleted![i]
+                if (i == index)
+                  !item.subtasksCompleted![i]
+                else
+                  item.subtasksCompleted![i],
             ],
           )
         else
-          item
+          item,
     ];
   }
 
   void toggleRoutineCompleted(String routineId) {
     state = [
       for (final item in state)
-        if (item.id == routineId) item.copyWith(isCompleted: !item.isCompleted, isMissed: false) else item
+        if (item.id == routineId)
+          item.copyWith(isCompleted: !item.isCompleted, isMissed: false)
+        else
+          item,
     ];
   }
 
   void toggleRoutineMissed(String routineId) {
     state = [
       for (final item in state)
-        if (item.id == routineId) item.copyWith(isMissed: !item.isMissed, isCompleted: false) else item
+        if (item.id == routineId)
+          item.copyWith(isMissed: !item.isMissed, isCompleted: false)
+        else
+          item,
     ];
   }
 
@@ -161,7 +177,8 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
         if (b.blockType != RoutineBlockType.hardBlock) continue;
 
         // Check time overlaps
-        final bool overlap = (a.startMinute < b.endMinute && a.endMinute > b.startMinute);
+        final bool overlap =
+            (a.startMinute < b.endMinute && a.endMinute > b.startMinute);
         if (overlap) {
           conflict = true;
           msg = 'Time conflict with hard block: "${b.title}"';
@@ -185,9 +202,10 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
   }
 }
 
-final mockRoutineProvider = StateNotifierProvider<MockRoutineNotifier, List<RoutineItem>>((ref) {
-  return MockRoutineNotifier();
-});
+final mockRoutineProvider =
+    StateNotifierProvider<MockRoutineNotifier, List<RoutineItem>>((ref) {
+      return MockRoutineNotifier();
+    });
 
 // ==========================================
 // 3. Trackers State Notifier
@@ -230,26 +248,27 @@ class MockTrackerState {
 
 class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
   MockTrackerNotifier()
-      : super(MockTrackerState(
+    : super(
+        MockTrackerState(
           hydrationLogs: MockSeedData.defaultHydrationLogs,
           fitnessActivities: MockSeedData.defaultFitnessActivities,
           screenTimeApps: MockSeedData.defaultScreenTimeApps,
           trackerSessions: MockSeedData.defaultTrackerSessions,
           moneyGoal: MockSeedData.defaultMoneyGoal,
           savingsEntries: MockSeedData.defaultSavingEntries,
-        ));
+        ),
+      );
 
   void logHydration(int ml) {
     final now = DateTime.now();
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
     final log = HydrationLog(
       id: 'w-${state.hydrationLogs.length + 1}',
       amountMl: ml,
       timestamp: timeStr,
     );
-    state = state.copyWith(
-      hydrationLogs: [...state.hydrationLogs, log],
-    );
+    state = state.copyWith(hydrationLogs: [...state.hydrationLogs, log]);
   }
 
   void resetHydration() {
@@ -274,12 +293,16 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
               distractionRisk: app.distractionRisk,
             )
           else
-            app
+            app,
       ],
     );
   }
 
-  void logSaving(double amount, String description, {bool isConfirmed = false}) {
+  void logSaving(
+    double amount,
+    String description, {
+    bool isConfirmed = false,
+  }) {
     final entry = SavingEntry(
       id: 's-${state.savingsEntries.length + 1}',
       amount: amount,
@@ -304,7 +327,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
 
   void confirmSaving(String entryId) {
     double confirmAmount = 0.0;
-    
+
     // Find the item first to get its amount safely outside the list literal
     for (final entry in state.savingsEntries) {
       if (entry.id == entryId && !entry.isConfirmed) {
@@ -325,12 +348,17 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
               isConfirmed: true,
             )
           else
-            entry
+            entry,
       ];
 
       final updatedGoal = state.moneyGoal.copyWith(
-        totalConfirmedSaved: state.moneyGoal.totalConfirmedSaved + confirmAmount,
-        totalPotentialSaved: (state.moneyGoal.totalPotentialSaved - confirmAmount).clamp(0, double.infinity),
+        totalConfirmedSaved:
+            state.moneyGoal.totalConfirmedSaved + confirmAmount,
+        totalPotentialSaved:
+            (state.moneyGoal.totalPotentialSaved - confirmAmount).clamp(
+              0,
+              double.infinity,
+            ),
         streakDays: state.moneyGoal.streakDays + 1,
       );
 
@@ -342,9 +370,10 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
   }
 }
 
-final mockTrackerProvider = StateNotifierProvider<MockTrackerNotifier, MockTrackerState>((ref) {
-  return MockTrackerNotifier();
-});
+final mockTrackerProvider =
+    StateNotifierProvider<MockTrackerNotifier, MockTrackerState>((ref) {
+      return MockTrackerNotifier();
+    });
 
 // ==========================================
 // 4. Goals Focus State Notifier
@@ -361,14 +390,18 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
       for (final goal in state)
         if (goal.id == goalId)
           goal.copyWith(
-            dailyProof: goal.dailyProof.copyWith(isCompleted: !goal.dailyProof.isCompleted),
-            streakDays: goal.dailyProof.isCompleted ? (goal.streakDays - 1).clamp(0, 999) : goal.streakDays + 1,
+            dailyProof: goal.dailyProof.copyWith(
+              isCompleted: !goal.dailyProof.isCompleted,
+            ),
+            streakDays: goal.dailyProof.isCompleted
+                ? (goal.streakDays - 1).clamp(0, 999)
+                : goal.streakDays + 1,
             progressPercent: goal.dailyProof.isCompleted
                 ? (goal.progressPercent - 0.05).clamp(0.0, 1.0)
                 : (goal.progressPercent + 0.05).clamp(0.0, 1.0),
           )
         else
-          goal
+          goal,
     ];
   }
 
@@ -377,10 +410,12 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
       for (final goal in state)
         if (goal.id == goalId)
           goal.copyWith(
-            dailyProof: goal.dailyProof.copyWith(selectedDifficulty: difficulty),
+            dailyProof: goal.dailyProof.copyWith(
+              selectedDifficulty: difficulty,
+            ),
           )
         else
-          goal
+          goal,
     ];
   }
 
@@ -388,18 +423,17 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
     state = [
       for (final goal in state)
         if (goal.id == goalId)
-          goal.copyWith(
-            dailyProof: goal.dailyProof.copyWith(note: note),
-          )
+          goal.copyWith(dailyProof: goal.dailyProof.copyWith(note: note))
         else
-          goal
+          goal,
     ];
   }
 }
 
-final mockGoalProvider = StateNotifierProvider<MockGoalNotifier, List<GoalModel>>((ref) {
-  return MockGoalNotifier();
-});
+final mockGoalProvider =
+    StateNotifierProvider<MockGoalNotifier, List<GoalModel>>((ref) {
+      return MockGoalNotifier();
+    });
 
 // ==========================================
 // 5. Mind Notes State Notifier
@@ -407,9 +441,14 @@ final mockGoalProvider = StateNotifierProvider<MockGoalNotifier, List<GoalModel>
 class MockMindNoteNotifier extends StateNotifier<List<MindNote>> {
   MockMindNoteNotifier() : super(MockSeedData.defaultMindNotes);
 
-  void addMindNote(String content, MindNoteType type, MindNoteIntensity intensity) {
+  void addMindNote(
+    String content,
+    MindNoteType type,
+    MindNoteIntensity intensity,
+  ) {
     final now = DateTime.now();
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
     final note = MindNote(
       id: 'note-${state.length + 1}',
       content: content,
@@ -427,14 +466,18 @@ class MockMindNoteNotifier extends StateNotifier<List<MindNote>> {
   void toggleShareWithCoach(String id) {
     state = [
       for (final note in state)
-        if (note.id == id) note.copyWith(isSharedWithCoach: !note.isSharedWithCoach) else note
+        if (note.id == id)
+          note.copyWith(isSharedWithCoach: !note.isSharedWithCoach)
+        else
+          note,
     ];
   }
 }
 
-final mockMindNoteProvider = StateNotifierProvider<MockMindNoteNotifier, List<MindNote>>((ref) {
-  return MockMindNoteNotifier();
-});
+final mockMindNoteProvider =
+    StateNotifierProvider<MockMindNoteNotifier, List<MindNote>>((ref) {
+      return MockMindNoteNotifier();
+    });
 
 // ==========================================
 // 6. AI Coach Sessions State Notifier
@@ -444,7 +487,8 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
 
   void sendMessage(String sessionId, String content) {
     final now = DateTime.now();
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
 
     final userMsg = CoachMessage(
       id: 'm-user-${DateTime.now().millisecondsSinceEpoch}',
@@ -458,7 +502,7 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
         if (session.id == sessionId)
           session.copyWith(messages: [...session.messages, userMsg])
         else
-          session
+          session,
     ];
 
     // Trigger mock AI response after 1.5 seconds delay
@@ -467,7 +511,12 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
     });
   }
 
-  void createNewSession(String title, CoachSessionType type, String coachName, String coachStyle) {
+  void createNewSession(
+    String title,
+    CoachSessionType type,
+    String coachName,
+    String coachStyle,
+  ) {
     final session = CoachSession(
       id: 'session-${DateTime.now().millisecondsSinceEpoch}',
       title: title,
@@ -479,9 +528,10 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
         CoachMessage(
           id: 'm-coach-1',
           isFromCoach: true,
-          content: 'Hello! I am your AI Coach $coachName. I look forward to working with you under my $coachStyle philosophy. What is currently on your mind?',
+          content:
+              'Hello! I am your AI Coach $coachName. I look forward to working with you under my $coachStyle philosophy. What is currently on your mind?',
           timestamp: 'Just now',
-        )
+        ),
       ],
     );
     state = [session, ...state];
@@ -489,7 +539,8 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
 
   void _generateCoachReply(String sessionId, String userContent) {
     final now = DateTime.now();
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
 
     String reply = '';
     List<CoachResponseBlock> blocks = [];
@@ -497,20 +548,26 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
     // Simple keyword mapping to create an amazingly smart visual dashboard simulation
     final lower = userContent.toLowerCase();
     if (lower.contains('hello') || lower.contains('hi')) {
-      reply = 'Greetings! How is your day proceeding? I am ready to audit your timeline, track hydration goals, or help you wind down.';
-    } else if (lower.contains('tired') || lower.contains('missed') || lower.contains('skip')) {
-      reply = 'Fatigue is a real biological trigger. Don\'t stress about breaking a hard routine. We can dynamically adapt. I recommend triggering the "Tiny" daily proof adjustment for your Gym goals so your streak remains unbroken!';
+      reply =
+          'Greetings! How is your day proceeding? I am ready to audit your timeline, track hydration goals, or help you wind down.';
+    } else if (lower.contains('tired') ||
+        lower.contains('missed') ||
+        lower.contains('skip')) {
+      reply =
+          'Fatigue is a real biological trigger. Don\'t stress about breaking a hard routine. We can dynamically adapt. I recommend triggering the "Tiny" daily proof adjustment for your Gym goals so your streak remains unbroken!';
       blocks = [
         CoachResponseBlock(
           type: CoachResponseBlockType.routineSuggestionCard,
           heading: 'Pivot Gym Workout',
-          body: 'Adapt Gym Workout block start time or limit to 15m home routine.',
+          body:
+              'Adapt Gym Workout block start time or limit to 15m home routine.',
           buttonLabel: 'Adapt Now',
           payload: 'pivot_routine',
-        )
+        ),
       ];
     } else if (lower.contains('water') || lower.contains('hydrate')) {
-      reply = 'Hydration levels affect cognitive processing directly. You have logged several hydration milestones today. I suggest adding another 250ml now to stay on pace!';
+      reply =
+          'Hydration levels affect cognitive processing directly. You have logged several hydration milestones today. I suggest adding another 250ml now to stay on pace!';
       blocks = [
         CoachResponseBlock(
           type: CoachResponseBlockType.trackerActionCard,
@@ -518,10 +575,13 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
           body: 'Quick log 250ml of water right from this card.',
           buttonLabel: '+250ml Water',
           payload: 'water_250',
-        )
+        ),
       ];
-    } else if (lower.contains('goal') || lower.contains('gym') || lower.contains('workout')) {
-      reply = 'Your systems shape your outcomes. Your "Sleek & Strong Athlete" identity currently has a 12-day streak. Complete your daily Gym proof to add to the multiplier!';
+    } else if (lower.contains('goal') ||
+        lower.contains('gym') ||
+        lower.contains('workout')) {
+      reply =
+          'Your systems shape your outcomes. Your "Sleek & Strong Athlete" identity currently has a 12-day streak. Complete your daily Gym proof to add to the multiplier!';
       blocks = [
         CoachResponseBlock(
           type: CoachResponseBlockType.goalProofCard,
@@ -529,21 +589,26 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
           body: 'Complete Gym compound lifts daily proof to maintain streak.',
           buttonLabel: 'Verify Gym Proof',
           payload: 'verify_proof_body',
-        )
+        ),
       ];
-    } else if (lower.contains('overthinking') || lower.contains('stress') || lower.contains('mind')) {
-      reply = 'Overthinking triggers cortisol releases. I recommend writing down whatever is running in your mind right into our Mind Notebook. I will automatically classify it for you to clear cognitive RAM.';
+    } else if (lower.contains('overthinking') ||
+        lower.contains('stress') ||
+        lower.contains('mind')) {
+      reply =
+          'Overthinking triggers cortisol releases. I recommend writing down whatever is running in your mind right into our Mind Notebook. I will automatically classify it for you to clear cognitive RAM.';
       blocks = [
         CoachResponseBlock(
           type: CoachResponseBlockType.mindNoteCard,
           heading: 'Dump Overthinking Thoughts',
-          body: 'Open your notebook timeline to classify and shelf mental clutter.',
+          body:
+              'Open your notebook timeline to classify and shelf mental clutter.',
           buttonLabel: 'Open Notebook',
           payload: 'open_notebook',
-        )
+        ),
       ];
     } else {
-      reply = 'I understand. Let\'s review your routine timeline and find ways to build robust habit consistency. Would you like me to suggest some minor schedule optimizations?';
+      reply =
+          'I understand. Let\'s review your routine timeline and find ways to build robust habit consistency. Would you like me to suggest some minor schedule optimizations?';
     }
 
     final coachMsg = CoachMessage(
@@ -559,14 +624,15 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
         if (session.id == sessionId)
           session.copyWith(messages: [...session.messages, coachMsg])
         else
-          session
+          session,
     ];
   }
 }
 
-final mockCoachProvider = StateNotifierProvider<MockCoachNotifier, List<CoachSession>>((ref) {
-  return MockCoachNotifier();
-});
+final mockCoachProvider =
+    StateNotifierProvider<MockCoachNotifier, List<CoachSession>>((ref) {
+      return MockCoachNotifier();
+    });
 
 class MockCoachPreferencesNotifier extends StateNotifier<CoachPreferences> {
   MockCoachPreferencesNotifier() : super(CoachPreferences());
@@ -576,14 +642,18 @@ class MockCoachPreferencesNotifier extends StateNotifier<CoachPreferences> {
   }
 }
 
-final mockCoachPreferencesProvider = StateNotifierProvider<MockCoachPreferencesNotifier, CoachPreferences>((ref) {
-  return MockCoachPreferencesNotifier();
-});
+final mockCoachPreferencesProvider =
+    StateNotifierProvider<MockCoachPreferencesNotifier, CoachPreferences>((
+      ref,
+    ) {
+      return MockCoachPreferencesNotifier();
+    });
 
 // ==========================================
 // 7. Notification Preferences Notifier
 // ==========================================
-class MockNotificationPreferencesNotifier extends StateNotifier<NotificationPreferences> {
+class MockNotificationPreferencesNotifier
+    extends StateNotifier<NotificationPreferences> {
   MockNotificationPreferencesNotifier() : super(NotificationPreferences());
 
   void updatePreferences(NotificationPreferences prefs) {
@@ -620,9 +690,12 @@ class MockNotificationPreferencesNotifier extends StateNotifier<NotificationPref
 }
 
 final mockNotificationPreferencesProvider =
-    StateNotifierProvider<MockNotificationPreferencesNotifier, NotificationPreferences>((ref) {
-  return MockNotificationPreferencesNotifier();
-});
+    StateNotifierProvider<
+      MockNotificationPreferencesNotifier,
+      NotificationPreferences
+    >((ref) {
+      return MockNotificationPreferencesNotifier();
+    });
 
 // ==========================================
 // 8. Permissions Status State Notifier
@@ -666,9 +739,10 @@ class MockPermissionNotifier extends StateNotifier<PermissionStatus> {
   }
 }
 
-final mockPermissionProvider = StateNotifierProvider<MockPermissionNotifier, PermissionStatus>((ref) {
-  return MockPermissionNotifier();
-});
+final mockPermissionProvider =
+    StateNotifierProvider<MockPermissionNotifier, PermissionStatus>((ref) {
+      return MockPermissionNotifier();
+    });
 
 // ==========================================
 // 9. Onboarding State Notifier
@@ -705,8 +779,30 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   void clearValidation() {
     state = state.copyWith(clearValidation: true);
   }
+
+  void updateDraft(OnboardingDraft Function(OnboardingDraft draft) update) {
+    state = state.copyWith(draft: update(state.draft), clearValidation: true);
+  }
+
+  void setDraft(OnboardingDraft draft) {
+    state = state.copyWith(draft: draft, clearValidation: true);
+  }
+
+  void saveFinalPreview() {
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        finalPreview: state.draft.buildFinalPreview(),
+      ),
+      clearValidation: true,
+    );
+  }
 }
 
-final mockOnboardingProvider = StateNotifierProvider<MockOnboardingNotifier, OnboardingState>((ref) {
-  return MockOnboardingNotifier();
+final mockOnboardingProvider =
+    StateNotifierProvider<MockOnboardingNotifier, OnboardingState>((ref) {
+      return MockOnboardingNotifier();
+    });
+
+final onboardingDraftProvider = Provider<OnboardingDraft>((ref) {
+  return ref.watch(mockOnboardingProvider.select((state) => state.draft));
 });

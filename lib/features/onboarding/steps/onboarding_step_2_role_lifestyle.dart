@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/mock_app_state.dart';
 
 class OnboardingStep2 extends ConsumerWidget {
@@ -9,41 +10,44 @@ class OnboardingStep2 extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(mockUserProfileProvider);
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final lifeRole = draft.lifeRole;
 
     const roles = [
       {
+        'key': LifeRoleDraft.studentKey,
         'name': 'Student / School / College',
         'icon': Icons.school_rounded,
         'desc': 'Classes enabled, job disabled',
       },
       {
+        'key': LifeRoleDraft.workingKey,
         'name': 'Working Person',
         'icon': Icons.business_center_rounded,
         'desc': 'Classes disabled, job enabled',
       },
       {
+        'key': LifeRoleDraft.studentWorkingKey,
         'name': 'Student + Working Person',
         'icon': Icons.dynamic_feed_rounded,
         'desc': 'Classes and job both enabled',
       },
       {
+        'key': LifeRoleDraft.businessKey,
         'name': 'Business / Startup / Freelancer',
         'icon': Icons.storefront_rounded,
         'desc': 'Work/business timeline enabled',
       },
       {
+        'key': LifeRoleDraft.notStudentNotWorkingKey,
         'name': 'Not Student + Not Working',
         'icon': Icons.self_improvement_rounded,
         'desc': 'Classes and job disabled',
       },
     ];
 
-    final showWorkingExtras =
-        profile.lifeRole == 'Working Person' ||
-        profile.lifeRole == 'Student + Working Person';
-    final showBusinessExtras =
-        profile.lifeRole == 'Business / Startup / Freelancer';
+    final showWorkingExtras = lifeRole.needsWorkType;
+    final showBusinessExtras = lifeRole.needsBusinessMode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -62,66 +66,104 @@ class OnboardingStep2 extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-          ...roles.map((role) {
-            final name = role['name'] as String;
-            final isSelected = profile.lifeRole == name;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: OnboardingChoiceTile(
-                title: name,
-                subtitle: role['desc'] as String,
-                icon: role['icon'] as IconData,
-                selected: isSelected,
-                onTap: () {
-                  ref
-                      .read(mockUserProfileProvider.notifier)
-                      .updateLifestyleRole(name);
-                  ref
-                      .read(mockOnboardingProvider.notifier)
-                      .setStepDirty(2, true);
-                },
-                expandedContent: isSelected
-                    ? _RoleEffectSummary(roleName: name)
-                    : null,
-              ),
-            );
-          }),
-          if (showWorkingExtras) ...[
-            const SizedBox(height: 8),
-            _ChipSection(
-              title: 'Work Type',
-              options: const [
-                'Full-time',
-                'Part-time',
-                'Shift work',
-                'Remote work',
-                'Hybrid',
-              ],
-              selected: profile.workingExtra,
-              onSelect: (value) {
-                ref
-                    .read(mockUserProfileProvider.notifier)
-                    .updateProfile(profile.copyWith(workingExtra: value));
-                ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
-              },
-            ),
-          ],
-          if (showBusinessExtras) ...[
-            const SizedBox(height: 8),
-            _ChipSection(
-              title: 'Business Schedule',
-              options: const ['Fixed hours', 'Flexible work', 'Mixed'],
-              selected: profile.businessMode,
-              onSelect: (value) {
-                ref
-                    .read(mockUserProfileProvider.notifier)
-                    .updateProfile(profile.copyWith(businessMode: value));
-                ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
-              },
-            ),
-          ],
-          const SizedBox(height: 18),
-                _LifestyleSection(profile: profile),
+                ...roles.map((role) {
+                  final key = role['key'] as String;
+                  final name = role['name'] as String;
+                  final isSelected = lifeRole.lifeRole == key;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OnboardingChoiceTile(
+                      title: name,
+                      subtitle: role['desc'] as String,
+                      icon: role['icon'] as IconData,
+                      selected: isSelected,
+                      onTap: () {
+                        ref
+                            .read(mockOnboardingProvider.notifier)
+                            .updateDraft(
+                              (current) => current.copyWith(
+                                lifeRole: current.lifeRole.copyWith(
+                                  lifeRole: key,
+                                  clearWorkType:
+                                      key != LifeRoleDraft.workingKey &&
+                                      key != LifeRoleDraft.studentWorkingKey,
+                                  clearBusinessMode:
+                                      key != LifeRoleDraft.businessKey,
+                                ),
+                                baseTimeline: current.baseTimeline.copyWith(
+                                  clearMealPlanning: false,
+                                ),
+                              ),
+                            );
+                        ref
+                            .read(mockOnboardingProvider.notifier)
+                            .setStepDirty(2, true);
+                      },
+                      expandedContent: isSelected
+                          ? _RoleEffectSummary(roleKey: key)
+                          : null,
+                    ),
+                  );
+                }),
+                if (showWorkingExtras) ...[
+                  const SizedBox(height: 8),
+                  _ChipSection(
+                    title: 'Work Type',
+                    options: const [
+                      _DraftOption('full_time', 'Full-time'),
+                      _DraftOption('part_time', 'Part-time'),
+                      _DraftOption('shift', 'Shift work'),
+                      _DraftOption('remote', 'Remote work'),
+                      _DraftOption('hybrid', 'Hybrid'),
+                    ],
+                    selectedKey: lifeRole.workType,
+                    onSelect: (value) {
+                      ref
+                          .read(mockOnboardingProvider.notifier)
+                          .updateDraft(
+                            (current) => current.copyWith(
+                              lifeRole: current.lifeRole.copyWith(
+                                workType: value,
+                              ),
+                            ),
+                          );
+                      ref
+                          .read(mockOnboardingProvider.notifier)
+                          .setStepDirty(2, true);
+                    },
+                  ),
+                ],
+                if (showBusinessExtras) ...[
+                  const SizedBox(height: 8),
+                  _ChipSection(
+                    title: 'Business Schedule',
+                    options: const [
+                      _DraftOption('fixed_business', 'Fixed hours'),
+                      _DraftOption('flexible_business', 'Flexible work'),
+                      _DraftOption('mixed_business', 'Mixed'),
+                    ],
+                    selectedKey: lifeRole.businessMode,
+                    onSelect: (value) {
+                      ref
+                          .read(mockOnboardingProvider.notifier)
+                          .updateDraft(
+                            (current) => current.copyWith(
+                              lifeRole: current.lifeRole.copyWith(
+                                businessMode: value,
+                              ),
+                              baseTimeline: current.baseTimeline.copyWith(
+                                businessMode: value,
+                              ),
+                            ),
+                          );
+                      ref
+                          .read(mockOnboardingProvider.notifier)
+                          .setStepDirty(2, true);
+                    },
+                  ),
+                ],
+                const SizedBox(height: 18),
+                _LifestyleSection(lifeRole: lifeRole),
               ],
             ),
           ),
@@ -132,19 +174,19 @@ class OnboardingStep2 extends ConsumerWidget {
 }
 
 class _RoleEffectSummary extends StatelessWidget {
-  final String roleName;
+  final String roleKey;
 
-  const _RoleEffectSummary({required this.roleName});
+  const _RoleEffectSummary({required this.roleKey});
 
   @override
   Widget build(BuildContext context) {
     final classesEnabled =
-        roleName == 'Student / School / College' ||
-        roleName == 'Student + Working Person';
+        roleKey == LifeRoleDraft.studentKey ||
+        roleKey == LifeRoleDraft.studentWorkingKey;
     final jobEnabled =
-        roleName == 'Working Person' ||
-        roleName == 'Student + Working Person' ||
-        roleName == 'Business / Startup / Freelancer';
+        roleKey == LifeRoleDraft.workingKey ||
+        roleKey == LifeRoleDraft.studentWorkingKey ||
+        roleKey == LifeRoleDraft.businessKey;
 
     return Wrap(
       spacing: 8,
@@ -168,14 +210,14 @@ class _RoleEffectSummary extends StatelessWidget {
 
 class _ChipSection extends StatelessWidget {
   final String title;
-  final List<String> options;
-  final String? selected;
+  final List<_DraftOption> options;
+  final String? selectedKey;
   final ValueChanged<String> onSelect;
 
   const _ChipSection({
     required this.title,
     required this.options,
-    required this.selected,
+    required this.selectedKey,
     required this.onSelect,
   });
 
@@ -200,9 +242,9 @@ class _ChipSection extends StatelessWidget {
             children: options
                 .map(
                   (option) => OnboardingChip(
-                    label: option,
-                    selected: selected == option,
-                    onTap: () => onSelect(option),
+                    label: option.label,
+                    selected: selectedKey == option.key,
+                    onTap: () => onSelect(option.key),
                   ),
                 )
                 .toList(),
@@ -214,9 +256,9 @@ class _ChipSection extends StatelessWidget {
 }
 
 class _LifestyleSection extends ConsumerWidget {
-  final dynamic profile;
+  final LifeRoleDraft lifeRole;
 
-  const _LifestyleSection({required this.profile});
+  const _LifestyleSection({required this.lifeRole});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -237,49 +279,77 @@ class _LifestyleSection extends ConsumerWidget {
           _SegmentRow(
             label: 'Exercise Level',
             options: const [
-              'Rarely',
-              '1-2 days/week',
-              '3-4 days/week',
-              '5+ days/week',
+              _DraftOption('rarely', 'Rarely'),
+              _DraftOption('1_2_days', '1-2 days/week'),
+              _DraftOption('3_4_days', '3-4 days/week'),
+              _DraftOption('5_plus_days', '5+ days/week'),
             ],
-            selected: profile.exerciseLevel,
+            selectedKey: lifeRole.exerciseLevel,
             onSelect: (value) {
               ref
-                  .read(mockUserProfileProvider.notifier)
-                  .updateProfile(profile.copyWith(exerciseLevel: value));
+                  .read(mockOnboardingProvider.notifier)
+                  .updateDraft(
+                    (current) => current.copyWith(
+                      lifeRole: current.lifeRole.copyWith(exerciseLevel: value),
+                    ),
+                  );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
             },
           ),
           _SegmentRow(
             label: 'Water Intake',
-            options: const ['Low', 'Medium', 'High'],
-            selected: profile.waterIntake,
+            options: const [
+              _DraftOption('low', 'Low'),
+              _DraftOption('medium', 'Medium'),
+              _DraftOption('high', 'High'),
+            ],
+            selectedKey: lifeRole.waterIntake,
             onSelect: (value) {
               ref
-                  .read(mockUserProfileProvider.notifier)
-                  .updateProfile(profile.copyWith(waterIntake: value));
+                  .read(mockOnboardingProvider.notifier)
+                  .updateDraft(
+                    (current) => current.copyWith(
+                      lifeRole: current.lifeRole.copyWith(waterIntake: value),
+                    ),
+                  );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
             },
           ),
           _SegmentRow(
             label: 'Stress Level',
-            options: const ['Low', 'Medium', 'High'],
-            selected: profile.stressLevel,
+            options: const [
+              _DraftOption('low', 'Low'),
+              _DraftOption('medium', 'Medium'),
+              _DraftOption('high', 'High'),
+            ],
+            selectedKey: lifeRole.stressLevel,
             onSelect: (value) {
               ref
-                  .read(mockUserProfileProvider.notifier)
-                  .updateProfile(profile.copyWith(stressLevel: value));
+                  .read(mockOnboardingProvider.notifier)
+                  .updateDraft(
+                    (current) => current.copyWith(
+                      lifeRole: current.lifeRole.copyWith(stressLevel: value),
+                    ),
+                  );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
             },
           ),
           _SegmentRow(
             label: 'Sleep Quality',
-            options: const ['Poor', 'Okay', 'Good'],
-            selected: profile.sleepQuality,
+            options: const [
+              _DraftOption('poor', 'Poor'),
+              _DraftOption('okay', 'Okay'),
+              _DraftOption('good', 'Good'),
+            ],
+            selectedKey: lifeRole.sleepQuality,
             onSelect: (value) {
               ref
-                  .read(mockUserProfileProvider.notifier)
-                  .updateProfile(profile.copyWith(sleepQuality: value));
+                  .read(mockOnboardingProvider.notifier)
+                  .updateDraft(
+                    (current) => current.copyWith(
+                      lifeRole: current.lifeRole.copyWith(sleepQuality: value),
+                    ),
+                  );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
             },
           ),
@@ -291,14 +361,14 @@ class _LifestyleSection extends ConsumerWidget {
 
 class _SegmentRow extends StatelessWidget {
   final String label;
-  final List<String> options;
-  final String selected;
+  final List<_DraftOption> options;
+  final String? selectedKey;
   final ValueChanged<String> onSelect;
 
   const _SegmentRow({
     required this.label,
     required this.options,
-    required this.selected,
+    required this.selectedKey,
     required this.onSelect,
   });
 
@@ -315,12 +385,33 @@ class _SegmentRow extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           OnboardingLiquidSlider(
-            options: options,
-            selectedValue: selected,
-            onChanged: onSelect,
+            options: options.map((option) => option.label).toList(),
+            selectedValue: _labelForKey(options, selectedKey),
+            onChanged: (label) => onSelect(_keyForLabel(options, label)),
           ),
         ],
       ),
     );
   }
+}
+
+class _DraftOption {
+  final String key;
+  final String label;
+
+  const _DraftOption(this.key, this.label);
+}
+
+String _labelForKey(List<_DraftOption> options, String? key) {
+  for (final option in options) {
+    if (option.key == key) return option.label;
+  }
+  return '';
+}
+
+String _keyForLabel(List<_DraftOption> options, String label) {
+  for (final option in options) {
+    if (option.label == label) return option.key;
+  }
+  return options.first.key;
 }

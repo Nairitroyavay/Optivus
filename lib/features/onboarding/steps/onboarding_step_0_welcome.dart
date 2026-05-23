@@ -4,14 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 
 class OnboardingStep0 extends ConsumerWidget {
-  final TextEditingController nameController;
-  final FocusNode nameFocus;
-
-  const OnboardingStep0({
-    super.key,
-    required this.nameController,
-    required this.nameFocus,
-  });
+  const OnboardingStep0({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

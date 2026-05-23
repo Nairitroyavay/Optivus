@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// import 'package:firebase_core/firebase_core.dart';
-// import 'package:optivus/config/firebase_options.dart';
 import 'package:optivus/app/optivus_app.dart';
 
 void main() async {
@@ -10,35 +8,22 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Configure modern Android/iOS edge-to-edge UI
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.dark,
-    statusBarBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.transparent,
-    systemNavigationBarIconBrightness: Brightness.dark,
-    systemNavigationBarDividerColor: Colors.transparent,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+      statusBarBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.dark,
+      systemNavigationBarDividerColor: Colors.transparent,
+    ),
+  );
 
   // Enable edge-to-edge mode (default app mode — not forced immersive hidden bars)
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   // Frontend-only mode: no backend initialization
-  debugPrint('🟢 Optivus frontend-only mode: backend disabled');
+  debugPrint('Optivus frontend-only mode: backend disabled');
 
-  // Initialize Firebase Core safely with platforms options (disabled for frontend-only phase)
-  /*
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint('🔴 Firebase initialization error: $e');
-  }
-  */
-
-  runApp(
-    const ProviderScope(
-      child: OptivusApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: OptivusApp()));
 }

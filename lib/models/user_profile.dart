@@ -2,7 +2,7 @@ class UserProfile {
   final String id;
   final String email;
   final String displayName;
-  
+
   // Lifestyle Role
   final String lifeRole; // e.g. Student, Working Person, etc.
   final String? workingExtra; // e.g. Full-time, Remote, Shift work, Freelancer
@@ -41,22 +41,22 @@ class UserProfile {
     this.lifeRole = '',
     this.workingExtra,
     this.businessMode,
-    this.exerciseLevel = 'Rarely',
-    this.waterIntake = 'Low',
-    this.stressLevel = 'Medium',
-    this.sleepQuality = 'Okay',
-    this.ageRange = '18–24',
-    this.height = 175.0,
-    this.weight = 70.0,
-    this.gender = 'Prefer not to say',
-    this.bmiEstimate = 22.9,
-    this.calorieEstimate = 2000.0,
-    this.proteinEstimate = 120.0,
+    this.exerciseLevel = '',
+    this.waterIntake = '',
+    this.stressLevel = '',
+    this.sleepQuality = '',
+    this.ageRange = '',
+    this.height = 0.0,
+    this.weight = 0.0,
+    this.gender = '',
+    this.bmiEstimate = 0.0,
+    this.calorieEstimate = 0.0,
+    this.proteinEstimate = 0.0,
     this.hasCompletedOnboarding = false,
     this.onboardingStep = 0,
-    this.coachName = 'Sensei',
-    this.coachStyle = 'Supportive',
-    this.slipUpStyle = 'Forgiving',
+    this.coachName = '',
+    this.coachStyle = '',
+    this.slipUpStyle = '',
   });
 
   UserProfile copyWith({
@@ -101,7 +101,8 @@ class UserProfile {
       bmiEstimate: bmiEstimate ?? this.bmiEstimate,
       calorieEstimate: calorieEstimate ?? this.calorieEstimate,
       proteinEstimate: proteinEstimate ?? this.proteinEstimate,
-      hasCompletedOnboarding: hasCompletedOnboarding ?? this.hasCompletedOnboarding,
+      hasCompletedOnboarding:
+          hasCompletedOnboarding ?? this.hasCompletedOnboarding,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       coachName: coachName ?? this.coachName,
       coachStyle: coachStyle ?? this.coachStyle,

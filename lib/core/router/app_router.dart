@@ -16,14 +16,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/loading',
         builder: (context, state) => const LoadingScreen(),
       ),
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const WelcomeScreen(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const WelcomeScreen()),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/signup',
         builder: (context, state) => const SignupScreen(),
@@ -34,12 +28,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/app',
-        builder: (context, state) => const AppShell(),
+        builder: (context, state) {
+          final requestedTab = int.tryParse(
+            state.uri.queryParameters['tab'] ?? '',
+          );
+          return AppShell(initialIndex: requestedTab ?? 1);
+        },
       ),
-      GoRoute(
-        path: '/home',
-        redirect: (context, state) => '/app',
-      ),
+      GoRoute(path: '/home', redirect: (context, state) => '/app'),
     ],
   );
 });
