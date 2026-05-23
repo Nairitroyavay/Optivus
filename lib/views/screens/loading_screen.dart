@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 import 'package:optivus/state/mock_auth_state.dart';
+import 'package:optivus/state/mock_app_state.dart';
 
 /// Shown while resolving the user's Auth and Firestore status.
 /// Prevents premature redirects and gives a polished first-launch experience.
@@ -40,7 +41,13 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
         if (mounted) {
           final authState = ref.read(mockAuthProvider);
           if (authState.isLoggedIn) {
-            context.go('/home');
+            final hasCompletedOnboarding =
+                ref.read(mockUserProfileProvider).hasCompletedOnboarding;
+            if (hasCompletedOnboarding) {
+              context.go('/app');
+            } else {
+              context.go('/onboarding');
+            }
           } else {
             context.go('/');
           }

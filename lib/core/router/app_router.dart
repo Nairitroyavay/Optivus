@@ -6,6 +6,7 @@ import '../../views/screens/login_screen.dart';
 import '../../views/screens/signup_screen.dart';
 import '../../views/screens/loading_screen.dart';
 import '../../views/screens/app_shell.dart';
+import '../../features/onboarding/onboarding_flow.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -28,8 +29,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SignupScreen(),
       ),
       GoRoute(
-        path: '/home',
+        path: '/onboarding',
+        builder: (context, state) => const OnboardingFlow(),
+      ),
+      GoRoute(
+        path: '/app',
         builder: (context, state) => const AppShell(),
+      ),
+      GoRoute(
+        path: '/home',
+        redirect: (context, state) => '/app',
       ),
     ],
   );

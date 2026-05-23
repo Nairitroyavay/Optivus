@@ -1,5 +1,227 @@
 # GEMINI.md — Optivus Coding Agent Charter
+# TEMPORARY OVERRIDE — OPTIVUS NEW FRONTEND BUILD
 
+This override applies only to the new frontend rebuild inside:
+
+/Users/roy/optivus2/Optivus
+
+This task is FRONTEND-ONLY.
+
+The old /Users/roy/optivus2 project is reference only.
+Do not edit the old project.
+Do not import from old optivus2/lib.
+Do not import from reference_copied_old_frontend directly into active app code.
+
+All active implementation must stay inside:
+
+/Users/roy/optivus2/Optivus
+
+## Frontend-only backend safety
+
+For this frontend phase:
+
+- Do not connect backend.
+- Do not call Firebase Auth.
+- Do not call Firestore.
+- Do not call Cloudflare Workers.
+- Do not call Gemini/OpenAI.
+- Do not upload files.
+- Do not request real Android permissions.
+- Do not open UPI apps.
+- Do not require Mapbox token.
+- Do not require internet.
+- Do not require Firebase config.
+- Do not require google-services.json.
+- Do not require API keys.
+
+main.dart must not actively require Firebase to run.
+Firebase initialization must be disabled by default for this frontend-only phase.
+
+Allowed:
+- mock/local state
+- backend-ready models
+- placeholder UI
+- TODO comments for future backend
+- copied reference files as visual reference only
+
+Not allowed:
+- real Firebase startup
+- real Firebase Auth request
+- real Firestore request
+- real AI request
+- real upload
+- real permission dialog
+- real UPI intent
+- real Mapbox runtime dependency unless already safely mocked
+
+## Current goal
+
+Build the complete Optivus frontend:
+
+Splash/Auth
+→ Onboarding 0–11
+→ Main App Shell with 6 tabs:
+Home, Routine, Tracker, Coach, Goals, Profile
+
+Every screen should be reachable, visually complete, and use local/mock state.
+
+## Design rules
+
+Optivus must feel:
+- liquid
+- glassy
+- soft
+- premium
+- calm
+- rounded
+- floating
+- spacious
+- modern iOS-style Android UI
+
+Avoid:
+- default Material look
+- harsh rectangular holders
+- clutter
+- dark/heavy style
+- basic habit tracker feeling
+
+## Edge-to-edge / fullscreen rule
+
+Optivus must support modern Android edge-to-edge UI.
+
+Default:
+- transparent status bar
+- transparent navigation bar
+- no black navigation strip
+- background flows behind system bars
+- content still respects SafeArea
+- floating tab bar sits above bottom gesture/nav area
+
+Do not force hidden system bars by default.
+
+Add Profile → App Preferences:
+- Edge-to-edge UI: on by default
+- Fullscreen / Immersive Mode: off by default
+- Compact Cards
+- Timeline Full 24h Default
+- Haptics placeholder
+
+## Liquid tab bar rule
+
+In the main app:
+- Liquid tab bar must float above background.
+- It must always be visible.
+- Current tab indicator must always be visible.
+- Tab bar must stay visible on Routine details, Tracker details, Coach sessions, Goals details, and Profile settings.
+- Prefer IndexedStack, nested content, and bottom sheets.
+- Do not push full-screen routes that hide the tab bar unless absolutely necessary.
+
+## Onboarding save/next rule
+
+Onboarding logic must be exact:
+
+Save:
+- validates current step
+- shows loading only on Save button
+- saves to local/mock onboarding state
+- marks step saved/completed
+- stays on same step
+- prevents double tap
+
+Next:
+- validates first
+- if invalid, shows missing field message
+- if dirty/not saved, triggers save flow
+- after save success, moves to next step
+- prevents double tap
+
+Navigation:
+- user can go back using indicator tap or left/back swipe
+- user can jump back to completed previous steps
+- user cannot jump forward to incomplete steps
+- forward swipe to incomplete step is blocked
+- Android back goes to previous onboarding step, not exit immediately
+- Enter Optivus disabled until Onboarding 11 is complete
+
+## Reference copied files
+
+reference_copied_old_frontend/ is reference only.
+
+Rules:
+- Do not import files from this folder.
+- Do not exact-copy provider/backend logic.
+- Use it only for visual/UX reference.
+- Rebuild clean code inside lib/features/.
+- If analyzer checks this folder and fails, exclude:
+  reference_copied_old_frontend/**
+
+## Implementation phasing
+
+Do not implement the full frontend in one uncontrolled edit.
+
+Use phases:
+
+1. Safety + structure + backend disabled + edge-to-edge
+2. Onboarding 0–11
+3. App Shell + floating liquid tab bar
+4. Home + Mind Timeline
+5. Routine
+6. Tracker
+7. Coach
+8. Goals
+9. Profile
+10. Final QA
+
+After each phase:
+- run flutter analyze
+- fix analyzer issues
+- report files changed
+- continue only after the phase is clean
+
+If analyzer fails, stop and fix before moving to the next phase.
+
+## Verification
+
+Run from:
+
+/Users/roy/optivus2/Optivus
+
+Required:
+flutter clean
+flutter pub get
+flutter analyze
+
+If possible:
+flutter test
+flutter build apk --debug
+flutter run -d RMX2001
+
+Manual checks:
+- app runs with internet off
+- app runs without Firebase config
+- no Firebase initialization happens
+- no backend call appears in logs
+- no real permission dialog opens
+- no UPI app opens
+- no black Android navigation strip
+- status bar transparent
+- navigation bar transparent
+- keyboard does not hide login/signup/onboarding buttons
+- floating tab bar stays above bottom gesture area
+- reference_copied_old_frontend is not imported
+
+## Output
+
+Every phase report must include:
+
+1. Files inspected
+2. Files changed
+3. Summary of changes
+4. Backend calls affected: must be None
+5. Firebase/Firestore paths affected: must be None for frontend-only phase
+6. Events affected: must be None for frontend-only phase
+7. Verification results
+8. Remaining risks / TODOs
 > This file is the operating contract for Gemini CLI inside the **Optivus** repository.
 > Read it fully **before every task**. Treat it as binding. When in doubt, **stop and ask**.
 

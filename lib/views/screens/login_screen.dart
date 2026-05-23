@@ -10,6 +10,7 @@ import 'package:optivus/widgets/liquid_glass_panel.dart';
 // import 'package:optivus/services/auth_service.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
 import 'package:optivus/state/mock_auth_state.dart';
+import 'package:optivus/state/mock_app_state.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLOUR TOKENS
@@ -108,8 +109,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _passCtrl.text,
       );
 
-      // Navigate to temporary app shell placeholder
-      context.go('/home');
+      // Route based on onboarding completion status
+      final hasCompletedOnboarding =
+          ref.read(mockUserProfileProvider).hasCompletedOnboarding;
+      if (hasCompletedOnboarding) {
+        context.go('/app');
+      } else {
+        context.go('/onboarding');
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {

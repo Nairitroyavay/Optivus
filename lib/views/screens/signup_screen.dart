@@ -184,8 +184,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
             _passCtrl.text,
           );
 
-      // Navigate to onboarding or temporary app shell placeholder
-      context.go('/home');
+      // Signup always goes to onboarding first
+      context.go('/onboarding');
     } catch (_) {
       if (!mounted) return;
       setState(() {

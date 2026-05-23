@@ -1,0 +1,1934 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/state/mock_app_state.dart';
+
+class BaseTimelineStep extends ConsumerStatefulWidget {
+  const BaseTimelineStep({super.key});
+
+  @override
+  ConsumerState<BaseTimelineStep> createState() => _BaseTimelineStepState();
+}
+
+class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  final _titleCtrl = TextEditingController();
+  final _locationCtrl = TextEditingController();
+  final _mealCtrl = TextEditingController();
+  final _fixedCtrl = TextEditingController();
+  final _skinCtrl = TextEditingController();
+
+  int _day = 0;
+  int _startHour = 9;
+  int _endHour = 10;
+  String _setupMode = 'Manual';
+  String _eatingMode = 'Mixed';
+  String _businessMode = 'Fixed';
+  String _workBestTime = 'Morning';
+  String _workPriority = 'Medium';
+  bool _hardBlock = true;
+  bool _skinSkipped = false;
+  String? _editingItemId;
+
+  static const _tabs = [
+    'Classes',
+    'Job / Work / Business',
+    'Eating',
+    'Fixed',
+    'Skin Care',
+  ];
+  static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(() {
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _titleCtrl.dispose();
+    _locationCtrl.dispose();
+    _mealCtrl.dispose();
+    _fixedCtrl.dispose();
+    _skinCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _classesEnabled(String role) =>
+      role == 'Student' ||
+      role == 'Student / School / College' ||
+      role == 'Student + Working Person';
+
+  bool _jobEnabled(String role) =>
+      role == 'Working Person' ||
+      role == 'Student + Working Person' ||
+      role == 'Business / Startup / Freelancer';
+
+  bool _classesRequired(String role) => _classesEnabled(role);
+
+  bool _jobRequired(String role) => _jobEnabled(role);
+
+  String _timeLabel(int hour) {
+    final h = hour % 12 == 0 ? 12 : hour % 12;
+    return '$h:00 ${hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  int _clampHour(num value, int min, int max) => value.clamp(min, max).toInt();
+
+  void _addRoutine(
+    String type,
+    TextEditingController controller,
+    RoutineBlockType blockType,
+  ) {
+    final title = controller.text.trim();
+    if (title.isEmpty) return;
+    final safeEndHour = _endHour <= _startHour ? _startHour + 1 : _endHour;
+    final id =
+        _editingItemId ??
+        'onboarding-$type-${DateTime.now().millisecondsSinceEpoch}';
+    final item = RoutineItem(
+      id: id,
+      title: title,
+      startMinute: _startHour * 60,
+      endMinute: _clampHour(safeEndHour, 1, 24) * 60,
+      blockType: blockType,
+      repeatDays: [_day + 1],
+      location: _locationCtrl.text.trim().isEmpty
+          ? null
+          : _locationCtrl.text.trim(),
+      notes: type,
+      mealCategory: type == 'Eating' ? title : null,
+      calories: type == 'Eating' ? 420 : null,
+      protein: type == 'Eating' ? 24 : null,
+      skincareProducts: type == 'Skin Care' ? [title] : null,
+    );
+
+    final routineNotifier = ref.read(mockRoutineProvider.notifier);
+    if (_editingItemId == null) {
+      routineNotifier.addRoutineItem(item);
+    } else {
+      routineNotifier.updateRoutineItem(item);
+    }
+
+    setState(() {
+      controller.clear();
+      _locationCtrl.clear();
+      _editingItemId = null;
+      _endHour = _clampHour(safeEndHour, 1, 24);
+    });
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
+  }
+
+  void _editItem(RoutineItem item) {
+    final targetController = item.notes == 'Eating'
+        ? _mealCtrl
+        : item.notes == 'Fixed'
+        ? _fixedCtrl
+        : item.notes == 'Skin Care'
+        ? _skinCtrl
+        : _titleCtrl;
+
+    setState(() {
+      _editingItemId = item.id;
+      targetController.text = item.title;
+      _locationCtrl.text = item.location ?? '';
+      _day = item.repeatDays.isEmpty
+          ? 0
+          : _clampHour(item.repeatDays.first - 1, 0, 6);
+      _startHour = _clampHour(item.startMinute ~/ 60, 0, 23);
+      _endHour = _clampHour(item.endMinute ~/ 60, _startHour + 1, 24);
+      _hardBlock = item.blockType == RoutineBlockType.hardBlock;
+    });
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
+  }
+
+  void _copyToOtherDays(RoutineItem item) {
+    final existingDays = item.repeatDays.toSet();
+    final notifier = ref.read(mockRoutineProvider.notifier);
+    for (int day = 1; day <= 7; day++) {
+      if (existingDays.contains(day)) continue;
+      notifier.addRoutineItem(
+        item.copyWith(
+          id: '${item.id}-d$day-${DateTime.now().microsecondsSinceEpoch}',
+          repeatDays: [day],
+        ),
+      );
+    }
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = ref.watch(mockUserProfileProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const OnboardingSectionTitle(
+                title: 'Set Base Timeline',
+                subtitle:
+                    'Build the fixed anchors Optivus should schedule around.',
+              ),
+              const SizedBox(height: 12),
+              OnboardingGlassCard(
+                padding: const EdgeInsets.all(12),
+                radius: 22,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: _tabs.asMap().entries.map((e) {
+                      final isSelected = _tabController.index == e.key;
+                      return Padding(
+                        padding: EdgeInsets.only(right: e.key == _tabs.length - 1 ? 0 : 8),
+                        child: OnboardingChip(
+                          label: e.value,
+                          selected: isSelected,
+                          onTap: () => _tabController.animateTo(e.key),
+                          accent: e.key == 0 ? OptivusColors.aquaAccent : 
+                                  e.key == 1 ? OptivusColors.brandAccent : 
+                                  e.key == 2 ? OptivusColors.brandAccent :
+                                  OptivusColors.aquaAccent,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _section(
+                enabled: _classesEnabled(profile.lifeRole),
+                requiredLabel: _classesRequired(profile.lifeRole)
+                    ? 'Required for your role'
+                    : 'Disabled by current role',
+                title: 'Classes',
+                icon: Icons.school_rounded,
+                accent: OptivusColors.aquaAccent,
+                description:
+                    'Add subjects, day, location, repeat pattern, and hard or soft blocks.',
+                controller: _titleCtrl,
+                controllerHint: 'Subject, lab, or lecture',
+                addLabel: 'Add class',
+                blockType: RoutineBlockType.hardBlock,
+                filter: (item) =>
+                    item.notes == 'Classes' || item.id == 'routine-college',
+                chips: const [
+                  'Subject name',
+                  'Hard block',
+                  'Soft block',
+                  'Repeat weekly',
+                  'Copy to other days',
+                ],
+              ),
+              _section(
+                enabled: _jobEnabled(profile.lifeRole),
+                requiredLabel: _jobRequired(profile.lifeRole)
+                    ? 'Required for your role'
+                    : 'Disabled by current role',
+                title: 'Job / Work / Business',
+                icon: Icons.work_rounded,
+                accent: OptivusColors.brandAccent,
+                description:
+                    'Set fixed shifts, flexible work windows, business duration, and best time.',
+                controller: _titleCtrl,
+                controllerHint: 'Office shift, client work, store hours',
+                addLabel: 'Add work block',
+                blockType: RoutineBlockType.hardBlock,
+                filter: (item) => item.notes == 'Job / Work / Business',
+                chips: const [
+                  'Normal job schedule',
+                  'Fixed',
+                  'Flexible',
+                  'Mixed',
+                  'Priority',
+                ],
+                extra: _businessModeSelector(),
+              ),
+              _eatingSection(),
+              _fixedSection(),
+              _skinCareSection(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _section({
+    required bool enabled,
+    required String requiredLabel,
+    required String title,
+    required IconData icon,
+    required Color accent,
+    required String description,
+    required TextEditingController controller,
+    required String controllerHint,
+    required String addLabel,
+    required RoutineBlockType blockType,
+    required bool Function(RoutineItem item) filter,
+    required List<String> chips,
+    Widget? extra,
+  }) {
+    final items = ref.watch(mockRoutineProvider).where(filter).toList();
+    final sectionItems = items
+        .where((item) => item.repeatDays.contains(_day + 1))
+        .toList();
+
+    return OnboardingScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 34),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _setupHeader(
+            title,
+            description,
+            requiredLabel,
+            icon,
+            accent,
+            enabled: enabled,
+            itemCount: items.length,
+          ),
+          const SizedBox(height: 12),
+          _dayChips(accent),
+          const SizedBox(height: 12),
+          _modeTabs(),
+          const SizedBox(height: 12),
+          _setupHeaderStrip('Set Your Weekly $title Schedule', accent),
+          const SizedBox(height: 12),
+          if (_setupMode != 'Manual') _placeholderImportCard(),
+          if (extra != null) ...[extra, const SizedBox(height: 12)],
+          _routineSetupFrame(
+            title: title == 'Classes'
+                ? 'Your Fixed Classes'
+                : 'Your Work / Business Anchors',
+            subtitle: title == 'Classes'
+                ? 'Stay on top of your semester with a clear timetable.'
+                : 'Protect fixed shifts and flexible business windows.',
+            items: sectionItems,
+            accent: accent,
+            emptyLabel: enabled
+                ? 'Tap a glass plus row or use manual add below.'
+                : 'This setup is disabled by your selected role.',
+            onAddAtHour: enabled
+                ? (hour) => setState(() {
+                    _startHour = hour;
+                    _endHour = _clampHour(hour + 1, 1, 24);
+                  })
+                : null,
+          ),
+          const SizedBox(height: 12),
+          ...sectionItems.map((item) => _timelineItemCard(item, accent)),
+          _manualAddCard(
+            icon: icon,
+            accent: accent,
+            title: addLabel,
+            hint: controllerHint,
+            controller: controller,
+            onAdd: enabled
+                ? () => _addRoutine(
+                    title,
+                    controller,
+                    _hardBlock
+                        ? RoutineBlockType.hardBlock
+                        : RoutineBlockType.softBlock,
+                  )
+                : null,
+            chips: chips,
+            location: title == 'Classes' || title == 'Job / Work / Business',
+          ),
+          const SizedBox(height: 12),
+          _reviewCard(accent),
+        ],
+      ),
+    );
+  }
+
+  Widget _setupHeader(
+    String title,
+    String description,
+    String requiredLabel,
+    IconData icon,
+    Color accent, {
+    bool enabled = true,
+    int itemCount = 0,
+  }) {
+    return OnboardingGlassCard(
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accent.withValues(alpha: 0.18),
+            ),
+            child: Icon(icon, color: accent),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: OptivusColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SectionStatusRail(
+                  accent: accent,
+                  enabled: enabled,
+                  status: requiredLabel,
+                  count: itemCount,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dayChips(Color accent) {
+    return OnboardingGlassCard(
+      padding: const EdgeInsets.all(12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: List.generate(
+            _days.length,
+            (index) => Padding(
+              padding: EdgeInsets.only(
+                right: index == _days.length - 1 ? 0 : 6,
+              ),
+              child: OnboardingDayDroplet(
+                label: _days[index].toUpperCase(),
+                selected: _day == index,
+                color: accent,
+                onTap: () => setState(() => _day = index),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _setupHeaderStrip(String label, Color accent) {
+    return Container(
+      width: double.infinity,
+      height: 44,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.90),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Row(
+                children:
+                    [accent, OptivusColors.aquaAccent, const Color(0xFFFF88C9)]
+                        .map(
+                          (color) => Expanded(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [
+                                    color.withValues(alpha: 0.10),
+                                    color.withValues(alpha: 0.32),
+                                    color.withValues(alpha: 0.10),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+              ),
+            ),
+            Positioned.fill(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Center(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modeTabs() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OnboardingChip(
+          label: 'Manual add',
+          selected: _setupMode == 'Manual',
+          icon: Icons.edit_calendar_rounded,
+          onTap: () => setState(() => _setupMode = 'Manual'),
+        ),
+        OnboardingChip(
+          label: 'AI Text placeholder',
+          selected: _setupMode == 'AI Text',
+          icon: Icons.text_fields_rounded,
+          onTap: () => setState(() => _setupMode = 'AI Text'),
+          accent: OptivusColors.aquaAccent,
+        ),
+        OnboardingChip(
+          label: 'Photo Upload placeholder',
+          selected: _setupMode == 'Photo Upload',
+          icon: Icons.document_scanner_rounded,
+          onTap: () => setState(() => _setupMode = 'Photo Upload'),
+          accent: const Color(0xFFFF88C9),
+        ),
+      ],
+    );
+  }
+
+  Widget _placeholderImportCard() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: OnboardingGlassCard(
+        tint: OptivusColors.aquaAccent.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.auto_fix_high_rounded,
+              color: OptivusColors.aquaAccent,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Frontend placeholder only. Review cards are shown here later, but no AI, upload, permissions, or backend call runs now.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _businessModeSelector() {
+    return OnboardingGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Business mode',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: ['Fixed', 'Flexible', 'Mixed']
+                .map(
+                  (mode) => OnboardingChip(
+                    label: mode,
+                    selected: _businessMode == mode,
+                    onTap: () => setState(() => _businessMode = mode),
+                  ),
+                )
+                .toList(),
+          ),
+          if (_businessMode == 'Flexible') ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Flexible business window: 3 hours, best time 10 AM to 1 PM.',
+              style: TextStyle(
+                fontSize: 11,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Text(
+            'Best time',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: ['Morning', 'Afternoon', 'Evening', 'Night']
+                .map(
+                  (time) => OnboardingChip(
+                    label: time,
+                    selected: _workBestTime == time,
+                    onTap: () => setState(() => _workBestTime = time),
+                    accent: OptivusColors.aquaAccent,
+                  ),
+                )
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Priority',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: ['Low', 'Medium', 'High']
+                .map(
+                  (priority) => OnboardingChip(
+                    label: priority,
+                    selected: _workPriority == priority,
+                    onTap: () => setState(() => _workPriority = priority),
+                    accent: OptivusColors.brandAccent,
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _presetActionGrid({
+    required Color accent,
+    required List<(String, IconData)> items,
+    required ValueChanged<String> onSelect,
+  }) {
+    return OnboardingGlassCard(
+      padding: const EdgeInsets.all(14),
+      tint: accent.withValues(alpha: 0.06),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Quick setup presets',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: items
+                .map(
+                  (item) => OnboardingActionPill(
+                    label: item.$1,
+                    icon: item.$2,
+                    accent: accent,
+                    compact: true,
+                    onTap: () => onSelect(item.$1),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _manualAddCard({
+    required IconData icon,
+    required Color accent,
+    required String title,
+    required String hint,
+    required TextEditingController controller,
+    required VoidCallback? onAdd,
+    required List<String> chips,
+    bool location = false,
+  }) {
+    final isEditing = _editingItemId != null;
+
+    return OnboardingGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _glassTextField(
+            controller: controller,
+            hint: hint,
+            enabled: onAdd != null,
+          ),
+          if (location) ...[
+            const SizedBox(height: 10),
+            _glassTextField(
+              controller: _locationCtrl,
+              hint: 'Location optional',
+              enabled: onAdd != null,
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _glassTimeField(
+                  'Start',
+                  _startHour,
+                  (v) => setState(() => _startHour = v),
+                  accent,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _glassTimeField(
+                  'End',
+                  _endHour,
+                  (v) => setState(() => _endHour = v),
+                  accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: chips.map((chip) {
+              final isHardChip = chip == 'Hard block';
+              final isSoftChip = chip == 'Soft block';
+              final selected = isHardChip
+                  ? _hardBlock
+                  : isSoftChip
+                  ? !_hardBlock
+                  : chip == 'Fixed' ||
+                        chip == 'Subject name' ||
+                        chip == 'Home meal-time' ||
+                        chip == 'Morning routine';
+              return OnboardingChip(
+                label: chip,
+                selected: selected,
+                onTap: isHardChip || isSoftChip
+                    ? () => setState(() => _hardBlock = isHardChip)
+                    : null,
+                accent: isSoftChip
+                    ? OptivusColors.aquaAccent
+                    : OptivusColors.brandAccent,
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.center,
+            child: OnboardingActionPill(
+              label: isEditing ? 'Update day block' : 'Add / update day block',
+              icon: isEditing ? Icons.check_rounded : Icons.add_rounded,
+              accent: accent,
+              selected: true,
+              onTap: onAdd,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _glassTextField({
+    required TextEditingController controller,
+    required String hint,
+    required bool enabled,
+  }) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.46,
+      child: IgnorePointer(
+        ignoring: !enabled,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.25),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.75),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.5),
+                blurRadius: 8,
+                spreadRadius: -2,
+                offset: const Offset(-1, -1),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14.5),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.6),
+                            Colors.white.withValues(alpha: 0.1),
+                            Colors.white.withValues(alpha: 0.0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  TextField(
+                    controller: controller,
+                    style: const TextStyle(
+                      color: OptivusColors.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: hint,
+                      hintStyle: TextStyle(
+                        color: OptivusColors.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      isDense: true,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _glassTimeField(
+    String label,
+    int value,
+    ValueChanged<int> onChanged,
+    Color accent,
+  ) {
+    void step(int delta) {
+      final lower = label == 'End' ? _clampHour(_startHour + 1, 1, 24) : 0;
+      final upper = label == 'End' ? 24 : 23;
+      onChanged(_clampHour(value + delta, lower, upper));
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.34),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+          ),
+          child: Column(
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: const TextStyle(
+                  color: OptivusColors.textSecondary,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.7,
+                ),
+              ),
+              const SizedBox(height: 7),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _tinyStepButton(Icons.remove_rounded, () => step(-1), accent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _timeLabel(_clampHour(value, 0, 24)),
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: OptivusColors.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _tinyStepButton(Icons.add_rounded, () => step(1), accent),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tinyStepButton(IconData icon, VoidCallback onTap, Color accent) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: accent.withValues(alpha: 0.16),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.76)),
+        ),
+        child: Icon(icon, size: 15, color: accent),
+      ),
+    );
+  }
+
+  Widget _routineSetupFrame({
+    required String title,
+    required String subtitle,
+    required List<RoutineItem> items,
+    required Color accent,
+    required String emptyLabel,
+    ValueChanged<int>? onAddAtHour,
+  }) {
+    const hourHeight = 42.0;
+    const leftOffset = 58.0;
+    final visible = [...items]
+      ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+
+    return OnboardingGlassCard(
+      padding: EdgeInsets.zero,
+      radius: 30,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: OptivusColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: OptivusColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            height: 360,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.30),
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.78)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.035),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(26),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.white,
+                      Colors.white,
+                      Colors.transparent,
+                    ],
+                    stops: [0, 0.06, 0.92, 1],
+                  ).createShader(bounds),
+                  blendMode: BlendMode.dstIn,
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(8, 20, 12, 32),
+                    child: SizedBox(
+                      height: 24 * hourHeight,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Positioned(
+                            top: 0,
+                            bottom: 0,
+                            left: 48,
+                            width: 8,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.34),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.88),
+                                  width: 1.1,
+                                ),
+                              ),
+                            ),
+                          ),
+                          ...List.generate(24, (index) {
+                            final hour = index;
+                            if (hour % 3 != 0) return const SizedBox.shrink();
+                            return Positioned(
+                              top: index * hourHeight - 8,
+                              left: 0,
+                              width: 44,
+                              child: Text(
+                                _timeLabel(hour),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                  color: OptivusColors.textSecondary,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            );
+                          }),
+                          if (visible.isEmpty)
+                            Positioned(
+                              left: leftOffset,
+                              right: 0,
+                              top: 7.5 * hourHeight,
+                              child: _emptyTimelinePill(emptyLabel, accent),
+                            )
+                          else
+                            ...visible.map(
+                              (item) => _timelineBlock(
+                                item,
+                                accent,
+                                hourHeight,
+                                leftOffset,
+                              ),
+                            ),
+                          if (visible.isEmpty)
+                            ...[8, 13, 19].map(
+                              (hour) => Positioned(
+                                top: hour * hourHeight - 18,
+                                left: leftOffset,
+                                right: 0,
+                                height: 36,
+                                child: _timelineAddPill(
+                                  hour,
+                                  accent,
+                                  onAddAtHour,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyTimelinePill(String label, Color accent) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 46),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(23),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.76)),
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: OptivusColors.textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          height: 1.25,
+        ),
+      ),
+    );
+  }
+
+  Widget _timelineAddPill(
+    int hour,
+    Color accent,
+    ValueChanged<int>? onAddAtHour,
+  ) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onAddAtHour == null ? null : () => onAddAtHour(hour),
+      child: Opacity(
+        opacity: onAddAtHour == null ? 0.46 : 1,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.24),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Icon(Icons.add_rounded, color: accent, size: 26),
+              Positioned(left: -3, top: 5, child: _droplet(8)),
+              Positioned(right: -2, bottom: -2, child: _droplet(12)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _timelineBlock(
+    RoutineItem item,
+    Color accent,
+    double hourHeight,
+    double leftOffset,
+  ) {
+    final start = item.startMinute / 60 * hourHeight;
+    final height = (item.durationMinutes / 60 * hourHeight)
+        .clamp(38.0, 130.0)
+        .toDouble();
+    final blockAccent = item.hasConflict ? OptivusColors.danger : accent;
+    final dayLabel = item.repeatDays.isEmpty
+        ? _days[_day]
+        : _days[_clampHour(item.repeatDays.first - 1, 0, 6)];
+
+    return Positioned(
+      top: start,
+      left: leftOffset,
+      right: 0,
+      height: height,
+      child: GestureDetector(
+        onTap: () => _editItem(item),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(13, 11, 13, 10),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      blockAccent.withValues(alpha: 0.28),
+                      Colors.white.withValues(alpha: 0.16),
+                      blockAccent.withValues(alpha: 0.06),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.82),
+                    width: 1.3,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: blockAccent.withValues(alpha: 0.18),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                    BoxShadow(
+                      color: Colors.white.withValues(alpha: 0.54),
+                      blurRadius: 6,
+                      offset: const Offset(-1, -1),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(21),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _iconForRoutine(item),
+                          color: blockAccent,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            physics: const NeverScrollableScrollPhysics(),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                              Text(
+                                item.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: OptivusColors.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${_timeLabel(item.startMinute ~/ 60)} - ${_timeLabel(_clampHour(item.endMinute ~/ 60, 0, 24))} | $dayLabel',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: OptivusColors.textSecondary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.more_vert_rounded,
+                          color: OptivusColors.textSecondary,
+                          size: 18,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(top: -8, left: 0, right: 0, child: _tapeHandle()),
+            Positioned(bottom: -8, left: 0, right: 0, child: _tapeHandle()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tapeHandle() {
+    return Center(
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 54,
+            height: 16,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.50),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.92),
+                width: 1.3,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+          ),
+          Positioned(right: -6, bottom: -4, child: _droplet(14)),
+          Positioned(right: 4, top: -2, child: _droplet(8)),
+          Positioned(left: 8, top: -5, child: _droplet(10)),
+          Positioned(left: -4, bottom: 2, child: _droplet(6)),
+        ],
+      ),
+    );
+  }
+
+  Widget _droplet(double size) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withValues(alpha: 0.46),
+        boxShadow: [
+          BoxShadow(color: Colors.white.withValues(alpha: 0.46), blurRadius: 6),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconForRoutine(RoutineItem item) {
+    final text = '${item.title} ${item.notes ?? ''}'.toLowerCase();
+    if (text.contains('sleep') || text.contains('bed')) {
+      return Icons.bed_rounded;
+    }
+    if (text.contains('class') ||
+        text.contains('lecture') ||
+        text.contains('lab')) {
+      return Icons.school_rounded;
+    }
+    if (text.contains('work') ||
+        text.contains('job') ||
+        text.contains('office') ||
+        text.contains('business')) {
+      return Icons.work_rounded;
+    }
+    if (text.contains('meal') ||
+        text.contains('breakfast') ||
+        text.contains('lunch') ||
+        text.contains('dinner')) {
+      return Icons.restaurant_rounded;
+    }
+    if (text.contains('skin') || text.contains('cleanser')) {
+      return Icons.spa_rounded;
+    }
+    if (text.contains('bath') || text.contains('shower')) {
+      return Icons.shower_rounded;
+    }
+    if (text.contains('travel')) return Icons.directions_bus_rounded;
+    if (text.contains('prayer')) return Icons.self_improvement_rounded;
+    if (text.contains('medication')) return Icons.medication_rounded;
+    return Icons.schedule_rounded;
+  }
+
+  Widget _timelineItemCard(RoutineItem item, Color accent) {
+    final start = _timeLabel(item.startMinute ~/ 60);
+    final end = _timeLabel(_clampHour(item.endMinute ~/ 60, 0, 23));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: OnboardingGlassCard(
+        padding: const EdgeInsets.all(14),
+        selected: item.hasConflict,
+        tint: item.hasConflict
+            ? OptivusColors.danger.withValues(alpha: 0.08)
+            : null,
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accent.withValues(alpha: 0.18),
+              ),
+              child: Icon(Icons.schedule_rounded, color: accent, size: 19),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$start to $end on ${_days[_clampHour(item.repeatDays.first - 1, 0, 6)]}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            OnboardingIconPill(
+              icon: Icons.copy_rounded,
+              accent: accent,
+              tooltip: 'Copy to other days',
+              onTap: () => _copyToOtherDays(item),
+            ),
+            const SizedBox(width: 8),
+            OnboardingIconPill(
+              icon: Icons.edit_rounded,
+              accent: accent,
+              tooltip: 'Edit block',
+              onTap: () => _editItem(item),
+            ),
+            const SizedBox(width: 8),
+            OnboardingIconPill(
+              icon: Icons.delete_outline_rounded,
+              accent: OptivusColors.danger,
+              tooltip: 'Delete block',
+              onTap: () {
+                ref
+                    .read(mockRoutineProvider.notifier)
+                    .deleteRoutineItem(item.id);
+                ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _eatingSection() {
+    final routines = ref.watch(mockRoutineProvider);
+    final meals = routines
+        .where((item) => item.mealCategory != null || item.notes == 'Eating')
+        .toList();
+    final dayMeals = meals
+        .where((item) => item.repeatDays.contains(_day + 1))
+        .toList();
+    return OnboardingScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 34),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _setupHeader(
+            'Eating',
+            'Choose living context, meal timing, menu style, and mock calorie/protein estimates.',
+            'Always required',
+            Icons.restaurant_rounded,
+            OptivusColors.success,
+            itemCount: meals.length,
+          ),
+          const SizedBox(height: 12),
+          _dayChips(OptivusColors.success),
+          const SizedBox(height: 12),
+          _modeTabs(),
+          const SizedBox(height: 12),
+          _setupHeaderStrip(
+            'Set Your Daily Eating Routine',
+            OptivusColors.success,
+          ),
+          const SizedBox(height: 12),
+          if (_setupMode != 'Manual') _placeholderImportCard(),
+          OnboardingGlassCard(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  [
+                        'Home',
+                        'Hostel',
+                        'PG',
+                        'Flat',
+                        'Mess',
+                        'Staying alone',
+                        'Mixed',
+                      ]
+                      .map(
+                        (mode) => OnboardingChip(
+                          label: mode,
+                          selected: _eatingMode == mode,
+                          onTap: () => setState(() => _eatingMode = mode),
+                          accent: OptivusColors.success,
+                        ),
+                      )
+                      .toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _routineSetupFrame(
+            title: 'Your Fixed Meals',
+            subtitle:
+                'Maintain regular eating windows without requesting permissions or AI.',
+            items: dayMeals,
+            accent: OptivusColors.success,
+            emptyLabel: 'No meals added yet',
+            onAddAtHour: (hour) => setState(() {
+              _startHour = hour;
+              _endHour = _clampHour(hour + 1, 1, 24);
+            }),
+          ),
+          const SizedBox(height: 12),
+          ...dayMeals.map(
+            (item) => _timelineItemCard(item, OptivusColors.success),
+          ),
+          _manualAddCard(
+            icon: Icons.restaurant_rounded,
+            accent: OptivusColors.success,
+            title: _eatingMode == 'Home'
+                ? 'Add meal time'
+                : 'Add menu / meal plan',
+            hint: _eatingMode == 'Hostel' || _eatingMode == 'Mess'
+                ? 'Mess menu item or meal slot'
+                : 'Breakfast, lunch, dinner, or snack',
+            controller: _mealCtrl,
+            onAdd: () =>
+                _addRoutine('Eating', _mealCtrl, RoutineBlockType.softBlock),
+            chips: const [
+              'Home meal-time',
+              'Menu style',
+              'Mock kcal',
+              'Mock protein',
+            ],
+          ),
+          const SizedBox(height: 12),
+          _reviewCard(OptivusColors.success),
+        ],
+      ),
+    );
+  }
+
+  Widget _fixedSection() {
+    final routines = ref.watch(mockRoutineProvider);
+    final fixedItems = routines
+        .where(
+          (item) =>
+              item.notes == 'Fixed' ||
+              item.id == 'routine-sleep' ||
+              item.title.toLowerCase().contains('bath'),
+        )
+        .toList();
+    final dayFixedItems = fixedItems
+        .where((item) => item.repeatDays.contains(_day + 1))
+        .toList();
+
+    return OnboardingScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 34),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _setupHeader(
+            'Fixed',
+            'Review previous timeline anchors and add prayer, travel, medication, family, tuition, house work, or other fixed blocks.',
+            'Always required',
+            Icons.lock_clock_rounded,
+            const Color(0xFFFF9D5C),
+            itemCount: fixedItems.length,
+          ),
+          const SizedBox(height: 12),
+          OnboardingGlassCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Previous timeline preview',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                ),
+                const SizedBox(height: 10),
+                ...ref
+                    .watch(mockRoutineProvider)
+                    .take(4)
+                    .map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          '${_timeLabel(item.startMinute ~/ 60)} - ${item.title}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _dayChips(const Color(0xFFFF9D5C)),
+          const SizedBox(height: 12),
+          _setupHeaderStrip(
+            'Set Your Fixed Daily Anchors',
+            const Color(0xFFFF9D5C),
+          ),
+          const SizedBox(height: 12),
+          _routineSetupFrame(
+            title: 'Your Fixed Anchors',
+            subtitle:
+                'Sleep, bath, travel, prayer, medication, family, tuition, and house work stay protected.',
+            items: dayFixedItems,
+            accent: const Color(0xFFFF9D5C),
+            emptyLabel: 'Sleep, bath, and fixed anchors appear here',
+            onAddAtHour: (hour) => setState(() {
+              _startHour = hour;
+              _endHour = _clampHour(hour + 1, 1, 24);
+            }),
+          ),
+          const SizedBox(height: 12),
+          ...dayFixedItems.map(
+            (item) => _timelineItemCard(item, const Color(0xFFFF9D5C)),
+          ),
+          _presetActionGrid(
+            accent: const Color(0xFFFF9D5C),
+            items: const [
+              ('Sleep preset', Icons.bed_rounded),
+              ('Bath preset', Icons.shower_rounded),
+              ('Prayer', Icons.self_improvement_rounded),
+              ('Travel', Icons.directions_bus_rounded),
+              ('Medication', Icons.medication_rounded),
+              ('Family responsibility', Icons.family_restroom_rounded),
+              ('Tuition', Icons.menu_book_rounded),
+              ('House work', Icons.cleaning_services_rounded),
+              ('Other', Icons.more_horiz_rounded),
+            ],
+            onSelect: (label) {
+              setState(() {
+                _fixedCtrl.text = label;
+                _hardBlock = true;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          _manualAddCard(
+            icon: Icons.lock_clock_rounded,
+            accent: const Color(0xFFFF9D5C),
+            title: 'Add fixed block',
+            hint:
+                'Prayer, Travel, Medication, Family responsibility, Tuition, House work, Other',
+            controller: _fixedCtrl,
+            onAdd: () =>
+                _addRoutine('Fixed', _fixedCtrl, RoutineBlockType.hardBlock),
+            chips: const [
+              'Sleep preset',
+              'Bath preset',
+              'Hard block',
+              'Conflict protected',
+            ],
+          ),
+          const SizedBox(height: 12),
+          _conflictResolver(),
+        ],
+      ),
+    );
+  }
+
+  Widget _skinCareSection() {
+    final skinItems = ref
+        .watch(mockRoutineProvider)
+        .where(
+          (item) => item.id == 'routine-skincare' || item.notes == 'Skin Care',
+        )
+        .toList();
+    final daySkinItems = skinItems
+        .where((item) => item.repeatDays.contains(_day + 1))
+        .toList();
+    return OnboardingScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 34),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _setupHeader(
+            'Skin Care',
+            'Optional morning and night product steps as soft blocks.',
+            'Optional / skippable',
+            Icons.spa_rounded,
+            OptivusColors.aquaAccent,
+            itemCount: skinItems.length,
+          ),
+          const SizedBox(height: 12),
+          OnboardingGlassCard(
+            selected: _skinSkipped,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _skinSkipped
+                        ? 'Skin care skipped for now'
+                        : 'Set morning or night skin care steps',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                OnboardingActionPill(
+                  label: _skinSkipped ? 'Undo skip' : 'Skip',
+                  icon: _skinSkipped
+                      ? Icons.undo_rounded
+                      : Icons.skip_next_rounded,
+                  accent: OptivusColors.aquaAccent,
+                  compact: true,
+                  onTap: () {
+                    setState(() => _skinSkipped = !_skinSkipped);
+                    ref
+                        .read(mockOnboardingProvider.notifier)
+                        .setStepDirty(4, true);
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (!_skinSkipped) ...[
+            _dayChips(OptivusColors.aquaAccent),
+            const SizedBox(height: 12),
+            _modeTabs(),
+            const SizedBox(height: 12),
+            _setupHeaderStrip(
+              'Set Your Fixed Skincare Routine',
+              OptivusColors.aquaAccent,
+            ),
+            const SizedBox(height: 12),
+            if (_setupMode != 'Manual') _placeholderImportCard(),
+            _routineSetupFrame(
+              title: 'Your Skincare Schedule',
+              subtitle:
+                  'Morning and night product steps are soft blocks and can be skipped.',
+              items: daySkinItems,
+              accent: OptivusColors.aquaAccent,
+              emptyLabel: 'No skin care steps yet',
+              onAddAtHour: (hour) => setState(() {
+                _startHour = hour;
+                _endHour = _clampHour(hour + 1, 1, 24);
+              }),
+            ),
+            const SizedBox(height: 12),
+            ...daySkinItems.map(
+              (item) => _timelineItemCard(item, OptivusColors.aquaAccent),
+            ),
+            _presetActionGrid(
+              accent: OptivusColors.aquaAccent,
+              items: const [
+                ('Morning routine', Icons.wb_sunny_rounded),
+                ('Night routine', Icons.nightlight_round),
+                ('Cleanser', Icons.water_drop_rounded),
+                ('Moisturizer', Icons.spa_rounded),
+                ('Sunscreen', Icons.wb_sunny_outlined),
+                ('Soft block', Icons.swap_horiz_rounded),
+              ],
+              onSelect: (label) {
+                setState(() {
+                  _skinCtrl.text = label;
+                  _hardBlock = false;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            _manualAddCard(
+              icon: Icons.spa_rounded,
+              accent: OptivusColors.aquaAccent,
+              title: 'Add product step',
+              hint: 'Cleanser, moisturizer, sunscreen, retinol',
+              controller: _skinCtrl,
+              onAdd: () => _addRoutine(
+                'Skin Care',
+                _skinCtrl,
+                RoutineBlockType.softBlock,
+              ),
+              chips: const [
+                'Morning routine',
+                'Night routine',
+                'Product steps',
+                'Soft block',
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _reviewCard(Color accent) {
+    return OnboardingGlassCard(
+      tint: accent.withValues(alpha: 0.07),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Preview / review',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Manual entries stay local in mock onboarding state. Imported AI/photo review is represented as placeholder UI only.',
+            style: TextStyle(
+              fontSize: 11,
+              color: OptivusColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OnboardingChip(
+                label: 'Edit',
+                selected: false,
+                icon: Icons.edit_rounded,
+              ),
+              OnboardingChip(
+                label: 'Delete',
+                selected: false,
+                icon: Icons.delete_outline_rounded,
+              ),
+              OnboardingChip(
+                label: 'Copy to other days',
+                selected: false,
+                icon: Icons.copy_rounded,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _conflictResolver() {
+    return OnboardingGlassCard(
+      tint: OptivusColors.danger.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.report_problem_rounded,
+                color: OptivusColors.danger,
+                size: 18,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Conflict resolver example',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Lunch overlaps class from 1 PM to 2 PM. Choose how Optivus should treat this type of conflict.',
+            style: TextStyle(
+              fontSize: 11,
+              color: OptivusColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: const [
+              OnboardingChip(label: 'Keep both', selected: false),
+              OnboardingChip(
+                label: 'Move lunch',
+                selected: true,
+                accent: OptivusColors.success,
+              ),
+              OnboardingChip(label: 'Edit class', selected: false),
+              OnboardingChip(label: 'Mark lunch flexible', selected: false),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionStatusRail extends StatelessWidget {
+  final Color accent;
+  final bool enabled;
+  final String status;
+  final int count;
+
+  const _SectionStatusRail({
+    required this.accent,
+    required this.enabled,
+    required this.status,
+    required this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OnboardingChip(
+          label: status,
+          selected: enabled,
+          accent: enabled ? accent : OptivusColors.textSecondary,
+        ),
+        OnboardingChip(
+          label: count == 0
+              ? 'No blocks yet'
+              : '$count block${count == 1 ? '' : 's'}',
+          selected: count > 0,
+          accent: accent,
+        ),
+        OnboardingChip(
+          label: 'Local mock only',
+          selected: true,
+          icon: Icons.lock_outline_rounded,
+          accent: OptivusColors.aquaAccent,
+        ),
+      ],
+    );
+  }
+}
