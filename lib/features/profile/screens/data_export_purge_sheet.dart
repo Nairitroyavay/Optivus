@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/state/mock_app_state.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 
@@ -80,7 +80,7 @@ void showDataExportPurgeSheet(BuildContext context, WidgetRef ref) {
                               onPressed: () {
                                 Navigator.pop(context); // Dialog
                                 Navigator.pop(context); // Sheet
-                                ref.read(mockUserProfileProvider.notifier).updateProfile(UserProfile());
+                                ref.read(mockUserProfileProvider.notifier).updateProfile(UserProfile.empty(uid: ''));
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Account reset completely. Logging out.'),
@@ -182,7 +182,7 @@ class _DataExportWidgetState extends State<_DataExportWidget> {
                   final profile = widget.ref.read(mockUserProfileProvider);
                   final map = {
                     'exportedAt': DateTime.now().toIso8601String(),
-                    'userId': profile.id,
+                    'userId': profile.uid,
                     'profile': {
                       'name': profile.displayName,
                       'role': profile.lifeRole,

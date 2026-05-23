@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/state/mock_app_state.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/features/goals/screens/goals_sub_screens.dart';
 

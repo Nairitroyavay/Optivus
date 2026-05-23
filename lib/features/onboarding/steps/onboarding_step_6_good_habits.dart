@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
-import 'package:optivus/state/mock_app_state.dart';
+import 'package:optivus/state/app_state.dart';
 
 class OnboardingStep6 extends ConsumerStatefulWidget {
   const OnboardingStep6({super.key});

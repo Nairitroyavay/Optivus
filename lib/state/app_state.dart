@@ -18,7 +18,7 @@ import 'package:optivus/state/mock_seed_data.dart';
 // 1. User Profile State Notifier
 // ==========================================
 class MockUserProfileNotifier extends StateNotifier<UserProfile> {
-  MockUserProfileNotifier() : super(MockSeedData.defaultUserProfile);
+  MockUserProfileNotifier() : super(UserProfile.empty(uid: ''));
 
   void updateProfile(UserProfile profile) {
     state = profile;
@@ -86,7 +86,7 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
   }
 
   void completeOnboarding() {
-    state = state.copyWith(hasCompletedOnboarding: true);
+    state = state.copyWith(onboardingCompleted: true);
   }
 }
 
@@ -749,6 +749,14 @@ final mockPermissionProvider =
 // ==========================================
 class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   MockOnboardingNotifier() : super(OnboardingState());
+
+  void loadSeedData(OnboardingDraft seedDraft) {
+    state = OnboardingState(draft: seedDraft);
+  }
+
+  void reset(String uid) {
+    state = OnboardingState(draft: OnboardingDraft(uid: uid));
+  }
 
   void setStep(int step) {
     state = state.copyWith(currentStep: step, clearValidation: true);

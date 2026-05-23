@@ -304,7 +304,7 @@ class UserModel {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int schemaVersion;
-  final bool hasCompletedOnboarding;
+  final bool onboardingCompleted;
   final int onboardingStep;
   final String? lastDayClosed;
 
@@ -324,7 +324,7 @@ class UserModel {
     required this.createdAt,
     required this.updatedAt,
     this.schemaVersion = 1,
-    this.hasCompletedOnboarding = false,
+    this.onboardingCompleted = false,
     this.onboardingStep = 0,
     this.lastDayClosed,
     this.coachName,
@@ -343,7 +343,7 @@ class UserModel {
       createdAt: _asDateTime(data['createdAt']) ?? DateTime.now(),
       updatedAt: _asDateTime(data['updatedAt']) ?? DateTime.now(),
       schemaVersion: data['schemaVersion'] as int? ?? 1,
-      hasCompletedOnboarding: data['hasCompletedOnboarding'] as bool? ?? false,
+      onboardingCompleted: data['onboardingCompleted'] as bool? ?? false,
       onboardingStep: data['onboardingStep'] as int? ?? 0,
       lastDayClosed: data['lastDayClosed'] as String?,
       coachName: data['coachName'] as String?,
@@ -365,7 +365,7 @@ class UserModel {
       createdAt: _asDateTime(map['createdAt']) ?? DateTime.now(),
       updatedAt: _asDateTime(map['updatedAt']) ?? DateTime.now(),
       schemaVersion: map['schemaVersion'] as int? ?? 1,
-      hasCompletedOnboarding: map['hasCompletedOnboarding'] as bool? ?? false,
+      onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
       onboardingStep: map['onboardingStep'] as int? ?? 0,
       lastDayClosed: map['lastDayClosed'] as String?,
       coachName: map['coachName'] as String?,
@@ -387,7 +387,7 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': FieldValue.serverTimestamp(),
       'schemaVersion': schemaVersion,
-      'hasCompletedOnboarding': hasCompletedOnboarding,
+      'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
       'lastDayClosed': lastDayClosed,
       'coachName': coachName,
@@ -404,7 +404,7 @@ class UserModel {
     String? displayName,
     String? timezone,
     DateTime? updatedAt,
-    bool? hasCompletedOnboarding,
+    bool? onboardingCompleted,
     int? onboardingStep,
     String? lastDayClosed,
     String? coachName,
@@ -420,8 +420,8 @@ class UserModel {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       schemaVersion: schemaVersion,
-      hasCompletedOnboarding:
-          hasCompletedOnboarding ?? this.hasCompletedOnboarding,
+      onboardingCompleted:
+          onboardingCompleted ?? this.onboardingCompleted,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       lastDayClosed: lastDayClosed ?? this.lastDayClosed,
       coachName: coachName ?? this.coachName,

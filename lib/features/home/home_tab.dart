@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/state/mock_app_state.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/models/mind_note.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';

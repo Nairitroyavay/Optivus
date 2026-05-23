@@ -8,7 +8,7 @@ import 'package:optivus/models/money_models.dart';
 
 class MockSeedData {
   static UserProfile get defaultUserProfile => UserProfile(
-    id: 'mock-user-123',
+    uid: 'mock-user-123',
     email: 'roy@optivus.app',
     displayName: 'Roy',
     lifeRole: '',
@@ -25,7 +25,7 @@ class MockSeedData {
     bmiEstimate: 0.0,
     calorieEstimate: 0.0,
     proteinEstimate: 0.0,
-    hasCompletedOnboarding: false,
+    onboardingCompleted: false,
     onboardingStep: 0,
     coachName: '',
     coachStyle: '',

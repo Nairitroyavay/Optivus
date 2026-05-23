@@ -1,12 +1,20 @@
 class UserProfile {
-  final String id;
+  final String uid;
   final String email;
   final String displayName;
+  
+  // Timestamps
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+
+  // Onboarding Status
+  final bool onboardingCompleted;
+  final int onboardingStep;
 
   // Lifestyle Role
-  final String lifeRole; // e.g. Student, Working Person, etc.
-  final String? workingExtra; // e.g. Full-time, Remote, Shift work, Freelancer
-  final String? businessMode; // e.g. Fixed hours, Flexible work, Mixed
+  final String lifeRole; 
+  final String? workingExtra; 
+  final String? businessMode; 
 
   // Lifestyle Attributes
   final String exerciseLevel;
@@ -16,8 +24,8 @@ class UserProfile {
 
   // Body Basics
   final String ageRange;
-  final double height; // cm or feet/inches representation
-  final double weight; // kg or lb
+  final double height; 
+  final double weight; 
   final String gender;
 
   // Estimates
@@ -25,19 +33,19 @@ class UserProfile {
   final double calorieEstimate;
   final double proteinEstimate;
 
-  // Onboarding Status
-  final bool hasCompletedOnboarding;
-  final int onboardingStep;
-
   // Selected Coach Preferences
   final String coachName;
   final String coachStyle;
   final String slipUpStyle;
 
   UserProfile({
-    this.id = 'mock-user-123',
-    this.email = 'user@optivus.app',
-    this.displayName = 'Member',
+    required this.uid,
+    required this.email,
+    required this.displayName,
+    this.createdAt,
+    this.updatedAt,
+    this.onboardingCompleted = false,
+    this.onboardingStep = 0,
     this.lifeRole = '',
     this.workingExtra,
     this.businessMode,
@@ -52,17 +60,87 @@ class UserProfile {
     this.bmiEstimate = 0.0,
     this.calorieEstimate = 0.0,
     this.proteinEstimate = 0.0,
-    this.hasCompletedOnboarding = false,
-    this.onboardingStep = 0,
     this.coachName = '',
     this.coachStyle = '',
     this.slipUpStyle = '',
   });
 
+  factory UserProfile.empty({required String uid, String email = '', String displayName = ''}) {
+    return UserProfile(
+      uid: uid,
+      email: email,
+      displayName: displayName,
+      onboardingCompleted: false,
+      onboardingStep: 0,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'uid': uid,
+      'email': email,
+      'displayName': displayName,
+      'createdAt': createdAt?.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
+      'onboardingCompleted': onboardingCompleted,
+      'onboardingStep': onboardingStep,
+      'lifeRole': lifeRole,
+      'workingExtra': workingExtra,
+      'businessMode': businessMode,
+      'exerciseLevel': exerciseLevel,
+      'waterIntake': waterIntake,
+      'stressLevel': stressLevel,
+      'sleepQuality': sleepQuality,
+      'ageRange': ageRange,
+      'height': height,
+      'weight': weight,
+      'gender': gender,
+      'bmiEstimate': bmiEstimate,
+      'calorieEstimate': calorieEstimate,
+      'proteinEstimate': proteinEstimate,
+      'coachName': coachName,
+      'coachStyle': coachStyle,
+      'slipUpStyle': slipUpStyle,
+    };
+  }
+
+  factory UserProfile.fromMap(Map<String, dynamic> map) {
+    return UserProfile(
+      uid: map['uid'] as String? ?? '',
+      email: map['email'] as String? ?? '',
+      displayName: map['displayName'] as String? ?? '',
+      createdAt: map['createdAt'] != null ? DateTime.tryParse(map['createdAt']) : null,
+      updatedAt: map['updatedAt'] != null ? DateTime.tryParse(map['updatedAt']) : null,
+      onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
+      onboardingStep: map['onboardingStep'] as int? ?? 0,
+      lifeRole: map['lifeRole'] as String? ?? '',
+      workingExtra: map['workingExtra'] as String?,
+      businessMode: map['businessMode'] as String?,
+      exerciseLevel: map['exerciseLevel'] as String? ?? '',
+      waterIntake: map['waterIntake'] as String? ?? '',
+      stressLevel: map['stressLevel'] as String? ?? '',
+      sleepQuality: map['sleepQuality'] as String? ?? '',
+      ageRange: map['ageRange'] as String? ?? '',
+      height: (map['height'] as num?)?.toDouble() ?? 0.0,
+      weight: (map['weight'] as num?)?.toDouble() ?? 0.0,
+      gender: map['gender'] as String? ?? '',
+      bmiEstimate: (map['bmiEstimate'] as num?)?.toDouble() ?? 0.0,
+      calorieEstimate: (map['calorieEstimate'] as num?)?.toDouble() ?? 0.0,
+      proteinEstimate: (map['proteinEstimate'] as num?)?.toDouble() ?? 0.0,
+      coachName: map['coachName'] as String? ?? '',
+      coachStyle: map['coachStyle'] as String? ?? '',
+      slipUpStyle: map['slipUpStyle'] as String? ?? '',
+    );
+  }
+
   UserProfile copyWith({
-    String? id,
+    String? uid,
     String? email,
     String? displayName,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? onboardingCompleted,
+    int? onboardingStep,
     String? lifeRole,
     String? workingExtra,
     String? businessMode,
@@ -77,16 +155,18 @@ class UserProfile {
     double? bmiEstimate,
     double? calorieEstimate,
     double? proteinEstimate,
-    bool? hasCompletedOnboarding,
-    int? onboardingStep,
     String? coachName,
     String? coachStyle,
     String? slipUpStyle,
   }) {
     return UserProfile(
-      id: id ?? this.id,
+      uid: uid ?? this.uid,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      onboardingStep: onboardingStep ?? this.onboardingStep,
       lifeRole: lifeRole ?? this.lifeRole,
       workingExtra: workingExtra ?? this.workingExtra,
       businessMode: businessMode ?? this.businessMode,
@@ -101,9 +181,6 @@ class UserProfile {
       bmiEstimate: bmiEstimate ?? this.bmiEstimate,
       calorieEstimate: calorieEstimate ?? this.calorieEstimate,
       proteinEstimate: proteinEstimate ?? this.proteinEstimate,
-      hasCompletedOnboarding:
-          hasCompletedOnboarding ?? this.hasCompletedOnboarding,
-      onboardingStep: onboardingStep ?? this.onboardingStep,
       coachName: coachName ?? this.coachName,
       coachStyle: coachStyle ?? this.coachStyle,
       slipUpStyle: slipUpStyle ?? this.slipUpStyle,

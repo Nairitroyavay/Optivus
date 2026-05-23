@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:optivus/state/mock_auth_state.dart';
-import 'package:optivus/state/mock_app_state.dart';
+import 'package:optivus/state/app_state.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
@@ -113,7 +112,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     // Double check gate transition
     if (_currentPage == 11) {
       ref.read(mockUserProfileProvider.notifier).completeOnboarding();
-      ref.read(mockAuthProvider.notifier).completeOnboarding();
       if (mounted) {
         context.go('/app?tab=1');
       }

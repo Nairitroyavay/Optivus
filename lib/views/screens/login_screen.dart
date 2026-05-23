@@ -9,8 +9,7 @@ import 'package:optivus/widgets/app_button.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 // import 'package:optivus/services/auth_service.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
-import 'package:optivus/state/mock_auth_state.dart';
-import 'package:optivus/state/mock_app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLOUR TOKENS
@@ -104,19 +103,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
 
       // Update local session state
-      ref.read(mockAuthProvider.notifier).login(
+      ref.read(authProvider.notifier).login(
         _emailCtrl.text.trim(),
         _passCtrl.text,
       );
 
       // Route based on onboarding completion status
-      final hasCompletedOnboarding =
-          ref.read(mockUserProfileProvider).hasCompletedOnboarding;
-      if (hasCompletedOnboarding) {
-        context.go('/app');
-      } else {
-        context.go('/onboarding');
-      }
+      // Handled by GoRouter redirect automatically
     } catch (_) {
       if (!mounted) return;
       setState(() {

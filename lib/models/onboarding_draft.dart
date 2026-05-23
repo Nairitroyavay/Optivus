@@ -1,4 +1,12 @@
 class OnboardingDraft {
+  final String uid;
+  final List<bool> stepCompleted;
+  final List<bool> stepDirty;
+  final List<bool> stepLoading;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final bool onboardingCompleted;
+
   final bool welcomeSaved;
   final bool patiencePledgeAccepted;
   final String? patiencePledgeText;
@@ -16,6 +24,13 @@ class OnboardingDraft {
   final FinalTimelinePreview? finalPreview;
 
   const OnboardingDraft({
+    this.uid = '',
+    this.stepCompleted = const [false, false, false, false, false, false, false, false, false, false, false, false],
+    this.stepDirty = const [false, false, false, false, false, false, false, false, false, false, false, false],
+    this.stepLoading = const [false, false, false, false, false, false, false, false, false, false, false, false],
+    this.createdAt,
+    this.updatedAt,
+    this.onboardingCompleted = false,
     this.welcomeSaved = false,
     this.patiencePledgeAccepted = false,
     this.patiencePledgeText,
@@ -35,6 +50,13 @@ class OnboardingDraft {
 
   factory OnboardingDraft.fromMap(Map<String, dynamic> map) {
     return OnboardingDraft(
+      uid: map['uid'] as String? ?? '',
+      stepCompleted: _readBoolList(map['stepCompleted'], 12),
+      stepDirty: _readBoolList(map['stepDirty'], 12),
+      stepLoading: _readBoolList(map['stepLoading'], 12),
+      createdAt: map['createdAt'] != null ? DateTime.tryParse(map['createdAt']) : null,
+      updatedAt: map['updatedAt'] != null ? DateTime.tryParse(map['updatedAt']) : null,
+      onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
       patiencePledgeText: map['patiencePledgeText'] as String?,
@@ -87,6 +109,13 @@ class OnboardingDraft {
   }
 
   Map<String, dynamic> toMap() => {
+    'uid': uid,
+    'stepCompleted': stepCompleted,
+    'stepDirty': stepDirty,
+    'stepLoading': stepLoading,
+    'createdAt': createdAt?.toIso8601String(),
+    'updatedAt': updatedAt?.toIso8601String(),
+    'onboardingCompleted': onboardingCompleted,
     'welcomeSaved': welcomeSaved,
     'patiencePledgeAccepted': patiencePledgeAccepted,
     'patiencePledgeText': patiencePledgeText,
@@ -105,6 +134,13 @@ class OnboardingDraft {
   };
 
   OnboardingDraft copyWith({
+    String? uid,
+    List<bool>? stepCompleted,
+    List<bool>? stepDirty,
+    List<bool>? stepLoading,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? onboardingCompleted,
     bool? welcomeSaved,
     bool? patiencePledgeAccepted,
     String? patiencePledgeText,
@@ -125,6 +161,13 @@ class OnboardingDraft {
     bool clearFinalPreview = false,
   }) {
     return OnboardingDraft(
+      uid: uid ?? this.uid,
+      stepCompleted: stepCompleted ?? this.stepCompleted,
+      stepDirty: stepDirty ?? this.stepDirty,
+      stepLoading: stepLoading ?? this.stepLoading,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       welcomeSaved: welcomeSaved ?? this.welcomeSaved,
       patiencePledgeAccepted:
           patiencePledgeAccepted ?? this.patiencePledgeAccepted,
@@ -382,6 +425,22 @@ class OnboardingDraft {
     }
     return start;
   }
+
+  static List<bool> _readBoolList(dynamic value, int length) {
+    if (value is List) {
+      return value.map((e) => e == true).toList();
+    }
+    return List.filled(length, false);
+  }
+
+  static List<T> _readList<T>(dynamic value, T Function(Map<String, dynamic>) mapper) {
+    if (value is List) {
+      return value.whereType<Map<String, dynamic>>().map(mapper).toList();
+    }
+    return [];
+  }
+
+
 }
 
 class LifeRoleDraft {

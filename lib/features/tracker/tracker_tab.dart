@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/state/mock_app_state.dart';
+import 'package:optivus/state/app_state.dart';
 import 'package:optivus/models/tracker_models.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 import 'package:optivus/features/tracker/widgets/tracker_details_sheets.dart';
