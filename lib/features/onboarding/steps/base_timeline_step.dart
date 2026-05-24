@@ -54,7 +54,18 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     super.initState();
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(() {
-      setState(() {});
+      if (_tabController.indexIsChanging) {
+        setState(() {
+          final tab = _tabs[_tabController.index];
+          if (tab == 'Classes' || tab == 'Fixed') {
+            _hardBlock = true;
+          } else if (tab == 'Skin Care') {
+            _hardBlock = false;
+          } else if (tab == 'Job / Work / Business') {
+            _hardBlock = _businessMode != 'flexible_business';
+          }
+        });
+      }
     });
   }
 
@@ -811,140 +822,142 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                     )
                     .toList(),
           ),
-          if (_businessMode == 'flexible_business') ...[
+          if (_businessMode != 'fixed_business' && _businessMode != null) ...[
+            if (_businessMode == 'flexible_business') ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Flexible business mode stores duration, best time, and priority locally.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             const Text(
-              'Flexible business mode stores duration, best time, and priority locally.',
-              style: TextStyle(
-                fontSize: 11,
-                color: OptivusColors.textSecondary,
-              ),
+              'Duration',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  const [
+                        _TimelineOption('30', '30 min'),
+                        _TimelineOption('60', '1 hour'),
+                        _TimelineOption('120', '2 hours'),
+                        _TimelineOption('180', '3 hours'),
+                      ]
+                      .map(
+                        (duration) => OnboardingChip(
+                          label: duration.label,
+                          selected:
+                              _workDurationMinutes?.toString() == duration.key,
+                          onTap: () {
+                            final minutes = int.tryParse(duration.key);
+                            setState(() => _workDurationMinutes = minutes);
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .updateDraft(
+                                  (draft) => draft.copyWith(
+                                    baseTimeline: draft.baseTimeline.copyWith(
+                                      workDurationMinutes: minutes,
+                                    ),
+                                    clearFinalPreview: true,
+                                  ),
+                                );
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .setStepDirty(4, true);
+                          },
+                          accent: OptivusColors.brandAccent,
+                        ),
+                      )
+                      .toList(),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Best time',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  const [
+                        _TimelineOption('morning', 'Morning'),
+                        _TimelineOption('afternoon', 'Afternoon'),
+                        _TimelineOption('evening', 'Evening'),
+                        _TimelineOption('night', 'Night'),
+                      ]
+                      .map(
+                        (time) => OnboardingChip(
+                          label: time.label,
+                          selected: _workBestTime == time.key,
+                          onTap: () {
+                            setState(() => _workBestTime = time.key);
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .updateDraft(
+                                  (draft) => draft.copyWith(
+                                    baseTimeline: draft.baseTimeline.copyWith(
+                                      workBestTime: time.key,
+                                    ),
+                                    clearFinalPreview: true,
+                                  ),
+                                );
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .setStepDirty(4, true);
+                          },
+                          accent: OptivusColors.aquaAccent,
+                        ),
+                      )
+                      .toList(),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Priority',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  const [
+                        _TimelineOption('low', 'Low'),
+                        _TimelineOption('medium', 'Medium'),
+                        _TimelineOption('high', 'High'),
+                      ]
+                      .map(
+                        (priority) => OnboardingChip(
+                          label: priority.label,
+                          selected: _workPriority == priority.key,
+                          onTap: () {
+                            setState(() => _workPriority = priority.key);
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .updateDraft(
+                                  (draft) => draft.copyWith(
+                                    baseTimeline: draft.baseTimeline.copyWith(
+                                      workPriority: priority.key,
+                                    ),
+                                    clearFinalPreview: true,
+                                  ),
+                                );
+                            ref
+                                .read(mockOnboardingProvider.notifier)
+                                .setStepDirty(4, true);
+                          },
+                          accent: OptivusColors.brandAccent,
+                        ),
+                      )
+                      .toList(),
             ),
           ],
-          const SizedBox(height: 12),
-          const Text(
-            'Duration',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children:
-                const [
-                      _TimelineOption('30', '30 min'),
-                      _TimelineOption('60', '1 hour'),
-                      _TimelineOption('120', '2 hours'),
-                      _TimelineOption('180', '3 hours'),
-                    ]
-                    .map(
-                      (duration) => OnboardingChip(
-                        label: duration.label,
-                        selected:
-                            _workDurationMinutes?.toString() == duration.key,
-                        onTap: () {
-                          final minutes = int.tryParse(duration.key);
-                          setState(() => _workDurationMinutes = minutes);
-                          ref
-                              .read(mockOnboardingProvider.notifier)
-                              .updateDraft(
-                                (draft) => draft.copyWith(
-                                  baseTimeline: draft.baseTimeline.copyWith(
-                                    workDurationMinutes: minutes,
-                                  ),
-                                  clearFinalPreview: true,
-                                ),
-                              );
-                          ref
-                              .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(4, true);
-                        },
-                        accent: OptivusColors.brandAccent,
-                      ),
-                    )
-                    .toList(),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Best time',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children:
-                const [
-                      _TimelineOption('morning', 'Morning'),
-                      _TimelineOption('afternoon', 'Afternoon'),
-                      _TimelineOption('evening', 'Evening'),
-                      _TimelineOption('night', 'Night'),
-                    ]
-                    .map(
-                      (time) => OnboardingChip(
-                        label: time.label,
-                        selected: _workBestTime == time.key,
-                        onTap: () {
-                          setState(() => _workBestTime = time.key);
-                          ref
-                              .read(mockOnboardingProvider.notifier)
-                              .updateDraft(
-                                (draft) => draft.copyWith(
-                                  baseTimeline: draft.baseTimeline.copyWith(
-                                    workBestTime: time.key,
-                                  ),
-                                  clearFinalPreview: true,
-                                ),
-                              );
-                          ref
-                              .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(4, true);
-                        },
-                        accent: OptivusColors.aquaAccent,
-                      ),
-                    )
-                    .toList(),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Priority',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children:
-                const [
-                      _TimelineOption('low', 'Low'),
-                      _TimelineOption('medium', 'Medium'),
-                      _TimelineOption('high', 'High'),
-                    ]
-                    .map(
-                      (priority) => OnboardingChip(
-                        label: priority.label,
-                        selected: _workPriority == priority.key,
-                        onTap: () {
-                          setState(() => _workPriority = priority.key);
-                          ref
-                              .read(mockOnboardingProvider.notifier)
-                              .updateDraft(
-                                (draft) => draft.copyWith(
-                                  baseTimeline: draft.baseTimeline.copyWith(
-                                    workPriority: priority.key,
-                                  ),
-                                  clearFinalPreview: true,
-                                ),
-                              );
-                          ref
-                              .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(4, true);
-                        },
-                        accent: OptivusColors.brandAccent,
-                      ),
-                    )
-                    .toList(),
-          ),
         ],
       ),
     );
@@ -2045,6 +2058,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 _TimelineOption('maintain', 'Maintain'),
                 _TimelineOption('fat_loss', 'Fat loss'),
                 _TimelineOption('muscle_gain', 'Muscle gain'),
+                _TimelineOption('gain_weight', 'Gain weight'),
               ],
               base.mealPlanningGoal,
               (key) => update(base.copyWith(mealPlanningGoal: key)),
@@ -2055,6 +2069,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 _TimelineOption('veg', 'Veg'),
                 _TimelineOption('non_veg', 'Non-veg'),
                 _TimelineOption('mixed', 'Mixed'),
+                _TimelineOption('egg', 'Egg-based'),
+                _TimelineOption('custom', 'Custom'),
               ],
               base.foodType,
               (key) => update(base.copyWith(foodType: key)),
@@ -2082,6 +2098,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             _mealOptionRow(
               'Meals/day',
               const [
+                _TimelineOption('2', '2'),
                 _TimelineOption('3', '3'),
                 _TimelineOption('4', '4'),
                 _TimelineOption('5', '5'),
@@ -2157,23 +2174,23 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Previous timeline preview',
+                  'Previous timeline preview (Today)',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
                 ),
                 const SizedBox(height: 10),
                 ..._draftRoutineItems()
                     .where(
                       (item) =>
-                          item.notes == 'Classes' ||
-                          item.notes == 'Job / Work / Business' ||
-                          item.notes == 'Eating',
+                          (item.notes == 'Classes' ||
+                              item.notes == 'Job / Work / Business' ||
+                              item.notes == 'Eating') &&
+                          item.repeatDays.contains(_day + 1),
                     )
-                    .take(4)
                     .map(
                       (item) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
-                          '${_minuteLabel(item.startMinute)} - ${item.title}',
+                          '${_minuteLabel(item.startMinute)} - ${_minuteLabel(item.endMinute)} : ${item.title}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: OptivusColors.textSecondary,

@@ -72,6 +72,10 @@ class FakeAuthRepository implements AuthRepository {
     
     final normalizedEmail = email.trim();
     
+    if (normalizedEmail.toLowerCase() == 'test@optivus.dev') {
+      throw Exception('email-already-in-use');
+    }
+    
     _currentUser = AuthUser(
       uid: 'fake-uid-${DateTime.now().millisecondsSinceEpoch}',
       email: normalizedEmail,

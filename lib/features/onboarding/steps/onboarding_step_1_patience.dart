@@ -26,7 +26,7 @@ class OnboardingStep1 extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Most modern apps push instant high-intensity targets that cause rapid burnout. Optivus builds resilient habit compound engines. We target identity over extremes.',
+            'Optivus is a discipline and patience app. Before you use the app, complete setup honestly. This is your first test.',
             textAlign: TextAlign.center,
             style: Theme.of(
               context,
@@ -108,8 +108,8 @@ class OnboardingStep1 extends ConsumerWidget {
                         const SizedBox(width: 12),
                         Text(
                           accepted
-                              ? 'Commitment Locked'
-                              : 'I Pledge Commitment',
+                              ? 'First test accepted.'
+                              : 'I accept the first test.',
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(
                                 color: accepted

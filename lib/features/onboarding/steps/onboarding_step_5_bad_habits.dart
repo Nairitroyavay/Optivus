@@ -238,51 +238,66 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       OptivusColors.brandAccent,
     ).withSaturation((0.2 + 0.8 * minPercent).clamp(0.0, 1.0)).toColor();
 
+    final showSpend = habit.name == 'Cigarettes' ||
+        habit.name == 'Alcohol' ||
+        habit.name == 'Junk Food' ||
+        !['Cigarettes', 'Alcohol', 'Junk Food', 'Doom Scrolling', 'Procrastination']
+            .contains(habit.name);
+
+    final showMinutes = habit.name == 'Doom Scrolling' ||
+        habit.name == 'Procrastination' ||
+        !['Cigarettes', 'Alcohol', 'Junk Food', 'Doom Scrolling', 'Procrastination']
+            .contains(habit.name);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 12),
-        const Text(
-          'Daily spend',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: OptivusColors.textSecondary,
+        if (showSpend) ...[
+          const SizedBox(height: 12),
+          const Text(
+            'Daily spend',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.textSecondary,
+            ),
           ),
-        ),
-        OnboardingLiquidContinuousSlider(
-          value: habit.spend,
-          valueLabel: 'Rs ${habit.spend.toInt()}',
-          min: 0,
-          max: 1000,
-          accent: spendColor,
-          onChanged: (value) {
-            setState(() => habit.spend = value);
-            _syncDraft();
-            _dirty();
-          },
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'Doom/time lost',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: OptivusColors.textSecondary,
+          OnboardingLiquidContinuousSlider(
+            value: habit.spend,
+            valueLabel: 'Rs ${habit.spend.toInt()}',
+            min: 0,
+            max: 1000,
+            accent: spendColor,
+            onChanged: (value) {
+              setState(() => habit.spend = value);
+              _syncDraft();
+              _dirty();
+            },
           ),
-        ),
-        OnboardingLiquidContinuousSlider(
-          value: habit.minutes.toDouble(),
-          valueLabel: '${habit.minutes} min',
-          min: 0,
-          max: 300,
-          accent: minColor,
-          onChanged: (value) {
-            setState(() => habit.minutes = value.round());
-            _syncDraft();
-            _dirty();
-          },
-        ),
+        ],
+        if (showMinutes) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Time lost',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.textSecondary,
+            ),
+          ),
+          OnboardingLiquidContinuousSlider(
+            value: habit.minutes.toDouble(),
+            valueLabel: '${habit.minutes} min',
+            min: 0,
+            max: 300,
+            accent: minColor,
+            onChanged: (value) {
+              setState(() => habit.minutes = value.round());
+              _syncDraft();
+              _dirty();
+            },
+          ),
+        ],
       ],
     );
   }

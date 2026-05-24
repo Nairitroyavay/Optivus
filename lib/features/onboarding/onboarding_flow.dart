@@ -49,7 +49,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   // Helper validation per step
   String? _validateStep(int step) {
     final onboarding = ref.read(mockOnboardingProvider);
-    return onboarding.draft.validateStep(step, onboarding.draft.stepCompleted);
+    return onboarding.draft.validateStep(step, onboarding.stepCompleted);
   }
 
   // Core Save step action — with double-tap prevention
@@ -133,10 +133,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   Future<void> _completeOnboarding() async {
     final onboarding = ref.read(mockOnboardingProvider);
-    for (var step = 0; step < OnboardingDraft.lastStepIndex; step++) {
+    for (var step = 0; step <= OnboardingDraft.lastStepIndex; step++) {
       final error = onboarding.draft.validateStep(
         step,
-        onboarding.draft.stepCompleted,
+        onboarding.stepCompleted,
       );
       if (error != null) {
         ref.read(mockOnboardingProvider.notifier).setValidationMessage(error);

@@ -26,6 +26,27 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // We can't use ref.read here safely without Future.microtask if it's a provider that hasn't initialized,
+    // but mockOnboardingProvider is already initialized since we are in Step 8.
+    // However, in Riverpod it's safer to read it in didChangeDependencies or read it here if it's synchronous.
+    // Since mockOnboardingProvider is a StateNotifierProvider, we can read it.
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Initialize the text controller once
+    if (_customCtrl.text.isEmpty) {
+      final draft = ref.read(mockOnboardingProvider).draft;
+      if (draft.coachSetup.customCoachName != null) {
+        _customCtrl.text = draft.coachSetup.customCoachName!;
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _customCtrl.dispose();
     super.dispose();
@@ -36,6 +57,7 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final coach = draft.coachSetup;
     final selectedCoachName = coach.coachName;
+    final isCustom = coach.customCoachName != null;
     final previewCoach = selectedCoachName?.isEmpty ?? true
         ? 'Coach'
         : selectedCoachName!;
@@ -61,31 +83,28 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
                   child: Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: coaches.map((coach) {
-                      final selected = coach == 'Custom'
-                          ? !coaches
-                                .where((c) => c != 'Custom')
-                                .contains(selectedCoachName)
-                          : selectedCoachName == coach;
+                    children: coaches.map((coachNameOption) {
+                      final selected = coachNameOption == 'Custom'
+                          ? isCustom
+                          : selectedCoachName == coachNameOption && !isCustom;
                       return OnboardingChip(
-                        label: coach,
+                        label: coachNameOption,
                         selected: selected,
                         onTap: () {
-                          final next = coach == 'Custom'
+                          final next = coachNameOption == 'Custom'
                               ? (_customCtrl.text.trim().isEmpty
-                                    ? 'Coach'
+                                    ? 'My Coach'
                                     : _customCtrl.text.trim())
-                              : coach;
+                              : coachNameOption;
                           ref
                               .read(mockOnboardingProvider.notifier)
                               .updateDraft(
                                 (current) => current.copyWith(
                                   coachSetup: current.coachSetup.copyWith(
                                     coachName: next,
-                                    customCoachName: coach == 'Custom'
+                                    customCoachName: coachNameOption == 'Custom'
                                         ? next
                                         : null,
-                                    clearCustomCoachName: coach != 'Custom',
                                   ),
                                   clearFinalPreview: true,
                                 ),
@@ -98,34 +117,37 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
                     }).toList(),
                   ),
                 ),
-                const SizedBox(height: 12),
-                OnboardingGlassCard(
-                  child: TextField(
-                    controller: _customCtrl,
-                    decoration: const InputDecoration(
-                      hintText: 'Custom coach name',
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
-                    onChanged: (value) {
-                      if (value.trim().isEmpty) return;
-                      ref
-                          .read(mockOnboardingProvider.notifier)
-                          .updateDraft(
-                            (current) => current.copyWith(
-                              coachSetup: current.coachSetup.copyWith(
-                                coachName: value.trim(),
-                                customCoachName: value.trim(),
+                if (isCustom) ...[
+                  const SizedBox(height: 12),
+                  OnboardingGlassCard(
+                    child: TextField(
+                      controller: _customCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'Custom coach name',
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                      onChanged: (value) {
+                        final trimmed = value.trim();
+                        final next = trimmed.isEmpty ? 'My Coach' : trimmed;
+                        ref
+                            .read(mockOnboardingProvider.notifier)
+                            .updateDraft(
+                              (current) => current.copyWith(
+                                coachSetup: current.coachSetup.copyWith(
+                                  coachName: next,
+                                  customCoachName: next,
+                                ),
+                                clearFinalPreview: true,
                               ),
-                              clearFinalPreview: true,
-                            ),
-                          );
-                      ref
-                          .read(mockOnboardingProvider.notifier)
-                          .setStepDirty(8, true);
-                    },
+                            );
+                        ref
+                            .read(mockOnboardingProvider.notifier)
+                            .setStepDirty(8, true);
+                      },
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 12),
                 OnboardingGlassCard(
                   child: Wrap(

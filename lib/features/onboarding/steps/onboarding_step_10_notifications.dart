@@ -187,29 +187,100 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                OnboardingGlassCard(
-                  tint: OptivusColors.aquaAccent.withValues(alpha: 0.08),
-                  child: const Row(
-                    children: [
-                      Icon(
-                        Icons.notifications_active_outlined,
-                        color: OptivusColors.aquaAccent,
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Mock permission card: notification access can be connected later from the real app shell.',
+                if (!notifications.osPermissionGranted)
+                  OnboardingGlassCard(
+                    tint: OptivusColors.aquaAccent.withValues(alpha: 0.12),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.notifications_active_rounded,
+                          size: 42,
+                          color: OptivusColors.aquaAccent,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          '"Optivus" Would Like to Send You Notifications',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 12,
-                            color: OptivusColors.textSecondary,
-                            height: 1.4,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
                           ),
                         ),
-                      ),
-                    ], // end Row children
-                  ), // end Row
-                ), // end OnboardingGlassCard
-              ], // end OnboardingScrollView inner Column children
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Notifications may include alerts, sounds and icon badges. These can be configured in Settings.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () {},
+                                child: const Text(
+                                  'Don\'t Allow',
+                                  style: TextStyle(color: OptivusColors.textSecondary),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: TextButton(
+                                onPressed: () {
+                                  ref
+                                      .read(mockOnboardingProvider.notifier)
+                                      .updateDraft(
+                                        (draft) => draft.copyWith(
+                                          notifications: draft.notifications
+                                              .copyWith(osPermissionGranted: true),
+                                          clearFinalPreview: true,
+                                        ),
+                                      );
+                                  ref
+                                      .read(mockOnboardingProvider.notifier)
+                                      .setStepDirty(10, true);
+                                },
+                                child: const Text(
+                                  'Allow',
+                                  style: TextStyle(
+                                    color: OptivusColors.aquaAccent,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                if (notifications.osPermissionGranted)
+                  OnboardingGlassCard(
+                    tint: OptivusColors.success.withValues(alpha: 0.08),
+                    child: const Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle_outline_rounded,
+                          color: OptivusColors.success,
+                        ),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Mock permission granted. Real OS permission will be requested in the app shell.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: OptivusColors.textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ), // end OnboardingScrollView inner Column
           ), // end OnboardingScrollView
         ), // end Expanded

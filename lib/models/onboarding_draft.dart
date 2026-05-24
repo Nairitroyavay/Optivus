@@ -331,7 +331,7 @@ class OnboardingDraft {
     return FinalTimelinePreview(
       items: items,
       warnings: warnings,
-      duplicateSystemKeysSkipped: _duplicateSystemKeysSkipped(),
+      duplicateSystemKeysSkipped: skippedDuplicateSystemKeys(),
     );
   }
 
@@ -349,6 +349,7 @@ class OnboardingDraft {
         _preferredStartMinute(habit.bestTime, fallback: cursor),
         duration,
         occupiedItems,
+        habit.repeatDays,
       );
       final item = FinalTimelineItem(
         id: 'good-${habit.id}',
@@ -376,7 +377,12 @@ class OnboardingDraft {
     var cursor = 20 * 60;
 
     for (final habit in badHabits) {
-      cursor = _nextFreeStart(cursor, 5, occupiedItems);
+      cursor = _nextFreeStart(
+        cursor,
+        5,
+        occupiedItems,
+        const [1, 2, 3, 4, 5, 6, 7],
+      );
       final item = FinalTimelineItem(
         id: 'bad-check-${habit.id}',
         title: '${habit.displayName} check-in',
@@ -410,6 +416,7 @@ class OnboardingDraft {
         _preferredStartMinute(habit?.bestTime ?? 'anytime', fallback: cursor),
         duration,
         occupiedItems,
+        repeatDays,
       );
       final title = identitySystemTitle(systemKey);
       final item = FinalTimelineItem(
@@ -460,7 +467,7 @@ class OnboardingDraft {
     return keys.toList();
   }
 
-  List<String> _duplicateSystemKeysSkipped() {
+  List<String> skippedDuplicateSystemKeys() {
     final raw = <String>[];
     for (final habit in goodHabits) {
       final systemKey = systemKeyForGoodHabit(habit);
@@ -582,12 +589,16 @@ class OnboardingDraft {
     int desiredStart,
     int duration,
     List<FinalTimelineItem> blockedWindows,
+    List<int> repeatDays,
   ) {
     var start = desiredStart;
     var moved = true;
     while (moved && start + duration <= 23 * 60) {
       moved = false;
       for (final block in blockedWindows) {
+        final sharesDay = repeatDays.any((d) => block.repeatDays.contains(d));
+        if (!sharesDay) continue;
+
         final overlaps =
             start < block.endMinute && start + duration > block.startMinute;
         if (overlaps) {
@@ -1118,11 +1129,13 @@ class BaseTimelineDraft {
       if (businessMode == null) {
         return 'Choose your business schedule mode.';
       }
-      if (workDurationMinutes == null || workDurationMinutes! <= 0) {
-        return 'Choose your business work duration.';
+      if (businessMode != 'fixed_business') {
+        if (workDurationMinutes == null || workDurationMinutes! <= 0) {
+          return 'Choose your business work duration.';
+        }
+        if (workBestTime == null) return 'Choose your business best time.';
+        if (workPriority == null) return 'Choose your business priority.';
       }
-      if (workBestTime == null) return 'Choose your business best time.';
-      if (workPriority == null) return 'Choose your business priority.';
     }
     if (eatingMode == null) return 'Choose your eating mode.';
     if ((eatingMode == 'flat' || eatingMode == 'staying_alone') &&
@@ -1626,6 +1639,7 @@ class CoachSetupDraft {
 }
 
 class NotificationSetupDraft {
+  final bool osPermissionGranted;
   final bool morningStartReminder;
   final bool nextTaskReminder;
   final bool eatingReminder;
@@ -1635,6 +1649,7 @@ class NotificationSetupDraft {
   final String reminderIntensity;
 
   const NotificationSetupDraft({
+    this.osPermissionGranted = false,
     this.morningStartReminder = true,
     this.nextTaskReminder = true,
     this.eatingReminder = true,
@@ -1646,6 +1661,7 @@ class NotificationSetupDraft {
 
   factory NotificationSetupDraft.fromMap(Map<String, dynamic> map) {
     return NotificationSetupDraft(
+      osPermissionGranted: map['osPermissionGranted'] as bool? ?? false,
       morningStartReminder: map['morningStartReminder'] as bool? ?? true,
       nextTaskReminder: map['nextTaskReminder'] as bool? ?? true,
       eatingReminder: map['eatingReminder'] as bool? ?? true,
@@ -1657,6 +1673,7 @@ class NotificationSetupDraft {
   }
 
   Map<String, dynamic> toMap() => {
+    'osPermissionGranted': osPermissionGranted,
     'morningStartReminder': morningStartReminder,
     'nextTaskReminder': nextTaskReminder,
     'eatingReminder': eatingReminder,
@@ -1667,6 +1684,7 @@ class NotificationSetupDraft {
   };
 
   NotificationSetupDraft copyWith({
+    bool? osPermissionGranted,
     bool? morningStartReminder,
     bool? nextTaskReminder,
     bool? eatingReminder,
@@ -1676,6 +1694,7 @@ class NotificationSetupDraft {
     String? reminderIntensity,
   }) {
     return NotificationSetupDraft(
+      osPermissionGranted: osPermissionGranted ?? this.osPermissionGranted,
       morningStartReminder: morningStartReminder ?? this.morningStartReminder,
       nextTaskReminder: nextTaskReminder ?? this.nextTaskReminder,
       eatingReminder: eatingReminder ?? this.eatingReminder,

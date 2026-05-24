@@ -105,7 +105,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                   habitKey: _habitKey(habit.name),
                   displayName: habit.name,
                   subtypeKey: _subtypeKey(habit.category),
-                  durationMinutes: _durationMinutes(habit.duration),
+                  durationMinutes: habit.duration == 'Custom' && habit.customDurationMinutes != null
+                      ? habit.customDurationMinutes!
+                      : _durationMinutes(habit.duration),
                   frequency: _frequencyKey(habit.frequency),
                   bestTime: _bestTimeKey(habit.bestTime),
                   priority: _priorityKey(habit.priority),
@@ -277,6 +279,16 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
               habit.duration,
               (value) => setState(() => habit.duration = value),
             ),
+            if (habit.duration == 'Custom')
+              _customNumberInput(
+                'Mins',
+                habit.customDurationMinutes?.toString() ?? '',
+                (val) {
+                  setState(() => habit.customDurationMinutes = int.tryParse(val));
+                  _syncDraft();
+                  _dirty();
+                },
+              ),
             _metaOptions(
               'Frequency',
               const ['Daily', 'Weekdays', '3 days/week', 'Custom'],
@@ -298,6 +310,33 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _customNumberInput(String hint, String initialValue, Function(String) onChanged) {
+    return Container(
+      width: 80,
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.44)),
+      ),
+      child: Center(
+        child: TextField(
+          controller: TextEditingController(text: initialValue)..selection = TextSelection.collapsed(offset: initialValue.length),
+          keyboardType: TextInputType.number,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          decoration: InputDecoration(
+            hintText: hint,
+            border: InputBorder.none,
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+          onChanged: onChanged,
+        ),
+      ),
     );
   }
 
@@ -355,6 +394,7 @@ class _GoodHabit {
   bool selected;
   String category;
   String duration = '15 min';
+  int? customDurationMinutes;
   String frequency = 'Daily';
   String bestTime = 'Anytime';
   String priority = 'Good to do';
