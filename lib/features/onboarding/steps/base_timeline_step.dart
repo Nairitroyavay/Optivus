@@ -23,6 +23,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   final _mealCtrl = TextEditingController();
   final _fixedCtrl = TextEditingController();
   final _skinCtrl = TextEditingController();
+  final _importTextCtrl = TextEditingController();
 
   int _day = 0;
   int _startHour = 9;
@@ -67,6 +68,20 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
         });
       }
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final timeline = ref.read(mockOnboardingProvider).draft.baseTimeline;
+      final withDefaults = timeline.withRequiredFixedBlocks();
+      if (withDefaults.blocks.length != timeline.blocks.length) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .updateDraft(
+              (draft) => draft.copyWith(
+                baseTimeline: withDefaults,
+                clearFinalPreview: true,
+              ),
+            );
+      }
+    });
   }
 
   @override
@@ -77,27 +92,30 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     _mealCtrl.dispose();
     _fixedCtrl.dispose();
     _skinCtrl.dispose();
+    _importTextCtrl.dispose();
     super.dispose();
   }
 
   bool _classesEnabled(String role) =>
       role == LifeRoleDraft.studentKey ||
-      role == 'Student' ||
-      role == 'Student / School / College' ||
-      role == LifeRoleDraft.studentWorkingKey ||
-      role == 'Student + Working Person';
+      role == LifeRoleDraft.studentWorkingKey;
 
   bool _jobEnabled(String role) =>
       role == LifeRoleDraft.workingKey ||
-      role == 'Working Person' ||
       role == LifeRoleDraft.studentWorkingKey ||
-      role == 'Student + Working Person' ||
-      role == LifeRoleDraft.businessKey ||
-      role == 'Business / Startup / Freelancer';
+      role == LifeRoleDraft.businessKey;
 
   bool _classesRequired(String role) => _classesEnabled(role);
 
   bool _jobRequired(String role) => _jobEnabled(role);
+
+  bool _tabEnabledForIndex(int index, String role) {
+    return switch (index) {
+      0 => _classesEnabled(role),
+      1 => _jobEnabled(role),
+      _ => true,
+    };
+  }
 
   String _timeLabel(int hour) {
     final h = hour % 12 == 0 ? 12 : hour % 12;
@@ -106,6 +124,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
 
   String _minuteLabel(int minute) {
     final clamped = minute.clamp(0, 24 * 60);
+    if (clamped == 24 * 60) return '12:00 AM';
     final hour = clamped ~/ 60;
     final min = clamped % 60;
     final h = hour % 12 == 0 ? 12 : hour % 12;
@@ -147,10 +166,12 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     final title = controller.text.trim();
     if (title.isEmpty) return;
     final startMinute = _startHour * 60 + _startMinutePart;
-    final rawEndMinute = _endHour * 60 + _endMinutePart;
-    final safeEndMinute = rawEndMinute <= startMinute
+    final rawEndMinute = (_endHour * 60 + _endMinutePart).clamp(0, 24 * 60);
+    final crossesMidnight = rawEndMinute < startMinute;
+    final safeEndMinute = rawEndMinute == startMinute
         ? (startMinute + 60).clamp(1, 24 * 60)
-        : rawEndMinute.clamp(1, 24 * 60);
+        : rawEndMinute.clamp(0, 24 * 60);
+    final mealEstimate = _mealEstimate(title);
     final id =
         _editingItemId ??
         'onboarding-$type-${DateTime.now().millisecondsSinceEpoch}';
@@ -160,14 +181,15 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       title: title,
       startMinute: startMinute,
       endMinute: safeEndMinute,
+      crossesMidnight: crossesMidnight,
       blockType: _draftBlockType(blockType),
       repeatDays: _selectedRepeatDays(),
       location: _locationCtrl.text.trim().isEmpty
           ? null
           : _locationCtrl.text.trim(),
       mealCategory: type == 'Eating' ? title : null,
-      calories: type == 'Eating' ? 420 : null,
-      protein: type == 'Eating' ? 24 : null,
+      calories: type == 'Eating' ? mealEstimate.$1 : null,
+      protein: type == 'Eating' ? mealEstimate.$2 : null,
       skincareProducts: type == 'Skin Care' ? [title] : const [],
     );
 
@@ -184,7 +206,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       controller.clear();
       _locationCtrl.clear();
       _editingItemId = null;
-      _endHour = _clampHour(safeEndMinute ~/ 60, 1, 24);
+      _endHour = _clampHour(safeEndMinute ~/ 60, 0, 24);
       _endMinutePart = safeEndMinute % 60;
     });
     ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
@@ -208,7 +230,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           : _clampHour(item.repeatDays.first - 1, 0, 6);
       _startHour = _clampHour(item.startMinute ~/ 60, 0, 23);
       _startMinutePart = item.startMinute % 60;
-      _endHour = _clampHour(item.endMinute ~/ 60, _startHour + 1, 24);
+      _endHour = _clampHour(item.endMinute ~/ 60, 0, 24);
       _endMinutePart = item.endMinute % 60;
       _hardBlock = item.blockType == RoutineBlockType.hardBlock;
       _syncRepeatModeFromDays(item.repeatDays);
@@ -240,11 +262,12 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   Widget build(BuildContext context) {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final role = draft.lifeRole.lifeRole ?? '';
-    _businessMode ??= draft.baseTimeline.businessMode;
-    _workDurationMinutes ??= draft.baseTimeline.workDurationMinutes;
-    _workBestTime ??= draft.baseTimeline.workBestTime;
-    _workPriority ??= draft.baseTimeline.workPriority;
-    _eatingMode ??= draft.baseTimeline.eatingMode;
+    _businessMode =
+        draft.lifeRole.businessMode ?? draft.baseTimeline.businessMode;
+    _workDurationMinutes = draft.baseTimeline.workDurationMinutes;
+    _workBestTime = draft.baseTimeline.workBestTime;
+    _workPriority = draft.baseTimeline.workPriority;
+    _eatingMode = draft.baseTimeline.eatingMode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -260,6 +283,9 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                     'Build the fixed anchors Optivus should schedule around.',
               ),
               const SizedBox(height: 12),
+              _conflictResolver(),
+              if (ref.watch(mockOnboardingProvider).draft.baseTimeline.detectConflicts().isNotEmpty)
+                const SizedBox(height: 12),
               OnboardingGlassCard(
                 padding: const EdgeInsets.all(12),
                 radius: 22,
@@ -269,21 +295,28 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   child: Row(
                     children: _tabs.asMap().entries.map((e) {
                       final isSelected = _tabController.index == e.key;
+                      final enabled = _tabEnabledForIndex(e.key, role);
                       return Padding(
                         padding: EdgeInsets.only(
                           right: e.key == _tabs.length - 1 ? 0 : 8,
                         ),
-                        child: OnboardingChip(
-                          label: e.value,
-                          selected: isSelected,
-                          onTap: () => _tabController.animateTo(e.key),
-                          accent: e.key == 0
-                              ? OptivusColors.aquaAccent
-                              : e.key == 1
-                              ? OptivusColors.brandAccent
-                              : e.key == 2
-                              ? OptivusColors.brandAccent
-                              : OptivusColors.aquaAccent,
+                        child: Opacity(
+                          opacity: enabled ? 1 : 0.48,
+                          child: OnboardingChip(
+                            label: e.value,
+                            selected: isSelected && enabled,
+                            icon: enabled ? null : Icons.lock_rounded,
+                            onTap: enabled
+                                ? () => _tabController.animateTo(e.key)
+                                : null,
+                            accent: e.key == 0
+                                ? OptivusColors.aquaAccent
+                                : e.key == 1
+                                ? OptivusColors.brandAccent
+                                : e.key == 2
+                                ? OptivusColors.brandAccent
+                                : OptivusColors.aquaAccent,
+                          ),
                         ),
                       );
                     }).toList(),
@@ -345,7 +378,9 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   'Mixed',
                   'Priority',
                 ],
-                extra: _businessModeSelector(),
+                extra: role == LifeRoleDraft.businessKey
+                    ? _businessModeSelector()
+                    : null,
               ),
               _eatingSection(),
               _fixedSection(),
@@ -475,6 +510,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       title: block.title,
       startMinute: block.startMinute,
       endMinute: block.endMinute,
+      crossesMidnight: block.crossesMidnight,
       blockType: _routineBlockType(block.blockType),
       repeatDays: block.repeatDays,
       location: block.location,
@@ -496,6 +532,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       title: item.title,
       startMinute: item.startMinute,
       endMinute: item.endMinute,
+      crossesMidnight: item.crossesMidnight,
       repeatDays: item.repeatDays,
       location: item.location,
       blockType: _draftBlockType(item.blockType),
@@ -551,6 +588,29 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       TimelineBlockDraft.checkInKey => RoutineBlockType.checkIn,
       _ => RoutineBlockType.flexibleTask,
     };
+  }
+
+  (double?, double?) _mealEstimate(String title) {
+    final body = ref.read(mockOnboardingProvider).draft.bodyBasics;
+    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final dailyCalories = body.calorieEstimate ?? 0;
+    final dailyProtein = body.proteinEstimate ?? 0;
+    if (dailyCalories <= 0 || dailyProtein <= 0) return (null, null);
+
+    final mealsPerDay = (base.mealsPerDay ?? 3).clamp(1, 6);
+    final lower = title.toLowerCase();
+    final calorieWeight = lower.contains('breakfast')
+        ? 0.25
+        : lower.contains('lunch')
+        ? 0.35
+        : lower.contains('dinner')
+        ? 0.30
+        : 1 / mealsPerDay;
+    final proteinWeight = lower.contains('snack') ? 0.10 : calorieWeight;
+    return (
+      double.parse((dailyCalories * calorieWeight).toStringAsFixed(0)),
+      double.parse((dailyProtein * proteinWeight).toStringAsFixed(0)),
+    );
   }
 
   Widget _setupHeader(
@@ -756,27 +816,155 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   Widget _placeholderImportCard() {
+    final currentImport = _currentPendingImport();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: OnboardingGlassCard(
         tint: OptivusColors.aquaAccent.withValues(alpha: 0.08),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
-              Icons.auto_fix_high_rounded,
-              color: OptivusColors.aquaAccent,
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_fix_high_rounded,
+                  color: OptivusColors.aquaAccent,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _setupMode == 'AI Text'
+                        ? 'Paste text for a local stub parse. No AI or backend call runs.'
+                        : 'Pending upload object created. No photo picker, upload, or backend call runs.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Frontend placeholder only. Review cards are shown here later, but no AI, upload, permissions, or backend call runs now.',
-                style: Theme.of(context).textTheme.bodyMedium,
+            if (_setupMode == 'AI Text') ...[
+              const SizedBox(height: 12),
+              _glassTextField(
+                controller: _importTextCtrl,
+                hint: 'Paste timetable/menu/routine text',
+                enabled: true,
               ),
-            ),
+              const SizedBox(height: 12),
+              OnboardingActionPill(
+                label: 'Parse for review',
+                icon: Icons.rule_rounded,
+                accent: OptivusColors.aquaAccent,
+                selected: true,
+                compact: true,
+                onTap: _parseCurrentImportText,
+              ),
+            ],
+            if (currentImport != null &&
+                currentImport.parsedBlocks.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Review parsed blocks',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              ...currentImport.parsedBlocks.map(
+                (block) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${_days[_clampHour((block.repeatDays.isEmpty ? 1 : block.repeatDays.first) - 1, 0, 6)]}: ${_minuteLabel(block.startMinute)} - ${_minuteLabel(block.endMinute)} ${block.title}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: OptivusColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              OnboardingActionPill(
+                label: 'Apply reviewed blocks',
+                icon: Icons.check_rounded,
+                accent: OptivusColors.success,
+                selected: true,
+                compact: true,
+                onTap: () => _applyCurrentImport(currentImport.id),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+
+  PendingFutureImportDraft? _currentPendingImport() {
+    final section = _tabs[_tabController.index];
+    final imports = ref
+        .read(mockOnboardingProvider)
+        .draft
+        .baseTimeline
+        .pendingFutureImports;
+    for (final entry in imports.reversed) {
+      if (entry.section == section && entry.mode == _setupMode) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  void _parseCurrentImportText() {
+    final text = _importTextCtrl.text.trim();
+    if (text.isEmpty) return;
+    final section = _tabs[_tabController.index];
+    final importId =
+        '${section.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}_ai_text';
+    final title = text.split('\n').first.trim();
+    final block = TimelineBlockDraft(
+      id: 'import-$importId-${DateTime.now().millisecondsSinceEpoch}',
+      section: _sectionKey(section),
+      title: title.isEmpty ? '$section import' : title,
+      startMinute: _startHour * 60 + _startMinutePart,
+      endMinute: (_endHour * 60 + _endMinutePart).clamp(0, 24 * 60),
+      crossesMidnight:
+          (_endHour * 60 + _endMinutePart) <
+          (_startHour * 60 + _startMinutePart),
+      repeatDays: _selectedRepeatDays(),
+      location: _locationCtrl.text.trim().isEmpty
+          ? null
+          : _locationCtrl.text.trim(),
+      blockType: section == 'Classes' || section == 'Job / Work / Business'
+          ? TimelineBlockDraft.hardBlockKey
+          : TimelineBlockDraft.softBlockKey,
+      source: 'ai_import',
+    );
+    final entry = PendingFutureImportDraft(
+      id: importId,
+      section: section,
+      mode: 'AI Text',
+      createdAt: _currentPendingImport()?.createdAt ?? DateTime.now(),
+      updatedAt: DateTime.now(),
+      status: PendingFutureImportDraft.needsReviewStatus,
+      pastedText: text,
+      parsedBlocks: [block],
+    );
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: draft.baseTimeline.upsertPendingImport(entry),
+            clearFinalPreview: true,
+          ),
+        );
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
+  }
+
+  void _applyCurrentImport(String importId) {
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: draft.baseTimeline.applyPendingImport(importId),
+            clearFinalPreview: true,
+          ),
+        );
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
 
   Widget _businessModeSelector() {
@@ -808,6 +996,9 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                               .read(mockOnboardingProvider.notifier)
                               .updateDraft(
                                 (draft) => draft.copyWith(
+                                  lifeRole: draft.lifeRole.copyWith(
+                                    businessMode: mode.key,
+                                  ),
                                   baseTimeline: draft.baseTimeline.copyWith(
                                     businessMode: mode.key,
                                   ),
@@ -1205,7 +1396,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     Color accent,
   ) {
     void step(int delta) {
-      final lower = label == 'End' ? _clampHour(_startHour + 1, 1, 24) : 0;
+      final lower = 0;
       final upper = label == 'End' ? 24 : 23;
       onHourChanged(_clampHour(hour + delta, lower, upper));
     }
@@ -1685,7 +1876,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${_minuteLabel(item.startMinute)} - ${_minuteLabel(item.endMinute)} | $dayLabel',
+                                  '${_minuteLabel(item.startMinute)} - ${_minuteLabel(item.endMinute)}${item.crossesMidnight ? ' overnight' : ''} | $dayLabel',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -1835,7 +2026,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '$start to $end on ${_days[_clampHour(item.repeatDays.first - 1, 0, 6)]}',
+                    '$start to $end${item.crossesMidnight ? ' overnight' : ''} on ${_days[_clampHour(item.repeatDays.first - 1, 0, 6)]}',
                     style: const TextStyle(
                       fontSize: 10,
                       color: OptivusColors.textSecondary,
@@ -2240,19 +2431,27 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             ],
             onSelect: (label) {
               setState(() {
-                _fixedCtrl.text = label;
+                _fixedCtrl.text = label == 'Sleep preset'
+                    ? 'Sleep'
+                    : label == 'Bath preset'
+                    ? 'Bath'
+                    : label;
                 _hardBlock = true;
                 _repeatMode = 'every_day';
                 if (label == 'Sleep preset') {
-                  _startHour = 0;
-                  _startMinutePart = 0;
+                  _editingItemId = BaseTimelineDraft.fixedSleepId;
+                  _startHour = 23;
+                  _startMinutePart = 30;
                   _endHour = 7;
                   _endMinutePart = 0;
                 } else if (label == 'Bath preset') {
+                  _editingItemId = BaseTimelineDraft.fixedBathId;
                   _startHour = 7;
                   _startMinutePart = 0;
                   _endHour = 7;
                   _endMinutePart = 30;
+                } else {
+                  _editingItemId = null;
                 }
               });
             },
@@ -2274,8 +2473,6 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               'Conflict protected',
             ],
           ),
-          const SizedBox(height: 12),
-          _conflictResolver(),
         ],
       ),
     );

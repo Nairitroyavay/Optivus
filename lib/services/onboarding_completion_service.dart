@@ -10,8 +10,15 @@ class OnboardingCompletionService {
   const OnboardingCompletionService._();
 
   static OnboardingCompletionBundle buildBundle(OnboardingDraft draft) {
+    final now = DateTime.now();
     final preview = draft.buildFinalPreview();
-    final routineItems = preview.items.map(_routineFromFinalItem).toList();
+    final baseItems = draft.baseTimeline.blocks
+        .where((block) => !block.needsTimeConfirmation)
+        .toList();
+    
+    // We rebuild routine items per day to ensure no hard-block overlaps
+    final routineItems = _scheduleRoutineItems(draft, baseItems, preview.items);
+    
     final badHabitCheckIns = _badHabitCheckIns(draft, routineItems);
     final goals = _goalModels(draft, routineItems);
     final totalDailySpend = draft.badHabits.fold<double>(
@@ -26,10 +33,11 @@ class OnboardingCompletionService {
         : null;
 
     return OnboardingCompletionBundle(
+      uid: draft.uid,
+      createdAt: now,
+      updatedAt: now,
       userProfilePatch: _userProfilePatch(draft),
-      baseTimelineBlocks: draft.baseTimeline.blocks
-          .where((block) => !block.needsTimeConfirmation)
-          .toList(),
+      baseTimelineBlocks: baseItems,
       finalTimelineItems: preview.items,
       routineItemsForApp: routineItems,
       goodHabitTemplates: _goodHabitTemplates(draft),
@@ -43,11 +51,117 @@ class OnboardingCompletionService {
     );
   }
 
+  static List<RoutineItem> _scheduleRoutineItems(
+    OnboardingDraft draft,
+    List<TimelineBlockDraft> baseBlocks,
+    List<FinalTimelineItem> previewItems,
+  ) {
+    // Generate base routines
+    final scheduled = baseBlocks.map((b) => RoutineItem(
+      id: b.id,
+      title: b.title,
+      startMinute: b.startMinute,
+      endMinute: b.endMinute,
+      crossesMidnight: b.crossesMidnight,
+      endsNextDay: b.endsNextDay,
+      repeatDays: b.repeatDays,
+      blockType: b.blockType == TimelineBlockDraft.hardBlockKey
+          ? RoutineBlockType.hardBlock
+          : RoutineBlockType.softBlock,
+      location: b.location,
+      mealCategory: b.mealCategory,
+      dishes: b.dishes,
+      calories: b.calories,
+      protein: b.protein,
+      skincareProducts: b.skincareProducts,
+    )).toList();
+
+    // Group the preview items by priority / flexible status
+    // Hard blocks are already added. Now we place flexible tasks carefully.
+    final flexibleItems = previewItems.where((i) => 
+      i.blockType != TimelineBlockDraft.hardBlockKey && 
+      !baseBlocks.any((b) => b.id == i.id)
+    ).toList();
+
+    for (final flex in flexibleItems) {
+      final blockType = switch (flex.blockType) {
+        TimelineBlockDraft.softBlockKey => RoutineBlockType.softBlock,
+        TimelineBlockDraft.checkInKey => RoutineBlockType.checkIn,
+        'money_task' => RoutineBlockType.moneyTask,
+        _ => RoutineBlockType.flexibleTask,
+      };
+
+      // Ensure no overlap per day
+      var placedAnyDay = false;
+      final successfulDays = <int>[];
+      var currentStartMinute = flex.startMinute;
+
+      for (final day in flex.repeatDays) {
+        final duration = flex.durationMinutes;
+        var start = currentStartMinute;
+        var moved = true;
+        
+        // Scan for conflicts on this specific day
+        while (moved && start + duration <= 24 * 60) {
+          moved = false;
+          for (final existing in scheduled) {
+            if (!existing.repeatDays.contains(day)) continue;
+            // Basic overlap check
+            final eStart = existing.startMinute;
+            final eEnd = existing.crossesMidnight || existing.endsNextDay || existing.endMinute <= eStart
+                ? (24 * 60) + existing.endMinute
+                : existing.endMinute;
+            
+            final overlaps = start < eEnd && (start + duration) > eStart;
+            if (overlaps) {
+              start = eEnd + 10; // Push 10 minutes past the existing block
+              moved = true;
+            }
+          }
+        }
+        
+        if (start + duration <= 24 * 60) {
+          currentStartMinute = start;
+          successfulDays.add(day);
+          placedAnyDay = true;
+        }
+      }
+
+      if (placedAnyDay) {
+        scheduled.add(RoutineItem(
+          id: flex.id,
+          title: flex.title,
+          startMinute: currentStartMinute,
+          endMinute: currentStartMinute + flex.durationMinutes,
+          repeatDays: successfulDays, // Only repeat on days we could fit it
+          blockType: blockType,
+          notes: flex.source,
+        ));
+      } else {
+        // Fallback: Add as a tiny unscheduled suggestion (0 duration)
+        scheduled.add(RoutineItem(
+          id: flex.id,
+          title: '[Tiny] ${flex.title}',
+          startMinute: 0,
+          endMinute: 0,
+          repeatDays: flex.repeatDays,
+          blockType: RoutineBlockType.flexibleTask,
+          notes: 'Unscheduled fallback due to schedule overflow',
+        ));
+      }
+    }
+
+    return scheduled;
+  }
+
   static Map<String, dynamic> _userProfilePatch(OnboardingDraft draft) {
     final now = DateTime.now();
     return {
       'uid': draft.uid,
+      'schemaVersion': OnboardingCompletionBundle.schemaVersion,
+      'createdAt': draft.createdAt?.toIso8601String() ?? now.toIso8601String(),
       'updatedAt': now.toIso8601String(),
+      'source': OnboardingDraft.sourceOnboarding,
       'onboardingCompleted': true,
       'onboardingStep': OnboardingDraft.lastStepIndex,
       'lifeRole': draft.lifeRole.lifeRole ?? '',
@@ -97,7 +211,7 @@ class OnboardingCompletionService {
     return draft.badHabits.map((habit) {
       RoutineItem? linkedRoutine;
       for (final item in routineItems) {
-        if (item.id == 'bad-check-${habit.id}') {
+        if (item.id == 'bad-check-${habit.id}' || item.id.contains(habit.id)) {
           linkedRoutine = item;
           break;
         }
@@ -120,7 +234,8 @@ class OnboardingCompletionService {
     List<RoutineItem> routineItems,
   ) {
     return draft.identityGoals.map((goal) {
-      final systems = goal.systemKeys.map((systemKey) {
+      final systemKeys = goal.systemKeys.map(_canonicalSystemKey).toSet();
+      final systems = systemKeys.map((systemKey) {
         final linkedRoutineIds = routineItems
             .where((item) => _routineMatchesSystem(item, systemKey))
             .map((item) => item.id)
@@ -148,6 +263,13 @@ class OnboardingCompletionService {
         ),
       );
     }).toList();
+  }
+
+  static String _canonicalSystemKey(String key) {
+    return switch (key) {
+      'five_words_daily' || 'weekly_revision' => 'language_practice',
+      _ => key,
+    };
   }
 
   static bool _routineMatchesSystem(RoutineItem item, String systemKey) {
@@ -196,24 +318,6 @@ class OnboardingCompletionService {
     return CoachPreferences(
       name: _coachName(draft),
       style: _displayKey(draft.coachSetup.coachStyle ?? 'supportive'),
-    );
-  }
-
-  static RoutineItem _routineFromFinalItem(FinalTimelineItem item) {
-    return RoutineItem(
-      id: item.id,
-      title: item.title,
-      startMinute: item.startMinute,
-      endMinute: item.endMinute,
-      repeatDays: item.repeatDays,
-      blockType: switch (item.blockType) {
-        TimelineBlockDraft.hardBlockKey => RoutineBlockType.hardBlock,
-        TimelineBlockDraft.softBlockKey => RoutineBlockType.softBlock,
-        TimelineBlockDraft.checkInKey => RoutineBlockType.checkIn,
-        'money_task' => RoutineBlockType.moneyTask,
-        _ => RoutineBlockType.flexibleTask,
-      },
-      notes: item.source,
     );
   }
 

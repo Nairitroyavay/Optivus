@@ -24,7 +24,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       final now = DateTime.now();
       final targetScroll = (now.hour * _hourHeight) - 100.0;
       if (_scrollController.hasClients) {
-        _scrollController.jumpTo(targetScroll.clamp(0.0, _scrollController.position.maxScrollExtent));
+        _scrollController.jumpTo(
+          targetScroll.clamp(0.0, _scrollController.position.maxScrollExtent),
+        );
       }
     });
   }
@@ -59,7 +61,12 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return Container(
-              padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 30),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                MediaQuery.of(context).viewInsets.bottom + 30,
+              ),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Color(0xFFEFFFEC), Color(0xFFC3FFB6)],
@@ -92,7 +99,12 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                     const Text(
                       'ADD ROUTINE HARD BLOCK',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.0, color: OptivusColors.textPrimary),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 1.0,
+                        color: OptivusColors.textPrimary,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     TextField(
@@ -102,7 +114,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                         labelText: 'Block Title (e.g. Gym, College, Commute)',
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.9),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -112,22 +126,48 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Start Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              const Text(
+                                'Start Time',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [
                                   Expanded(
                                     child: DropdownButton<int>(
                                       value: startHour,
-                                      onChanged: (h) => setSheetState(() => startHour = h ?? 0),
-                                      items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text('${i.toString().padLeft(2, '0')}:'))),
+                                      onChanged: (h) => setSheetState(
+                                        () => startHour = h ?? 0,
+                                      ),
+                                      items: List.generate(
+                                        24,
+                                        (i) => DropdownMenuItem(
+                                          value: i,
+                                          child: Text(
+                                            '${i.toString().padLeft(2, '0')}:',
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   Expanded(
                                     child: DropdownButton<int>(
                                       value: startMin,
-                                      onChanged: (m) => setSheetState(() => startMin = m ?? 0),
-                                      items: List.generate(12, (i) => DropdownMenuItem(value: i * 5, child: Text((i * 5).toString().padLeft(2, '0')))),
+                                      onChanged: (m) => setSheetState(
+                                        () => startMin = m ?? 0,
+                                      ),
+                                      items: List.generate(
+                                        12,
+                                        (i) => DropdownMenuItem(
+                                          value: i * 5,
+                                          child: Text(
+                                            (i * 5).toString().padLeft(2, '0'),
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -140,22 +180,46 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('End Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              const Text(
+                                'End Time',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [
                                   Expanded(
                                     child: DropdownButton<int>(
                                       value: endHour,
-                                      onChanged: (h) => setSheetState(() => endHour = h ?? 0),
-                                      items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text('${i.toString().padLeft(2, '0')}:'))),
+                                      onChanged: (h) =>
+                                          setSheetState(() => endHour = h ?? 0),
+                                      items: List.generate(
+                                        24,
+                                        (i) => DropdownMenuItem(
+                                          value: i,
+                                          child: Text(
+                                            '${i.toString().padLeft(2, '0')}:',
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   Expanded(
                                     child: DropdownButton<int>(
                                       value: endMin,
-                                      onChanged: (m) => setSheetState(() => endMin = m ?? 0),
-                                      items: List.generate(12, (i) => DropdownMenuItem(value: i * 5, child: Text((i * 5).toString().padLeft(2, '0')))),
+                                      onChanged: (m) =>
+                                          setSheetState(() => endMin = m ?? 0),
+                                      items: List.generate(
+                                        12,
+                                        (i) => DropdownMenuItem(
+                                          value: i * 5,
+                                          child: Text(
+                                            (i * 5).toString().padLeft(2, '0'),
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -169,19 +233,29 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Block Type Strength:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const Text(
+                          'Block Type Strength:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
                         Row(
                           children: [
                             ChoiceChip(
                               label: const Text('Hard Block'),
                               selected: type == RoutineBlockType.hardBlock,
-                              onSelected: (val) => setSheetState(() => type = RoutineBlockType.hardBlock),
+                              onSelected: (val) => setSheetState(
+                                () => type = RoutineBlockType.hardBlock,
+                              ),
                             ),
                             const SizedBox(width: 8),
                             ChoiceChip(
                               label: const Text('Soft Buffer'),
                               selected: type == RoutineBlockType.softBlock,
-                              onSelected: (val) => setSheetState(() => type = RoutineBlockType.softBlock),
+                              onSelected: (val) => setSheetState(
+                                () => type = RoutineBlockType.softBlock,
+                              ),
                             ),
                           ],
                         ),
@@ -192,7 +266,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: OptivusColors.brandAccent,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         elevation: 0,
                       ),
@@ -205,7 +281,11 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
 
                         if (eMin <= sMin) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('End time must be after start time.')),
+                            const SnackBar(
+                              content: Text(
+                                'End time must be after start time.',
+                              ),
+                            ),
                           );
                           return;
                         }
@@ -218,10 +298,15 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           blockType: type,
                         );
 
-                        ref.read(mockRoutineProvider.notifier).addRoutineItem(newItem);
+                        ref
+                            .read(mockRoutineProvider.notifier)
+                            .addRoutineItem(newItem);
                         Navigator.pop(context);
                       },
-                      child: const Text('Anchor to Time ruler', style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'Anchor to Time ruler',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
@@ -273,16 +358,18 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                   Text(
                     'AI CORE OPTIMIZATIONS',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: Colors.deepPurple,
-                        ),
+                      fontWeight: FontWeight.w900,
+                      color: Colors.deepPurple,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
               Text(
                 'Aura Coach detected 1 collision inside your Friday shift routines. I suggest these offline adjustments:',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(height: 1.4),
               ),
               const SizedBox(height: 20),
               Container(
@@ -297,47 +384,79 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.flash_on, color: Colors.orangeAccent, size: 16),
+                        Icon(
+                          Icons.flash_on,
+                          color: Colors.orangeAccent,
+                          size: 16,
+                        ),
                         SizedBox(width: 6),
                         Text(
                           'Suggested Optimization:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.textPrimary),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: OptivusColors.textPrimary,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     const Text(
                       'Delay Gym Workout start from 17:30 to 18:00 to give your nervous system a 30m shift buffer.',
-                      style: TextStyle(fontSize: 12, height: 1.3, color: OptivusColors.textBody),
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.3,
+                        color: OptivusColors.textBody,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurple,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         elevation: 0,
                       ),
                       onPressed: () {
                         // Apply mock adjustment: Update workout routine block in mock app state
-                        final gym = ref.read(mockRoutineProvider).firstWhere((r) => r.title.contains('Gym'));
-                        ref.read(mockRoutineProvider.notifier).updateRoutineItem(
-                              gym.copyWith(startMinute: 18 * 60, endMinute: 19 * 60 + 30),
+                        final gym = ref
+                            .read(mockRoutineProvider)
+                            .firstWhere((r) => r.title.contains('Gym'));
+                        ref
+                            .read(mockRoutineProvider.notifier)
+                            .updateRoutineItem(
+                              gym.copyWith(
+                                startMinute: 18 * 60,
+                                endMinute: 19 * 60 + 30,
+                              ),
                             );
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('AI optimization applied: Gym delayed to 18:00.'),
+                            content: Text(
+                              'AI optimization applied: Gym delayed to 18:00.',
+                            ),
                             behavior: SnackBarBehavior.floating,
                           ),
                         );
                       },
-                      child: const Text('Apply AI Adjustment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                    )
+                      child: const Text(
+                        'Apply AI Adjustment',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         );
@@ -352,7 +471,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     final currentMinuteOfDay = now.hour * 60 + now.minute;
 
     // Scan for collisions/conflicts to display overlay alerts
-    final conflictingItems = routines.where((item) => item.hasConflict).toList();
+    final conflictingItems = routines
+        .where((item) => item.hasConflict)
+        .toList();
 
     return Column(
       children: [
@@ -373,13 +494,24 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                 Expanded(
                   child: Text(
                     'Collision alert! ${conflictingItems.length} hard blocks overlap.',
-                    style: const TextStyle(color: OptivusColors.danger, fontWeight: FontWeight.bold, fontSize: 12),
+                    style: const TextStyle(
+                      color: OptivusColors.danger,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
                 TextButton(
                   onPressed: _showAISuggestionsSheet,
-                  child: const Text('Resolve with AI', style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.bold, fontSize: 12)),
-                )
+                  child: const Text(
+                    'Resolve with AI',
+                    style: TextStyle(
+                      color: Colors.deepPurple,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -402,7 +534,10 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                     elevation: 0,
                   ),
                   icon: const Icon(Icons.add_circle_outline, size: 18),
-                  label: const Text('Add Block', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  label: const Text(
+                    'Add Block',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
                   onPressed: _showAddBlockSheet,
                 ),
               ),
@@ -410,7 +545,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFDCCBFF).withValues(alpha: 0.3),
+                    backgroundColor: const Color(
+                      0xFFDCCBFF,
+                    ).withValues(alpha: 0.3),
                     foregroundColor: Colors.deepPurple,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -419,8 +556,19 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     elevation: 0,
                   ),
-                  icon: const Icon(Icons.psychology, size: 18, color: Colors.deepPurple),
-                  label: const Text('AI Optimizer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.deepPurple)),
+                  icon: const Icon(
+                    Icons.psychology,
+                    size: 18,
+                    color: Colors.deepPurple,
+                  ),
+                  label: const Text(
+                    'AI Optimizer',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
                   onPressed: _showAISuggestionsSheet,
                 ),
               ),
@@ -476,7 +624,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                       for (final item in routines) ...[
                         Positioned(
                           top: item.startMinute * _minuteHeight,
-                          height: (item.endMinute - item.startMinute) * _minuteHeight,
+                          height: item.durationMinutes * _minuteHeight,
                           left: 70,
                           right: 16,
                           child: _buildRoutineBlockWidget(item),
@@ -491,14 +639,21 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.redAccent,
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
-                                style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white),
+                                style: const TextStyle(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
                             Expanded(
@@ -506,7 +661,10 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                                 height: 1.5,
                                 decoration: const BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: [Colors.redAccent, Colors.transparent],
+                                    colors: [
+                                      Colors.redAccent,
+                                      Colors.transparent,
+                                    ],
                                   ),
                                 ),
                               ),
@@ -563,15 +721,15 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
           color: item.isCompleted
               ? OptivusColors.success.withValues(alpha: 0.15)
               : item.hasConflict
-                  ? OptivusColors.danger.withValues(alpha: 0.15)
-                  : baseColor.withValues(alpha: 0.15),
+              ? OptivusColors.danger.withValues(alpha: 0.15)
+              : baseColor.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: item.isCompleted
                 ? OptivusColors.success
                 : item.hasConflict
-                    ? OptivusColors.danger
-                    : baseColor,
+                ? OptivusColors.danger
+                : baseColor,
             width: item.hasConflict ? 2.0 : 1.2,
           ),
         ),
@@ -581,15 +739,15 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
               item.isCompleted
                   ? Icons.check_circle
                   : item.hasConflict
-                      ? Icons.warning
-                      : isHard
-                          ? Icons.lock_outline
-                          : Icons.access_time_filled,
+                  ? Icons.warning
+                  : isHard
+                  ? Icons.lock_outline
+                  : Icons.access_time_filled,
               color: item.isCompleted
                   ? OptivusColors.success
                   : item.hasConflict
-                      ? OptivusColors.danger
-                      : baseColor,
+                  ? OptivusColors.danger
+                  : baseColor,
               size: 16,
             ),
             const SizedBox(width: 8),
@@ -608,9 +766,11 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                       color: item.isCompleted
                           ? OptivusColors.success
                           : item.hasConflict
-                              ? OptivusColors.danger
-                              : OptivusColors.textPrimary,
-                      decoration: item.isCompleted ? TextDecoration.lineThrough : null,
+                          ? OptivusColors.danger
+                          : OptivusColors.textPrimary,
+                      decoration: item.isCompleted
+                          ? TextDecoration.lineThrough
+                          : null,
                     ),
                   ),
                   if (item.conflictMessage != null) ...[
@@ -619,7 +779,11 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                       item.conflictMessage!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: OptivusColors.danger),
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: OptivusColors.danger,
+                      ),
                     ),
                   ] else ...[
                     const SizedBox(height: 2),
@@ -628,19 +792,27 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: item.isCompleted ? OptivusColors.success.withValues(alpha: 0.7) : OptivusColors.textSecondary,
+                        color: item.isCompleted
+                            ? OptivusColors.success.withValues(alpha: 0.7)
+                            : OptivusColors.textSecondary,
                       ),
                     ),
-                  ]
+                  ],
                 ],
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, size: 16, color: OptivusColors.textSecondary),
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 16,
+                color: OptivusColors.textSecondary,
+              ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               onPressed: () {
-                ref.read(mockRoutineProvider.notifier).deleteRoutineItem(item.id);
+                ref
+                    .read(mockRoutineProvider.notifier)
+                    .deleteRoutineItem(item.id);
               },
             ),
           ],

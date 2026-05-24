@@ -30,7 +30,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/loading',
     redirect: (context, state) {
       final authState = ref.read(authProvider);
-      final isAuth = authState.isLoggedIn;
 
       final isAuthRoute =
           state.uri.path == '/login' ||
@@ -42,7 +41,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (authState.isLoading) return null;
 
       // 1. Not signed in -> restricted to auth routes
-      if (!isAuth) {
+      if (!authState.isLoggedIn) {
         return isAuthRoute ? null : '/';
       }
 
@@ -50,7 +49,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onboardingCompleted = ref
           .read(mockUserProfileProvider)
           .onboardingCompleted;
-      if (!onboardingCompleted) {
+      if (!onboardingCompleted || authState.onboardingIncomplete) {
         if (state.uri.path != '/onboarding') return '/onboarding';
         return null;
       }

@@ -6,6 +6,13 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 
 class OnboardingCompletionBundle {
+  static const int schemaVersion = 1;
+
+  final String uid;
+  final int version;
+  final String source;
+  final DateTime createdAt;
+  final DateTime updatedAt;
   final Map<String, dynamic> userProfilePatch;
   final List<TimelineBlockDraft> baseTimelineBlocks;
   final List<FinalTimelineItem> finalTimelineItems;
@@ -20,6 +27,11 @@ class OnboardingCompletionBundle {
   final List<String> duplicateSystemKeysMerged;
 
   const OnboardingCompletionBundle({
+    required this.uid,
+    this.version = schemaVersion,
+    this.source = OnboardingDraft.sourceOnboarding,
+    required this.createdAt,
+    required this.updatedAt,
     required this.userProfilePatch,
     required this.baseTimelineBlocks,
     required this.finalTimelineItems,
@@ -36,6 +48,12 @@ class OnboardingCompletionBundle {
 
   Map<String, dynamic> toMap() {
     return {
+      'uid': uid,
+      'schemaVersion': version,
+      'source': source,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'onboardingCompleted': true,
       'userProfilePatch': userProfilePatch,
       'baseTimelineBlocks': baseTimelineBlocks
           .map((block) => block.toMap())
@@ -114,6 +132,16 @@ class GoodHabitTemplateBundle {
     'priority': priority,
     'repeatDays': repeatDays,
   };
+
+  Map<String, dynamic> toMapWithMetadata(String uid) => {
+    'uid': uid,
+    'schemaVersion': OnboardingCompletionBundle.schemaVersion,
+    'createdAt': DateTime.now().toIso8601String(),
+    'updatedAt': DateTime.now().toIso8601String(),
+    'source': OnboardingDraft.sourceOnboarding,
+    'onboardingCompleted': true,
+    ...toMap(),
+  };
 }
 
 class BadHabitCheckInBundle {
@@ -147,6 +175,16 @@ class BadHabitCheckInBundle {
     'moneySavedTrackerEnabled': moneySavedTrackerEnabled,
     'linkedRoutineItemId': linkedRoutineItemId,
   };
+
+  Map<String, dynamic> toMapWithMetadata(String uid) => {
+    'uid': uid,
+    'schemaVersion': OnboardingCompletionBundle.schemaVersion,
+    'createdAt': DateTime.now().toIso8601String(),
+    'updatedAt': DateTime.now().toIso8601String(),
+    'source': OnboardingDraft.sourceOnboarding,
+    'onboardingCompleted': true,
+    ...toMap(),
+  };
 }
 
 Map<String, dynamic> _routineItemToMap(RoutineItem item) => {
@@ -154,6 +192,8 @@ Map<String, dynamic> _routineItemToMap(RoutineItem item) => {
   'title': item.title,
   'startMinute': item.startMinute,
   'endMinute': item.endMinute,
+  'crossesMidnight': item.crossesMidnight,
+  'endsNextDay': item.endsNextDay,
   'repeatDays': item.repeatDays,
   'location': item.location,
   'blockType': item.blockType.name,

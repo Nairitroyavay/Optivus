@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
@@ -29,7 +30,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    final initialStep = ref
+        .read(mockOnboardingProvider)
+        .draft
+        .currentStep
+        .clamp(0, OnboardingDraft.lastStepIndex);
+    _currentPage = initialStep;
+    _pageOffset = initialStep.toDouble();
+    _pageController = PageController(initialPage: initialStep);
 
     _pageController.addListener(() {
       if (mounted) {
@@ -57,44 +65,50 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_isSaving) return false; // Prevent double tap
     setState(() => _isSaving = true);
 
-    final validationError = _validateStep(step);
-    if (validationError != null) {
-      ref
-          .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(validationError);
-      setState(() => _isSaving = false);
+    try {
+      final validationError = _validateStep(step);
+      if (validationError != null) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(validationError);
+        return false;
+      }
+
+      ref.read(mockOnboardingProvider.notifier).setStepLoading(step, true);
+      ref.read(mockOnboardingProvider.notifier).clearValidation();
+
+      // Simulate offline-first save database delay
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
+      final uid =
+          ref.read(authProvider).user?.uid ??
+          ref.read(mockOnboardingProvider).draft.uid;
+      onboardingNotifier.saveStep(
+        step,
+        uid: uid,
+        transform: (draft) {
+          if (step == 0) {
+            return draft.copyWith(welcomeSaved: true);
+          }
+          if (step == 3) {
+            return draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
+          }
+          if (step == 11) {
+            return draft.copyWith(finalPreview: draft.buildFinalPreview());
+          }
+          return draft;
+        },
+      );
+
+      return true;
+    } catch (e) {
+      ref.read(mockOnboardingProvider.notifier).setValidationMessage(e.toString());
       return false;
+    } finally {
+      ref.read(mockOnboardingProvider.notifier).setStepLoading(step, false);
+      if (mounted) setState(() => _isSaving = false);
     }
-
-    ref.read(mockOnboardingProvider.notifier).setStepLoading(step, true);
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
-
-    // Simulate offline-first save database delay
-    await Future.delayed(const Duration(milliseconds: 600));
-
-    final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
-    final uid =
-        ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
-    onboardingNotifier.saveStep(
-      step,
-      uid: uid,
-      transform: (draft) {
-        if (step == 0) {
-          return draft.copyWith(welcomeSaved: true);
-        }
-        if (step == 3) {
-          return draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
-        }
-        if (step == 11) {
-          return draft.copyWith(finalPreview: draft.buildFinalPreview());
-        }
-        return draft;
-      },
-    );
-
-    if (mounted) setState(() => _isSaving = false);
-    return true;
   }
 
   // Next step trigger action — with double-tap prevention
@@ -102,33 +116,37 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_isNavigating) return; // Prevent double tap
     setState(() => _isNavigating = true);
 
-    final onboardingState = ref.read(mockOnboardingProvider);
-    if (_currentPage == OnboardingDraft.lastStepIndex) {
-      await _completeOnboarding();
-      return;
-    }
-
-    final isDirty = onboardingState.stepDirty[_currentPage];
-    final isCompleted = onboardingState.stepCompleted[_currentPage];
-
-    // If dirty or not completed, force save logic
-    if (isDirty || !isCompleted) {
-      final saveSuccess = await _saveStep(_currentPage);
-      if (!saveSuccess) {
-        if (mounted) setState(() => _isNavigating = false);
-        return; // Stop if invalid
+    try {
+      final onboardingState = ref.read(mockOnboardingProvider);
+      if (_currentPage == OnboardingDraft.lastStepIndex) {
+        await _completeOnboarding();
+        return;
       }
-    }
 
-    // Otherwise slide to the next step
-    _currentPage++;
-    ref.read(mockOnboardingProvider.notifier).setStep(_currentPage);
-    await _pageController.animateToPage(
-      _currentPage,
-      duration: const Duration(milliseconds: 350),
-      curve: Curves.easeInOut,
-    );
-    if (mounted) setState(() => _isNavigating = false);
+      final isDirty = onboardingState.stepDirty[_currentPage];
+      final isCompleted = onboardingState.stepCompleted[_currentPage];
+
+      // If dirty or not completed, force save logic
+      if (isDirty || !isCompleted) {
+        final saveSuccess = await _saveStep(_currentPage);
+        if (!saveSuccess) {
+          return; // Stop if invalid
+        }
+      }
+
+      // Otherwise slide to the next step
+      _currentPage++;
+      ref.read(mockOnboardingProvider.notifier).setStep(_currentPage);
+      await _pageController.animateToPage(
+        _currentPage,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+      );
+    } catch (e) {
+      ref.read(mockOnboardingProvider.notifier).setValidationMessage(e.toString());
+    } finally {
+      if (mounted) setState(() => _isNavigating = false);
+    }
   }
 
   Future<void> _completeOnboarding() async {
@@ -140,14 +158,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       );
       if (error != null) {
         ref.read(mockOnboardingProvider.notifier).setValidationMessage(error);
-        if (mounted) setState(() => _isNavigating = false);
         return;
       }
     }
 
     final saveSuccess = await _saveStep(OnboardingDraft.lastStepIndex);
     if (!saveSuccess) {
-      if (mounted) setState(() => _isNavigating = false);
       return;
     }
 
@@ -164,7 +180,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       ref
           .read(mockOnboardingProvider.notifier)
           .setValidationMessage(blockingWarning);
-      if (mounted) setState(() => _isNavigating = false);
       return;
     }
 
@@ -183,9 +198,21 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     ref.read(mockUserProfileProvider.notifier).applyOnboardingBundle(bundle);
     ref.read(mockOnboardingProvider.notifier).completeOnboarding(uid: uid);
 
+    // Initialize the coach tab with a starter session so it doesn't crash empty
+    ref.read(mockCoachProvider.notifier).createNewSession(
+      'Onboarding Review',
+      CoachSessionType.generalChat,
+      bundle.coachPreferences.name ?? 'Coach',
+      bundle.coachPreferences.style ?? 'Supportive',
+    );
+
+    final authUser = ref.read(authProvider).user;
+    if (authUser != null) {
+      ref.read(authProvider.notifier).markOnboardingComplete(authUser);
+    }
+
     if (mounted) {
       context.go('/app?tab=0');
-      setState(() => _isNavigating = false);
     }
   }
 

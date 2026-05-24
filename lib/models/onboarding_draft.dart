@@ -1,4 +1,6 @@
 class OnboardingDraft {
+  static const int schemaVersion = 1;
+  static const String sourceOnboarding = 'onboarding';
   static const int stepCount = 12;
   static const int lastStepIndex = stepCount - 1;
 
@@ -162,6 +164,8 @@ class OnboardingDraft {
 
   Map<String, dynamic> toMap() => {
     'uid': uid,
+    'schemaVersion': schemaVersion,
+    'source': sourceOnboarding,
     'currentStep': currentStep,
     'stepCompleted': stepCompleted,
     'stepDirty': stepDirty,
@@ -311,6 +315,7 @@ class OnboardingDraft {
 
     final baseItems = baseTimeline.blocks
         .where((block) => !block.needsTimeConfirmation)
+        .where((block) => !(baseTimeline.skinCareSkipped && block.section == 'skin_care'))
         .map(FinalTimelineItem.fromTimelineBlock)
         .toList();
     final occupiedItems = <FinalTimelineItem>[...baseItems];
@@ -377,12 +382,15 @@ class OnboardingDraft {
     var cursor = 20 * 60;
 
     for (final habit in badHabits) {
-      cursor = _nextFreeStart(
-        cursor,
+      cursor = _nextFreeStart(cursor, 5, occupiedItems, const [
+        1,
+        2,
+        3,
+        4,
         5,
-        occupiedItems,
-        const [1, 2, 3, 4, 5, 6, 7],
-      );
+        6,
+        7,
+      ]);
       final item = FinalTimelineItem(
         id: 'bad-check-${habit.id}',
         title: '${habit.displayName} check-in',
@@ -456,13 +464,13 @@ class OnboardingDraft {
     final keys = <String>{};
     for (final habit in goodHabits) {
       final systemKey = systemKeyForGoodHabit(habit);
-      if (systemKey != null) keys.add(systemKey);
+      if (systemKey != null) keys.add(_canonicalSystemKey(systemKey));
     }
     if (badHabits.any((habit) => habit.dailySpend > 0)) {
       keys.add('bad_habit_money_saved');
     }
     for (final goal in identityGoals) {
-      keys.addAll(goal.systemKeys);
+      keys.addAll(goal.systemKeys.map(_canonicalSystemKey));
     }
     return keys.toList();
   }
@@ -471,13 +479,13 @@ class OnboardingDraft {
     final raw = <String>[];
     for (final habit in goodHabits) {
       final systemKey = systemKeyForGoodHabit(habit);
-      if (systemKey != null) raw.add(systemKey);
+      if (systemKey != null) raw.add(_canonicalSystemKey(systemKey));
     }
     if (badHabits.any((habit) => habit.dailySpend > 0)) {
       raw.add('bad_habit_money_saved');
     }
     for (final goal in identityGoals) {
-      raw.addAll(goal.systemKeys);
+      raw.addAll(goal.systemKeys.map(_canonicalSystemKey));
     }
 
     final seen = <String>{};
@@ -498,6 +506,13 @@ class OnboardingDraft {
     }
     if (habit.subtypeKey == 'business_skill') return 'business_work';
     return null;
+  }
+
+  static String _canonicalSystemKey(String key) {
+    return switch (key) {
+      'five_words_daily' || 'weekly_revision' => 'language_practice',
+      _ => key,
+    };
   }
 
   static int _defaultSystemDuration(String systemKey) {
@@ -529,28 +544,35 @@ class OnboardingDraft {
       final first = items[i];
       for (var j = i + 1; j < items.length; j++) {
         final second = items[j];
-        for (final day in first.repeatDays) {
-          if (!second.repeatDays.contains(day)) continue;
-          final overlaps =
-              first.startMinute < second.endMinute &&
-              first.endMinute > second.startMinute;
-          if (!overlaps) continue;
-          final key = '${first.id}:${second.id}:$day';
-          if (!seen.add(key)) continue;
-          final hardConflict =
-              first.blockType == TimelineBlockDraft.hardBlockKey &&
-              second.blockType == TimelineBlockDraft.hardBlockKey;
-          final acceptedHardConflict =
-              hardConflict &&
-              baseTimeline.acceptedConflictKeys.contains(
-                TimelineConflictDraft.keyFor(first.id, second.id, day),
-              );
-          if (acceptedHardConflict) continue;
-          warnings.add(
-            hardConflict
-                ? 'Resolve or accept the final hard conflict between ${first.title} and ${second.title}.'
-                : 'Schedule overlap: ${first.title} and ${second.title}. Tiny-version fallback may be needed.',
-          );
+        for (final firstWindow in _windowsForFinalItem(first)) {
+          for (final secondWindow in _windowsForFinalItem(second)) {
+            if (firstWindow.day != secondWindow.day) continue;
+            final overlaps =
+                firstWindow.startMinute < secondWindow.endMinute &&
+                firstWindow.endMinute > secondWindow.startMinute;
+            if (!overlaps) continue;
+            final key =
+                '${first.id}:${second.id}:${firstWindow.day}:${firstWindow.startMinute}';
+            if (!seen.add(key)) continue;
+            final hardConflict =
+                first.blockType == TimelineBlockDraft.hardBlockKey &&
+                second.blockType == TimelineBlockDraft.hardBlockKey;
+            final acceptedHardConflict =
+                hardConflict &&
+                baseTimeline.acceptedConflictKeys.contains(
+                  TimelineConflictDraft.keyFor(
+                    first.id,
+                    second.id,
+                    firstWindow.day,
+                  ),
+                );
+            if (acceptedHardConflict) continue;
+            warnings.add(
+              hardConflict
+                  ? 'Resolve or accept the final hard conflict between ${first.title} and ${second.title}.'
+                  : 'Schedule overlap: ${first.title} and ${second.title}. Tiny-version fallback may be needed.',
+            );
+          }
         }
       }
     }
@@ -596,18 +618,53 @@ class OnboardingDraft {
     while (moved && start + duration <= 23 * 60) {
       moved = false;
       for (final block in blockedWindows) {
-        final sharesDay = repeatDays.any((d) => block.repeatDays.contains(d));
-        if (!sharesDay) continue;
-
-        final overlaps =
-            start < block.endMinute && start + duration > block.startMinute;
-        if (overlaps) {
-          start = block.endMinute + 10;
-          moved = true;
+        for (final window in _windowsForFinalItem(block)) {
+          if (!repeatDays.contains(window.day)) continue;
+          final overlaps =
+              start < window.endMinute && start + duration > window.startMinute;
+          if (overlaps) {
+            start = window.endMinute + 10;
+            moved = true;
+          }
         }
       }
     }
     return start;
+  }
+
+  static List<_TimelineWindowDraft> _windowsForFinalItem(
+    FinalTimelineItem item,
+  ) {
+    final windows = <_TimelineWindowDraft>[];
+    final crossesMidnight =
+        item.crossesMidnight || item.endMinute <= item.startMinute;
+    for (final day in item.repeatDays) {
+      if (crossesMidnight) {
+        windows.add(
+          _TimelineWindowDraft(
+            day: day,
+            startMinute: item.startMinute,
+            endMinute: 24 * 60,
+          ),
+        );
+        windows.add(
+          _TimelineWindowDraft(
+            day: day == 7 ? 1 : day + 1,
+            startMinute: 0,
+            endMinute: item.endMinute,
+          ),
+        );
+      } else {
+        windows.add(
+          _TimelineWindowDraft(
+            day: day,
+            startMinute: item.startMinute,
+            endMinute: item.endMinute,
+          ),
+        );
+      }
+    }
+    return windows;
   }
 
   static List<bool> _readBoolList(dynamic value, int length) {
@@ -836,6 +893,9 @@ class BodyBasicsDraft {
 }
 
 class BaseTimelineDraft {
+  static const fixedSleepId = 'fixed-sleep';
+  static const fixedBathId = 'fixed-bath';
+
   final List<TimelineBlockDraft> blocks;
   final String? businessMode;
   final int? workDurationMinutes;
@@ -991,9 +1051,10 @@ class BaseTimelineDraft {
   BaseTimelineDraft deleteBlock(String id) {
     return copyWith(
       blocks: blocks.where((block) => block.id != id).toList(),
-      acceptedConflictKeys: acceptedConflictKeys
-          .where((key) => !key.contains(id))
-          .toList(),
+      acceptedConflictKeys: acceptedConflictKeys.where((key) {
+        final ids = TimelineConflictDraft.blockIdsForKey(key);
+        return ids == null || !ids.contains(id);
+      }).toList(),
     );
   }
 
@@ -1004,14 +1065,89 @@ class BaseTimelineDraft {
       section: section,
       mode: mode,
       createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
     );
     if (pendingFutureImports.any((item) => item.id == entry.id)) return this;
     return copyWith(pendingFutureImports: [...pendingFutureImports, entry]);
   }
 
+  BaseTimelineDraft upsertPendingImport(PendingFutureImportDraft entry) {
+    final exists = pendingFutureImports.any((item) => item.id == entry.id);
+    return copyWith(
+      pendingFutureImports: exists
+          ? [
+              for (final item in pendingFutureImports)
+                if (item.id == entry.id) entry else item,
+            ]
+          : [...pendingFutureImports, entry],
+    );
+  }
+
+  BaseTimelineDraft applyPendingImport(String importId) {
+    PendingFutureImportDraft? target;
+    for (final entry in pendingFutureImports) {
+      if (entry.id == importId) {
+        target = entry;
+        break;
+      }
+    }
+    if (target == null) return this;
+    final appliedBlocks = target.parsedBlocks
+        .map((block) => block.copyWith(needsTimeConfirmation: false))
+        .toList();
+    return copyWith(
+      blocks: [...blocks, ...appliedBlocks],
+      pendingFutureImports: [
+        for (final entry in pendingFutureImports)
+          if (entry.id == importId)
+            entry.copyWith(status: PendingFutureImportDraft.appliedStatus)
+          else
+            entry,
+      ],
+    );
+  }
+
   BaseTimelineDraft acceptConflict(String key) {
     if (acceptedConflictKeys.contains(key)) return this;
     return copyWith(acceptedConflictKeys: [...acceptedConflictKeys, key]);
+  }
+
+  BaseTimelineDraft withRequiredFixedBlocks() {
+    final nextBlocks = [...blocks];
+    if (!_hasSleepBlock(nextBlocks)) {
+      nextBlocks.add(defaultSleepBlock());
+    }
+    if (!_hasBathBlock(nextBlocks)) {
+      nextBlocks.add(defaultBathBlock());
+    }
+    return copyWith(blocks: nextBlocks);
+  }
+
+  static TimelineBlockDraft defaultSleepBlock() {
+    return const TimelineBlockDraft(
+      id: fixedSleepId,
+      section: 'fixed',
+      title: 'Sleep',
+      startMinute: 23 * 60 + 30,
+      endMinute: 7 * 60,
+      repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      blockType: TimelineBlockDraft.hardBlockKey,
+      source: OnboardingDraft.sourceOnboarding,
+      crossesMidnight: true,
+    );
+  }
+
+  static TimelineBlockDraft defaultBathBlock() {
+    return const TimelineBlockDraft(
+      id: fixedBathId,
+      section: 'fixed',
+      title: 'Bath',
+      startMinute: 7 * 60,
+      endMinute: 7 * 60 + 30,
+      repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      blockType: TimelineBlockDraft.hardBlockKey,
+      source: OnboardingDraft.sourceOnboarding,
+    );
   }
 
   List<TimelineConflictDraft> detectConflicts() {
@@ -1022,29 +1158,35 @@ class BaseTimelineDraft {
       for (var j = i + 1; j < blocks.length; j++) {
         final second = blocks[j];
         if (second.needsTimeConfirmation) continue;
-        for (final day in first.repeatDays) {
-          if (!second.repeatDays.contains(day)) continue;
-          final overlaps =
-              first.startMinute < second.endMinute &&
-              first.endMinute > second.startMinute;
-          if (!overlaps) continue;
-          final key = TimelineConflictDraft.keyFor(first.id, second.id, day);
-          final accepted = acceptedConflictKeys.contains(key);
-          final hardConflict =
-              first.blockType == TimelineBlockDraft.hardBlockKey &&
-              second.blockType == TimelineBlockDraft.hardBlockKey;
-          conflicts.add(
-            TimelineConflictDraft(
-              key: key,
-              firstBlockId: first.id,
-              secondBlockId: second.id,
-              firstTitle: first.title,
-              secondTitle: second.title,
-              day: day,
-              isHardConflict: hardConflict,
-              accepted: accepted,
-            ),
-          );
+        for (final firstWindow in _windowsFor(first)) {
+          for (final secondWindow in _windowsFor(second)) {
+            if (firstWindow.day != secondWindow.day) continue;
+            final overlaps =
+                firstWindow.startMinute < secondWindow.endMinute &&
+                firstWindow.endMinute > secondWindow.startMinute;
+            if (!overlaps) continue;
+            final key = TimelineConflictDraft.keyFor(
+              first.id,
+              second.id,
+              firstWindow.day,
+            );
+            final accepted = acceptedConflictKeys.contains(key);
+            final hardConflict =
+                first.blockType == TimelineBlockDraft.hardBlockKey &&
+                second.blockType == TimelineBlockDraft.hardBlockKey;
+            conflicts.add(
+              TimelineConflictDraft(
+                key: key,
+                firstBlockId: first.id,
+                secondBlockId: second.id,
+                firstTitle: first.title,
+                secondTitle: second.title,
+                day: firstWindow.day,
+                isHardConflict: hardConflict,
+                accepted: accepted,
+              ),
+            );
+          }
         }
       }
     }
@@ -1093,9 +1235,10 @@ class BaseTimelineDraft {
         'Cleared business schedule settings because this role is not Business.',
     ];
 
-    final nextAcceptedKeys = acceptedConflictKeys
-        .where((key) => removedIds.every((id) => !key.contains(id)))
-        .toList();
+    final nextAcceptedKeys = acceptedConflictKeys.where((key) {
+      final ids = TimelineConflictDraft.blockIdsForKey(key);
+      return ids == null || ids.every((id) => !removedIds.contains(id));
+    }).toList();
 
     return BaseTimelineInvalidationResult(
       timeline: copyWith(
@@ -1156,6 +1299,12 @@ class BaseTimelineDraft {
     if (!_hasConfirmedSection('fixed')) {
       return 'Add at least one fixed block.';
     }
+    if (!_hasSleepBlock(blocks)) {
+      return 'Keep the default Sleep fixed block and set its timing.';
+    }
+    if (!_hasBathBlock(blocks)) {
+      return 'Keep the default Bath fixed block and set its timing.';
+    }
     final blocking = detectConflicts().where((conflict) => conflict.isBlocking);
     if (blocking.isNotEmpty) {
       return 'Resolve or explicitly keep hard-block timeline conflicts.';
@@ -1171,6 +1320,73 @@ class BaseTimelineDraft {
           block.title.trim().isNotEmpty,
     );
   }
+
+  static bool _hasSleepBlock(List<TimelineBlockDraft> blocks) {
+    return blocks.any((block) {
+      final title = block.title.toLowerCase();
+      return block.section == 'fixed' &&
+          !block.needsTimeConfirmation &&
+          (block.id == fixedSleepId ||
+              title.contains('sleep') ||
+              title.contains('bed'));
+    });
+  }
+
+  static bool _hasBathBlock(List<TimelineBlockDraft> blocks) {
+    return blocks.any((block) {
+      final title = block.title.toLowerCase();
+      return block.section == 'fixed' &&
+          !block.needsTimeConfirmation &&
+          (block.id == fixedBathId ||
+              title.contains('bath') ||
+              title.contains('shower'));
+    });
+  }
+
+  static List<_TimelineWindowDraft> _windowsFor(TimelineBlockDraft block) {
+    final windows = <_TimelineWindowDraft>[];
+    final crossesMidnight =
+        block.crossesMidnight || block.endMinute <= block.startMinute;
+    for (final day in block.repeatDays) {
+      if (crossesMidnight) {
+        windows.add(
+          _TimelineWindowDraft(
+            day: day,
+            startMinute: block.startMinute,
+            endMinute: 24 * 60,
+          ),
+        );
+        windows.add(
+          _TimelineWindowDraft(
+            day: day == 7 ? 1 : day + 1,
+            startMinute: 0,
+            endMinute: block.endMinute,
+          ),
+        );
+      } else {
+        windows.add(
+          _TimelineWindowDraft(
+            day: day,
+            startMinute: block.startMinute,
+            endMinute: block.endMinute,
+          ),
+        );
+      }
+    }
+    return windows;
+  }
+}
+
+class _TimelineWindowDraft {
+  final int day;
+  final int startMinute;
+  final int endMinute;
+
+  const _TimelineWindowDraft({
+    required this.day,
+    required this.startMinute,
+    required this.endMinute,
+  });
 }
 
 class BaseTimelineInvalidationResult {
@@ -1184,19 +1400,41 @@ class BaseTimelineInvalidationResult {
 }
 
 class PendingFutureImportDraft {
+  static const pendingStatus = 'pending';
+  static const parsedStatus = 'parsed';
+  static const needsReviewStatus = 'needs_review';
+  static const appliedStatus = 'applied';
+  static const errorStatus = 'error';
+
   final String id;
   final String section;
   final String mode;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final String status;
+  final String? pastedText;
+  final String? uploadPlaceholderPath;
+  final String? errorMessage;
+  final List<TimelineBlockDraft> parsedBlocks;
+  final double? confidence;
+  final bool userVerified;
+  final bool userEdited;
 
   const PendingFutureImportDraft({
     required this.id,
     required this.section,
     required this.mode,
     required this.createdAt,
-    this.status = 'pending_future_import',
-  });
+    DateTime? updatedAt,
+    this.status = pendingStatus,
+    this.pastedText,
+    this.uploadPlaceholderPath,
+    this.errorMessage,
+    this.parsedBlocks = const [],
+    this.confidence,
+    this.userVerified = false,
+    this.userEdited = false,
+  }) : updatedAt = updatedAt ?? createdAt;
 
   factory PendingFutureImportDraft.fromMap(Map<String, dynamic> map) {
     return PendingFutureImportDraft(
@@ -1206,7 +1444,21 @@ class PendingFutureImportDraft {
       createdAt:
           DateTime.tryParse(map['createdAt'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
-      status: map['status'] as String? ?? 'pending_future_import',
+      updatedAt:
+          DateTime.tryParse(map['updatedAt'] as String? ?? '') ??
+          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      status: map['status'] as String? ?? pendingStatus,
+      pastedText: map['pastedText'] as String?,
+      uploadPlaceholderPath: map['uploadPlaceholderPath'] as String?,
+      errorMessage: map['errorMessage'] as String?,
+      parsedBlocks: _readList(
+        map['parsedBlocks'],
+        (value) => TimelineBlockDraft.fromMap(value),
+      ),
+      confidence: (map['confidence'] as num?)?.toDouble(),
+      userVerified: map['userVerified'] as bool? ?? false,
+      userEdited: map['userEdited'] as bool? ?? false,
     );
   }
 
@@ -1215,8 +1467,49 @@ class PendingFutureImportDraft {
     'section': section,
     'mode': mode,
     'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
     'status': status,
+    'pastedText': pastedText,
+    'uploadPlaceholderPath': uploadPlaceholderPath,
+    'errorMessage': errorMessage,
+    'parsedBlocks': parsedBlocks.map((block) => block.toMap()).toList(),
+    'confidence': confidence,
+    'userVerified': userVerified,
+    'userEdited': userEdited,
   };
+
+  PendingFutureImportDraft copyWith({
+    String? id,
+    String? section,
+    String? mode,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? status,
+    String? pastedText,
+    String? uploadPlaceholderPath,
+    String? errorMessage,
+    List<TimelineBlockDraft>? parsedBlocks,
+    double? confidence,
+    bool? userVerified,
+    bool? userEdited,
+  }) {
+    return PendingFutureImportDraft(
+      id: id ?? this.id,
+      section: section ?? this.section,
+      mode: mode ?? this.mode,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      status: status ?? this.status,
+      pastedText: pastedText ?? this.pastedText,
+      uploadPlaceholderPath:
+          uploadPlaceholderPath ?? this.uploadPlaceholderPath,
+      errorMessage: errorMessage ?? this.errorMessage,
+      parsedBlocks: parsedBlocks ?? this.parsedBlocks,
+      confidence: confidence ?? this.confidence,
+      userVerified: userVerified ?? this.userVerified,
+      userEdited: userEdited ?? this.userEdited,
+    );
+  }
 }
 
 class TimelineBlockDraft {
@@ -1235,6 +1528,8 @@ class TimelineBlockDraft {
   final String blockType;
   final String source;
   final bool needsTimeConfirmation;
+  final bool crossesMidnight;
+  final bool endsNextDay;
   final String? mealCategory;
   final List<String> dishes;
   final double? calories;
@@ -1252,6 +1547,8 @@ class TimelineBlockDraft {
     required this.blockType,
     this.source = 'manual',
     this.needsTimeConfirmation = false,
+    this.crossesMidnight = false,
+    this.endsNextDay = false,
     this.mealCategory,
     this.dishes = const [],
     this.calories,
@@ -1271,6 +1568,8 @@ class TimelineBlockDraft {
       blockType: map['blockType'] as String? ?? softBlockKey,
       source: map['source'] as String? ?? 'manual',
       needsTimeConfirmation: map['needsTimeConfirmation'] as bool? ?? false,
+      crossesMidnight: map['crossesMidnight'] as bool? ?? false,
+      endsNextDay: map['endsNextDay'] as bool? ?? false,
       mealCategory: map['mealCategory'] as String?,
       dishes: _readStringList(map['dishes']),
       calories: (map['calories'] as num?)?.toDouble(),
@@ -1290,6 +1589,8 @@ class TimelineBlockDraft {
     'blockType': blockType,
     'source': source,
     'needsTimeConfirmation': needsTimeConfirmation,
+    'crossesMidnight': crossesMidnight,
+    'endsNextDay': endsNextDay,
     'mealCategory': mealCategory,
     'dishes': dishes,
     'calories': calories,
@@ -1308,6 +1609,8 @@ class TimelineBlockDraft {
     String? blockType,
     String? source,
     bool? needsTimeConfirmation,
+    bool? crossesMidnight,
+    bool? endsNextDay,
     String? mealCategory,
     List<String>? dishes,
     double? calories,
@@ -1326,12 +1629,21 @@ class TimelineBlockDraft {
       source: source ?? this.source,
       needsTimeConfirmation:
           needsTimeConfirmation ?? this.needsTimeConfirmation,
+      crossesMidnight: crossesMidnight ?? this.crossesMidnight,
+      endsNextDay: endsNextDay ?? this.endsNextDay,
       mealCategory: mealCategory ?? this.mealCategory,
       dishes: dishes ?? this.dishes,
       calories: calories ?? this.calories,
       protein: protein ?? this.protein,
       skincareProducts: skincareProducts ?? this.skincareProducts,
     );
+  }
+
+  int get durationMinutes {
+    if (crossesMidnight || endsNextDay || endMinute <= startMinute) {
+      return (24 * 60 - startMinute) + endMinute;
+    }
+    return endMinute - startMinute;
   }
 }
 
@@ -1384,7 +1696,22 @@ class TimelineConflictDraft {
 
   static String keyFor(String firstId, String secondId, int day) {
     final ids = [firstId, secondId]..sort();
-    return '${ids[0]}:${ids[1]}:$day';
+    return '$day|${Uri.encodeComponent(ids[0])}|${Uri.encodeComponent(ids[1])}';
+  }
+
+  static Set<String>? blockIdsForKey(String key) {
+    final parts = key.split('|');
+    if (parts.length == 3) {
+      return {Uri.decodeComponent(parts[1]), Uri.decodeComponent(parts[2])};
+    }
+    final legacyParts = key.split(':');
+    if (legacyParts.length >= 3) {
+      return {
+        legacyParts.sublist(0, legacyParts.length - 1).first,
+        legacyParts.sublist(0, legacyParts.length - 1).last,
+      };
+    }
+    return null;
   }
 }
 
@@ -1639,6 +1966,7 @@ class CoachSetupDraft {
 }
 
 class NotificationSetupDraft {
+  final bool preferencesConfirmed;
   final bool osPermissionGranted;
   final bool morningStartReminder;
   final bool nextTaskReminder;
@@ -1649,6 +1977,7 @@ class NotificationSetupDraft {
   final String reminderIntensity;
 
   const NotificationSetupDraft({
+    this.preferencesConfirmed = false,
     this.osPermissionGranted = false,
     this.morningStartReminder = true,
     this.nextTaskReminder = true,
@@ -1661,6 +1990,7 @@ class NotificationSetupDraft {
 
   factory NotificationSetupDraft.fromMap(Map<String, dynamic> map) {
     return NotificationSetupDraft(
+      preferencesConfirmed: map['preferencesConfirmed'] as bool? ?? false,
       osPermissionGranted: map['osPermissionGranted'] as bool? ?? false,
       morningStartReminder: map['morningStartReminder'] as bool? ?? true,
       nextTaskReminder: map['nextTaskReminder'] as bool? ?? true,
@@ -1673,6 +2003,7 @@ class NotificationSetupDraft {
   }
 
   Map<String, dynamic> toMap() => {
+    'preferencesConfirmed': preferencesConfirmed,
     'osPermissionGranted': osPermissionGranted,
     'morningStartReminder': morningStartReminder,
     'nextTaskReminder': nextTaskReminder,
@@ -1684,6 +2015,7 @@ class NotificationSetupDraft {
   };
 
   NotificationSetupDraft copyWith({
+    bool? preferencesConfirmed,
     bool? osPermissionGranted,
     bool? morningStartReminder,
     bool? nextTaskReminder,
@@ -1694,6 +2026,7 @@ class NotificationSetupDraft {
     String? reminderIntensity,
   }) {
     return NotificationSetupDraft(
+      preferencesConfirmed: preferencesConfirmed ?? this.preferencesConfirmed,
       osPermissionGranted: osPermissionGranted ?? this.osPermissionGranted,
       morningStartReminder: morningStartReminder ?? this.morningStartReminder,
       nextTaskReminder: nextTaskReminder ?? this.nextTaskReminder,
@@ -1710,6 +2043,9 @@ class NotificationSetupDraft {
   String? validate() {
     if (!const {'low', 'medium', 'high'}.contains(reminderIntensity)) {
       return 'Choose a reminder intensity.';
+    }
+    if (!preferencesConfirmed) {
+      return 'Confirm reminder preferences before permission setup.';
     }
     return null;
   }
@@ -1769,6 +2105,7 @@ class FinalTimelineItem {
   final int endMinute;
   final List<int> repeatDays;
   final String blockType;
+  final bool crossesMidnight;
 
   const FinalTimelineItem({
     required this.id,
@@ -1778,6 +2115,7 @@ class FinalTimelineItem {
     required this.endMinute,
     required this.repeatDays,
     required this.blockType,
+    this.crossesMidnight = false,
   });
 
   factory FinalTimelineItem.fromTimelineBlock(TimelineBlockDraft block) {
@@ -1789,6 +2127,7 @@ class FinalTimelineItem {
       endMinute: block.endMinute,
       repeatDays: block.repeatDays,
       blockType: block.blockType,
+      crossesMidnight: block.crossesMidnight,
     );
   }
 
@@ -1801,10 +2140,16 @@ class FinalTimelineItem {
       endMinute: (map['endMinute'] as num?)?.toInt() ?? 0,
       repeatDays: _readIntList(map['repeatDays']),
       blockType: map['blockType'] as String? ?? TimelineBlockDraft.softBlockKey,
+      crossesMidnight: map['crossesMidnight'] as bool? ?? false,
     );
   }
 
-  int get durationMinutes => endMinute - startMinute;
+  int get durationMinutes {
+    if (crossesMidnight || endMinute <= startMinute) {
+      return (24 * 60 - startMinute) + endMinute;
+    }
+    return endMinute - startMinute;
+  }
 
   Map<String, dynamic> toMap() => {
     'id': id,
@@ -1814,6 +2159,7 @@ class FinalTimelineItem {
     'endMinute': endMinute,
     'repeatDays': repeatDays,
     'blockType': blockType,
+    'crossesMidnight': crossesMidnight,
   };
 }
 

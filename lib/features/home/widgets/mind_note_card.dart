@@ -74,11 +74,13 @@ class MindNoteCard extends ConsumerWidget {
                           color: typeColor.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(typeIcon,
-                            color: typeColor == const Color(0xFFDCCBFF)
-                                ? Colors.deepPurple
-                                : typeColor,
-                            size: 14),
+                        child: Icon(
+                          typeIcon,
+                          color: typeColor == const Color(0xFFDCCBFF)
+                              ? Colors.deepPurple
+                              : typeColor,
+                          size: 14,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -95,7 +97,9 @@ class MindNoteCard extends ConsumerWidget {
                       const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: intensityColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
@@ -129,15 +133,19 @@ class MindNoteCard extends ConsumerWidget {
               color: Colors.white.withValues(alpha: 0.4),
               child: Row(
                 children: [
-                  const Icon(Icons.access_time,
-                      size: 12, color: OptivusColors.textSecondary),
+                  const Icon(
+                    Icons.access_time,
+                    size: 12,
+                    color: OptivusColors.textSecondary,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     note.timestamp,
                     style: const TextStyle(
-                        fontSize: 10,
-                        color: OptivusColors.textSecondary,
-                        fontWeight: FontWeight.bold),
+                      fontSize: 10,
+                      color: OptivusColors.textSecondary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   InkWell(
@@ -147,9 +155,11 @@ class MindNoteCard extends ConsumerWidget {
                           .toggleShareWithCoach(note.id);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(note.isSharedWithCoach
-                              ? 'Unshared with AI Coach.'
-                              : 'Shared with AI Coach for timeline audits.'),
+                          content: Text(
+                            note.isSharedWithCoach
+                                ? 'Unshared with AI Coach.'
+                                : 'Shared with AI Coach for timeline audits.',
+                          ),
                           behavior: SnackBarBehavior.floating,
                           duration: const Duration(seconds: 2),
                         ),
@@ -158,7 +168,9 @@ class MindNoteCard extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       child: Row(
                         children: [
                           Icon(
@@ -189,8 +201,11 @@ class MindNoteCard extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 16, color: OptivusColors.danger),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: OptivusColors.danger,
+                    ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: () {
@@ -201,7 +216,7 @@ class MindNoteCard extends ConsumerWidget {
                   ),
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),

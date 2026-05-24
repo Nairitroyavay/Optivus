@@ -14,7 +14,8 @@ class CoachTab extends ConsumerStatefulWidget {
   ConsumerState<CoachTab> createState() => _CoachTabState();
 }
 
-class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderStateMixin {
+class _CoachTabState extends ConsumerState<CoachTab>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _chatScrollController = ScrollController();
   late final AnimationController _waveAnimationController;
@@ -54,7 +55,9 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
 
   void _sendMessage(String text) {
     if (text.trim().isEmpty) return;
-    ref.read(mockCoachProvider.notifier).sendMessage(_selectedSessionId, text.trim());
+    ref
+        .read(mockCoachProvider.notifier)
+        .sendMessage(_selectedSessionId, text.trim());
     _messageController.clear();
     _scrollToBottom();
 
@@ -68,10 +71,54 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final sessions = ref.watch(mockCoachProvider);
+    final coachPreferences = ref.watch(mockCoachPreferencesProvider);
+    if (sessions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'AI COACH ${coachPreferences.name.toUpperCase()}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+              child: const Text(
+                'Coach setup is ready. Start a new session when you need help adjusting your routine.',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textBody,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     final activeSession = sessions.firstWhere(
       (s) => s.id == _selectedSessionId,
       orElse: () => sessions.first,
     );
+    
+    // Ensure selected session stays synced with reality if fallback occurs
+    if (_selectedSessionId != activeSession.id) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedSessionId = activeSession.id);
+      });
+    }
 
     final messages = activeSession.messages;
 
@@ -94,20 +141,28 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
               Text(
                 'AI COACH AURA',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.2,
-                      color: OptivusColors.textSecondary,
-                    ),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                  color: OptivusColors.textSecondary,
+                ),
               ),
               Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.forum_outlined, color: OptivusColors.brandAccent, size: 18),
+                    icon: const Icon(
+                      Icons.forum_outlined,
+                      color: OptivusColors.brandAccent,
+                      size: 18,
+                    ),
                     onPressed: () => showCoachSessionsListScreen(context, ref),
                     tooltip: 'All Threads',
                   ),
                   IconButton(
-                    icon: const Icon(Icons.tune, color: OptivusColors.brandAccent, size: 18),
+                    icon: const Icon(
+                      Icons.tune,
+                      color: OptivusColors.brandAccent,
+                      size: 18,
+                    ),
                     onPressed: () => showCoachSettingsScreen(context, ref),
                     tooltip: 'Persona Configurations',
                   ),
@@ -131,12 +186,20 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
                 return Padding(
                   padding: const EdgeInsets.only(right: 8.0),
                   child: ChoiceChip(
-                    label: Text(s.title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    label: Text(
+                      s.title,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     selected: isSel,
                     onSelected: (val) {
                       if (val) {
                         setState(() => _selectedSessionId = s.id);
-                        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => _scrollToBottom(),
+                        );
                       }
                     },
                   ),
@@ -241,19 +304,29 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
                         Expanded(
                           child: TextField(
                             controller: _messageController,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
                             decoration: InputDecoration(
                               hintText: 'Talk to Aura Coach...',
                               filled: true,
                               fillColor: Colors.white.withValues(alpha: 0.9),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: OptivusColors.borderSoft),
+                                borderSide: const BorderSide(
+                                  color: OptivusColors.borderSoft,
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
-                                borderSide: const BorderSide(color: OptivusColors.brandAccent),
+                                borderSide: const BorderSide(
+                                  color: OptivusColors.brandAccent,
+                                ),
                               ),
                             ),
                             onChanged: (val) {
@@ -267,12 +340,20 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: LinearGradient(
-                              colors: [OptivusColors.brandAccent, OptivusColors.aquaAccent],
+                              colors: [
+                                OptivusColors.brandAccent,
+                                OptivusColors.aquaAccent,
+                              ],
                             ),
                           ),
                           child: IconButton(
-                            icon: const Icon(Icons.send, color: Colors.white, size: 18),
-                            onPressed: () => _sendMessage(_messageController.text),
+                            icon: const Icon(
+                              Icons.send,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            onPressed: () =>
+                                _sendMessage(_messageController.text),
                           ),
                         ),
                       ],
@@ -295,20 +376,30 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
       child: FractionallySizedBox(
         widthFactor: 0.85,
         child: Column(
-          crossAxisAlignment: isCoach ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+          crossAxisAlignment: isCoach
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.end,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isCoach ? const Color(0xFFDCCBFF).withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.95),
+                color: isCoach
+                    ? const Color(0xFFDCCBFF).withValues(alpha: 0.25)
+                    : Colors.white.withValues(alpha: 0.95),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(20),
                   topRight: const Radius.circular(20),
-                  bottomLeft: isCoach ? const Radius.circular(4) : const Radius.circular(20),
-                  bottomRight: isCoach ? const Radius.circular(20) : const Radius.circular(4),
+                  bottomLeft: isCoach
+                      ? const Radius.circular(4)
+                      : const Radius.circular(20),
+                  bottomRight: isCoach
+                      ? const Radius.circular(20)
+                      : const Radius.circular(4),
                 ),
                 border: Border.all(
-                  color: isCoach ? const Color(0xFFDCCBFF) : OptivusColors.borderSoft,
+                  color: isCoach
+                      ? const Color(0xFFDCCBFF)
+                      : OptivusColors.borderSoft,
                   width: 1.0,
                 ),
               ),
@@ -326,7 +417,8 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
                   ),
                   if (msg.blocks.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    for (final block in msg.blocks) _buildCoachActionCard(block),
+                    for (final block in msg.blocks)
+                      _buildCoachActionCard(block),
                   ],
                 ],
               ),
@@ -334,7 +426,11 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
             const SizedBox(height: 4),
             Text(
               msg.timestamp,
-              style: const TextStyle(fontSize: 9, color: OptivusColors.textSecondary, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 9,
+                color: OptivusColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
@@ -386,51 +482,87 @@ class _CoachTabState extends ConsumerState<CoachTab> with SingleTickerProviderSt
               const SizedBox(width: 8),
               Text(
                 block.heading ?? '',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: blockColor),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                  color: blockColor,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             block.body ?? '',
-            style: const TextStyle(fontSize: 10, height: 1.3, color: OptivusColors.textBody),
+            style: const TextStyle(
+              fontSize: 10,
+              height: 1.3,
+              color: OptivusColors.textBody,
+            ),
           ),
           const SizedBox(height: 10),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: blockColor,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               padding: const EdgeInsets.symmetric(vertical: 8),
               elevation: 0,
             ),
             onPressed: () {
               if (block.payload == 'pivot_routine') {
-                final gym = ref.read(mockRoutineProvider).firstWhere((r) => r.title.contains('Gym'));
-                ref.read(mockRoutineProvider.notifier).updateRoutineItem(
-                      gym.copyWith(startMinute: 18 * 60, endMinute: 19 * 60 + 30),
+                final gym = ref
+                    .read(mockRoutineProvider)
+                    .firstWhere((r) => r.title.contains('Gym'));
+                ref
+                    .read(mockRoutineProvider.notifier)
+                    .updateRoutineItem(
+                      gym.copyWith(
+                        startMinute: 18 * 60,
+                        endMinute: 19 * 60 + 30,
+                      ),
                     );
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Applied: Gym delayed to 18:00.'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Applied: Gym delayed to 18:00.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               } else if (block.payload == 'water_250') {
                 ref.read(mockTrackerProvider.notifier).logHydration(250);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Logged +250ml Water!'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Logged +250ml Water!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               } else if (block.payload == 'verify_proof_body') {
-                final gymGoal = ref.read(mockGoalProvider).firstWhere((g) => g.identityTitle.contains('Gym'));
-                ref.read(mockGoalProvider.notifier).toggleGoalProofCompleted(gymGoal.id);
+                final gymGoal = ref
+                    .read(mockGoalProvider)
+                    .firstWhere((g) => g.identityTitle.contains('Gym'));
+                ref
+                    .read(mockGoalProvider.notifier)
+                    .toggleGoalProofCompleted(gymGoal.id);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Gym Goal Daily Proof Verified!'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Gym Goal Daily Proof Verified!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               } else if (block.payload == 'open_notebook') {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mind Notebook is open on your Home tab!'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Mind Notebook is open on your Home tab!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               }
             },
-            child: Text(block.buttonLabel ?? 'Confirm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+            child: Text(
+              block.buttonLabel ?? 'Confirm',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+            ),
           ),
         ],
       ),
@@ -509,7 +641,9 @@ class IridescentWavePainter extends CustomPainter {
     final paint = Paint()
       ..strokeWidth = strokeWidth
       ..style = PaintingStyle.stroke
-      ..shader = LinearGradient(colors: colors).createShader(Rect.fromLTWH(0, 0, width, 36));
+      ..shader = LinearGradient(
+        colors: colors,
+      ).createShader(Rect.fromLTWH(0, 0, width, 36));
 
     canvas.drawPath(path, paint);
   }

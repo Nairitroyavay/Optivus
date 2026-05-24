@@ -62,6 +62,11 @@ Home and Routine read `mockRoutineProvider`, so generated onboarding data is vis
 
 **Home/Routine Readiness Status: PASS**
 
+## Next Phases
+- The core onboarding data models and repositories (auth, onboarding, user profile, routine, habit, goal, notification preferences) are integrated and complete on the frontend side.
+- Real backend integration can start using the `fake_..._repository` implementations as the contract baseline.
+- Real Firebase Auth should be connected via `FirebaseAuthRepository`.
+
 ## Future Firestore Target Paths
 
 Documented only. Not connected in this frontend-only phase.

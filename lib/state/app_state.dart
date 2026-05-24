@@ -914,7 +914,12 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   void reset(String uid) {
     final now = DateTime.now();
     state = OnboardingState(
-      draft: OnboardingDraft(uid: uid, createdAt: now, updatedAt: now),
+      draft: OnboardingDraft(
+        uid: uid,
+        createdAt: now,
+        updatedAt: now,
+        baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
+      ),
     );
   }
 

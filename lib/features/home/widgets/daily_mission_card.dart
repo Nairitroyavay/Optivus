@@ -15,8 +15,7 @@ class DailyMissionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final completionRatio =
-        totalTasks > 0 ? completedTasks / totalTasks : 0.0;
+    final completionRatio = totalTasks > 0 ? completedTasks / totalTasks : 0.0;
 
     return LiquidGlassPanel(
       padding: const EdgeInsets.all(20),
@@ -33,7 +32,8 @@ class DailyMissionCard extends StatelessWidget {
                   strokeWidth: 8,
                   backgroundColor: Colors.white.withValues(alpha: 0.3),
                   valueColor: const AlwaysStoppedAnimation<Color>(
-                      OptivusColors.brandAccent),
+                    OptivusColors.brandAccent,
+                  ),
                 ),
               ),
               Text(
@@ -54,15 +54,15 @@ class DailyMissionCard extends StatelessWidget {
                 Text(
                   'Daily Habit Progress',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '$completedTasks of $totalTasks routine blocks completed.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: OptivusColors.textBody,
-                      ),
+                    color: OptivusColors.textBody,
+                  ),
                 ),
               ],
             ),

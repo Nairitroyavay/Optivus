@@ -1,29 +1,35 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+
 /// A simple user model for authentication purposes.
 class AuthUser {
   final String uid;
   final String? email;
   final String? displayName;
 
-  const AuthUser({
-    required this.uid,
-    this.email,
-    this.displayName,
-  });
+  const AuthUser({required this.uid, this.email, this.displayName});
 }
 
 /// Abstract repository interface for authentication.
 abstract class AuthRepository {
   Stream<AuthUser?> get authStateChanges;
-  
+
   Future<AuthUser> signIn(String email, String password);
-  
+
   Future<AuthUser> signUp(String email, String password, {String? name});
-  
+
   Future<void> sendPasswordResetEmail(String email);
-  
+
   Future<void> signOut();
+}
+
+AuthUser _authUserFromFirebase(firebase_auth.User user) {
+  return AuthUser(
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+  );
 }
 
 /// Fake implementation of [AuthRepository] for testing and UI development.
@@ -69,19 +75,19 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<AuthUser> signUp(String email, String password, {String? name}) async {
     await Future.delayed(const Duration(milliseconds: 1200));
-    
+
     final normalizedEmail = email.trim();
-    
+
     if (normalizedEmail.toLowerCase() == 'test@optivus.dev') {
       throw Exception('email-already-in-use');
     }
-    
+
     _currentUser = AuthUser(
       uid: 'fake-uid-${DateTime.now().millisecondsSinceEpoch}',
       email: normalizedEmail,
       displayName: name?.trim(),
     );
-    
+
     _authStateController.add(_currentUser);
     return _currentUser!;
   }
@@ -100,18 +106,67 @@ class FakeAuthRepository implements AuthRepository {
   }
 }
 
-/// TODO: Real Firebase Implementation
-///
-/// This is a placeholder for the future implementation of [AuthRepository]
-/// using Firebase Auth and Cloud Firestore.
-/// 
-/// It should be implemented in this file or a separate file later when Firebase
-/// is connected. DO NOT use [FirebaseAuth.instance] in this task.
-/*
 class FirebaseAuthRepository implements AuthRepository {
-  // final FirebaseAuth _auth;
-  // final FirebaseFirestore _firestore;
+  final firebase_auth.FirebaseAuth _auth;
 
-  // ... Implement methods using Firebase Auth
+  FirebaseAuthRepository({firebase_auth.FirebaseAuth? auth})
+    : _auth = auth ?? firebase_auth.FirebaseAuth.instance;
+
+  @override
+  Stream<AuthUser?> get authStateChanges {
+    return _auth.authStateChanges().map((user) {
+      return user == null ? null : _authUserFromFirebase(user);
+    });
+  }
+
+  @override
+  Future<AuthUser> signIn(String email, String password) async {
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+    final user = credential.user;
+    if (user == null) {
+      throw firebase_auth.FirebaseAuthException(
+        code: 'missing-user',
+        message: 'Firebase sign-in did not return a user.',
+      );
+    }
+    return _authUserFromFirebase(user);
+  }
+
+  @override
+  Future<AuthUser> signUp(String email, String password, {String? name}) async {
+    final credential = await _auth.createUserWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+    final user = credential.user;
+    if (user == null) {
+      throw firebase_auth.FirebaseAuthException(
+        code: 'missing-user',
+        message: 'Firebase sign-up did not return a user.',
+      );
+    }
+    final trimmedName = name?.trim();
+    if (trimmedName != null && trimmedName.isNotEmpty) {
+      await user.updateDisplayName(trimmedName);
+      await user.reload();
+      final refreshed = _auth.currentUser;
+      return refreshed == null
+          ? _authUserFromFirebase(user)
+          : _authUserFromFirebase(refreshed);
+    }
+    return _authUserFromFirebase(user);
+  }
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) {
+    return _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
+  @override
+  Future<void> signOut() {
+    return _auth.signOut();
+  }
 }
-*/

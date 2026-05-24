@@ -19,32 +19,50 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
       (
         'Morning start',
         notifications.morningStartReminder,
-        (bool value) => notifications.copyWith(morningStartReminder: value),
+        (bool value) => notifications.copyWith(
+          morningStartReminder: value,
+          preferencesConfirmed: false,
+        ),
       ),
       (
         'Next task',
         notifications.nextTaskReminder,
-        (bool value) => notifications.copyWith(nextTaskReminder: value),
+        (bool value) => notifications.copyWith(
+          nextTaskReminder: value,
+          preferencesConfirmed: false,
+        ),
       ),
       (
         'Eating',
         notifications.eatingReminder,
-        (bool value) => notifications.copyWith(eatingReminder: value),
+        (bool value) => notifications.copyWith(
+          eatingReminder: value,
+          preferencesConfirmed: false,
+        ),
       ),
       (
         'Bad habit check-in',
         notifications.badHabitCheckInReminder,
-        (bool value) => notifications.copyWith(badHabitCheckInReminder: value),
+        (bool value) => notifications.copyWith(
+          badHabitCheckInReminder: value,
+          preferencesConfirmed: false,
+        ),
       ),
       (
         'Savings',
         notifications.savingsReminder,
-        (bool value) => notifications.copyWith(savingsReminder: value),
+        (bool value) => notifications.copyWith(
+          savingsReminder: value,
+          preferencesConfirmed: false,
+        ),
       ),
       (
         'Night reflection',
         notifications.nightReflectionReminder,
-        (bool value) => notifications.copyWith(nightReflectionReminder: value),
+        (bool value) => notifications.copyWith(
+          nightReflectionReminder: value,
+          preferencesConfirmed: false,
+        ),
       ),
     ];
 
@@ -170,6 +188,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                                               .copyWith(
                                                 reminderIntensity: level
                                                     .toLowerCase(),
+                                                preferencesConfirmed: false,
                                               ),
                                           clearFinalPreview: true,
                                         ),
@@ -187,7 +206,66 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                   ),
                 ),
                 const SizedBox(height: 14),
-                if (!notifications.osPermissionGranted)
+                OnboardingGlassCard(
+                  tint: notifications.preferencesConfirmed
+                      ? OptivusColors.success.withValues(alpha: 0.08)
+                      : OptivusColors.brandAccent.withValues(alpha: 0.08),
+                  child: Row(
+                    children: [
+                      Icon(
+                        notifications.preferencesConfirmed
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.rule_rounded,
+                        color: notifications.preferencesConfirmed
+                            ? OptivusColors.success
+                            : OptivusColors.brandAccent,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          notifications.preferencesConfirmed
+                              ? 'Reminder preferences saved. Permission setup is now available.'
+                              : 'Confirm app-level reminder preferences before permission setup.',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: OptivusColors.textSecondary,
+                            height: 1.4,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      OnboardingActionPill(
+                        label: notifications.preferencesConfirmed
+                            ? 'Confirmed'
+                            : 'Confirm',
+                        icon: Icons.check_rounded,
+                        accent: notifications.preferencesConfirmed
+                            ? OptivusColors.success
+                            : OptivusColors.brandAccent,
+                        compact: true,
+                        selected: notifications.preferencesConfirmed,
+                        onTap: () {
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .updateDraft(
+                                (draft) => draft.copyWith(
+                                  notifications: draft.notifications.copyWith(
+                                    preferencesConfirmed: true,
+                                  ),
+                                  clearFinalPreview: true,
+                                ),
+                              );
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .setStepDirty(10, true);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                if (notifications.preferencesConfirmed &&
+                    !notifications.osPermissionGranted)
                   OnboardingGlassCard(
                     tint: OptivusColors.aquaAccent.withValues(alpha: 0.12),
                     child: Column(
@@ -223,7 +301,9 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                                 onPressed: () {},
                                 child: const Text(
                                   'Don\'t Allow',
-                                  style: TextStyle(color: OptivusColors.textSecondary),
+                                  style: TextStyle(
+                                    color: OptivusColors.textSecondary,
+                                  ),
                                 ),
                               ),
                             ),
@@ -235,7 +315,9 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                                       .updateDraft(
                                         (draft) => draft.copyWith(
                                           notifications: draft.notifications
-                                              .copyWith(osPermissionGranted: true),
+                                              .copyWith(
+                                                osPermissionGranted: true,
+                                              ),
                                           clearFinalPreview: true,
                                         ),
                                       );
@@ -257,7 +339,8 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                       ],
                     ),
                   ),
-                if (notifications.osPermissionGranted)
+                if (notifications.preferencesConfirmed &&
+                    notifications.osPermissionGranted)
                   OnboardingGlassCard(
                     tint: OptivusColors.success.withValues(alpha: 0.08),
                     child: const Row(

@@ -35,7 +35,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       'Self-growth book',
       'Class subject',
       'Fiction',
-      'Research',
+      'Spiritual/calm reading',
       'Custom',
     ]),
     _GoodHabit('Meditation', Icons.self_improvement_rounded, [
@@ -49,8 +49,8 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       'Planner',
     ]),
     _GoodHabit('Language Learning', Icons.translate_rounded, [
-      'Hindi',
       'English',
+      'Hindi',
       'Bengali',
       'German',
       'Japanese',
@@ -105,7 +105,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                   habitKey: _habitKey(habit.name),
                   displayName: habit.name,
                   subtypeKey: _subtypeKey(habit.category),
-                  durationMinutes: habit.duration == 'Custom' && habit.customDurationMinutes != null
+                  durationMinutes:
+                      habit.duration == 'Custom' &&
+                          habit.customDurationMinutes != null
                       ? habit.customDurationMinutes!
                       : _durationMinutes(habit.duration),
                   frequency: _frequencyKey(habit.frequency),
@@ -284,7 +286,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                 'Mins',
                 habit.customDurationMinutes?.toString() ?? '',
                 (val) {
-                  setState(() => habit.customDurationMinutes = int.tryParse(val));
+                  setState(
+                    () => habit.customDurationMinutes = int.tryParse(val),
+                  );
                   _syncDraft();
                   _dirty();
                 },
@@ -313,7 +317,11 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
     );
   }
 
-  Widget _customNumberInput(String hint, String initialValue, Function(String) onChanged) {
+  Widget _customNumberInput(
+    String hint,
+    String initialValue,
+    Function(String) onChanged,
+  ) {
     return Container(
       width: 80,
       height: 38,
@@ -325,7 +333,8 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       ),
       child: Center(
         child: TextField(
-          controller: TextEditingController(text: initialValue)..selection = TextSelection.collapsed(offset: initialValue.length),
+          controller: TextEditingController(text: initialValue)
+            ..selection = TextSelection.collapsed(offset: initialValue.length),
           keyboardType: TextInputType.number,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
           decoration: InputDecoration(

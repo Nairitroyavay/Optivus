@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 
 import 'package:optivus/state/app_state.dart';
@@ -7,25 +8,51 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/notification_preferences.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
+  if (OptivusBackendConfig.useFirebase) {
+    return FirebaseAuthRepository();
+  }
   return FakeAuthRepository();
 });
 
+enum AuthFlowStatus {
+  loading,
+  signedOut,
+  signedInOnboardingIncomplete,
+  signedInOnboardingComplete,
+  error,
+}
+
 class AuthState {
   final AuthUser? user;
-  final bool isLoading;
+  final AuthFlowStatus status;
+  final String? errorMessage;
 
-  const AuthState({this.user, this.isLoading = false});
+  const AuthState({
+    this.user,
+    this.status = AuthFlowStatus.signedOut,
+    this.errorMessage,
+  });
 
   bool get isLoggedIn => user != null;
+  bool get isLoading => status == AuthFlowStatus.loading;
+  bool get isSignedOut => status == AuthFlowStatus.signedOut;
+  bool get onboardingIncomplete =>
+      status == AuthFlowStatus.signedInOnboardingIncomplete;
+  bool get onboardingComplete =>
+      status == AuthFlowStatus.signedInOnboardingComplete;
+  bool get hasError => status == AuthFlowStatus.error;
 
   AuthState copyWith({
     AuthUser? user,
-    bool? isLoading,
+    AuthFlowStatus? status,
+    String? errorMessage,
     bool clearUser = false,
+    bool clearError = false,
   }) {
     return AuthState(
       user: clearUser ? null : (user ?? this.user),
-      isLoading: isLoading ?? this.isLoading,
+      status: status ?? this.status,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
 }
@@ -36,12 +63,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   AuthNotifier(this._repository, this._ref) : super(const AuthState()) {
     _repository.authStateChanges.listen((user) {
-      state = state.copyWith(user: user, clearUser: user == null);
+      final onboardingCompleted = _ref
+          .read(mockUserProfileProvider)
+          .onboardingCompleted;
+      state = state.copyWith(
+        user: user,
+        clearUser: user == null,
+        status: _statusFor(user, onboardingCompleted),
+        clearError: true,
+      );
     });
   }
 
   Future<void> login(String email, String password) async {
-    state = state.copyWith(isLoading: true);
+    final previousUser = state.user;
+    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       final user = await _repository.signIn(email, password);
       // If dev account, populate seed data. Otherwise, leave as empty if no local profile found.
@@ -50,36 +86,96 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } else {
         _resetNormalUserState(user);
       }
+      state = state.copyWith(
+        user: user,
+        status: _statusFor(
+          user,
+          _ref.read(mockUserProfileProvider).onboardingCompleted,
+        ),
+        clearError: true,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        user: previousUser,
+        status: AuthFlowStatus.error,
+        errorMessage: error.toString(),
+      );
+      rethrow;
     } finally {
-      if (mounted) {
-        state = state.copyWith(isLoading: false);
+      if (mounted && state.isLoading) {
+        state = state.copyWith(
+          status: _statusFor(
+            state.user,
+            _ref.read(mockUserProfileProvider).onboardingCompleted,
+          ),
+        );
       }
     }
   }
 
   Future<void> signup(String name, String email, String password) async {
-    state = state.copyWith(isLoading: true);
+    final previousUser = state.user;
+    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       final user = await _repository.signUp(email, password, name: name);
       // Empty profile for new user
       _resetNormalUserState(user);
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.signedInOnboardingIncomplete,
+        clearError: true,
+      );
+    } catch (error) {
+      state = state.copyWith(
+        user: previousUser,
+        status: AuthFlowStatus.error,
+        errorMessage: error.toString(),
+      );
+      rethrow;
     } finally {
-      if (mounted) {
-        state = state.copyWith(isLoading: false);
+      if (mounted && state.isLoading) {
+        state = state.copyWith(
+          status: _statusFor(
+            state.user,
+            _ref.read(mockUserProfileProvider).onboardingCompleted,
+          ),
+        );
       }
     }
   }
 
   Future<void> logout() async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       await _repository.signOut();
       _resetSignedOutState();
+      state = const AuthState(status: AuthFlowStatus.signedOut);
+    } catch (error) {
+      state = state.copyWith(
+        status: AuthFlowStatus.error,
+        errorMessage: error.toString(),
+      );
+      rethrow;
     } finally {
-      if (mounted) {
-        state = state.copyWith(isLoading: false);
+      if (mounted && state.isLoading) {
+        state = const AuthState(status: AuthFlowStatus.signedOut);
       }
     }
+  }
+
+  void markOnboardingComplete(AuthUser user) {
+    state = state.copyWith(
+      user: user,
+      status: AuthFlowStatus.signedInOnboardingComplete,
+      clearError: true,
+    );
+  }
+
+  static AuthFlowStatus _statusFor(AuthUser? user, bool onboardingCompleted) {
+    if (user == null) return AuthFlowStatus.signedOut;
+    return onboardingCompleted
+        ? AuthFlowStatus.signedInOnboardingComplete
+        : AuthFlowStatus.signedInOnboardingIncomplete;
   }
 
   void _loadDevSeedState(AuthUser user) {

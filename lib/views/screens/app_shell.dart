@@ -117,20 +117,15 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildHeader() {
+    if (_currentIndex == 0) {
+      return const SizedBox.shrink();
+    }
+
     String title = '';
     String subtitle = '';
     Widget trailing = const SizedBox.shrink();
 
     switch (_currentIndex) {
-      case 0:
-        title = 'Optivus';
-        subtitle = 'PLAN. EXECUTE. BECOME.';
-        trailing = const SizedBox(
-          width: 44,
-          height: 44,
-          child: AnimatedBotAvatar(),
-        );
-        break;
       case 1:
         title = 'Routines';
         subtitle = 'Daily commitments & habits';

@@ -4,7 +4,7 @@ enum RoutineBlockType {
   flexibleTask, // Movable habits: Reading, Language, Study
   trackerTask, // Timed tracker items: Workout, Meditation, Focus session
   checkIn, // Manual loggers: Smoking check, alcohol avoid, Hydration logs
-  moneyTask // UPI target save ₹10 task
+  moneyTask, // UPI target save ₹10 task
 }
 
 class RoutineItem {
@@ -12,15 +12,17 @@ class RoutineItem {
   final String title;
   final int startMinute; // Minutes since midnight
   final int endMinute; // Minutes since midnight
+  final bool crossesMidnight;
+  final bool endsNextDay;
   final List<int> repeatDays; // 1 = Monday, 7 = Sunday
   final String? location;
   final RoutineBlockType blockType;
   final String? notes;
-  
+
   // Custom metadata based on types
   final List<String>? subtasks;
   final List<bool>? subtasksCompleted;
-  
+
   // Eating Meal specific lists
   final String? mealCategory; // Breakfast, Lunch, Snacks, Dinner
   final List<String>? dishes;
@@ -29,7 +31,7 @@ class RoutineItem {
 
   // Skincare specific details
   final List<String>? skincareProducts;
-  
+
   // Status attributes
   final bool isCompleted;
   final bool isMissed;
@@ -42,6 +44,8 @@ class RoutineItem {
     required this.startMinute,
     required this.endMinute,
     required this.blockType,
+    this.crossesMidnight = false,
+    this.endsNextDay = false,
     List<int>? repeatDays,
     this.location,
     this.notes,
@@ -58,13 +62,20 @@ class RoutineItem {
     this.conflictMessage,
   }) : repeatDays = repeatDays ?? const [1, 2, 3, 4, 5, 6, 7];
 
-  int get durationMinutes => endMinute - startMinute;
+  int get durationMinutes {
+    if (crossesMidnight || endsNextDay || endMinute <= startMinute) {
+      return (24 * 60 - startMinute) + endMinute;
+    }
+    return endMinute - startMinute;
+  }
 
   RoutineItem copyWith({
     String? id,
     String? title,
     int? startMinute,
     int? endMinute,
+    bool? crossesMidnight,
+    bool? endsNextDay,
     List<int>? repeatDays,
     String? location,
     RoutineBlockType? blockType,
@@ -87,6 +98,8 @@ class RoutineItem {
       title: title ?? this.title,
       startMinute: startMinute ?? this.startMinute,
       endMinute: endMinute ?? this.endMinute,
+      crossesMidnight: crossesMidnight ?? this.crossesMidnight,
+      endsNextDay: endsNextDay ?? this.endsNextDay,
       repeatDays: repeatDays ?? this.repeatDays,
       location: location ?? this.location,
       blockType: blockType ?? this.blockType,
@@ -101,7 +114,9 @@ class RoutineItem {
       isCompleted: isCompleted ?? this.isCompleted,
       isMissed: isMissed ?? this.isMissed,
       hasConflict: clearConflict ? false : (hasConflict ?? this.hasConflict),
-      conflictMessage: clearConflict ? null : (conflictMessage ?? this.conflictMessage),
+      conflictMessage: clearConflict
+          ? null
+          : (conflictMessage ?? this.conflictMessage),
     );
   }
 }
