@@ -10,6 +10,7 @@ import 'package:optivus/models/mind_note.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/permission_status.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/mock_seed_data.dart';
@@ -19,6 +20,18 @@ import 'package:optivus/state/mock_seed_data.dart';
 // ==========================================
 class MockUserProfileNotifier extends StateNotifier<UserProfile> {
   MockUserProfileNotifier() : super(UserProfile.empty(uid: ''));
+
+  void resetEmpty({
+    String uid = '',
+    String email = '',
+    String displayName = '',
+  }) {
+    state = UserProfile.empty(uid: uid, email: email, displayName: displayName);
+  }
+
+  void loadSeedData(UserProfile profile) {
+    state = profile;
+  }
 
   void updateProfile(UserProfile profile) {
     state = profile;
@@ -88,6 +101,44 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
   void completeOnboarding() {
     state = state.copyWith(onboardingCompleted: true);
   }
+
+  void applyOnboardingBundle(OnboardingCompletionBundle bundle) {
+    final patch = bundle.userProfilePatch;
+    state = UserProfile(
+      uid: patch['uid'] as String? ?? state.uid,
+      email: state.email,
+      displayName: state.displayName,
+      createdAt: state.createdAt,
+      updatedAt:
+          DateTime.tryParse(patch['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
+      onboardingCompleted: patch['onboardingCompleted'] as bool? ?? true,
+      onboardingStep:
+          (patch['onboardingStep'] as num?)?.toInt() ?? state.onboardingStep,
+      lifeRole: patch['lifeRole'] as String? ?? state.lifeRole,
+      workingExtra: patch['workingExtra'] as String?,
+      businessMode: patch['businessMode'] as String?,
+      exerciseLevel: patch['exerciseLevel'] as String? ?? state.exerciseLevel,
+      waterIntake: patch['waterIntake'] as String? ?? state.waterIntake,
+      stressLevel: patch['stressLevel'] as String? ?? state.stressLevel,
+      sleepQuality: patch['sleepQuality'] as String? ?? state.sleepQuality,
+      ageRange: patch['ageRange'] as String? ?? state.ageRange,
+      height: (patch['height'] as num?)?.toDouble() ?? state.height,
+      weight: (patch['weight'] as num?)?.toDouble() ?? state.weight,
+      gender: patch['gender'] as String? ?? state.gender,
+      bmiEstimate:
+          (patch['bmiEstimate'] as num?)?.toDouble() ?? state.bmiEstimate,
+      calorieEstimate:
+          (patch['calorieEstimate'] as num?)?.toDouble() ??
+          state.calorieEstimate,
+      proteinEstimate:
+          (patch['proteinEstimate'] as num?)?.toDouble() ??
+          state.proteinEstimate,
+      coachName: patch['coachName'] as String? ?? state.coachName,
+      coachStyle: patch['coachStyle'] as String? ?? state.coachStyle,
+      slipUpStyle: patch['slipUpStyle'] as String? ?? state.slipUpStyle,
+    );
+  }
 }
 
 final mockUserProfileProvider =
@@ -99,7 +150,21 @@ final mockUserProfileProvider =
 // 2. Routine Items State Notifier
 // ==========================================
 class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
-  MockRoutineNotifier() : super(MockSeedData.defaultRoutineItems);
+  MockRoutineNotifier() : super(const []);
+
+  void resetEmpty() {
+    state = const [];
+  }
+
+  void loadSeedData() {
+    state = MockSeedData.defaultRoutineItems;
+    _checkConflicts();
+  }
+
+  void replaceWith(List<RoutineItem> items) {
+    state = List<RoutineItem>.from(items);
+    _checkConflicts();
+  }
 
   void addRoutineItem(RoutineItem item) {
     state = [...state, item];
@@ -247,17 +312,58 @@ class MockTrackerState {
 }
 
 class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
-  MockTrackerNotifier()
-    : super(
-        MockTrackerState(
-          hydrationLogs: MockSeedData.defaultHydrationLogs,
-          fitnessActivities: MockSeedData.defaultFitnessActivities,
-          screenTimeApps: MockSeedData.defaultScreenTimeApps,
-          trackerSessions: MockSeedData.defaultTrackerSessions,
-          moneyGoal: MockSeedData.defaultMoneyGoal,
-          savingsEntries: MockSeedData.defaultSavingEntries,
-        ),
-      );
+  MockTrackerNotifier() : super(_emptyState());
+
+  static MockTrackerState _emptyState() {
+    return MockTrackerState(
+      hydrationLogs: const [],
+      fitnessActivities: const [],
+      screenTimeApps: const [],
+      trackerSessions: const [],
+      moneyGoal: MoneyGoal(id: 'money-goal-empty'),
+      savingsEntries: const [],
+    );
+  }
+
+  static MockTrackerState _seedState() {
+    return MockTrackerState(
+      hydrationLogs: MockSeedData.defaultHydrationLogs,
+      fitnessActivities: MockSeedData.defaultFitnessActivities,
+      screenTimeApps: MockSeedData.defaultScreenTimeApps,
+      trackerSessions: MockSeedData.defaultTrackerSessions,
+      moneyGoal: MockSeedData.defaultMoneyGoal,
+      savingsEntries: MockSeedData.defaultSavingEntries,
+    );
+  }
+
+  void resetEmpty() {
+    state = _emptyState();
+  }
+
+  void loadSeedData() {
+    state = _seedState();
+  }
+
+  void applyOnboardingBundle(OnboardingCompletionBundle bundle) {
+    final sessions = bundle.badHabitCheckIns
+        .where((checkIn) => checkIn.badHabitCheckInEnabled)
+        .map(
+          (checkIn) => TrackerSession(
+            id: 'tracker-${checkIn.id}',
+            category: 'Habits',
+            title: '${checkIn.displayName} check-in ready',
+            timestamp: DateTime.now(),
+            value: checkIn.lostTimeMinutes,
+            isCompleted: false,
+          ),
+        )
+        .toList();
+    state = state.copyWith(
+      trackerSessions: sessions,
+      moneyGoal: bundle.moneyGoal ?? MoneyGoal(id: 'money-goal-empty'),
+      savingsEntries: const [],
+    );
+  }
 
   void logHydration(int ml) {
     final now = DateTime.now();
@@ -379,7 +485,19 @@ final mockTrackerProvider =
 // 4. Goals Focus State Notifier
 // ==========================================
 class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
-  MockGoalNotifier() : super(MockSeedData.defaultGoals);
+  MockGoalNotifier() : super(const []);
+
+  void resetEmpty() {
+    state = const [];
+  }
+
+  void loadSeedData() {
+    state = MockSeedData.defaultGoals;
+  }
+
+  void replaceWith(List<GoalModel> goals) {
+    state = List<GoalModel>.from(goals);
+  }
 
   void addGoal(GoalModel goal) {
     state = [...state, goal];
@@ -439,7 +557,15 @@ final mockGoalProvider =
 // 5. Mind Notes State Notifier
 // ==========================================
 class MockMindNoteNotifier extends StateNotifier<List<MindNote>> {
-  MockMindNoteNotifier() : super(MockSeedData.defaultMindNotes);
+  MockMindNoteNotifier() : super(const []);
+
+  void resetEmpty() {
+    state = const [];
+  }
+
+  void loadSeedData() {
+    state = MockSeedData.defaultMindNotes;
+  }
 
   void addMindNote(
     String content,
@@ -483,7 +609,19 @@ final mockMindNoteProvider =
 // 6. AI Coach Sessions State Notifier
 // ==========================================
 class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
-  MockCoachNotifier() : super(MockSeedData.defaultCoachSessions);
+  MockCoachNotifier() : super(const []);
+
+  void resetEmpty() {
+    state = const [];
+  }
+
+  void loadSeedData() {
+    state = MockSeedData.defaultCoachSessions;
+  }
+
+  void replaceWith(List<CoachSession> sessions) {
+    state = List<CoachSession>.from(sessions);
+  }
 
   void sendMessage(String sessionId, String content) {
     final now = DateTime.now();
@@ -637,6 +775,10 @@ final mockCoachProvider =
 class MockCoachPreferencesNotifier extends StateNotifier<CoachPreferences> {
   MockCoachPreferencesNotifier() : super(CoachPreferences());
 
+  void resetEmpty() {
+    state = CoachPreferences();
+  }
+
   void updatePreferences(CoachPreferences prefs) {
     state = prefs;
   }
@@ -655,6 +797,17 @@ final mockCoachPreferencesProvider =
 class MockNotificationPreferencesNotifier
     extends StateNotifier<NotificationPreferences> {
   MockNotificationPreferencesNotifier() : super(NotificationPreferences());
+
+  void resetEmpty() {
+    state = NotificationPreferences(
+      morningStart: false,
+      nextTask: false,
+      eating: false,
+      badHabitCheckIn: false,
+      savings: false,
+      nightReflection: false,
+    );
+  }
 
   void updatePreferences(NotificationPreferences prefs) {
     state = prefs;
@@ -702,6 +855,10 @@ final mockNotificationPreferencesProvider =
 // ==========================================
 class MockPermissionNotifier extends StateNotifier<PermissionStatus> {
   MockPermissionNotifier() : super(PermissionStatus());
+
+  void resetEmpty() {
+    state = PermissionStatus();
+  }
 
   void toggleNotificationPermission() {
     final next = state.notifications == PermissionConnectionState.notConnected
@@ -751,33 +908,47 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   MockOnboardingNotifier() : super(OnboardingState());
 
   void loadSeedData(OnboardingDraft seedDraft) {
-    state = OnboardingState(draft: seedDraft);
+    state = OnboardingState(draft: seedDraft, validationMessage: null);
   }
 
   void reset(String uid) {
-    state = OnboardingState(draft: OnboardingDraft(uid: uid));
+    final now = DateTime.now();
+    state = OnboardingState(
+      draft: OnboardingDraft(uid: uid, createdAt: now, updatedAt: now),
+    );
   }
 
   void setStep(int step) {
-    state = state.copyWith(currentStep: step, clearValidation: true);
+    final bounded = step.clamp(0, OnboardingDraft.lastStepIndex);
+    state = state.copyWith(
+      draft: state.draft.copyWith(currentStep: bounded),
+      currentStep: bounded,
+      clearValidation: true,
+    );
   }
 
   void setStepCompleted(int step, bool completed) {
-    final list = List<bool>.from(state.stepCompleted);
-    list[step] = completed;
-    state = state.copyWith(stepCompleted: list);
+    final list = _setStepValue(state.draft.stepCompleted, step, completed);
+    state = state.copyWith(
+      draft: state.draft.copyWith(stepCompleted: list),
+      stepCompleted: list,
+    );
   }
 
   void setStepDirty(int step, bool dirty) {
-    final list = List<bool>.from(state.stepDirty);
-    list[step] = dirty;
-    state = state.copyWith(stepDirty: list);
+    final list = _setStepValue(state.draft.stepDirty, step, dirty);
+    state = state.copyWith(
+      draft: state.draft.copyWith(stepDirty: list),
+      stepDirty: list,
+    );
   }
 
   void setStepLoading(int step, bool loading) {
-    final list = List<bool>.from(state.stepLoading);
-    list[step] = loading;
-    state = state.copyWith(stepLoading: list);
+    final list = _setStepValue(state.draft.stepLoading, step, loading);
+    state = state.copyWith(
+      draft: state.draft.copyWith(stepLoading: list),
+      stepLoading: list,
+    );
   }
 
   void setValidationMessage(String? msg) {
@@ -797,12 +968,93 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 
   void saveFinalPreview() {
+    final now = DateTime.now();
     state = state.copyWith(
       draft: state.draft.copyWith(
         finalPreview: state.draft.buildFinalPreview(),
+        createdAt: state.draft.createdAt ?? now,
+        updatedAt: now,
       ),
       clearValidation: true,
     );
+  }
+
+  void saveStep(
+    int step, {
+    required String uid,
+    OnboardingDraft Function(OnboardingDraft draft)? transform,
+  }) {
+    final now = DateTime.now();
+    var draft = transform == null ? state.draft : transform(state.draft);
+    final completed = _setStepValue(draft.stepCompleted, step, true);
+    final dirty = _setStepValue(draft.stepDirty, step, false);
+    final loading = _setStepValue(draft.stepLoading, step, false);
+    draft = draft.copyWith(
+      uid: uid.isEmpty ? draft.uid : uid,
+      currentStep: step,
+      stepCompleted: completed,
+      stepDirty: dirty,
+      stepLoading: loading,
+      createdAt: draft.createdAt ?? now,
+      updatedAt: now,
+    );
+    state = state.copyWith(draft: draft, clearValidation: true);
+  }
+
+  void completeOnboarding({required String uid}) {
+    final now = DateTime.now();
+    final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+    final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
+    final loading = List<bool>.filled(OnboardingDraft.stepCount, false);
+    final preview = state.draft.finalPreview ?? state.draft.buildFinalPreview();
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        uid: uid.isEmpty ? state.draft.uid : uid,
+        currentStep: OnboardingDraft.lastStepIndex,
+        stepCompleted: completed,
+        stepDirty: dirty,
+        stepLoading: loading,
+        finalPreview: preview,
+        onboardingCompleted: true,
+        createdAt: state.draft.createdAt ?? now,
+        updatedAt: now,
+      ),
+      clearValidation: true,
+    );
+  }
+
+  List<String> updateLifeRoleSelection(String roleKey) {
+    final invalidation = state.draft.baseTimeline.invalidateForRole(roleKey);
+    final nextDraft = state.draft.copyWith(
+      lifeRole: state.draft.lifeRole.copyWith(
+        lifeRole: roleKey,
+        clearWorkType:
+            roleKey != LifeRoleDraft.workingKey &&
+            roleKey != LifeRoleDraft.studentWorkingKey,
+        clearBusinessMode: roleKey != LifeRoleDraft.businessKey,
+      ),
+      baseTimeline: invalidation.timeline,
+      clearFinalPreview: true,
+    );
+    final dirty = _setStepValue(nextDraft.stepDirty, 2, true);
+    state = state.copyWith(
+      draft: nextDraft.copyWith(stepDirty: dirty),
+      validationMessage: invalidation.warnings.isEmpty
+          ? null
+          : invalidation.warnings.join(' '),
+    );
+    return invalidation.warnings;
+  }
+
+  static List<bool> _setStepValue(List<bool> source, int step, bool value) {
+    final list = List<bool>.generate(
+      OnboardingDraft.stepCount,
+      (index) => index < source.length ? source[index] : false,
+    );
+    if (step >= 0 && step < list.length) {
+      list[step] = value;
+    }
+    return list;
   }
 }
 

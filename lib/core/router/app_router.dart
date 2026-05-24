@@ -15,8 +15,8 @@ class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
 
   RouterNotifier(this._ref) {
-    _ref.listen(authProvider, (_, __) => notifyListeners());
-    _ref.listen(mockUserProfileProvider, (_, __) => notifyListeners());
+    _ref.listen(authProvider, (previous, next) => notifyListeners());
+    _ref.listen(mockUserProfileProvider, (previous, next) => notifyListeners());
   }
 }
 
@@ -31,11 +31,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final authState = ref.read(authProvider);
       final isAuth = authState.isLoggedIn;
-      
-      final isAuthRoute = state.uri.path == '/login' || 
-                          state.uri.path == '/signup' || 
-                          state.uri.path == '/' || 
-                          state.uri.path == '/loading';
+
+      final isAuthRoute =
+          state.uri.path == '/login' ||
+          state.uri.path == '/signup' ||
+          state.uri.path == '/' ||
+          state.uri.path == '/loading';
 
       // Still loading (auth check not complete / mock delay)
       if (authState.isLoading) return null;
@@ -46,7 +47,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // 2. Signed in but onboarding not complete -> restricted to onboarding
-      final onboardingCompleted = ref.read(mockUserProfileProvider).onboardingCompleted;
+      final onboardingCompleted = ref
+          .read(mockUserProfileProvider)
+          .onboardingCompleted;
       if (!onboardingCompleted) {
         if (state.uri.path != '/onboarding') return '/onboarding';
         return null;
@@ -54,7 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // 3. Signed in & onboarding complete -> redirect away from auth/onboarding
       if (isAuthRoute || state.uri.path == '/onboarding') {
-        return '/app';
+        return '/app?tab=0';
       }
 
       return null;
@@ -80,7 +83,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           final requestedTab = int.tryParse(
             state.uri.queryParameters['tab'] ?? '',
           );
-          return AppShell(initialIndex: requestedTab ?? 1);
+          return AppShell(initialIndex: requestedTab ?? 0);
         },
       ),
       GoRoute(path: '/home', redirect: (context, state) => '/app'),

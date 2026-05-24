@@ -12,6 +12,7 @@ class OnboardingStep2 extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final lifeRole = draft.lifeRole;
+    final roleWarnings = draft.baseTimeline.roleChangeWarnings;
 
     const roles = [
       {
@@ -80,24 +81,7 @@ class OnboardingStep2 extends ConsumerWidget {
                       onTap: () {
                         ref
                             .read(mockOnboardingProvider.notifier)
-                            .updateDraft(
-                              (current) => current.copyWith(
-                                lifeRole: current.lifeRole.copyWith(
-                                  lifeRole: key,
-                                  clearWorkType:
-                                      key != LifeRoleDraft.workingKey &&
-                                      key != LifeRoleDraft.studentWorkingKey,
-                                  clearBusinessMode:
-                                      key != LifeRoleDraft.businessKey,
-                                ),
-                                baseTimeline: current.baseTimeline.copyWith(
-                                  clearMealPlanning: false,
-                                ),
-                              ),
-                            );
-                        ref
-                            .read(mockOnboardingProvider.notifier)
-                            .setStepDirty(2, true);
+                            .updateLifeRoleSelection(key);
                       },
                       expandedContent: isSelected
                           ? _RoleEffectSummary(roleKey: key)
@@ -105,6 +89,35 @@ class OnboardingStep2 extends ConsumerWidget {
                     ),
                   );
                 }),
+                if (roleWarnings.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  OnboardingGlassCard(
+                    tint: OptivusColors.warning.withValues(alpha: 0.10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.info_outline_rounded,
+                          color: OptivusColors.warning,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            roleWarnings.join('\n'),
+                            style: const TextStyle(
+                              color: OptivusColors.textSecondary,
+                              fontSize: 12,
+                              height: 1.4,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 if (showWorkingExtras) ...[
                   const SizedBox(height: 8),
                   _ChipSection(
@@ -125,6 +138,7 @@ class OnboardingStep2 extends ConsumerWidget {
                               lifeRole: current.lifeRole.copyWith(
                                 workType: value,
                               ),
+                              clearFinalPreview: true,
                             ),
                           );
                       ref
@@ -153,7 +167,9 @@ class OnboardingStep2 extends ConsumerWidget {
                               ),
                               baseTimeline: current.baseTimeline.copyWith(
                                 businessMode: value,
+                                clearRoleChangeWarnings: true,
                               ),
+                              clearFinalPreview: true,
                             ),
                           );
                       ref
@@ -291,6 +307,7 @@ class _LifestyleSection extends ConsumerWidget {
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(exerciseLevel: value),
+                      clearFinalPreview: true,
                     ),
                   );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
@@ -310,6 +327,7 @@ class _LifestyleSection extends ConsumerWidget {
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(waterIntake: value),
+                      clearFinalPreview: true,
                     ),
                   );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
@@ -329,6 +347,7 @@ class _LifestyleSection extends ConsumerWidget {
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(stressLevel: value),
+                      clearFinalPreview: true,
                     ),
                   );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);
@@ -348,6 +367,7 @@ class _LifestyleSection extends ConsumerWidget {
                   .updateDraft(
                     (current) => current.copyWith(
                       lifeRole: current.lifeRole.copyWith(sleepQuality: value),
+                      clearFinalPreview: true,
                     ),
                   );
               ref.read(mockOnboardingProvider.notifier).setStepDirty(2, true);

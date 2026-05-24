@@ -77,6 +77,7 @@ class OnboardingStep1 extends ConsumerWidget {
                                 !current.patiencePledgeAccepted,
                             patiencePledgeText:
                                 'I agree to start with tiny steps, pivot schedules dynamically rather than skip them, and give my nervous system time to adapt.',
+                            clearFinalPreview: true,
                           ),
                         );
                     ref

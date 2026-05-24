@@ -26,10 +26,15 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
 
   int _day = 0;
   int _startHour = 9;
+  int _startMinutePart = 0;
   int _endHour = 10;
+  int _endMinutePart = 0;
+  String _repeatMode = 'selected_day';
+  Set<int> _customRepeatDays = {1};
   String _setupMode = 'Manual';
   String? _eatingMode;
   String? _businessMode;
+  int? _workDurationMinutes;
   String? _workBestTime;
   String? _workPriority;
   bool _hardBlock = true;
@@ -88,7 +93,40 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     return '$h:00 ${hour >= 12 ? 'PM' : 'AM'}';
   }
 
+  String _minuteLabel(int minute) {
+    final clamped = minute.clamp(0, 24 * 60);
+    final hour = clamped ~/ 60;
+    final min = clamped % 60;
+    final h = hour % 12 == 0 ? 12 : hour % 12;
+    return '$h:${min.toString().padLeft(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}';
+  }
+
   int _clampHour(num value, int min, int max) => value.clamp(min, max).toInt();
+
+  List<int> _selectedRepeatDays() {
+    return switch (_repeatMode) {
+      'every_day' => const [1, 2, 3, 4, 5, 6, 7],
+      'weekdays' => const [1, 2, 3, 4, 5],
+      'custom' => (_customRepeatDays.toList()..sort()),
+      _ => [_day + 1],
+    };
+  }
+
+  void _syncRepeatModeFromDays(List<int> days) {
+    final normalized = days.toSet();
+    if (normalized.length == 7) {
+      _repeatMode = 'every_day';
+    } else if (normalized.length == 5 &&
+        normalized.containsAll(const [1, 2, 3, 4, 5])) {
+      _repeatMode = 'weekdays';
+    } else if (normalized.length == 1) {
+      _repeatMode = 'selected_day';
+      _day = (normalized.first - 1).clamp(0, 6);
+    } else {
+      _repeatMode = 'custom';
+      _customRepeatDays = normalized.isEmpty ? {_day + 1} : normalized;
+    }
+  }
 
   void _addRoutine(
     String type,
@@ -97,7 +135,11 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   ) {
     final title = controller.text.trim();
     if (title.isEmpty) return;
-    final safeEndHour = _endHour <= _startHour ? _startHour + 1 : _endHour;
+    final startMinute = _startHour * 60 + _startMinutePart;
+    final rawEndMinute = _endHour * 60 + _endMinutePart;
+    final safeEndMinute = rawEndMinute <= startMinute
+        ? (startMinute + 60).clamp(1, 24 * 60)
+        : rawEndMinute.clamp(1, 24 * 60);
     final id =
         _editingItemId ??
         'onboarding-$type-${DateTime.now().millisecondsSinceEpoch}';
@@ -105,10 +147,10 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       id: id,
       section: _sectionKey(type),
       title: title,
-      startMinute: _startHour * 60,
-      endMinute: _clampHour(safeEndHour, 1, 24) * 60,
+      startMinute: startMinute,
+      endMinute: safeEndMinute,
       blockType: _draftBlockType(blockType),
-      repeatDays: [_day + 1],
+      repeatDays: _selectedRepeatDays(),
       location: _locationCtrl.text.trim().isEmpty
           ? null
           : _locationCtrl.text.trim(),
@@ -131,7 +173,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       controller.clear();
       _locationCtrl.clear();
       _editingItemId = null;
-      _endHour = _clampHour(safeEndHour, 1, 24);
+      _endHour = _clampHour(safeEndMinute ~/ 60, 1, 24);
+      _endMinutePart = safeEndMinute % 60;
     });
     ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
@@ -153,8 +196,11 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           ? 0
           : _clampHour(item.repeatDays.first - 1, 0, 6);
       _startHour = _clampHour(item.startMinute ~/ 60, 0, 23);
+      _startMinutePart = item.startMinute % 60;
       _endHour = _clampHour(item.endMinute ~/ 60, _startHour + 1, 24);
+      _endMinutePart = item.endMinute % 60;
       _hardBlock = item.blockType == RoutineBlockType.hardBlock;
+      _syncRepeatModeFromDays(item.repeatDays);
     });
     ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
@@ -184,6 +230,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     final draft = ref.watch(mockOnboardingProvider).draft;
     final role = draft.lifeRole.lifeRole ?? '';
     _businessMode ??= draft.baseTimeline.businessMode;
+    _workDurationMinutes ??= draft.baseTimeline.workDurationMinutes;
     _workBestTime ??= draft.baseTimeline.workBestTime;
     _workPriority ??= draft.baseTimeline.workPriority;
     _eatingMode ??= draft.baseTimeline.eatingMode;
@@ -767,13 +814,56 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           if (_businessMode == 'flexible_business') ...[
             const SizedBox(height: 12),
             const Text(
-              'Flexible business window: 3 hours, best time 10 AM to 1 PM.',
+              'Flexible business mode stores duration, best time, and priority locally.',
               style: TextStyle(
                 fontSize: 11,
                 color: OptivusColors.textSecondary,
               ),
             ),
           ],
+          const SizedBox(height: 12),
+          const Text(
+            'Duration',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children:
+                const [
+                      _TimelineOption('30', '30 min'),
+                      _TimelineOption('60', '1 hour'),
+                      _TimelineOption('120', '2 hours'),
+                      _TimelineOption('180', '3 hours'),
+                    ]
+                    .map(
+                      (duration) => OnboardingChip(
+                        label: duration.label,
+                        selected:
+                            _workDurationMinutes?.toString() == duration.key,
+                        onTap: () {
+                          final minutes = int.tryParse(duration.key);
+                          setState(() => _workDurationMinutes = minutes);
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .updateDraft(
+                                (draft) => draft.copyWith(
+                                  baseTimeline: draft.baseTimeline.copyWith(
+                                    workDurationMinutes: minutes,
+                                  ),
+                                  clearFinalPreview: true,
+                                ),
+                              );
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .setStepDirty(4, true);
+                        },
+                        accent: OptivusColors.brandAccent,
+                      ),
+                    )
+                    .toList(),
+          ),
           const SizedBox(height: 12),
           const Text(
             'Best time',
@@ -946,7 +1036,9 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 child: _glassTimeField(
                   'Start',
                   _startHour,
+                  _startMinutePart,
                   (v) => setState(() => _startHour = v),
+                  (v) => setState(() => _startMinutePart = v),
                   accent,
                 ),
               ),
@@ -955,12 +1047,16 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 child: _glassTimeField(
                   'End',
                   _endHour,
+                  _endMinutePart,
                   (v) => setState(() => _endHour = v),
+                  (v) => setState(() => _endMinutePart = v),
                   accent,
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _repeatControls(accent),
           const SizedBox(height: 12),
           Wrap(
             spacing: 7,
@@ -1089,14 +1185,16 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
 
   Widget _glassTimeField(
     String label,
-    int value,
-    ValueChanged<int> onChanged,
+    int hour,
+    int minute,
+    ValueChanged<int> onHourChanged,
+    ValueChanged<int> onMinuteChanged,
     Color accent,
   ) {
     void step(int delta) {
       final lower = label == 'End' ? _clampHour(_startHour + 1, 1, 24) : 0;
       final upper = label == 'End' ? 24 : 23;
-      onChanged(_clampHour(value + delta, lower, upper));
+      onHourChanged(_clampHour(hour + delta, lower, upper));
     }
 
     return ClipRRect(
@@ -1129,7 +1227,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _timeLabel(_clampHour(value, 0, 24)),
+                      _minuteLabel(_clampHour(hour, 0, 24) * 60 + minute),
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1144,10 +1242,114 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   _tinyStepButton(Icons.add_rounded, () => step(1), accent),
                 ],
               ),
+              const SizedBox(height: 7),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 5,
+                runSpacing: 5,
+                children: const [0, 15, 30, 45]
+                    .map(
+                      (value) => GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onMinuteChanged(value),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: minute == value
+                                ? accent.withValues(alpha: 0.18)
+                                : Colors.white.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.68),
+                            ),
+                          ),
+                          child: Text(
+                            ':${value.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              color: minute == value
+                                  ? accent
+                                  : OptivusColors.textSecondary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _repeatControls(Color accent) {
+    final options = const [
+      _TimelineOption('selected_day', 'Selected day'),
+      _TimelineOption('every_day', 'Every day'),
+      _TimelineOption('weekdays', 'Weekdays'),
+      _TimelineOption('custom', 'Custom days'),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Repeat',
+          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options
+              .map(
+                (option) => OnboardingChip(
+                  label: option.label,
+                  selected: _repeatMode == option.key,
+                  accent: accent,
+                  onTap: () {
+                    setState(() {
+                      _repeatMode = option.key;
+                      if (_repeatMode == 'custom' &&
+                          _customRepeatDays.isEmpty) {
+                        _customRepeatDays = {_day + 1};
+                      }
+                    });
+                  },
+                ),
+              )
+              .toList(),
+        ),
+        if (_repeatMode == 'custom') ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: List.generate(_days.length, (index) {
+              final day = index + 1;
+              final selected = _customRepeatDays.contains(day);
+              return OnboardingDayDroplet(
+                label: _days[index].toUpperCase(),
+                selected: selected,
+                color: accent,
+                onTap: () {
+                  setState(() {
+                    final next = Set<int>.from(_customRepeatDays);
+                    selected ? next.remove(day) : next.add(day);
+                    _customRepeatDays = next.isEmpty ? {day} : next;
+                  });
+                },
+              );
+            }),
+          ),
+        ],
+      ],
     );
   }
 
@@ -1470,7 +1672,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${_timeLabel(item.startMinute ~/ 60)} - ${_timeLabel(_clampHour(item.endMinute ~/ 60, 0, 24))} | $dayLabel',
+                                  '${_minuteLabel(item.startMinute)} - ${_minuteLabel(item.endMinute)} | $dayLabel',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
@@ -1585,8 +1787,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   Widget _timelineItemCard(RoutineItem item, Color accent) {
-    final start = _timeLabel(item.startMinute ~/ 60);
-    final end = _timeLabel(_clampHour(item.endMinute ~/ 60, 0, 23));
+    final start = _minuteLabel(item.startMinute);
+    final end = _minuteLabel(item.endMinute);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: OnboardingGlassCard(
@@ -1971,7 +2173,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                       (item) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Text(
-                          '${_timeLabel(item.startMinute ~/ 60)} - ${item.title}',
+                          '${_minuteLabel(item.startMinute)} - ${item.title}',
                           style: const TextStyle(
                             fontSize: 11,
                             color: OptivusColors.textSecondary,
@@ -2023,6 +2225,18 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               setState(() {
                 _fixedCtrl.text = label;
                 _hardBlock = true;
+                _repeatMode = 'every_day';
+                if (label == 'Sleep preset') {
+                  _startHour = 0;
+                  _startMinutePart = 0;
+                  _endHour = 7;
+                  _endMinutePart = 0;
+                } else if (label == 'Bath preset') {
+                  _startHour = 7;
+                  _startMinutePart = 0;
+                  _endHour = 7;
+                  _endMinutePart = 30;
+                }
               });
             },
           ),

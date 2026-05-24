@@ -1,5 +1,9 @@
 class OnboardingDraft {
+  static const int stepCount = 12;
+  static const int lastStepIndex = stepCount - 1;
+
   final String uid;
+  final int currentStep;
   final List<bool> stepCompleted;
   final List<bool> stepDirty;
   final List<bool> stepLoading;
@@ -25,9 +29,49 @@ class OnboardingDraft {
 
   const OnboardingDraft({
     this.uid = '',
-    this.stepCompleted = const [false, false, false, false, false, false, false, false, false, false, false, false],
-    this.stepDirty = const [false, false, false, false, false, false, false, false, false, false, false, false],
-    this.stepLoading = const [false, false, false, false, false, false, false, false, false, false, false, false],
+    this.currentStep = 0,
+    this.stepCompleted = const [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ],
+    this.stepDirty = const [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ],
+    this.stepLoading = const [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ],
     this.createdAt,
     this.updatedAt,
     this.onboardingCompleted = false,
@@ -51,11 +95,19 @@ class OnboardingDraft {
   factory OnboardingDraft.fromMap(Map<String, dynamic> map) {
     return OnboardingDraft(
       uid: map['uid'] as String? ?? '',
-      stepCompleted: _readBoolList(map['stepCompleted'], 12),
-      stepDirty: _readBoolList(map['stepDirty'], 12),
-      stepLoading: _readBoolList(map['stepLoading'], 12),
-      createdAt: map['createdAt'] != null ? DateTime.tryParse(map['createdAt']) : null,
-      updatedAt: map['updatedAt'] != null ? DateTime.tryParse(map['updatedAt']) : null,
+      currentStep: ((map['currentStep'] as num?)?.toInt() ?? 0).clamp(
+        0,
+        lastStepIndex,
+      ),
+      stepCompleted: _readBoolList(map['stepCompleted'], stepCount),
+      stepDirty: _readBoolList(map['stepDirty'], stepCount),
+      stepLoading: _readBoolList(map['stepLoading'], stepCount),
+      createdAt: map['createdAt'] != null
+          ? DateTime.tryParse(map['createdAt'])
+          : null,
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.tryParse(map['updatedAt'])
+          : null,
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
@@ -110,6 +162,7 @@ class OnboardingDraft {
 
   Map<String, dynamic> toMap() => {
     'uid': uid,
+    'currentStep': currentStep,
     'stepCompleted': stepCompleted,
     'stepDirty': stepDirty,
     'stepLoading': stepLoading,
@@ -135,6 +188,7 @@ class OnboardingDraft {
 
   OnboardingDraft copyWith({
     String? uid,
+    int? currentStep,
     List<bool>? stepCompleted,
     List<bool>? stepDirty,
     List<bool>? stepLoading,
@@ -162,9 +216,16 @@ class OnboardingDraft {
   }) {
     return OnboardingDraft(
       uid: uid ?? this.uid,
-      stepCompleted: stepCompleted ?? this.stepCompleted,
-      stepDirty: stepDirty ?? this.stepDirty,
-      stepLoading: stepLoading ?? this.stepLoading,
+      currentStep: (currentStep ?? this.currentStep).clamp(0, lastStepIndex),
+      stepCompleted: _normalizeBoolList(
+        stepCompleted ?? this.stepCompleted,
+        stepCount,
+      ),
+      stepDirty: _normalizeBoolList(stepDirty ?? this.stepDirty, stepCount),
+      stepLoading: _normalizeBoolList(
+        stepLoading ?? this.stepLoading,
+        stepCount,
+      ),
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
@@ -252,32 +313,20 @@ class OnboardingDraft {
         .where((block) => !block.needsTimeConfirmation)
         .map(FinalTimelineItem.fromTimelineBlock)
         .toList();
-    final systemItems = _identitySystemItems();
-    final goodHabitItems = _goodHabitItems(baseItems);
-    final badHabitItems = _badHabitCheckIns(baseItems);
+    final occupiedItems = <FinalTimelineItem>[...baseItems];
+    final systemItems = _mergedSystemItems(occupiedItems);
+    final goodHabitItems = _standaloneGoodHabitItems(occupiedItems);
+    final badHabitItems = _badHabitCheckIns(occupiedItems);
 
     final items = [
       ...baseItems,
+      ...systemItems,
       ...goodHabitItems,
       ...badHabitItems,
-      ...systemItems,
     ]..sort((a, b) => a.startMinute.compareTo(b.startMinute));
 
-    final dailyFlexibleMinutes = [
-      ...goodHabitItems,
-      ...systemItems,
-    ].fold<int>(0, (sum, item) => sum + item.durationMinutes);
-    final busyMinutes = baseItems.fold<int>(
-      0,
-      (sum, item) => item.blockType == TimelineBlockDraft.hardBlockKey
-          ? sum + item.durationMinutes
-          : sum,
-    );
-    if (busyMinutes + dailyFlexibleMinutes > 16 * 60) {
-      warnings.add(
-        'There may not be enough free time for every flexible habit.',
-      );
-    }
+    warnings.addAll(_finalTimelineConflictWarnings(items));
+    warnings.addAll(_capacityWarnings(items));
 
     return FinalTimelinePreview(
       items: items,
@@ -286,15 +335,21 @@ class OnboardingDraft {
     );
   }
 
-  List<FinalTimelineItem> _goodHabitItems(List<FinalTimelineItem> baseItems) {
-    final blockedWindows = baseItems
-        .where((item) => item.blockType == TimelineBlockDraft.hardBlockKey)
-        .toList();
+  List<FinalTimelineItem> _standaloneGoodHabitItems(
+    List<FinalTimelineItem> occupiedItems,
+  ) {
+    final items = <FinalTimelineItem>[];
     var cursor = 6 * 60;
 
-    return goodHabits.map((habit) {
+    for (final habit in goodHabits.where(
+      (habit) => systemKeyForGoodHabit(habit) == null,
+    )) {
       final duration = habit.durationMinutes;
-      cursor = _nextFreeStart(cursor, duration, blockedWindows);
+      cursor = _nextFreeStart(
+        _preferredStartMinute(habit.bestTime, fallback: cursor),
+        duration,
+        occupiedItems,
+      );
       final item = FinalTimelineItem(
         id: 'good-${habit.id}',
         title: habit.displayTitle,
@@ -307,19 +362,21 @@ class OnboardingDraft {
             : TimelineBlockDraft.softBlockKey,
       );
       cursor += duration + 15;
-      return item;
-    }).toList();
+      items.add(item);
+      occupiedItems.add(item);
+    }
+    return items;
   }
 
-  List<FinalTimelineItem> _badHabitCheckIns(List<FinalTimelineItem> baseItems) {
+  List<FinalTimelineItem> _badHabitCheckIns(
+    List<FinalTimelineItem> occupiedItems,
+  ) {
     if (badHabitsNotNow || badHabits.isEmpty) return const [];
-    final blockedWindows = baseItems
-        .where((item) => item.blockType == TimelineBlockDraft.hardBlockKey)
-        .toList();
+    final items = <FinalTimelineItem>[];
     var cursor = 20 * 60;
 
-    return badHabits.map((habit) {
-      cursor = _nextFreeStart(cursor, 5, blockedWindows);
+    for (final habit in badHabits) {
+      cursor = _nextFreeStart(cursor, 5, occupiedItems);
       final item = FinalTimelineItem(
         id: 'bad-check-${habit.id}',
         title: '${habit.displayName} check-in',
@@ -330,44 +387,69 @@ class OnboardingDraft {
         blockType: TimelineBlockDraft.checkInKey,
       );
       cursor += 10;
-      return item;
-    }).toList();
+      items.add(item);
+      occupiedItems.add(item);
+    }
+    return items;
   }
 
-  List<FinalTimelineItem> _identitySystemItems() {
+  List<FinalTimelineItem> _mergedSystemItems(
+    List<FinalTimelineItem> occupiedItems,
+  ) {
     final selectedSystemKeys = _dedupedIdentitySystemKeys();
+    final goodHabitBySystemKey = _goodHabitBySystemKey();
+    final items = <FinalTimelineItem>[];
     var cursor = 7 * 60;
-    return selectedSystemKeys.map((systemKey) {
+    for (final systemKey in selectedSystemKeys) {
+      final habit = goodHabitBySystemKey[systemKey];
+      final duration =
+          habit?.durationMinutes ?? _defaultSystemDuration(systemKey);
+      final repeatDays = habit?.repeatDays ?? const [1, 2, 3, 4, 5, 6, 7];
+      final priority = habit?.priority ?? GoodHabitDraft.mustDoPriority;
+      cursor = _nextFreeStart(
+        _preferredStartMinute(habit?.bestTime ?? 'anytime', fallback: cursor),
+        duration,
+        occupiedItems,
+      );
       final title = identitySystemTitle(systemKey);
       final item = FinalTimelineItem(
         id: 'identity-$systemKey',
         title: title,
-        source: 'identity_system',
+        source: habit == null ? 'identity_system' : 'merged_habit_system',
         startMinute: cursor,
-        endMinute: cursor + 10,
-        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-        blockType: TimelineBlockDraft.flexibleTaskKey,
+        endMinute: (cursor + duration).clamp(0, 24 * 60),
+        repeatDays: repeatDays,
+        blockType: priority == GoodHabitDraft.mustDoPriority
+            ? TimelineBlockDraft.flexibleTaskKey
+            : TimelineBlockDraft.softBlockKey,
       );
-      cursor += 20;
-      return item;
-    }).toList();
+      cursor += duration + 15;
+      items.add(item);
+      occupiedItems.add(item);
+    }
+    return items;
+  }
+
+  Map<String, GoodHabitDraft> _goodHabitBySystemKey() {
+    final mapped = <String, GoodHabitDraft>{};
+    for (final habit in goodHabits) {
+      final systemKey = systemKeyForGoodHabit(habit);
+      if (systemKey == null) continue;
+      final existing = mapped[systemKey];
+      if (existing == null ||
+          habit.priority == GoodHabitDraft.mustDoPriority ||
+          habit.durationMinutes > existing.durationMinutes) {
+        mapped[systemKey] = habit;
+      }
+    }
+    return mapped;
   }
 
   List<String> _dedupedIdentitySystemKeys() {
     final keys = <String>{};
     for (final habit in goodHabits) {
-      if (habit.habitKey == GoodHabitDraft.gymKey) keys.add('workout');
-      if (habit.habitKey == GoodHabitDraft.meditationKey) {
-        keys.add('meditation');
-      }
-      if (habit.habitKey == GoodHabitDraft.journalingKey) {
-        keys.add('journaling');
-      }
-      if (habit.habitKey == GoodHabitDraft.languageLearningKey ||
-          habit.subtypeKey == 'language') {
-        keys.add('language_practice');
-      }
-      if (habit.subtypeKey == 'business_skill') keys.add('business_work');
+      final systemKey = systemKeyForGoodHabit(habit);
+      if (systemKey != null) keys.add(systemKey);
     }
     if (badHabits.any((habit) => habit.dailySpend > 0)) {
       keys.add('bad_habit_money_saved');
@@ -381,14 +463,8 @@ class OnboardingDraft {
   List<String> _duplicateSystemKeysSkipped() {
     final raw = <String>[];
     for (final habit in goodHabits) {
-      if (habit.habitKey == GoodHabitDraft.gymKey) raw.add('workout');
-      if (habit.habitKey == GoodHabitDraft.meditationKey) raw.add('meditation');
-      if (habit.habitKey == GoodHabitDraft.journalingKey) raw.add('journaling');
-      if (habit.habitKey == GoodHabitDraft.languageLearningKey ||
-          habit.subtypeKey == 'language') {
-        raw.add('language_practice');
-      }
-      if (habit.subtypeKey == 'business_skill') raw.add('business_work');
+      final systemKey = systemKeyForGoodHabit(habit);
+      if (systemKey != null) raw.add(systemKey);
     }
     if (badHabits.any((habit) => habit.dailySpend > 0)) {
       raw.add('bad_habit_money_saved');
@@ -403,6 +479,103 @@ class OnboardingDraft {
       if (!seen.add(key)) duplicates.add(key);
     }
     return duplicates.toList();
+  }
+
+  static String? systemKeyForGoodHabit(GoodHabitDraft habit) {
+    if (habit.habitKey == GoodHabitDraft.gymKey) return 'workout';
+    if (habit.habitKey == GoodHabitDraft.meditationKey) return 'meditation';
+    if (habit.habitKey == GoodHabitDraft.journalingKey) return 'journaling';
+    if (habit.habitKey == GoodHabitDraft.languageLearningKey ||
+        habit.subtypeKey == 'language') {
+      return 'language_practice';
+    }
+    if (habit.subtypeKey == 'business_skill') return 'business_work';
+    return null;
+  }
+
+  static int _defaultSystemDuration(String systemKey) {
+    return switch (systemKey) {
+      'workout' => 30,
+      'business_work' => 30,
+      'language_practice' => 10,
+      'meditation' => 10,
+      'journaling' => 10,
+      'bad_habit_money_saved' => 5,
+      _ => 10,
+    };
+  }
+
+  static int _preferredStartMinute(String bestTime, {required int fallback}) {
+    return switch (bestTime) {
+      'morning' => 7 * 60,
+      'afternoon' => 13 * 60,
+      'evening' => 18 * 60,
+      'night' => 21 * 60,
+      _ => fallback,
+    };
+  }
+
+  List<String> _finalTimelineConflictWarnings(List<FinalTimelineItem> items) {
+    final warnings = <String>[];
+    final seen = <String>{};
+    for (var i = 0; i < items.length; i++) {
+      final first = items[i];
+      for (var j = i + 1; j < items.length; j++) {
+        final second = items[j];
+        for (final day in first.repeatDays) {
+          if (!second.repeatDays.contains(day)) continue;
+          final overlaps =
+              first.startMinute < second.endMinute &&
+              first.endMinute > second.startMinute;
+          if (!overlaps) continue;
+          final key = '${first.id}:${second.id}:$day';
+          if (!seen.add(key)) continue;
+          final hardConflict =
+              first.blockType == TimelineBlockDraft.hardBlockKey &&
+              second.blockType == TimelineBlockDraft.hardBlockKey;
+          final acceptedHardConflict =
+              hardConflict &&
+              baseTimeline.acceptedConflictKeys.contains(
+                TimelineConflictDraft.keyFor(first.id, second.id, day),
+              );
+          if (acceptedHardConflict) continue;
+          warnings.add(
+            hardConflict
+                ? 'Resolve or accept the final hard conflict between ${first.title} and ${second.title}.'
+                : 'Schedule overlap: ${first.title} and ${second.title}. Tiny-version fallback may be needed.',
+          );
+        }
+      }
+    }
+    return warnings;
+  }
+
+  static List<String> _capacityWarnings(List<FinalTimelineItem> items) {
+    final warnings = <String>[];
+    for (var day = 1; day <= 7; day++) {
+      final hardMinutes = items
+          .where(
+            (item) =>
+                item.repeatDays.contains(day) &&
+                item.blockType == TimelineBlockDraft.hardBlockKey,
+          )
+          .fold<int>(0, (sum, item) => sum + item.durationMinutes);
+      final flexibleMinutes = items
+          .where(
+            (item) =>
+                item.repeatDays.contains(day) &&
+                item.blockType != TimelineBlockDraft.hardBlockKey,
+          )
+          .fold<int>(0, (sum, item) => sum + item.durationMinutes);
+      final freeMinutes = (24 * 60 - hardMinutes).clamp(0, 24 * 60);
+      if (flexibleMinutes > freeMinutes) {
+        warnings.add(
+          'Day $day does not have enough free time. Use tiny versions for flexible habits or edit hard blocks.',
+        );
+        break;
+      }
+    }
+    return warnings;
   }
 
   static int _nextFreeStart(
@@ -428,19 +601,28 @@ class OnboardingDraft {
 
   static List<bool> _readBoolList(dynamic value, int length) {
     if (value is List) {
-      return value.map((e) => e == true).toList();
+      return _normalizeBoolList(value.map((e) => e == true).toList(), length);
     }
     return List.filled(length, false);
   }
 
-  static List<T> _readList<T>(dynamic value, T Function(Map<String, dynamic>) mapper) {
+  static List<bool> _normalizeBoolList(List<bool> value, int length) {
+    if (value.length == length) return List<bool>.from(value);
+    return List<bool>.generate(
+      length,
+      (index) => index < value.length ? value[index] : false,
+    );
+  }
+
+  static List<T> _readList<T>(
+    dynamic value,
+    T Function(Map<String, dynamic>) mapper,
+  ) {
     if (value is List) {
       return value.whereType<Map<String, dynamic>>().map(mapper).toList();
     }
     return [];
   }
-
-
 }
 
 class LifeRoleDraft {
@@ -645,6 +827,7 @@ class BodyBasicsDraft {
 class BaseTimelineDraft {
   final List<TimelineBlockDraft> blocks;
   final String? businessMode;
+  final int? workDurationMinutes;
   final String? workBestTime;
   final String? workPriority;
   final String? eatingMode;
@@ -655,12 +838,14 @@ class BaseTimelineDraft {
   final String? cookingAbility;
   final int? mealsPerDay;
   final bool skinCareSkipped;
-  final List<String> pendingFutureImports;
+  final List<PendingFutureImportDraft> pendingFutureImports;
   final List<String> acceptedConflictKeys;
+  final List<String> roleChangeWarnings;
 
   const BaseTimelineDraft({
     this.blocks = const [],
     this.businessMode,
+    this.workDurationMinutes,
     this.workBestTime,
     this.workPriority,
     this.eatingMode,
@@ -673,6 +858,7 @@ class BaseTimelineDraft {
     this.skinCareSkipped = false,
     this.pendingFutureImports = const [],
     this.acceptedConflictKeys = const [],
+    this.roleChangeWarnings = const [],
   });
 
   factory BaseTimelineDraft.fromMap(Map<String, dynamic> map) {
@@ -682,6 +868,7 @@ class BaseTimelineDraft {
         (value) => TimelineBlockDraft.fromMap(value),
       ),
       businessMode: map['businessMode'] as String?,
+      workDurationMinutes: (map['workDurationMinutes'] as num?)?.toInt(),
       workBestTime: map['workBestTime'] as String?,
       workPriority: map['workPriority'] as String?,
       eatingMode: map['eatingMode'] as String?,
@@ -692,14 +879,18 @@ class BaseTimelineDraft {
       cookingAbility: map['cookingAbility'] as String?,
       mealsPerDay: (map['mealsPerDay'] as num?)?.toInt(),
       skinCareSkipped: map['skinCareSkipped'] as bool? ?? false,
-      pendingFutureImports: _readStringList(map['pendingFutureImports']),
+      pendingFutureImports: _readPendingFutureImports(
+        map['pendingFutureImports'],
+      ),
       acceptedConflictKeys: _readStringList(map['acceptedConflictKeys']),
+      roleChangeWarnings: _readStringList(map['roleChangeWarnings']),
     );
   }
 
   Map<String, dynamic> toMap() => {
     'blocks': blocks.map((block) => block.toMap()).toList(),
     'businessMode': businessMode,
+    'workDurationMinutes': workDurationMinutes,
     'workBestTime': workBestTime,
     'workPriority': workPriority,
     'eatingMode': eatingMode,
@@ -710,13 +901,17 @@ class BaseTimelineDraft {
     'cookingAbility': cookingAbility,
     'mealsPerDay': mealsPerDay,
     'skinCareSkipped': skinCareSkipped,
-    'pendingFutureImports': pendingFutureImports,
+    'pendingFutureImports': pendingFutureImports
+        .map((entry) => entry.toMap())
+        .toList(),
     'acceptedConflictKeys': acceptedConflictKeys,
+    'roleChangeWarnings': roleChangeWarnings,
   };
 
   BaseTimelineDraft copyWith({
     List<TimelineBlockDraft>? blocks,
     String? businessMode,
+    int? workDurationMinutes,
     String? workBestTime,
     String? workPriority,
     String? eatingMode,
@@ -727,15 +922,27 @@ class BaseTimelineDraft {
     String? cookingAbility,
     int? mealsPerDay,
     bool? skinCareSkipped,
-    List<String>? pendingFutureImports,
+    List<PendingFutureImportDraft>? pendingFutureImports,
     List<String>? acceptedConflictKeys,
+    List<String>? roleChangeWarnings,
     bool clearMealPlanning = false,
+    bool clearBusinessPlanning = false,
+    bool clearRoleChangeWarnings = false,
   }) {
     return BaseTimelineDraft(
       blocks: blocks ?? this.blocks,
-      businessMode: businessMode ?? this.businessMode,
-      workBestTime: workBestTime ?? this.workBestTime,
-      workPriority: workPriority ?? this.workPriority,
+      businessMode: clearBusinessPlanning
+          ? null
+          : (businessMode ?? this.businessMode),
+      workDurationMinutes: clearBusinessPlanning
+          ? null
+          : (workDurationMinutes ?? this.workDurationMinutes),
+      workBestTime: clearBusinessPlanning
+          ? null
+          : (workBestTime ?? this.workBestTime),
+      workPriority: clearBusinessPlanning
+          ? null
+          : (workPriority ?? this.workPriority),
       eatingMode: eatingMode ?? this.eatingMode,
       shouldPlanMeals: clearMealPlanning
           ? null
@@ -752,6 +959,9 @@ class BaseTimelineDraft {
       skinCareSkipped: skinCareSkipped ?? this.skinCareSkipped,
       pendingFutureImports: pendingFutureImports ?? this.pendingFutureImports,
       acceptedConflictKeys: acceptedConflictKeys ?? this.acceptedConflictKeys,
+      roleChangeWarnings: clearRoleChangeWarnings
+          ? const []
+          : (roleChangeWarnings ?? this.roleChangeWarnings),
     );
   }
 
@@ -778,9 +988,14 @@ class BaseTimelineDraft {
 
   BaseTimelineDraft addPendingImport(String section, String mode) {
     if (mode == 'Manual') return this;
-    final key = '${section.toLowerCase().replaceAll(' ', '_')}:$mode';
-    if (pendingFutureImports.contains(key)) return this;
-    return copyWith(pendingFutureImports: [...pendingFutureImports, key]);
+    final entry = PendingFutureImportDraft(
+      id: '${section.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}_${mode.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}',
+      section: section,
+      mode: mode,
+      createdAt: DateTime.now(),
+    );
+    if (pendingFutureImports.any((item) => item.id == entry.id)) return this;
+    return copyWith(pendingFutureImports: [...pendingFutureImports, entry]);
   }
 
   BaseTimelineDraft acceptConflict(String key) {
@@ -825,6 +1040,63 @@ class BaseTimelineDraft {
     return conflicts;
   }
 
+  BaseTimelineInvalidationResult invalidateForRole(String? lifeRole) {
+    final classesEnabled =
+        lifeRole == LifeRoleDraft.studentKey ||
+        lifeRole == LifeRoleDraft.studentWorkingKey;
+    final jobEnabled =
+        lifeRole == LifeRoleDraft.workingKey ||
+        lifeRole == LifeRoleDraft.studentWorkingKey ||
+        lifeRole == LifeRoleDraft.businessKey;
+    final businessEnabled = lifeRole == LifeRoleDraft.businessKey;
+
+    final removedIds = <String>{};
+    final keptBlocks = <TimelineBlockDraft>[];
+    var removedClassCount = 0;
+    var removedJobCount = 0;
+
+    for (final block in blocks) {
+      if (!classesEnabled && block.section == 'classes') {
+        removedIds.add(block.id);
+        removedClassCount++;
+        continue;
+      }
+      if (!jobEnabled && block.section == 'job_work_business') {
+        removedIds.add(block.id);
+        removedJobCount++;
+        continue;
+      }
+      keptBlocks.add(block);
+    }
+
+    final warnings = <String>[
+      if (removedClassCount > 0)
+        'Removed $removedClassCount class block${removedClassCount == 1 ? '' : 's'} because Classes are disabled for this role.',
+      if (removedJobCount > 0)
+        'Removed $removedJobCount job/work block${removedJobCount == 1 ? '' : 's'} because Work is disabled for this role.',
+      if (!businessEnabled &&
+          (businessMode != null ||
+              workBestTime != null ||
+              workPriority != null ||
+              workDurationMinutes != null))
+        'Cleared business schedule settings because this role is not Business.',
+    ];
+
+    final nextAcceptedKeys = acceptedConflictKeys
+        .where((key) => removedIds.every((id) => !key.contains(id)))
+        .toList();
+
+    return BaseTimelineInvalidationResult(
+      timeline: copyWith(
+        blocks: keptBlocks,
+        acceptedConflictKeys: nextAcceptedKeys,
+        roleChangeWarnings: warnings,
+        clearBusinessPlanning: !businessEnabled,
+      ),
+      warnings: warnings,
+    );
+  }
+
   String? validateForRole(String? lifeRole) {
     final classesRequired =
         lifeRole == LifeRoleDraft.studentKey ||
@@ -842,7 +1114,29 @@ class BaseTimelineDraft {
     if (jobRequired && !_hasConfirmedSection('job_work_business')) {
       return 'Add at least one job/work/business block for your role.';
     }
+    if (lifeRole == LifeRoleDraft.businessKey) {
+      if (businessMode == null) {
+        return 'Choose your business schedule mode.';
+      }
+      if (workDurationMinutes == null || workDurationMinutes! <= 0) {
+        return 'Choose your business work duration.';
+      }
+      if (workBestTime == null) return 'Choose your business best time.';
+      if (workPriority == null) return 'Choose your business priority.';
+    }
     if (eatingMode == null) return 'Choose your eating mode.';
+    if ((eatingMode == 'flat' || eatingMode == 'staying_alone') &&
+        shouldPlanMeals == null) {
+      return 'Choose whether Optivus should plan meals or only remind you.';
+    }
+    if (shouldPlanMeals == true &&
+        (mealPlanningGoal == null ||
+            foodType == null ||
+            mealBudget == null ||
+            cookingAbility == null ||
+            mealsPerDay == null)) {
+      return 'Complete meal planning details or choose Only remind me.';
+    }
     if (!_hasConfirmedSection('eating')) {
       return 'Add at least one eating block.';
     }
@@ -864,6 +1158,52 @@ class BaseTimelineDraft {
           block.title.trim().isNotEmpty,
     );
   }
+}
+
+class BaseTimelineInvalidationResult {
+  final BaseTimelineDraft timeline;
+  final List<String> warnings;
+
+  const BaseTimelineInvalidationResult({
+    required this.timeline,
+    required this.warnings,
+  });
+}
+
+class PendingFutureImportDraft {
+  final String id;
+  final String section;
+  final String mode;
+  final DateTime createdAt;
+  final String status;
+
+  const PendingFutureImportDraft({
+    required this.id,
+    required this.section,
+    required this.mode,
+    required this.createdAt,
+    this.status = 'pending_future_import',
+  });
+
+  factory PendingFutureImportDraft.fromMap(Map<String, dynamic> map) {
+    return PendingFutureImportDraft(
+      id: map['id'] as String? ?? '',
+      section: map['section'] as String? ?? '',
+      mode: map['mode'] as String? ?? '',
+      createdAt:
+          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      status: map['status'] as String? ?? 'pending_future_import',
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'section': section,
+    'mode': mode,
+    'createdAt': createdAt.toIso8601String(),
+    'status': status,
+  };
 }
 
 class TimelineBlockDraft {
@@ -1496,6 +1836,25 @@ List<T> _readList<T>(
 List<String> _readStringList(Object? value) {
   return (value as List?)?.map((item) => item.toString()).toList() ??
       <String>[];
+}
+
+List<PendingFutureImportDraft> _readPendingFutureImports(Object? value) {
+  return (value as List?)?.map((item) {
+        if (item is Map) {
+          return PendingFutureImportDraft.fromMap(
+            Map<String, dynamic>.from(item),
+          );
+        }
+        final raw = item.toString();
+        final parts = raw.split(':');
+        return PendingFutureImportDraft(
+          id: raw.replaceAll(RegExp(r'[^a-zA-Z0-9_]+'), '_'),
+          section: parts.isNotEmpty ? parts.first : 'unknown',
+          mode: parts.length > 1 ? parts.sublist(1).join(':') : raw,
+          createdAt: DateTime.fromMillisecondsSinceEpoch(0),
+        );
+      }).toList() ??
+      <PendingFutureImportDraft>[];
 }
 
 List<int> _readIntList(Object? value) {

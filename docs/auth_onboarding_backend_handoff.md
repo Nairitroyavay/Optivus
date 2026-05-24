@@ -1,86 +1,94 @@
 # Optivus Auth & Onboarding Backend Handoff
 
-> This document details the fake auth architecture and onboarding foundation built during the testing phase. It explains how to replace the fake implementations with real Firebase services in the future.
+This document describes the current frontend-only auth and onboarding flow. It is backend-ready in shape, but no Firebase, Firestore, Cloudflare Worker, AI API, R2 upload, or real notification permission call is connected in this phase.
 
-## 1. Current Fake Auth Architecture
+## Current Auth Architecture
 
-Currently, the app uses a clean repository pattern to mock authentication. This allows for rapid UI and flow testing without making actual network requests to Firebase.
+- `AuthRepository` defines login, signup, logout, password reset, and auth-state stream contracts.
+- `FakeAuthRepository` simulates local auth with artificial delay.
+- `AuthNotifier` awaits fake auth, exposes `AuthState.isLoading`, and resets or seeds mock app state.
+- Normal login/signup creates an empty profile, empty onboarding draft, and empty mock app slate.
+- The dev account `test@optivus.dev` / `test1234` intentionally loads `MockSeedData`.
+- Logout resets user profile, onboarding, routine, tracker, goals, mind notes, coach sessions/preferences, notifications, and permission mock state.
 
-- **`AuthRepository` Interface**: Defines the contract for all authentication operations (`login`, `signup`, `logout`, `authStateChanges`).
-- **`FakeAuthRepository`**: A mock implementation of the interface that simulates network delays, maintains local session state, and creates seed `UserModel` and `OnboardingDraft` instances upon signup/login.
-- **`AuthNotifier`**: Manages the reactive state (`AuthState`) of the user's session and bridges the gap between the repository and Riverpod providers (`mockUserProfileProvider`, `mockOnboardingProvider`).
-- **`RouterNotifier`**: Subscribes to changes in `AuthState` and `UserProfile` to dynamically redirect users using `GoRouter`.
-  - Unauthenticated -> `/` (Welcome/Login/Signup)
-  - Authenticated + `onboardingCompleted == false` -> `/onboarding`
-  - Authenticated + `onboardingCompleted == true` -> `/app`
+## Onboarding Source Of Truth
 
-## 2. Future Firebase Integration
+`OnboardingDraft` is the backend-facing draft source of truth.
 
-To integrate real Firebase Auth and Firestore, follow these steps:
+It stores:
+- `uid`
+- `currentStep`
+- `stepCompleted`
+- `stepDirty`
+- `stepLoading`
+- `createdAt`
+- `updatedAt`
+- all step payloads
+- `finalPreview`
+- `onboardingCompleted`
 
-### A. Auth Integration
+`OnboardingState` remains a UI wrapper for validation messages and compatibility, but its progress arrays are synchronized from the draft.
 
-1. Create a `FirebaseAuthRepository` that implements `AuthRepository`.
-2. Update the implementation to use `FirebaseAuth.instance`:
-   - `login`: `signInWithEmailAndPassword`
-   - `signup`: `createUserWithEmailAndPassword`
-   - `logout`: `signOut`
-   - `authStateChanges`: Listen to `FirebaseAuth.instance.authStateChanges()`
-3. In `lib/state/auth_state.dart`, replace the instance of `FakeAuthRepository` with `FirebaseAuthRepository`.
-4. Ensure `FirebaseAuthRepository` creates or fetches the user's document from Firestore upon successful login/signup.
+## Completion Bundle
 
-### B. Firestore Schema and Path Expectations
+`OnboardingCompletionService.buildBundle(draft)` creates an `OnboardingCompletionBundle` with:
 
-When implementing the Firestore sync, use the following paths:
+- `userProfilePatch`
+- `baseTimelineBlocks`
+- `finalTimelineItems`
+- `routineItemsForApp`
+- `goodHabitTemplates`
+- `badHabitCheckIns`
+- `identityGoalSystems`
+- `notificationPreferences`
+- `coachPreferences`
+- `moneyGoal`
+- `warnings`
+- `duplicateSystemKeysMerged`
 
-- **User Document**: `/users/{uid}`
-  - Contains core user data: `uid`, `name`, `email`, `createdAt`, `updatedAt`, `onboardingCompleted`, `onboardingStep`.
-- **Onboarding Draft**: `/users/{uid}/onboarding/draft`
-  - Contains the in-progress onboarding state. Use `OnboardingDraft.toMap()` to write and `OnboardingDraft.fromMap()` to read.
+The final Step 11 CTA validates required data, saves the final preview, builds this bundle, applies it to mock app state, marks onboarding complete, and routes to `/app?tab=0`.
 
-### C. Onboarding Completion Flow
+## Mock App Wiring
 
-1. Currently, `OnboardingDraft` handles save operations locally by updating the `mockOnboardingProvider` state.
-2. When real backend sync is implemented, update the `_saveStep` method in `lib/features/onboarding/onboarding_flow.dart` to write the draft to Firestore:
-   - `FirebaseFirestore.instance.doc('users/${uid}/onboarding/draft').set(draft.toMap())`
-3. When the user taps "Enter Optivus" in Step 11:
-   - Mark the draft as completed.
-   - Update the `/users/{uid}` document to set `onboardingCompleted = true`.
-   - Clear the local draft from state if desired, or keep it as a read-only reference.
+After onboarding completion:
 
-## 3. Data Models
+- `mockUserProfileProvider` receives role, lifestyle, body basics, coach, slip-up, and onboarding completion fields.
+- `mockRoutineProvider` is replaced with generated `RoutineItem` data from the final timeline.
+- `mockGoalProvider` is replaced with generated identity goal systems.
+- `mockTrackerProvider` receives bad-habit check-in tracker sessions and a money goal when selected.
+- `mockCoachPreferencesProvider` and `mockNotificationPreferencesProvider` receive onboarding preferences.
 
-The data models have been made backend-ready with robust serialization methods.
+Home and Routine read `mockRoutineProvider`, so generated onboarding data is visible there after completion.
 
-- **`UserModel` / `UserProfile`**: 
-  - Fields: `uid`, `name`, `email`, `createdAt`, `updatedAt`, `onboardingCompleted`.
-  - Methods: `toMap()`, `fromMap()`, `copyWith()`.
-- **`OnboardingDraft`**:
-  - Fields: `uid`, `stepCompleted`, `stepDirty`, `stepLoading`, `createdAt`, `updatedAt`, `onboardingCompleted`, plus all specific step data (`lifeRole`, `bodyBasics`, etc.).
-  - Methods: `toMap()`, `fromMap()`, `copyWith()`.
-  - Internal states (like enums) use canonical string keys (e.g., `student_working`, `flexible_business`) mapped accurately for backend consumption.
+**Home/Routine Readiness Status: PASS**
 
-## 4. Current State and TODOs
+## Future Firestore Target Paths
 
-- [x] Fake auth repository and state management.
-- [x] GoRouter redirects based on auth and onboarding completion.
-- [x] Backend-ready models with `toMap`/`fromMap`.
-- [x] Step-by-step local saving with dirty/completed checks.
-- [ ] Implement `FirebaseAuthRepository`.
-- [ ] Connect `MockUserProfileNotifier` and `MockOnboardingNotifier` to read/write from `/users/{uid}` and `/users/{uid}/onboarding/draft`.
-- [ ] Ensure Spark-safe Firestore rules match the schema.
+Documented only. Not connected in this frontend-only phase.
 
-## 5. Home Tab Readiness
+- `/users/{uid}`
+- `/users/{uid}/onboarding/draft`
+- `/users/{uid}/routine/current`
+- `/users/{uid}/habits/{habitId}`
+- `/users/{uid}/goals/{goalId}`
+- `/users/{uid}/notification_preferences/main`
 
-The Home tab (once implemented) can safely read the following properties from the validated user profile and onboarding draft:
-- Current user ID, name, email.
-- `onboardingCompleted` status.
-- `lifeRole` and `workType`.
-- `bodyBasics` (including BMI and caloric estimates).
-- Formatted `baseTimeline` (classes, job, eating, fixed blocks).
-- `badHabits` and `goodHabits` lists.
-- Selected `identityGoals`.
-- `coachSetup` preference.
-- `notifications` preference.
+## Future Backend Notes
 
-**Home Readiness Status**: **PASS** (Ready for implementation once UI begins).
+When Firebase is intentionally enabled later:
+
+1. Implement a real `FirebaseAuthRepository` behind the existing `AuthRepository` interface.
+2. On auth success, fetch `/users/{uid}` and `/users/{uid}/onboarding/draft`.
+3. Save local draft updates to `/users/{uid}/onboarding/draft`.
+4. On completion, persist the completion bundle to the documented paths.
+5. Keep AI and upload flows behind Cloudflare Workers/R2 signed URL patterns. Do not put API keys or R2 secrets in Flutter.
+
+## Frontend-Only Limitations
+
+- No Firebase Auth call is made.
+- No Firestore read/write is made.
+- No Cloudflare Worker request is made.
+- No AI request is made.
+- No upload or R2 signed URL flow is made.
+- No real notification permission is requested.
+- Placeholder import entries are stored locally in the onboarding draft for future text/photo review flows.

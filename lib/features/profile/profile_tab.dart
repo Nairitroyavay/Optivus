@@ -24,10 +24,18 @@ class ProfileTab extends ConsumerWidget {
 
     // Count active permissions/connections
     int activePermissions = 0;
-    if (permissions.notifications == PermissionConnectionState.mockConnected) activePermissions++;
-    if (permissions.usageAccess == PermissionConnectionState.mockConnected) activePermissions++;
-    if (permissions.locationGps == PermissionConnectionState.mockConnected) activePermissions++;
-    if (permissions.healthConnect == PermissionConnectionState.mockConnected) activePermissions++;
+    if (permissions.notifications == PermissionConnectionState.mockConnected) {
+      activePermissions++;
+    }
+    if (permissions.usageAccess == PermissionConnectionState.mockConnected) {
+      activePermissions++;
+    }
+    if (permissions.locationGps == PermissionConnectionState.mockConnected) {
+      activePermissions++;
+    }
+    if (permissions.healthConnect == PermissionConnectionState.mockConnected) {
+      activePermissions++;
+    }
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -57,11 +65,11 @@ class ProfileTab extends ConsumerWidget {
               Text(
                 'QUICK SYSTEM PORTAL',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
-                      fontSize: 10,
-                      color: OptivusColors.textSecondary,
-                    ),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  fontSize: 10,
+                  color: OptivusColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -77,14 +85,17 @@ class ProfileTab extends ConsumerWidget {
               ProfileSystemShortcutCard(
                 icon: Icons.bluetooth_searching_rounded,
                 title: 'Wearable Sync',
-                description: 'Manage Health SDK & smart watch tracking ($activePermissions/4 connected)',
+                description:
+                    'Manage Health SDK & smart watch tracking ($activePermissions/4 connected)',
                 accentColor: OptivusColors.brandAccent,
                 statusWidget: Container(
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: permissions.healthConnect == PermissionConnectionState.mockConnected
+                    color:
+                        permissions.healthConnect ==
+                            PermissionConnectionState.mockConnected
                         ? OptivusColors.success
                         : OptivusColors.textMuted,
                   ),
@@ -196,34 +207,88 @@ class ProfileTab extends ConsumerWidget {
             children: [
               SwitchListTile.adaptive(
                 activeTrackColor: OptivusColors.brandAccent,
-                title: const Text('Edge-to-edge UI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.textPrimary)),
-                subtitle: const Text('Transparent system status bars matching gradients', style: TextStyle(fontSize: 10, color: OptivusColors.textSecondary)),
+                title: const Text(
+                  'Edge-to-edge UI',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Transparent system status bars matching gradients',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
                 value: true,
                 onChanged: (val) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('App Preferences: Edge-to-edge UI locked ON by default.'), behavior: SnackBarBehavior.floating),
+                    const SnackBar(
+                      content: Text(
+                        'App Preferences: Edge-to-edge UI locked ON by default.',
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
                   );
                 },
               ),
               SwitchListTile.adaptive(
                 activeTrackColor: OptivusColors.brandAccent,
-                title: const Text('Fullscreen Immersive Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.textPrimary)),
-                subtitle: const Text('Hides top system status bar completely', style: TextStyle(fontSize: 10, color: OptivusColors.textSecondary)),
+                title: const Text(
+                  'Fullscreen Immersive Mode',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Hides top system status bar completely',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
                 value: false,
                 onChanged: (val) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Immersive mode ${val ? "Activated" : "Deactivated"}!'), behavior: SnackBarBehavior.floating),
+                    SnackBar(
+                      content: Text(
+                        'Immersive mode ${val ? "Activated" : "Deactivated"}!',
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
                   );
                 },
               ),
               SwitchListTile.adaptive(
                 activeTrackColor: OptivusColors.brandAccent,
-                title: const Text('Compact Cards Layout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.textPrimary)),
-                subtitle: const Text('Tightens heights on timeline routine items', style: TextStyle(fontSize: 10, color: OptivusColors.textSecondary)),
+                title: const Text(
+                  'Compact Cards Layout',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Tightens heights on timeline routine items',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
                 value: false,
                 onChanged: (val) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Compact view ${val ? "Enabled" : "Disabled"}.'), behavior: SnackBarBehavior.floating),
+                    SnackBar(
+                      content: Text(
+                        'Compact view ${val ? "Enabled" : "Disabled"}.',
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
                   );
                 },
               ),
@@ -265,12 +330,19 @@ class ProfileTab extends ConsumerWidget {
               ),
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
-            onPressed: () {
-              ref.read(authProvider.notifier).logout();
-              context.go('/');
+            onPressed: () async {
+              await ref.read(authProvider.notifier).logout();
+              if (context.mounted) context.go('/');
             },
             icon: const Icon(Icons.logout_rounded, size: 18),
-            label: const Text('Sign Out Session', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.3)),
+            label: const Text(
+              'Sign Out Session',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                letterSpacing: 0.3,
+              ),
+            ),
           ),
         ],
       ),
@@ -337,18 +409,29 @@ class ProfileTab extends ConsumerWidget {
                       children: [
                         const Text(
                           'Need assistance with your Optivus profile?',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.textPrimary),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: OptivusColors.textPrimary,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         const Text(
                           'Submit a detailed ticket below, and our team will analyze it alongside your mock logs.',
-                          style: TextStyle(fontSize: 11, color: OptivusColors.textSecondary, height: 1.3),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: OptivusColors.textSecondary,
+                            height: 1.3,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         const TextField(
                           decoration: InputDecoration(
                             labelText: 'Subject / Issue Category',
-                            labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            labelStyle: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -357,7 +440,10 @@ class ProfileTab extends ConsumerWidget {
                           maxLines: 4,
                           decoration: InputDecoration(
                             labelText: 'Describe the issue...',
-                            labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                            labelStyle: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -366,19 +452,26 @@ class ProfileTab extends ConsumerWidget {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: OptivusColors.brandAccent,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           onPressed: () {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Support Ticket submitted successfully! Mock Ticket #8928'),
+                                content: Text(
+                                  'Support Ticket submitted successfully! Mock Ticket #8928',
+                                ),
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
                           },
-                          child: const Text('Submit Mock Ticket', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Submit Mock Ticket',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
@@ -386,12 +479,23 @@ class ProfileTab extends ConsumerWidget {
                   const SizedBox(height: 20),
                   const Text(
                     'FREQUENTLY ASKED QUESTIONS',
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textSecondary,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                   const SizedBox(height: 10),
-                  _buildFaqItem('How do I sync my active outdoor GPS runs?', 'Go to Wearable Sync in your System Portal, and tap "Grant GPS Location Permission".'),
+                  _buildFaqItem(
+                    'How do I sync my active outdoor GPS runs?',
+                    'Go to Wearable Sync in your System Portal, and tap "Grant GPS Location Permission".',
+                  ),
                   const SizedBox(height: 10),
-                  _buildFaqItem('What is the Habit Overload Shield?', 'A safeguard designed to prevent burnout by letting you set custom target limits on daily active goals.'),
+                  _buildFaqItem(
+                    'What is the Habit Overload Shield?',
+                    'A safeguard designed to prevent burnout by letting you set custom target limits on daily active goals.',
+                  ),
                 ],
               ),
             );
@@ -409,12 +513,20 @@ class ProfileTab extends ConsumerWidget {
         children: [
           Text(
             question,
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12, color: OptivusColors.textPrimary),
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              color: OptivusColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             answer,
-            style: const TextStyle(fontSize: 11, color: OptivusColors.textSecondary, height: 1.3),
+            style: const TextStyle(
+              fontSize: 11,
+              color: OptivusColors.textSecondary,
+              height: 1.3,
+            ),
           ),
         ],
       ),
@@ -481,32 +593,56 @@ class ProfileTab extends ConsumerWidget {
                       children: [
                         Text(
                           '1. Mock Service Operations',
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: OptivusColors.textPrimary),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                            color: OptivusColors.textPrimary,
+                          ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'Optivus operates entirely as a high-fidelity frontend simulation layout. All data is stored transiently using mock Riverpod states and local memory controls.',
-                          style: TextStyle(fontSize: 11, color: OptivusColors.textSecondary, height: 1.3),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: OptivusColors.textSecondary,
+                            height: 1.3,
+                          ),
                         ),
                         SizedBox(height: 16),
                         Text(
                           '2. Privacy and Safe Health Sync',
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: OptivusColors.textPrimary),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                            color: OptivusColors.textPrimary,
+                          ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'Your native health integrations (Health Connect / location logs) are simulated sandbox entities. No telemetry or location logs are transmitted out of your device sandbox.',
-                          style: TextStyle(fontSize: 11, color: OptivusColors.textSecondary, height: 1.3),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: OptivusColors.textSecondary,
+                            height: 1.3,
+                          ),
                         ),
                         SizedBox(height: 16),
                         Text(
                           '3. End-User License Agreement (EULA)',
-                          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13, color: OptivusColors.textPrimary),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                            color: OptivusColors.textPrimary,
+                          ),
                         ),
                         SizedBox(height: 4),
                         Text(
                           'By proceeding to use the simulation, you agree to experience high-framerate glassmorphic layouts, consistent habit building systems, and comprehensive AI coaching context models.',
-                          style: TextStyle(fontSize: 11, color: OptivusColors.textSecondary, height: 1.3),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: OptivusColors.textSecondary,
+                            height: 1.3,
+                          ),
                         ),
                       ],
                     ),
@@ -516,11 +652,16 @@ class ProfileTab extends ConsumerWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: OptivusColors.brandAccent,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Accept & Close', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Accept & Close',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),

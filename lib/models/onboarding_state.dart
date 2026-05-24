@@ -13,16 +13,24 @@ class OnboardingState {
   final String? validationMessage;
 
   OnboardingState({
-    this.currentStep = 0,
+    int? currentStep,
     List<bool>? stepCompleted,
     List<bool>? stepDirty,
     List<bool>? stepLoading,
     OnboardingDraft? draft,
     this.validationMessage,
-  }) : stepCompleted = stepCompleted ?? List<bool>.filled(12, false),
-       stepDirty = stepDirty ?? List<bool>.filled(12, false),
-       stepLoading = stepLoading ?? List<bool>.filled(12, false),
-       draft = draft ?? const OnboardingDraft();
+  }) : draft = draft ?? const OnboardingDraft(),
+       currentStep =
+           currentStep ?? (draft ?? const OnboardingDraft()).currentStep,
+       stepCompleted =
+           stepCompleted ??
+           List<bool>.from((draft ?? const OnboardingDraft()).stepCompleted),
+       stepDirty =
+           stepDirty ??
+           List<bool>.from((draft ?? const OnboardingDraft()).stepDirty),
+       stepLoading =
+           stepLoading ??
+           List<bool>.from((draft ?? const OnboardingDraft()).stepLoading);
 
   OnboardingState copyWith({
     int? currentStep,
@@ -33,12 +41,26 @@ class OnboardingState {
     String? validationMessage,
     bool clearValidation = false,
   }) {
+    final nextDraft = draft ?? this.draft;
+    final draftChanged = draft != null;
     return OnboardingState(
-      currentStep: currentStep ?? this.currentStep,
-      stepCompleted: stepCompleted ?? List<bool>.from(this.stepCompleted),
-      stepDirty: stepDirty ?? List<bool>.from(this.stepDirty),
-      stepLoading: stepLoading ?? List<bool>.from(this.stepLoading),
-      draft: draft ?? this.draft,
+      currentStep:
+          currentStep ??
+          (draftChanged ? nextDraft.currentStep : this.currentStep),
+      stepCompleted:
+          stepCompleted ??
+          List<bool>.from(
+            draftChanged ? nextDraft.stepCompleted : this.stepCompleted,
+          ),
+      stepDirty:
+          stepDirty ??
+          List<bool>.from(draftChanged ? nextDraft.stepDirty : this.stepDirty),
+      stepLoading:
+          stepLoading ??
+          List<bool>.from(
+            draftChanged ? nextDraft.stepLoading : this.stepLoading,
+          ),
+      draft: nextDraft,
       validationMessage: clearValidation
           ? null
           : (validationMessage ?? this.validationMessage),

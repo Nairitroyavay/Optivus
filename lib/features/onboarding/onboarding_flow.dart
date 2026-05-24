@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
@@ -46,7 +49,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   // Helper validation per step
   String? _validateStep(int step) {
     final onboarding = ref.read(mockOnboardingProvider);
-    return onboarding.draft.validateStep(step, onboarding.stepCompleted);
+    return onboarding.draft.validateStep(step, onboarding.draft.stepCompleted);
   }
 
   // Core Save step action — with double-tap prevention
@@ -69,23 +72,26 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     // Simulate offline-first save database delay
     await Future.delayed(const Duration(milliseconds: 600));
 
-    // Save corresponding states
     final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
-    if (step == 0) {
-      onboardingNotifier.updateDraft(
-        (draft) => draft.copyWith(welcomeSaved: true),
-      );
-    } else if (step == 3) {
-      onboardingNotifier.updateDraft(
-        (draft) => draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates()),
-      );
-    } else if (step == 11) {
-      onboardingNotifier.saveFinalPreview();
-    }
-
-    onboardingNotifier.setStepLoading(step, false);
-    onboardingNotifier.setStepCompleted(step, true);
-    onboardingNotifier.setStepDirty(step, false);
+    final uid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    onboardingNotifier.saveStep(
+      step,
+      uid: uid,
+      transform: (draft) {
+        if (step == 0) {
+          return draft.copyWith(welcomeSaved: true);
+        }
+        if (step == 3) {
+          return draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
+        }
+        if (step == 11) {
+          return draft.copyWith(finalPreview: draft.buildFinalPreview());
+        }
+        return draft;
+      },
+    );
 
     if (mounted) setState(() => _isSaving = false);
     return true;
@@ -97,6 +103,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     setState(() => _isNavigating = true);
 
     final onboardingState = ref.read(mockOnboardingProvider);
+    if (_currentPage == OnboardingDraft.lastStepIndex) {
+      await _completeOnboarding();
+      return;
+    }
+
     final isDirty = onboardingState.stepDirty[_currentPage];
     final isCompleted = onboardingState.stepCompleted[_currentPage];
 
@@ -109,16 +120,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
     }
 
-    // Double check gate transition
-    if (_currentPage == 11) {
-      ref.read(mockUserProfileProvider.notifier).completeOnboarding();
-      if (mounted) {
-        context.go('/app?tab=1');
-      }
-      if (mounted) setState(() => _isNavigating = false);
-      return;
-    }
-
     // Otherwise slide to the next step
     _currentPage++;
     ref.read(mockOnboardingProvider.notifier).setStep(_currentPage);
@@ -128,6 +129,64 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       curve: Curves.easeInOut,
     );
     if (mounted) setState(() => _isNavigating = false);
+  }
+
+  Future<void> _completeOnboarding() async {
+    final onboarding = ref.read(mockOnboardingProvider);
+    for (var step = 0; step < OnboardingDraft.lastStepIndex; step++) {
+      final error = onboarding.draft.validateStep(
+        step,
+        onboarding.draft.stepCompleted,
+      );
+      if (error != null) {
+        ref.read(mockOnboardingProvider.notifier).setValidationMessage(error);
+        if (mounted) setState(() => _isNavigating = false);
+        return;
+      }
+    }
+
+    final saveSuccess = await _saveStep(OnboardingDraft.lastStepIndex);
+    if (!saveSuccess) {
+      if (mounted) setState(() => _isNavigating = false);
+      return;
+    }
+
+    final savedDraft = ref.read(mockOnboardingProvider).draft;
+    final bundle = OnboardingCompletionService.buildBundle(savedDraft);
+    String? blockingWarning;
+    for (final warning in bundle.warnings) {
+      if (warning.startsWith('Resolve or accept')) {
+        blockingWarning = warning;
+        break;
+      }
+    }
+    if (blockingWarning != null) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(blockingWarning);
+      if (mounted) setState(() => _isNavigating = false);
+      return;
+    }
+
+    final uid = ref.read(authProvider).user?.uid ?? savedDraft.uid;
+    ref
+        .read(mockRoutineProvider.notifier)
+        .replaceWith(bundle.routineItemsForApp);
+    ref.read(mockGoalProvider.notifier).replaceWith(bundle.identityGoalSystems);
+    ref.read(mockTrackerProvider.notifier).applyOnboardingBundle(bundle);
+    ref
+        .read(mockCoachPreferencesProvider.notifier)
+        .updatePreferences(bundle.coachPreferences);
+    ref
+        .read(mockNotificationPreferencesProvider.notifier)
+        .updatePreferences(bundle.notificationPreferences);
+    ref.read(mockUserProfileProvider.notifier).applyOnboardingBundle(bundle);
+    ref.read(mockOnboardingProvider.notifier).completeOnboarding(uid: uid);
+
+    if (mounted) {
+      context.go('/app?tab=0');
+      setState(() => _isNavigating = false);
+    }
   }
 
   int _lastCompletedStep(List<bool> completedSteps) {
@@ -224,17 +283,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       ctaLabel = 'Get Started';
     } else if (_currentPage == 11) {
       ctaLabel = 'Enter Optivus';
-      ctaEnabled =
-          !_isNavigating &&
-          !_isSaving &&
-          onboardingState.stepCompleted.take(11).every((c) => c) &&
-          onboardingState.stepCompleted[11] &&
-          !onboardingState.stepDirty[11] &&
-          onboardingState.draft.validateStep(
-                11,
-                onboardingState.stepCompleted,
-              ) ==
-              null;
+      ctaEnabled = !_isNavigating && !_isSaving;
     }
 
     return PopScope(
@@ -257,7 +306,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         saveEnabled: !_isSaving && !onboardingState.stepLoading[_currentPage],
         ctaLabel: ctaLabel,
         ctaEnabled: ctaEnabled,
-        ctaLoading: false,
+        ctaLoading: _isNavigating,
         child: PageView(
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),

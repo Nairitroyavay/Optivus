@@ -225,7 +225,10 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
   void _updateBody(BodyBasicsDraft body) {
     ref
         .read(mockOnboardingProvider.notifier)
-        .updateDraft((current) => current.copyWith(bodyBasics: body));
+        .updateDraft(
+          (current) =>
+              current.copyWith(bodyBasics: body, clearFinalPreview: true),
+        );
   }
 
   String _genderKey(String label) {

@@ -39,7 +39,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passFocus = FocusNode();
 
   bool _obscurePass = true;
-  bool _loading = false;
   bool _resetLoading = false;
   Future<void>? _authOperation;
   String? _errorMsg;
@@ -62,8 +61,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final pass = _passCtrl.text;
 
     if (email.isEmpty) return 'Please enter your email address.';
-    if (!RegExp(r'^[\w\.\+\-]+@[\w\-]+\.[a-z]{2,}$', caseSensitive: false)
-        .hasMatch(email)) {
+    if (!RegExp(
+      r'^[\w\.\+\-]+@[\w\-]+\.[a-z]{2,}$',
+      caseSensitive: false,
+    ).hasMatch(email)) {
       return 'Please enter a valid email address.';
     }
     if (pass.isEmpty) return 'Please enter your password.';
@@ -82,40 +83,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    // TODO: Connect real Firebase Auth later:
-    // final authCall = _authRepository.signIn(
-    //   _emailCtrl.text.trim(),
-    //   _passCtrl.text,
-    // );
+    if (ref.read(authProvider).isLoading) return;
 
-    // Mock local auth workflow:
-    final mockOperation = Future.delayed(const Duration(milliseconds: 1200));
+    final authOperation = ref
+        .read(authProvider.notifier)
+        .login(_emailCtrl.text.trim(), _passCtrl.text);
 
     setState(() {
-      _loading = true;
       _errorMsg = null;
       _successMsg = null;
-      _authOperation = mockOperation;
+      _authOperation = authOperation;
     });
 
     try {
-      await mockOperation;
+      await authOperation;
       if (!mounted) return;
-
-      // Update local session state
-      ref.read(authProvider.notifier).login(
-        _emailCtrl.text.trim(),
-        _passCtrl.text,
-      );
-
       // Route based on onboarding completion status
       // Handled by GoRouter redirect automatically
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
-        _errorMsg = 'Something went wrong. Please try again.';
+        _errorMsg = error.toString();
       });
+    } finally {
+      if (mounted) {
+        setState(() => _authOperation = null);
+      }
     }
   }
 
@@ -128,12 +121,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (email.isEmpty) {
       setState(
-          () => _errorMsg = 'Enter your email above to reset your password.');
+        () => _errorMsg = 'Enter your email above to reset your password.',
+      );
       return;
     }
 
-    if (!RegExp(r'^[\w\.\+\-]+@[\w\-]+\.[a-z]{2,}$', caseSensitive: false)
-        .hasMatch(email)) {
+    if (!RegExp(
+      r'^[\w\.\+\-]+@[\w\-]+\.[a-z]{2,}$',
+      caseSensitive: false,
+    ).hasMatch(email)) {
       setState(() => _errorMsg = 'Please enter a valid email address.');
       return;
     }
@@ -148,7 +144,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // TODO: Connect real Firebase Auth later:
       // await _authRepository.sendPasswordResetEmail(email);
       await Future.delayed(const Duration(milliseconds: 1000));
-      
+
       if (!mounted) return;
       setState(() {
         _resetLoading = false;
@@ -159,8 +155,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           content: Text('Password reset email sent to $email'),
           backgroundColor: const Color(0xFF22C55E),
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
     } catch (_) {
@@ -176,6 +173,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authLoading = ref.watch(authProvider).isLoading;
+
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -203,20 +202,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       const SizedBox(height: 32),
 
                       // Welcome back
-                      const Text('Welcome back.',
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w900,
-                            color: _kInk,
-                            letterSpacing: -0.8,
-                          )),
+                      const Text(
+                        'Welcome back.',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w900,
+                          color: _kInk,
+                          letterSpacing: -0.8,
+                        ),
+                      ),
                       const SizedBox(height: 6),
-                      Text('Sign in to your Optivus account.',
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.blueGrey.shade600,
-                            fontWeight: FontWeight.w500,
-                          )),
+                      Text(
+                        'Sign in to your Optivus account.',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.blueGrey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 36),
 
                       // Form
@@ -259,7 +262,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     size: 20,
                                   ),
                                   onPressed: () => setState(
-                                      () => _obscurePass = !_obscurePass),
+                                    () => _obscurePass = !_obscurePass,
+                                  ),
                                 ),
                               ),
                             ),
@@ -308,12 +312,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // Sign In button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _loading
+                child: authLoading
                     ? _LoadingButton(operation: _authOperation)
-                    : AppButton(
-                        text: 'Sign In',
-                        onPressed: _signIn,
-                      ),
+                    : AppButton(text: 'Sign In', onPressed: _signIn),
               ),
               const SizedBox(height: 20),
 
@@ -323,9 +324,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text("Don't have an account?",
-                        style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 14)),
+                    Text(
+                      "Don't have an account?",
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
                     TextButton(
                       onPressed: () => context.go('/signup'),
                       style: TextButton.styleFrom(
@@ -334,9 +339,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                      child: const Text('Sign Up',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w800, fontSize: 14)),
+                      child: const Text(
+                        'Sign Up',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -374,10 +383,7 @@ class _DisabledProviderButton extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _DisabledProviderButton({
-    required this.icon,
-    required this.label,
-  });
+  const _DisabledProviderButton({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -426,13 +432,15 @@ class _FieldLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: _kSub,
-          letterSpacing: 0.4,
-        ));
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: _kSub,
+        letterSpacing: 0.4,
+      ),
+    );
   }
 }
 
@@ -453,18 +461,22 @@ class _ErrorBanner extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _kRed.withValues(alpha: 0.35), width: 1),
           ),
-          child: Row(children: [
-            Icon(Icons.error_outline_rounded, color: _kRed, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(message,
+          child: Row(
+            children: [
+              Icon(Icons.error_outline_rounded, color: _kRed, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
                   style: const TextStyle(
                     fontSize: 13,
                     color: _kRed,
                     fontWeight: FontWeight.w600,
-                  )),
-            ),
-          ]),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -491,19 +503,26 @@ class _SuccessBanner extends StatelessWidget {
               width: 1,
             ),
           ),
-          child: Row(children: [
-            const Icon(Icons.check_circle_outline_rounded,
-                color: Color(0xFF22C55E), size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(message,
+          child: Row(
+            children: [
+              const Icon(
+                Icons.check_circle_outline_rounded,
+                color: Color(0xFF22C55E),
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
                   style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFF15803D),
                     fontWeight: FontWeight.w600,
-                  )),
-            ),
-          ]),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -525,7 +544,8 @@ class _LoadingButton extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(33),
-        color: Colors.transparent, // Fix: transparent background eliminates the rectangular grey-blue border visual bug
+        color: Colors
+            .transparent, // Fix: transparent background eliminates the rectangular grey-blue border visual bug
         boxShadow: [
           // Soft black shadow (10% opacity)
           BoxShadow(
@@ -598,7 +618,8 @@ class _GlassInputState extends State<_GlassInput> {
   void initState() {
     super.initState();
     widget.focusNode.addListener(
-        () => setState(() => _focused = widget.focusNode.hasFocus));
+      () => setState(() => _focused = widget.focusNode.hasFocus),
+    );
   }
 
   @override
@@ -634,86 +655,95 @@ class _GlassInputState extends State<_GlassInput> {
         borderRadius: BorderRadius.circular(28.5),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Stack(children: [
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(28.5),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    stops: const [0.0, 0.15, 0.4, 1.0],
-                    colors: [
-                      Colors.white.withValues(alpha: 0.95),
-                      Colors.white.withValues(alpha: 0.40),
-                      Colors.white.withValues(alpha: 0.0),
-                      Colors.black.withValues(alpha: 0.03),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            TextField(
-              controller: widget.controller,
-              focusNode: widget.focusNode,
-              obscureText: widget.obscure,
-              keyboardType: widget.keyboardType,
-              textInputAction: widget.next != null
-                  ? TextInputAction.next
-                  : TextInputAction.done,
-              onSubmitted: widget.onSubmit ??
-                  (_) {
-                    if (widget.next != null) {
-                      FocusScope.of(context).requestFocus(widget.next);
-                    }
-                  },
-              style: const TextStyle(
-                color: Color(0xFF1E202A),
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-                letterSpacing: 0.3,
-              ),
-              cursorColor: _kAmber,
-              decoration: InputDecoration(
-                prefixIcon: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: Colors.white.withValues(alpha: 0.25),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.5), width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            offset: const Offset(2, 2),
-                            blurRadius: 6),
-                        BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            offset: const Offset(-2, -2),
-                            blurRadius: 6),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28.5),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      stops: const [0.0, 0.15, 0.4, 1.0],
+                      colors: [
+                        Colors.white.withValues(alpha: 0.95),
+                        Colors.white.withValues(alpha: 0.40),
+                        Colors.white.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.03),
                       ],
                     ),
-                    child: Icon(widget.icon,
-                        color: _focused ? _kAmber : const Color(0xFF1E202A),
-                        size: 22),
                   ),
                 ),
-                suffixIcon: widget.suffix,
-                hintText: widget.hint,
-                hintStyle: TextStyle(
-                  color: const Color(0xFF1E202A).withValues(alpha: 0.40),
-                  fontWeight: FontWeight.w500,
-                  fontSize: 14,
-                  letterSpacing: 0.2,
-                ),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 18),
               ),
-            ),
-          ]),
+              TextField(
+                controller: widget.controller,
+                focusNode: widget.focusNode,
+                obscureText: widget.obscure,
+                keyboardType: widget.keyboardType,
+                textInputAction: widget.next != null
+                    ? TextInputAction.next
+                    : TextInputAction.done,
+                onSubmitted:
+                    widget.onSubmit ??
+                    (_) {
+                      if (widget.next != null) {
+                        FocusScope.of(context).requestFocus(widget.next);
+                      }
+                    },
+                style: const TextStyle(
+                  color: Color(0xFF1E202A),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  letterSpacing: 0.3,
+                ),
+                cursorColor: _kAmber,
+                decoration: InputDecoration(
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        color: Colors.white.withValues(alpha: 0.25),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            offset: const Offset(2, 2),
+                            blurRadius: 6,
+                          ),
+                          BoxShadow(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            offset: const Offset(-2, -2),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        widget.icon,
+                        color: _focused ? _kAmber : const Color(0xFF1E202A),
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                  suffixIcon: widget.suffix,
+                  hintText: widget.hint,
+                  hintStyle: TextStyle(
+                    color: const Color(0xFF1E202A).withValues(alpha: 0.40),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                    letterSpacing: 0.2,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

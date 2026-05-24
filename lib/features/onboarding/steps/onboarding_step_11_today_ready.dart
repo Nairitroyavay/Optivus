@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
 
 class OnboardingStep11 extends ConsumerWidget {
@@ -14,20 +15,25 @@ class OnboardingStep11 extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final onboarding = ref.watch(mockOnboardingProvider);
     final draft = onboarding.draft;
-    final preview = draft.finalPreview ?? draft.buildFinalPreview();
-    final missing = <String>[
-      if (draft.lifeRole.validate() != null) 'Role and lifestyle',
-      if (draft.bodyBasics.validate() != null) 'Body basics',
+    final bundle = OnboardingCompletionService.buildBundle(draft);
+    final missing = <_MissingSetup>[
+      if (draft.lifeRole.validate() != null)
+        const _MissingSetup('Role and lifestyle', 2),
+      if (draft.bodyBasics.validate() != null)
+        const _MissingSetup('Body basics', 3),
       if (draft.baseTimeline.validateForRole(draft.lifeRole.lifeRole) != null)
-        'Base timeline',
-      if (!draft.badHabitsNotNow && draft.badHabits.isEmpty) 'Bad habits',
-      if (!draft.goodHabitsNotNow && draft.goodHabits.isEmpty) 'Good habits',
-      if (draft.identityGoals.isEmpty) 'Identity goals',
-      if (draft.coachSetup.validate() != null) 'Coach setup',
-      if (draft.slipUpHandling == null) 'Slip-up handling',
+        const _MissingSetup('Base timeline', 4),
+      if (!draft.badHabitsNotNow && draft.badHabits.isEmpty)
+        const _MissingSetup('Bad habits', 5),
+      if (!draft.goodHabitsNotNow && draft.goodHabits.isEmpty)
+        const _MissingSetup('Good habits', 6),
+      if (draft.identityGoals.isEmpty) const _MissingSetup('Identity goals', 7),
+      if (draft.coachSetup.validate() != null)
+        const _MissingSetup('Coach setup', 8),
+      if (draft.slipUpHandling == null)
+        const _MissingSetup('Slip-up handling', 9),
       if (!onboarding.stepCompleted.sublist(0, 11).every((done) => done))
-        'Unsaved setup steps',
-      if (!onboarding.stepCompleted[11]) 'Final preview not saved',
+        const _MissingSetup('Unsaved setup steps', 0),
     ];
 
     return Column(
@@ -69,12 +75,27 @@ class OnboardingStep11 extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          missing.join('\n'),
+                          missing.map((item) => item.label).join('\n'),
                           style: const TextStyle(
                             fontSize: 12,
                             color: OptivusColors.textSecondary,
                             height: 1.45,
                           ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: missing
+                              .map(
+                                (item) => OnboardingChip(
+                                  label: 'Edit ${item.label}',
+                                  selected: false,
+                                  accent: OptivusColors.warning,
+                                  onTap: () => onJumpToStep?.call(item.step),
+                                ),
+                              )
+                              .toList(),
                         ),
                       ],
                     ),
@@ -137,7 +158,7 @@ class OnboardingStep11 extends ConsumerWidget {
                       ),
                       _row(
                         'Today timeline',
-                        '${preview.items.length} local blocks',
+                        '${bundle.routineItemsForApp.length} generated blocks',
                       ),
                       _row('Habit focus', _habitFocus(draft)),
                       _row(
@@ -158,10 +179,17 @@ class OnboardingStep11 extends ConsumerWidget {
                             ? 'None selected'
                             : draft.notifications.selectedLabels().join(', '),
                       ),
+                      if (bundle.duplicateSystemKeysMerged.isNotEmpty)
+                        _row(
+                          'Merged duplicates',
+                          bundle.duplicateSystemKeysMerged
+                              .map(identitySystemTitle)
+                              .join(', '),
+                        ),
                     ],
                   ),
                 ),
-                if (preview.warnings.isNotEmpty) ...[
+                if (bundle.warnings.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   OnboardingGlassCard(
                     tint: OptivusColors.warning.withValues(alpha: 0.10),
@@ -177,7 +205,7 @@ class OnboardingStep11 extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          preview.warnings.join('\n'),
+                          bundle.warnings.join('\n'),
                           style: const TextStyle(
                             fontSize: 12,
                             color: OptivusColors.textSecondary,
@@ -202,13 +230,13 @@ class OnboardingStep11 extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      ...preview.items
-                          .take(6)
+                      ...bundle.routineItemsForApp
+                          .take(12)
                           .map(
                             (item) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Text(
-                                '${_time(item.startMinute)} - ${item.title}',
+                                '${_time(item.startMinute)} - ${_time(item.endMinute)}  ${item.title}',
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: OptivusColors.textSecondary,
@@ -216,6 +244,15 @@ class OnboardingStep11 extends ConsumerWidget {
                               ),
                             ),
                           ),
+                      if (bundle.routineItemsForApp.length > 12)
+                        Text(
+                          '+${bundle.routineItemsForApp.length - 12} more generated blocks',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
                     ], // end OnboardingGlassCard Column children
                   ), // end OnboardingGlassCard Column
                 ), // end OnboardingGlassCard
@@ -285,4 +322,11 @@ class OnboardingStep11 extends ConsumerWidget {
         )
         .join(' ');
   }
+}
+
+class _MissingSetup {
+  final String label;
+  final int step;
+
+  const _MissingSetup(this.label, this.step);
 }

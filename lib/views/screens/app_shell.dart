@@ -33,7 +33,7 @@ const List<Color> _tabAccents = [
 class AppShell extends ConsumerStatefulWidget {
   final int initialIndex;
 
-  const AppShell({super.key, this.initialIndex = 1});
+  const AppShell({super.key, this.initialIndex = 0});
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
