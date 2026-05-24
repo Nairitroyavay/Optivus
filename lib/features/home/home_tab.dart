@@ -4,6 +4,7 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 
 import 'widgets/home_header.dart';
+import 'widgets/today_identity_card.dart';
 import 'widgets/now_next_action_card.dart';
 import 'widgets/today_mission_card.dart';
 import 'widgets/life_os_snapshot.dart';
@@ -41,6 +42,7 @@ class HomeTab extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: HomeHeader(userName: userName),
             ),
+            const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
@@ -48,6 +50,8 @@ class HomeTab extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    TodayIdentityCard(identity: dashboardState.identityFocus),
+                    const SizedBox(height: 16),
                     NowNextActionCard(actionState: dashboardState.nowNextAction),
                     const SizedBox(height: 16),
                     TodayMissionCard(summary: dashboardState.missionSummary),

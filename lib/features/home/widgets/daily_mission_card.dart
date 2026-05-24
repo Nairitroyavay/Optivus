@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/widgets/liquid_glass_panel.dart';
+import 'home_glass_widgets.dart';
 
 /// Daily habit progress card with circular progress indicator.
 class DailyMissionCard extends StatelessWidget {
@@ -17,7 +17,7 @@ class DailyMissionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final completionRatio = totalTasks > 0 ? completedTasks / totalTasks : 0.0;
 
-    return LiquidGlassPanel(
+    return HomeGlassCard(
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [

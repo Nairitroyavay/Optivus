@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
-import 'package:optivus/widgets/liquid_glass_panel.dart';
+import 'home_glass_widgets.dart';
 
 class AutoInsightsCard extends StatelessWidget {
   final List<AutoInsight> insights;
@@ -12,7 +12,7 @@ class AutoInsightsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (insights.isEmpty) return const SizedBox.shrink();
 
-    return LiquidGlassPanel(
+    return HomeGlassCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -26,13 +26,13 @@ class AutoInsightsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          ...insights.map((insight) => _buildInsightRow(insight)),
+          ...insights.map((insight) => _buildInsightRow(context, insight)),
         ],
       ),
     );
   }
 
-  Widget _buildInsightRow(AutoInsight insight) {
+  Widget _buildInsightRow(BuildContext context, AutoInsight insight) {
     final Color riskColor;
     switch (insight.risk) {
       case InsightRisk.low:
@@ -99,12 +99,22 @@ class AutoInsightsCard extends StatelessWidget {
             ),
           ),
           TextButton(
-            onPressed: () {},
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                builder: (context) => Container(
+                  height: 300,
+                  color: Colors.white,
+                  alignment: Alignment.center,
+                  child: const Text('Focus Control Sheet (Demo)'),
+                ),
+              );
+            },
             style: TextButton.styleFrom(
               foregroundColor: OptivusColors.brandAccent,
             ),
             child: const Text(
-              'View',
+              'Control',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),

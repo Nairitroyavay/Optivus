@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
+import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'mind_note_editor_sheet.dart';
 import 'mind_switch_sheet.dart';
 import 'dart:ui';
@@ -156,6 +157,9 @@ class FloatingQuickAdd extends ConsumerWidget {
                           Icons.water_drop,
                           () {
                             Navigator.pop(context);
+                            ref
+                                .read(homeDashboardProvider.notifier)
+                                .completeCheckIn('water', '+250ml');
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Water logged.')),
                             );

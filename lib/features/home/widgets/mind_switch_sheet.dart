@@ -5,6 +5,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_mind_note.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
+import 'home_glass_widgets.dart';
 
 class MindSwitchSheet extends ConsumerStatefulWidget {
   const MindSwitchSheet({super.key});
@@ -122,21 +123,10 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: OptivusColors.brandAccent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 0,
-          ),
-          onPressed: _nextStep,
-          child: const Text(
-            'Yes, capture it',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
+        HomeActionPill(
+          label: 'Yes, capture it',
+          selected: true,
+          onTap: _nextStep,
         ),
       ],
     );
@@ -226,21 +216,10 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
           ),
         ),
         const SizedBox(height: 24),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: OptivusColors.brandAccent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 0,
-          ),
-          onPressed: _nextStep,
-          child: const Text(
-            'Next',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
+        HomeActionPill(
+          label: 'Next',
+          selected: true,
+          onTap: _nextStep,
         ),
       ],
     );
@@ -272,58 +251,48 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
           ),
         ),
         const SizedBox(height: 24),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: OptivusColors.brandAccent,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+        Row(
+          children: [
+            Expanded(
+              child: HomeActionPill(
+                label: 'Save',
+                selected: true,
+                onTap: () => _save(false),
+              ),
             ),
-            elevation: 0,
-          ),
-          onPressed: () => _save(false),
-          child: const Text(
-            'Save',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: HomeActionPill(
+                label: 'Send to Coach',
+                onTap: () => _save(true),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white.withValues(alpha: 0.6),
-            foregroundColor: OptivusColors.brandAccent,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+        Row(
+          children: [
+            Expanded(
+              child: HomeActionPill(
+                label: 'Return to Focus',
+                compact: true,
+                onTap: () => _save(false),
+              ),
             ),
-            elevation: 0,
-          ),
-          onPressed: () => _save(true),
-          child: const Text(
-            'Send to Coach',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextButton(
-          onPressed: () => _save(false),
-          child: const Text(
-            'Return to Focus',
-            style: TextStyle(color: OptivusColors.textSecondary),
-          ),
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Making Action Plan... (Mock)')),
-            );
-          },
-          child: const Text(
-            'Make Action Plan',
-            style: TextStyle(color: OptivusColors.textSecondary),
-          ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: HomeActionPill(
+                label: 'Make Action Plan',
+                compact: true,
+                onTap: () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Making Action Plan... (Mock)')),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ],
     );

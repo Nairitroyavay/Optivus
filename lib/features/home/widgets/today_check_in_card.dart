@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
-import 'package:optivus/widgets/liquid_glass_panel.dart';
+import 'home_glass_widgets.dart';
 
 class TodayCheckInCard extends ConsumerWidget {
   final List<CheckInItem> checkIns;
@@ -14,7 +14,7 @@ class TodayCheckInCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (checkIns.isEmpty) return const SizedBox.shrink();
 
-    return LiquidGlassPanel(
+    return HomeGlassCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

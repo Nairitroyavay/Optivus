@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'home_glass_widgets.dart';
 
 class HomeHeader extends StatelessWidget {
   final String userName;
@@ -56,41 +57,28 @@ class HomeHeader extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
+              _getFormattedDate().toUpperCase(),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
               _getTimeGreeting(),
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w900,
                 color: OptivusColors.textPrimary,
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              _getFormattedDate(),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
           ],
         ),
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.5),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.8),
-              width: 1,
-            ),
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.notifications_none,
-              color: OptivusColors.textPrimary,
-              size: 24,
-            ),
-          ),
+        HomeIconPill(
+          icon: Icons.notifications_none,
+          accent: OptivusColors.textPrimary,
+          onTap: () {},
         ),
       ],
     );

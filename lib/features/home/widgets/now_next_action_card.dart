@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
+import 'home_glass_widgets.dart';
 
 class NowNextActionCard extends StatelessWidget {
   final NowNextActionState? actionState;
@@ -16,31 +17,17 @@ class NowNextActionCard extends StatelessWidget {
         actionState!.currentType == NowActionType.hardBlock ||
         actionState!.currentType == NowActionType.workBlock;
 
-    const cardColor = Color(0xFFFBF6F6);
     const pillBgColor = Color(0xFFFAF0D7);
     const pillBorderColor = Color(0xFFF1E4C3);
     const pillTextColor = Color(0xFF6B5824);
     const titleColor = Color(0xFF322F2E);
     const subtitleColor = Color(0xFF86807D);
-    const btnColor = Color(0xFFE2B814);
-    const btnTextColor = Color(0xFF534304);
     const dividerColor = Color(0xFFEDE4E1);
     const circleBtnColor = Color(0xFFF4ECEC);
     const nextLabelColor = Color(0xFFA59E9A);
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+    return HomeGlassCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -72,8 +59,8 @@ class NowNextActionCard extends StatelessWidget {
                     Text(
                       actionState!.currentTitle,
                       style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                         color: titleColor,
                       ),
                     ),
@@ -83,7 +70,7 @@ class NowNextActionCard extends StatelessWidget {
                           ? 'Was planned at ${actionState!.missedTaskTime}'
                           : actionState!.currentSubtitle,
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.w400,
                         color: subtitleColor,
                       ),
@@ -94,31 +81,11 @@ class NowNextActionCard extends StatelessWidget {
               if (!isHardBlock && !isMissed)
                 Container(
                   margin: const EdgeInsets.only(top: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: btnColor.withValues(alpha: 0.4),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: btnColor,
-                      foregroundColor: btnTextColor,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                    ),
-                    onPressed: () {},
-                    child: const Text(
-                      'Start',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
+                  child: HomeActionPill(
+                    label: 'Start',
+                    compact: true,
+                    selected: true,
+                    onTap: () {},
                   ),
                 ),
             ],
@@ -128,30 +95,25 @@ class NowNextActionCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: OptivusColors.danger,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    onPressed: () {},
-                    child: const Text('Do tiny version'),
+                  child: HomeActionPill(
+                    label: 'Do tiny version',
+                    compact: true,
+                    selected: true,
+                    onTap: () {},
                   ),
                 ),
                 const SizedBox(width: 8),
-                TextButton(
-                  onPressed: () {}, 
-                  child: const Text('Skip', style: TextStyle(color: OptivusColors.textSecondary)),
+                HomeActionPill(
+                  label: 'Skip',
+                  compact: true,
+                  onTap: () {},
                 ),
               ],
             ),
           ],
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           const Divider(color: dividerColor, height: 1, thickness: 1),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           Row(
             children: [
               Container(

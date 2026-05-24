@@ -13,8 +13,12 @@ class OptivusGradients {
     return LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
-      colors: [topColor, Colors.white, Colors.white],
-      stops: const [0.0, 0.7, 1.0],
+      colors: [
+        topColor,
+        Color.lerp(topColor, Colors.white, 0.8) ?? Colors.white,
+        const Color(0xFFF2F4F7), // Soft cool off-white for 3D contrast
+      ],
+      stops: const [0.0, 0.5, 1.0],
     );
   }
 

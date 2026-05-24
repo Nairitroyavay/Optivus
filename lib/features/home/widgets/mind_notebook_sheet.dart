@@ -5,6 +5,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_mind_note.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
+import 'home_glass_widgets.dart';
 
 class MindNotebookSheet extends ConsumerWidget {
   const MindNotebookSheet({super.key});
@@ -140,31 +141,19 @@ class MindNotebookSheet extends ConsumerWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: OptivusColors.textPrimary,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {},
-                child: const Text('Open'),
+              HomeActionPill(
+                label: 'Open',
+                compact: true,
+                onTap: () {},
               ),
               const SizedBox(width: 8),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isShared
-                      ? OptivusColors.success
-                      : OptivusColors.brandAccent,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {
+              HomeActionPill(
+                label: isShared ? 'Shared' : 'Send to Coach',
+                icon: isShared ? Icons.check : Icons.send,
+                compact: true,
+                selected: isShared ? false : true,
+                accent: isShared ? OptivusColors.success : OptivusColors.brandAccent,
+                onTap: () {
                   ref
                       .read(homeMindNoteProvider.notifier)
                       .toggleShareWithCoach(note.id);
@@ -173,8 +162,6 @@ class MindNotebookSheet extends ConsumerWidget {
                     ref.read(appNavigationProvider.notifier).goToCoach();
                   }
                 },
-                icon: Icon(isShared ? Icons.check : Icons.send, size: 16),
-                label: Text(isShared ? 'Shared' : 'Send to Coach'),
               ),
             ],
           ),

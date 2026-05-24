@@ -18,38 +18,31 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         nextActionTitle: 'Read 5 pages',
       ),
       missionSummary: HomeMissionSummary(
-        percentage: 0.0,
-        actionsDone: 0,
+        percentage: 0.65,
+        actionsDone: 4,
         actionsTotal: 6,
-        focusMinutes: 0,
-        moneySaved: 0,
-        badHabitsAvoided: 0,
+        focusMinutes: 120,
+        moneySaved: 150,
+        badHabitsAvoided: 2,
       ),
       lifeOsSnapshot: [
-        LifeOsPillarProgress(pillar: LifePillar.body, current: 0, target: 1),
-        LifeOsPillarProgress(pillar: LifePillar.mind, current: 0, target: 1),
-        LifeOsPillarProgress(
-          pillar: LifePillar.workStudy,
-          current: 0,
-          target: 2,
-        ),
-        LifeOsPillarProgress(pillar: LifePillar.finance, current: 0, target: 1),
-        LifeOsPillarProgress(pillar: LifePillar.focus, current: 0, target: 1),
+        LifeOsPillarProgress(pillar: LifePillar.body, current: 1, target: 3),
+        LifeOsPillarProgress(pillar: LifePillar.mind, current: 2, target: 2),
+        LifeOsPillarProgress(pillar: LifePillar.workStudy, current: 1, target: 2),
+        LifeOsPillarProgress(pillar: LifePillar.skill, current: 0, target: 1),
+        LifeOsPillarProgress(pillar: LifePillar.finance, current: 1, target: 1),
+        LifeOsPillarProgress(pillar: LifePillar.focus, current: 1, target: 2),
         LifeOsPillarProgress(pillar: LifePillar.growth, current: 0, target: 1),
       ],
       checkIns: [
-        CheckInItem(
-          id: 'water',
-          title: 'Water',
-          icon: '💧',
-          options: ['+250ml'],
-        ),
-        CheckInItem(
-          id: 'sleep',
-          title: 'Sleep',
-          icon: '😴',
-          options: ['Good', 'Okay', 'Poor'],
-        ),
+        CheckInItem(id: 'water', title: 'Water', icon: '💧', options: ['+250ml', '+500ml']),
+        CheckInItem(id: 'sleep', title: 'Sleep', icon: '😴', options: ['Great', 'Good', 'Poor']),
+        CheckInItem(id: 'stress', title: 'Stress', icon: '😫', options: ['Low', 'Medium', 'High']),
+        CheckInItem(id: 'mood', title: 'Mood', icon: '😊', options: ['Happy', 'Neutral', 'Sad']),
+        CheckInItem(id: 'cigarettes', title: 'Cigarettes', icon: '🚬', options: ['None', '1-5', '5+']),
+        CheckInItem(id: 'alcohol', title: 'Alcohol', icon: '🍷', options: ['None', '1 drink', 'More']),
+        CheckInItem(id: 'junk_food', title: 'Junk Food', icon: '🍔', options: ['Avoided', 'A little', 'Failed']),
+        CheckInItem(id: 'money_saved', title: 'Money Saved', icon: '💰', options: ['₹0', '₹50', '₹100+']),
       ],
       autoInsights: [
         AutoInsight(
@@ -59,25 +52,20 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         ),
       ],
       trackerPreviews: [
-        TrackerPreview(
-          id: 'money',
-          title: 'Money System',
-          subtitle: 'Save ₹10 today',
-          buttonText: 'Save via UPI',
-        ),
-        TrackerPreview(
-          id: 'med',
-          title: 'Meditation',
-          subtitle: '0 / 5 min',
-          buttonText: 'Start',
-        ),
+        TrackerPreview(id: 'meditation', title: 'Meditation', subtitle: '0 / 10 min', buttonText: 'Start'),
+        TrackerPreview(id: 'screen_time', title: 'Screen Time', subtitle: '2h 15m (Limit: 3h)', buttonText: 'Log'),
+        TrackerPreview(id: 'money', title: 'Money System', subtitle: 'Save ₹50 today', buttonText: 'Save via UPI'),
+        TrackerPreview(id: 'hydration', title: 'Hydration', subtitle: '3 / 8 glasses', buttonText: 'Drink'),
+        TrackerPreview(id: 'smoking', title: 'Smoking', subtitle: '0 cigarettes', buttonText: 'Log'),
+        TrackerPreview(id: 'workout', title: 'Workout', subtitle: 'Not started', buttonText: 'Start'),
+        TrackerPreview(id: 'focus', title: 'Deep Focus', subtitle: '45m completed', buttonText: 'Focus'),
       ],
       coachTip: CoachTip(
         coachName: 'Sensei',
         message: 'Start with one small win. Do not wait for motivation.',
       ),
       comingUpItems: [
-        const ComingUpItem(
+        ComingUpItem(
           time: '9:00',
           amPm: 'AM',
           title: 'Class',
@@ -86,7 +74,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
           iconBgColor: Color(0xFFF6E8CE),
           isNext: true,
         ),
-        const ComingUpItem(
+        ComingUpItem(
           time: '6:30',
           amPm: 'PM',
           title: 'Gym',
@@ -94,7 +82,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
           iconColor: Color(0xFF754545),
           iconBgColor: Color(0xFFFAEAEC),
         ),
-        const ComingUpItem(
+        ComingUpItem(
           time: '9:45',
           amPm: 'PM',
           title: 'Save ₹10',

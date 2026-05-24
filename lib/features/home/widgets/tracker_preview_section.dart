@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
+import 'home_glass_widgets.dart';
 
 class TrackerPreviewSection extends ConsumerWidget {
   final List<TrackerPreview> previews;
@@ -31,7 +33,7 @@ class TrackerPreviewSection extends ConsumerWidget {
             itemCount: previews.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
-              return _buildPreviewCard(context, previews[index]);
+              return _buildPreviewCard(context, ref, previews[index]);
             },
           ),
         ),
@@ -39,24 +41,14 @@ class TrackerPreviewSection extends ConsumerWidget {
     );
   }
 
-  Widget _buildPreviewCard(BuildContext context, TrackerPreview preview) {
-    return Container(
+  Widget _buildPreviewCard(BuildContext context, WidgetRef ref, TrackerPreview preview) {
+    return SizedBox(
       width: 160,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: HomeGlassCard(
+        padding: const EdgeInsets.all(16),
+        radius: 20,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             preview.title,
@@ -82,34 +74,17 @@ class TrackerPreviewSection extends ConsumerWidget {
           const Spacer(),
           SizedBox(
             width: double.infinity,
-            height: 32,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: OptivusColors.brandAccent.withValues(
-                  alpha: 0.1,
-                ),
-                foregroundColor: OptivusColors.brandAccent,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: EdgeInsets.zero,
-              ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${preview.buttonText} action...')),
-                );
+            child: HomeActionPill(
+              label: preview.buttonText,
+              compact: true,
+              selected: true,
+              onTap: () {
+                ref.read(appNavigationProvider.notifier).goToTracker();
               },
-              child: Text(
-                preview.buttonText,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
             ),
           ),
         ],
+      ),
       ),
     );
   }

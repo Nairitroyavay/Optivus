@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
-import 'package:optivus/widgets/liquid_glass_panel.dart';
+import 'home_glass_widgets.dart';
 
 class TodayIdentityCard extends StatelessWidget {
   final IdentityFocus? identity;
@@ -18,8 +18,8 @@ class TodayIdentityCard extends StatelessWidget {
         ? '${identity!.primaryIdentity} + ${identity!.secondaryIdentity}'
         : identity!.primaryIdentity;
 
-    return LiquidGlassPanel(
-      padding: const EdgeInsets.all(20),
+    return HomeGlassCard(
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -5,6 +5,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_mind_note.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
+import 'home_glass_widgets.dart';
 
 class MindNoteEditorSheet extends ConsumerStatefulWidget {
   const MindNoteEditorSheet({super.key});
@@ -134,7 +135,9 @@ class _MindNoteEditorSheetState extends ConsumerState<MindNoteEditorSheet> {
                           label: Text(type.name),
                           selected: isSelected,
                           onSelected: (val) {
-                            if (val) setState(() => _selectedType = type);
+                            if (val) {
+                              setState(() => _selectedType = type);
+                            }
                           },
                           backgroundColor: Colors.white.withValues(alpha: 0.5),
                           selectedColor: OptivusColors.brandAccent.withValues(
@@ -168,8 +171,9 @@ class _MindNoteEditorSheetState extends ConsumerState<MindNoteEditorSheet> {
                           label: Text(intensity.name),
                           selected: isSelected,
                           onSelected: (val) {
-                            if (val)
+                            if (val) {
                               setState(() => _selectedIntensity = intensity);
+                            }
                           },
                           backgroundColor: Colors.white.withValues(alpha: 0.5),
                           selectedColor: const Color(
@@ -192,50 +196,35 @@ class _MindNoteEditorSheetState extends ConsumerState<MindNoteEditorSheet> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: OptivusColors.brandAccent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: HomeActionPill(
+                        label: 'Save',
+                        selected: true,
+                        onTap: () => _saveNote(sendToCoach: false),
+                      ),
                     ),
-                    elevation: 0,
-                  ),
-                  onPressed: () => _saveNote(sendToCoach: false),
-                  child: const Text(
-                    'Save',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: HomeActionPill(
+                        label: 'Send to Coach',
+                        onTap: () => _saveNote(sendToCoach: true),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.6),
-                    foregroundColor: OptivusColors.brandAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
-                  ),
-                  onPressed: () => _saveNote(sendToCoach: true),
-                  child: const Text(
-                    'Save + Send to Coach',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () {
-                    _saveNote(sendToCoach: false);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Returning to focus...')),
-                    );
-                  },
-                  child: const Text(
-                    'Return to Focus',
-                    style: TextStyle(color: OptivusColors.textSecondary),
+                Center(
+                  child: HomeActionPill(
+                    label: 'Return to Focus',
+                    compact: true,
+                    onTap: () {
+                      _saveNote(sendToCoach: false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Returning to focus...')),
+                      );
+                    },
                   ),
                 ),
               ],

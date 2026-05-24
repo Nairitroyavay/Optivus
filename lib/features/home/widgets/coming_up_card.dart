@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'home_glass_widgets.dart';
 
 class ComingUpCard extends ConsumerWidget {
   final List<ComingUpItem> items;
@@ -12,12 +13,8 @@ class ComingUpCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (items.isEmpty) return const SizedBox.shrink();
 
-    return Container(
+    return HomeGlassCard(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFCF5F5), // subtle warm background matching design
-        borderRadius: BorderRadius.circular(24),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -133,15 +130,6 @@ class ComingUpCard extends ConsumerWidget {
                   border: item.isNext
                       ? Border.all(color: const Color(0xFFF6E8CE), width: 1.5)
                       : null,
-                  boxShadow: item.isNext
-                      ? [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          )
-                        ]
-                      : [],
                 ),
                 child: Row(
                   children: [

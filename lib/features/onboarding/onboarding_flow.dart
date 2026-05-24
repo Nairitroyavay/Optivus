@@ -202,8 +202,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     ref.read(mockCoachProvider.notifier).createNewSession(
       'Onboarding Review',
       CoachSessionType.generalChat,
-      bundle.coachPreferences.name ?? 'Coach',
-      bundle.coachPreferences.style ?? 'Supportive',
+      bundle.coachPreferences.name,
+      bundle.coachPreferences.style,
     );
 
     final authUser = ref.read(authProvider).user;

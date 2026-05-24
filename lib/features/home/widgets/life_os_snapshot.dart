@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
+import 'home_glass_widgets.dart';
 
 class LifeOsSnapshot extends StatelessWidget {
   final List<LifeOsPillarProgress> pillars;
@@ -20,8 +21,8 @@ class LifeOsSnapshot extends StatelessWidget {
         return const Color(0xFFDCDCE2); // Light grey/lavender
       case LifePillar.growth:
         return const Color(0xFF6B5319); // Dark olive/brown
-      default:
-        return Colors.grey;
+      case LifePillar.skill:
+        return const Color(0xFF8B5A2B); // Brownish
     }
   }
 
@@ -39,20 +40,15 @@ class LifeOsSnapshot extends StatelessWidget {
         return 'Focus';
       case LifePillar.growth:
         return 'Growth';
-      default:
-        return pillar.name;
+      case LifePillar.skill:
+        return 'Skill';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return HomeGlassCard(
       padding: const EdgeInsets.all(24),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFCF5F5), // match design background
-        borderRadius: BorderRadius.circular(24),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -68,15 +64,27 @@ class LifeOsSnapshot extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: pillars.map((p) => _buildPillarChip(p)).toList(),
+            children: pillars.map((p) => _buildPillarChip(context, p)).toList(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPillarChip(LifeOsPillarProgress progress) {
-    return Container(
+  Widget _buildPillarChip(BuildContext context, LifeOsPillarProgress progress) {
+    return GestureDetector(
+      onTap: () {
+        showModalBottomSheet(
+          context: context,
+          builder: (context) => Container(
+            height: 200,
+            color: Colors.white,
+            alignment: Alignment.center,
+            child: Text('${_formatPillarName(progress.pillar)} Detail Sheet (Demo)'),
+          ),
+        );
+      },
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -104,6 +112,6 @@ class LifeOsSnapshot extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }

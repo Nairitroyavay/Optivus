@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
-import 'package:optivus/widgets/liquid_glass_panel.dart';
+import 'home_glass_widgets.dart';
 import 'mind_note_editor_sheet.dart';
 import 'mind_notebook_sheet.dart';
 import 'mind_switch_sheet.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
 
 class MindTimelineCard extends ConsumerWidget {
   const MindTimelineCard({super.key});
@@ -16,8 +17,8 @@ class MindTimelineCard extends ConsumerWidget {
     final hasNotes = notes.isNotEmpty;
     final latestNote = hasNotes ? notes.first : null;
 
-    return LiquidGlassPanel(
-      padding: const EdgeInsets.all(24),
+    return HomeGlassCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -97,16 +98,12 @@ class MindTimelineCard extends ConsumerWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: OptivusColors.brandAccent,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {
+              HomeActionPill(
+                label: 'Add Thought',
+                icon: Icons.add,
+                compact: true,
+                selected: true,
+                onTap: () {
                   showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
@@ -114,23 +111,12 @@ class MindTimelineCard extends ConsumerWidget {
                     builder: (context) => const MindNoteEditorSheet(),
                   );
                 },
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text(
-                  'Add Thought',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
               ),
               if (!hasNotes)
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: OptivusColors.textPrimary,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () {
+                HomeActionPill(
+                  label: 'Mind Switch',
+                  compact: true,
+                  onTap: () {
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
@@ -138,21 +124,11 @@ class MindTimelineCard extends ConsumerWidget {
                       builder: (context) => const MindSwitchSheet(),
                     );
                   },
-                  child: const Text(
-                    'Mind Switch',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
                 ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: OptivusColors.textPrimary,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {
+              HomeActionPill(
+                label: 'Open Notebook',
+                compact: true,
+                onTap: () {
                   showModalBottomSheet(
                     context: context,
                     isScrollControlled: true,
@@ -160,11 +136,15 @@ class MindTimelineCard extends ConsumerWidget {
                     builder: (context) => const MindNotebookSheet(),
                   );
                 },
-                child: const Text(
-                  'Open Notebook',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
               ),
+              if (hasNotes)
+                HomeActionPill(
+                  label: 'Send to Coach',
+                  compact: true,
+                  onTap: () {
+                    ref.read(appNavigationProvider.notifier).goToCoach();
+                  },
+                ),
             ],
           ),
         ],

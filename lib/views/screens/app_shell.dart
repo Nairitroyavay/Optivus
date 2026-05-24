@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/widgets/liquid_glass_tabbar.dart';
-import 'package:optivus/widgets/animated_bot_avatar.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/home_tab.dart';
 import 'package:optivus/features/routine/routine_tab.dart';
