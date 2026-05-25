@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/mission_detail_sheet.dart';
 
 class TodayMissionCard extends StatefulWidget {
   final HomeMissionSummary summary;
@@ -87,15 +88,7 @@ class _TodayMissionCardState extends State<TodayMissionCard>
 
     return GestureDetector(
       onTap: () {
-        showModalBottomSheet(
-          context: context,
-          builder: (context) => Container(
-            height: 200,
-            color: Colors.white,
-            alignment: Alignment.center,
-            child: const Text('Mission Detail Sheet (Demo)'),
-          ),
-        );
+        MissionDetailSheet.show(context);
       },
       child: HomeGlassCard(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),

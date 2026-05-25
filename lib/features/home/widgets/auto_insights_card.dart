@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/focus_control_sheet.dart';
 
 class AutoInsightsCard extends StatelessWidget {
   final List<AutoInsight> insights;
@@ -100,15 +101,7 @@ class AutoInsightsCard extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              showModalBottomSheet(
-                context: context,
-                builder: (context) => Container(
-                  height: 300,
-                  color: Colors.white,
-                  alignment: Alignment.center,
-                  child: const Text('Focus Control Sheet (Demo)'),
-                ),
-              );
+              FocusControlSheet.show(context);
             },
             style: TextButton.styleFrom(
               foregroundColor: OptivusColors.brandAccent,

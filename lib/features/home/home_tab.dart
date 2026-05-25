@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 
+import 'package:optivus/app/app_navigation_controller.dart';
+
 import 'widgets/home_header.dart';
 import 'widgets/today_identity_card.dart';
 import 'widgets/now_next_action_card.dart';
@@ -32,7 +34,10 @@ class HomeTab extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: Colors.transparent, // Background gradient is handled by app shell
-      floatingActionButton: const FloatingQuickAdd(),
+      floatingActionButton: const Padding(
+        padding: EdgeInsets.only(bottom: 140.0),
+        child: FloatingQuickAdd(),
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: SafeArea(
         bottom: false,
@@ -46,11 +51,14 @@ class HomeTab extends ConsumerWidget {
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 180),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TodayIdentityCard(identity: dashboardState.identityFocus),
+                    TodayIdentityCard(
+                      identity: dashboardState.identityFocus,
+                      onTap: () => ref.read(appNavigationProvider.notifier).goToGoals(),
+                    ),
                     const SizedBox(height: 16),
                     NowNextActionCard(actionState: dashboardState.nowNextAction),
                     const SizedBox(height: 16),

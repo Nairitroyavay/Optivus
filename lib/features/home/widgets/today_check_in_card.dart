@@ -61,41 +61,22 @@ class TodayCheckInCard extends ConsumerWidget {
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
+            runSpacing: 8,
             children: item.options.map((option) {
               final isSelected = item.selectedOption == option;
-              return InkWell(
+              final useGold = item.id == 'money_saved';
+              final activeColor = useGold ? OptivusColors.brandAccent : OptivusColors.homeAccent;
+
+              return HomeActionPill(
+                label: option,
+                selected: isSelected,
+                compact: true,
+                accent: activeColor,
                 onTap: () {
                   ref
                       .read(homeDashboardProvider.notifier)
                       .completeCheckIn(item.id, option);
                 },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? OptivusColors.brandAccent
-                        : Colors.white.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected
-                          ? OptivusColors.brandAccent
-                          : Colors.white,
-                    ),
-                  ),
-                  child: Text(
-                    option,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected
-                          ? Colors.white
-                          : OptivusColors.textSecondary,
-                    ),
-                  ),
-                ),
               );
             }).toList(),
           ),

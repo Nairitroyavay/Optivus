@@ -22,8 +22,8 @@ void main() async {
     ),
   );
 
-  // Enable edge-to-edge mode (default app mode — not forced immersive hidden bars)
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  // Enable true full screen (immersive mode, hides status and nav bars)
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   if (OptivusBackendConfig.useFirebase) {
     await Firebase.initializeApp(

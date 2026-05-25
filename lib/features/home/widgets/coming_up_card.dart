@@ -3,6 +3,7 @@ import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/demo_sheet.dart';
 
 class ComingUpCard extends ConsumerWidget {
   final List<ComingUpItem> items;
@@ -53,14 +54,14 @@ class ComingUpCard extends ConsumerWidget {
           ...items.asMap().entries.map((entry) {
             final isFirst = entry.key == 0;
             final isLast = entry.key == items.length - 1;
-            return _buildItemRow(entry.value, isFirst, isLast);
+            return _buildItemRow(context, entry.value, isFirst, isLast);
           }),
         ],
       ),
     );
   }
 
-  Widget _buildItemRow(ComingUpItem item, bool isFirst, bool isLast) {
+  Widget _buildItemRow(BuildContext context, ComingUpItem item, bool isFirst, bool isLast) {
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -122,17 +123,21 @@ class ComingUpCard extends ConsumerWidget {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: item.isNext ? Colors.white : const Color(0xFFFCF8F9),
-                  borderRadius: BorderRadius.circular(16),
-                  border: item.isNext
-                      ? Border.all(color: const Color(0xFFF6E8CE), width: 1.5)
-                      : null,
-                ),
-                child: Row(
-                  children: [
+              child: GestureDetector(
+                onTap: () {
+                  DemoSheet.show(context, title: item.title, message: 'Routine / Calendar event details here.');
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: item.isNext ? Colors.white : const Color(0xFFFCF8F9),
+                    borderRadius: BorderRadius.circular(16),
+                    border: item.isNext
+                        ? Border.all(color: const Color(0xFFF6E8CE), width: 1.5)
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
                     Container(
                       width: 44,
                       height: 44,
@@ -167,6 +172,7 @@ class ComingUpCard extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
           ),
         ],
       ),

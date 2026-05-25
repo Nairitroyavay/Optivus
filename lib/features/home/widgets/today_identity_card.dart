@@ -5,8 +5,9 @@ import 'home_glass_widgets.dart';
 
 class TodayIdentityCard extends StatelessWidget {
   final IdentityFocus? identity;
+  final VoidCallback? onTap;
 
-  const TodayIdentityCard({super.key, this.identity});
+  const TodayIdentityCard({super.key, this.identity, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -18,16 +19,18 @@ class TodayIdentityCard extends StatelessWidget {
         ? '${identity!.primaryIdentity} + ${identity!.secondaryIdentity}'
         : identity!.primaryIdentity;
 
-    return HomeGlassCard(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return GestureDetector(
+      onTap: onTap,
+      child: HomeGlassCard(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Row(
             children: [
               const Icon(
                 Icons.psychology,
-                color: OptivusColors.brandAccent,
+                color: OptivusColors.homeAccent,
                 size: 20,
               ),
               const SizedBox(width: 8),
@@ -55,7 +58,7 @@ class TodayIdentityCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: OptivusColors.brandAccent.withValues(alpha: 0.1),
+              color: OptivusColors.homeAccent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -63,7 +66,7 @@ class TodayIdentityCard extends StatelessWidget {
                 const Icon(
                   Icons.verified,
                   size: 14,
-                  color: OptivusColors.brandAccent,
+                  color: OptivusColors.homeAccent,
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -81,6 +84,7 @@ class TodayIdentityCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 }

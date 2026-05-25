@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/home_notification_sheet.dart';
 
 class HomeHeader extends StatelessWidget {
   final String userName;
@@ -75,10 +76,27 @@ class HomeHeader extends StatelessWidget {
             ),
           ],
         ),
-        HomeIconPill(
-          icon: Icons.notifications_none,
-          accent: OptivusColors.textPrimary,
-          onTap: () {},
+        Stack(
+          children: [
+            HomeIconPill(
+              icon: Icons.notifications_none,
+              accent: OptivusColors.textPrimary,
+              onTap: () => HomeNotificationSheet.show(context),
+            ),
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: OptivusColors.homeAccent,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

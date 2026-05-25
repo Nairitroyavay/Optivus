@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/pillar_detail_sheets.dart';
 
 class LifeOsSnapshot extends StatelessWidget {
   final List<LifeOsPillarProgress> pillars;
@@ -33,7 +34,7 @@ class LifeOsSnapshot extends StatelessWidget {
       case LifePillar.mind:
         return 'Mind';
       case LifePillar.workStudy:
-        return 'Work Study';
+        return 'Work / Study';
       case LifePillar.finance:
         return 'Finance';
       case LifePillar.focus:
@@ -53,7 +54,7 @@ class LifeOsSnapshot extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Life OS Snapshot',
+            'Life OS Today',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -74,15 +75,7 @@ class LifeOsSnapshot extends StatelessWidget {
   Widget _buildPillarChip(BuildContext context, LifeOsPillarProgress progress) {
     return GestureDetector(
       onTap: () {
-        showModalBottomSheet(
-          context: context,
-          builder: (context) => Container(
-            height: 200,
-            color: Colors.white,
-            alignment: Alignment.center,
-            child: Text('${_formatPillarName(progress.pillar)} Detail Sheet (Demo)'),
-          ),
-        );
+        PillarDetailSheet.show(context, progress.pillar);
       },
       child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

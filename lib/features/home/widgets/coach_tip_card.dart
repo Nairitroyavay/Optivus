@@ -14,55 +14,60 @@ class CoachTipCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (tip == null) return const SizedBox.shrink();
 
-    return HomeGlassCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '${tip!.coachName}:',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.textPrimary,
+    return GestureDetector(
+      onTap: () {
+        ref.read(appNavigationProvider.notifier).goToCoach();
+      },
+      child: HomeGlassCard(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '${tip!.coachName}:',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            tip!.message,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: OptivusColors.textSecondary,
-              height: 1.4,
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              HomeActionPill(
-                label: 'Ask Coach',
-                compact: true,
-                selected: true,
-                onTap: () {
-                  ref.read(appNavigationProvider.notifier).goToCoach();
-                },
+            const SizedBox(height: 12),
+            Text(
+              tip!.message,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.textSecondary,
+                height: 1.4,
               ),
-              const SizedBox(width: 8),
-              HomeActionPill(
-                label: 'Improve Plan',
-                compact: true,
-                onTap: () {
-                  ref.read(appNavigationProvider.notifier).goToRoutine();
-                },
-              ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                HomeActionPill(
+                  label: 'Ask Coach',
+                  compact: true,
+                  selected: true,
+                  onTap: () {
+                    ref.read(appNavigationProvider.notifier).goToCoach();
+                  },
+                ),
+                const SizedBox(width: 8),
+                HomeActionPill(
+                  label: 'Improve Today\'s Plan',
+                  compact: true,
+                  onTap: () {
+                    ref.read(appNavigationProvider.notifier).goToRoutine();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

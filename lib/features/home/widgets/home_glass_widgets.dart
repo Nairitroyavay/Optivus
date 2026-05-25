@@ -34,7 +34,7 @@ class HomeGlassCard extends StatelessWidget {
             decoration: BoxDecoration(
               color:
                   tint ??
-                  const Color(0xFFFFF1F1).withValues(alpha: selected ? 0.35 : 0.15),
+                  OptivusColors.homeCardTint.withValues(alpha: selected ? 0.35 : 0.15),
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
                 color: Colors.white.withValues(alpha: selected ? 0.95 : 0.65),
@@ -549,8 +549,8 @@ class HomeActionPill extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: selected
-                      ? const Color(0xFFFFF1F1).withValues(alpha: 0.4)
-                      : const Color(0xFFFFF1F1).withValues(alpha: 0.15),
+                      ? OptivusColors.homeCardTint.withValues(alpha: 0.4)
+                      : OptivusColors.homeCardTint.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(radius),
                   border: Border.all(
                     color: selected
@@ -661,7 +661,7 @@ class HomeIconPill extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF1F1).withValues(alpha: 0.15),
+                color: OptivusColors.homeCardTint.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
                 gradient: LinearGradient(
@@ -742,7 +742,7 @@ class HomeDayDroplet extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFFFFF1F1).withValues(alpha: 0.15),
+                color: OptivusColors.homeCardTint.withValues(alpha: 0.15),
                 border: Border.all(
                   color: Colors.white.withValues(alpha: selected ? 0.8 : 0.4),
                   width: 1.0,
@@ -758,7 +758,7 @@ class HomeDayDroplet extends StatelessWidget {
                         ]
                       : [
                           Colors.white.withValues(alpha: 0.6),
-                          const Color(0xFFFFF1F1).withValues(alpha: 0.15),
+                          OptivusColors.homeCardTint.withValues(alpha: 0.15),
                           Colors.black.withValues(alpha: 0.02),
                         ],
                 ),

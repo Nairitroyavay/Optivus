@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/app/app_navigation_controller.dart';
-import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'mind_note_editor_sheet.dart';
 import 'mind_switch_sheet.dart';
+import 'sheets/demo_sheet.dart';
 import 'dart:ui';
 
 class FloatingQuickAdd extends ConsumerWidget {
@@ -92,7 +91,16 @@ class FloatingQuickAdd extends ConsumerWidget {
                       children: [
                         _buildActionChip(
                           context,
-                          'Add mind note',
+                          'Log Tracker',
+                          Icons.track_changes,
+                          () {
+                            Navigator.pop(context);
+                            DemoSheet.show(context, title: 'Manual Tracker', message: 'Manual tracker log entry dialog would appear here.');
+                          },
+                        ),
+                        _buildActionChip(
+                          context,
+                          'Add Thought',
                           Icons.psychology,
                           () {
                             Navigator.pop(context);
@@ -106,6 +114,15 @@ class FloatingQuickAdd extends ConsumerWidget {
                         ),
                         _buildActionChip(
                           context,
+                          'Quick Task',
+                          Icons.check_box_outlined,
+                          () {
+                            Navigator.pop(context);
+                            DemoSheet.show(context, title: 'New Task', message: 'New Quick Task Added.');
+                          },
+                        ),
+                        _buildActionChip(
+                          context,
                           'Mind Switch',
                           Icons.switch_access_shortcut,
                           () {
@@ -115,66 +132,6 @@ class FloatingQuickAdd extends ConsumerWidget {
                               isScrollControlled: true,
                               backgroundColor: Colors.transparent,
                               builder: (context) => const MindSwitchSheet(),
-                            );
-                          },
-                        ),
-                        _buildActionChip(
-                          context,
-                          'Add task',
-                          Icons.check_box_outlined,
-                          () {
-                            Navigator.pop(context);
-                            ref
-                                .read(appNavigationProvider.notifier)
-                                .goToRoutine();
-                          },
-                        ),
-                        _buildActionChip(
-                          context,
-                          'Add fixed block',
-                          Icons.calendar_month,
-                          () {
-                            Navigator.pop(context);
-                            ref
-                                .read(appNavigationProvider.notifier)
-                                .goToRoutine();
-                          },
-                        ),
-                        _buildActionChip(
-                          context,
-                          'Ask coach',
-                          Icons.chat_bubble_outline,
-                          () {
-                            Navigator.pop(context);
-                            ref
-                                .read(appNavigationProvider.notifier)
-                                .goToCoach();
-                          },
-                        ),
-                        _buildActionChip(
-                          context,
-                          'Log water',
-                          Icons.water_drop,
-                          () {
-                            Navigator.pop(context);
-                            ref
-                                .read(homeDashboardProvider.notifier)
-                                .completeCheckIn('water', '+250ml');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Water logged.')),
-                            );
-                          },
-                        ),
-                        _buildActionChip(
-                          context,
-                          'Log saved money',
-                          Icons.savings,
-                          () {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Money saved logged.'),
-                              ),
                             );
                           },
                         ),

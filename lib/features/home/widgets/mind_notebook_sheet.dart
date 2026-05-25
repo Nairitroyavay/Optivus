@@ -6,6 +6,7 @@ import 'package:optivus/features/home/models/home_mind_note.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/note_detail_sheet.dart';
 
 class MindNotebookSheet extends ConsumerWidget {
   const MindNotebookSheet({super.key});
@@ -76,8 +77,31 @@ class MindNotebookSheet extends ConsumerWidget {
                         itemCount: notes.length,
                         itemBuilder: (context, index) {
                           final note = notes[index];
-                          // Grouping by date isn't fully implemented in mock, but we can display the date per card
-                          return _buildNoteCard(context, ref, note);
+                          final isFirst = index == 0;
+                          final previousNote = isFirst ? null : notes[index - 1];
+                          
+                          final currentDay = note.createdAt.day;
+                          final previousDay = previousNote?.createdAt.day;
+                          final showHeader = isFirst || currentDay != previousDay;
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (showHeader)
+                                Padding(
+                                  padding: EdgeInsets.only(bottom: 12, top: index == 0 ? 0 : 16),
+                                  child: Text(
+                                    currentDay == DateTime.now().day ? 'Today' : 'Earlier',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w900,
+                                      color: OptivusColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              _buildNoteCard(context, ref, note),
+                            ],
+                          );
                         },
                       ),
               ),
@@ -144,7 +168,9 @@ class MindNotebookSheet extends ConsumerWidget {
               HomeActionPill(
                 label: 'Open',
                 compact: true,
-                onTap: () {},
+                onTap: () {
+                  NoteDetailSheet.show(context, note);
+                },
               ),
               const SizedBox(width: 8),
               HomeActionPill(

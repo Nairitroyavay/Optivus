@@ -4,6 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/demo_sheet.dart';
 
 class TrackerPreviewSection extends ConsumerWidget {
   final List<TrackerPreview> previews;
@@ -78,8 +79,19 @@ class TrackerPreviewSection extends ConsumerWidget {
               label: preview.buttonText,
               compact: true,
               selected: true,
+              accent: preview.id == 'money' ? OptivusColors.brandAccent : OptivusColors.homeAccent,
               onTap: () {
-                ref.read(appNavigationProvider.notifier).goToTracker();
+                if (preview.id == 'money') {
+                  DemoSheet.show(context, title: "Saved", message: "₹50 added to your Money System.");
+                } else if (preview.id == 'hydration') {
+                  DemoSheet.show(context, title: "Hydration", message: "+1 glass of water logged.");
+                } else if (preview.id == 'smoking') {
+                  DemoSheet.show(context, title: "Smoking", message: "Cigarette logged in tracker.");
+                } else if (preview.id == 'focus') {
+                  DemoSheet.show(context, title: "Deep Focus", message: "Deep focus session started.");
+                } else {
+                  ref.read(appNavigationProvider.notifier).goToTracker();
+                }
               },
             ),
           ),

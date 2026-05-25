@@ -24,7 +24,7 @@ class OptivusColors {
   static const Color homeCardTint = Color(0xFFFFF1F1);
 
   // Routine
-  static const Color routineTop = Color(0xFFE4FAD4);
+  static const Color routineTop = Color(0xFFE1FFAD);
   static const Color routineAccent = Color(0xFF72C95F);
   static const Color routineCardTint = Color(0xFFF2FCEC);
 

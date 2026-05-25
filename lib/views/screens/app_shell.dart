@@ -8,10 +8,11 @@ import 'package:optivus/features/tracker/tracker_tab.dart';
 import 'package:optivus/features/coach/coach_tab.dart';
 import 'package:optivus/features/goals/goals_tab.dart';
 import 'package:optivus/features/profile/profile_tab.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
 
 // Per-tab gradient definitions using the blueprint OptivusColors tokens exactly
 const List<List<Color>> _tabGradients = [
-  [OptivusColors.homeTop, Colors.white], // Home: #FFE0E0
+  [OptivusColors.homeTop, Color(0xFFFFEDED)], // Home: #FFE0E0 to #FFEDED
   [OptivusColors.routineTop, Colors.white], // Routine: #E4FAD4
   [OptivusColors.trackerTop, Colors.white], // Tracker: #D6FFFF
   [OptivusColors.coachTop, Colors.white], // Coach: #F7E0FF
@@ -39,15 +40,18 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  int _currentIndex = 0;
   late final List<Widget?> _tabCache;
 
   @override
   void initState() {
     super.initState();
     _tabCache = List<Widget?>.filled(_tabGradients.length, null);
-    _currentIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
-    _ensureTabLoaded(_currentIndex);
+    _ensureTabLoaded(widget.initialIndex.clamp(0, _tabGradients.length - 1));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appNavigationProvider.notifier).setTab(
+        widget.initialIndex.clamp(0, _tabGradients.length - 1),
+      );
+    });
   }
 
   void _ensureTabLoaded(int index) {
@@ -63,7 +67,9 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = _tabGradients[_currentIndex];
+    final currentIndex = ref.watch(appNavigationProvider);
+    _ensureTabLoaded(currentIndex);
+    final colors = _tabGradients[currentIndex];
 
     return Scaffold(
       extendBody: true,
@@ -86,12 +92,12 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: Column(
             children: [
               // Dynamic Premium Header
-              _buildHeader(),
+              _buildHeader(currentIndex),
 
               // Active Tab Content inside a state-preserving stack
               Expanded(
                 child: IndexedStack(
-                  index: _currentIndex,
+                  index: currentIndex,
                   children: List.generate(
                     _tabGradients.length,
                     (index) => _tabCache[index] ?? const SizedBox.shrink(),
@@ -103,20 +109,17 @@ class _AppShellState extends ConsumerState<AppShell> {
         ),
       ),
       bottomNavigationBar: LiquidGlassTabBar(
-        currentIndex: _currentIndex,
+        currentIndex: currentIndex,
         onTap: (index) {
-          setState(() {
-            _ensureTabLoaded(index);
-            _currentIndex = index;
-          });
+          ref.read(appNavigationProvider.notifier).setTab(index);
         },
-        activeColor: _tabAccents[_currentIndex],
+        activeColor: _tabAccents[currentIndex],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    if (_currentIndex == 0) {
+  Widget _buildHeader(int currentIndex) {
+    if (currentIndex == 0) {
       return const SizedBox.shrink();
     }
 
@@ -124,7 +127,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     String subtitle = '';
     Widget trailing = const SizedBox.shrink();
 
-    switch (_currentIndex) {
+    switch (currentIndex) {
       case 1:
         title = 'Routines';
         subtitle = 'Daily commitments & habits';

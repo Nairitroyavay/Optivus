@@ -6,6 +6,7 @@ import 'package:optivus/features/home/models/home_mind_note.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/mini_action_plan_sheet.dart';
 
 class MindSwitchSheet extends ConsumerStatefulWidget {
   const MindSwitchSheet({super.key});
@@ -28,6 +29,12 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
   void _nextStep() {
     setState(() {
       _step++;
+    });
+  }
+
+  void _prevStep() {
+    setState(() {
+      if (_step > 0) _step--;
     });
   }
 
@@ -140,6 +147,16 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
       children: [
         _buildHandle(),
         const Text(
+          'Step 2 of 4',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: OptivusColors.textSecondary,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        const Text(
           'What kind of thought is this?',
           style: TextStyle(
             fontSize: 20,
@@ -177,6 +194,11 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
             );
           }).toList(),
         ),
+        const SizedBox(height: 24),
+        HomeActionPill(
+          label: 'Back',
+          onTap: _prevStep,
+        ),
       ],
     );
   }
@@ -188,6 +210,16 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildHandle(),
+        const Text(
+          'Step 3 of 4',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: OptivusColors.textSecondary,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
         const Text(
           'Write one line.',
           style: TextStyle(
@@ -216,10 +248,23 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
           ),
         ),
         const SizedBox(height: 24),
-        HomeActionPill(
-          label: 'Next',
-          selected: true,
-          onTap: _nextStep,
+        Row(
+          children: [
+            Expanded(
+              child: HomeActionPill(
+                label: 'Back',
+                onTap: _prevStep,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: HomeActionPill(
+                label: 'Next',
+                selected: true,
+                onTap: _nextStep,
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -232,6 +277,16 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildHandle(),
+        const Text(
+          'Step 4 of 4',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: OptivusColors.textSecondary,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
         const Text(
           'Good. You noticed it.',
           style: TextStyle(
@@ -285,10 +340,8 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
                 label: 'Make Action Plan',
                 compact: true,
                 onTap: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Making Action Plan... (Mock)')),
-                  );
+                  _save(false);
+                  MiniActionPlanSheet.show(context);
                 },
               ),
             ),

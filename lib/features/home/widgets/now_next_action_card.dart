@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
+import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
 import 'home_glass_widgets.dart';
+import 'sheets/demo_sheet.dart';
 
-class NowNextActionCard extends StatelessWidget {
+class NowNextActionCard extends ConsumerWidget {
   final NowNextActionState? actionState;
 
   const NowNextActionCard({super.key, this.actionState});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (actionState == null) return const SizedBox.shrink();
 
     final isMissed = actionState!.currentType == NowActionType.missedTask;
@@ -38,20 +42,25 @@ class NowNextActionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isMissed ? OptivusColors.danger.withValues(alpha: 0.1) : pillBgColor,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: isMissed ? OptivusColors.danger.withValues(alpha: 0.3) : pillBorderColor),
-                      ),
-                      child: Text(
-                        isMissed ? 'MISSED' : 'NOW',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: isMissed ? OptivusColors.danger : pillTextColor,
-                          letterSpacing: 2.0,
+                    GestureDetector(
+                      onTap: () {
+                        ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isMissed ? OptivusColors.danger.withValues(alpha: 0.1) : pillBgColor,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: isMissed ? OptivusColors.danger.withValues(alpha: 0.3) : pillBorderColor),
+                        ),
+                        child: Text(
+                          isMissed ? 'MISSED' : 'NOW',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: isMissed ? OptivusColors.danger : pillTextColor,
+                            letterSpacing: 2.0,
+                          ),
                         ),
                       ),
                     ),
@@ -82,10 +91,16 @@ class NowNextActionCard extends StatelessWidget {
                 Container(
                   margin: const EdgeInsets.only(top: 8),
                   child: HomeActionPill(
-                    label: 'Start',
+                    label: actionState!.currentType == NowActionType.freeTime ? 'Start 10 min' : 'Start',
                     compact: true,
                     selected: true,
-                    onTap: () {},
+                    onTap: () {
+                      if (actionState!.currentType == NowActionType.freeTime) {
+                        DemoSheet.show(context, title: "Focus Started", message: "10 minute deep focus block initiated.");
+                      } else {
+                        ref.read(appNavigationProvider.notifier).goToTracker();
+                      }
+                    },
                   ),
                 ),
             ],
@@ -99,14 +114,29 @@ class NowNextActionCard extends StatelessWidget {
                     label: 'Do tiny version',
                     compact: true,
                     selected: true,
-                    onTap: () {},
+                    onTap: () {
+                      DemoSheet.show(context, title: "Tiny Version", message: "Task downgraded to a 2-minute tiny version.");
+                      ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                    },
                   ),
+                ),
+                const SizedBox(width: 8),
+                HomeActionPill(
+                  label: 'Move Later',
+                  compact: true,
+                  onTap: () {
+                    DemoSheet.show(context, title: "Moved", message: "Task rescheduled for later today.");
+                    ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                  },
                 ),
                 const SizedBox(width: 8),
                 HomeActionPill(
                   label: 'Skip',
                   compact: true,
-                  onTap: () {},
+                  onTap: () {
+                    DemoSheet.show(context, title: "Skipped", message: "Task skipped. It's okay, you'll get it next time.");
+                    ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                  },
                 ),
               ],
             ),

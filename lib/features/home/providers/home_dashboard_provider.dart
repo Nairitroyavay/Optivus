@@ -35,14 +35,14 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         LifeOsPillarProgress(pillar: LifePillar.growth, current: 0, target: 1),
       ],
       checkIns: [
-        CheckInItem(id: 'water', title: 'Water', icon: '💧', options: ['+250ml', '+500ml']),
-        CheckInItem(id: 'sleep', title: 'Sleep', icon: '😴', options: ['Great', 'Good', 'Poor']),
+        CheckInItem(id: 'water', title: 'Water', icon: '💧', options: ['+250ml', 'Done']),
+        CheckInItem(id: 'sleep', title: 'Sleep', icon: '😴', options: ['Good', 'Okay', 'Poor']),
         CheckInItem(id: 'stress', title: 'Stress', icon: '😫', options: ['Low', 'Medium', 'High']),
-        CheckInItem(id: 'mood', title: 'Mood', icon: '😊', options: ['Happy', 'Neutral', 'Sad']),
-        CheckInItem(id: 'cigarettes', title: 'Cigarettes', icon: '🚬', options: ['None', '1-5', '5+']),
-        CheckInItem(id: 'alcohol', title: 'Alcohol', icon: '🍷', options: ['None', '1 drink', 'More']),
-        CheckInItem(id: 'junk_food', title: 'Junk Food', icon: '🍔', options: ['Avoided', 'A little', 'Failed']),
-        CheckInItem(id: 'money_saved', title: 'Money Saved', icon: '💰', options: ['₹0', '₹50', '₹100+']),
+        CheckInItem(id: 'mood', title: 'Mood', icon: '😊', options: ['Good', 'Okay', 'Low']),
+        CheckInItem(id: 'cigarettes', title: 'Cigarettes', icon: '🚬', options: ['Avoided', 'Craving', 'Relapsed']),
+        CheckInItem(id: 'alcohol', title: 'Alcohol', icon: '🍷', options: ['Avoided', 'Craving', 'Relapsed']),
+        CheckInItem(id: 'junk_food', title: 'Junk Food', icon: '🍔', options: ['Avoided', 'Craving', 'Relapsed']),
+        CheckInItem(id: 'money_saved', title: 'Money Saved', icon: '💰', options: ['₹10', '₹20', 'Custom']),
       ],
       autoInsights: [
         AutoInsight(
@@ -107,6 +107,60 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
 
   void completeTracker(String trackerId) {
     // Mock update logic
+  }
+
+  void cycleNowNextState() {
+    final types = NowActionType.values;
+    final currentIndex = types.indexOf(state.nowNextAction!.currentType);
+    final nextIndex = (currentIndex + 1) % types.length;
+    final nextType = types[nextIndex];
+    
+    NowNextActionState newState;
+    switch (nextType) {
+      case NowActionType.flexibleTask:
+        newState = const NowNextActionState(
+          currentType: NowActionType.flexibleTask,
+          currentTitle: 'Meditation',
+          currentSubtitle: '5 min • Flexible task',
+          nextActionTitle: 'Read 5 pages',
+        );
+        break;
+      case NowActionType.hardBlock:
+        newState = const NowNextActionState(
+          currentType: NowActionType.hardBlock,
+          currentTitle: 'Class',
+          currentSubtitle: '9:00 AM - 5:00 PM • Hard block',
+          nextActionTitle: 'Gym at 6:30 PM',
+        );
+        break;
+      case NowActionType.workBlock:
+        newState = const NowNextActionState(
+          currentType: NowActionType.workBlock,
+          currentTitle: 'Work',
+          currentSubtitle: '10:00 AM - 6:00 PM • Hard block',
+          nextActionTitle: 'Save ₹10 at 8:30 PM',
+        );
+        break;
+      case NowActionType.freeTime:
+        newState = const NowNextActionState(
+          currentType: NowActionType.freeTime,
+          currentTitle: 'Free time',
+          currentSubtitle: 'Next small win: Read 5 pages',
+          nextActionTitle: 'Read 5 pages',
+        );
+        break;
+      case NowActionType.missedTask:
+        newState = const NowNextActionState(
+          currentType: NowActionType.missedTask,
+          currentTitle: 'Meditation',
+          currentSubtitle: 'Restart with 2 minutes now.',
+          missedTaskTime: '7:30 AM',
+          nextActionTitle: 'Read 5 pages',
+        );
+        break;
+    }
+    
+    state = state.copyWith(nowNextAction: newState);
   }
 }
 
