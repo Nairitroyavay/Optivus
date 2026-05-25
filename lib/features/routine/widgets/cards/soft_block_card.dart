@@ -1,25 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
 /// Card for soft blocks: Eating (rich with dishes/nutrition) and Skin Care (steps).
-class SoftBlockCard extends StatelessWidget {
+class SoftBlockCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
+  final double? railHeight;
   final VoidCallback? onTap;
 
   const SoftBlockCard({
     super.key,
     required this.item,
     this.isNow = false,
+    this.railHeight,
     this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = RoutineCardFactory.colorForType(RoutineBlockType.softBlock);
     final isEating = item.category == RoutineCategory.eating;
     final isSkinCare = item.category == RoutineCategory.skinCare;
@@ -27,6 +32,7 @@ class SoftBlockCard extends StatelessWidget {
 
     return RoutineCardBase(
       railColor: color,
+      railHeight: railHeight,
       isCompleted: item.isCompleted,
       hasConflict: item.hasConflict,
       isNow: isNow,
@@ -135,19 +141,23 @@ class SoftBlockCard extends StatelessWidget {
           // Skin care: steps
           if (isSkinCare && steps != null && steps.isNotEmpty) ...[
             const SizedBox(height: 6),
-            ...steps.take(3).map((step) => Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Text(
-                    step,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: OptivusColors.sub,
+            ...steps
+                .take(3)
+                .map(
+                  (step) => Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      step,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: OptivusColors.sub,
+                      ),
                     ),
                   ),
-                )),
+                ),
             if (steps.length > 3)
               Text(
                 '${steps.length} steps',
@@ -164,13 +174,33 @@ class SoftBlockCard extends StatelessWidget {
             spacing: 6,
             runSpacing: 4,
             children: [
-              CardActionButton(label: 'Done', color: color),
+              CardActionButton(
+                label: 'Done',
+                color: color,
+                icon: Icons.check_rounded,
+                onTap: () =>
+                    ref.read(routineControllerProvider).markCompleted(item.id),
+              ),
               if (isEating && item.dishes != null)
-                CardActionButton(label: 'View dishes', color: color),
+                CardActionButton(
+                  label: 'View dishes',
+                  color: color,
+                  icon: Icons.restaurant_menu_rounded,
+                  onTap: onTap,
+                ),
               if (isSkinCare)
-                CardActionButton(label: 'View steps', color: color),
-              if (!isEating && !isSkinCare)
-                CardActionButton(label: 'Move', color: color),
+                CardActionButton(
+                  label: 'View steps',
+                  color: color,
+                  icon: Icons.format_list_numbered_rounded,
+                  onTap: onTap,
+                ),
+              CardActionButton(
+                label: 'Move',
+                color: OptivusColors.textSecondary,
+                icon: Icons.schedule_rounded,
+                onTap: () => showRoutineMoveSheet(context, ref, item),
+              ),
             ],
           ),
         ],
