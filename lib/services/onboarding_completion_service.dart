@@ -71,8 +71,8 @@ class OnboardingCompletionService {
       location: b.location,
       mealCategory: b.mealCategory,
       dishes: b.dishes,
-      calories: b.calories,
-      protein: b.protein,
+      caloriesEstimate: b.calories,
+      proteinEstimate: b.protein,
       skincareProducts: b.skincareProducts,
     )).toList();
 

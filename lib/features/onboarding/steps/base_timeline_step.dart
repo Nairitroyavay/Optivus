@@ -517,8 +517,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       notes: _sectionLabel(block.section),
       mealCategory: block.mealCategory,
       dishes: block.dishes,
-      calories: block.calories,
-      protein: block.protein,
+      caloriesEstimate: block.calories,
+      proteinEstimate: block.protein,
       skincareProducts: block.skincareProducts,
       hasConflict: hasConflict,
       conflictMessage: conflictMessage,
@@ -538,8 +538,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       blockType: _draftBlockType(item.blockType),
       mealCategory: item.mealCategory,
       dishes: item.dishes ?? const [],
-      calories: item.calories,
-      protein: item.protein,
+      calories: item.caloriesEstimate,
+      protein: item.proteinEstimate,
       skincareProducts: item.skincareProducts ?? const [],
     );
   }

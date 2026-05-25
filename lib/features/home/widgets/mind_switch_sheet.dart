@@ -179,16 +179,16 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
                 }
               },
               backgroundColor: Colors.white.withValues(alpha: 0.5),
-              selectedColor: OptivusColors.brandAccent.withValues(alpha: 0.2),
+              selectedColor: OptivusColors.homeAccent.withValues(alpha: 0.2),
               labelStyle: TextStyle(
                 color: _selectedType == type
-                    ? OptivusColors.brandAccent
+                    ? OptivusColors.homeAccent
                     : OptivusColors.textSecondary,
                 fontWeight: FontWeight.bold,
               ),
               side: BorderSide(
                 color: _selectedType == type
-                    ? OptivusColors.brandAccent
+                    ? OptivusColors.homeAccent
                     : Colors.transparent,
               ),
             );

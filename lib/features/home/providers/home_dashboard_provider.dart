@@ -46,9 +46,9 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
       ],
       autoInsights: [
         AutoInsight(
-          title: 'Instagram 1h 20m',
-          description: 'Risk: Medium',
-          risk: InsightRisk.medium,
+          title: 'Instagram 3h 20m',
+          description: 'Limit crossed by 1h 20m\nHigh distraction risk',
+          risk: InsightRisk.high,
         ),
       ],
       trackerPreviews: [
@@ -73,6 +73,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
           iconColor: Color(0xFF6B5319),
           iconBgColor: Color(0xFFF6E8CE),
           isNext: true,
+          badgeText: 'Hard block',
         ),
         ComingUpItem(
           time: '6:30',
@@ -81,6 +82,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
           icon: Icons.fitness_center,
           iconColor: Color(0xFF754545),
           iconBgColor: Color(0xFFFAEAEC),
+          badgeText: 'Tracker',
         ),
         ComingUpItem(
           time: '9:45',
@@ -89,6 +91,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
           icon: Icons.savings_outlined,
           iconColor: Color(0xFF4A3B3D),
           iconBgColor: Color(0xFFF1EBEB),
+          badgeText: 'Money',
         ),
       ],
     );

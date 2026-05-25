@@ -140,18 +140,18 @@ class _MindNoteEditorSheetState extends ConsumerState<MindNoteEditorSheet> {
                             }
                           },
                           backgroundColor: Colors.white.withValues(alpha: 0.5),
-                          selectedColor: OptivusColors.brandAccent.withValues(
+                          selectedColor: OptivusColors.homeAccent.withValues(
                             alpha: 0.2,
                           ),
                           labelStyle: TextStyle(
                             color: isSelected
-                                ? OptivusColors.brandAccent
+                                ? OptivusColors.homeAccent
                                 : OptivusColors.textSecondary,
                             fontWeight: FontWeight.bold,
                           ),
                           side: BorderSide(
                             color: isSelected
-                                ? OptivusColors.brandAccent
+                                ? OptivusColors.homeAccent
                                 : Colors.transparent,
                           ),
                         ),

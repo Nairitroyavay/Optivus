@@ -32,7 +32,7 @@ class DailyMissionCard extends StatelessWidget {
                   strokeWidth: 8,
                   backgroundColor: Colors.white.withValues(alpha: 0.3),
                   valueColor: const AlwaysStoppedAnimation<Color>(
-                    OptivusColors.brandAccent,
+                    OptivusColors.homeAccent,
                   ),
                 ),
               ),

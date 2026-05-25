@@ -6,6 +6,7 @@ import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'home_glass_widgets.dart';
 import 'sheets/demo_sheet.dart';
+import 'sheets/move_later_sheet.dart';
 
 class NowNextActionCard extends ConsumerWidget {
   final NowNextActionState? actionState;
@@ -125,8 +126,7 @@ class NowNextActionCard extends ConsumerWidget {
                   label: 'Move Later',
                   compact: true,
                   onTap: () {
-                    DemoSheet.show(context, title: "Moved", message: "Task rescheduled for later today.");
-                    ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                    MoveLaterSheet.show(context);
                   },
                 ),
                 const SizedBox(width: 8),

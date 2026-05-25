@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 
 import 'package:optivus/app/app_navigation_controller.dart';
 
@@ -16,7 +17,6 @@ import 'widgets/tracker_preview_section.dart';
 import 'widgets/coach_tip_card.dart';
 import 'widgets/mind_timeline_card.dart';
 import 'widgets/coming_up_card.dart';
-import 'widgets/floating_quick_add.dart';
 
 class HomeTab extends ConsumerWidget {
   const HomeTab({super.key});
@@ -32,15 +32,22 @@ class HomeTab extends ConsumerWidget {
     // We get all home dashboard state from our new provider
     final dashboardState = ref.watch(homeDashboardProvider);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent, // Background gradient is handled by app shell
-      floatingActionButton: const Padding(
-        padding: EdgeInsets.only(bottom: 140.0),
-        child: FloatingQuickAdd(),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            OptivusColors.homeTop,
+            Color(0xFFFFEDED),
+          ],
+          stops: [0.0, 0.80],
+        ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: SafeArea(
-        bottom: false,
+      child: Scaffold(
+        backgroundColor: Colors.transparent, // Background gradient is handled by container wrapper
+        body: SafeArea(
+          bottom: false,
         child: Column(
           children: [
             Padding(
@@ -84,6 +91,7 @@ class HomeTab extends ConsumerWidget {
           ],
         ),
       ),
-    );
+      ), // Scaffold
+    ); // Container
   }
 }

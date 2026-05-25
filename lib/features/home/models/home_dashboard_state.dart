@@ -140,6 +140,7 @@ class ComingUpItem {
   final Color iconColor;
   final Color iconBgColor;
   final bool isNext;
+  final String? badgeText;
 
   const ComingUpItem({
     required this.time,
@@ -149,6 +150,7 @@ class ComingUpItem {
     required this.iconColor,
     required this.iconBgColor,
     this.isNext = false,
+    this.badgeText,
   });
 }
 

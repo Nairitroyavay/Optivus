@@ -206,7 +206,7 @@ class _MissionRing extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           if (isLoading)
-            const CircularProgressIndicator(color: OptivusColors.brandAccent)
+            const CircularProgressIndicator(color: OptivusColors.homeAccent)
           else ...[
             Container(
               width: 120,

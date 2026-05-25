@@ -54,6 +54,43 @@ class OptivusColors {
   static const Color brandAccent = Color(0xFFE0B51F);
   static const Color aquaAccent = Color(0xFF7BE6DC);
 
+  // ── Old-codebase-matched tokens (liquid_ui.dart kXxx equivalents) ─────────
+  // These are the EXACT colour values from the original Optivus Routine UI.
+  // Every Routine widget must use these instead of raw hex.
+
+  /// Primary text — matches old `kInk` (0xFF0F111A)
+  static const Color ink = Color(0xFF0F111A);
+
+  /// Secondary text — matches old `kSub` (0xFF6B7280)
+  static const Color sub = Color(0xFF6B7280);
+
+  // ── Routine background (old LiquidBg green gradient) ───────────────────
+  static const Color routineBgTop = Color(0xFFA3FF91);
+  static const Color routineBgBottom = Color(0xFFEFFEEC);
+
+  // ── Category accent colours (old liquid_ui palette) ────────────────────
+  static const Color mintAccent = Color(0xFF60D4A0);   // kMint — skin care
+  static const Color blueAccent = Color(0xFF60B8FF);   // kBlue — classes
+  static const Color roseAccent = Color(0xFFFF9560);   // kRose — eating/time
+  static const Color purpleAccent = Color(0xFF9B8FFF); // kPurple — AI/fixed
+  static const Color tealAccent = Color(0xFF14B8A6);   // supplements
+
+  // ── Block-type rail colours ────────────────────────────────────────────
+  static const Color blockHard = Color(0xFF8B5CF6);
+  static const Color blockSoft = Color(0xFF10B981);
+  static const Color blockFlex = Color(0xFF8B5CF6);
+  static const Color blockTracker = Color(0xFFF59E0B);
+  static const Color blockCheckIn = Color(0xFFEC4899);
+  static const Color blockMoney = Color(0xFF14B8A6);
+
+  // ── Glass surface ─────────────────────────────────────────────────────
+  static const Color glassFill = Color(0x33FFFFFF);
+  static const Color glassBorder = Color(0x66FFFFFF);
+
+  // ── Header action button colours ──────────────────────────────────────
+  static const Color headerAI = Color(0xFF86EFAC);
+  static const Color headerAdd = Color(0xFFD8B4FE);
+
   // Soft rainbow gradient for liquid borders
   static const List<Color> liquidBorderGradient = [
     Color(0xFFFFB3B3),

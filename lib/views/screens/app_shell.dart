@@ -13,7 +13,7 @@ import 'package:optivus/app/app_navigation_controller.dart';
 // Per-tab gradient definitions using the blueprint OptivusColors tokens exactly
 const List<List<Color>> _tabGradients = [
   [OptivusColors.homeTop, Color(0xFFFFEDED)], // Home: #FFE0E0 to #FFEDED
-  [OptivusColors.routineTop, Colors.white], // Routine: #E4FAD4
+  [OptivusColors.routineBgTop, OptivusColors.routineBgBottom], // Routine: RoutineTab also paints this
   [OptivusColors.trackerTop, Colors.white], // Tracker: #D6FFFF
   [OptivusColors.coachTop, Colors.white], // Coach: #F7E0FF
   [OptivusColors.goalsTop, Colors.white], // Goals: #FFD9F2
@@ -73,7 +73,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return Scaffold(
       extendBody: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: OptivusColors.backgroundBottom,
       body: AnimatedContainer(
         duration: const Duration(milliseconds: 400),
         curve: Curves.easeInOut,
@@ -119,7 +119,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildHeader(int currentIndex) {
-    if (currentIndex == 0) {
+    // Home (0) and Routine (1) tabs render their own custom headers
+    if (currentIndex == 0 || currentIndex == 1) {
       return const SizedBox.shrink();
     }
 

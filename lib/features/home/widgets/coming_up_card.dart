@@ -3,7 +3,7 @@ import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'home_glass_widgets.dart';
-import 'sheets/demo_sheet.dart';
+import 'sheets/coming_up_item_sheet.dart';
 
 class ComingUpCard extends ConsumerWidget {
   final List<ComingUpItem> items;
@@ -125,7 +125,7 @@ class ComingUpCard extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: GestureDetector(
                 onTap: () {
-                  DemoSheet.show(context, title: item.title, message: 'Routine / Calendar event details here.');
+                  ComingUpItemSheet.show(context, item.title);
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -149,13 +149,36 @@ class ComingUpCard extends ConsumerWidget {
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: Text(
-                        item.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF2D2D2D),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.title,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2D2D2D),
+                            ),
+                          ),
+                          if (item.badgeText != null) ...[
+                            const SizedBox(height: 2),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                item.badgeText!,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF5A5A5A),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     if (item.isNext)

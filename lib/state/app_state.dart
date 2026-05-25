@@ -224,6 +224,20 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
     ];
   }
 
+  void updateStatus(String routineId, RoutineStatus newStatus) {
+    state = [
+      for (final item in state)
+        if (item.id == routineId)
+          item.copyWith(
+            status: newStatus,
+            isCompleted: newStatus == RoutineStatus.completed,
+            isMissed: newStatus == RoutineStatus.missed,
+          )
+        else
+          item,
+    ];
+  }
+
   void _checkConflicts() {
     // Standard validation: check if start/end times of any hard blocks overlap
     final items = List<RoutineItem>.from(state);

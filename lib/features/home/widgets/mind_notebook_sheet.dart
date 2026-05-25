@@ -147,7 +147,7 @@ class MindNotebookSheet extends ConsumerWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
-                  color: OptivusColors.brandAccent,
+                  color: OptivusColors.homeAccent,
                 ),
               ),
             ],
@@ -178,7 +178,7 @@ class MindNotebookSheet extends ConsumerWidget {
                 icon: isShared ? Icons.check : Icons.send,
                 compact: true,
                 selected: isShared ? false : true,
-                accent: isShared ? OptivusColors.success : OptivusColors.brandAccent,
+                accent: isShared ? OptivusColors.success : OptivusColors.homeAccent,
                 onTap: () {
                   ref
                       .read(homeMindNoteProvider.notifier)

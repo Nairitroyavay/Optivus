@@ -107,7 +107,7 @@ class AutoInsightsCard extends StatelessWidget {
               foregroundColor: OptivusColors.brandAccent,
             ),
             child: const Text(
-              'Control',
+              'Open Focus Control',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),

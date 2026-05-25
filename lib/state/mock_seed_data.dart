@@ -32,44 +32,98 @@ class MockSeedData {
     slipUpStyle: '',
   );
 
+  // ── Blueprint sample routine data ─────────────────────────
   static List<RoutineItem> get defaultRoutineItems => [
     RoutineItem(
-      id: 'routine-sleep',
-      title: 'Sleep & Night Recovery',
-      startMinute: 0, // 12:00 AM
-      endMinute: 420, // 07:00 AM
+      id: 'routine-bath',
+      title: 'Bath',
+      startMinute: 435, // 7:15 AM
+      endMinute: 455, // 7:35 AM
       blockType: RoutineBlockType.hardBlock,
-      notes: 'Consistent sleep timing is crucial for nervous system recovery.',
+      category: RoutineCategory.fixed,
+      source: RoutineSource.onboarding,
+      priority: RoutinePriority.mustDo,
+      hardBlock: true,
+      notes: 'Morning bath routine.',
+    ),
+    RoutineItem(
+      id: 'routine-morning-skincare',
+      title: 'Morning Skin Care',
+      startMinute: 455, // 7:35 AM
+      endMinute: 460, // 7:40 AM
+      blockType: RoutineBlockType.softBlock,
+      category: RoutineCategory.skinCare,
+      source: RoutineSource.onboarding,
+      steps: ['Face wash', 'Vitamin C', 'Sunscreen'],
+      skincareProducts: ['Face wash', 'Vitamin C', 'Sunscreen'],
+      notes: '3-step morning routine.',
+    ),
+    RoutineItem(
+      id: 'routine-meditation',
+      title: 'Meditation',
+      startMinute: 460, // 7:40 AM
+      endMinute: 465, // 7:45 AM
+      blockType: RoutineBlockType.trackerTask,
+      category: RoutineCategory.health,
+      source: RoutineSource.onboarding,
+      isTrackerLinked: true,
+      trackerType: TrackerType.meditation,
+      priority: RoutinePriority.mustDo,
+      notes: 'Morning mindfulness session.',
     ),
     RoutineItem(
       id: 'routine-breakfast',
-      title: 'Healthy Breakfast Power',
-      startMinute: 480, // 08:00 AM
-      endMinute: 540, // 09:00 AM
+      title: 'Breakfast',
+      startMinute: 480, // 8:00 AM
+      endMinute: 510, // 8:30 AM
       blockType: RoutineBlockType.softBlock,
+      category: RoutineCategory.eating,
+      source: RoutineSource.onboarding,
       mealCategory: 'Breakfast',
-      dishes: ['Oatmeal with Almonds', '2 Boiled Eggs', 'Black Coffee'],
-      calories: 480.0,
-      protein: 24.0,
-      notes: 'Fuel up with complex carbs and protein.',
+      dishes: ['Bread', 'Egg', 'Banana'],
+      caloriesEstimate: 520.0,
+      proteinEstimate: 22.0,
+      notes: 'Morning fuel.',
     ),
     RoutineItem(
-      id: 'routine-college',
-      title: 'University Lectures & Lab',
-      startMinute: 600, // 10:00 AM
-      endMinute: 960, // 04:00 PM
+      id: 'routine-class',
+      title: 'Class',
+      startMinute: 540, // 9:00 AM
+      endMinute: 1020, // 5:00 PM
       blockType: RoutineBlockType.hardBlock,
-      location: 'Main Engineering Block',
-      notes: 'Attend lectures and focus on lab assignments.',
+      category: RoutineCategory.classBlock,
+      source: RoutineSource.onboarding,
+      priority: RoutinePriority.mustDo,
+      hardBlock: true,
+      location: 'Engineering Block',
+      notes: 'University lectures and lab.',
     ),
     RoutineItem(
-      id: 'routine-workout',
-      title: 'Gym Strength Workout',
-      startMinute: 1020, // 05:00 PM
-      endMinute: 1080, // 06:00 PM
+      id: 'routine-lunch',
+      title: 'Lunch',
+      startMinute: 780, // 1:00 PM
+      endMinute: 810, // 1:30 PM
+      blockType: RoutineBlockType.softBlock,
+      category: RoutineCategory.eating,
+      source: RoutineSource.onboarding,
+      mealCategory: 'Lunch',
+      dishes: ['Rice', 'Dal', 'Sabji', 'Chicken curry', 'Curd'],
+      caloriesEstimate: 720.0,
+      proteinEstimate: 28.0,
+      allowOverlap: true,
+      notes: 'Lunch break during class.',
+    ),
+    RoutineItem(
+      id: 'routine-gym',
+      title: 'Gym',
+      startMinute: 1110, // 6:30 PM
+      endMinute: 1155, // 7:15 PM
       blockType: RoutineBlockType.trackerTask,
-      location: 'Powerhouse Gym',
-      notes: 'Push Day: Chest, Shoulders, and Triceps.',
+      category: RoutineCategory.health,
+      source: RoutineSource.onboarding,
+      isTrackerLinked: true,
+      trackerType: TrackerType.workout,
+      priority: RoutinePriority.mustDo,
       subtasks: [
         'Warmup stretching',
         'Bench Press: 4x8',
@@ -77,39 +131,87 @@ class MockSeedData {
         'Tricep Pushdowns: 3x12',
       ],
       subtasksCompleted: [false, false, false, false],
+      location: 'Powerhouse Gym',
+      notes: 'Push Day: Chest, Shoulders, and Triceps.',
     ),
     RoutineItem(
       id: 'routine-dinner',
-      title: 'High-Protein Dinner',
-      startMinute: 1140, // 07:00 PM
-      endMinute: 1200, // 08:00 PM
+      title: 'Dinner',
+      startMinute: 1260, // 9:00 PM
+      endMinute: 1290, // 9:30 PM
       blockType: RoutineBlockType.softBlock,
+      category: RoutineCategory.eating,
+      source: RoutineSource.onboarding,
       mealCategory: 'Dinner',
-      dishes: ['Grilled Chicken Breast', 'Sweet Potatoes', 'Sautéed Asparagus'],
-      calories: 620.0,
-      protein: 52.0,
-      notes: 'Refuel after the intense workout block.',
+      dishes: ['Rice', 'Dal', 'Sabji'],
+      caloriesEstimate: 620.0,
+      proteinEstimate: 18.0,
+      notes: 'Evening meal.',
     ),
     RoutineItem(
-      id: 'routine-skincare',
-      title: 'Night Skincare Routine',
-      startMinute: 1260, // 09:00 PM
-      endMinute: 1290, // 09:30 PM
-      blockType: RoutineBlockType.softBlock,
-      skincareProducts: [
-        'Gentle Hydrating Cleanser',
-        'Niacinamide Serum',
-        'Ceramide Night Cream',
-      ],
-      notes: 'Cleanse, treat, and seal moisture.',
+      id: 'routine-save-money',
+      title: 'Save ₹10',
+      startMinute: 1305, // 9:45 PM
+      endMinute: 1310, // 9:50 PM
+      blockType: RoutineBlockType.moneyTask,
+      category: RoutineCategory.finance,
+      source: RoutineSource.onboarding,
+      isTrackerLinked: true,
+      trackerType: TrackerType.money,
+      notes: 'Financially Free • Money System',
     ),
     RoutineItem(
-      id: 'routine-meditation',
-      title: 'Mindful Meditation',
+      id: 'routine-smoking-checkin',
+      title: 'Cigarettes',
       startMinute: 1320, // 10:00 PM
+      endMinute: 1325, // 10:05 PM
+      blockType: RoutineBlockType.checkIn,
+      category: RoutineCategory.health,
+      source: RoutineSource.onboarding,
+      notes: 'Check-in: Did you avoid smoking today?',
+    ),
+    RoutineItem(
+      id: 'routine-reading',
+      title: 'Reading',
+      startMinute: 1335, // 10:15 PM
       endMinute: 1350, // 10:30 PM
-      blockType: RoutineBlockType.trackerTask,
-      notes: 'Deep breathing practice for wind-down.',
+      blockType: RoutineBlockType.flexibleTask,
+      category: RoutineCategory.habit,
+      source: RoutineSource.manual,
+      priority: RoutinePriority.goodToDo,
+      subtasks: [
+        'Revise stack',
+        'Solve 1 problem',
+        'Review solution',
+      ],
+      subtasksCompleted: [false, false, false],
+      notes: 'DSA practice session.',
+    ),
+    RoutineItem(
+      id: 'routine-night-skincare',
+      title: 'Night Skin Care',
+      startMinute: 1390, // 11:10 PM
+      endMinute: 1395, // 11:15 PM
+      blockType: RoutineBlockType.softBlock,
+      category: RoutineCategory.skinCare,
+      source: RoutineSource.onboarding,
+      steps: ['Cleanser', 'Serum', 'Moisturizer'],
+      skincareProducts: ['Cleanser', 'Serum', 'Moisturizer'],
+      notes: 'Night skin care routine.',
+    ),
+    RoutineItem(
+      id: 'routine-sleep',
+      title: 'Sleep',
+      startMinute: 1410, // 11:30 PM
+      endMinute: 420, // 7:00 AM next day
+      blockType: RoutineBlockType.hardBlock,
+      category: RoutineCategory.fixed,
+      source: RoutineSource.onboarding,
+      priority: RoutinePriority.mustDo,
+      hardBlock: true,
+      crossesMidnight: true,
+      endsNextDay: true,
+      notes: 'Sleep and night recovery.',
     ),
   ];
 
@@ -275,7 +377,7 @@ class MockSeedData {
         GoalSystem(
           id: 'sys-body-1',
           description: 'Strength workouts 4 times per week',
-          linkedRoutineTaskIds: ['routine-workout'],
+          linkedRoutineTaskIds: ['routine-gym'],
         ),
         GoalSystem(
           id: 'sys-body-2',

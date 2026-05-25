@@ -121,7 +121,7 @@ class MissionDetailSheet extends StatelessWidget {
                     const Divider(height: 24, color: Colors.white),
                     
                     _buildSectionTitle('IDENTITY PROOF'),
-                    _buildStatRow('Non-negotiable task', 'Pending', Icons.verified, OptivusColors.brandAccent),
+                    _buildStatRow('Non-negotiable task', 'Pending', Icons.verified, OptivusColors.homeAccent),
                     
                     const Divider(height: 24, color: Colors.white),
                     

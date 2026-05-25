@@ -114,7 +114,7 @@ class FocusControlSheet extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Your screen time risk is HIGH today. Consider starting a deep focus block to restrict distracting apps.',
+                'Your screen time risk is HIGH today. Suggested action: 25 min focus block to restrict distracting apps.',
                 style: TextStyle(
                   fontSize: 14,
                   color: OptivusColors.textSecondary,
@@ -142,9 +142,8 @@ class FocusControlSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _buildAppRow('Instagram', '1h 20m today', 'High risk', Colors.redAccent),
-                    _buildAppRow('YouTube', '45m today', 'Medium risk', Colors.orange),
-                    _buildAppRow('Twitter', '30m today', 'Medium risk', Colors.orange),
+                    _buildAppRow('Instagram', '3h 20m today', 'High risk', Colors.redAccent),
+                    _buildAppRow('YouTube Shorts', '1h 10m today', 'High risk', Colors.redAccent),
                   ],
                 ),
               ),
@@ -162,7 +161,17 @@ class FocusControlSheet extends StatelessWidget {
                       },
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: HomeActionPill(
+                      label: 'Relax Limit',
+                      icon: Icons.snooze,
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   HomeActionPill(
                     label: 'Close',
                     onTap: () => Navigator.pop(context),

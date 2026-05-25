@@ -180,7 +180,7 @@ class MindNoteCard extends ConsumerWidget {
                             size: 14,
                             color: note.isSharedWithCoach
                                 ? OptivusColors.success
-                                : OptivusColors.brandAccent,
+                                : OptivusColors.homeAccent,
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -192,7 +192,7 @@ class MindNoteCard extends ConsumerWidget {
                               fontWeight: FontWeight.bold,
                               color: note.isSharedWithCoach
                                   ? OptivusColors.success
-                                  : OptivusColors.brandAccent,
+                                  : OptivusColors.homeAccent,
                             ),
                           ),
                         ],
