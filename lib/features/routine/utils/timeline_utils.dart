@@ -7,10 +7,19 @@ import 'package:optivus/models/timeline_layout.dart';
 class TimelineUtils {
   TimelineUtils._();
 
+  static DateTime dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  static DateTime weekStart(DateTime date) {
+    final normalized = dateOnly(date);
+    return normalized.subtract(Duration(days: normalized.weekday - 1));
+  }
+
   /// Calculate smart visible range based on routine items.
   ///
   /// Default: 30 min before first item, 30 min after last item,
-  /// rounded to nearest 10 min. Falls back to 7:00 AM – 11:00 PM if empty.
+  /// rounded to nearest 10 min. Falls back to 6:00 AM-12:00 AM if empty.
   static TimelineLayout calculateVisibleRange(
     List<RoutineItem> items, {
     bool showFullDay = false,
@@ -18,6 +27,8 @@ class TimelineUtils {
     bool showMinuteTicks = true,
     bool compactMode = false,
   }) {
+    const defaultLayout = TimelineLayout();
+
     if (showFullDay) {
       return TimelineLayout(
         visibleStartMinute: 0,
@@ -31,8 +42,8 @@ class TimelineUtils {
 
     if (items.isEmpty) {
       return TimelineLayout(
-        visibleStartMinute: 420, // 7:00 AM
-        visibleEndMinute: 1380, // 11:00 PM
+        visibleStartMinute: 360, // 6:00 AM
+        visibleEndMinute: 1440, // 12:00 AM
         minuteHeight: minuteHeight,
         showMinuteTicks: showMinuteTicks,
         showFullDay: false,
@@ -41,15 +52,15 @@ class TimelineUtils {
     }
 
     final firstStart = items.map((e) => e.startMinute).reduce(min);
-    final lastEnd = items.map((e) => e.effectiveEndMinute).reduce(max);
+    final lastEnd = items.map(normalizedEndMinute).reduce(max);
 
     // 30 min buffer, rounded to nearest 10 min
-    final visibleStart = ((firstStart - 30) / 10).floor() * 10;
-    final visibleEnd = ((lastEnd + 30) / 10).ceil() * 10;
+    final visibleStart = defaultLayout.roundDownToNearestTen(firstStart - 30);
+    final visibleEnd = defaultLayout.roundUpToNearestTen(lastEnd + 30);
 
     return TimelineLayout(
-      visibleStartMinute: visibleStart.clamp(0, 1430),
-      visibleEndMinute: visibleEnd.clamp(10, 1440),
+      visibleStartMinute: max(0, visibleStart),
+      visibleEndMinute: max(10, min(visibleEnd, 2880)),
       minuteHeight: minuteHeight,
       showMinuteTicks: showMinuteTicks,
       showFullDay: false,
@@ -57,54 +68,87 @@ class TimelineUtils {
     );
   }
 
+  /// Normalize an item's end minute for layout only.
+  ///
+  /// Overnight ranges keep their display values but lay out with an end minute
+  /// past midnight, e.g. 23:30-07:00 becomes 1410-1860.
+  static int normalizedEndMinute(RoutineItem item) {
+    if (item.crossesMidnight ||
+        item.endsNextDay ||
+        item.endMinute <= item.startMinute) {
+      return item.endMinute + 1440;
+    }
+    return item.endMinute;
+  }
+
+  /// Whether a wall-clock minute falls inside an item's display range.
+  static bool isMinuteInsideItem(RoutineItem item, int minute) {
+    if (item.crossesMidnight ||
+        item.endsNextDay ||
+        item.endMinute <= item.startMinute) {
+      return minute >= item.startMinute || minute < item.endMinute;
+    }
+    return minute >= item.startMinute && minute < item.endMinute;
+  }
+
   /// Format minutes since midnight to a time string like "7:40 AM".
   static String formatMinute(int minutes) {
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
+    final normalized = _normalizeDisplayMinute(minutes);
+    final h = normalized ~/ 60;
+    final m = normalized % 60;
     final period = h >= 12 ? 'PM' : 'AM';
     final displayHour = h == 0
         ? 12
         : h > 12
-            ? h - 12
-            : h;
+        ? h - 12
+        : h;
     return '$displayHour:${m.toString().padLeft(2, '0')} $period';
   }
 
   /// Format minutes to short time for ruler labels (e.g., "7:00", "7:10").
   static String formatMinuteShort(int minutes) {
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
+    final normalized = _normalizeDisplayMinute(minutes);
+    final h = normalized ~/ 60;
+    final m = normalized % 60;
     final displayHour = h == 0
         ? 12
         : h > 12
-            ? h - 12
-            : h;
+        ? h - 12
+        : h;
     return '$displayHour:${m.toString().padLeft(2, '0')}';
   }
 
   /// Format a time range like "7:40 - 7:45 AM" or "7:40 AM - 8:00 AM".
   static String formatTimeRange(int startMinute, int endMinute) {
-    final startPeriod = startMinute ~/ 60 >= 12 ? 'PM' : 'AM';
-    final endPeriod = endMinute ~/ 60 >= 12 ? 'PM' : 'AM';
+    final normalizedStart = _normalizeDisplayMinute(startMinute);
+    final normalizedEnd = _normalizeDisplayMinute(endMinute);
+    final startPeriod = normalizedStart ~/ 60 >= 12 ? 'PM' : 'AM';
+    final endPeriod = normalizedEnd ~/ 60 >= 12 ? 'PM' : 'AM';
 
     if (startPeriod == endPeriod) {
       // Same period: "7:40 - 8:00 AM"
-      return '${_formatTimeOnly(startMinute)} - ${formatMinute(endMinute)}';
+      return '${_formatTimeOnly(normalizedStart)} - ${formatMinute(normalizedEnd)}';
     }
     // Different periods: "11:30 AM - 12:00 PM"
-    return '${formatMinute(startMinute)} - ${formatMinute(endMinute)}';
+    return '${formatMinute(normalizedStart)} - ${formatMinute(normalizedEnd)}';
   }
 
   /// Format just the time part without AM/PM.
   static String _formatTimeOnly(int minutes) {
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
+    final normalized = _normalizeDisplayMinute(minutes);
+    final h = normalized ~/ 60;
+    final m = normalized % 60;
     final displayHour = h == 0
         ? 12
         : h > 12
-            ? h - 12
-            : h;
+        ? h - 12
+        : h;
     return '$displayHour:${m.toString().padLeft(2, '0')}';
+  }
+
+  static int _normalizeDisplayMinute(int minutes) {
+    final normalized = minutes % 1440;
+    return normalized < 0 ? normalized + 1440 : normalized;
   }
 
   /// Format duration in minutes to readable string.
@@ -133,8 +177,18 @@ class TimelineUtils {
   /// Get the month name abbreviated.
   static String getMonthAbbr(int month) {
     const months = [
-      'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-      'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
     ];
     return months[(month - 1).clamp(0, 11)];
   }
@@ -142,8 +196,13 @@ class TimelineUtils {
   /// Get the full day name.
   static String getDayName(int weekday) {
     const days = [
-      'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY',
-      'FRIDAY', 'SATURDAY', 'SUNDAY',
+      'MONDAY',
+      'TUESDAY',
+      'WEDNESDAY',
+      'THURSDAY',
+      'FRIDAY',
+      'SATURDAY',
+      'SUNDAY',
     ];
     return days[(weekday - 1).clamp(0, 6)];
   }
@@ -171,18 +230,17 @@ class TimelineUtils {
   }
 
   /// Filter routine items by the active filter.
-  static List<RoutineItem> filterItems(
-    List<RoutineItem> items,
-    String filter,
-  ) {
+  static List<RoutineItem> filterItems(List<RoutineItem> items, String filter) {
     switch (filter) {
       case 'all':
         return items;
       case 'base_timeline':
         return items
-            .where((i) =>
-                i.blockType == RoutineBlockType.hardBlock ||
-                i.blockType == RoutineBlockType.softBlock)
+            .where(
+              (i) =>
+                  i.blockType == RoutineBlockType.hardBlock ||
+                  i.blockType == RoutineBlockType.softBlock,
+            )
             .toList();
       case 'flexible_tasks':
         return items
@@ -200,13 +258,11 @@ class TimelineUtils {
         return items.where((i) => i.hasConflict).toList();
       case 'completed':
         return items
-            .where((i) =>
-                i.isCompleted || i.status == RoutineStatus.completed)
+            .where((i) => i.isCompleted || i.status == RoutineStatus.completed)
             .toList();
       case 'missed':
         return items
-            .where(
-                (i) => i.isMissed || i.status == RoutineStatus.missed)
+            .where((i) => i.isMissed || i.status == RoutineStatus.missed)
             .toList();
       default:
         return items;

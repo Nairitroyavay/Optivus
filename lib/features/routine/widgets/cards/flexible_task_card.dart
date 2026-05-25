@@ -1,29 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
 /// Card for flexible tasks: Reading, Study, Skill practice, Journaling.
-class FlexibleTaskCard extends StatelessWidget {
+class FlexibleTaskCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
+  final double? railHeight;
   final VoidCallback? onTap;
 
   const FlexibleTaskCard({
     super.key,
     required this.item,
     this.isNow = false,
+    this.railHeight,
     this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
-    final color = RoutineCardFactory.colorForType(RoutineBlockType.flexibleTask);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final color = RoutineCardFactory.colorForType(
+      RoutineBlockType.flexibleTask,
+    );
 
     return RoutineCardBase(
       railColor: color,
+      railHeight: railHeight,
       isCompleted: item.isCompleted,
       hasConflict: item.hasConflict,
       isNow: isNow,
@@ -110,7 +118,8 @@ class FlexibleTaskCard extends StatelessWidget {
             ...item.subtasks!.take(2).indexed.map((entry) {
               final idx = entry.$1;
               final task = entry.$2;
-              final done = item.subtasksCompleted != null &&
+              final done =
+                  item.subtasksCompleted != null &&
                   idx < item.subtasksCompleted!.length &&
                   item.subtasksCompleted![idx];
               return Padding(
@@ -134,8 +143,7 @@ class FlexibleTaskCard extends StatelessWidget {
                           fontSize: 12.5,
                           fontWeight: FontWeight.w500,
                           color: done ? OptivusColors.sub : OptivusColors.ink,
-                          decoration:
-                              done ? TextDecoration.lineThrough : null,
+                          decoration: done ? TextDecoration.lineThrough : null,
                           decorationColor: OptivusColors.sub,
                         ),
                       ),
@@ -161,9 +169,27 @@ class FlexibleTaskCard extends StatelessWidget {
             spacing: 6,
             runSpacing: 4,
             children: [
-              CardActionButton(label: 'Start', color: color),
-              CardActionButton(label: 'Done', color: color),
-              CardActionButton(label: 'Move', color: color),
+              CardActionButton(
+                label: 'Start',
+                color: color,
+                icon: Icons.play_arrow_rounded,
+                onTap: () => ref
+                    .read(routineControllerProvider)
+                    .startFlexibleTask(item.id),
+              ),
+              CardActionButton(
+                label: 'Done',
+                color: OptivusColors.success,
+                icon: Icons.check_rounded,
+                onTap: () =>
+                    ref.read(routineControllerProvider).markCompleted(item.id),
+              ),
+              CardActionButton(
+                label: 'Move',
+                color: OptivusColors.textSecondary,
+                icon: Icons.schedule_rounded,
+                onTap: () => showRoutineMoveSheet(context, ref, item),
+              ),
             ],
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 
 /// Horizontal scrolling day strip — matches old Optivus `_DateStrip` exactly.
 ///
@@ -21,63 +22,120 @@ class RoutineDaySelector extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: SizedBox(
         height: 48,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          itemCount: days.length,
-          separatorBuilder: (context, index) => const SizedBox(width: 8),
-          itemBuilder: (context, index) {
-            final day = days[index];
-            final selected = DateUtils.isSameDay(day, selectedDate);
+        child: Row(
+          children: [
+            Expanded(
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: days.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final day = days[index];
+                  final selected = DateUtils.isSameDay(day, selectedDate);
 
-            return InkWell(
-              onTap: () {
-                ref.read(selectedDayProvider.notifier).state = day;
-              },
-              borderRadius: BorderRadius.circular(10),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                width: 42,
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? OptivusColors.ink
-                      : Colors.white.withValues(alpha: 0.52),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: selected
-                        ? Colors.transparent
-                        : Colors.white.withValues(alpha: 0.72),
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      const [
-                        'MON', 'TUE', 'WED', 'THU',
-                        'FRI', 'SAT', 'SUN',
-                      ][day.weekday - 1],
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w900,
-                        color: selected ? Colors.white70 : OptivusColors.sub,
+                  return InkWell(
+                    onTap: () {
+                      ref.read(selectedDayProvider.notifier).state = day;
+                      ref
+                          .read(selectedWeekStartProvider.notifier)
+                          .state = DateTime(
+                        day.year,
+                        day.month,
+                        day.day,
+                      ).subtract(Duration(days: day.weekday - 1));
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      width: 42,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? OptivusColors.ink
+                            : Colors.white.withValues(alpha: 0.52),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: selected
+                              ? Colors.transparent
+                              : Colors.white.withValues(alpha: 0.72),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            const [
+                              'MON',
+                              'TUE',
+                              'WED',
+                              'THU',
+                              'FRI',
+                              'SAT',
+                              'SUN',
+                            ][day.weekday - 1],
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w900,
+                              color: selected
+                                  ? Colors.white70
+                                  : OptivusColors.sub,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            '${day.day}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              color: selected
+                                  ? Colors.white
+                                  : OptivusColors.ink,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 1),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: () => showRoutineWeekPlannerSheet(context, ref),
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.54),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.78),
+                    width: 1,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.calendar_view_week_rounded,
+                      size: 16,
+                      color: OptivusColors.ink,
+                    ),
+                    SizedBox(width: 6),
                     Text(
-                      '${day.day}',
+                      'Week',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         fontWeight: FontWeight.w900,
-                        color: selected ? Colors.white : OptivusColors.ink,
+                        color: OptivusColors.ink,
                       ),
                     ),
                   ],
                 ),
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
     );

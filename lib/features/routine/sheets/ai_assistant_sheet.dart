@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
+import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/models/routine_item.dart';
 
-/// Shows the AI Routine Assistant bottom sheet.
-void showAIAssistantSheet(BuildContext context) {
+void showAIAssistantSheet(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -11,22 +16,27 @@ void showAIAssistantSheet(BuildContext context) {
   );
 }
 
-class _AIAssistantSheetBody extends StatefulWidget {
+class _AIAssistantSheetBody extends ConsumerStatefulWidget {
   const _AIAssistantSheetBody();
 
   @override
-  State<_AIAssistantSheetBody> createState() => _AIAssistantSheetBodyState();
+  ConsumerState<_AIAssistantSheetBody> createState() =>
+      _AIAssistantSheetBodyState();
 }
 
-class _AIAssistantSheetBodyState extends State<_AIAssistantSheetBody> {
-  int? _selectedOption;
+class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
+  final Set<String> _rejected = {};
 
   @override
   Widget build(BuildContext context) {
+    final suggestions = _buildSuggestions()
+        .where((suggestion) => !_rejected.contains(suggestion.id))
+        .toList();
+
     return DraggableScrollableSheet(
-      initialChildSize: 0.7,
+      initialChildSize: 0.74,
       minChildSize: 0.4,
-      maxChildSize: 0.9,
+      maxChildSize: 0.92,
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
@@ -35,16 +45,12 @@ class _AIAssistantSheetBodyState extends State<_AIAssistantSheetBody> {
               end: Alignment.bottomCenter,
               colors: [Color(0xFFF0FFF0), Color(0xFFDCFFCC)],
             ),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(28),
-              topRight: Radius.circular(28),
-            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: ListView(
             controller: scrollController,
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
             children: [
-              // Drag handle
               Center(
                 child: Container(
                   width: 48,
@@ -56,13 +62,12 @@ class _AIAssistantSheetBodyState extends State<_AIAssistantSheetBody> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Title
               const Row(
                 children: [
                   Icon(
                     Icons.auto_awesome,
                     size: 22,
-                    color: Color(0xFFA56CF0),
+                    color: OptivusColors.routineAccent,
                   ),
                   SizedBox(width: 8),
                   Text(
@@ -77,135 +82,300 @@ class _AIAssistantSheetBodyState extends State<_AIAssistantSheetBody> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Smart suggestions powered by AI',
+                'Local planner suggestions. Nothing changes until you accept.',
                 style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                   color: OptivusColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: 20),
-
-              ..._options.asMap().entries.map((entry) {
-                final idx = entry.key;
-                final opt = entry.value;
-                final isSelected = _selectedOption == idx;
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: GestureDetector(
-                    onTap: () => setState(() {
-                      _selectedOption = isSelected ? null : idx;
-                    }),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? opt.color.withValues(alpha: 0.1)
-                            : Colors.white.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isSelected
-                              ? opt.color.withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.7),
-                          width: 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(opt.icon, size: 20, color: opt.color),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  opt.title,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: isSelected
-                                        ? opt.color
-                                        : OptivusColors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                              Icon(
-                                isSelected
-                                    ? Icons.expand_less
-                                    : Icons.expand_more,
-                                size: 20,
-                                color: OptivusColors.textMuted,
-                              ),
-                            ],
-                          ),
-                          if (isSelected) ...[
-                            const SizedBox(height: 12),
-                            // Mock suggestion card
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    opt.suggestion,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: OptivusColors.textBody,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      _ActionPill(
-                                        label: 'Accept',
-                                        color: OptivusColors.success,
-                                        onTap: () {
-                                          Navigator.of(context).pop();
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'AI suggestion applied',
-                                              ),
-                                              behavior:
-                                                  SnackBarBehavior.floating,
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _ActionPill(
-                                        label: 'Edit',
-                                        color: OptivusColors.textSecondary,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _ActionPill(
-                                        label: 'Reject',
-                                        color: OptivusColors.danger,
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }),
+              const SizedBox(height: 18),
+              if (suggestions.isEmpty)
+                const _SuggestionShell(
+                  icon: Icons.check_circle_rounded,
+                  color: OptivusColors.success,
+                  title: 'No urgent changes',
+                  body:
+                      'Your selected day has no unresolved local suggestions right now.',
+                )
+              else
+                ...suggestions.map(_suggestionCard),
+              const SizedBox(height: 10),
+              const _OptionSummary(),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _suggestionCard(_RoutineSuggestion suggestion) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: _SuggestionShell(
+        icon: suggestion.icon,
+        color: suggestion.color,
+        title: suggestion.title,
+        body: suggestion.body,
+        actions: [
+          _ActionPill(
+            label: 'Accept',
+            color: OptivusColors.success,
+            onTap: () {
+              suggestion.accept();
+              Navigator.of(context).pop();
+            },
+          ),
+          _ActionPill(
+            label: 'Edit',
+            color: OptivusColors.textSecondary,
+            onTap: suggestion.edit,
+          ),
+          _ActionPill(
+            label: 'Reject',
+            color: OptivusColors.danger,
+            onTap: () => setState(() => _rejected.add(suggestion.id)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_RoutineSuggestion> _buildSuggestions() {
+    final day = ref.watch(selectedDayProvider);
+    final items = ref.watch(selectedDayRoutineItemsProvider);
+    final conflicts = ref.watch(routineConflictsProvider);
+    final controller = ref.read(routineControllerProvider);
+    final suggestions = <_RoutineSuggestion>[];
+
+    for (final conflict in conflicts.take(3)) {
+      final item = _itemById(items, conflict.itemId);
+      if (item == null) continue;
+      final freeSlot = controller.findFreeSlot(item: item, date: day);
+      suggestions.add(
+        _RoutineSuggestion(
+          id: 'fix-${conflict.id}',
+          icon: Icons.warning_amber_rounded,
+          color: conflict.blocking
+              ? OptivusColors.danger
+              : OptivusColors.warning,
+          title: 'Fix conflict',
+          body: freeSlot == null
+              ? '${conflict.message}\nSuggestion: make a tiny version or move it tomorrow.'
+              : '${conflict.message}\nSuggestion: move ${item.title} to ${TimelineUtils.formatMinute(freeSlot)}.',
+          accept: () {
+            if (freeSlot == null) {
+              controller.makeTinyVersion(item);
+            } else {
+              controller.moveItem(
+                itemId: item.id,
+                date: day,
+                startMinute: freeSlot,
+                durationMinutes: item.durationMinutes,
+              );
+            }
+          },
+          edit: () => showRoutineMoveSheet(context, ref, item),
+        ),
+      );
+    }
+
+    final missed = items.where((item) {
+      return item.status == RoutineStatus.missed || item.isMissed;
+    }).toList();
+    for (final item in missed.take(1)) {
+      suggestions.add(
+        _RoutineSuggestion(
+          id: 'tiny-${item.id}',
+          icon: Icons.compress_rounded,
+          color: OptivusColors.warning,
+          title: 'Create tiny version',
+          body:
+              '${item.title} was missed. Suggestion: keep a 5-10 min version today instead of dropping the habit.',
+          accept: () => controller.makeTinyVersion(item),
+          edit: () => showRoutineMoveSheet(context, ref, item),
+        ),
+      );
+    }
+
+    final freeGap = _largestFreeGap(items);
+    if (freeGap.duration >= 15) {
+      suggestions.add(
+        _RoutineSuggestion(
+          id: 'fill-${freeGap.start}-${freeGap.end}',
+          icon: Icons.add_task_rounded,
+          color: OptivusColors.routineAccent,
+          title: 'Fill free time',
+          body:
+              'AI found ${TimelineUtils.formatDuration(freeGap.duration)} free from ${TimelineUtils.formatMinute(freeGap.start)}. Suggestion: add a short focus or reading task.',
+          accept: () {
+            controller.addItem(
+              RoutineItem(
+                id: 'ai-fill-${DateTime.now().millisecondsSinceEpoch}',
+                title: 'Short focus block',
+                date: TimelineUtils.dateOnly(day),
+                startMinute: freeGap.start,
+                endMinute: freeGap.start + 15,
+                repeatDays: const [],
+                blockType: RoutineBlockType.flexibleTask,
+                category: RoutineCategory.focus,
+                source: RoutineSource.aiSuggestion,
+                priority: RoutinePriority.goodToDo,
+                repeatRule: 'once',
+                notes: 'Accepted from local Routine Assistant.',
+              ),
+            );
+          },
+          edit: () => showAddRoutineSheet(context, ref),
+        ),
+      );
+    }
+
+    final longTask = items
+        .where((item) {
+          return item.blockType == RoutineBlockType.flexibleTask &&
+              item.durationMinutes > 45;
+        })
+        .cast<RoutineItem?>()
+        .firstWhere((item) => item != null, orElse: () => null);
+    if (longTask != null) {
+      suggestions.add(
+        _RoutineSuggestion(
+          id: 'order-${longTask.id}',
+          icon: Icons.swap_vert_rounded,
+          color: OptivusColors.blockFlex,
+          title: 'Suggest better task order',
+          body:
+              '${longTask.title} is long for a crowded day. Suggestion: split it by making a tiny version now and moving the full block later.',
+          accept: () => controller.makeTinyVersion(longTask),
+          edit: () => showRoutineMoveSheet(context, ref, longTask),
+        ),
+      );
+    }
+
+    return suggestions;
+  }
+
+  RoutineItem? _itemById(List<RoutineItem> items, String id) {
+    for (final item in items) {
+      if (item.id == id) return item;
+    }
+    return null;
+  }
+
+  _FreeGap _largestFreeGap(List<RoutineItem> items) {
+    final sorted =
+        items
+            .where((item) => !item.allowOverlap && item.durationMinutes > 0)
+            .toList()
+          ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+    var cursor = 6 * 60;
+    var best = const _FreeGap(18 * 60, 18 * 60);
+    for (final item in sorted) {
+      if (item.startMinute > cursor &&
+          item.startMinute - cursor > best.duration) {
+        best = _FreeGap(cursor, item.startMinute);
+      }
+      final end = TimelineUtils.normalizedEndMinute(
+        item,
+      ).clamp(0, 24 * 60).toInt();
+      if (end > cursor) cursor = end;
+    }
+    if (23 * 60 - cursor > best.duration) {
+      best = _FreeGap(cursor, 23 * 60);
+    }
+    return best;
+  }
+}
+
+class _RoutineSuggestion {
+  final String id;
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String body;
+  final VoidCallback accept;
+  final VoidCallback edit;
+
+  const _RoutineSuggestion({
+    required this.id,
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.body,
+    required this.accept,
+    required this.edit,
+  });
+}
+
+class _FreeGap {
+  final int start;
+  final int end;
+
+  const _FreeGap(this.start, this.end);
+
+  int get duration => end - start;
+}
+
+class _SuggestionShell extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String body;
+  final List<Widget> actions;
+
+  const _SuggestionShell({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.body,
+    this.actions = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            body,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+              color: OptivusColors.textBody,
+            ),
+          ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: actions),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -222,16 +392,17 @@ class _ActionPill extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
             color: color,
           ),
         ),
@@ -240,49 +411,39 @@ class _ActionPill extends StatelessWidget {
   }
 }
 
-class _AIOption {
-  final String title;
-  final IconData icon;
-  final Color color;
-  final String suggestion;
-  const _AIOption(this.title, this.icon, this.color, this.suggestion);
-}
+class _OptionSummary extends StatelessWidget {
+  const _OptionSummary();
 
-const _options = [
-  _AIOption(
-    'Improve today\'s plan',
-    Icons.auto_fix_high,
-    Color(0xFF8B5CF6),
-    'Move your Meditation from 7:40 AM to 6:30 AM for better cortisol sync. Also, add a 10-min stretch after Gym at 7:15 PM.',
-  ),
-  _AIOption(
-    'Fill free time',
-    Icons.schedule,
-    Color(0xFF3B82F6),
-    'You have a 2h gap from 5:00–6:30 PM after class. I suggest: 30 min Reading, 15 min Hydration check, then Gym prep.',
-  ),
-  _AIOption(
-    'Fix conflicts',
-    Icons.warning_amber,
-    Color(0xFFEF5B5B),
-    'Lunch (1:00 PM) overlaps with Class (9:00 AM – 5:00 PM). Mark Lunch as allowOverlap since you eat during class break.',
-  ),
-  _AIOption(
-    'Create tiny version for busy day',
-    Icons.compress,
-    Color(0xFFF59E0B),
-    'Tiny day: 5 min meditation, 15 min reading, skip gym (rest day), keep meal blocks. Estimated: 3 hard blocks only.',
-  ),
-  _AIOption(
-    'Suggest better task order',
-    Icons.swap_vert,
-    Color(0xFF10B981),
-    'Move skin care before meditation for better habit stacking. Your current order breaks the "anchor chain" pattern.',
-  ),
-  _AIOption(
-    'Rebuild this week',
-    Icons.calendar_month,
-    Color(0xFF14B8A6),
-    'Based on your patterns: Mon/Wed/Fri → full gym days, Tue/Thu → light + focus sessions, Weekend → flexible recovery.',
-  ),
-];
+  @override
+  Widget build(BuildContext context) {
+    const options = [
+      'Improve today\'s plan',
+      'Fill free time',
+      'Fix conflicts',
+      'Create tiny version',
+      'Suggest better task order',
+      'Rebuild this week',
+    ];
+    return Wrap(
+      spacing: 7,
+      runSpacing: 7,
+      children: options.map((option) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            color: OptivusColors.routineAccent.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            option,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: OptivusColors.textSecondary,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/widgets/routine_glass_filter.dart';
 
@@ -12,24 +11,38 @@ class RoutineTitleFilterRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedDay = ref.watch(selectedDayProvider);
     final filter = ref.watch(routineFilterProvider);
+    final categoryFilter = ref.watch(selectedCategoryFilterProvider);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          RoutineGlassFilter(
-            selected: filter,
-            onSelected: (f) {
-              ref.read(routineFilterProvider.notifier).state = f;
-            },
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        reverse: true,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            RoutineGlassFilter(
+              selected: categoryFilter,
+              options: categoryFilters,
+              width: 168,
+              onSelected: (f) {
+                ref.read(selectedCategoryFilterProvider.notifier).state = f;
+              },
+            ),
+            const SizedBox(width: 10),
+            RoutineGlassFilter(
+              selected: filter,
+              width: 174,
+              onSelected: (f) {
+                ref.read(routineFilterProvider.notifier).state = f;
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
-
 }

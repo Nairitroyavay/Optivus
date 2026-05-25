@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
+import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -23,10 +26,7 @@ class _RoutineDetailSheetBody extends StatelessWidget {
   final RoutineItem item;
   final WidgetRef parentRef;
 
-  const _RoutineDetailSheetBody({
-    required this.item,
-    required this.parentRef,
-  });
+  const _RoutineDetailSheetBody({required this.item, required this.parentRef});
 
   @override
   Widget build(BuildContext context) {
@@ -110,8 +110,7 @@ class _RoutineDetailSheetBody extends StatelessWidget {
               _InfoRow('Type', item.blockTypeLabel),
               _InfoRow('Priority', item.priorityLabel),
               _InfoRow('Status', item.statusLabel),
-              if (item.location != null)
-                _InfoRow('Location', item.location!),
+              if (item.location != null) _InfoRow('Location', item.location!),
               if (item.mealCategory != null)
                 _InfoRow('Meal', item.mealCategory!),
 
@@ -160,7 +159,8 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                 ...item.subtasks!.asMap().entries.map((entry) {
                   final idx = entry.key;
                   final task = entry.value;
-                  final done = item.subtasksCompleted != null &&
+                  final done =
+                      item.subtasksCompleted != null &&
                       idx < item.subtasksCompleted!.length &&
                       item.subtasksCompleted![idx];
                   return GestureDetector(
@@ -277,7 +277,9 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                           height: 22,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: OptivusColors.routineAccent.withValues(alpha: 0.15),
+                            color: OptivusColors.routineAccent.withValues(
+                              alpha: 0.15,
+                            ),
                           ),
                           child: Center(
                             child: Text(
@@ -305,6 +307,68 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                 }),
               ],
 
+              const SizedBox(height: 12),
+              const Text(
+                'Attachments',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.photo_camera_outlined,
+                      size: 18,
+                      color: OptivusColors.textSecondary,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Photo or attachment placeholder',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: OptivusColors.textBody,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              const Text(
+                'AI suggestions',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              _SuggestionTile(item: item, parentRef: parentRef),
+
+              const SizedBox(height: 12),
+              const Text(
+                'History',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              _HistoryTile(item: item),
+
               // Action buttons
               const SizedBox(height: 24),
               Row(
@@ -314,14 +378,11 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                       label: 'Edit',
                       icon: Icons.edit,
                       color: OptivusColors.textSecondary,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('TODO: Edit routine item'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
+                      onTap: () => showAddRoutineSheet(
+                        context,
+                        parentRef,
+                        editItem: item,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -344,13 +405,39 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                       label: 'Move',
                       icon: Icons.schedule,
                       color: OptivusColors.routineAccent,
+                      onTap: () =>
+                          showRoutineMoveSheet(context, parentRef, item),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _SheetButton(
+                      label: 'Done',
+                      icon: Icons.check_rounded,
+                      color: OptivusColors.success,
                       onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('TODO: Move routine item'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
+                        parentRef
+                            .read(routineControllerProvider)
+                            .markCompleted(item.id);
+                        Navigator.of(context).pop();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _SheetButton(
+                      label: 'Skip',
+                      icon: Icons.skip_next_rounded,
+                      color: OptivusColors.textSecondary,
+                      onTap: () {
+                        parentRef
+                            .read(routineControllerProvider)
+                            .markSkipped(item.id);
+                        Navigator.of(context).pop();
                       },
                     ),
                   ),
@@ -361,6 +448,87 @@ class _RoutineDetailSheetBody extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class _SuggestionTile extends StatelessWidget {
+  final RoutineItem item;
+  final WidgetRef parentRef;
+
+  const _SuggestionTile({required this.item, required this.parentRef});
+
+  @override
+  Widget build(BuildContext context) {
+    final suggestion = item.durationMinutes > 20
+        ? 'Create a ${item.durationMinutes.clamp(5, 10).toInt()} min tiny version for busy days.'
+        : 'Keep this item near its current anchor to protect the schedule order.';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: OptivusColors.routineAccent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.auto_awesome_rounded,
+            size: 18,
+            color: OptivusColors.routineAccent,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              suggestion,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.textBody,
+              ),
+            ),
+          ),
+          if (item.durationMinutes > 20)
+            TextButton(
+              onPressed: () {
+                parentRef.read(routineControllerProvider).makeTinyVersion(item);
+                Navigator.of(context).pop();
+              },
+              child: const Text(
+                'Accept',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryTile extends StatelessWidget {
+  final RoutineItem item;
+
+  const _HistoryTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        'Created ${_date(item.createdAt)} • Updated ${_date(item.updatedAt)} • ${item.statusLabel}',
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: OptivusColors.textBody,
+        ),
+      ),
+    );
+  }
+
+  String _date(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
 }
 
@@ -426,10 +594,7 @@ class _SheetButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: color.withValues(alpha: 0.2),
-            width: 1,
-          ),
+          border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

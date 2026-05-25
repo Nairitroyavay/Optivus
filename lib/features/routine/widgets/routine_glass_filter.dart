@@ -10,11 +10,15 @@ import 'package:optivus/features/routine/routine_state.dart';
 class RoutineGlassFilter extends StatefulWidget {
   final String selected;
   final ValueChanged<String> onSelected;
+  final List<RoutineFilterOption> options;
+  final double width;
 
   const RoutineGlassFilter({
     super.key,
     required this.selected,
     required this.onSelected,
+    this.options = primaryFilters,
+    this.width = 190,
   });
 
   @override
@@ -28,8 +32,6 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
   late final Animation<double> _fade;
   final LayerLink _link = LayerLink();
 
-  static const double _fixedWidth = 190.0;
-
   @override
   void initState() {
     super.initState();
@@ -42,39 +44,46 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
 
   @override
   void dispose() {
-    _closeDropdown();
+    _closeDropdown(immediate: true);
     _anim.dispose();
     super.dispose();
   }
 
   void _openDropdown() {
-    _overlay = OverlayEntry(builder: (_) {
-      return GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: _closeDropdown,
-        child: Stack(children: [
-          CompositedTransformFollower(
-            link: _link,
-            showWhenUnlinked: false,
-            targetAnchor: Alignment.bottomRight,
-            followerAnchor: Alignment.topRight,
-            offset: const Offset(0, 8),
-            child: ScaleTransition(
-              scale: _fade,
-              alignment: Alignment.topRight,
-              child: _buildSheet(),
-            ),
+    _overlay = OverlayEntry(
+      builder: (_) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _closeDropdown,
+          child: Stack(
+            children: [
+              CompositedTransformFollower(
+                link: _link,
+                showWhenUnlinked: false,
+                targetAnchor: Alignment.bottomRight,
+                followerAnchor: Alignment.topRight,
+                offset: const Offset(0, 8),
+                child: ScaleTransition(
+                  scale: _fade,
+                  alignment: Alignment.topRight,
+                  child: _buildSheet(),
+                ),
+              ),
+            ],
           ),
-        ]),
-      );
-    });
+        );
+      },
+    );
 
     Overlay.of(context).insert(_overlay!);
     _anim.forward();
   }
 
-  void _closeDropdown() async {
-    await _anim.reverse();
+  void _closeDropdown({bool immediate = false}) async {
+    if (_overlay == null) return;
+    if (!immediate && mounted) {
+      await _anim.reverse();
+    }
     _overlay?.remove();
     _overlay = null;
   }
@@ -89,7 +98,7 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
     const double rim = 8.0;
     const double innerR = outerR - rim + 2;
 
-    final rows = primaryFilters.asMap().entries.map((entry) {
+    final rows = widget.options.asMap().entries.map((entry) {
       final idx = entry.key;
       final f = entry.value;
       final isSelected = widget.selected == f.key;
@@ -109,38 +118,41 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
                   horizontal: 14,
                   vertical: 9,
                 ),
-                child: Row(children: [
-                  Text(
-                    f.emoji,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      f.label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: OptivusColors.ink.withValues(
-                          alpha: isSelected ? 1.0 : 0.80,
-                        ),
-                        letterSpacing: -0.1,
-                        height: 1.2,
+                child: Row(
+                  children: [
+                    Text(
+                      f.emoji,
+                      style: const TextStyle(
+                        fontSize: 15,
                         decoration: TextDecoration.none,
                       ),
                     ),
-                  ),
-                  if (isSelected)
-                    Icon(
-                      Icons.check_rounded,
-                      size: 14,
-                      color: OptivusColors.ink.withValues(alpha: 0.85),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        f.label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: OptivusColors.ink.withValues(
+                            alpha: isSelected ? 1.0 : 0.80,
+                          ),
+                          letterSpacing: -0.1,
+                          height: 1.2,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
                     ),
-                ]),
+                    if (isSelected)
+                      Icon(
+                        Icons.check_rounded,
+                        size: 14,
+                        color: OptivusColors.ink.withValues(alpha: 0.85),
+                      ),
+                  ],
+                ),
               ),
               if (!isLast)
                 Divider(
@@ -159,7 +171,7 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
     return Material(
       color: Colors.transparent,
       child: Container(
-        width: _fixedWidth,
+        width: widget.width,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(outerR),
           boxShadow: [
@@ -180,10 +192,7 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
                 // Content column — drives height
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: rows,
-                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: rows),
                 ),
                 // Transparent tint overlay
                 Positioned.fill(
@@ -218,9 +227,9 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
 
   @override
   Widget build(BuildContext context) {
-    final selectedOption = primaryFilters.firstWhere(
+    final selectedOption = widget.options.firstWhere(
       (f) => f.key == widget.selected,
-      orElse: () => primaryFilters.first,
+      orElse: () => widget.options.first,
     );
 
     return CompositedTransformTarget(
@@ -229,7 +238,10 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
         onTap: () => _overlay == null ? _openDropdown() : _closeDropdown(),
         child: Container(
           color: Colors.transparent,
-          child: _LiquidGlassPill(label: selectedOption.label),
+          child: _LiquidGlassPill(
+            label: selectedOption.label,
+            width: widget.width,
+          ),
         ),
       ),
     );
@@ -242,9 +254,9 @@ class _RoutineGlassFilterState extends State<RoutineGlassFilter>
 
 class _LiquidGlassPill extends StatelessWidget {
   final String label;
-  const _LiquidGlassPill({required this.label});
+  final double width;
+  const _LiquidGlassPill({required this.label, required this.width});
 
-  static const double _width = 190.0;
   static const double outerR = 20.0;
   static const double rim = 7.0;
   static const double innerR = outerR - rim + 2; // 15
@@ -252,7 +264,7 @@ class _LiquidGlassPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: _width,
+      width: width,
       height: 40,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(outerR),
@@ -351,13 +363,21 @@ class GlassHighlightPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final outerRect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final outerRRect =
-        RRect.fromRectAndRadius(outerRect, Radius.circular(outerR));
+    final outerRRect = RRect.fromRectAndRadius(
+      outerRect,
+      Radius.circular(outerR),
+    );
 
-    final innerRect =
-        Rect.fromLTWH(rim, rim, size.width - rim * 2, size.height - rim * 2);
-    final innerRRect =
-        RRect.fromRectAndRadius(innerRect, Radius.circular(innerR));
+    final innerRect = Rect.fromLTWH(
+      rim,
+      rim,
+      size.width - rim * 2,
+      size.height - rim * 2,
+    );
+    final innerRRect = RRect.fromRectAndRadius(
+      innerRect,
+      Radius.circular(innerR),
+    );
 
     // Outer Edge White Sweep (Top left)
     final outerSweepPaint = Paint()
@@ -388,12 +408,7 @@ class GlassHighlightPainter extends CustomPainter {
     // Thick Glare inside the rim (top-left)
     final glarePath = Path()
       ..addArc(
-        Rect.fromLTWH(
-          rim * 0.4,
-          rim * 0.4,
-          outerR * 2.5,
-          outerR * 2.5,
-        ),
+        Rect.fromLTWH(rim * 0.4, rim * 0.4, outerR * 2.5, outerR * 2.5),
         3.14,
         1.57,
       );
@@ -458,10 +473,7 @@ class GlassHighlightPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.transparent,
-            Colors.black.withValues(alpha: 0.35),
-          ],
+          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.35)],
           stops: const [0.6, 1.0],
         ).createShader(outerRect)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),

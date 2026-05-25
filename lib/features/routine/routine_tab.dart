@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_header.dart';
@@ -47,16 +46,14 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
 
   @override
   Widget build(BuildContext context) {
-    final allItems = ref.watch(mockRoutineProvider);
-    final filter = ref.watch(routineFilterProvider);
     final selectedDay = ref.watch(selectedDayProvider);
     final showFullDay = ref.watch(showFullDayProvider);
     final showMinuteTicks = ref.watch(showMinuteTicksProvider);
+    final showCurrentTimeLine = ref.watch(showCurrentTimeLineProvider);
     final compactMode = ref.watch(compactModeProvider);
     final isToday = TimelineUtils.isToday(selectedDay);
-
-    // Apply filter
-    final filteredItems = TimelineUtils.filterItems(allItems, filter);
+    final conflicts = ref.watch(routineConflictsProvider);
+    final filteredItems = ref.watch(filteredRoutineItemsProvider);
 
     // Sort by start time
     final sortedItems = List<RoutineItem>.from(filteredItems)
@@ -70,8 +67,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       compactMode: compactMode,
     );
 
-    // Count conflicts
-    final conflictCount = allItems.where((i) => i.hasConflict).length;
+    final conflictCount = conflicts.length;
 
     // ── Layout matches old: LiquidBg → Scaffold(transparent) → Stack ──
     return Container(
@@ -80,7 +76,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            OptivusColors.routineBgTop,    // #A3FF91
+            OptivusColors.routineBgTop, // #A3FF91
             OptivusColors.routineBgBottom, // #EFFEEC
           ],
           stops: [0.0, 0.55],
@@ -96,7 +92,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                 children: [
                   // ── Header: Date + AI/Add/Settings ──
                   RoutineHeader(
-                    onAITap: () => showAIAssistantSheet(context),
+                    onAITap: () => showAIAssistantSheet(context, ref),
                     onAddTap: () => showAddRoutineSheet(context, ref),
                     onSettingsTap: () => showRoutineSettingsSheet(context, ref),
                   ),
@@ -117,18 +113,31 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           'conflicts';
                     },
                   ),
-                  
+
                   // Add a small spacing if there are conflicts so timeline doesn't touch it
                   if (conflictCount > 0) const SizedBox(height: 12),
 
                   // ── Timeline or Empty State ──
                   Expanded(
                     child: sortedItems.isEmpty
-                        ? _buildEmptyState()
+                        ? Stack(
+                            children: [
+                              RoutineTimelineViewport(
+                                items: const [],
+                                layout: layout,
+                                isToday: isToday,
+                                showCurrentTimeLine: showCurrentTimeLine,
+                              ),
+                              Positioned.fill(
+                                child: IgnorePointer(child: _buildEmptyState()),
+                              ),
+                            ],
+                          )
                         : RoutineTimelineViewport(
                             items: sortedItems,
                             layout: layout,
                             isToday: isToday,
+                            showCurrentTimeLine: showCurrentTimeLine,
                             onCardTap: (item) {
                               showRoutineDetailSheet(context, ref, item);
                             },

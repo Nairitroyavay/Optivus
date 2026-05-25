@@ -46,9 +46,10 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
       vsync: this,
       duration: const Duration(milliseconds: 100),
     );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.97).animate(
-      CurvedAnimation(parent: _pressCtrl, curve: Curves.easeOut),
-    );
+    _scaleAnim = Tween<double>(
+      begin: 1.0,
+      end: 0.97,
+    ).animate(CurvedAnimation(parent: _pressCtrl, curve: Curves.easeOut));
   }
 
   @override
@@ -131,8 +132,12 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
       ];
     }
 
-    final railColor =
-        widget.isCompleted ? OptivusColors.success : widget.railColor;
+    final railColor = widget.isCompleted
+        ? OptivusColors.success
+        : widget.railColor;
+    final accentRailHeight = (widget.railHeight ?? 42.0)
+        .clamp(32.0, 64.0)
+        .toDouble();
 
     return GestureDetector(
       onTapDown: (_) {
@@ -146,10 +151,8 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
       onTapCancel: () => _pressCtrl.reverse(),
       child: AnimatedBuilder(
         animation: _scaleAnim,
-        builder: (_, child) => Transform.scale(
-          scale: _scaleAnim.value,
-          child: child,
-        ),
+        builder: (_, child) =>
+            Transform.scale(scale: _scaleAnim.value, child: child),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           decoration: BoxDecoration(
@@ -166,7 +169,7 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
                 // Accent bar — 3.5px with glow shadow
                 Container(
                   width: 3.5,
-                  height: widget.railHeight,
+                  height: accentRailHeight,
                   margin: const EdgeInsets.only(right: 10, top: 2),
                   decoration: BoxDecoration(
                     color: railColor,
@@ -215,10 +218,7 @@ class CardActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: color.withValues(alpha: 0.2),
-            width: 0.5,
-          ),
+          border: Border.all(color: color.withValues(alpha: 0.2), width: 0.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

@@ -17,19 +17,44 @@ class TimelineLayout {
   });
 
   /// Total pixel height of the visible timeline range.
-  double get totalHeight =>
-      (visibleEndMinute - visibleStartMinute) * minuteHeight;
+  double get totalHeight => totalMinutes * minuteHeight;
 
   /// Total minutes visible.
-  int get totalMinutes => visibleEndMinute - visibleStartMinute;
+  int get totalMinutes {
+    final minutes = visibleEndMinute - visibleStartMinute;
+    return minutes < 0 ? 0 : minutes;
+  }
 
   /// Calculate the top position for a given minute.
   double topForMinute(int minute) =>
       (minute - visibleStartMinute) * minuteHeight;
 
+  /// Calculate the exact pixel height for a normalized minute range.
+  double heightForRange(int startMinute, int endMinute) {
+    final minutes = endMinute - startMinute;
+    return (minutes < 0 ? 0 : minutes) * minuteHeight;
+  }
+
   /// Calculate the height for a duration in minutes.
   double heightForDuration(int durationMinutes) =>
-      durationMinutes * minuteHeight;
+      (durationMinutes < 0 ? 0 : durationMinutes) * minuteHeight;
+
+  /// Whether a minute sits inside the visible timeline range.
+  bool isMinuteVisible(int minute) =>
+      minute >= visibleStartMinute && minute <= visibleEndMinute;
+
+  /// Clamp a minute to the visible timeline range.
+  int clampMinuteToVisibleRange(int minute) {
+    if (minute < visibleStartMinute) return visibleStartMinute;
+    if (minute > visibleEndMinute) return visibleEndMinute;
+    return minute;
+  }
+
+  /// Round a minute down to the nearest 10-minute boundary.
+  int roundDownToNearestTen(int minute) => (minute / 10).floor() * 10;
+
+  /// Round a minute up to the nearest 10-minute boundary.
+  int roundUpToNearestTen(int minute) => (minute / 10).ceil() * 10;
 
   TimelineLayout copyWith({
     int? visibleStartMinute,

@@ -1,5 +1,3 @@
-
-
 // ── Item Type (block category) ──────────────────────────────
 enum RoutineBlockType {
   hardBlock, // Non-negotiable: Class, Shift work, Travel, sleep
@@ -18,20 +16,18 @@ enum RoutineCategory {
   fixed,
   skinCare,
   habit,
+  badHabit,
   identity,
   finance,
   health,
   focus,
+  meditation,
+  hydration,
+  screenTime,
 }
 
 // ── Source ───────────────────────────────────────────────────
-enum RoutineSource {
-  onboarding,
-  manual,
-  aiSuggestion,
-  tracker,
-  imported,
-}
+enum RoutineSource { onboarding, manual, aiSuggestion, tracker, imported }
 
 // ── Status ──────────────────────────────────────────────────
 enum RoutineStatus {
@@ -45,25 +41,15 @@ enum RoutineStatus {
 }
 
 // ── Priority ────────────────────────────────────────────────
-enum RoutinePriority {
-  mustDo,
-  goodToDo,
-}
+enum RoutinePriority { mustDo, goodToDo }
 
 // ── Tracker Type ────────────────────────────────────────────
-enum TrackerType {
-  meditation,
-  workout,
-  focus,
-  money,
-  hydration,
-  smoking,
-  none,
-}
+enum TrackerType { meditation, workout, focus, money, hydration, smoking, none }
 
 // ── RoutineItem ─────────────────────────────────────────────
 class RoutineItem {
   final String id;
+  final String? userId;
   final String title;
   final DateTime? date;
   final int startMinute; // Minutes since midnight
@@ -114,6 +100,7 @@ class RoutineItem {
 
   RoutineItem({
     required this.id,
+    this.userId,
     required this.title,
     required this.startMinute,
     required this.endMinute,
@@ -147,9 +134,9 @@ class RoutineItem {
     this.conflictMessage,
     DateTime? createdAt,
     DateTime? updatedAt,
-  })  : repeatDays = repeatDays ?? const [1, 2, 3, 4, 5, 6, 7],
-        createdAt = createdAt ?? DateTime.now(),
-        updatedAt = updatedAt ?? DateTime.now();
+  }) : repeatDays = repeatDays ?? const [1, 2, 3, 4, 5, 6, 7],
+       createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
 
   int get durationMinutes {
     if (crossesMidnight || endsNextDay || endMinute <= startMinute) {
@@ -168,8 +155,7 @@ class RoutineItem {
   }
 
   /// Whether this is a hard-type block (hard_block or configured as hardBlock).
-  bool get isHardBlock =>
-      blockType == RoutineBlockType.hardBlock || hardBlock;
+  bool get isHardBlock => blockType == RoutineBlockType.hardBlock || hardBlock;
 
   /// Get the display steps: prefer steps, fall back to skincareProducts.
   List<String>? get displaySteps => steps ?? skincareProducts;
@@ -224,6 +210,7 @@ class RoutineItem {
 
   RoutineItem copyWith({
     String? id,
+    String? userId,
     String? title,
     DateTime? date,
     int? startMinute,
@@ -261,6 +248,7 @@ class RoutineItem {
   }) {
     return RoutineItem(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       title: title ?? this.title,
       date: date ?? this.date,
       startMinute: startMinute ?? this.startMinute,
@@ -304,6 +292,7 @@ class RoutineItem {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
+      'userId': userId,
       'title': title,
       'date': date?.toIso8601String(),
       'startMinute': startMinute,
@@ -343,6 +332,7 @@ class RoutineItem {
   factory RoutineItem.fromMap(Map<String, dynamic> map) {
     return RoutineItem(
       id: map['id'] as String? ?? '',
+      userId: map['userId'] as String?,
       title: map['title'] as String? ?? '',
       date: map['date'] != null
           ? DateTime.tryParse(map['date'] as String)
@@ -351,28 +341,43 @@ class RoutineItem {
       endMinute: (map['endMinute'] as num?)?.toInt() ?? 0,
       crossesMidnight: map['crossesMidnight'] as bool? ?? false,
       endsNextDay: map['endsNextDay'] as bool? ?? false,
-      repeatDays: (map['repeatDays'] as List?)
+      repeatDays:
+          (map['repeatDays'] as List?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [1, 2, 3, 4, 5, 6, 7],
       location: map['location'] as String?,
       blockType: _parseEnum(
-          RoutineBlockType.values, map['blockType'] as String?,
-          fallback: RoutineBlockType.flexibleTask),
+        RoutineBlockType.values,
+        map['blockType'] as String?,
+        fallback: RoutineBlockType.flexibleTask,
+      ),
       category: _parseEnum(
-          RoutineCategory.values, map['category'] as String?,
-          fallback: RoutineCategory.fixed),
-      source: _parseEnum(RoutineSource.values, map['source'] as String?,
-          fallback: RoutineSource.manual),
-      status: _parseEnum(RoutineStatus.values, map['status'] as String?,
-          fallback: RoutineStatus.planned),
+        RoutineCategory.values,
+        map['category'] as String?,
+        fallback: RoutineCategory.fixed,
+      ),
+      source: _parseEnum(
+        RoutineSource.values,
+        map['source'] as String?,
+        fallback: RoutineSource.manual,
+      ),
+      status: _parseEnum(
+        RoutineStatus.values,
+        map['status'] as String?,
+        fallback: RoutineStatus.planned,
+      ),
       priority: _parseEnum(
-          RoutinePriority.values, map['priority'] as String?,
-          fallback: RoutinePriority.goodToDo),
+        RoutinePriority.values,
+        map['priority'] as String?,
+        fallback: RoutinePriority.goodToDo,
+      ),
       isTrackerLinked: map['isTrackerLinked'] as bool? ?? false,
       trackerType: _parseEnum(
-          TrackerType.values, map['trackerType'] as String?,
-          fallback: TrackerType.none),
+        TrackerType.values,
+        map['trackerType'] as String?,
+        fallback: TrackerType.none,
+      ),
       notes: map['notes'] as String?,
       subtasks: (map['subtasks'] as List?)?.cast<String>(),
       subtasksCompleted: (map['subtasksCompleted'] as List?)?.cast<bool>(),
@@ -400,8 +405,11 @@ class RoutineItem {
 }
 
 /// Safe enum parser: returns fallback for unknown values.
-T _parseEnum<T extends Enum>(List<T> values, String? name,
-    {required T fallback}) {
+T _parseEnum<T extends Enum>(
+  List<T> values,
+  String? name, {
+  required T fallback,
+}) {
   if (name == null) return fallback;
   for (final v in values) {
     if (v.name == name) return v;

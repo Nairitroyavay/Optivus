@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/models/routine_item.dart';
 
 /// Shows the Routine Settings bottom sheet.
 void showRoutineSettingsSheet(BuildContext context, WidgetRef ref) {
@@ -55,7 +58,11 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
               // Title
               const Row(
                 children: [
-                  Icon(Icons.settings, size: 22, color: OptivusColors.textSecondary),
+                  Icon(
+                    Icons.settings,
+                    size: 22,
+                    color: OptivusColors.textSecondary,
+                  ),
                   SizedBox(width: 8),
                   Text(
                     'Routine Settings',
@@ -74,25 +81,25 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
                 icon: Icons.calendar_view_week,
                 title: 'Week Planner',
                 subtitle: 'Monday to Sunday planning',
-                onTap: () => _showSubSheet(context, 'Week Planner'),
+                onTap: () => showRoutineWeekPlannerSheet(context, parentRef),
               ),
               _SettingsTile(
                 icon: Icons.schedule,
                 title: 'Base Timeline Manager',
                 subtitle: 'Classes, Job, Eating, Fixed blocks',
-                onTap: () => _showSubSheet(context, 'Base Timeline Manager'),
+                onTap: () => _showBaseTimelineManager(context),
               ),
               _SettingsTile(
                 icon: Icons.psychology,
                 title: 'Habit Systems',
                 subtitle: 'Good habits, Bad habits, Identity goals',
-                onTap: () => _showSubSheet(context, 'Habit Systems'),
+                onTap: () => _showHabitSystems(context),
               ),
               _SettingsTile(
                 icon: Icons.history,
                 title: 'Routine History',
                 subtitle: 'Completed, Skipped, Missed',
-                onTap: () => _showSubSheet(context, 'Routine History'),
+                onTap: () => _showRoutineHistory(context),
               ),
 
               const SizedBox(height: 16),
@@ -143,6 +150,33 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
                   );
                 },
               ),
+              Consumer(
+                builder: (ctx, ref, _) {
+                  final showCurrentTimeLine = ref.watch(
+                    showCurrentTimeLineProvider,
+                  );
+                  return _ToggleTile(
+                    title: 'Show current time line',
+                    subtitle: 'Dotted now marker on today',
+                    value: showCurrentTimeLine,
+                    onChanged: (v) =>
+                        ref.read(showCurrentTimeLineProvider.notifier).state =
+                            v,
+                  );
+                },
+              ),
+              Consumer(
+                builder: (ctx, ref, _) {
+                  final precisionMode = ref.watch(precisionModeProvider);
+                  return _ToggleTile(
+                    title: 'Precision mode',
+                    subtitle: 'Move controls snap to 1 minute',
+                    value: precisionMode,
+                    onChanged: (v) =>
+                        ref.read(precisionModeProvider.notifier).state = v,
+                  );
+                },
+              ),
 
               const SizedBox(height: 16),
               const Text(
@@ -158,13 +192,35 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
                 icon: Icons.auto_fix_high,
                 title: 'AI Suggestions',
                 subtitle: 'Get smart suggestions for your routine',
-                onTap: () => _showSubSheet(context, 'AI Suggestions'),
+                onTap: () => _showAutomationSheet(context),
+              ),
+              _SettingsTile(
+                icon: Icons.warning_amber_rounded,
+                title: 'Conflict Resolver',
+                subtitle: 'Warnings and move suggestions',
+                onTap: () => _showConflictResolver(context),
               ),
               _SettingsTile(
                 icon: Icons.notifications_none,
                 title: 'Notifications',
                 subtitle: 'Task reminders and alerts',
-                onTap: () => _showSubSheet(context, 'Notifications'),
+                onTap: () => _showAutomationSheet(context),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Export',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _SettingsTile(
+                icon: Icons.ios_share_rounded,
+                title: 'Export Schedule',
+                subtitle: 'Preview a text schedule export',
+                onTap: () => _showExportSheet(context),
               ),
             ],
           ),
@@ -173,67 +229,414 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
     );
   }
 
-  void _showSubSheet(BuildContext context, String title) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
+  void _showBaseTimelineManager(BuildContext context) {
+    final items = parentRef.read(routineItemsProvider).where((item) {
+      return item.blockType == RoutineBlockType.hardBlock ||
+          item.blockType == RoutineBlockType.softBlock ||
+          item.category == RoutineCategory.classBlock ||
+          item.category == RoutineCategory.job ||
+          item.category == RoutineCategory.eating ||
+          item.category == RoutineCategory.fixed ||
+          item.category == RoutineCategory.skinCare;
+    }).toList()..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+
+    _showListSheet(
+      context,
+      title: 'Base Timeline Manager',
+      icon: Icons.schedule_rounded,
+      children: [
+        const _SectionLabel('Classes'),
+        ..._tilesFor(items, RoutineCategory.classBlock),
+        const _SectionLabel('Job / Work / Business'),
+        ..._tilesFor(items, RoutineCategory.job),
+        const _SectionLabel('Eating'),
+        ..._tilesFor(items, RoutineCategory.eating),
+        const _SectionLabel('Fixed'),
+        ..._tilesFor(items, RoutineCategory.fixed),
+        const _SectionLabel('Skin Care'),
+        ..._tilesFor(items, RoutineCategory.skinCare),
+      ],
+    );
+  }
+
+  void _showHabitSystems(BuildContext context) {
+    final items = parentRef.read(routineItemsProvider);
+    _showListSheet(
+      context,
+      title: 'Habit Systems',
+      icon: Icons.psychology_rounded,
+      children: [
+        const _SectionLabel('Good Habits'),
+        ...items
+            .where(
+              (item) =>
+                  item.category == RoutineCategory.habit ||
+                  item.category == RoutineCategory.identity,
+            )
+            .map(_itemTile),
+        const _SectionLabel('Bad Habits'),
+        ...items
+            .where(
+              (item) =>
+                  item.category == RoutineCategory.badHabit ||
+                  item.blockType == RoutineBlockType.checkIn,
+            )
+            .map(_itemTile),
+        const _SectionLabel('Identity Goals'),
+        ...items
+            .where((item) => item.priority == RoutinePriority.mustDo)
+            .map(_itemTile),
+      ],
+    );
+  }
+
+  void _showRoutineHistory(BuildContext context) {
+    final history =
+        parentRef
+            .read(routineItemsProvider)
+            .where(
+              (item) =>
+                  item.status == RoutineStatus.completed ||
+                  item.status == RoutineStatus.skipped ||
+                  item.status == RoutineStatus.missed ||
+                  item.isCompleted ||
+                  item.isMissed,
+            )
+            .toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    _showListSheet(
+      context,
+      title: 'Routine History',
+      icon: Icons.history_rounded,
+      children: history.isEmpty
+          ? [
+              const _InfoRowBox(
+                text:
+                    'Completed, skipped, and missed routine items appear here.',
+              ),
+            ]
+          : history.map(_itemTile).toList(),
+    );
+  }
+
+  void _showAutomationSheet(BuildContext context) {
+    _showListSheet(
+      context,
+      title: 'Automation',
+      icon: Icons.auto_fix_high_rounded,
+      children: [
+        Consumer(
+          builder: (context, ref, _) => _ToggleTile(
+            title: 'AI Routine Suggestions',
+            subtitle: 'Local suggestions only in this frontend build',
+            value: ref.watch(aiRoutineSuggestionsEnabledProvider),
+            onChanged: (value) =>
+                ref.read(aiRoutineSuggestionsEnabledProvider.notifier).state =
+                    value,
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Center(
-              child: Container(
-                width: 48,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.black12,
-                  borderRadius: BorderRadius.circular(10),
-                ),
+        Consumer(
+          builder: (context, ref, _) => _ToggleTile(
+            title: 'Conflict Resolver',
+            subtitle: 'Show schedule warnings and move suggestions',
+            value: ref.watch(conflictResolverEnabledProvider),
+            onChanged: (value) =>
+                ref.read(conflictResolverEnabledProvider.notifier).state =
+                    value,
+          ),
+        ),
+        Consumer(
+          builder: (context, ref, _) => _ToggleTile(
+            title: 'Notifications',
+            subtitle: 'Mock reminder toggle, no system permission request',
+            value: ref.watch(routineNotificationsEnabledProvider),
+            onChanged: (value) =>
+                ref.read(routineNotificationsEnabledProvider.notifier).state =
+                    value,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showConflictResolver(BuildContext context) {
+    final conflicts = parentRef.read(routineConflictsProvider);
+    _showListSheet(
+      context,
+      title: 'Conflict Resolver',
+      icon: Icons.warning_amber_rounded,
+      children: conflicts.isEmpty
+          ? [const _InfoRowBox(text: 'No conflicts on the selected day.')]
+          : conflicts.map((conflict) {
+              return _ConflictResolverTile(
+                conflict: conflict,
+                onKeepBoth: conflict.canKeepBoth
+                    ? () {
+                        parentRef
+                            .read(routineControllerProvider)
+                            .keepConflictPair(conflict);
+                        Navigator.of(context).pop();
+                      }
+                    : null,
+                onMarkFlexible: () {
+                  parentRef
+                      .read(routineControllerProvider)
+                      .markFlexible(conflict.itemId);
+                  Navigator.of(context).pop();
+                },
+              );
+            }).toList(),
+    );
+  }
+
+  void _showExportSheet(BuildContext context) {
+    final selectedDay = parentRef.read(selectedDayProvider);
+    final items = parentRef.read(selectedDayRoutineItemsProvider);
+    final lines = items
+        .map((item) {
+          return '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)}  ${item.title}  ${item.statusLabel}';
+        })
+        .join('\n');
+    _showListSheet(
+      context,
+      title: 'Export Schedule',
+      icon: Icons.ios_share_rounded,
+      children: [
+        _InfoRowBox(
+          text:
+              '${TimelineUtils.getDayName(selectedDay.weekday)} ${selectedDay.day}/${selectedDay.month}\n$lines',
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _tilesFor(List<RoutineItem> items, RoutineCategory category) {
+    final filtered = items.where((item) => item.category == category).toList();
+    if (filtered.isEmpty) return [const _InfoRowBox(text: 'No items yet.')];
+    return filtered.map(_itemTile).toList();
+  }
+
+  Widget _itemTile(RoutineItem item) {
+    return _InfoRowBox(
+      text:
+          '${item.title}\n${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.blockTypeLabel} • ${item.statusLabel}',
+    );
+  }
+
+  void _showListSheet(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.72,
+        minChildSize: 0.35,
+        maxChildSize: 0.92,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFF0FFF0), Color(0xFFDCFFCC)],
               ),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
-            const SizedBox(height: 20),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: OptivusColors.routineAccent.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.construction, size: 20, color: OptivusColors.routineAccent),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '$title is coming soon. This feature is part of the full Routine system.',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: OptivusColors.textBody,
-                      ),
+            child: ListView(
+              controller: scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+              children: [
+                Center(
+                  child: Container(
+                    width: 48,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(icon, color: OptivusColors.routineAccent, size: 22),
+                    const SizedBox(width: 8),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ...children,
+              ],
             ),
-            const SizedBox(height: 20),
-          ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  final String label;
+
+  const _SectionLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 8),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w900,
+          color: OptivusColors.textSecondary,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRowBox extends StatelessWidget {
+  final String text;
+
+  const _InfoRowBox({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.54),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          height: 1.35,
+          fontWeight: FontWeight.w700,
+          color: OptivusColors.textBody,
+        ),
+      ),
+    );
+  }
+}
+
+class _ConflictResolverTile extends StatelessWidget {
+  final RoutineConflict conflict;
+  final VoidCallback? onKeepBoth;
+  final VoidCallback onMarkFlexible;
+
+  const _ConflictResolverTile({
+    required this.conflict,
+    required this.onKeepBoth,
+    required this.onMarkFlexible,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = conflict.blocking
+        ? OptivusColors.danger
+        : OptivusColors.warning;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            conflict.title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            conflict.message,
+            style: const TextStyle(
+              fontSize: 12,
+              height: 1.25,
+              fontWeight: FontWeight.w600,
+              color: OptivusColors.textBody,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MiniAction(
+                label: 'Keep both',
+                color: OptivusColors.warning,
+                onTap: onKeepBoth,
+              ),
+              _MiniAction(
+                label: 'Mark flexible',
+                color: OptivusColors.routineAccent,
+                onTap: onMarkFlexible,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniAction extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _MiniAction({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.45 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
         ),
       ),
     );

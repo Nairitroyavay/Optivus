@@ -1,25 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
 /// Card for tracker-linked tasks: Meditation, Workout, Focus timer.
-class TrackerTaskCard extends StatelessWidget {
+class TrackerTaskCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
+  final double? railHeight;
   final VoidCallback? onTap;
 
   const TrackerTaskCard({
     super.key,
     required this.item,
     this.isNow = false,
+    this.railHeight,
     this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = RoutineCardFactory.colorForType(RoutineBlockType.trackerTask);
     final isInTracker = item.status == RoutineStatus.inTracker;
     final isComplete =
@@ -27,6 +33,7 @@ class TrackerTaskCard extends StatelessWidget {
 
     return RoutineCardBase(
       railColor: color,
+      railHeight: railHeight,
       isCompleted: isComplete,
       hasConflict: item.hasConflict,
       isNow: isNow,
@@ -78,8 +85,9 @@ class TrackerTaskCard extends StatelessWidget {
                             ? OptivusColors.success
                             : OptivusColors.ink,
                         letterSpacing: -0.2,
-                        decoration:
-                            isComplete ? TextDecoration.lineThrough : null,
+                        decoration: isComplete
+                            ? TextDecoration.lineThrough
+                            : null,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -119,22 +127,25 @@ class TrackerTaskCard extends StatelessWidget {
                   label: 'Open Tracker',
                   color: color,
                   icon: Icons.open_in_new,
+                  onTap: () =>
+                      ref.read(appNavigationProvider.notifier).goToTracker(),
                 )
               else if (!isComplete) ...[
                 CardActionButton(
                   label: 'Start',
                   color: color,
                   icon: Icons.play_arrow,
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('TODO: Switch to Tracker tab'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
+                  onTap: () => ref
+                      .read(routineControllerProvider)
+                      .startTrackerTask(item),
                 ),
-                CardActionButton(label: 'Edit', color: color),
+                CardActionButton(
+                  label: 'Edit',
+                  color: OptivusColors.textSecondary,
+                  icon: Icons.edit_rounded,
+                  onTap: () =>
+                      showAddRoutineSheet(context, ref, editItem: item),
+                ),
               ],
               if (isComplete)
                 CardActionButton(

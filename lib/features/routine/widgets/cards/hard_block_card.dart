@@ -1,28 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
 /// Card for hard blocks: Class, Job, Work, Sleep, Travel, Exam, Shift.
-class HardBlockCard extends StatelessWidget {
+class HardBlockCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
+  final double? railHeight;
   final VoidCallback? onTap;
 
   const HardBlockCard({
     super.key,
     required this.item,
     this.isNow = false,
+    this.railHeight,
     this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = RoutineCardFactory.colorForType(RoutineBlockType.hardBlock);
     return RoutineCardBase(
       railColor: color,
+      railHeight: railHeight,
       isCompleted: item.isCompleted,
       hasConflict: item.hasConflict,
       isNow: isNow,
@@ -107,6 +113,34 @@ class HardBlockCard extends StatelessWidget {
               ),
             ),
           ],
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              CardActionButton(
+                label: 'View',
+                color: color,
+                icon: Icons.visibility_rounded,
+                onTap: onTap,
+              ),
+              CardActionButton(
+                label: 'Edit base',
+                color: OptivusColors.textSecondary,
+                icon: Icons.edit_calendar_rounded,
+                onTap: () => showAddRoutineSheet(context, ref, editItem: item),
+              ),
+              if (item.hasConflict)
+                CardActionButton(
+                  label: 'Allow overlap',
+                  color: OptivusColors.warning,
+                  icon: Icons.layers_rounded,
+                  onTap: () => ref
+                      .read(routineControllerProvider)
+                      .updateItem(item.copyWith(allowOverlap: true)),
+                ),
+            ],
+          ),
         ],
       ),
     );

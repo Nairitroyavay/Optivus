@@ -1,6 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
@@ -15,6 +19,7 @@ class RoutineTimelineViewport extends StatefulWidget {
   final List<RoutineItem> items;
   final TimelineLayout layout;
   final bool isToday;
+  final bool showCurrentTimeLine;
   final ValueChanged<RoutineItem>? onCardTap;
 
   const RoutineTimelineViewport({
@@ -22,6 +27,7 @@ class RoutineTimelineViewport extends StatefulWidget {
     required this.items,
     required this.layout,
     required this.isToday,
+    this.showCurrentTimeLine = true,
     this.onCardTap,
   });
 
@@ -53,15 +59,14 @@ class _RoutineTimelineViewportState extends State<RoutineTimelineViewport> {
 
     final now = DateTime.now();
     final currentMinute = now.hour * 60 + now.minute;
-    final offsetMinute = currentMinute - widget.layout.visibleStartMinute;
 
-    if (offsetMinute < 0) return;
+    if (!widget.layout.isMinuteVisible(currentMinute)) return;
 
-    final targetScroll = offsetMinute * widget.layout.minuteHeight - 100;
+    final targetScroll = widget.layout.topForMinute(currentMinute) - 100;
     final maxScroll = _scrollController.position.maxScrollExtent;
 
     _scrollController.animateTo(
-      targetScroll.clamp(0, maxScroll),
+      targetScroll.clamp(0.0, maxScroll).toDouble(),
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeOutCubic,
     );
@@ -70,23 +75,25 @@ class _RoutineTimelineViewportState extends State<RoutineTimelineViewport> {
   @override
   Widget build(BuildContext context) {
     final bottomPadding = MediaQuery.of(context).padding.bottom + 72 + 60;
-    final totalHeight = widget.layout.totalHeight;
+    final timelineHeight = widget.layout.totalHeight;
+    final itemLayouts = _buildItemLayouts();
 
     return SingleChildScrollView(
       controller: _scrollController,
       physics: const BouncingScrollPhysics(),
       child: SizedBox(
-        height: totalHeight + bottomPadding,
+        height: timelineHeight + bottomPadding,
         child: Stack(
-          clipBehavior: Clip.none,
+          clipBehavior: Clip.hardEdge,
           children: [
             // ── Vertical rail line ──
             Positioned(
-              left: kTimelineTimeRailWidth +
+              left:
+                  kTimelineTimeRailWidth +
                   kTimelineRailDotColumnWidth / 2 -
                   0.6,
               top: 0,
-              bottom: 0,
+              height: timelineHeight,
               child: Container(
                 width: 1.2,
                 decoration: BoxDecoration(
@@ -94,8 +101,8 @@ class _RoutineTimelineViewportState extends State<RoutineTimelineViewport> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      const Color(0xFF6B7280).withValues(alpha: 0.10),
-                      const Color(0xFF6B7280).withValues(alpha: 0.025),
+                      OptivusColors.sub.withValues(alpha: 0.10),
+                      OptivusColors.sub.withValues(alpha: 0.025),
                     ],
                   ),
                 ),
@@ -106,58 +113,218 @@ class _RoutineTimelineViewportState extends State<RoutineTimelineViewport> {
             Positioned(
               left: 0,
               top: 0,
-              bottom: 0,
-              width: kTimelineTimeRailWidth +
+              height: timelineHeight,
+              width:
+                  kTimelineTimeRailWidth +
                   kTimelineRailDotColumnWidth +
                   kTimelineContentGap,
-              child: RoutineTimeRuler(
-                startMinute: widget.layout.visibleStartMinute,
-                endMinute: widget.layout.visibleEndMinute,
+              child: RoutineTimeRuler(layout: widget.layout),
+            ),
+
+            // ── Time anchor layer: exact duration rails and start/end lines ──
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: timelineHeight,
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _TimelineAnchorPainter(
+                    layout: widget.layout,
+                    entries: itemLayouts,
+                  ),
+                ),
               ),
             ),
 
-            // ── Positioned cards ──
-            ...widget.items.map((item) {
-              final top = widget.layout.topForMinute(item.startMinute);
-              final height = widget.layout
-                  .heightForDuration(item.durationMinutes)
-                  .clamp(kTimelineMinimumTaskCardHeight, double.infinity);
-
-              // Check if this item is currently active
+            // ── Content card layer: readable overlays that do not affect anchors ──
+            ...itemLayouts.map((entry) {
+              final item = entry.item;
               final now = DateTime.now();
               final currentMinute = now.hour * 60 + now.minute;
-              final isNow = widget.isToday &&
-                  currentMinute >= item.startMinute &&
-                  currentMinute < item.effectiveEndMinute;
+              final isNow =
+                  widget.isToday &&
+                  TimelineUtils.isMinuteInsideItem(item, currentMinute);
 
               return Positioned(
-                top: top,
-                left: kTimelineTimeRailWidth +
+                top: entry.cardTop,
+                left:
+                    kTimelineTimeRailWidth +
                     kTimelineRailDotColumnWidth +
-                    kTimelineContentGap,
+                    kTimelineContentGap +
+                    entry.laneOffset,
                 right: 12,
-                height: height,
-                child: RoutineCardFactory.buildCard(
-                  item: item,
-                  isNow: isNow,
-                  onTap: () => widget.onCardTap?.call(item),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: _minimumCardHeightFor(item),
+                  ),
+                  child: RoutineCardFactory.buildCard(
+                    item: item,
+                    isNow: isNow,
+                    railHeight: entry.railHeight,
+                    onTap: () => widget.onCardTap?.call(item),
+                  ),
                 ),
               );
             }),
 
             // ── Current time indicator ──
-            if (widget.isToday)
-              Positioned.fill(
+            if (widget.isToday && widget.showCurrentTimeLine)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: timelineHeight,
                 child: IgnorePointer(
-                  child: RoutineCurrentTimeLine(
-                    startMinute: widget.layout.visibleStartMinute,
-                    endMinute: widget.layout.visibleEndMinute,
-                  ),
+                  child: RoutineCurrentTimeLine(layout: widget.layout),
                 ),
               ),
           ],
         ),
       ),
     );
+  }
+
+  List<_TimelineItemLayout> _buildItemLayouts() {
+    final laneEndMinutes = <int>[];
+    final entries = <_TimelineItemLayout>[];
+
+    for (final item in widget.items) {
+      final normalizedEndMinute = TimelineUtils.normalizedEndMinute(item);
+      final startMinute = item.startMinute;
+
+      if (normalizedEndMinute <= widget.layout.visibleStartMinute ||
+          startMinute >= widget.layout.visibleEndMinute) {
+        continue;
+      }
+
+      final visibleStartMinute = max(
+        startMinute,
+        widget.layout.visibleStartMinute,
+      );
+      final visibleEndMinute = min(
+        normalizedEndMinute,
+        widget.layout.visibleEndMinute,
+      );
+
+      var lane = 0;
+      while (lane < laneEndMinutes.length &&
+          laneEndMinutes[lane] > startMinute) {
+        lane++;
+      }
+
+      if (lane == laneEndMinutes.length) {
+        laneEndMinutes.add(normalizedEndMinute);
+      } else {
+        laneEndMinutes[lane] = normalizedEndMinute;
+      }
+
+      entries.add(
+        _TimelineItemLayout(
+          item: item,
+          lane: lane,
+          top: widget.layout.topForMinute(visibleStartMinute),
+          cardTop: widget.layout.topForMinute(visibleStartMinute),
+          railHeight: widget.layout.heightForRange(
+            visibleStartMinute,
+            visibleEndMinute,
+          ),
+          normalizedEndMinute: visibleEndMinute,
+        ),
+      );
+    }
+
+    return entries;
+  }
+
+  double _minimumCardHeightFor(RoutineItem item) {
+    if (widget.layout.compactMode) return 88;
+    return kTimelineMinimumTaskCardHeight;
+  }
+}
+
+class _TimelineItemLayout {
+  final RoutineItem item;
+  final int lane;
+  final double top;
+  final double cardTop;
+  final double railHeight;
+  final int normalizedEndMinute;
+
+  const _TimelineItemLayout({
+    required this.item,
+    required this.lane,
+    required this.top,
+    required this.cardTop,
+    required this.railHeight,
+    required this.normalizedEndMinute,
+  });
+
+  double get laneOffset => lane * 20.0;
+}
+
+class _TimelineAnchorPainter extends CustomPainter {
+  final TimelineLayout layout;
+  final List<_TimelineItemLayout> entries;
+
+  const _TimelineAnchorPainter({required this.layout, required this.entries});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final entry in entries) {
+      if (entry.railHeight <= 0) continue;
+
+      final color = RoutineCardFactory.colorForType(entry.item.blockType);
+      final startY = entry.top;
+      final endY = layout.topForMinute(entry.normalizedEndMinute);
+
+      if (endY < -20 || startY > size.height + 20) continue;
+
+      final railX =
+          kTimelineTimeRailWidth +
+          kTimelineRailDotColumnWidth +
+          kTimelineContentGap +
+          entry.laneOffset -
+          6;
+
+      final railPaint = Paint()
+        ..color = color.withValues(alpha: 0.82)
+        ..style = PaintingStyle.fill;
+      final linePaint = Paint()
+        ..color = color.withValues(alpha: 0.44)
+        ..strokeWidth = 1.1
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(railX - 1.8, startY, 3.6, endY - startY),
+          const Radius.circular(3),
+        ),
+        railPaint,
+      );
+
+      canvas.drawLine(
+        Offset(railX - 5, startY),
+        Offset(railX + 14, startY),
+        linePaint,
+      );
+      canvas.drawLine(
+        Offset(railX - 5, endY),
+        Offset(railX + 14, endY),
+        linePaint,
+      );
+
+      canvas.drawCircle(Offset(railX, startY), 3.2, Paint()..color = color);
+      canvas.drawCircle(
+        Offset(railX, endY),
+        2.6,
+        Paint()..color = color.withValues(alpha: 0.72),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelineAnchorPainter oldDelegate) {
+    return layout != oldDelegate.layout || entries != oldDelegate.entries;
   }
 }

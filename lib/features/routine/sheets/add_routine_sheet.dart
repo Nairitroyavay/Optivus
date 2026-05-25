@@ -1,45 +1,100 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/state/app_state.dart';
 
-/// Shows the "Add to Routine" bottom sheet.
-void showAddRoutineSheet(BuildContext context, WidgetRef ref) {
+void showAddRoutineSheet(
+  BuildContext context,
+  WidgetRef ref, {
+  RoutineItem? editItem,
+}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _AddRoutineSheetBody(parentRef: ref),
+    builder: (ctx) => _AddRoutineSheetBody(editItem: editItem),
   );
 }
 
-class _AddRoutineSheetBody extends StatefulWidget {
-  final WidgetRef parentRef;
-  const _AddRoutineSheetBody({required this.parentRef});
+class _AddRoutineSheetBody extends ConsumerStatefulWidget {
+  final RoutineItem? editItem;
+
+  const _AddRoutineSheetBody({this.editItem});
 
   @override
-  State<_AddRoutineSheetBody> createState() => _AddRoutineSheetBodyState();
+  ConsumerState<_AddRoutineSheetBody> createState() =>
+      _AddRoutineSheetBodyState();
 }
 
-class _AddRoutineSheetBodyState extends State<_AddRoutineSheetBody> {
-  String? _selectedCategory;
-  final _titleController = TextEditingController();
-  TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
-  TimeOfDay _endTime = const TimeOfDay(hour: 9, minute: 0);
+class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
+  String? _mode;
+  late final TextEditingController _titleController;
+  late final TextEditingController _notesController;
+  late final TextEditingController _subtasksController;
+  late final TextEditingController _stepsController;
+  late final TextEditingController _dishesController;
+  late DateTime _date;
+  late TimeOfDay _startTime;
+  late int _durationMinutes;
+  late RoutinePriority _priority;
+  late RoutineCategory _category;
+  late TrackerType _trackerType;
+  late bool _hard;
+  late bool _allowOverlap;
+  late List<int> _repeatDays;
+  String _fixedKind = 'Class';
+  String? _error;
+
+  bool get _editing => widget.editItem != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.editItem;
+    _mode = item == null ? null : _modeForBlockType(item.blockType);
+    _titleController = TextEditingController(text: item?.title ?? '');
+    _notesController = TextEditingController(text: item?.notes ?? '');
+    _subtasksController = TextEditingController(
+      text: item?.subtasks?.join('\n') ?? '',
+    );
+    _stepsController = TextEditingController(
+      text: item?.displaySteps?.join('\n') ?? '',
+    );
+    _dishesController = TextEditingController(
+      text: item?.dishes?.join('\n') ?? '',
+    );
+    _date = item?.date ?? ref.read(selectedDayProvider);
+    _startTime = TimeOfDay(
+      hour: (item?.startMinute ?? 8 * 60) ~/ 60,
+      minute: (item?.startMinute ?? 8 * 60) % 60,
+    );
+    _durationMinutes = item?.durationMinutes.clamp(1, 24 * 60).toInt() ?? 30;
+    _priority = item?.priority ?? RoutinePriority.goodToDo;
+    _category = item?.category ?? RoutineCategory.habit;
+    _trackerType = item?.trackerType ?? TrackerType.none;
+    _hard = item?.isHardBlock ?? false;
+    _allowOverlap = item?.allowOverlap ?? false;
+    _repeatDays = List<int>.from(item?.repeatDays ?? const []);
+  }
 
   @override
   void dispose() {
     _titleController.dispose();
+    _notesController.dispose();
+    _subtasksController.dispose();
+    _stepsController.dispose();
+    _dishesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
-      initialChildSize: 0.85,
+      initialChildSize: 0.88,
       minChildSize: 0.5,
-      maxChildSize: 0.95,
+      maxChildSize: 0.96,
       builder: (context, scrollController) {
         return Container(
           decoration: const BoxDecoration(
@@ -48,16 +103,12 @@ class _AddRoutineSheetBodyState extends State<_AddRoutineSheetBody> {
               end: Alignment.bottomCenter,
               colors: [Color(0xFFF0FFF0), Color(0xFFDCFFCC)],
             ),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(28),
-              topRight: Radius.circular(28),
-            ),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: ListView(
             controller: scrollController,
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
             children: [
-              // Drag handle
               Center(
                 child: Container(
                   width: 48,
@@ -69,14 +120,17 @@ class _AddRoutineSheetBodyState extends State<_AddRoutineSheetBody> {
                 ),
               ),
               const SizedBox(height: 16),
-              // Title
               Row(
                 children: [
-                  Icon(Icons.add_circle, size: 22, color: OptivusColors.routineAccent),
+                  Icon(
+                    _editing ? Icons.edit_calendar_rounded : Icons.add_circle,
+                    size: 22,
+                    color: OptivusColors.routineAccent,
+                  ),
                   const SizedBox(width: 8),
-                  const Text(
-                    'Add to Routine',
-                    style: TextStyle(
+                  Text(
+                    _editing ? 'Edit Routine Item' : 'Add to Routine',
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
                       color: OptivusColors.textPrimary,
@@ -84,24 +138,8 @@ class _AddRoutineSheetBodyState extends State<_AddRoutineSheetBody> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-
-              if (_selectedCategory == null) ...[
-                // Category selection grid
-                const Text(
-                  'Choose a type',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildCategoryGrid(),
-              ] else ...[
-                // Form for selected category
-                _buildForm(),
-              ],
+              const SizedBox(height: 18),
+              if (_mode == null) _buildTypeGrid() else _buildForm(),
             ],
           ),
         );
@@ -109,14 +147,29 @@ class _AddRoutineSheetBodyState extends State<_AddRoutineSheetBody> {
     );
   }
 
-  Widget _buildCategoryGrid() {
+  Widget _buildTypeGrid() {
     final categories = [
-      _Cat('Flexible Task', Icons.task_alt, const Color(0xFF8B5CF6), 'flexibleTask'),
-      _Cat('Fixed Block', Icons.lock_outline, const Color(0xFF3B82F6), 'hardBlock'),
-      _Cat('Habit', Icons.repeat, const Color(0xFF10B981), 'softBlock'),
-      _Cat('Tracker Task', Icons.timer, const Color(0xFFF59E0B), 'trackerTask'),
-      _Cat('Check-in', Icons.check_circle_outline, const Color(0xFFEC4899), 'checkIn'),
-      _Cat('Money Task', Icons.savings, const Color(0xFF14B8A6), 'moneyTask'),
+      _Cat(
+        'Flexible Task',
+        Icons.task_alt,
+        OptivusColors.blockFlex,
+        'flexible',
+      ),
+      _Cat('Fixed Block', Icons.lock_outline, OptivusColors.blockHard, 'fixed'),
+      _Cat('Habit', Icons.repeat_rounded, OptivusColors.blockSoft, 'habit'),
+      _Cat('Tracker Task', Icons.timer, OptivusColors.blockTracker, 'tracker'),
+      _Cat(
+        'Check-in',
+        Icons.check_circle_outline,
+        OptivusColors.blockCheckIn,
+        'checkin',
+      ),
+      _Cat(
+        'Money Saving Task',
+        Icons.savings,
+        OptivusColors.blockMoney,
+        'money',
+      ),
     ];
 
     return Wrap(
@@ -124,28 +177,28 @@ class _AddRoutineSheetBodyState extends State<_AddRoutineSheetBody> {
       runSpacing: 12,
       children: categories.map((cat) {
         return GestureDetector(
-          onTap: () => setState(() => _selectedCategory = cat.key),
+          onTap: () => setState(() {
+            _mode = cat.key;
+            _applyModeDefaults(cat.key);
+          }),
           child: Container(
             width: (MediaQuery.of(context).size.width - 52) / 2,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cat.color.withValues(alpha: 0.08),
+              color: cat.color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: cat.color.withValues(alpha: 0.2),
-                width: 1,
-              ),
+              border: Border.all(color: cat.color.withValues(alpha: 0.22)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(cat.icon, size: 28, color: cat.color),
+                Icon(cat.icon, size: 26, color: cat.color),
                 const SizedBox(height: 8),
                 Text(
                   cat.label,
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: cat.color,
                   ),
                 ),
@@ -158,152 +211,713 @@ class _AddRoutineSheetBodyState extends State<_AddRoutineSheetBody> {
   }
 
   Widget _buildForm() {
+    final mode = _mode!;
+    final preview = _conflictPreview();
+    final blockingConflict = preview.any((conflict) => conflict.blocking);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Back button
-        GestureDetector(
-          onTap: () => setState(() => _selectedCategory = null),
-          child: const Row(
-            children: [
-              Icon(Icons.arrow_back, size: 18, color: OptivusColors.textSecondary),
-              SizedBox(width: 4),
-              Text(
-                'Back',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+        if (!_editing)
+          GestureDetector(
+            onTap: () => setState(() => _mode = null),
+            child: const Row(
+              children: [
+                Icon(
+                  Icons.arrow_back,
+                  size: 18,
                   color: OptivusColors.textSecondary,
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Title field
-        TextField(
-          controller: _titleController,
-          decoration: InputDecoration(
-            labelText: 'Title',
-            hintText: 'e.g., Morning Study',
-            filled: true,
-            fillColor: Colors.white.withValues(alpha: 0.6),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+                SizedBox(width: 4),
+                Text(
+                  'Back',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
+        if (!_editing) const SizedBox(height: 14),
+        _textField(
+          controller: _titleController,
+          label: 'Title',
+          hint: _hintForMode(mode),
         ),
         const SizedBox(height: 12),
-        // Time pickers
+        Row(
+          children: [
+            Expanded(child: _dateTile()),
+            const SizedBox(width: 10),
+            Expanded(child: _timeTile()),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _durationTile(),
+        const SizedBox(height: 12),
+        if (mode == 'fixed') _fixedBlockFields(),
+        if (mode == 'tracker') _trackerFields(),
+        if (mode == 'checkin') _checkInFields(),
+        if (mode == 'money') _moneyFields(),
+        if (mode == 'habit') _habitFields(),
+        if (mode == 'flexible') _flexibleFields(),
+        const SizedBox(height: 12),
+        _repeatSelector(),
+        const SizedBox(height: 12),
+        _textField(
+          controller: _notesController,
+          label: 'Notes',
+          hint: 'Optional notes',
+          maxLines: 3,
+        ),
+        if (mode == 'flexible' || mode == 'tracker' || mode == 'habit') ...[
+          const SizedBox(height: 12),
+          _textField(
+            controller: _subtasksController,
+            label: 'Subtasks',
+            hint: 'One subtask per line',
+            maxLines: 4,
+          ),
+        ],
+        if (mode == 'fixed' && _category == RoutineCategory.skinCare ||
+            mode == 'habit') ...[
+          const SizedBox(height: 12),
+          _textField(
+            controller: _stepsController,
+            label: 'Steps',
+            hint: 'One step per line',
+            maxLines: 4,
+          ),
+        ],
+        if (_category == RoutineCategory.eating) ...[
+          const SizedBox(height: 12),
+          _textField(
+            controller: _dishesController,
+            label: 'Dishes',
+            hint: 'One dish per line',
+            maxLines: 4,
+          ),
+        ],
+        const SizedBox(height: 12),
+        _ConflictBox(conflicts: preview),
+        if (_error != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            _error!,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: OptivusColors.danger,
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
         Row(
           children: [
             Expanded(
-              child: GestureDetector(
-                onTap: () async {
-                  final t = await showTimePicker(
-                    context: context,
-                    initialTime: _startTime,
-                  );
-                  if (t != null) setState(() => _startTime = t);
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(12),
+              child: OutlinedButton(
+                onPressed: _letAiPlace,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: OptivusColors.routineAccent),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Text(
-                    'Start: ${_startTime.format(context)}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: OptivusColors.textPrimary,
-                    ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  'Let AI place it',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.routineAccent,
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
-              child: GestureDetector(
-                onTap: () async {
-                  final t = await showTimePicker(
-                    context: context,
-                    initialTime: _endTime,
-                  );
-                  if (t != null) setState(() => _endTime = t);
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(12),
+              child: ElevatedButton(
+                onPressed: blockingConflict ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: OptivusColors.routineAccent,
+                  disabledBackgroundColor: OptivusColors.disabled,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Text(
-                    'End: ${_endTime.format(context)}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: OptivusColors.textPrimary,
-                    ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: Text(
+                  _editing ? 'Save changes' : 'Save at this time',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        // Save button
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: () {
-              if (_titleController.text.trim().isEmpty) return;
-              final item = RoutineItem(
-                id: 'routine-${DateTime.now().millisecondsSinceEpoch}',
-                title: _titleController.text.trim(),
-                startMinute: _startTime.hour * 60 + _startTime.minute,
-                endMinute: _endTime.hour * 60 + _endTime.minute,
-                blockType: _parseBlockType(_selectedCategory!),
-                source: RoutineSource.manual,
-              );
-              widget.parentRef
-                  .read(mockRoutineProvider.notifier)
-                  .addRoutineItem(item);
-              Navigator.of(context).pop();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: OptivusColors.routineAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            child: const Text(
-              'Save',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+      ],
+    );
+  }
+
+  Widget _flexibleFields() {
+    return Column(
+      children: [
+        _enumTile<RoutinePriority>(
+          label: 'Priority',
+          value: _priority,
+          values: RoutinePriority.values,
+          labelFor: (value) =>
+              value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
+          onChanged: (value) => setState(() => _priority = value),
+        ),
+        const SizedBox(height: 10),
+        _categoryTile(),
+      ],
+    );
+  }
+
+  Widget _habitFields() {
+    return Column(
+      children: [
+        _categoryTile(),
+        const SizedBox(height: 10),
+        _enumTile<TrackerType>(
+          label: 'Tracker linked',
+          value: _trackerType,
+          values: const [
+            TrackerType.none,
+            TrackerType.meditation,
+            TrackerType.focus,
+            TrackerType.workout,
+            TrackerType.hydration,
+          ],
+          labelFor: (value) => value == TrackerType.none ? 'No' : value.name,
+          onChanged: (value) => setState(() => _trackerType = value),
+        ),
+      ],
+    );
+  }
+
+  Widget _fixedBlockFields() {
+    return Column(
+      children: [
+        _stringTile(
+          label: 'Type',
+          value: _fixedKind,
+          values: const [
+            'Class',
+            'Job',
+            'Eating',
+            'Sleep',
+            'Bath',
+            'Travel',
+            'Prayer',
+            'Tuition',
+            'Other',
+          ],
+          onChanged: (value) {
+            setState(() {
+              _fixedKind = value;
+              _category = _categoryForFixedKind(value);
+              _hard =
+                  value == 'Class' ||
+                  value == 'Job' ||
+                  value == 'Sleep' ||
+                  value == 'Travel';
+            });
+          },
+        ),
+        const SizedBox(height: 10),
+        SwitchListTile.adaptive(
+          value: _hard,
+          onChanged: (value) => setState(() => _hard = value),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          activeTrackColor: OptivusColors.blockHard,
+          title: const Text(
+            'Hard block',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+          ),
+        ),
+        SwitchListTile.adaptive(
+          value: _allowOverlap,
+          onChanged: (value) => setState(() => _allowOverlap = value),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          activeTrackColor: OptivusColors.routineAccent,
+          title: const Text(
+            'Allow overlap',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
           ),
         ),
       ],
     );
   }
 
-  RoutineBlockType _parseBlockType(String key) {
-    return switch (key) {
-      'hardBlock' => RoutineBlockType.hardBlock,
-      'softBlock' => RoutineBlockType.softBlock,
-      'flexibleTask' => RoutineBlockType.flexibleTask,
-      'trackerTask' => RoutineBlockType.trackerTask,
-      'checkIn' => RoutineBlockType.checkIn,
-      'moneyTask' => RoutineBlockType.moneyTask,
+  Widget _trackerFields() {
+    return _enumTile<TrackerType>(
+      label: 'Tracker task',
+      value: _trackerType == TrackerType.none
+          ? TrackerType.meditation
+          : _trackerType,
+      values: const [
+        TrackerType.meditation,
+        TrackerType.focus,
+        TrackerType.workout,
+        TrackerType.hydration,
+        TrackerType.money,
+        TrackerType.smoking,
+      ],
+      labelFor: (value) => value.name,
+      onChanged: (value) {
+        setState(() {
+          _trackerType = value;
+          _category = switch (value) {
+            TrackerType.meditation => RoutineCategory.meditation,
+            TrackerType.hydration => RoutineCategory.hydration,
+            TrackerType.money => RoutineCategory.finance,
+            TrackerType.focus => RoutineCategory.focus,
+            TrackerType.smoking => RoutineCategory.badHabit,
+            TrackerType.workout => RoutineCategory.health,
+            TrackerType.none => RoutineCategory.health,
+          };
+        });
+      },
+    );
+  }
+
+  Widget _checkInFields() {
+    final options = const [
+      'Smoking',
+      'Alcohol',
+      'Junk food',
+      'Water',
+      'Sleep quality',
+      'Stress',
+      'Manual saving',
+    ];
+    return _stringTile(
+      label: 'Check-in type',
+      value: options.contains(_titleController.text)
+          ? _titleController.text
+          : options.first,
+      values: options,
+      onChanged: (value) {
+        setState(() {
+          _titleController.text = value;
+          _category = value == 'Water'
+              ? RoutineCategory.hydration
+              : value == 'Manual saving'
+              ? RoutineCategory.finance
+              : RoutineCategory.badHabit;
+        });
+      },
+    );
+  }
+
+  Widget _moneyFields() {
+    return const _InfoBox(
+      text:
+          'This creates a Routine money task. Start opens Tracker Money System.',
+    );
+  }
+
+  Widget _categoryTile() {
+    return _enumTile<RoutineCategory>(
+      label: 'Category',
+      value: _category,
+      values: const [
+        RoutineCategory.classBlock,
+        RoutineCategory.job,
+        RoutineCategory.eating,
+        RoutineCategory.fixed,
+        RoutineCategory.skinCare,
+        RoutineCategory.habit,
+        RoutineCategory.identity,
+        RoutineCategory.finance,
+        RoutineCategory.health,
+        RoutineCategory.focus,
+        RoutineCategory.meditation,
+        RoutineCategory.hydration,
+        RoutineCategory.screenTime,
+      ],
+      labelFor: (value) => value.name,
+      onChanged: (value) => setState(() => _category = value),
+    );
+  }
+
+  Widget _repeatSelector() {
+    const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Repeat',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: OptivusColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 7,
+          children: List.generate(7, (index) {
+            final day = index + 1;
+            final selected = _repeatDays.contains(day);
+            return GestureDetector(
+              onTap: () => setState(() {
+                selected ? _repeatDays.remove(day) : _repeatDays.add(day);
+                _repeatDays.sort();
+              }),
+              child: Container(
+                width: 34,
+                height: 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? OptivusColors.ink
+                      : Colors.white.withValues(alpha: 0.56),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.74),
+                  ),
+                ),
+                child: Text(
+                  labels[index],
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: selected ? Colors.white : OptivusColors.textPrimary,
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _dateTile() {
+    return _PickerTile(
+      label: 'Date',
+      value:
+          '${TimelineUtils.getShortDayName(_date.weekday)} ${_date.day}/${_date.month}',
+      icon: Icons.calendar_today_rounded,
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: _date,
+          firstDate: DateTime.now().subtract(const Duration(days: 30)),
+          lastDate: DateTime.now().add(const Duration(days: 365)),
+        );
+        if (picked != null) setState(() => _date = picked);
+      },
+    );
+  }
+
+  Widget _timeTile() {
+    return _PickerTile(
+      label: 'Start time',
+      value: _startTime.format(context),
+      icon: Icons.schedule_rounded,
+      onTap: () async {
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: _startTime,
+        );
+        if (picked != null) setState(() => _startTime = picked);
+      },
+    );
+  }
+
+  Widget _durationTile() {
+    return _PickerTile(
+      label: 'Duration',
+      value: TimelineUtils.formatDuration(_durationMinutes),
+      icon: Icons.timelapse_rounded,
+      onTap: () {},
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: () => setState(() {
+              _durationMinutes = (_durationMinutes - 5)
+                  .clamp(1, 24 * 60)
+                  .toInt();
+            }),
+            icon: const Icon(Icons.remove_circle_outline_rounded),
+            color: OptivusColors.textSecondary,
+          ),
+          IconButton(
+            onPressed: () => setState(() {
+              _durationMinutes = (_durationMinutes + 5)
+                  .clamp(1, 24 * 60)
+                  .toInt();
+            }),
+            icon: const Icon(Icons.add_circle_outline_rounded),
+            color: OptivusColors.routineAccent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _textField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: controller,
+      maxLines: maxLines,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.6),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _enumTile<T>({
+    required String label,
+    required T value,
+    required List<T> values,
+    required String Function(T value) labelFor,
+    required ValueChanged<T> onChanged,
+  }) {
+    return _DropTile<T>(
+      label: label,
+      value: value,
+      values: values,
+      labelFor: labelFor,
+      onChanged: onChanged,
+    );
+  }
+
+  Widget _stringTile({
+    required String label,
+    required String value,
+    required List<String> values,
+    required ValueChanged<String> onChanged,
+  }) {
+    return _DropTile<String>(
+      label: label,
+      value: value,
+      values: values,
+      labelFor: (value) => value,
+      onChanged: onChanged,
+    );
+  }
+
+  List<RoutineConflict> _conflictPreview() {
+    return ref
+        .read(routineControllerProvider)
+        .previewMove(
+          item: _draftItem(),
+          date: _date,
+          startMinute: _startMinute,
+          durationMinutes: _durationMinutes,
+        );
+  }
+
+  int get _startMinute => _startTime.hour * 60 + _startTime.minute;
+
+  RoutineItem _draftItem() {
+    final mode = _mode ?? 'flexible';
+    final blockType = _blockTypeForMode(mode);
+    final start = _startMinute;
+    final end = (start + _durationMinutes).clamp(1, 1440).toInt();
+    final subtasks = _lines(_subtasksController.text);
+    final steps = _lines(_stepsController.text);
+    final dishes = _lines(_dishesController.text);
+    return RoutineItem(
+      id:
+          widget.editItem?.id ??
+          'routine-${DateTime.now().millisecondsSinceEpoch}',
+      userId: widget.editItem?.userId,
+      title: _titleController.text.trim(),
+      date: _repeatDays.isEmpty ? TimelineUtils.dateOnly(_date) : null,
+      startMinute: start,
+      endMinute: end,
+      repeatDays: _repeatDays,
+      blockType: blockType,
+      category: _category,
+      source: widget.editItem?.source ?? RoutineSource.manual,
+      status: widget.editItem?.status ?? RoutineStatus.planned,
+      priority: _priority,
+      isTrackerLinked:
+          blockType == RoutineBlockType.trackerTask ||
+          blockType == RoutineBlockType.moneyTask ||
+          _trackerType != TrackerType.none,
+      trackerType: blockType == RoutineBlockType.moneyTask
+          ? TrackerType.money
+          : _trackerType,
+      notes: _notesController.text.trim().isEmpty
+          ? null
+          : _notesController.text.trim(),
+      subtasks: subtasks.isEmpty ? null : subtasks,
+      subtasksCompleted: subtasks.isEmpty
+          ? null
+          : List<bool>.filled(subtasks.length, false),
+      steps: steps.isEmpty ? null : steps,
+      dishes: dishes.isEmpty ? null : dishes,
+      hardBlock: _hard,
+      allowOverlap: _allowOverlap,
+      repeatRule: _repeatDays.isEmpty ? 'once' : 'weekly',
+      createdAt: widget.editItem?.createdAt,
+    );
+  }
+
+  void _letAiPlace() {
+    final draft = _draftItem();
+    final slot = ref
+        .read(routineControllerProvider)
+        .findFreeSlot(
+          item: draft,
+          date: _date,
+          durationMinutes: _durationMinutes,
+        );
+    if (slot == null) {
+      setState(() => _error = 'No free slot found for this duration today.');
+      return;
+    }
+    setState(() {
+      _startTime = TimeOfDay(hour: slot ~/ 60, minute: slot % 60);
+      _error = null;
+    });
+  }
+
+  void _save() {
+    final validation = _validate();
+    if (validation != null) {
+      setState(() => _error = validation);
+      return;
+    }
+    final item = _draftItem();
+    if (_editing) {
+      ref.read(routineControllerProvider).updateItem(item);
+    } else {
+      ref.read(routineControllerProvider).addItem(item);
+    }
+    Navigator.of(context).pop();
+  }
+
+  String? _validate() {
+    if (_titleController.text.trim().isEmpty) return 'Title is required.';
+    if (_durationMinutes <= 0) return 'Duration must be greater than 0.';
+    if (_startMinute + _durationMinutes > 1440) {
+      return 'End time must be after start time unless crossing midnight is enabled.';
+    }
+    final conflicts = _conflictPreview();
+    final blocking = conflicts.where((conflict) => conflict.blocking).toList();
+    if (blocking.isNotEmpty &&
+        _blockTypeForMode(_mode ?? 'flexible') ==
+            RoutineBlockType.flexibleTask) {
+      return 'Flexible tasks cannot be saved into a hard block. Move it or make a tiny version.';
+    }
+    return null;
+  }
+
+  void _applyModeDefaults(String mode) {
+    switch (mode) {
+      case 'fixed':
+        _durationMinutes = 60;
+        _hard = true;
+        _category = RoutineCategory.classBlock;
+        _fixedKind = 'Class';
+        break;
+      case 'habit':
+        _durationMinutes = 15;
+        _category = RoutineCategory.habit;
+        break;
+      case 'tracker':
+        _durationMinutes = 10;
+        _trackerType = TrackerType.meditation;
+        _category = RoutineCategory.meditation;
+        break;
+      case 'checkin':
+        _durationMinutes = 5;
+        _category = RoutineCategory.badHabit;
+        if (_titleController.text.isEmpty) _titleController.text = 'Smoking';
+        break;
+      case 'money':
+        _durationMinutes = 5;
+        _category = RoutineCategory.finance;
+        _trackerType = TrackerType.money;
+        if (_titleController.text.isEmpty) _titleController.text = 'Save ₹10';
+        break;
+      default:
+        _durationMinutes = 30;
+        _category = RoutineCategory.habit;
+    }
+  }
+
+  RoutineBlockType _blockTypeForMode(String mode) {
+    return switch (mode) {
+      'fixed' =>
+        _hard ? RoutineBlockType.hardBlock : RoutineBlockType.softBlock,
+      'habit' =>
+        _trackerType == TrackerType.none
+            ? RoutineBlockType.flexibleTask
+            : RoutineBlockType.trackerTask,
+      'tracker' => RoutineBlockType.trackerTask,
+      'checkin' => RoutineBlockType.checkIn,
+      'money' => RoutineBlockType.moneyTask,
       _ => RoutineBlockType.flexibleTask,
     };
+  }
+
+  String _modeForBlockType(RoutineBlockType blockType) {
+    return switch (blockType) {
+      RoutineBlockType.hardBlock => 'fixed',
+      RoutineBlockType.softBlock => 'fixed',
+      RoutineBlockType.flexibleTask => 'flexible',
+      RoutineBlockType.trackerTask => 'tracker',
+      RoutineBlockType.checkIn => 'checkin',
+      RoutineBlockType.moneyTask => 'money',
+    };
+  }
+
+  RoutineCategory _categoryForFixedKind(String kind) {
+    return switch (kind) {
+      'Class' || 'Tuition' => RoutineCategory.classBlock,
+      'Job' => RoutineCategory.job,
+      'Eating' => RoutineCategory.eating,
+      'Prayer' || 'Bath' || 'Travel' || 'Sleep' => RoutineCategory.fixed,
+      _ => RoutineCategory.fixed,
+    };
+  }
+
+  String _hintForMode(String mode) {
+    return switch (mode) {
+      'fixed' => 'e.g., Class, Job, Sleep',
+      'habit' => 'e.g., Reading, Journaling',
+      'tracker' => 'e.g., Meditation, Workout',
+      'checkin' => 'e.g., Smoking',
+      'money' => 'e.g., Save ₹10',
+      _ => 'e.g., Morning Study',
+    };
+  }
+
+  List<String> _lines(String text) {
+    return text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList(growable: false);
   }
 }
 
@@ -312,5 +926,196 @@ class _Cat {
   final IconData icon;
   final Color color;
   final String key;
+
   const _Cat(this.label, this.icon, this.color, this.key);
+}
+
+class _PickerTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  const _PickerTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 17, color: OptivusColors.routineAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ?trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DropTile<T> extends StatelessWidget {
+  final String label;
+  final T value;
+  final List<T> values;
+  final String Function(T value) labelFor;
+  final ValueChanged<T> onChanged;
+
+  const _DropTile({
+    required this.label,
+    required this.value,
+    required this.values,
+    required this.labelFor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          borderRadius: BorderRadius.circular(12),
+          items: values
+              .map(
+                (item) => DropdownMenuItem<T>(
+                  value: item,
+                  child: Text(
+                    '$label: ${labelFor(item)}',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: (item) {
+            if (item != null) onChanged(item);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoBox extends StatelessWidget {
+  final String text;
+
+  const _InfoBox({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: OptivusColors.routineAccent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: OptivusColors.textBody,
+        ),
+      ),
+    );
+  }
+}
+
+class _ConflictBox extends StatelessWidget {
+  final List<RoutineConflict> conflicts;
+
+  const _ConflictBox({required this.conflicts});
+
+  @override
+  Widget build(BuildContext context) {
+    if (conflicts.isEmpty) {
+      return const _InfoBox(text: 'No conflict detected for this slot.');
+    }
+    final conflict = conflicts.first;
+    final color = conflict.blocking
+        ? OptivusColors.danger
+        : OptivusColors.warning;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            conflict.blocking
+                ? Icons.block_rounded
+                : Icons.warning_amber_rounded,
+            size: 18,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              conflict.message,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.25,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

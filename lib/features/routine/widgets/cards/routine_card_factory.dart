@@ -16,21 +16,22 @@ class RoutineCardFactory {
   static Widget buildCard({
     required RoutineItem item,
     bool isNow = false,
+    double? railHeight,
     VoidCallback? onTap,
   }) {
     return switch (item.blockType) {
       RoutineBlockType.hardBlock =>
-        HardBlockCard(item: item, isNow: isNow, onTap: onTap),
+        HardBlockCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
       RoutineBlockType.softBlock =>
-        SoftBlockCard(item: item, isNow: isNow, onTap: onTap),
+        SoftBlockCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
       RoutineBlockType.flexibleTask =>
-        FlexibleTaskCard(item: item, isNow: isNow, onTap: onTap),
+        FlexibleTaskCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
       RoutineBlockType.trackerTask =>
-        TrackerTaskCard(item: item, isNow: isNow, onTap: onTap),
+        TrackerTaskCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
       RoutineBlockType.checkIn =>
-        CheckInCard(item: item, isNow: isNow, onTap: onTap),
+        CheckInCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
       RoutineBlockType.moneyTask =>
-        MoneyTaskCard(item: item, isNow: isNow, onTap: onTap),
+        MoneyTaskCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
     };
   }
 

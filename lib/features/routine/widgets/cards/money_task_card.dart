@@ -1,29 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
 /// Card for money system tasks: Save ₹10 via UPI, etc.
-class MoneyTaskCard extends StatelessWidget {
+class MoneyTaskCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
+  final double? railHeight;
   final VoidCallback? onTap;
 
   const MoneyTaskCard({
     super.key,
     required this.item,
     this.isNow = false,
+    this.railHeight,
     this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = RoutineCardFactory.colorForType(RoutineBlockType.moneyTask);
 
     return RoutineCardBase(
       railColor: color,
+      railHeight: railHeight,
       isCompleted: item.isCompleted,
       isNow: isNow,
       onTap: onTap,
@@ -104,23 +109,22 @@ class MoneyTaskCard extends StatelessWidget {
                 label: 'Save via UPI',
                 color: color,
                 icon: Icons.payment,
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('TODO: Open UPI savings flow'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
+                onTap: () =>
+                    ref.read(routineControllerProvider).startTrackerTask(item),
               ),
               CardActionButton(
                 label: 'Already saved',
                 color: OptivusColors.success,
                 icon: Icons.check,
+                onTap: () =>
+                    ref.read(routineControllerProvider).alreadySaved(item.id),
               ),
               CardActionButton(
                 label: 'Skip',
                 color: OptivusColors.sub.withValues(alpha: 0.7),
+                icon: Icons.skip_next_rounded,
+                onTap: () =>
+                    ref.read(routineControllerProvider).markSkipped(item.id),
               ),
             ],
           ),
