@@ -202,10 +202,10 @@ class MockSeedData {
     RoutineItem(
       id: 'routine-sleep',
       title: 'Sleep',
-      startMinute: 1410, // 11:30 PM
-      endMinute: 420, // 7:00 AM next day
+      startMinute: 1350, // 10:30 PM
+      endMinute: 450, // 7:30 AM next day
       blockType: RoutineBlockType.hardBlock,
-      category: RoutineCategory.fixed,
+      category: RoutineCategory.sleep,
       source: RoutineSource.onboarding,
       priority: RoutinePriority.mustDo,
       hardBlock: true,

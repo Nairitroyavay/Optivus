@@ -59,8 +59,11 @@ class HardBlockCard extends ConsumerWidget {
                     width: 1.2,
                   ),
                 ),
-                child: const Center(
-                  child: Text('🔒', style: TextStyle(fontSize: 20)),
+                child: Center(
+                  child: Text(
+                    _isSleepItem(item) ? '🌙' : '🔒',
+                    style: const TextStyle(fontSize: 20),
+                  ),
                 ),
               ),
               const SizedBox(width: 11),
@@ -69,7 +72,9 @@ class HardBlockCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      item.title,
+                      item.isContinuation
+                          ? '${item.title} continues'
+                          : item.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -86,7 +91,9 @@ class HardBlockCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.blockTypeLabel}',
+                      item.isContinuation
+                          ? '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • Continues from yesterday'
+                          : '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${TimelineUtils.formatDuration(item.durationMinutes)} • ${item.blockTypeLabel}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -98,6 +105,27 @@ class HardBlockCard extends ConsumerWidget {
                   ],
                 ),
               ),
+              if (item.isOvernight && !item.isContinuation)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: OptivusColors.purpleAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: OptivusColors.purpleAccent.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: const Text(
+                    'Overnight',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.purpleAccent,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ),
             ],
           ),
           if (item.conflictMessage != null) ...[
@@ -124,13 +152,14 @@ class HardBlockCard extends ConsumerWidget {
                 icon: Icons.visibility_rounded,
                 onTap: onTap,
               ),
-              CardActionButton(
-                label: 'Edit base',
-                color: OptivusColors.textSecondary,
-                icon: Icons.edit_calendar_rounded,
-                onTap: () => showAddRoutineSheet(context, ref, editItem: item),
-              ),
-              if (item.hasConflict)
+              if (!item.isContinuation)
+                CardActionButton(
+                  label: 'Edit base',
+                  color: OptivusColors.textSecondary,
+                  icon: Icons.edit_calendar_rounded,
+                  onTap: () => showAddRoutineSheet(context, ref, editItem: item),
+                ),
+              if (item.hasConflict && !item.isContinuation)
                 CardActionButton(
                   label: 'Allow overlap',
                   color: OptivusColors.warning,
@@ -145,4 +174,8 @@ class HardBlockCard extends ConsumerWidget {
       ),
     );
   }
+
+  static bool _isSleepItem(RoutineItem item) =>
+      item.category == RoutineCategory.sleep ||
+      item.title.toLowerCase().contains('sleep');
 }

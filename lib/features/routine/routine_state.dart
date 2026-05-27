@@ -647,6 +647,7 @@ class RoutineMaterializer {
             endMinute: item.endMinute,
             crossesMidnight: false,
             endsNextDay: false,
+            isContinuation: true,
           ),
         );
       }
@@ -891,7 +892,8 @@ class RoutineConflictEngine {
   }
 
   static bool _isSleep(RoutineItem item) {
-    return item.title.toLowerCase().contains('sleep');
+    return item.category == RoutineCategory.sleep ||
+        item.title.toLowerCase().contains('sleep');
   }
 
   static int _minInt(int a, int b) => a < b ? a : b;

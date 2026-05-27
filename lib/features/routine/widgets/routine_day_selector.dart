@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 
 /// Horizontal scrolling day strip — matches old Optivus `_DateStrip` exactly.
 ///
@@ -98,41 +97,6 @@ class RoutineDaySelector extends ConsumerWidget {
                     ),
                   );
                 },
-              ),
-            ),
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: () => showRoutineWeekPlannerSheet(context, ref),
-              child: Container(
-                height: 48,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.54),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.78),
-                    width: 1,
-                  ),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.calendar_view_week_rounded,
-                      size: 16,
-                      color: OptivusColors.ink,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      'Week',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: OptivusColors.ink,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ),
           ],

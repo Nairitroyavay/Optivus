@@ -15,6 +15,7 @@ enum RoutineCategory {
   eating,
   fixed,
   skinCare,
+  sleep,
   habit,
   badHabit,
   identity,
@@ -52,10 +53,12 @@ class RoutineItem {
   final String? userId;
   final String title;
   final DateTime? date;
+  final DateTime? endDate; // Non-null for overnight items
   final int startMinute; // Minutes since midnight
   final int endMinute; // Minutes since midnight
   final bool crossesMidnight;
   final bool endsNextDay;
+  final bool isContinuation; // True for next-day continuation segments
   final List<int> repeatDays; // 1 = Monday, 7 = Sunday
   final String? location;
   final RoutineBlockType blockType;
@@ -106,8 +109,10 @@ class RoutineItem {
     required this.endMinute,
     required this.blockType,
     this.date,
+    this.endDate,
     this.crossesMidnight = false,
     this.endsNextDay = false,
+    this.isContinuation = false,
     List<int>? repeatDays,
     this.location,
     this.category = RoutineCategory.fixed,
@@ -153,6 +158,18 @@ class RoutineItem {
     }
     return endMinute;
   }
+
+  /// Whether this item is an overnight block (crosses midnight).
+  bool get isOvernight =>
+      crossesMidnight || endsNextDay || endMinute <= startMinute;
+
+  /// Layout-only normalized end minute (adds 1440 for overnight items).
+  int get normalizedEndMinuteForLayout =>
+      isOvernight ? endMinute + 1440 : endMinute;
+
+  /// Duration in minutes for layout, accounting for overnight crossing.
+  int get durationMinutesForLayout =>
+      normalizedEndMinuteForLayout - startMinute;
 
   /// Whether this is a hard-type block (hard_block or configured as hardBlock).
   bool get isHardBlock => blockType == RoutineBlockType.hardBlock || hardBlock;
@@ -213,10 +230,12 @@ class RoutineItem {
     String? userId,
     String? title,
     DateTime? date,
+    DateTime? endDate,
     int? startMinute,
     int? endMinute,
     bool? crossesMidnight,
     bool? endsNextDay,
+    bool? isContinuation,
     List<int>? repeatDays,
     String? location,
     RoutineBlockType? blockType,
@@ -251,10 +270,12 @@ class RoutineItem {
       userId: userId ?? this.userId,
       title: title ?? this.title,
       date: date ?? this.date,
+      endDate: endDate ?? this.endDate,
       startMinute: startMinute ?? this.startMinute,
       endMinute: endMinute ?? this.endMinute,
       crossesMidnight: crossesMidnight ?? this.crossesMidnight,
       endsNextDay: endsNextDay ?? this.endsNextDay,
+      isContinuation: isContinuation ?? this.isContinuation,
       repeatDays: repeatDays ?? this.repeatDays,
       location: location ?? this.location,
       blockType: blockType ?? this.blockType,
@@ -295,10 +316,12 @@ class RoutineItem {
       'userId': userId,
       'title': title,
       'date': date?.toIso8601String(),
+      'endDate': endDate?.toIso8601String(),
       'startMinute': startMinute,
       'endMinute': endMinute,
       'crossesMidnight': crossesMidnight,
       'endsNextDay': endsNextDay,
+      'isContinuation': isContinuation,
       'repeatDays': repeatDays,
       'location': location,
       'blockType': blockType.name,
@@ -339,8 +362,12 @@ class RoutineItem {
           : null,
       startMinute: (map['startMinute'] as num?)?.toInt() ?? 0,
       endMinute: (map['endMinute'] as num?)?.toInt() ?? 0,
+      endDate: map['endDate'] != null
+          ? DateTime.tryParse(map['endDate'] as String)
+          : null,
       crossesMidnight: map['crossesMidnight'] as bool? ?? false,
       endsNextDay: map['endsNextDay'] as bool? ?? false,
+      isContinuation: map['isContinuation'] as bool? ?? false,
       repeatDays:
           (map['repeatDays'] as List?)
               ?.map((e) => (e as num).toInt())

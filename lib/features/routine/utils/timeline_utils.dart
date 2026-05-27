@@ -7,6 +7,13 @@ import 'package:optivus/models/timeline_layout.dart';
 class TimelineUtils {
   TimelineUtils._();
 
+  /// Display label for sleep/overnight items on a selected day.
+  /// Returns 'Sleep continues' for continuation segments.
+  static String sleepDisplayLabel(RoutineItem item) {
+    if (item.isContinuation) return '${item.title} continues';
+    return item.title;
+  }
+
   static DateTime dateOnly(DateTime date) {
     return DateTime(date.year, date.month, date.day);
   }
