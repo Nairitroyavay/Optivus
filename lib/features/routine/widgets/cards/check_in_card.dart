@@ -106,7 +106,7 @@ class CheckInCard extends ConsumerWidget {
                       color: OptivusColors.success,
                       icon: Icons.check,
                       onTap: () => ref
-                          .read(routineControllerProvider)
+                          .read(routineNotifierProvider.notifier)
                           .checkIn(item.id, 'Avoided'),
                     ),
                     CardActionButton(
@@ -114,7 +114,7 @@ class CheckInCard extends ConsumerWidget {
                       color: OptivusColors.warning,
                       icon: Icons.warning_amber_rounded,
                       onTap: () => ref
-                          .read(routineControllerProvider)
+                          .read(routineNotifierProvider.notifier)
                           .checkIn(item.id, 'Craving'),
                     ),
                     CardActionButton(
@@ -122,7 +122,7 @@ class CheckInCard extends ConsumerWidget {
                       color: OptivusColors.danger,
                       icon: Icons.close,
                       onTap: () => ref
-                          .read(routineControllerProvider)
+                          .read(routineNotifierProvider.notifier)
                           .checkIn(item.id, 'Relapsed'),
                     ),
                   ]
@@ -132,7 +132,7 @@ class CheckInCard extends ConsumerWidget {
                       color: OptivusColors.success,
                       icon: Icons.check,
                       onTap: () => ref
-                          .read(routineControllerProvider)
+                          .read(routineNotifierProvider.notifier)
                           .markCompleted(item.id),
                     ),
                     CardActionButton(
@@ -140,7 +140,7 @@ class CheckInCard extends ConsumerWidget {
                       color: OptivusColors.sub.withValues(alpha: 0.7),
                       icon: Icons.skip_next_rounded,
                       onTap: () => ref
-                          .read(routineControllerProvider)
+                          .read(routineNotifierProvider.notifier)
                           .markSkipped(item.id),
                     ),
                   ],

@@ -110,21 +110,21 @@ class MoneyTaskCard extends ConsumerWidget {
                 color: color,
                 icon: Icons.payment,
                 onTap: () =>
-                    ref.read(routineControllerProvider).startTrackerTask(item),
+                    ref.read(routineNotifierProvider.notifier).startTrackerTask(item),
               ),
               CardActionButton(
                 label: 'Already saved',
                 color: OptivusColors.success,
                 icon: Icons.check,
                 onTap: () =>
-                    ref.read(routineControllerProvider).alreadySaved(item.id),
+                    ref.read(routineNotifierProvider.notifier).alreadySaved(item.id),
               ),
               CardActionButton(
                 label: 'Skip',
                 color: OptivusColors.sub.withValues(alpha: 0.7),
                 icon: Icons.skip_next_rounded,
                 onTap: () =>
-                    ref.read(routineControllerProvider).markSkipped(item.id),
+                    ref.read(routineNotifierProvider.notifier).markSkipped(item.id),
               ),
             ],
           ),

@@ -42,10 +42,10 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final precisionMode = ref.watch(precisionModeProvider);
+    final precisionMode = ref.watch(routineNotifierProvider).precisionMode;
     final snap = precisionMode ? 1 : 5;
     final conflicts = ref
-        .watch(routineControllerProvider)
+        .watch(routineNotifierProvider.notifier)
         .previewMove(
           item: widget.item,
           date: _date,
@@ -136,7 +136,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
               SwitchListTile.adaptive(
                 value: precisionMode,
                 onChanged: (value) =>
-                    ref.read(precisionModeProvider.notifier).state = value,
+                    ref.read(routineNotifierProvider.notifier).togglePrecisionMode(value),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 activeTrackColor: OptivusColors.routineAccent,
@@ -178,7 +178,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                     icon: Icons.compress_rounded,
                     onTap: () {
                       ref
-                          .read(routineControllerProvider)
+                          .read(routineNotifierProvider.notifier)
                           .makeTinyVersion(widget.item);
                       Navigator.of(context).pop();
                     },
@@ -189,7 +189,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                     icon: Icons.today_rounded,
                     onTap: () {
                       ref
-                          .read(routineControllerProvider)
+                          .read(routineNotifierProvider.notifier)
                           .moveToTomorrow(widget.item);
                       Navigator.of(context).pop();
                     },
@@ -211,7 +211,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                   ),
                   onPressed: () {
                     ref
-                        .read(routineControllerProvider)
+                        .read(routineNotifierProvider.notifier)
                         .moveItem(
                           itemId: widget.item.id,
                           date: _date,
@@ -258,14 +258,14 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
     );
     if (picked != null) {
       final rawMinute = picked.hour * 60 + picked.minute;
-      final snap = ref.read(precisionModeProvider) ? 1 : 5;
+      final snap = ref.read(routineNotifierProvider).precisionMode ? 1 : 5;
       setState(() => _startMinute = (rawMinute / snap).round() * snap);
     }
   }
 
   void _findFreeSlot() {
     final start = ref
-        .read(routineControllerProvider)
+        .read(routineNotifierProvider.notifier)
         .findFreeSlot(
           item: widget.item,
           date: _date,

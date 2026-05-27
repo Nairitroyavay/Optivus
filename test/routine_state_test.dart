@@ -115,7 +115,7 @@ void main() {
   group('tracker and money sync', () {
     test('Tracker task start sets inTracker and launch intent', () {
       final container = ProviderContainer();
-      final controller = container.read(routineControllerProvider);
+      final controller = container.read(routineNotifierProvider.notifier);
       final item = RoutineItem(
         id: 'tracker-task',
         title: 'Meditation',
@@ -128,18 +128,18 @@ void main() {
 
       controller.startTrackerTask(item);
 
-      final intent = container.read(trackerLaunchIntentProvider);
+      final intent = container.read(routineNotifierProvider).activeTrackerLaunchIntent;
       expect(intent, isNotNull);
       expect(intent!.routineTaskId, 'tracker-task');
       expect(intent.trackerType, TrackerType.meditation);
 
-      final updated = container.read(routineItemsProvider).firstWhere((e) => e.id == 'tracker-task');
+      final updated = container.read(routineNotifierProvider).items.firstWhere((e) => e.id == 'tracker-task');
       expect(updated.status, RoutineStatus.inTracker);
     });
 
     test('Tracker completion marks Routine completed', () {
       final container = ProviderContainer();
-      final controller = container.read(routineControllerProvider);
+      final controller = container.read(routineNotifierProvider.notifier);
       final item = RoutineItem(
         id: 'tracker-task',
         title: 'Meditation',
@@ -152,17 +152,17 @@ void main() {
 
       controller.completeTrackerSession('tracker-task');
 
-      final updated = container.read(routineItemsProvider).firstWhere((e) => e.id == 'tracker-task');
+      final updated = container.read(routineNotifierProvider).items.firstWhere((e) => e.id == 'tracker-task');
       expect(updated.status, RoutineStatus.completed);
       expect(updated.isCompleted, isTrue);
       
-      final intent = container.read(trackerLaunchIntentProvider);
+      final intent = container.read(routineNotifierProvider).activeTrackerLaunchIntent;
       expect(intent, isNull);
     });
 
     test('Money already saved logs saving and completes item', () {
       final container = ProviderContainer();
-      final controller = container.read(routineControllerProvider);
+      final controller = container.read(routineNotifierProvider.notifier);
       final item = RoutineItem(
         id: 'money-task',
         title: 'Save 10',
@@ -174,7 +174,7 @@ void main() {
 
       controller.alreadySaved('money-task');
 
-      final updated = container.read(routineItemsProvider).firstWhere((e) => e.id == 'money-task');
+      final updated = container.read(routineNotifierProvider).items.firstWhere((e) => e.id == 'money-task');
       expect(updated.status, RoutineStatus.completed);
       expect(updated.isCompleted, isTrue);
     });

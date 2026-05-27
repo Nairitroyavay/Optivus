@@ -19,9 +19,9 @@ class _WeekPlannerSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(selectedDayProvider);
+    final selected = ref.watch(routineNotifierProvider).selectedDay;
     final weekStart = TimelineUtils.weekStart(selected);
-    final allItems = ref.watch(routineItemsProvider);
+    final allItems = ref.watch(routineNotifierProvider).items;
     final days = List.generate(7, (index) {
       return weekStart.add(Duration(days: index));
     });
@@ -114,9 +114,7 @@ class _WeekPlannerSheet extends ConsumerWidget {
                   freeMinutes: freeMinutes,
                   conflicts: conflicts.length,
                   onTap: () {
-                    ref.read(selectedDayProvider.notifier).state = day;
-                    ref.read(selectedWeekStartProvider.notifier).state =
-                        weekStart;
+                    ref.read(routineNotifierProvider.notifier).updateSelectedDay(day);
                     Navigator.of(context).pop();
                   },
                 );

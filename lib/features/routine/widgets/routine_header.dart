@@ -20,7 +20,7 @@ class RoutineHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedDay = ref.watch(selectedDayProvider);
+    final selectedDay = ref.watch(routineNotifierProvider).selectedDay;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),

@@ -1,13 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/state/app_state.dart';
-import 'package:optivus/models/tracker_models.dart';
+import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
-import 'package:optivus/features/tracker/widgets/tracker_details_sheets.dart';
+import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 
 class TrackerTab extends ConsumerStatefulWidget {
   const TrackerTab({super.key});
@@ -17,1070 +13,491 @@ class TrackerTab extends ConsumerStatefulWidget {
 }
 
 class _TrackerTabState extends ConsumerState<TrackerTab> {
-  // Meditation states
-  bool _isMeditating = false;
-  int _meditationSeconds = 0;
-  Timer? _meditationTimer;
-  String _breathText = 'Breathe in...';
-
-  // Strava mock run states
-  bool _isStravaSimulating = false;
-  double _simulatedDistance = 0.0;
-  int _simulatedSeconds = 0;
-  Timer? _stravaTimer;
-
-  // Selected tracker view (Daily, Weekly, Monthly)
   String _activeMetricView = 'Daily';
 
-  // Active / Inactive metrics lists
-  final List<String> _activeMetrics = [
-    'Sleep',
-    'Steps',
-    'Hydration',
-    'Meditation',
-    'Workout',
-    'Savings',
-  ];
-  final List<String> _inactiveMetrics = [
-    'Screen Time',
-    'Bad Habits',
-    'Nutrition',
-    'Skin Care',
-    'Reading',
-    'Language',
-    'Skill Practice',
-  ];
-
-  @override
-  void dispose() {
-    _meditationTimer?.cancel();
-    _stravaTimer?.cancel();
-    super.dispose();
-  }
-
-  // --- Meditation breathing timer handler
-  void _toggleMeditation() {
-    if (_isMeditating) {
-      _meditationTimer?.cancel();
-      final mins = (_meditationSeconds / 60).ceil();
-      if (mins > 0) {
-        final intent = ref.read(trackerLaunchIntentProvider);
-        if (intent?.trackerType == TrackerType.meditation) {
-          ref
-              .read(routineControllerProvider)
-              .completeTrackerSession(intent!.routineTaskId);
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Successfully logged $mins min of mindfulness meditation!',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      setState(() {
-        _isMeditating = false;
-        _meditationSeconds = 0;
-      });
-    } else {
-      setState(() {
-        _isMeditating = true;
-        _meditationSeconds = 0;
-        _breathText = 'Breathe in...';
-      });
-      _meditationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        setState(() {
-          _meditationSeconds++;
-          final mod = _meditationSeconds % 12;
-          if (mod < 4) {
-            _breathText = 'Breathe in...';
-          } else if (mod < 8) {
-            _breathText = 'Hold...';
-          } else {
-            _breathText = 'Breathe out...';
-          }
-        });
-      });
-    }
-  }
-
-  // --- Strava running simulator handler
-  void _toggleStravaSimulation() {
-    if (_isStravaSimulating) {
-      _stravaTimer?.cancel();
-      if (_simulatedDistance > 0.0) {
-        final pace = _simulatedDistance > 0
-            ? (_simulatedSeconds / 60) / _simulatedDistance
-            : 0.0;
-        final act = FitnessActivity(
-          id: 'fit-${DateTime.now().millisecondsSinceEpoch}',
-          type: 'Run',
-          distanceKm: _simulatedDistance,
-          durationSeconds: _simulatedSeconds,
-          paceMinutesPerKm: pace,
-          caloriesBurned: (_simulatedDistance * 65).toInt(),
-        );
-        ref.read(mockTrackerProvider.notifier).addFitnessActivity(act);
-        final intent = ref.read(trackerLaunchIntentProvider);
-        if (intent?.trackerType == TrackerType.workout) {
-          ref
-              .read(routineControllerProvider)
-              .completeTrackerSession(intent!.routineTaskId);
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Synced ${_simulatedDistance.toStringAsFixed(2)}km run to Strava logs!',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-      setState(() {
-        _isStravaSimulating = false;
-        _simulatedDistance = 0.0;
-        _simulatedSeconds = 0;
-      });
-    } else {
-      setState(() {
-        _isStravaSimulating = true;
-        _simulatedDistance = 0.0;
-        _simulatedSeconds = 0;
-      });
-      _stravaTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        setState(() {
-          _simulatedSeconds++;
-          _simulatedDistance += 0.02;
-        });
-      });
-    }
-  }
-
-  void _triggerMockUPIPayment() {
-    final amountController = TextEditingController(text: '10.0');
-    final descController = TextEditingController(
-      text: 'Skipped junk coffee savings',
+  void _showMockSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: OptivusColors.brandAccent,
+      ),
     );
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFFE8FCFF),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: const Row(
-            children: [
-              Icon(Icons.payment, color: OptivusColors.brandAccent),
-              SizedBox(width: 10),
-              Text(
-                'SANDBOX UPI TRANS',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Simulate moving ₹10 target from consumption into daily savings.',
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.3,
-                  color: OptivusColors.textBody,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Amount (₹)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descController,
-                decoration: const InputDecoration(
-                  labelText: 'Pledge Reason',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: OptivusColors.brandAccent,
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {
-                final amt = double.tryParse(amountController.text) ?? 10.0;
-                final desc = descController.text.trim();
-                if (desc.isEmpty) return;
-
-                ref
-                    .read(mockTrackerProvider.notifier)
-                    .logSaving(amt, desc, isConfirmed: true);
-                final intent = ref.read(trackerLaunchIntentProvider);
-                if (intent?.trackerType == TrackerType.money) {
-                  ref
-                      .read(routineControllerProvider)
-                      .completeTrackerSession(intent!.routineTaskId);
-                }
-
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Mock UPI payment of ₹$amt verified! Saved successfully.',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-              child: const Text(
-                'Simulate Paid',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _deactivateMetric(String metric) {
-    setState(() {
-      _activeMetrics.remove(metric);
-      if (!_inactiveMetrics.contains(metric)) {
-        _inactiveMetrics.add(metric);
-      }
-    });
-  }
-
-  void _activateMetric(String metric) {
-    setState(() {
-      _inactiveMetrics.remove(metric);
-      if (!_activeMetrics.contains(metric)) {
-        _activeMetrics.add(metric);
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(mockTrackerProvider);
-    final waterTotal = state.hydrationLogs.fold<int>(
-      0,
-      (sum, item) => sum + item.amountMl,
-    );
-    final launchIntent = ref.watch(trackerLaunchIntentProvider);
-    final launchedRoutine = launchIntent == null
-        ? null
-        : ref
-              .watch(mockRoutineProvider)
-              .where((item) => item.id == launchIntent.routineTaskId)
-              .cast<RoutineItem?>()
-              .firstWhere((item) => item != null, orElse: () => null);
-
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (launchIntent != null && launchedRoutine != null) ...[
-            _buildRoutineLaunchBanner(launchIntent, launchedRoutine),
-            const SizedBox(height: 16),
+          _buildHeader(context),
+          const SizedBox(height: 24),
+          _buildTodayProgressHero(context),
+          const SizedBox(height: 24),
+          _buildPeriodSelector(),
+          const SizedBox(height: 24),
+          _buildProgressCarousel(),
+          const SizedBox(height: 32),
+          const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
+          _buildActiveTrackers(),
+          const SizedBox(height: 32),
+          const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
+          _buildDiscoverTrackers(),
+          const SizedBox(height: 32),
+          const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
+          _buildPhoneDataSources(),
+          const SizedBox(height: 32),
+          const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
+          _buildRecentActivity(),
+          const SizedBox(height: 48),
+          _buildTrackerSettingsTeaser(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tracking Center',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: kInk,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Measure your discipline today',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: kSub.withValues(alpha: 0.8),
+              ),
+            ),
           ],
-          // 1. DYNAMIC PROGRESS CAROUSEL (Daily/Weekly/Monthly Toggle)
+        ),
+        LiquidIconBtn(
+          icon: Icons.settings,
+          onTap: () => _showMockSnackbar('Open Tracker Settings'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTodayProgressHero(BuildContext context) {
+    return LiquidGlassPanel(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'METRICS & CONSISTENCY',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.2,
-                  color: OptivusColors.textSecondary,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Today\'s Life Score',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: kInk,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'System is active',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: kSub.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
               ),
               Container(
+                width: 64,
+                height: 64,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: OptivusColors.borderSoft),
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [OptivusColors.brandAccent, kRose],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: OptivusColors.brandAccent.withValues(alpha: 0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: Row(
-                  children: ['Daily', 'Weekly', 'Monthly'].map((view) {
-                    final isSel = _activeMetricView == view;
-                    return InkWell(
-                      onTap: () => setState(() => _activeMetricView = view),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        color: isSel
-                            ? OptivusColors.brandAccent
-                            : Colors.transparent,
-                        child: Text(
-                          view,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: isSel
-                                ? Colors.white
-                                : OptivusColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                alignment: Alignment.center,
+                child: const Text(
+                  '42%',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          LiquidGlassPanel(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Audit Score:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      _activeMetricView == 'Daily'
-                          ? '92%'
-                          : _activeMetricView == 'Weekly'
-                          ? '88%'
-                          : '94%',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                        color: OptivusColors.success,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(7, (index) {
-                    final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-                    double heightPercent = [
-                      0.8,
-                      0.95,
-                      0.45,
-                      0.9,
-                      0.75,
-                      0.3,
-                      0.85,
-                    ][index];
-                    return Column(
-                      children: [
-                        Container(
-                          width: 14,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.3),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.bottomCenter,
-                            heightFactor: heightPercent,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    OptivusColors.brandAccent,
-                                    OptivusColors.aquaAccent,
-                                  ],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          days[index],
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 24),
-
-          // 2. STAGGERED GRID OF ACTIVE METRICS
-          Text(
-            'ACTIVE HEALTH & PRODUCTIVITY METRICS (TAP TO VIEW DETAILS)',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _activeMetrics.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.2,
-            ),
-            itemBuilder: (context, index) {
-              final metric = _activeMetrics[index];
-              return _buildActiveMetricCard(metric, waterTotal, state);
-            },
-          ),
-          const SizedBox(height: 24),
-
-          // 3. INACTIVE METRICS SELECTOR DECK
-          if (_inactiveMetrics.isNotEmpty) ...[
-            Text(
-              'INACTIVE SYSTEM TELEMETRY (TAP TO ACTIVATE)',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.2,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white, width: 1.5),
-              ),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _inactiveMetrics.map((metric) {
-                  return ActionChip(
-                    backgroundColor: Colors.white.withValues(alpha: 0.8),
-                    side: const BorderSide(color: OptivusColors.borderSoft),
-                    label: Text(
-                      '+ $metric',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: OptivusColors.brandAccent,
-                      ),
-                    ),
-                    onPressed: () => _activateMetric(metric),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 24),
-          ],
-
-          // 4. INTERACTIVE PARASYMPATHETIC BREATHING COACH
-          Text(
-            'MINDFULNESS & NEURAL CALM',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          LiquidGlassPanel(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Parasympathetic Breathing',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Deep pacing simulator for neural relaxation',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Icon(
-                      Icons.self_improvement,
-                      color: Colors.deepPurple,
-                      size: 28,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                if (_isMeditating) ...[
-                  Center(
-                    child: Column(
-                      children: [
-                        TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 0.0, end: 1.0),
-                          duration: const Duration(seconds: 4),
-                          curve: Curves.easeInOut,
-                          builder: (context, val, child) {
-                            return Container(
-                              width: 80 + (val * 40),
-                              height: 80 + (val * 40),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.deepPurple.withValues(
-                                  alpha: 0.15,
-                                ),
-                                border: Border.all(
-                                  color: Colors.deepPurple,
-                                  width: 2,
-                                ),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  _breathText,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 10,
-                                    color: Colors.deepPurple,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Elapsed: ${_meditationSeconds}s',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  const Center(
-                    child: Text(
-                      'Timer Idle. Press start to log daily focus minutes.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                        color: OptivusColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isMeditating
-                        ? OptivusColors.danger
-                        : Colors.deepPurple,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: _toggleMeditation,
-                  child: Text(
-                    _isMeditating
-                        ? 'Finish & Log Meditation'
-                        : 'Start Breathing Timer',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // 5. STRAVA ACTIVE FITNESS GPS SIMULATOR
-          Text(
-            'ACTIVE RUN COMPANION (STRAVA SYNC)',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          LiquidGlassPanel(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'GPS Live Run Telemetry',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Simulate aerobic road running stats offline',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Icon(
-                      Icons.directions_run,
-                      color: Colors.orange,
-                      size: 28,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                if (_isStravaSimulating) ...[
-                  Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Column(
-                          children: [
-                            const Text(
-                              'DISTANCE',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${_simulatedDistance.toStringAsFixed(2)} km',
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.orange,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            const Text(
-                              'PACE',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              '5:00 /km',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            const Text(
-                              'TIME',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${_simulatedSeconds}s',
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: OptivusColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  const Center(
-                    child: Text(
-                      'Simulator Idle. Complete a workout to sync via Strava API mock.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                        color: OptivusColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isStravaSimulating
-                        ? OptivusColors.danger
-                        : Colors.orange,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: _toggleStravaSimulation,
-                  child: Text(
-                    _isStravaSimulating
-                        ? 'Stop & Sync to Strava'
-                        : 'Simulate Outdoor Run',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (state.fitnessActivities.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'SYNCED FITNESS STATS:',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 9,
-                      color: OptivusColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: state.fitnessActivities.length,
-                    itemBuilder: (context, index) {
-                      final fit = state.fitnessActivities[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.offline_bolt,
-                              color: OptivusColors.success,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '${fit.type}: ${fit.distanceKm.toStringAsFixed(2)} km (${(fit.durationSeconds / 60).ceil()}m @ ${fit.paceMinutesPerKm.toStringAsFixed(1)}/km)',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const Icon(
-                              Icons.cloud_done_outlined,
-                              color: Colors.orange,
-                              size: 16,
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // 6. UPI ₹10 TARGET SANDBOX
-          Text(
-            'SANDBOX FINANCIAL COMMITMENT (MOCK UPI)',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          LiquidGlassPanel(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '₹10 Daily Micro-Savings',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Confirmed Saved: ₹${state.moneyGoal.totalConfirmedSaved} | Streak: ${state.moneyGoal.streakDays} Days',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Icon(
-                      Icons.savings_outlined,
-                      color: Colors.teal,
-                      size: 28,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal,
-                    foregroundColor: Colors.white,
-                  ),
-                  icon: const Icon(Icons.security, size: 16),
-                  label: const Text(
-                    'Trigger Safe UPI Deposit',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: _triggerMockUPIPayment,
-                ),
-              ],
-            ),
+          const Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              TrackerMetricChip(category: 'Mind', value: 'Meditation 5m'),
+              TrackerMetricChip(category: 'Body', value: 'Water 1.2L / 2.5L'),
+              TrackerMetricChip(category: 'Focus', value: 'Screen time risk High'),
+              TrackerMetricChip(category: 'Finance', value: '₹10 saved'),
+              TrackerMetricChip(category: 'Movement', value: 'Walk 2.4 km'),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildRoutineLaunchBanner(
-    TrackerLaunchIntent intent,
-    RoutineItem item,
-  ) {
-    return LiquidGlassPanel(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: OptivusColors.trackerAccent.withValues(alpha: 0.15),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.play_circle_fill_rounded,
-              color: OptivusColors.trackerAccent,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-                Text(
-                  'Launched from Routine • ${intent.trackerType.name}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              ref
-                  .read(routineControllerProvider)
-                  .completeTrackerSession(intent.routineTaskId);
-            },
-            child: const Text(
-              'Complete',
-              style: TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ),
-        ],
-      ),
+  Widget _buildPeriodSelector() {
+    return TrackerSegmentedControl(
+      segments: const ['Daily', 'Weekly', 'Monthly', 'Yearly'],
+      selectedSegment: _activeMetricView,
+      onSegmentSelected: (view) {
+        setState(() => _activeMetricView = view);
+      },
     );
   }
 
-  Widget _buildActiveMetricCard(
-    String metric,
-    int waterTotal,
-    MockTrackerState state,
-  ) {
-    IconData icon = Icons.insights;
-    Color color = OptivusColors.brandAccent;
-    String statusStr = 'Active';
-
-    switch (metric) {
-      case 'Sleep':
-        icon = Icons.bedtime;
-        color = Colors.indigo;
-        statusStr = '7.5h slept';
-        break;
-      case 'Steps':
-        icon = Icons.directions_walk;
-        color = Colors.orange;
-        statusStr = '7,420 steps';
-        break;
-      case 'Hydration':
-        icon = Icons.local_drink;
-        color = OptivusColors.brandAccent;
-        statusStr = '${waterTotal}ml';
-        break;
-      case 'Meditation':
-        icon = Icons.self_improvement;
-        color = Colors.deepPurple;
-        statusStr = '10m focus';
-        break;
-      case 'Workout':
-        icon = Icons.fitness_center;
-        color = Colors.red;
-        statusStr = 'PUSH split';
-        break;
-      case 'Savings':
-        icon = Icons.savings;
-        color = Colors.teal;
-        statusStr = '₹${state.moneyGoal.totalConfirmedSaved} saved';
-        break;
-      default:
-        icon = Icons.offline_bolt;
-        color = Colors.blueGrey;
-        statusStr = '100%';
+  Widget _buildProgressCarousel() {
+    if (_activeMetricView == 'Weekly' || _activeMetricView == 'Monthly') {
+      return Container(
+        height: 180,
+        alignment: Alignment.center,
+        child: LiquidCard.solid(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.lock_outline, color: kSub, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                '$_activeMetricView Progress',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _activeMetricView == 'Weekly'
+                    ? 'Complete 7 days to unlock your first weekly review.'
+                    : 'Complete 30 days to unlock deeper insights.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: kSub),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    return InkWell(
-      onTap: () => showTrackerDetailSheet(context, ref, metric),
-      borderRadius: BorderRadius.circular(24),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white, width: 1.5),
+    return SizedBox(
+      height: 180,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
+        physics: const BouncingScrollPhysics(),
+        children: const [
+          TrackerGraphCard(
+            title: 'Weekly Performance',
+            subtitle: 'Energy vs Habits Completed',
+            badgeText: '+12%',
+            values: [0.3, 0.6, 0.8, 0.4, 0.9, 0.7, 0.5],
+            accentColor: kPurple,
+          ),
+          TrackerGraphCard(
+            title: 'Life Balance',
+            badgeText: 'Stable',
+            values: [0.5, 0.5, 0.6, 0.5, 0.7, 0.6, 0.5],
+            accentColor: kBlue,
+          ),
+          TrackerGraphCard(
+            title: 'Screen Time',
+            badgeText: '-45m',
+            values: [0.8, 0.7, 0.4, 0.9, 0.6, 0.5, 0.8],
+            accentColor: kRose,
+          ),
+          TrackerGraphCard(
+            title: 'Money',
+            badgeText: '₹140',
+            values: [0.2, 0.4, 0.6, 0.8, 0.5, 1.0, 0.3],
+            accentColor: kMint,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveTrackers() {
+    return Column(
+      children: [
+        TrackerCard(
+          title: 'Meditation',
+          status: '5 / 5 min today',
+          iconEmoji: '🧘',
+          buttonText: 'View',
+          accentColor: kPurple,
+          onAction: () => _showMockSnackbar('Open Meditation Details'),
         ),
-        child: Stack(
-          children: [
-            // Top Right delete icon
-            Positioned(
-              top: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: () => _deactivateMetric(metric),
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: OptivusColors.borderSoft),
-                  ),
-                  child: const Icon(
-                    Icons.remove,
-                    size: 10,
-                    color: OptivusColors.danger,
-                  ),
-                ),
-              ),
-            ),
-            Column(
+        TrackerCard(
+          title: 'Money System',
+          status: '₹10 saved today',
+          iconEmoji: '💰',
+          buttonText: 'View',
+          accentColor: kMint,
+          onAction: () => _showMockSnackbar('Open Money System Details'),
+        ),
+        TrackerCard(
+          title: 'Screen Time',
+          status: '4h 20m total\nRisk: High',
+          iconEmoji: '📱',
+          buttonText: 'View',
+          accentColor: kRose,
+          onAction: () => _showMockSnackbar('Open Screen Time Details'),
+        ),
+        TrackerCard(
+          title: 'Walk / Run',
+          status: '2.4 km this week',
+          iconEmoji: '🏃',
+          buttonText: 'Start',
+          accentColor: kAmber,
+          onAction: () => _showMockSnackbar('Start Walk / Run'),
+        ),
+        TrackerCard(
+          title: 'Hydration',
+          status: '1.2L / 2.5L',
+          iconEmoji: '💧',
+          buttonText: '+250ml',
+          accentColor: kBlue,
+          onAction: () => _showMockSnackbar('Logged 250ml water'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiscoverTrackers() {
+    return Column(
+      children: [
+        DiscoverTrackerCard(
+          title: 'Smoking',
+          description: 'Not set up\nTrack cravings, relapses, money saved.',
+          iconEmoji: '🚭',
+          onActivate: () => _showMockSnackbar('Activate Smoking Tracker'),
+        ),
+        DiscoverTrackerCard(
+          title: 'Alcohol',
+          description: 'Not set up\nTrack clean days and relapse recovery.',
+          iconEmoji: '🍺',
+          onActivate: () => _showMockSnackbar('Activate Alcohol Tracker'),
+        ),
+        DiscoverTrackerCard(
+          title: 'Nutrition',
+          description: 'Not set up\nTrack meals, protein, calories.',
+          iconEmoji: '🍽',
+          onActivate: () => _showMockSnackbar('Activate Nutrition Tracker'),
+        ),
+        DiscoverTrackerCard(
+          title: 'Sleep',
+          description: 'Not set up\nTrack sleep quality and energy.',
+          iconEmoji: '😴',
+          onActivate: () => _showMockSnackbar('Activate Sleep Tracker'),
+        ),
+        DiscoverTrackerCard(
+          title: 'Workout',
+          description: 'Not set up\nTrack workouts, sets, progress.',
+          iconEmoji: '🏋️',
+          onActivate: () => _showMockSnackbar('Activate Workout Tracker'),
+        ),
+        DiscoverTrackerCard(
+          title: 'Reading',
+          description: 'Not set up\nTrack pages and consistency.',
+          iconEmoji: '📚',
+          onActivate: () => _showMockSnackbar('Activate Reading Tracker'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPhoneDataSources() {
+    return Column(
+      children: [
+        PhoneDataSourceCard(
+          title: 'Screen Time',
+          subtitle: 'Usage Access needed',
+          iconEmoji: '📱',
+          status: 'Connected',
+          isConnected: false,
+          onConnect: () => _showMockSnackbar('Request Screen Time Access'),
+        ),
+        PhoneDataSourceCard(
+          title: 'Walk / Run GPS',
+          subtitle: 'Location permission needed',
+          iconEmoji: '📍',
+          status: 'Connected',
+          isConnected: false,
+          onConnect: () => _showMockSnackbar('Request Location Access'),
+        ),
+        PhoneDataSourceCard(
+          title: 'Health Connect',
+          subtitle: 'Optional health data',
+          iconEmoji: '❤️',
+          status: 'Connected',
+          isConnected: false,
+          onConnect: () => _showMockSnackbar('Request Health Connect Access'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentActivity() {
+    final activities = [
+      {'title': 'Meditation completed', 'subtitle': '5 min', 'color': kPurple},
+      {'title': 'Saved ₹10', 'subtitle': 'Money System', 'color': kMint},
+      {'title': 'Water logged', 'subtitle': '+250ml', 'color': kBlue},
+      {'title': 'Walk completed', 'subtitle': '2.4 km', 'color': kAmber},
+    ];
+
+    return LiquidCard.solid(
+      padding: const EdgeInsets.all(20),
+      radius: 20,
+      child: Column(
+        children: activities.asMap().entries.map((entry) {
+          final isLast = entry.key == activities.length - 1;
+          final item = entry.value;
+          final color = item['color'] as Color;
+          
+          return IntrinsicHeight(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: color, size: 18),
-                ),
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      metric.toUpperCase(),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 10,
-                        color: OptivusColors.textSecondary,
-                        letterSpacing: 0.8,
+                    Container(
+                      width: 10,
+                      height: 10,
+                      margin: const EdgeInsets.only(top: 4),
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: color.withValues(alpha: 0.4),
+                            blurRadius: 4,
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      statusStr,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                        color: OptivusColors.textPrimary,
+                    if (!isLast)
+                      Expanded(
+                        child: Container(
+                          width: 2,
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          color: color.withValues(alpha: 0.2),
+                        ),
                       ),
-                    ),
                   ],
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: isLast ? 0 : 20),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          item['title'] as String,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: kInk,
+                          ),
+                        ),
+                        Text(
+                          item['subtitle'] as String,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: kSub,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildTrackerSettingsTeaser() {
+    return GestureDetector(
+      onTap: () => _showMockSnackbar('Open Tracker Settings'),
+      child: LiquidCard.solid(
+        padding: const EdgeInsets.all(20),
+        tint: Colors.white.withValues(alpha: 0.4),
+        radius: 20,
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.settings, color: kSub, size: 20),
+            ),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tracker Settings',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: kInk,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Manage active trackers, permissions, goals, reminders, and data sources.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: kSub,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: kSub),
           ],
         ),
       ),

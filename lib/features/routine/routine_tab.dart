@@ -46,13 +46,14 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedDay = ref.watch(selectedDayProvider);
-    final showFullDay = ref.watch(showFullDayProvider);
-    final showMinuteTicks = ref.watch(showMinuteTicksProvider);
-    final showCurrentTimeLine = ref.watch(showCurrentTimeLineProvider);
-    final compactMode = ref.watch(compactModeProvider);
+    final state = ref.watch(routineNotifierProvider);
+    final selectedDay = state.selectedDay;
+    final showFullDay = state.showFullDay;
+    final showMinuteTicks = state.showMinuteTicks;
+    final showCurrentTimeLine = state.showCurrentTimeLine;
+    final compactMode = state.compactMode;
     final isToday = TimelineUtils.isToday(selectedDay);
-    final conflicts = ref.watch(routineConflictsProvider);
+    final conflicts = state.conflicts;
     final filteredItems = ref.watch(filteredRoutineItemsProvider);
 
     // Sort by start time
@@ -109,8 +110,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                   ConflictBanner(
                     conflictCount: conflictCount,
                     onTap: () {
-                      ref.read(routineFilterProvider.notifier).state =
-                          'conflicts';
+                      ref.read(routineNotifierProvider.notifier).setPrimaryFilter('conflicts');
                     },
                   ),
 

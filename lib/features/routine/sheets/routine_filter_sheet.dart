@@ -27,13 +27,13 @@ class _RoutineFilterSheetBodyState extends ConsumerState<_RoutineFilterSheetBody
   @override
   void initState() {
     super.initState();
-    _selectedView = widget.parentRef.read(routineFilterProvider);
-    _selectedCategory = widget.parentRef.read(selectedCategoryFilterProvider);
+    _selectedView = widget.parentRef.read(routineNotifierProvider).selectedPrimaryFilter;
+    _selectedCategory = widget.parentRef.read(routineNotifierProvider).selectedCategoryFilter;
   }
 
   void _apply() {
-    widget.parentRef.read(routineFilterProvider.notifier).state = _selectedView;
-    widget.parentRef.read(selectedCategoryFilterProvider.notifier).state = _selectedCategory;
+    widget.parentRef.read(routineNotifierProvider.notifier).setPrimaryFilter(_selectedView);
+    widget.parentRef.read(routineNotifierProvider.notifier).setCategoryFilter(_selectedCategory);
     Navigator.of(context).pop();
   }
 

@@ -142,10 +142,10 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
   }
 
   List<_RoutineSuggestion> _buildSuggestions() {
-    final day = ref.watch(selectedDayProvider);
+    final day = ref.watch(routineNotifierProvider).selectedDay;
     final items = ref.watch(selectedDayRoutineItemsProvider);
-    final conflicts = ref.watch(routineConflictsProvider);
-    final controller = ref.read(routineControllerProvider);
+    final conflicts = ref.watch(routineNotifierProvider).conflicts;
+    final controller = ref.read(routineNotifierProvider.notifier);
     final suggestions = <_RoutineSuggestion>[];
 
     for (final conflict in conflicts.take(3)) {

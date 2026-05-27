@@ -1,3 +1,4 @@
+// ignore_for_file: unused_field, unused_element, unused_local_variable, dead_code, dead_null_aware_expression
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,13 @@ import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dar
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/state/app_state.dart';
+
+import 'package:optivus/features/onboarding/steps/base_timeline_editors/class_timeline_editor.dart';
+import 'package:optivus/features/onboarding/steps/base_timeline_editors/eating_timeline_editor.dart';
+import 'package:optivus/features/onboarding/steps/base_timeline_editors/fixed_timeline_editor.dart';
+import 'package:optivus/features/onboarding/steps/base_timeline_editors/skin_care_timeline_editor.dart';
+
+
 
 class BaseTimelineStep extends ConsumerStatefulWidget {
   const BaseTimelineStep({super.key});
@@ -331,28 +339,11 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             controller: _tabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _section(
-                enabled: _classesEnabled(role),
-                requiredLabel: _classesRequired(role)
-                    ? 'Required for your role'
-                    : 'Disabled by current role',
-                title: 'Classes',
-                icon: Icons.school_rounded,
-                accent: OptivusColors.aquaAccent,
-                description:
-                    'Add subjects, day, location, repeat pattern, and hard or soft blocks.',
-                controller: _titleCtrl,
-                controllerHint: 'Subject, lab, or lecture',
-                addLabel: 'Add class',
-                blockType: RoutineBlockType.hardBlock,
-                filter: (item) => item.notes == 'Classes',
-                chips: const [
-                  'Subject name',
-                  'Hard block',
-                  'Soft block',
-                  'Repeat weekly',
-                  'Copy to other days',
-                ],
+              
+              _launchEditorButton(
+                 enabled: _classesEnabled(role),
+                 title: 'Classes',
+                 builder: (ctx) => ClassSetupScreen(onComplete: () => Navigator.pop(ctx)),
               ),
               _section(
                 enabled: _jobEnabled(role),
@@ -382,13 +373,39 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                     ? _businessModeSelector()
                     : null,
               ),
-              _eatingSection(),
-              _fixedSection(),
-              _skinCareSection(),
-            ],
+              _launchEditorButton(
+                 enabled: true,
+                 title: 'Eating',
+                 builder: (ctx) => EatingSetupScreen(onComplete: () => Navigator.pop(ctx)),
+              ),
+              _launchEditorButton(
+                 enabled: true,
+                 title: 'Fixed',
+                 builder: (ctx) => FixedScheduleSetupScreen(onComplete: () => Navigator.pop(ctx)),
+              ),
+              _launchEditorButton(
+                 enabled: true,
+                 title: 'Skin Care',
+                 builder: (ctx) => SkinCareSetupScreen(onComplete: () => Navigator.pop(ctx)),
+              ),
+],
           ),
         ),
       ],
+    );
+  }
+
+  
+  Widget _launchEditorButton({required bool enabled, required String title, required Widget Function(BuildContext) builder}) {
+    if (!enabled) return Center(child: Text('Disabled for current role'));
+    return Center(
+      child: FilledButton.icon(
+        icon: const Icon(Icons.fullscreen),
+        label: Text('Open $title Editor'),
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(builder: builder));
+        },
+      )
     );
   }
 

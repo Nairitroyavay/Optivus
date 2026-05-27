@@ -86,8 +86,9 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
     const double rim = 8.0;
     const double innerR = outerR - rim + 2;
 
-    final filter = ref.watch(routineFilterProvider);
-    final categoryFilter = ref.watch(selectedCategoryFilterProvider);
+    final state = ref.watch(routineNotifierProvider);
+    final filter = state.selectedPrimaryFilter;
+    final categoryFilter = state.selectedCategoryFilter;
 
     final List<Widget> rows = [];
     
@@ -99,7 +100,7 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
         f: f,
         isSelected: filter == f.key,
         onTap: () {
-          ref.read(routineFilterProvider.notifier).state = f.key;
+          ref.read(routineNotifierProvider.notifier).setPrimaryFilter(f.key);
         },
       ));
     }
@@ -114,7 +115,7 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
         f: f,
         isSelected: categoryFilter == f.key,
         onTap: () {
-          ref.read(selectedCategoryFilterProvider.notifier).state = f.key;
+          ref.read(routineNotifierProvider.notifier).setCategoryFilter(f.key);
         },
       ));
     }
@@ -259,8 +260,9 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
 
   @override
   Widget build(BuildContext context) {
-    final filter = ref.watch(routineFilterProvider);
-    final categoryFilter = ref.watch(selectedCategoryFilterProvider);
+    final state = ref.watch(routineNotifierProvider);
+    final filter = state.selectedPrimaryFilter;
+    final categoryFilter = state.selectedCategoryFilter;
 
     final activeFilters = <RoutineFilterOption>[];
     if (filter != 'all') {

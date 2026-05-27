@@ -6,43 +6,89 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/tracker_session_link.dart';
 import 'package:optivus/state/app_state.dart';
 
-/// Selected day for the routine timeline.
-final selectedDayProvider = StateProvider<DateTime>((ref) {
-  return TimelineUtils.dateOnly(DateTime.now());
-});
+import 'package:optivus/repositories/routine_repository.dart';
 
-/// Monday of the currently selected week.
-final selectedWeekStartProvider = StateProvider<DateTime>((ref) {
-  return TimelineUtils.weekStart(DateTime.now());
-});
+class RoutineState {
+  final List<RoutineItem> items;
+  final DateTime selectedDay;
+  final String selectedPrimaryFilter;
+  final String selectedCategoryFilter;
+  final bool showFullDay;
+  final bool compactMode;
+  final bool showMinuteTicks;
+  final bool showCurrentTimeLine;
+  final bool precisionMode;
+  final bool loading;
+  final String? error;
+  final TrackerLaunchIntent? activeTrackerLaunchIntent;
+  final List<RoutineConflict> conflicts;
+  final bool aiRoutineSuggestionsEnabled;
+  final bool conflictResolverEnabled;
+  final bool routineNotificationsEnabled;
 
-/// Active primary filter.
-final selectedPrimaryFilterProvider = StateProvider<String>((ref) => 'all');
+  const RoutineState({
+    required this.items,
+    required this.selectedDay,
+    this.selectedPrimaryFilter = 'all',
+    this.selectedCategoryFilter = 'all',
+    this.showFullDay = false,
+    this.compactMode = false,
+    this.showMinuteTicks = true,
+    this.showCurrentTimeLine = true,
+    this.precisionMode = false,
+    this.loading = false,
+    this.error,
+    this.activeTrackerLaunchIntent,
+    this.conflicts = const [],
+    this.aiRoutineSuggestionsEnabled = true,
+    this.conflictResolverEnabled = true,
+    this.routineNotificationsEnabled = false,
+  });
 
-/// Backward-compatible name used by older Routine widgets.
-final routineFilterProvider = selectedPrimaryFilterProvider;
-
-/// Active category filter.
-final selectedCategoryFilterProvider = StateProvider<String>((ref) => 'all');
-
-/// Whether to show the full 24-hour timeline.
-final showFullDayProvider = StateProvider<bool>((ref) => false);
-
-/// Whether to show minute ticks on the ruler.
-final showMinuteTicksProvider = StateProvider<bool>((ref) => true);
-
-/// Whether to show the current-time indicator.
-final showCurrentTimeLineProvider = StateProvider<bool>((ref) => true);
-
-/// Whether to use compact card mode.
-final compactModeProvider = StateProvider<bool>((ref) => false);
-
-/// Whether move/edit controls snap to 1 minute instead of 5 minutes.
-final precisionModeProvider = StateProvider<bool>((ref) => false);
-
-final aiRoutineSuggestionsEnabledProvider = StateProvider<bool>((ref) => true);
-final conflictResolverEnabledProvider = StateProvider<bool>((ref) => true);
-final routineNotificationsEnabledProvider = StateProvider<bool>((ref) => false);
+  RoutineState copyWith({
+    List<RoutineItem>? items,
+    DateTime? selectedDay,
+    String? selectedPrimaryFilter,
+    String? selectedCategoryFilter,
+    bool? showFullDay,
+    bool? compactMode,
+    bool? showMinuteTicks,
+    bool? showCurrentTimeLine,
+    bool? precisionMode,
+    bool? loading,
+    String? error,
+    TrackerLaunchIntent? activeTrackerLaunchIntent,
+    bool clearTrackerIntent = false,
+    List<RoutineConflict>? conflicts,
+    bool? aiRoutineSuggestionsEnabled,
+    bool? conflictResolverEnabled,
+    bool? routineNotificationsEnabled,
+  }) {
+    return RoutineState(
+      items: items ?? this.items,
+      selectedDay: selectedDay ?? this.selectedDay,
+      selectedPrimaryFilter: selectedPrimaryFilter ?? this.selectedPrimaryFilter,
+      selectedCategoryFilter: selectedCategoryFilter ?? this.selectedCategoryFilter,
+      showFullDay: showFullDay ?? this.showFullDay,
+      compactMode: compactMode ?? this.compactMode,
+      showMinuteTicks: showMinuteTicks ?? this.showMinuteTicks,
+      showCurrentTimeLine: showCurrentTimeLine ?? this.showCurrentTimeLine,
+      precisionMode: precisionMode ?? this.precisionMode,
+      loading: loading ?? this.loading,
+      error: error,
+      activeTrackerLaunchIntent: clearTrackerIntent
+          ? null
+          : (activeTrackerLaunchIntent ?? this.activeTrackerLaunchIntent),
+      conflicts: conflicts ?? this.conflicts,
+      aiRoutineSuggestionsEnabled:
+          aiRoutineSuggestionsEnabled ?? this.aiRoutineSuggestionsEnabled,
+      conflictResolverEnabled:
+          conflictResolverEnabled ?? this.conflictResolverEnabled,
+      routineNotificationsEnabled:
+          routineNotificationsEnabled ?? this.routineNotificationsEnabled,
+    );
+  }
+}
 
 /// Primary filter options with labels and emojis.
 class RoutineFilterOption {
@@ -93,21 +139,14 @@ class TrackerLaunchIntent {
   });
 }
 
-final trackerLaunchIntentProvider = StateProvider<TrackerLaunchIntent?>(
-  (ref) => null,
-);
-
-class RoutineTrackerLinksNotifier
-    extends StateNotifier<List<TrackerSessionLink>> {
+class RoutineTrackerLinksNotifier extends StateNotifier<List<TrackerSessionLink>> {
   RoutineTrackerLinksNotifier() : super(const []);
 
   void upsert(TrackerSessionLink link) {
     state = [
       for (final existing in state)
         if (existing.routineTaskId == link.routineTaskId) link else existing,
-      if (!state.any(
-        (existing) => existing.routineTaskId == link.routineTaskId,
-      ))
+      if (!state.any((existing) => existing.routineTaskId == link.routineTaskId))
         link,
     ];
   }
@@ -122,12 +161,9 @@ class RoutineTrackerLinksNotifier
 }
 
 final trackerSessionLinksProvider =
-    StateNotifierProvider<
-      RoutineTrackerLinksNotifier,
-      List<TrackerSessionLink>
-    >((ref) {
-      return RoutineTrackerLinksNotifier();
-    });
+    StateNotifierProvider<RoutineTrackerLinksNotifier, List<TrackerSessionLink>>((ref) {
+  return RoutineTrackerLinksNotifier();
+});
 
 enum RoutineConflictType {
   timeOverlap,
@@ -189,151 +225,83 @@ class RoutineConflictSummary {
   const RoutineConflictSummary({required this.total, required this.blocking});
 }
 
-final routineControllerProvider = Provider<RoutineController>((ref) {
-  return RoutineController(ref);
-});
-
-final routineItemsProvider = Provider<List<RoutineItem>>((ref) {
-  return ref.watch(mockRoutineProvider);
-});
-
-final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
-  final day = ref.watch(selectedDayProvider);
-  final items = ref.watch(routineItemsProvider);
-  final materialized = RoutineMaterializer.itemsForDay(items, day);
-  final conflicts = RoutineConflictEngine.detect(materialized, day: day);
-  final conflictItemIds = conflicts
-      .expand((conflict) => [conflict.itemId, conflict.otherItemId])
-      .whereType<String>()
-      .toSet();
-
-  return materialized
-      .map(
-        (item) => item.copyWith(
-          hasConflict: conflictItemIds.contains(item.id),
-          conflictMessage: _firstConflictMessage(item.id, conflicts),
-        ),
-      )
-      .toList(growable: false)
-    ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
-});
-
-final routineConflictsProvider = Provider<List<RoutineConflict>>((ref) {
-  final day = ref.watch(selectedDayProvider);
-  final items = ref.watch(routineItemsProvider);
-  return RoutineConflictEngine.detect(
-    RoutineMaterializer.itemsForDay(items, day),
-    day: day,
-  );
-});
-
-final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
-  final items = ref.watch(selectedDayRoutineItemsProvider);
-  final primaryFilter = ref.watch(selectedPrimaryFilterProvider);
-  final categoryFilter = ref.watch(selectedCategoryFilterProvider);
-  final primary = TimelineUtils.filterItems(items, primaryFilter);
-  return RoutineFilters.applyCategory(primary, categoryFilter);
-});
-
-final todayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
-  final items = ref.watch(routineItemsProvider);
-  return RoutineMaterializer.itemsForDay(
-    items,
-    TimelineUtils.dateOnly(DateTime.now()),
-  );
-});
-
-final currentRoutineItemProvider = Provider<RoutineItem?>((ref) {
-  final now = DateTime.now();
-  final minute = now.hour * 60 + now.minute;
-  final todayItems = ref.watch(todayRoutineItemsProvider);
-  for (final item in todayItems) {
-    if (TimelineUtils.isMinuteInsideItem(item, minute) &&
-        item.status != RoutineStatus.completed &&
-        item.status != RoutineStatus.skipped) {
-      return item;
-    }
-  }
-  return null;
-});
-
-final nextRoutineItemProvider = Provider<RoutineItem?>((ref) {
-  final now = DateTime.now();
-  final minute = now.hour * 60 + now.minute;
-  final candidates =
-      ref
-          .watch(todayRoutineItemsProvider)
-          .where(
-            (item) =>
-                item.startMinute >= minute &&
-                item.status != RoutineStatus.completed &&
-                item.status != RoutineStatus.skipped,
-          )
-          .toList()
-        ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
-  return candidates.isEmpty ? null : candidates.first;
-});
-
-final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((
-  ref,
-) {
-  final items = ref.watch(todayRoutineItemsProvider);
-  final actionable = items
-      .where((item) {
-        return item.blockType != RoutineBlockType.hardBlock;
-      })
-      .toList(growable: false);
-  return RoutineCompletionSummary(
-    total: actionable.length,
-    completed: actionable
-        .where(
-          (item) => item.isCompleted || item.status == RoutineStatus.completed,
-        )
-        .length,
-    skipped: actionable
-        .where((item) => item.status == RoutineStatus.skipped)
-        .length,
-    missed: actionable
-        .where((item) => item.isMissed || item.status == RoutineStatus.missed)
-        .length,
-  );
-});
-
-final routineConflictSummaryProvider = Provider<RoutineConflictSummary>((ref) {
-  final conflicts = RoutineConflictEngine.detect(
-    ref.watch(todayRoutineItemsProvider),
-  );
-  return RoutineConflictSummary(
-    total: conflicts.length,
-    blocking: conflicts.where((conflict) => conflict.blocking).length,
-  );
-});
-
-String? _firstConflictMessage(String itemId, List<RoutineConflict> conflicts) {
-  for (final conflict in conflicts) {
-    if (conflict.itemId == itemId || conflict.otherItemId == itemId) {
-      return conflict.message;
-    }
-  }
-  return null;
-}
-
-class RoutineController {
+class RoutineNotifier extends StateNotifier<RoutineState> {
+  final RoutineRepository _repository;
   final Ref _ref;
 
-  RoutineController(this._ref);
+  RoutineNotifier(this._repository, this._ref)
+      : super(RoutineState(items: [], selectedDay: TimelineUtils.dateOnly(DateTime.now()))) {
+    _loadItems();
+  }
 
-  List<RoutineItem> get _items => _ref.read(mockRoutineProvider);
+  Future<void> _loadItems() async {
+    state = state.copyWith(loading: true, error: null);
+    try {
+      final uid = _ref.read(mockUserProfileProvider).uid;
+      final items = await _repository.fetchRoutineItems(uid);
+      state = state.copyWith(items: items, loading: false);
+      _recalculateConflicts();
+    } catch (e) {
+      state = state.copyWith(loading: false, error: e.toString());
+    }
+  }
 
-  MockRoutineNotifier get _notifier => _ref.read(mockRoutineProvider.notifier);
+  void _recalculateConflicts() {
+    final conflicts = RoutineConflictEngine.detect(
+      RoutineMaterializer.itemsForDay(state.items, state.selectedDay),
+      day: state.selectedDay,
+    );
+    state = state.copyWith(conflicts: conflicts);
+  }
 
-  void addItem(RoutineItem item) => _notifier.addRoutineItem(item);
+  void updateSelectedDay(DateTime day) {
+    state = state.copyWith(selectedDay: TimelineUtils.dateOnly(day));
+    _recalculateConflicts();
+  }
 
-  void updateItem(RoutineItem item) => _notifier.updateRoutineItem(item);
+  void toggleFullDay(bool value) => state = state.copyWith(showFullDay: value);
+  void toggleCompactMode(bool value) => state = state.copyWith(compactMode: value);
+  void toggleMinuteTicks(bool value) => state = state.copyWith(showMinuteTicks: value);
+  void toggleCurrentTimeLine(bool value) => state = state.copyWith(showCurrentTimeLine: value);
+  void togglePrecisionMode(bool value) => state = state.copyWith(precisionMode: value);
+  void setPrimaryFilter(String filter) => state = state.copyWith(selectedPrimaryFilter: filter);
+  void setCategoryFilter(String filter) => state = state.copyWith(selectedCategoryFilter: filter);
+  void toggleAiSuggestions(bool value) => state = state.copyWith(aiRoutineSuggestionsEnabled: value);
+  void toggleConflictResolver(bool value) => state = state.copyWith(conflictResolverEnabled: value);
+  void toggleNotifications(bool value) => state = state.copyWith(routineNotificationsEnabled: value);
 
-  void deleteItem(String itemId) {
-    _notifier.deleteRoutineItem(itemId);
+  Future<void> addItem(RoutineItem item) async {
+    final newItems = [...state.items, item];
+    state = state.copyWith(items: newItems);
+    _recalculateConflicts();
+    final uid = _ref.read(mockUserProfileProvider).uid;
+    await _repository.saveRoutineItem(uid, item);
+  }
+
+  Future<void> updateItem(RoutineItem item) async {
+    final newItems = state.items.map((e) => e.id == item.id ? item : e).toList();
+    state = state.copyWith(items: newItems);
+    _recalculateConflicts();
+    final uid = _ref.read(mockUserProfileProvider).uid;
+    await _repository.saveRoutineItem(uid, item);
+  }
+
+  Future<void> deleteItem(String itemId) async {
+    final newItems = state.items.where((e) => e.id != itemId).toList();
+    state = state.copyWith(items: newItems);
+    _recalculateConflicts();
     _ref.read(trackerSessionLinksProvider.notifier).clearForRoutine(itemId);
+    final uid = _ref.read(mockUserProfileProvider).uid;
+    await _repository.saveRoutineItems(uid, newItems);
+  }
+
+  void _updateById(String itemId, RoutineItem Function(RoutineItem) update) {
+    for (final item in state.items) {
+      if (item.id == itemId) {
+        updateItem(update(item));
+        return;
+      }
+    }
   }
 
   void startFlexibleTask(String itemId) {
@@ -344,6 +312,20 @@ class RoutineController {
         isCompleted: false,
         isMissed: false,
       ),
+    );
+  }
+
+  void toggleSubtask(String itemId, int subtaskIndex) {
+    _updateById(
+      itemId,
+      (item) {
+        if (item.subtasksCompleted == null) return item;
+        final list = List<bool>.from(item.subtasksCompleted!);
+        if (subtaskIndex >= 0 && subtaskIndex < list.length) {
+          list[subtaskIndex] = !list[subtaskIndex];
+        }
+        return item.copyWith(subtasksCompleted: list);
+      },
     );
   }
 
@@ -429,12 +411,16 @@ class RoutineController {
     );
 
     _ref.read(trackerSessionLinksProvider.notifier).upsert(link);
-    _ref.read(trackerLaunchIntentProvider.notifier).state = TrackerLaunchIntent(
-      trackerType: trackerType,
-      routineTaskId: item.id,
-      sessionId: sessionId,
-      startedAt: now,
+    
+    state = state.copyWith(
+      activeTrackerLaunchIntent: TrackerLaunchIntent(
+        trackerType: trackerType,
+        routineTaskId: item.id,
+        sessionId: sessionId,
+        startedAt: now,
+      )
     );
+    
     _updateById(
       item.id,
       (current) => current.copyWith(
@@ -472,9 +458,8 @@ class RoutineController {
           );
     }
     markCompleted(routineTaskId);
-    final intent = _ref.read(trackerLaunchIntentProvider);
-    if (intent?.routineTaskId == routineTaskId) {
-      _ref.read(trackerLaunchIntentProvider.notifier).state = null;
+    if (state.activeTrackerLaunchIntent?.routineTaskId == routineTaskId) {
+      state = state.copyWith(clearTrackerIntent: true);
     }
   }
 
@@ -533,10 +518,10 @@ class RoutineController {
   }) {
     final duration = durationMinutes ?? item.durationMinutes;
     final dayItems = RoutineMaterializer.itemsForDay(
-      _items,
+      state.items,
       date,
     ).where((candidate) => candidate.id != item.id).toList(growable: false);
-    final snap = _ref.read(precisionModeProvider) ? 1 : 5;
+    final snap = state.precisionMode ? 1 : 5;
     for (int start = 6 * 60; start + duration <= 23 * 60; start += snap) {
       final candidate = item.copyWith(
         startMinute: start,
@@ -563,7 +548,7 @@ class RoutineController {
     required int durationMinutes,
   }) {
     final dayItems = RoutineMaterializer.itemsForDay(
-      _items,
+      state.items,
       date,
     ).where((candidate) => candidate.id != item.id).toList(growable: false);
     final candidate = item.copyWith(
@@ -595,15 +580,6 @@ class RoutineController {
     }
   }
 
-  void _updateById(String itemId, RoutineItem Function(RoutineItem) update) {
-    for (final item in _items) {
-      if (item.id == itemId) {
-        _notifier.updateRoutineItem(update(item));
-        return;
-      }
-    }
-  }
-
   TrackerType _inferTrackerType(RoutineItem item) {
     final lower = item.title.toLowerCase();
     if (lower.contains('meditat')) return TrackerType.meditation;
@@ -625,6 +601,120 @@ class RoutineController {
     if (notes == null || notes.trim().isEmpty) return addition;
     return '$notes\n$addition';
   }
+}
+
+final routineNotifierProvider = StateNotifierProvider<RoutineNotifier, RoutineState>((ref) {
+  return RoutineNotifier(ref.watch(routineRepositoryProvider), ref);
+});
+
+final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
+  final state = ref.watch(routineNotifierProvider);
+  final day = state.selectedDay;
+  final items = state.items;
+  final materialized = RoutineMaterializer.itemsForDay(items, day);
+  final conflicts = state.conflicts;
+  final conflictItemIds = conflicts
+      .expand((conflict) => [conflict.itemId, conflict.otherItemId])
+      .whereType<String>()
+      .toSet();
+
+  return materialized
+      .map(
+        (item) => item.copyWith(
+          hasConflict: conflictItemIds.contains(item.id),
+          conflictMessage: _firstConflictMessage(item.id, conflicts),
+        ),
+      )
+      .toList(growable: false)
+    ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+});
+
+final filteredRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
+  final items = ref.watch(selectedDayRoutineItemsProvider);
+  final state = ref.watch(routineNotifierProvider);
+  final primary = TimelineUtils.filterItems(items, state.selectedPrimaryFilter);
+  return RoutineFilters.applyCategory(primary, state.selectedCategoryFilter);
+});
+
+final todayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
+  final items = ref.watch(routineNotifierProvider).items;
+  return RoutineMaterializer.itemsForDay(
+    items,
+    TimelineUtils.dateOnly(DateTime.now()),
+  );
+});
+
+final currentRoutineItemProvider = Provider<RoutineItem?>((ref) {
+  final now = DateTime.now();
+  final minute = now.hour * 60 + now.minute;
+  final todayItems = ref.watch(todayRoutineItemsProvider);
+  for (final item in todayItems) {
+    if (TimelineUtils.isMinuteInsideItem(item, minute) &&
+        item.status != RoutineStatus.completed &&
+        item.status != RoutineStatus.skipped) {
+      return item;
+    }
+  }
+  return null;
+});
+
+final nextRoutineItemProvider = Provider<RoutineItem?>((ref) {
+  final now = DateTime.now();
+  final minute = now.hour * 60 + now.minute;
+  final candidates =
+      ref
+          .watch(todayRoutineItemsProvider)
+          .where(
+            (item) =>
+                item.startMinute >= minute &&
+                item.status != RoutineStatus.completed &&
+                item.status != RoutineStatus.skipped,
+          )
+          .toList()
+        ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  return candidates.isEmpty ? null : candidates.first;
+});
+
+final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((ref) {
+  final items = ref.watch(todayRoutineItemsProvider);
+  final actionable = items
+      .where((item) {
+        return item.blockType != RoutineBlockType.hardBlock;
+      })
+      .toList(growable: false);
+  return RoutineCompletionSummary(
+    total: actionable.length,
+    completed: actionable
+        .where(
+          (item) => item.isCompleted || item.status == RoutineStatus.completed,
+        )
+        .length,
+    skipped: actionable
+        .where((item) => item.status == RoutineStatus.skipped)
+        .length,
+    missed: actionable
+        .where((item) => item.isMissed || item.status == RoutineStatus.missed)
+        .length,
+  );
+});
+
+final routineConflictSummaryProvider = Provider<RoutineConflictSummary>((ref) {
+  final conflicts = RoutineConflictEngine.detect(
+    ref.watch(todayRoutineItemsProvider),
+  );
+  return RoutineConflictSummary(
+    total: conflicts.length,
+    blocking: conflicts.where((conflict) => conflict.blocking).length,
+  );
+});
+
+String? _firstConflictMessage(String itemId, List<RoutineConflict> conflicts) {
+  for (final conflict in conflicts) {
+    if (conflict.itemId == itemId || conflict.otherItemId == itemId) {
+      return conflict.message;
+    }
+  }
+  return null;
 }
 
 class RoutineMaterializer {
@@ -921,3 +1011,8 @@ class RoutineConflictEngine {
   static int _minInt(int a, int b) => a < b ? a : b;
   static int _maxInt(int a, int b) => a > b ? a : b;
 }
+
+// ── Generic Settings Providers ──
+final aiRoutineSuggestionsEnabledProvider = StateProvider<bool>((ref) => true);
+final conflictResolverEnabledProvider = StateProvider<bool>((ref) => true);
+final routineNotificationsEnabledProvider = StateProvider<bool>((ref) => true);

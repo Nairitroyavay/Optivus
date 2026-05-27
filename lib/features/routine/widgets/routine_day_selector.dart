@@ -12,7 +12,7 @@ class RoutineDaySelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedDate = ref.watch(selectedDayProvider);
+    final selectedDate = ref.watch(routineNotifierProvider).selectedDay;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final days = List.generate(7, (i) => today.add(Duration(days: i)));
@@ -35,14 +35,7 @@ class RoutineDaySelector extends ConsumerWidget {
 
                   return InkWell(
                     onTap: () {
-                      ref.read(selectedDayProvider.notifier).state = day;
-                      ref
-                          .read(selectedWeekStartProvider.notifier)
-                          .state = DateTime(
-                        day.year,
-                        day.month,
-                        day.day,
-                      ).subtract(Duration(days: day.weekday - 1));
+                      ref.read(routineNotifierProvider.notifier).updateSelectedDay(day);
                     },
                     borderRadius: BorderRadius.circular(10),
                     child: AnimatedContainer(

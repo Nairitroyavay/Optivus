@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/managers/base_timeline/base_timeline_manager_screen.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -116,64 +117,61 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
               // Working toggles
               Consumer(
                 builder: (ctx, ref, _) {
-                  final showFullDay = ref.watch(showFullDayProvider);
+                  final showFullDay = ref.watch(routineNotifierProvider).showFullDay;
                   return _ToggleTile(
                     title: 'Full 24h mode',
                     subtitle: 'Show all 24 hours',
                     value: showFullDay,
                     onChanged: (v) =>
-                        ref.read(showFullDayProvider.notifier).state = v,
+                        ref.read(routineNotifierProvider.notifier).toggleFullDay(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final showMinuteTicks = ref.watch(showMinuteTicksProvider);
+                  final showMinuteTicks = ref.watch(routineNotifierProvider).showMinuteTicks;
                   return _ToggleTile(
                     title: 'Show minute ticks',
                     subtitle: '1-min and 5-min markers on ruler',
                     value: showMinuteTicks,
                     onChanged: (v) =>
-                        ref.read(showMinuteTicksProvider.notifier).state = v,
+                        ref.read(routineNotifierProvider.notifier).toggleMinuteTicks(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final compactMode = ref.watch(compactModeProvider);
+                  final compactMode = ref.watch(routineNotifierProvider).compactMode;
                   return _ToggleTile(
                     title: 'Compact mode',
                     subtitle: 'Smaller card heights',
                     value: compactMode,
                     onChanged: (v) =>
-                        ref.read(compactModeProvider.notifier).state = v,
+                        ref.read(routineNotifierProvider.notifier).toggleCompactMode(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final showCurrentTimeLine = ref.watch(
-                    showCurrentTimeLineProvider,
-                  );
+                  final showCurrentTimeLine = ref.watch(routineNotifierProvider).showCurrentTimeLine;
                   return _ToggleTile(
-                    title: 'Show current time line',
-                    subtitle: 'Dotted now marker on today',
+                    title: 'Current Time Line',
+                    subtitle: 'Show floating indicator',
                     value: showCurrentTimeLine,
                     onChanged: (v) =>
-                        ref.read(showCurrentTimeLineProvider.notifier).state =
-                            v,
+                        ref.read(routineNotifierProvider.notifier).toggleCurrentTimeLine(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final precisionMode = ref.watch(precisionModeProvider);
+                  final precisionMode = ref.watch(routineNotifierProvider).precisionMode;
                   return _ToggleTile(
                     title: 'Precision mode',
                     subtitle: 'Move controls snap to 1 minute',
                     value: precisionMode,
                     onChanged: (v) =>
-                        ref.read(precisionModeProvider.notifier).state = v,
+                        ref.read(routineNotifierProvider.notifier).togglePrecisionMode(v),
                   );
                 },
               ),
@@ -230,37 +228,16 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
   }
 
   void _showBaseTimelineManager(BuildContext context) {
-    final items = parentRef.read(routineItemsProvider).where((item) {
-      return item.blockType == RoutineBlockType.hardBlock ||
-          item.blockType == RoutineBlockType.softBlock ||
-          item.category == RoutineCategory.classBlock ||
-          item.category == RoutineCategory.job ||
-          item.category == RoutineCategory.eating ||
-          item.category == RoutineCategory.fixed ||
-          item.category == RoutineCategory.skinCare;
-    }).toList()..sort((a, b) => a.startMinute.compareTo(b.startMinute));
-
-    _showListSheet(
-      context,
-      title: 'Base Timeline Manager',
-      icon: Icons.schedule_rounded,
-      children: [
-        const _SectionLabel('Classes'),
-        ..._tilesFor(items, RoutineCategory.classBlock),
-        const _SectionLabel('Job / Work / Business'),
-        ..._tilesFor(items, RoutineCategory.job),
-        const _SectionLabel('Eating'),
-        ..._tilesFor(items, RoutineCategory.eating),
-        const _SectionLabel('Fixed'),
-        ..._tilesFor(items, RoutineCategory.fixed),
-        const _SectionLabel('Skin Care'),
-        ..._tilesFor(items, RoutineCategory.skinCare),
-      ],
+    Navigator.of(context).pop(); // Close the settings sheet first
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const BaseTimelineManagerScreen(),
+      ),
     );
   }
 
   void _showHabitSystems(BuildContext context) {
-    final items = parentRef.read(routineItemsProvider);
+    final items = parentRef.watch(routineNotifierProvider).items;
     _showListSheet(
       context,
       title: 'Habit Systems',
@@ -293,7 +270,7 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
   void _showRoutineHistory(BuildContext context) {
     final history =
         parentRef
-            .read(routineItemsProvider)
+            .watch(routineNotifierProvider).items
             .where(
               (item) =>
                   item.status == RoutineStatus.completed ||
@@ -360,7 +337,7 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
   }
 
   void _showConflictResolver(BuildContext context) {
-    final conflicts = parentRef.read(routineConflictsProvider);
+    final conflicts = parentRef.watch(routineNotifierProvider).conflicts;
     _showListSheet(
       context,
       title: 'Conflict Resolver',
@@ -373,14 +350,14 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
                 onKeepBoth: conflict.canKeepBoth
                     ? () {
                         parentRef
-                            .read(routineControllerProvider)
+                            .read(routineNotifierProvider.notifier)
                             .keepConflictPair(conflict);
                         Navigator.of(context).pop();
                       }
                     : null,
                 onMarkFlexible: () {
                   parentRef
-                      .read(routineControllerProvider)
+                      .read(routineNotifierProvider.notifier)
                       .markFlexible(conflict.itemId);
                   Navigator.of(context).pop();
                 },
@@ -390,8 +367,8 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
   }
 
   void _showExportSheet(BuildContext context) {
-    final selectedDay = parentRef.read(selectedDayProvider);
-    final items = parentRef.read(selectedDayRoutineItemsProvider);
+    final selectedDay = parentRef.watch(routineNotifierProvider).selectedDay;
+    final items = parentRef.watch(selectedDayRoutineItemsProvider);
     final lines = items
         .map((item) {
           return '${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)}  ${item.title}  ${item.statusLabel}';
@@ -410,11 +387,7 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
     );
   }
 
-  List<Widget> _tilesFor(List<RoutineItem> items, RoutineCategory category) {
-    final filtered = items.where((item) => item.category == category).toList();
-    if (filtered.isEmpty) return [const _InfoRowBox(text: 'No items yet.')];
-    return filtered.map(_itemTile).toList();
-  }
+
 
   Widget _itemTile(RoutineItem item) {
     return _InfoRowBox(
@@ -598,15 +571,15 @@ class _ConflictResolverTile extends ConsumerWidget {
                   label: 'Find free slot',
                   color: OptivusColors.success,
                   onTap: () {
-                    final item = ref.read(routineItemsProvider).firstWhere((i) => i.id == conflict.itemId);
-                    final start = ref.read(routineControllerProvider).findFreeSlot(
+                    final item = ref.read(routineNotifierProvider).items.firstWhere((i) => i.id == conflict.itemId);
+                    final start = ref.read(routineNotifierProvider.notifier).findFreeSlot(
                       item: item,
-                      date: ref.read(selectedDayProvider),
+                      date: ref.read(routineNotifierProvider).selectedDay,
                     );
                     if (start != null) {
-                      ref.read(routineControllerProvider).moveItem(
+                      ref.read(routineNotifierProvider.notifier).moveItem(
                         itemId: item.id,
-                        date: ref.read(selectedDayProvider),
+                        date: ref.read(routineNotifierProvider).selectedDay,
                         startMinute: start,
                         durationMinutes: item.durationMinutes,
                       );
@@ -618,8 +591,8 @@ class _ConflictResolverTile extends ConsumerWidget {
                   label: 'Make tiny version',
                   color: OptivusColors.routineAccent,
                   onTap: () {
-                    final item = ref.read(routineItemsProvider).firstWhere((i) => i.id == conflict.itemId);
-                    ref.read(routineControllerProvider).makeTinyVersion(item);
+                    final item = ref.read(routineNotifierProvider).items.firstWhere((i) => i.id == conflict.itemId);
+                    ref.read(routineNotifierProvider.notifier).makeTinyVersion(item);
                     Navigator.of(context).pop();
                   },
                 ),

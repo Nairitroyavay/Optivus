@@ -174,7 +174,7 @@ class FlexibleTaskCard extends ConsumerWidget {
                 color: color,
                 icon: Icons.play_arrow_rounded,
                 onTap: () => ref
-                    .read(routineControllerProvider)
+                    .read(routineNotifierProvider.notifier)
                     .startFlexibleTask(item.id),
               ),
               CardActionButton(
@@ -182,7 +182,7 @@ class FlexibleTaskCard extends ConsumerWidget {
                 color: OptivusColors.success,
                 icon: Icons.check_rounded,
                 onTap: () =>
-                    ref.read(routineControllerProvider).markCompleted(item.id),
+                    ref.read(routineNotifierProvider.notifier).markCompleted(item.id),
               ),
               CardActionButton(
                 label: 'Move',

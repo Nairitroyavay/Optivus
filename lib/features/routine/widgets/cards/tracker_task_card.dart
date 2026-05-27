@@ -136,7 +136,7 @@ class TrackerTaskCard extends ConsumerWidget {
                   color: color,
                   icon: Icons.play_arrow,
                   onTap: () => ref
-                      .read(routineControllerProvider)
+                      .read(routineNotifierProvider.notifier)
                       .startTrackerTask(item),
                 ),
                 CardActionButton(

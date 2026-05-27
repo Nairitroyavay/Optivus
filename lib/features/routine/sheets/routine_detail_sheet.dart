@@ -5,7 +5,6 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 
 /// Shows the expanded detail sheet for a routine item.
@@ -166,7 +165,7 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                   return GestureDetector(
                     onTap: () {
                       parentRef
-                          .read(mockRoutineProvider.notifier)
+                          .read(routineNotifierProvider.notifier)
                           .toggleSubtask(item.id, idx);
                     },
                     child: Padding(
@@ -393,8 +392,8 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                       color: OptivusColors.danger,
                       onTap: () {
                         parentRef
-                            .read(mockRoutineProvider.notifier)
-                            .deleteRoutineItem(item.id);
+                            .read(routineNotifierProvider.notifier)
+                            .deleteItem(item.id);
                         Navigator.of(context).pop();
                       },
                     ),
@@ -421,7 +420,7 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                       color: OptivusColors.success,
                       onTap: () {
                         parentRef
-                            .read(routineControllerProvider)
+                            .read(routineNotifierProvider.notifier)
                             .markCompleted(item.id);
                         Navigator.of(context).pop();
                       },
@@ -435,7 +434,7 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                       color: OptivusColors.textSecondary,
                       onTap: () {
                         parentRef
-                            .read(routineControllerProvider)
+                            .read(routineNotifierProvider.notifier)
                             .markSkipped(item.id);
                         Navigator.of(context).pop();
                       },
@@ -489,7 +488,7 @@ class _SuggestionTile extends StatelessWidget {
           if (item.durationMinutes > 20)
             TextButton(
               onPressed: () {
-                parentRef.read(routineControllerProvider).makeTinyVersion(item);
+                parentRef.read(routineNotifierProvider.notifier).makeTinyVersion(item);
                 Navigator.of(context).pop();
               },
               child: const Text(

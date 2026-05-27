@@ -186,13 +186,13 @@ class _RoutineTimelineViewportState extends ConsumerState<RoutineTimelineViewpor
                   },
                   onLongPressEnd: (details) {
                     if (_dragItemId == item.id) {
-                      final snap = ref.read(precisionModeProvider) ? 1 : 5;
+                      final snap = ref.read(routineNotifierProvider).precisionMode ? 1 : 5;
                       int newMinute = widget.layout.minuteForTop(_dragTop).clamp(0, 1439);
                       newMinute = (newMinute / snap).round() * snap;
                       
-                      ref.read(routineControllerProvider).moveItem(
+                      ref.read(routineNotifierProvider.notifier).moveItem(
                         itemId: item.id,
-                        date: item.date ?? ref.read(selectedDayProvider),
+                        date: item.date ?? ref.read(routineNotifierProvider).selectedDay,
                         startMinute: newMinute,
                         durationMinutes: item.durationMinutes,
                       );

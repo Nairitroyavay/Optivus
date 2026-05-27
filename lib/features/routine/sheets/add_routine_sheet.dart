@@ -66,7 +66,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     _dishesController = TextEditingController(
       text: item?.dishes?.join('\n') ?? '',
     );
-    _date = item?.date ?? ref.read(selectedDayProvider);
+    _date = item?.date ?? ref.read(routineNotifierProvider).selectedDay;
     _startTime = TimeOfDay(
       hour: (item?.startMinute ?? 8 * 60) ~/ 60,
       minute: (item?.startMinute ?? 8 * 60) % 60,
@@ -832,7 +832,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
 
   List<RoutineConflict> _conflictPreview() {
     return ref
-        .read(routineControllerProvider)
+        .read(routineNotifierProvider.notifier)
         .previewMove(
           item: _draftItem(),
           date: _date,
@@ -902,7 +902,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   void _letAiPlace() {
     final draft = _draftItem();
     final slot = ref
-        .read(routineControllerProvider)
+        .read(routineNotifierProvider.notifier)
         .findFreeSlot(
           item: draft,
           date: _date,
@@ -926,9 +926,9 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     }
     final item = _draftItem();
     if (_editing) {
-      ref.read(routineControllerProvider).updateItem(item);
+      ref.read(routineNotifierProvider.notifier).updateItem(item);
     } else {
-      ref.read(routineControllerProvider).addItem(item);
+      ref.read(routineNotifierProvider.notifier).addItem(item);
     }
     Navigator.of(context).pop();
   }

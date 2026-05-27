@@ -165,7 +165,7 @@ class HardBlockCard extends ConsumerWidget {
                   color: OptivusColors.warning,
                   icon: Icons.layers_rounded,
                   onTap: () => ref
-                      .read(routineControllerProvider)
+                      .read(routineNotifierProvider.notifier)
                       .updateItem(item.copyWith(allowOverlap: true)),
                 ),
             ],
