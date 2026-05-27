@@ -99,32 +99,51 @@ class CheckInCard extends ConsumerWidget {
           Wrap(
             spacing: 6,
             runSpacing: 4,
-            children: [
-              CardActionButton(
-                label: 'Avoided',
-                color: OptivusColors.success,
-                icon: Icons.check,
-                onTap: () => ref
-                    .read(routineControllerProvider)
-                    .checkIn(item.id, 'Avoided'),
-              ),
-              CardActionButton(
-                label: 'Craving',
-                color: OptivusColors.warning,
-                icon: Icons.warning_amber_rounded,
-                onTap: () => ref
-                    .read(routineControllerProvider)
-                    .checkIn(item.id, 'Craving'),
-              ),
-              CardActionButton(
-                label: 'Relapsed',
-                color: OptivusColors.danger,
-                icon: Icons.close,
-                onTap: () => ref
-                    .read(routineControllerProvider)
-                    .checkIn(item.id, 'Relapsed'),
-              ),
-            ],
+            children: item.category == RoutineCategory.badHabit
+                ? [
+                    CardActionButton(
+                      label: 'Avoided',
+                      color: OptivusColors.success,
+                      icon: Icons.check,
+                      onTap: () => ref
+                          .read(routineControllerProvider)
+                          .checkIn(item.id, 'Avoided'),
+                    ),
+                    CardActionButton(
+                      label: 'Craving',
+                      color: OptivusColors.warning,
+                      icon: Icons.warning_amber_rounded,
+                      onTap: () => ref
+                          .read(routineControllerProvider)
+                          .checkIn(item.id, 'Craving'),
+                    ),
+                    CardActionButton(
+                      label: 'Relapsed',
+                      color: OptivusColors.danger,
+                      icon: Icons.close,
+                      onTap: () => ref
+                          .read(routineControllerProvider)
+                          .checkIn(item.id, 'Relapsed'),
+                    ),
+                  ]
+                : [
+                    CardActionButton(
+                      label: 'Log Data',
+                      color: OptivusColors.success,
+                      icon: Icons.check,
+                      onTap: () => ref
+                          .read(routineControllerProvider)
+                          .markCompleted(item.id),
+                    ),
+                    CardActionButton(
+                      label: 'Skip',
+                      color: OptivusColors.sub.withValues(alpha: 0.7),
+                      icon: Icons.skip_next_rounded,
+                      onTap: () => ref
+                          .read(routineControllerProvider)
+                          .markSkipped(item.id),
+                    ),
+                  ],
           ),
         ],
       ),

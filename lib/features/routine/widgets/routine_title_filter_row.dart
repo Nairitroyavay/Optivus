@@ -410,7 +410,7 @@ class _RoutineGlassPill extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
-                              color: Color(0xFF1C1C2E),
+                              color: OptivusColors.routineInkDark,
                               letterSpacing: -0.2,
                               decoration: TextDecoration.none,
                             ),
@@ -421,7 +421,7 @@ class _RoutineGlassPill extends StatelessWidget {
                       const Icon(
                         Icons.keyboard_arrow_down_rounded,
                         size: 18,
-                        color: Color(0xFF1C1C2E),
+                        color: OptivusColors.routineInkDark,
                       ),
                     ],
                   ),

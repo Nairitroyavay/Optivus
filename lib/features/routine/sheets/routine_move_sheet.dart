@@ -63,7 +63,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFF0FFF0), Color(0xFFDCFFCC)],
+              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),

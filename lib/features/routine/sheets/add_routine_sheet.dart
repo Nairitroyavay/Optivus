@@ -44,6 +44,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   late bool _hard;
   late bool _allowOverlap;
   late List<int> _repeatDays;
+  late String _bestTime;
   String _fixedKind = 'Class';
   String? _error;
 
@@ -77,6 +78,13 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     _hard = item?.isHardBlock ?? false;
     _allowOverlap = item?.allowOverlap ?? false;
     _repeatDays = List<int>.from(item?.repeatDays ?? const []);
+    _bestTime = item?.bestTime ?? 'Morning';
+
+    if (item != null &&
+        (item.blockType == RoutineBlockType.hardBlock ||
+            item.blockType == RoutineBlockType.softBlock)) {
+      _fixedKind = _kindForCategory(item.category);
+    }
   }
 
   @override
@@ -101,7 +109,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFF0FFF0), Color(0xFFDCFFCC)],
+              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
@@ -367,13 +375,28 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   Widget _flexibleFields() {
     return Column(
       children: [
-        _enumTile<RoutinePriority>(
-          label: 'Priority',
-          value: _priority,
-          values: RoutinePriority.values,
-          labelFor: (value) =>
-              value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
-          onChanged: (value) => setState(() => _priority = value),
+        Row(
+          children: [
+            Expanded(
+              child: _enumTile<RoutinePriority>(
+                label: 'Priority',
+                value: _priority,
+                values: RoutinePriority.values,
+                labelFor: (value) =>
+                    value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
+                onChanged: (value) => setState(() => _priority = value),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _stringTile(
+                label: 'Best time',
+                value: _bestTime,
+                values: const ['Morning', 'Afternoon', 'Evening', 'Night', 'Anytime'],
+                onChanged: (value) => setState(() => _bestTime = value),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         _categoryTile(),
@@ -385,6 +408,30 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     return Column(
       children: [
         _categoryTile(),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _enumTile<RoutinePriority>(
+                label: 'Priority',
+                value: _priority,
+                values: RoutinePriority.values,
+                labelFor: (value) =>
+                    value == RoutinePriority.mustDo ? 'Must do' : 'Good to do',
+                onChanged: (value) => setState(() => _priority = value),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _stringTile(
+                label: 'Best time',
+                value: _bestTime,
+                values: const ['Morning', 'Afternoon', 'Evening', 'Night', 'Anytime'],
+                onChanged: (value) => setState(() => _bestTime = value),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 10),
         _enumTile<TrackerType>(
           label: 'Tracker linked',
@@ -414,6 +461,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             'Job',
             'Eating',
             'Sleep',
+            'Skin Care',
             'Bath',
             'Travel',
             'Prayer',
@@ -544,7 +592,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
         RoutineCategory.focus,
         RoutineCategory.meditation,
         RoutineCategory.hydration,
-        RoutineCategory.screenTime,
       ],
       labelFor: (value) => value.name,
       onChanged: (value) => setState(() => _category = value),
@@ -642,7 +689,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       label: 'Duration',
       value: TimelineUtils.formatDuration(_durationMinutes),
       icon: Icons.timelapse_rounded,
-      onTap: () {},
+      onTap: _showDurationPicker,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -666,6 +713,67 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showDurationPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Select Duration',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: [
+                  5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480,
+                ].map((mins) {
+                  return ActionChip(
+                    label: Text(
+                      TimelineUtils.formatDuration(mins),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: _durationMinutes == mins
+                            ? OptivusColors.routineAccent
+                            : OptivusColors.textPrimary,
+                      ),
+                    ),
+                    backgroundColor: _durationMinutes == mins
+                        ? OptivusColors.routineAccent.withValues(alpha: 0.15)
+                        : Colors.grey.shade100,
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    onPressed: () {
+                      setState(() => _durationMinutes = mins);
+                      Navigator.of(ctx).pop();
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -739,7 +847,14 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     final mode = _mode ?? 'flexible';
     final blockType = _blockTypeForMode(mode);
     final start = _startMinute;
-    final end = (start + _durationMinutes).clamp(1, 1440).toInt();
+    final endRaw = start + _durationMinutes;
+    final crossesMidnight = endRaw > 1440;
+    final end = crossesMidnight ? (endRaw - 1440).clamp(0, 1440).toInt() : endRaw.clamp(1, 1440).toInt();
+    
+    final endDate = crossesMidnight && _repeatDays.isEmpty 
+          ? TimelineUtils.dateOnly(_date).add(const Duration(days: 1)) 
+          : null;
+
     final subtasks = _lines(_subtasksController.text);
     final steps = _lines(_stepsController.text);
     final dishes = _lines(_dishesController.text);
@@ -750,8 +865,11 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       userId: widget.editItem?.userId,
       title: _titleController.text.trim(),
       date: _repeatDays.isEmpty ? TimelineUtils.dateOnly(_date) : null,
+      endDate: endDate,
       startMinute: start,
       endMinute: end,
+      crossesMidnight: crossesMidnight,
+      endsNextDay: crossesMidnight,
       repeatDays: _repeatDays,
       blockType: blockType,
       category: _category,
@@ -818,15 +936,19 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   String? _validate() {
     if (_titleController.text.trim().isEmpty) return 'Title is required.';
     if (_durationMinutes <= 0) return 'Duration must be greater than 0.';
-    if (_startMinute + _durationMinutes > 1440) {
-      return 'End time must be after start time unless crossing midnight is enabled.';
+    final endRaw = _startMinute + _durationMinutes;
+    if (endRaw > 1440 && _fixedKind != 'Sleep') {
+      return 'Only Sleep blocks typically cross midnight. Adjust the time or set type to Sleep.';
     }
     final conflicts = _conflictPreview();
     final blocking = conflicts.where((conflict) => conflict.blocking).toList();
-    if (blocking.isNotEmpty &&
-        _blockTypeForMode(_mode ?? 'flexible') ==
-            RoutineBlockType.flexibleTask) {
-      return 'Flexible tasks cannot be saved into a hard block. Move it or make a tiny version.';
+    if (blocking.isNotEmpty) {
+      final isFlexibleOrTracker = _blockTypeForMode(_mode ?? 'flexible') == RoutineBlockType.flexibleTask ||
+          _blockTypeForMode(_mode ?? 'flexible') == RoutineBlockType.trackerTask;
+      if (isFlexibleOrTracker) {
+        return 'Tasks cannot be saved into a hard block. Move it or make a tiny version.';
+      }
+      return 'This item has a blocking conflict. Adjust time or allow overlap if applicable.';
     }
     return null;
   }
@@ -896,8 +1018,22 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       'Class' || 'Tuition' => RoutineCategory.classBlock,
       'Job' => RoutineCategory.job,
       'Eating' => RoutineCategory.eating,
-      'Prayer' || 'Bath' || 'Travel' || 'Sleep' => RoutineCategory.fixed,
+      'Sleep' => RoutineCategory.sleep,
+      'Skin Care' => RoutineCategory.skinCare,
+      'Bath' || 'Travel' || 'Prayer' => RoutineCategory.fixed,
       _ => RoutineCategory.fixed,
+    };
+  }
+
+  String _kindForCategory(RoutineCategory category) {
+    return switch (category) {
+      RoutineCategory.classBlock => 'Class',
+      RoutineCategory.job => 'Job',
+      RoutineCategory.eating => 'Eating',
+      RoutineCategory.sleep => 'Sleep',
+      RoutineCategory.skinCare => 'Skin Care',
+      RoutineCategory.fixed => 'Bath', // Default for fixed
+      _ => 'Other',
     };
   }
 

@@ -69,6 +69,7 @@ class RoutineItem {
   final bool isTrackerLinked;
   final TrackerType trackerType;
   final String? notes;
+  final String? bestTime;
 
   // Custom metadata based on types
   final List<String>? subtasks;
@@ -122,6 +123,7 @@ class RoutineItem {
     this.isTrackerLinked = false,
     this.trackerType = TrackerType.none,
     this.notes,
+    this.bestTime,
     this.subtasks,
     this.subtasksCompleted,
     this.steps,
@@ -246,6 +248,7 @@ class RoutineItem {
     bool? isTrackerLinked,
     TrackerType? trackerType,
     String? notes,
+    String? bestTime,
     List<String>? subtasks,
     List<bool>? subtasksCompleted,
     List<String>? steps,
@@ -286,6 +289,7 @@ class RoutineItem {
       isTrackerLinked: isTrackerLinked ?? this.isTrackerLinked,
       trackerType: trackerType ?? this.trackerType,
       notes: notes ?? this.notes,
+      bestTime: bestTime ?? this.bestTime,
       subtasks: subtasks ?? this.subtasks,
       subtasksCompleted: subtasksCompleted ?? this.subtasksCompleted,
       steps: steps ?? this.steps,
@@ -332,6 +336,7 @@ class RoutineItem {
       'isTrackerLinked': isTrackerLinked,
       'trackerType': trackerType.name,
       'notes': notes,
+      'bestTime': bestTime,
       'subtasks': subtasks,
       'subtasksCompleted': subtasksCompleted,
       'steps': steps,
@@ -406,6 +411,7 @@ class RoutineItem {
         fallback: TrackerType.none,
       ),
       notes: map['notes'] as String?,
+      bestTime: map['bestTime'] as String?,
       subtasks: (map['subtasks'] as List?)?.cast<String>(),
       subtasksCompleted: (map['subtasksCompleted'] as List?)?.cast<bool>(),
       steps: (map['steps'] as List?)?.cast<String>(),

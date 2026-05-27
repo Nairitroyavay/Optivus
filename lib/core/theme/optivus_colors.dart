@@ -68,6 +68,16 @@ class OptivusColors {
   static const Color routineBgTop = Color(0xFFA3FF91);
   static const Color routineBgBottom = Color(0xFFEFFEEC);
 
+  // ── Routine specific tokens ──────────────────────────────────────────────
+  static const Color routineSheetTop = Color(0xFFF0FFF0);
+  static const Color routineSheetBottom = Color(0xFFDCFFCC);
+  static const Color routineInkDark = Color(0xFF1C1C2E);
+  static const Color routineIconDark = Color(0xFF0F172A);
+  static const Color routineTextDark = Color(0xFF334155);
+  static const Color routinePrismBlue = Color(0xFF60A5FA);
+  static const Color routinePrismYellow = Color(0xFFFBBF24);
+  static const Color routinePrismPink = Color(0xFFF472B6);
+
   // ── Category accent colours (old liquid_ui palette) ────────────────────
   static const Color mintAccent = Color(0xFF60D4A0);   // kMint — skin care
   static const Color blueAccent = Color(0xFF60B8FF);   // kBlue — classes

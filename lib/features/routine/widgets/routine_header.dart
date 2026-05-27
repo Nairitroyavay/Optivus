@@ -164,14 +164,14 @@ class _HeaderActionButton extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 16, color: const Color(0xFF0F172A)),
+                Icon(icon, size: 16, color: OptivusColors.routineIconDark),
                 const SizedBox(width: 6),
                 Text(
                   label,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF0F172A),
+                    color: OptivusColors.routineIconDark,
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -247,7 +247,7 @@ class _SettingsPill extends StatelessWidget {
               child: Icon(
                 Icons.settings_rounded,
                 size: 17,
-                color: Color(0xFF334155),
+                color: OptivusColors.routineTextDark,
               ),
             ),
           ],

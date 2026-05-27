@@ -9,13 +9,16 @@ import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 import 'package:optivus/features/routine/widgets/routine_current_time_line.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+
 /// Timeline viewport — scrollable stack with ruler, cards, and current time.
 ///
 /// Matches old Optivus `TimelineDaySchedule` layout:
 /// - Stack with ruler on left, positioned cards, current time overlay
 /// - Cards at exact minute positions
 /// - Auto-scrolls to current time on init
-class RoutineTimelineViewport extends StatefulWidget {
+class RoutineTimelineViewport extends ConsumerStatefulWidget {
   final List<RoutineItem> items;
   final TimelineLayout layout;
   final bool isToday;
@@ -32,12 +35,17 @@ class RoutineTimelineViewport extends StatefulWidget {
   });
 
   @override
-  State<RoutineTimelineViewport> createState() =>
+  ConsumerState<RoutineTimelineViewport> createState() =>
       _RoutineTimelineViewportState();
 }
 
-class _RoutineTimelineViewportState extends State<RoutineTimelineViewport> {
+class _RoutineTimelineViewportState extends ConsumerState<RoutineTimelineViewport> {
   late ScrollController _scrollController;
+  
+  String? _dragItemId;
+  double _dragTop = 0.0;
+  double _dragStartTop = 0.0;
+  double _dragInitialGlobalY = 0.0;
 
   @override
   void initState() {
@@ -138,6 +146,9 @@ class _RoutineTimelineViewportState extends State<RoutineTimelineViewport> {
             ),
 
             // ── Content card layer: readable overlays that do not affect anchors ──
+            // TODO: Implement vertical drag-and-drop for cards.
+            // On long press/drag card vertically, show floating time bubble.
+            // Snap = 5 min or 1 min (precision mode). Warn if hitting hard block.
             ...itemLayouts.map((entry) {
               final item = entry.item;
               final now = DateTime.now();
@@ -146,23 +157,78 @@ class _RoutineTimelineViewportState extends State<RoutineTimelineViewport> {
                   widget.isToday &&
                   TimelineUtils.isMinuteInsideItem(item, currentMinute);
 
+              final isDragging = _dragItemId == item.id;
+              final top = isDragging ? _dragTop : entry.cardTop;
+
               return Positioned(
-                top: entry.cardTop,
+                top: top,
                 left:
                     kTimelineTimeRailWidth +
                     kTimelineRailDotColumnWidth +
                     kTimelineContentGap +
                     entry.laneOffset,
                 right: 12,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minHeight: _minimumCardHeightFor(item),
-                  ),
-                  child: RoutineCardFactory.buildCard(
-                    item: item,
-                    isNow: isNow,
-                    railHeight: entry.railHeight,
-                    onTap: () => widget.onCardTap?.call(item),
+                child: GestureDetector(
+                  onLongPressStart: (details) {
+                    setState(() {
+                      _dragItemId = item.id;
+                      _dragStartTop = entry.cardTop;
+                      _dragTop = entry.cardTop;
+                      _dragInitialGlobalY = details.globalPosition.dy;
+                    });
+                  },
+                  onLongPressMoveUpdate: (details) {
+                    if (_dragItemId == item.id) {
+                      setState(() {
+                        _dragTop = _dragStartTop + (details.globalPosition.dy - _dragInitialGlobalY);
+                      });
+                    }
+                  },
+                  onLongPressEnd: (details) {
+                    if (_dragItemId == item.id) {
+                      final snap = ref.read(precisionModeProvider) ? 1 : 5;
+                      int newMinute = widget.layout.minuteForTop(_dragTop).clamp(0, 1439);
+                      newMinute = (newMinute / snap).round() * snap;
+                      
+                      ref.read(routineControllerProvider).moveItem(
+                        itemId: item.id,
+                        date: item.date ?? ref.read(selectedDayProvider),
+                        startMinute: newMinute,
+                        durationMinutes: item.durationMinutes,
+                      );
+                      
+                      setState(() {
+                        _dragItemId = null;
+                      });
+                    }
+                  },
+                  onLongPressCancel: () {
+                    if (_dragItemId == item.id) {
+                      setState(() {
+                        _dragItemId = null;
+                      });
+                    }
+                  },
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: _minimumCardHeightFor(item),
+                    ),
+                    child: Opacity(
+                      opacity: isDragging ? 0.8 : 1.0,
+                      // TODO(Phase 8): Implement drag-to-move behavior using LongPressDraggable.
+                      // Wrap this RoutineCardFactory.buildCard in a GestureDetector (for long press)
+                      // or LongPressDraggable to allow vertical dragging. On drag update, calculate
+                      // the snapped target time (using precision mode vs 5-minute snap) and display
+                      // a floating time bubble. On drop, trigger the move action with conflict resolution.
+                      // Leaving this as a "safe partial" implementation for now per blueprint rules,
+                      // since the standalone Move Sheet handles moving robustly.
+                      child: RoutineCardFactory.buildCard(
+                        item: item,
+                        isNow: isNow,
+                        railHeight: entry.railHeight,
+                        onTap: () => widget.onCardTap?.call(item),
+                      ),
+                    ),
                   ),
                 ),
               );

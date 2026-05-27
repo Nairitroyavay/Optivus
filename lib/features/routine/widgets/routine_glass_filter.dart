@@ -310,7 +310,7 @@ class _LiquidGlassPill extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
-                          color: Color(0xFF1C1C2E),
+                          color: OptivusColors.routineInkDark,
                           letterSpacing: -0.2,
                           decoration: TextDecoration.none,
                         ),
@@ -318,7 +318,7 @@ class _LiquidGlassPill extends StatelessWidget {
                       const Icon(
                         Icons.keyboard_arrow_down_rounded,
                         size: 18,
-                        color: Color(0xFF1C1C2E),
+                        color: OptivusColors.routineInkDark,
                       ),
                     ],
                   ),
@@ -444,7 +444,7 @@ class GlassHighlightPainter extends CustomPainter {
       Offset(size.width - 5, size.height - 15),
       20,
       Paint()
-        ..color = const Color(0xFF60A5FA).withValues(alpha: 0.8)
+        ..color = OptivusColors.routinePrismBlue.withValues(alpha: 0.8)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
     );
     // Amber prism
@@ -452,7 +452,7 @@ class GlassHighlightPainter extends CustomPainter {
       Offset(size.width - 25, size.height - 5),
       20,
       Paint()
-        ..color = const Color(0xFFFBBF24).withValues(alpha: 0.8)
+        ..color = OptivusColors.routinePrismYellow.withValues(alpha: 0.8)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
     );
     // Pink prism
@@ -460,7 +460,7 @@ class GlassHighlightPainter extends CustomPainter {
       Offset(size.width - 15, size.height - 30),
       20,
       Paint()
-        ..color = const Color(0xFFF472B6).withValues(alpha: 0.6)
+        ..color = OptivusColors.routinePrismPink.withValues(alpha: 0.6)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
     );
 

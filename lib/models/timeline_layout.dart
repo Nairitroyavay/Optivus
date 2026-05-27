@@ -29,6 +29,10 @@ class TimelineLayout {
   double topForMinute(int minute) =>
       (minute - visibleStartMinute) * minuteHeight;
 
+  /// Calculate the minute for a given top position.
+  int minuteForTop(double top) =>
+      (top / minuteHeight).round() + visibleStartMinute;
+
   /// Calculate the exact pixel height for a normalized minute range.
   double heightForRange(int startMinute, int endMinute) {
     final minutes = endMinute - startMinute;

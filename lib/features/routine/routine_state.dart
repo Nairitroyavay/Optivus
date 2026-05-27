@@ -779,6 +779,7 @@ class RoutineConflictEngine {
 
         final involvesHard = a.isHardBlock || b.isHardBlock;
         final isSleep = _isSleep(a) || _isSleep(b);
+        final isHardVsHard = a.isHardBlock && b.isHardBlock;
         final canKeep = a.allowOverlap || b.allowOverlap;
         final flexibleVsHard =
             involvesHard &&
@@ -786,6 +787,21 @@ class RoutineConflictEngine {
                 b.blockType == RoutineBlockType.flexibleTask ||
                 a.blockType == RoutineBlockType.trackerTask ||
                 b.blockType == RoutineBlockType.trackerTask);
+
+        bool blocking = false;
+        if (flexibleVsHard) {
+          blocking = true;
+        } else if (isSleep) {
+          blocking = true;
+        } else if (isHardVsHard) {
+          final aIsStrict = _isStrictHard(a);
+          final bIsStrict = _isStrictHard(b);
+          if (!canKeep || aIsStrict || bIsStrict) {
+            blocking = true;
+          }
+        } else if (involvesHard && !canKeep) {
+          blocking = true;
+        }
 
         conflicts.add(
           RoutineConflict(
@@ -802,8 +818,8 @@ class RoutineConflictEngine {
                 '${a.title} overlaps with ${b.title}\n${TimelineUtils.formatTimeRange(_maxInt(a.startMinute, b.startMinute), _minInt(aEnd, bEnd))}',
             startMinute: _maxInt(a.startMinute, b.startMinute),
             endMinute: _minInt(aEnd, bEnd),
-            blocking: flexibleVsHard || (!canKeep && involvesHard),
-            canKeepBoth: canKeep || !flexibleVsHard,
+            blocking: blocking,
+            canKeepBoth: !blocking || (canKeep && !isSleep && !flexibleVsHard),
           ),
         );
       }
@@ -894,6 +910,12 @@ class RoutineConflictEngine {
   static bool _isSleep(RoutineItem item) {
     return item.category == RoutineCategory.sleep ||
         item.title.toLowerCase().contains('sleep');
+  }
+
+  static bool _isStrictHard(RoutineItem item) {
+    return _isSleep(item) ||
+        item.category == RoutineCategory.classBlock ||
+        item.category == RoutineCategory.job;
   }
 
   static int _minInt(int a, int b) => a < b ? a : b;

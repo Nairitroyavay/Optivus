@@ -32,7 +32,7 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFF0FFF0), Color(0xFFDCFFCC)],
+              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
             ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(28),
@@ -443,7 +443,7 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFFF0FFF0), Color(0xFFDCFFCC)],
+                colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
@@ -538,7 +538,7 @@ class _InfoRowBox extends StatelessWidget {
   }
 }
 
-class _ConflictResolverTile extends StatelessWidget {
+class _ConflictResolverTile extends ConsumerWidget {
   final RoutineConflict conflict;
   final VoidCallback? onKeepBoth;
   final VoidCallback onMarkFlexible;
@@ -550,7 +550,7 @@ class _ConflictResolverTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final color = conflict.blocking
         ? OptivusColors.danger
         : OptivusColors.warning;
@@ -584,22 +584,52 @@ class _ConflictResolverTile extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _MiniAction(
-                label: 'Keep both',
-                color: OptivusColors.warning,
-                onTap: onKeepBoth,
-              ),
-              _MiniAction(
-                label: 'Mark flexible',
-                color: OptivusColors.routineAccent,
-                onTap: onMarkFlexible,
-              ),
-            ],
-          ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (onKeepBoth != null)
+                  _MiniAction(
+                    label: 'Keep both',
+                    color: OptivusColors.warning,
+                    onTap: onKeepBoth,
+                  ),
+                _MiniAction(
+                  label: 'Find free slot',
+                  color: OptivusColors.success,
+                  onTap: () {
+                    final item = ref.read(routineItemsProvider).firstWhere((i) => i.id == conflict.itemId);
+                    final start = ref.read(routineControllerProvider).findFreeSlot(
+                      item: item,
+                      date: ref.read(selectedDayProvider),
+                    );
+                    if (start != null) {
+                      ref.read(routineControllerProvider).moveItem(
+                        itemId: item.id,
+                        date: ref.read(selectedDayProvider),
+                        startMinute: start,
+                        durationMinutes: item.durationMinutes,
+                      );
+                    }
+                    Navigator.of(context).pop();
+                  },
+                ),
+                _MiniAction(
+                  label: 'Make tiny version',
+                  color: OptivusColors.routineAccent,
+                  onTap: () {
+                    final item = ref.read(routineItemsProvider).firstWhere((i) => i.id == conflict.itemId);
+                    ref.read(routineControllerProvider).makeTinyVersion(item);
+                    Navigator.of(context).pop();
+                  },
+                ),
+                _MiniAction(
+                  label: 'Mark flexible',
+                  color: OptivusColors.textSecondary,
+                  onTap: onMarkFlexible,
+                ),
+              ],
+            ),
         ],
       ),
     );
