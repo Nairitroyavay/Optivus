@@ -30,11 +30,11 @@ class CoachActionCard extends StatelessWidget {
         break;
       case CoachResponseBlockType.goalProofCard:
         cardIcon = Icons.verified_user;
-        blockColor = Colors.orange;
+        blockColor = OptivusColors.warning;
         break;
       case CoachResponseBlockType.mindNoteCard:
         cardIcon = Icons.bubble_chart;
-        blockColor = Colors.deepPurple;
+        blockColor = OptivusColors.coachAccent;
         break;
       default:
         cardIcon = Icons.stars;

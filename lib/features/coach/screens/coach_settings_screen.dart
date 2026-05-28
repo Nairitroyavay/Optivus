@@ -8,7 +8,7 @@ void showCoachSettingsScreen(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFFF7F0FF),
+    backgroundColor: OptivusColors.coachTop.withValues(alpha: 0.3),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
     ),
@@ -27,7 +27,7 @@ void showCoachSettingsScreen(BuildContext context, WidgetRef ref) {
                   child: Container(
                     width: 48,
                     height: 5,
-                    decoration: BoxDecoration(color: Colors.blueGrey.shade300, borderRadius: BorderRadius.circular(10)),
+                    decoration: BoxDecoration(color: OptivusColors.borderSoft, borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -87,7 +87,7 @@ void showCoachSettingsScreen(BuildContext context, WidgetRef ref) {
                 const SizedBox(height: 20),
 
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: OptivusColors.coachAccent, foregroundColor: Colors.white),
                   onPressed: () {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -114,9 +114,9 @@ Widget _buildArchetypeBtn(WidgetRef ref, String label, bool isActive, VoidCallba
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: isActive ? Colors.deepPurple.withValues(alpha: 0.15) : Colors.white,
+          color: isActive ? OptivusColors.coachAccent.withValues(alpha: 0.15) : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isActive ? Colors.deepPurple : OptivusColors.borderSoft, width: 1.5),
+          border: Border.all(color: isActive ? OptivusColors.coachAccent : OptivusColors.borderSoft, width: 1.5),
         ),
         child: Center(
           child: Text(
@@ -124,7 +124,7 @@ Widget _buildArchetypeBtn(WidgetRef ref, String label, bool isActive, VoidCallba
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: isActive ? Colors.deepPurple : OptivusColors.textSecondary,
+              color: isActive ? OptivusColors.coachAccent : OptivusColors.textSecondary,
             ),
           ),
         ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/home/widgets/home_glass_widgets.dart';
 
 class TrackerSectionHeader extends StatelessWidget {
   final String title;
@@ -151,7 +152,8 @@ class TrackerGraphCard extends StatelessWidget {
     return Container(
       width: 280,
       margin: const EdgeInsets.only(right: 16),
-      child: LiquidCard.solid(
+      child: HomeGlassCard(
+        tint: OptivusColors.trackerCardTint.withValues(alpha: 0.15),
         padding: const EdgeInsets.all(16),
         radius: 24,
         child: Column(
@@ -276,7 +278,8 @@ class TrackerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: LiquidCard.solid(
+      child: HomeGlassCard(
+        tint: OptivusColors.trackerCardTint.withValues(alpha: 0.15),
         padding: const EdgeInsets.all(16),
         radius: 20,
         child: Row(
@@ -376,8 +379,8 @@ class DiscoverTrackerCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: Opacity(
         opacity: 0.7,
-        child: LiquidCard.solid(
-          tint: Colors.grey.withValues(alpha: 0.05),
+        child: HomeGlassCard(
+          tint: OptivusColors.trackerCardTint.withValues(alpha: 0.1),
           padding: const EdgeInsets.all(16),
           radius: 20,
           child: Row(
@@ -474,7 +477,8 @@ class PhoneDataSourceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: LiquidCard.solid(
+      child: HomeGlassCard(
+        tint: OptivusColors.trackerCardTint.withValues(alpha: 0.15),
         padding: const EdgeInsets.all(16),
         radius: 20,
         child: Row(

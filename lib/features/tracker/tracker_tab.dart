@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/liquid_ui/liquid_ui.dart';
-import 'package:optivus/widgets/liquid_glass_panel.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/home/widgets/home_glass_widgets.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 
 class TrackerTab extends ConsumerStatefulWidget {
@@ -28,34 +28,62 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildHeader(context),
-          const SizedBox(height: 24),
-          _buildTodayProgressHero(context),
-          const SizedBox(height: 24),
-          _buildPeriodSelector(),
-          const SizedBox(height: 24),
-          _buildProgressCarousel(),
-          const SizedBox(height: 32),
-          const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
-          _buildActiveTrackers(),
-          const SizedBox(height: 32),
-          const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
-          _buildDiscoverTrackers(),
-          const SizedBox(height: 32),
-          const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
-          _buildPhoneDataSources(),
-          const SizedBox(height: 32),
-          const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
-          _buildRecentActivity(),
-          const SizedBox(height: 48),
-          _buildTrackerSettingsTeaser(),
-        ],
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            OptivusColors.trackerTop,
+            Color(0xFFD9FFFF),
+          ],
+          stops: [0.0, 0.80],
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: _buildHeader(context),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 180),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildTodayProgressHero(context),
+                      const SizedBox(height: 24),
+                      _buildPeriodSelector(),
+                      const SizedBox(height: 24),
+                      _buildProgressCarousel(),
+                      const SizedBox(height: 32),
+                      const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
+                      _buildActiveTrackers(),
+                      const SizedBox(height: 32),
+                      const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
+                      _buildDiscoverTrackers(),
+                      const SizedBox(height: 32),
+                      const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
+                      _buildPhoneDataSources(),
+                      const SizedBox(height: 32),
+                      const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
+                      _buildRecentActivity(),
+                      const SizedBox(height: 48),
+                      _buildTrackerSettingsTeaser(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -86,16 +114,17 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
             ),
           ],
         ),
-        LiquidIconBtn(
+        HomeIconPill(
           icon: Icons.settings,
           onTap: () => _showMockSnackbar('Open Tracker Settings'),
+          accent: OptivusColors.trackerAccent,
         ),
       ],
     );
   }
 
   Widget _buildTodayProgressHero(BuildContext context) {
-    return LiquidGlassPanel(
+    return HomeGlassPanel(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,7 +216,8 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       return Container(
         height: 180,
         alignment: Alignment.center,
-        child: LiquidCard.solid(
+        child: HomeGlassCard(
+          tint: OptivusColors.trackerCardTint.withValues(alpha: 0.15),
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -380,7 +410,8 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       {'title': 'Walk completed', 'subtitle': '2.4 km', 'color': kAmber},
     ];
 
-    return LiquidCard.solid(
+    return HomeGlassCard(
+      tint: OptivusColors.trackerCardTint.withValues(alpha: 0.15),
       padding: const EdgeInsets.all(20),
       radius: 20,
       child: Column(
@@ -457,9 +488,9 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
   Widget _buildTrackerSettingsTeaser() {
     return GestureDetector(
       onTap: () => _showMockSnackbar('Open Tracker Settings'),
-      child: LiquidCard.solid(
+      child: HomeGlassCard(
         padding: const EdgeInsets.all(20),
-        tint: Colors.white.withValues(alpha: 0.4),
+        tint: OptivusColors.trackerCardTint.withValues(alpha: 0.2),
         radius: 20,
         child: Row(
           children: [

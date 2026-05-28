@@ -29,8 +29,8 @@ class OptivusColors {
   static const Color routineCardTint = Color(0xFFF2FCEC);
 
   // Tracker
-  static const Color trackerTop = Color(0xFFD6FFFF);
-  static const Color trackerAccent = Color(0xFF36C6D4);
+  static const Color trackerTop = Color(0xFFBFFFFE);
+  static const Color trackerAccent = Color(0xFF3ED8E6);
   static const Color trackerCardTint = Color(0xFFEEFFFF);
 
   // Coach

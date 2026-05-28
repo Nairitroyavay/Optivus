@@ -14,7 +14,7 @@ import 'package:optivus/app/app_navigation_controller.dart';
 const List<List<Color>> _tabGradients = [
   [OptivusColors.homeTop, Color(0xFFFFEDED)], // Home: #FFE0E0 to #FFEDED
   [OptivusColors.routineBgTop, OptivusColors.routineBgBottom], // Routine: RoutineTab also paints this
-  [OptivusColors.trackerTop, Colors.white], // Tracker: #D6FFFF
+  [OptivusColors.trackerTop, Colors.white], // Tracker: #BFFFFE
   [OptivusColors.coachTop, Colors.white], // Coach: #F7E0FF
   [OptivusColors.goalsTop, Colors.white], // Goals: #FFD9F2
   [OptivusColors.profileTop, Colors.white], // Profile: #FCFFD6
@@ -119,8 +119,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildHeader(int currentIndex) {
-    // Home (0) and Routine (1) tabs render their own custom headers
-    if (currentIndex == 0 || currentIndex == 1) {
+    // Home (0), Routine (1), and Tracker (2) tabs render their own custom headers
+    if (currentIndex == 0 || currentIndex == 1 || currentIndex == 2) {
       return const SizedBox.shrink();
     }
 

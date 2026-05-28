@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/features/routine/managers/base_timeline/base_timeline_manager_screen.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/managers/base_timeline/base_timeline_manager_screen.dart';
 
 /// Shows the Routine Settings bottom sheet.
 void showRoutineSettingsSheet(BuildContext context, WidgetRef ref) {
@@ -229,10 +229,9 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
 
   void _showBaseTimelineManager(BuildContext context) {
     Navigator.of(context).pop(); // Close the settings sheet first
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => const BaseTimelineManagerScreen(),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const BaseTimelineManagerScreen()),
     );
   }
 

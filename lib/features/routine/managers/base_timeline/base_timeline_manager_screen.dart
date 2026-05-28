@@ -1,80 +1,147 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/class_setup_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/eating_setup_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/fixed_schedule_setup_screen.dart';
-import 'package:optivus/features/routine/managers/base_timeline/screens/skin_care_setup_screen.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/managers/base_timeline/utils/base_timeline_filter_utils.dart';
+import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_option_card.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/classes_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/work_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/eating_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/fixed_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/skin_care_routine_setup_screen.dart';
+import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
 
-class BaseTimelineManagerScreen extends ConsumerStatefulWidget {
+class BaseTimelineManagerScreen extends ConsumerWidget {
   const BaseTimelineManagerScreen({super.key});
 
   @override
-  ConsumerState<BaseTimelineManagerScreen> createState() => _BaseTimelineManagerScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final items = ref.watch(routineNotifierProvider).items;
 
-class _BaseTimelineManagerScreenState extends ConsumerState<BaseTimelineManagerScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+    final classes = BaseTimelineFilterUtils.getClasses(items);
+    final work = BaseTimelineFilterUtils.getWorkItems(items);
+    final eating = BaseTimelineFilterUtils.getEatingItems(items);
+    final fixed = BaseTimelineFilterUtils.getFixedItems(items);
+    final skinCare = BaseTimelineFilterUtils.getSkinCareItems(items);
 
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 5, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: OptivusColors.routineBgBottom,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text(
-          'Base Timeline Manager',
+          'Base Timeline',
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
             color: OptivusColors.textPrimary,
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
+        centerTitle: true,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [OptivusColors.routineBgBottom, OptivusColors.routineBgBottom],
+          ),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          labelColor: OptivusColors.routineAccent,
-          unselectedLabelColor: OptivusColors.textSecondary,
-          indicatorColor: OptivusColors.routineAccent,
-          labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-          tabs: const [
-            Tab(text: 'Classes'),
-            Tab(text: 'Job/Work'),
-            Tab(text: 'Eating'),
-            Tab(text: 'Fixed'),
-            Tab(text: 'Skin Care'),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 60),
+          children: [
+            const Text(
+              'Base Timeline Manager',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
+                height: 1.1,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Set the foundation blocks that shape your daily routine.',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: OptivusColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            BaseTimelineOptionCard(
+              title: 'Classes',
+              subtitle: 'School, college, or course blocks',
+              icon: Icons.school_rounded,
+              itemCount: classes.length,
+              previewText: classes.isNotEmpty ? _previewItem(classes.first) : null,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ClassesRoutineSetupScreen()),
+              ),
+            ),
+
+            BaseTimelineOptionCard(
+              title: 'Job / Work / Business',
+              subtitle: 'Shifts, core hours, or flexible work',
+              icon: Icons.work_rounded,
+              itemCount: work.length,
+              previewText: work.isNotEmpty ? _previewItem(work.first) : null,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WorkRoutineSetupScreen()),
+              ),
+            ),
+
+            BaseTimelineOptionCard(
+              title: 'Eating',
+              subtitle: 'Breakfast, lunch, dinner windows',
+              icon: Icons.restaurant_rounded,
+              itemCount: eating.length,
+              previewText: eating.isNotEmpty ? _previewItem(eating.first) : null,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EatingRoutineSetupScreen()),
+              ),
+            ),
+
+            BaseTimelineOptionCard(
+              title: 'Fixed',
+              subtitle: 'Sleep, travel, bathing, or locked time',
+              icon: Icons.schedule_rounded,
+              itemCount: fixed.length,
+              previewText: fixed.isNotEmpty ? _previewItem(fixed.first) : null,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FixedRoutineSetupScreen()),
+              ),
+            ),
+
+            BaseTimelineOptionCard(
+              title: 'Skin Care',
+              subtitle: 'Morning & night skincare sets',
+              icon: Icons.face_retouching_natural_rounded,
+              itemCount: skinCare.length,
+              previewText: skinCare.isNotEmpty ? _previewItem(skinCare.first) : null,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SkinCareRoutineSetupScreen()),
+              ),
+            ),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        physics: const NeverScrollableScrollPhysics(), // Prevent swipe interference with draggable timeline blocks
-        children: [
-          ClassSetupScreen(onComplete: () {}),
-          FixedScheduleSetupScreen(onComplete: () {}), // Reuse fixed for job/work
-          EatingSetupScreen(onComplete: () {}),
-          FixedScheduleSetupScreen(onComplete: () {}),
-          SkinCareSetupScreen(onComplete: () {}),
-        ],
-      ),
     );
+  }
+
+  String _previewItem(RoutineItem item) {
+    return '${item.title} at ${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)}';
   }
 }

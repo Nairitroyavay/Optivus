@@ -2,14 +2,21 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class AnimatedBotAvatar extends StatelessWidget {
-  const AnimatedBotAvatar({super.key});
+  final Color baseColor;
+  final Color rimColor;
+  final Color lightColor;
+  final Color iconColor;
+
+  const AnimatedBotAvatar({
+    super.key,
+    this.baseColor = const Color(0xFFFFEFA6),
+    this.rimColor = const Color(0xFFFFD54F),
+    this.lightColor = const Color(0xFFFFF9C4),
+    this.iconColor = const Color(0xFFE5B500),
+  });
 
   @override
   Widget build(BuildContext context) {
-    const c = Color(0xFFFFEFA6); // Matches original circle colour
-    const rim = Color(0xFFFFD54F); // Slightly darker yellow rim
-    const light = Color(0xFFFFF9C4); // Very light yellow top
-
     return Container(
       width: 48,
       height: 48,
@@ -19,9 +26,9 @@ class AnimatedBotAvatar extends StatelessWidget {
           center: const Alignment(0.0, 0.15),
           radius: 0.90,
           colors: [
-            light.withValues(alpha: 0.90),
-            c.withValues(alpha: 0.95),
-            rim,
+            lightColor.withValues(alpha: 0.90),
+            baseColor.withValues(alpha: 0.95),
+            rimColor,
           ],
           stops: const [0.0, 0.60, 1.0],
         ),
@@ -29,7 +36,7 @@ class AnimatedBotAvatar extends StatelessWidget {
         boxShadow: [
           // Bouncy coloured underglow
           BoxShadow(
-            color: const Color(0xFFFFD54F).withValues(alpha: 0.6),
+            color: rimColor.withValues(alpha: 0.6),
             blurRadius: 18,
             offset: const Offset(0, 6),
             spreadRadius: -2,
@@ -82,7 +89,10 @@ class AnimatedBotAvatar extends StatelessWidget {
               ),
             ),
             // The same bouncy animated bot
-            const _AnimatedBotIcon(),
+            _AnimatedBotIcon(
+              baseColor: baseColor,
+              iconColor: iconColor,
+            ),
           ],
         ),
       ),
@@ -90,7 +100,13 @@ class AnimatedBotAvatar extends StatelessWidget {
   }
 }
 class _AnimatedBotIcon extends StatefulWidget {
-  const _AnimatedBotIcon();
+  final Color baseColor;
+  final Color iconColor;
+  
+  const _AnimatedBotIcon({
+    required this.baseColor,
+    required this.iconColor,
+  });
 
   @override
   State<_AnimatedBotIcon> createState() => _AnimatedBotIconState();
@@ -140,7 +156,11 @@ class _AnimatedBotIconState extends State<_AnimatedBotIcon> with SingleTickerPro
           offset: Offset(0, _bounceAnimation.value),
           child: CustomPaint(
             size: const Size(26, 26),
-            painter: _RobotPainter(_moodAnimation.value),
+            painter: _RobotPainter(
+              _moodAnimation.value,
+              widget.baseColor,
+              widget.iconColor,
+            ),
           ),
         );
       },
@@ -150,13 +170,15 @@ class _AnimatedBotIconState extends State<_AnimatedBotIcon> with SingleTickerPro
 
 class _RobotPainter extends CustomPainter {
   final double animationValue;
+  final Color baseColor;
+  final Color iconColor;
 
-  _RobotPainter(this.animationValue);
+  _RobotPainter(this.animationValue, this.baseColor, this.iconColor);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFFE5B500) // Bot gold/yellow color
+      ..color = iconColor // Bot gold/yellow color
       ..style = PaintingStyle.fill;
 
     final center = Offset(size.width / 2, size.height / 2);
@@ -193,7 +215,7 @@ class _RobotPainter extends CustomPainter {
 
     // Cutout Paint for eyes and mouth
     final cutoutPaint = Paint()
-      ..color = const Color(0xFFFFEFA6) // Circle background color to look like cutouts
+      ..color = baseColor // Circle background color to look like cutouts
       ..style = PaintingStyle.fill;
     
     // Eyes
@@ -208,7 +230,7 @@ class _RobotPainter extends CustomPainter {
 
     // Mouth
     final mouthPaint = Paint()
-      ..color = const Color(0xFFFFEFA6)
+      ..color = baseColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = size.width * 0.08
       ..strokeCap = StrokeCap.round;

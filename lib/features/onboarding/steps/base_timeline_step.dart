@@ -9,13 +9,6 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/state/app_state.dart';
 
-import 'package:optivus/features/onboarding/steps/base_timeline_editors/class_timeline_editor.dart';
-import 'package:optivus/features/onboarding/steps/base_timeline_editors/eating_timeline_editor.dart';
-import 'package:optivus/features/onboarding/steps/base_timeline_editors/fixed_timeline_editor.dart';
-import 'package:optivus/features/onboarding/steps/base_timeline_editors/skin_care_timeline_editor.dart';
-
-
-
 class BaseTimelineStep extends ConsumerStatefulWidget {
   const BaseTimelineStep({super.key});
 
@@ -340,10 +333,28 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             physics: const NeverScrollableScrollPhysics(),
             children: [
               
-              _launchEditorButton(
-                 enabled: _classesEnabled(role),
-                 title: 'Classes',
-                 builder: (ctx) => ClassSetupScreen(onComplete: () => Navigator.pop(ctx)),
+              _section(
+                enabled: _classesEnabled(role),
+                requiredLabel: _classesRequired(role)
+                    ? 'Required for your role'
+                    : 'Disabled by current role',
+                title: 'Classes',
+                icon: Icons.school_rounded,
+                accent: OptivusColors.aquaAccent,
+                description: 'Set your fixed lecture and lab timings.',
+                controller: _titleCtrl,
+                controllerHint: 'Subject name, Lab, Lecture',
+                addLabel: 'Add class',
+                blockType: RoutineBlockType.hardBlock,
+                filter: (item) => item.notes == 'Classes',
+                chips: const [
+                  'Subject name',
+                  'Hard block',
+                  'Soft block',
+                  'Lecture',
+                  'Lab',
+                  'Practical',
+                ],
               ),
               _section(
                 enabled: _jobEnabled(role),
@@ -373,39 +384,13 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                     ? _businessModeSelector()
                     : null,
               ),
-              _launchEditorButton(
-                 enabled: true,
-                 title: 'Eating',
-                 builder: (ctx) => EatingSetupScreen(onComplete: () => Navigator.pop(ctx)),
-              ),
-              _launchEditorButton(
-                 enabled: true,
-                 title: 'Fixed',
-                 builder: (ctx) => FixedScheduleSetupScreen(onComplete: () => Navigator.pop(ctx)),
-              ),
-              _launchEditorButton(
-                 enabled: true,
-                 title: 'Skin Care',
-                 builder: (ctx) => SkinCareSetupScreen(onComplete: () => Navigator.pop(ctx)),
-              ),
+              _eatingSection(),
+              _fixedSection(),
+              _skinCareSection(),
 ],
           ),
         ),
       ],
-    );
-  }
-
-  
-  Widget _launchEditorButton({required bool enabled, required String title, required Widget Function(BuildContext) builder}) {
-    if (!enabled) return Center(child: Text('Disabled for current role'));
-    return Center(
-      child: FilledButton.icon(
-        icon: const Icon(Icons.fullscreen),
-        label: Text('Open $title Editor'),
-        onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: builder));
-        },
-      )
     );
   }
 
@@ -1332,28 +1317,22 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
         ignoring: !enabled,
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.25),
-            borderRadius: BorderRadius.circular(16),
+            color: const Color(0xFFF1F5F9).withValues(alpha: 0.65),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.75),
+              color: Colors.white.withValues(alpha: 0.8),
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-              BoxShadow(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 8,
-                spreadRadius: -2,
-                offset: const Offset(-1, -1),
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(14.5),
+            borderRadius: BorderRadius.circular(11.5),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Stack(
@@ -1759,9 +1738,19 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.34),
+        color: Colors.white.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(23),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.76)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.8),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Text(
         label,
@@ -1833,47 +1822,40 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           children: [
             Positioned.fill(
               child: Container(
-                padding: const EdgeInsets.fromLTRB(13, 11, 13, 10),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(24),
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      blockAccent.withValues(alpha: 0.28),
-                      Colors.white.withValues(alpha: 0.16),
-                      blockAccent.withValues(alpha: 0.06),
+                      blockAccent.withValues(alpha: 0.3),
+                      blockAccent.withValues(alpha: 0.05),
                     ],
                   ),
                   border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    width: 1.3,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: blockAccent.withValues(alpha: 0.18),
-                      blurRadius: 14,
+                      color: blockAccent.withValues(alpha: 0.15),
+                      blurRadius: 16,
                       offset: const Offset(0, 6),
                     ),
                     BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.54),
-                      blurRadius: 6,
-                      offset: const Offset(-1, -1),
+                      color: Colors.white.withValues(alpha: 0.9),
+                      blurRadius: 12,
+                      offset: const Offset(-4, -4),
                     ),
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(21),
+                  borderRadius: BorderRadius.circular(24),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                     child: Row(
                       children: [
-                        Icon(
-                          _iconForRoutine(item),
-                          color: blockAccent,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 9),
                         Expanded(
                           child: SingleChildScrollView(
                             physics: const NeverScrollableScrollPhysics(),
@@ -1881,35 +1863,108 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  item.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: OptivusColors.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                                Row(
+                                  children: [
+                                    if (item.notes == 'Eating')
+                                      Text(
+                                        item.mealCategory == 'Breakfast' ? '🥞' : (item.mealCategory == 'Lunch' ? '🍛' : '🍲'),
+                                        style: const TextStyle(fontSize: 18),
+                                      )
+                                    else
+                                      Icon(
+                                        _iconForRoutine(item),
+                                        color: blockAccent.withValues(alpha: 0.9),
+                                        size: 20,
+                                      ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        item.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Color(0xFF0F111A),
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.more_vert_rounded,
+                                      color: Color(0xFF64748B),
+                                      size: 18,
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${_minuteLabel(item.startMinute)} - ${_minuteLabel(item.endMinute)}${item.crossesMidnight ? ' overnight' : ''} | $dayLabel',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: OptivusColors.textSecondary,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.6),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                            color: Colors.white.withValues(alpha: 0.8),
+                                            width: 1),
+                                      ),
+                                      child: Text(
+                                        '${_minuteLabel(item.startMinute)} - ${_minuteLabel(item.endMinute)}${item.crossesMidnight ? ' overnight' : ''}',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF334155),
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.45),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                            color: Colors.white.withValues(alpha: 0.8),
+                                            width: 1),
+                                      ),
+                                      child: Text(
+                                        dayLabel,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                    ),
+                                    if (item.location != null && item.location!.isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.45),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(
+                                              color: Colors.white.withValues(alpha: 0.8),
+                                              width: 1),
+                                        ),
+                                        child: Text(
+                                          item.location!,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                        const Icon(
-                          Icons.more_vert_rounded,
-                          color: OptivusColors.textSecondary,
-                          size: 18,
                         ),
                       ],
                     ),
@@ -1932,22 +1987,29 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
         alignment: Alignment.center,
         children: [
           Container(
-            width: 54,
+            width: 56,
             height: 16,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.50),
+              color: Colors.white.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.92),
-                width: 1.3,
+                color: Colors.white.withValues(alpha: 0.95),
+                width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
+                  color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 4,
                   offset: const Offset(0, 3),
                 ),
               ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: Container(),
+              ),
             ),
           ),
           Positioned(right: -6, bottom: -4, child: _droplet(14)),
@@ -1965,9 +2027,55 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withValues(alpha: 0.46),
-        boxShadow: [
-          BoxShadow(color: Colors.white.withValues(alpha: 0.46), blurRadius: 6),
+        color: Colors.white.withValues(alpha: 0.25),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            right: size * 0.15,
+            bottom: size * 0.05,
+            width: size * 0.7,
+            height: size * 0.45,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(size),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    blurRadius: 6,
+                  )
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: size * 0.08,
+            left: size * 0.18,
+            width: size * 0.35,
+            height: size * 0.15,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(size),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    blurRadius: 4,
+                  )
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

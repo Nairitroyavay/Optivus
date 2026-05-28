@@ -9,7 +9,7 @@ void showCoachSessionsListScreen(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFFF7F0FF),
+    backgroundColor: OptivusColors.coachTop.withValues(alpha: 0.3),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
     ),
@@ -35,7 +35,7 @@ void showCoachSessionsListScreen(BuildContext context, WidgetRef ref) {
                       child: Container(
                         width: 48,
                         height: 5,
-                        decoration: BoxDecoration(color: Colors.blueGrey.shade300, borderRadius: BorderRadius.circular(10)),
+                        decoration: BoxDecoration(color: OptivusColors.borderSoft, borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -58,7 +58,7 @@ void showCoachSessionsListScreen(BuildContext context, WidgetRef ref) {
                           ],
                         ),
                         ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(backgroundColor: OptivusColors.coachAccent, foregroundColor: Colors.white),
                           icon: const Icon(Icons.add, size: 14),
                           label: const Text('New Thread', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                           onPressed: () {
@@ -85,9 +85,9 @@ void showCoachSessionsListScreen(BuildContext context, WidgetRef ref) {
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.7),
+                            color: OptivusColors.glassFill,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white, width: 1.5),
+                            border: Border.all(color: OptivusColors.glassBorder, width: 1.5),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -114,7 +114,7 @@ void showCoachSessionsListScreen(BuildContext context, WidgetRef ref) {
                     const SizedBox(height: 24),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: OptivusColors.coachAccent,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         padding: const EdgeInsets.symmetric(vertical: 16),
