@@ -23,20 +23,26 @@ class RoutineHeader extends ConsumerWidget {
     final selectedDay = ref.watch(routineNotifierProvider).selectedDay;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // ── Date label ──
           Expanded(
-            child: Text(
-              _formatDate(selectedDay).toUpperCase(),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.ink.withValues(alpha: 0.8),
-                letterSpacing: 1.2,
+            child: SizedBox(
+              height: 48,
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Text(
+                  _formatDate(selectedDay).toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.ink.withValues(alpha: 0.8),
+                    letterSpacing: 1.2,
+                  ),
+                ),
               ),
             ),
           ),
@@ -197,8 +203,8 @@ class _SettingsPill extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 36,
-        height: 36,
+        width: 38,
+        height: 38,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.white.withValues(alpha: 0.08),

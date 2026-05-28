@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/home/widgets/home_glass_widgets.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 
 class TrackerTab extends ConsumerStatefulWidget {
@@ -28,6 +27,9 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final bottomReserve = 76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -54,16 +56,16 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               Expanded(
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 180),
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildTodayProgressHero(context),
-                      const SizedBox(height: 24),
                       _buildPeriodSelector(),
                       const SizedBox(height: 24),
                       _buildProgressCarousel(),
                       const SizedBox(height: 32),
+                      _buildTodayProgressHero(context),
+                      const SizedBox(height: 40),
                       const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
                       _buildActiveTrackers(),
                       const SizedBox(height: 32),
@@ -96,67 +98,73 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Tracking Center',
+              'MEASURE DISCIPLINE',
               style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-                color: kInk,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: kSub,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'Measure your discipline today',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: kSub.withValues(alpha: 0.8),
+              'Tracking Center',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: kInk,
+              ) ?? const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                color: kInk,
               ),
             ),
           ],
         ),
-        HomeIconPill(
+        TrackerHeaderButton(
           icon: Icons.settings,
           onTap: () => _showMockSnackbar('Open Tracker Settings'),
-          accent: OptivusColors.trackerAccent,
         ),
       ],
     );
   }
 
   Widget _buildTodayProgressHero(BuildContext context) {
-    return HomeGlassPanel(
-      padding: const EdgeInsets.all(24),
+    return TrackerGlassCard(
+      padding: const EdgeInsets.all(18),
+      radius: 28,
+      opacity: 0.7,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Today\'s Life Score',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
                       color: kInk,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4),
                   Text(
                     'System is active',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: kSub.withValues(alpha: 0.8),
+                      color: kSub,
                     ),
                   ),
                 ],
               ),
               Container(
-                width: 64,
-                height: 64,
+                width: 58,
+                height: 58,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
@@ -176,7 +184,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                 child: const Text(
                   '42%',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
                   ),
@@ -184,10 +192,10 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           const Wrap(
             spacing: 8,
-            runSpacing: 8,
+            runSpacing: 10,
             children: [
               TrackerMetricChip(category: 'Mind', value: 'Meditation 5m'),
               TrackerMetricChip(category: 'Body', value: 'Water 1.2L / 2.5L'),
@@ -212,79 +220,13 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
   }
 
   Widget _buildProgressCarousel() {
-    if (_activeMetricView == 'Weekly' || _activeMetricView == 'Monthly') {
-      return Container(
-        height: 180,
-        alignment: Alignment.center,
-        child: HomeGlassCard(
-          tint: OptivusColors.trackerCardTint.withValues(alpha: 0.15),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.lock_outline, color: kSub, size: 32),
-              const SizedBox(height: 12),
-              Text(
-                '$_activeMetricView Progress',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _activeMetricView == 'Weekly'
-                    ? 'Complete 7 days to unlock your first weekly review.'
-                    : 'Complete 30 days to unlock deeper insights.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12, color: kSub),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 180,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        clipBehavior: Clip.none,
-        physics: const BouncingScrollPhysics(),
-        children: const [
-          TrackerGraphCard(
-            title: 'Weekly Performance',
-            subtitle: 'Energy vs Habits Completed',
-            badgeText: '+12%',
-            values: [0.3, 0.6, 0.8, 0.4, 0.9, 0.7, 0.5],
-            accentColor: kPurple,
-          ),
-          TrackerGraphCard(
-            title: 'Life Balance',
-            badgeText: 'Stable',
-            values: [0.5, 0.5, 0.6, 0.5, 0.7, 0.6, 0.5],
-            accentColor: kBlue,
-          ),
-          TrackerGraphCard(
-            title: 'Screen Time',
-            badgeText: '-45m',
-            values: [0.8, 0.7, 0.4, 0.9, 0.6, 0.5, 0.8],
-            accentColor: kRose,
-          ),
-          TrackerGraphCard(
-            title: 'Money',
-            badgeText: '₹140',
-            values: [0.2, 0.4, 0.6, 0.8, 0.5, 1.0, 0.3],
-            accentColor: kMint,
-          ),
-        ],
-      ),
-    );
+    return _TrackerGraphCarouselCard(activePeriod: _activeMetricView);
   }
 
   Widget _buildActiveTrackers() {
     return Column(
       children: [
-        TrackerCard(
+        TrackerActiveCard(
           title: 'Meditation',
           status: '5 / 5 min today',
           iconEmoji: '🧘',
@@ -292,7 +234,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           accentColor: kPurple,
           onAction: () => _showMockSnackbar('Open Meditation Details'),
         ),
-        TrackerCard(
+        TrackerActiveCard(
           title: 'Money System',
           status: '₹10 saved today',
           iconEmoji: '💰',
@@ -300,7 +242,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           accentColor: kMint,
           onAction: () => _showMockSnackbar('Open Money System Details'),
         ),
-        TrackerCard(
+        TrackerActiveCard(
           title: 'Screen Time',
           status: '4h 20m total\nRisk: High',
           iconEmoji: '📱',
@@ -308,7 +250,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           accentColor: kRose,
           onAction: () => _showMockSnackbar('Open Screen Time Details'),
         ),
-        TrackerCard(
+        TrackerActiveCard(
           title: 'Walk / Run',
           status: '2.4 km this week',
           iconEmoji: '🏃',
@@ -316,7 +258,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           accentColor: kAmber,
           onAction: () => _showMockSnackbar('Start Walk / Run'),
         ),
-        TrackerCard(
+        TrackerActiveCard(
           title: 'Hydration',
           status: '1.2L / 2.5L',
           iconEmoji: '💧',
@@ -331,37 +273,37 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
   Widget _buildDiscoverTrackers() {
     return Column(
       children: [
-        DiscoverTrackerCard(
+        TrackerDiscoverCard(
           title: 'Smoking',
           description: 'Not set up\nTrack cravings, relapses, money saved.',
           iconEmoji: '🚭',
           onActivate: () => _showMockSnackbar('Activate Smoking Tracker'),
         ),
-        DiscoverTrackerCard(
+        TrackerDiscoverCard(
           title: 'Alcohol',
           description: 'Not set up\nTrack clean days and relapse recovery.',
           iconEmoji: '🍺',
           onActivate: () => _showMockSnackbar('Activate Alcohol Tracker'),
         ),
-        DiscoverTrackerCard(
+        TrackerDiscoverCard(
           title: 'Nutrition',
           description: 'Not set up\nTrack meals, protein, calories.',
           iconEmoji: '🍽',
           onActivate: () => _showMockSnackbar('Activate Nutrition Tracker'),
         ),
-        DiscoverTrackerCard(
+        TrackerDiscoverCard(
           title: 'Sleep',
           description: 'Not set up\nTrack sleep quality and energy.',
           iconEmoji: '😴',
           onActivate: () => _showMockSnackbar('Activate Sleep Tracker'),
         ),
-        DiscoverTrackerCard(
+        TrackerDiscoverCard(
           title: 'Workout',
           description: 'Not set up\nTrack workouts, sets, progress.',
           iconEmoji: '🏋️',
           onActivate: () => _showMockSnackbar('Activate Workout Tracker'),
         ),
-        DiscoverTrackerCard(
+        TrackerDiscoverCard(
           title: 'Reading',
           description: 'Not set up\nTrack pages and consistency.',
           iconEmoji: '📚',
@@ -374,7 +316,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
   Widget _buildPhoneDataSources() {
     return Column(
       children: [
-        PhoneDataSourceCard(
+        TrackerDataSourceCard(
           title: 'Screen Time',
           subtitle: 'Usage Access needed',
           iconEmoji: '📱',
@@ -382,7 +324,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           isConnected: false,
           onConnect: () => _showMockSnackbar('Request Screen Time Access'),
         ),
-        PhoneDataSourceCard(
+        TrackerDataSourceCard(
           title: 'Walk / Run GPS',
           subtitle: 'Location permission needed',
           iconEmoji: '📍',
@@ -390,7 +332,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           isConnected: false,
           onConnect: () => _showMockSnackbar('Request Location Access'),
         ),
-        PhoneDataSourceCard(
+        TrackerDataSourceCard(
           title: 'Health Connect',
           subtitle: 'Optional health data',
           iconEmoji: '❤️',
@@ -410,101 +352,24 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       {'title': 'Walk completed', 'subtitle': '2.4 km', 'color': kAmber},
     ];
 
-    return HomeGlassCard(
-      tint: OptivusColors.trackerCardTint.withValues(alpha: 0.15),
-      padding: const EdgeInsets.all(20),
-      radius: 20,
-      child: Column(
-        children: activities.asMap().entries.map((entry) {
-          final isLast = entry.key == activities.length - 1;
-          final item = entry.value;
-          final color = item['color'] as Color;
-          
-          return IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  children: [
-                    Container(
-                      width: 10,
-                      height: 10,
-                      margin: const EdgeInsets.only(top: 4),
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: color.withValues(alpha: 0.4),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!isLast)
-                      Expanded(
-                        child: Container(
-                          width: 2,
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          color: color.withValues(alpha: 0.2),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: isLast ? 0 : 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          item['title'] as String,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: kInk,
-                          ),
-                        ),
-                        Text(
-                          item['subtitle'] as String,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: kSub,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
+    return TrackerActivityTimeline(activities: activities);
   }
 
   Widget _buildTrackerSettingsTeaser() {
     return GestureDetector(
       onTap: () => _showMockSnackbar('Open Tracker Settings'),
-      child: HomeGlassCard(
-        padding: const EdgeInsets.all(20),
-        tint: OptivusColors.trackerCardTint.withValues(alpha: 0.2),
+      child: const TrackerGlassCard(
+        padding: EdgeInsets.all(20),
         radius: 20,
+        opacity: 0.7,
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.settings, color: kSub, size: 20),
+            TrackerHeaderButton(
+              icon: Icons.settings,
+              onTap: _doNothing, // Just for visual in teaser, actual tap handled by parent
             ),
-            const SizedBox(width: 16),
-            const Expanded(
+            SizedBox(width: 16),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -512,7 +377,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                     'Tracker Settings',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 15,
                       color: kInk,
                     ),
                   ),
@@ -520,18 +385,204 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                   Text(
                     'Manage active trackers, permissions, goals, reminders, and data sources.',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: kSub,
+                      height: 1.3,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: kSub),
+            SizedBox(width: 8),
+            Icon(Icons.arrow_forward_ios, size: 16, color: kSub),
           ],
         ),
       ),
+    );
+  }
+}
+
+void _doNothing() {}
+
+class _TrackerGraphCarouselCard extends StatefulWidget {
+  final String activePeriod;
+
+  const _TrackerGraphCarouselCard({required this.activePeriod});
+
+  @override
+  State<_TrackerGraphCarouselCard> createState() => _TrackerGraphCarouselCardState();
+}
+
+class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
+  final PageController _pageController = PageController();
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final graphs = [
+      {'title': '${widget.activePeriod} Performance', 'subtitle': 'Energy vs Habits Completed', 'badge': '+12%', 'color': kPurple, 'values': [0.3, 0.6, 0.8, 0.4, 0.9, 0.7, 0.5]},
+      {'title': 'Life Balance', 'subtitle': null, 'badge': 'Stable', 'color': kBlue, 'values': [0.5, 0.5, 0.6, 0.5, 0.7, 0.6, 0.5]},
+      {'title': 'Screen Time', 'subtitle': null, 'badge': '-45m', 'color': kRose, 'values': [0.8, 0.7, 0.4, 0.9, 0.6, 0.5, 0.8]},
+      {'title': 'Money', 'subtitle': null, 'badge': '₹30k', 'color': const Color(0xFF00C896), 'values': [0.3, 0.4, 0.3, 0.5, 0.4, 0.3, 0.6]},
+      {'title': 'Sleep Quality', 'subtitle': 'Average 7.5 hrs', 'badge': '+5%', 'color': const Color(0xFF6A5ACD), 'values': [0.7, 0.8, 0.7, 0.9, 0.8, 0.9, 0.8]},
+      {'title': 'Hydration', 'subtitle': null, 'badge': '+1.2L', 'color': const Color(0xFF00BFFF), 'values': [0.5, 0.6, 0.8, 0.7, 0.9, 0.8, 0.9]},
+      {'title': 'Steps', 'subtitle': null, 'badge': '+2k', 'color': const Color(0xFFFF8C00), 'values': [0.4, 0.5, 0.7, 0.6, 0.8, 0.7, 0.9]},
+    ];
+
+    return TrackerGlassCard(
+      padding: const EdgeInsets.all(20),
+      radius: 28,
+      child: Column(
+        children: [
+          SizedBox(
+            height: 180,
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: (index) {
+                setState(() => _currentPage = index);
+              },
+              itemCount: graphs.length,
+              itemBuilder: (context, index) {
+                final graph = graphs[index];
+                return _buildInnerGraph(
+                  title: graph['title'] as String,
+                  subtitle: graph['subtitle'] as String?,
+                  badgeText: graph['badge'] as String,
+                  values: graph['values'] as List<double>,
+                  accentColor: graph['color'] as Color,
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(graphs.length, (index) {
+              final isSelected = _currentPage == index;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: isSelected ? 24 : 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isSelected ? kInk : kInk.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInnerGraph({
+    required String title,
+    String? subtitle,
+    required String badgeText,
+    required List<double> values,
+    required Color accentColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: kInk,
+                letterSpacing: -0.3,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+              ),
+              child: Text(
+                badgeText,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: accentColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              fontSize: 11,
+              color: kSub,
+            ),
+          ),
+        ],
+        const Spacer(),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(7, (index) {
+            final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+            double heightPercent = values.length > index ? values[index] : 0.5;
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  width: 18,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.bottomCenter,
+                    heightFactor: heightPercent,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            accentColor,
+                            accentColor.withValues(alpha: 0.7),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  days[index],
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: kInk,
+                  ),
+                ),
+              ],
+            );
+          }),
+        ),
+      ],
     );
   }
 }
