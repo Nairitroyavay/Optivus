@@ -119,8 +119,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildHeader(int currentIndex) {
-    // Home (0), Routine (1), and Tracker (2) tabs render their own custom headers
-    if (currentIndex == 0 || currentIndex == 1 || currentIndex == 2) {
+    // Home (0), Routine (1), Tracker (2), and Goals (4) tabs render their own custom headers
+    if (currentIndex == 0 || currentIndex == 1 || currentIndex == 2 || currentIndex == 4) {
       return const SizedBox.shrink();
     }
 
@@ -129,21 +129,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     Widget trailing = const SizedBox.shrink();
 
     switch (currentIndex) {
-      case 1:
-        title = 'Routines';
-        subtitle = 'Daily commitments & habits';
-        break;
-      case 2:
-        title = 'Progress';
-        subtitle = 'Visualizing your consistency';
-        break;
       case 3:
         title = 'AI Coach';
         subtitle = 'Always supportive, never shaming';
-        break;
-      case 4:
-        title = 'Goals';
-        subtitle = 'Identity level targets';
         break;
       default:
         title = 'Profile';

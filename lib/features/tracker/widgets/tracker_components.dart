@@ -15,10 +15,10 @@ class TrackerSectionHeader extends StatelessWidget {
       child: Text(
         title,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.2,
-              color: OptivusColors.textSecondary,
-            ),
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.2,
+          color: OptivusColors.textSecondary,
+        ),
       ),
     );
   }
@@ -201,7 +201,10 @@ class TrackerMetricChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.2,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -247,7 +250,10 @@ class TrackerSegmentedControl extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.85), width: 1.5),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.85),
+          width: 1.5,
+        ),
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -272,10 +278,12 @@ class TrackerSegmentedControl extends StatelessWidget {
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: OptivusColors.trackerAccent.withValues(alpha: 0.35),
+                            color: OptivusColors.trackerAccent.withValues(
+                              alpha: 0.35,
+                            ),
                             blurRadius: 10,
                             offset: const Offset(0, 3),
-                          )
+                          ),
                         ]
                       : null,
                 ),
@@ -285,7 +293,9 @@ class TrackerSegmentedControl extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : kInk.withValues(alpha: 0.8),
+                    color: isSelected
+                        ? Colors.white
+                        : kInk.withValues(alpha: 0.8),
                   ),
                 ),
               ),
@@ -341,7 +351,10 @@ class TrackerGraphCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
@@ -361,10 +374,7 @@ class TrackerGraphCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 subtitle!,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: kSub,
-                ),
+                style: const TextStyle(fontSize: 11, color: kSub),
               ),
             ],
             const Spacer(),
@@ -373,7 +383,9 @@ class TrackerGraphCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: List.generate(7, (index) {
                 final days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-                double heightPercent = values.length > index ? values[index] : 0.5;
+                double heightPercent = values.length > index
+                    ? values[index]
+                    : 0.5;
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -383,7 +395,9 @@ class TrackerGraphCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
                       ),
                       child: FractionallySizedBox(
                         alignment: Alignment.bottomCenter,
@@ -457,10 +471,7 @@ class TrackerActiveCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.8),
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white,
-                  width: 1.5,
-                ),
+                border: Border.all(color: Colors.white, width: 1.5),
                 boxShadow: [
                   BoxShadow(
                     color: accentColor.withValues(alpha: 0.25),
@@ -470,10 +481,7 @@ class TrackerActiveCard extends StatelessWidget {
                 ],
               ),
               alignment: Alignment.center,
-              child: Text(
-                iconEmoji,
-                style: const TextStyle(fontSize: 28),
-              ),
+              child: Text(iconEmoji, style: const TextStyle(fontSize: 28)),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -505,7 +513,10 @@ class TrackerActiveCard extends StatelessWidget {
             GestureDetector(
               onTap: onAction,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [accentColor, accentColor.withValues(alpha: 0.8)],
@@ -513,7 +524,10 @@ class TrackerActiveCard extends StatelessWidget {
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 1),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    width: 1,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: accentColor.withValues(alpha: 0.35),
@@ -557,78 +571,148 @@ class TrackerDiscoverCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: TrackerGlassCard(
-        padding: const EdgeInsets.all(16),
-        radius: 20,
-        opacity: 0.45,
-        child: Opacity(
-          opacity: 0.95,
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    width: 1,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  iconEmoji,
-                  style: const TextStyle(fontSize: 22),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: kInk,
-                      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 300;
+          return TrackerGlassCard(
+            padding: const EdgeInsets.all(16),
+            radius: 20,
+            opacity: 0.45,
+            child: Opacity(
+              opacity: 0.95,
+              child: compact
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            _TrackerDiscoverIcon(iconEmoji: iconEmoji),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: kInk,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          description,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: kSub,
+                            height: 1.3,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const Spacer(),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _TrackerActivateButton(onTap: onActivate),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        _TrackerDiscoverIcon(iconEmoji: iconEmoji),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: kInk,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                description,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: kSub,
+                                  height: 1.3,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        _TrackerActivateButton(onTap: onActivate),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: kSub,
-                        height: 1.3,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: onActivate,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: kSub.withValues(alpha: 0.5), width: 1.5),
-                  ),
-                  child: const Text(
-                    'Activate',
-                    style: TextStyle(
-                      color: kInk,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TrackerDiscoverIcon extends StatelessWidget {
+  final String iconEmoji;
+
+  const _TrackerDiscoverIcon({required this.iconEmoji});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.5),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.7),
+          width: 1,
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(iconEmoji, style: const TextStyle(fontSize: 22)),
+    );
+  }
+}
+
+class _TrackerActivateButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _TrackerActivateButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: kSub.withValues(alpha: 0.5), width: 1.5),
+        ),
+        child: const Text(
+          'Activate',
+          style: TextStyle(
+            color: kInk,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
           ),
         ),
       ),
@@ -673,10 +757,7 @@ class TrackerDataSourceCard extends StatelessWidget {
                 border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
               ),
               alignment: Alignment.center,
-              child: Text(
-                iconEmoji,
-                style: const TextStyle(fontSize: 22),
-              ),
+              child: Text(iconEmoji, style: const TextStyle(fontSize: 22)),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -690,13 +771,21 @@ class TrackerDataSourceCard extends StatelessWidget {
                       fontSize: 15,
                       color: kInk,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: kSub,
+                    style: const TextStyle(fontSize: 12, color: kSub),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Status: $status',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isConnected ? kMint : kSub,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ],
@@ -706,16 +795,23 @@ class TrackerDataSourceCard extends StatelessWidget {
             GestureDetector(
               onTap: onConnect,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: isConnected ? Colors.white.withValues(alpha: 0.4) : OptivusColors.brandAccent.withValues(alpha: 0.15),
+                  color: isConnected
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : OptivusColors.trackerAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(16),
-                  border: isConnected ? Border.all(color: Colors.white.withValues(alpha: 0.6)) : null,
+                  border: isConnected
+                      ? Border.all(color: Colors.white.withValues(alpha: 0.6))
+                      : null,
                 ),
                 child: Text(
                   isConnected ? status : 'Connect',
                   style: TextStyle(
-                    color: isConnected ? kSub : OptivusColors.brandAccent,
+                    color: isConnected ? kSub : OptivusColors.trackerAccent,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -732,10 +828,7 @@ class TrackerDataSourceCard extends StatelessWidget {
 class TrackerActivityTimeline extends StatelessWidget {
   final List<Map<String, dynamic>> activities;
 
-  const TrackerActivityTimeline({
-    super.key,
-    required this.activities,
-  });
+  const TrackerActivityTimeline({super.key, required this.activities});
 
   @override
   Widget build(BuildContext context) {
@@ -748,7 +841,7 @@ class TrackerActivityTimeline extends StatelessWidget {
           final isLast = entry.key == activities.length - 1;
           final item = entry.value;
           final color = item['color'] as Color;
-          
+
           return IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -785,16 +878,20 @@ class TrackerActivityTimeline extends StatelessWidget {
                   child: Padding(
                     padding: EdgeInsets.only(bottom: isLast ? 0 : 24),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          item['title'] as String,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                            color: kInk,
+                        Expanded(
+                          child: Text(
+                            item['title'] as String,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: kInk,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 12),
                         Text(
                           item['subtitle'] as String,
                           style: const TextStyle(

@@ -29,10 +29,8 @@ class LiquidSettingsRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white, width: 1.2),
+        decoration: const BoxDecoration(
+          color: Colors.transparent,
         ),
         child: Row(
           children: [

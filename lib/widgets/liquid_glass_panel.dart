@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 
 class LiquidGlassPanel extends StatelessWidget {
   final Widget child;
@@ -15,65 +16,63 @@ class LiquidGlassPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double radius = 24.0;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(40),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.7),
-          width: 1.5,
-        ),
-        boxShadow: [
-          // Soft ambient drop shadow underneath
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 30,
-            offset: const Offset(0, 15),
-          ),
-          // Bright inner highlight for 3D thickness
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.4),
-            blurRadius: 20,
-            spreadRadius: -2,
-            offset: const Offset(-2, -2),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(radius),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(38.5),
+        borderRadius: BorderRadius.circular(radius),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
-          child: Stack(
-            children: [
-              // Liquid resin rim light gradient
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(38.5),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      stops: const [0.0, 0.2, 0.4, 1.0],
-                      colors: [
-                        Colors.white.withValues(alpha: 0.8), // Bright gleam
-                        Colors.white.withValues(alpha: 0.2), 
-                        Colors.white.withValues(alpha: 0.0), // Transparent center
-                        Colors.black.withValues(alpha: 0.05), // Darker edge
-                      ],
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
+            decoration: BoxDecoration(
+              color: OptivusColors.homeCardTint.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.65),
+                width: 1.5,
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.white.withValues(alpha: 0.15),
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.black.withValues(alpha: 0.02),
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  top: 3,
+                  left: 18,
+                  right: 18,
+                  height: 6,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(3),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.8),
+                          Colors.white.withValues(alpha: 0.0),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              if (hasScrews) ..._buildScrews(), // Inject corner pins if requested
-              Padding(
-                padding: padding,
-                child: child,
-              ),
-            ],
+                if (hasScrews) ..._buildScrews(),
+                Padding(
+                  padding: padding,
+                  child: child,
+                ),
+              ],
+            ),
           ),
         ),
       ),

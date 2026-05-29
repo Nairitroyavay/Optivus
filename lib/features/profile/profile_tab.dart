@@ -4,15 +4,15 @@ import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
-import 'package:optivus/models/permission_status.dart';
-import 'package:optivus/widgets/liquid_glass_panel.dart';
 import 'package:optivus/core/widgets/liquid_settings_row.dart';
 
-// Phase 8 Components
 import 'package:optivus/features/profile/widgets/profile_header_card.dart';
 import 'package:optivus/features/profile/widgets/profile_setting_group.dart';
-import 'package:optivus/features/profile/widgets/profile_system_shortcut_card.dart';
+import 'package:optivus/features/profile/widgets/profile_status_chip.dart';
 import 'package:optivus/features/profile/screens/profile_sub_screens.dart';
+import 'package:optivus/widgets/liquid_glass_panel.dart';
+import 'package:optivus/features/profile/widgets/profile_components.dart';
+import 'package:optivus/features/profile/providers/profile_mock_data.dart';
 
 class ProfileTab extends ConsumerWidget {
   const ProfileTab({super.key});
@@ -20,655 +20,467 @@ class ProfileTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(mockUserProfileProvider);
-    final permissions = ref.watch(mockPermissionProvider);
+    final identityStatement = ref.watch(mockIdentityStatementProvider);
+    final focusAreas = ref.watch(mockFocusAreasProvider);
+    final habitsToBreak = ref.watch(mockHabitsToBreakProvider);
 
-    // Count active permissions/connections
-    int activePermissions = 0;
-    if (permissions.notifications == PermissionConnectionState.mockConnected) {
-      activePermissions++;
-    }
-    if (permissions.usageAccess == PermissionConnectionState.mockConnected) {
-      activePermissions++;
-    }
-    if (permissions.locationGps == PermissionConnectionState.mockConnected) {
-      activePermissions++;
-    }
-    if (permissions.healthConnect == PermissionConnectionState.mockConnected) {
-      activePermissions++;
-    }
-
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // 1. Bio Identity Card
-          ProfileHeaderCard(
-            profile: profile,
-            onEditTap: () => showEditProfileSheet(context, ref),
-          ),
-          const SizedBox(height: 24),
-
-          // 2. Quick System Shortcuts Grid
-          Row(
-            children: [
-              Container(
-                width: 3.5,
-                height: 14,
-                decoration: BoxDecoration(
-                  color: OptivusColors.brandAccent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'QUICK SYSTEM PORTAL',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  fontSize: 10,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
-            childAspectRatio: 1.25,
-            children: [
-              ProfileSystemShortcutCard(
-                icon: Icons.bluetooth_searching_rounded,
-                title: 'Wearable Sync',
-                description:
-                    'Manage Health SDK & smart watch tracking ($activePermissions/4 connected)',
-                accentColor: OptivusColors.brandAccent,
-                statusWidget: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color:
-                        permissions.healthConnect ==
-                            PermissionConnectionState.mockConnected
-                        ? OptivusColors.success
-                        : OptivusColors.textMuted,
-                  ),
-                ),
-                onTap: () => showWearableConnectSheet(context, ref),
-              ),
-              ProfileSystemShortcutCard(
-                icon: Icons.developer_mode_rounded,
-                title: 'Diagnostics Logs',
-                description: 'State nodes, system health, FPS rendering rate',
-                accentColor: const Color(0xFF6C5CE7),
-                statusWidget: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: OptivusColors.success,
-                  ),
-                ),
-                onTap: () => showSystemDiagnosticsSheet(context, ref),
-              ),
-              ProfileSystemShortcutCard(
-                icon: Icons.palette_outlined,
-                title: 'Theme Customizer',
-                description: 'Adjust gradients, dark mode, card styles',
-                accentColor: const Color(0xFFFF7675),
-                statusWidget: const Icon(
-                  Icons.auto_awesome_rounded,
-                  size: 12,
-                  color: Colors.amber,
-                ),
-                onTap: () => showThemeCustomizerSheet(context, ref),
-              ),
-              ProfileSystemShortcutCard(
-                icon: Icons.fingerprint_rounded,
-                title: 'Secure Gate',
-                description: 'Biometrics face lock and passcode keys',
-                accentColor: const Color(0xFF00B894),
-                statusWidget: const Icon(
-                  Icons.lock_outline_rounded,
-                  size: 12,
-                  color: Color(0xFF00B894),
-                ),
-                onTap: () => showBiometricSecuritySheet(context, ref),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // 3. Preferences & Alerts Group
-          ProfileSettingGroup(
-            title: 'Preferences & Routine Alarms',
-            children: [
-              LiquidSettingsRow(
-                icon: Icons.notifications_active_outlined,
-                title: 'Nudges & Alert Pacing',
-                subtitle: 'Manage dynamic micro-reminders & frequency',
-                iconColor: const Color(0xFFFF7675),
-                onTap: () => showAlertPacingSheet(context, ref),
-              ),
-              LiquidSettingsRow(
-                icon: Icons.wb_twighlight,
-                title: 'Circadian Rhythm Setup',
-                subtitle: 'Optimize sleep cycles & routine offsets',
-                iconColor: const Color(0xFFECCC68),
-                onTap: () => showCircadianScheduleSheet(context, ref),
-              ),
-              LiquidSettingsRow(
-                icon: Icons.chat_bubble_outline_rounded,
-                title: 'AI Coach Quick Replies',
-                subtitle: 'Customize prompt shortcut context templates',
-                iconColor: const Color(0xFF70A1FF),
-                onTap: () => showQuickRepliesSheet(context, ref),
-              ),
-            ],
-          ),
-
-          // 4. Guardrails & Privacy Group
-          ProfileSettingGroup(
-            title: 'Safety Guardrails & Privacy',
-            children: [
-              LiquidSettingsRow(
-                icon: Icons.security_rounded,
-                title: 'Habit Overload Shield',
-                subtitle: 'Prevent burnout by setting hard target caps',
-                iconColor: const Color(0xFF2ED573),
-                onTap: () => showOverloadLimitsSheet(context, ref),
-              ),
-              LiquidSettingsRow(
-                icon: Icons.savings_outlined,
-                title: 'Financial Savings Sweep',
-                subtitle: 'Rule models for auto penalty bad habit sweeps',
-                iconColor: const Color(0xFFFFA502),
-                onTap: () => showSavingsSweepSheet(context, ref),
-              ),
-              LiquidSettingsRow(
-                icon: Icons.delete_forever_outlined,
-                title: 'Account Data Control',
-                subtitle: 'Export state logs, purge local database Cache',
-                iconColor: OptivusColors.danger,
-                onTap: () => showDataExportPurgeSheet(context, ref),
-              ),
-            ],
-          ),
-
-          // 5. Visual App Layout Settings
-          ProfileSettingGroup(
-            title: 'Interactive System Toggles',
-            children: [
-              SwitchListTile.adaptive(
-                activeTrackColor: OptivusColors.brandAccent,
-                title: const Text(
-                  'Edge-to-edge UI',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Transparent system status bars matching gradients',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-                value: true,
-                onChanged: (val) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'App Preferences: Edge-to-edge UI locked ON by default.',
-                      ),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-              SwitchListTile.adaptive(
-                activeTrackColor: OptivusColors.brandAccent,
-                title: const Text(
-                  'Fullscreen Immersive Mode',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Hides top system status bar completely',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-                value: false,
-                onChanged: (val) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Immersive mode ${val ? "Activated" : "Deactivated"}!',
-                      ),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-              SwitchListTile.adaptive(
-                activeTrackColor: OptivusColors.brandAccent,
-                title: const Text(
-                  'Compact Cards Layout',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Tightens heights on timeline routine items',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-                value: false,
-                onChanged: (val) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Compact view ${val ? "Enabled" : "Disabled"}.',
-                      ),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-
-          // 6. Help & Support
-          ProfileSettingGroup(
-            title: 'Help, Support & Legal',
-            children: [
-              LiquidSettingsRow(
-                icon: Icons.help_outline_rounded,
-                title: 'Help & Support Portal',
-                subtitle: 'Submit tickets, browse documentation FAQs',
-                iconColor: const Color(0xFF6C5CE7),
-                onTap: () => _showSupportPortalSheet(context),
-              ),
-              LiquidSettingsRow(
-                icon: Icons.description_outlined,
-                title: 'Terms & Conditions',
-                subtitle: 'Read privacy policies & legal conditions',
-                iconColor: OptivusColors.textSecondary,
-                onTap: () => _showLegalLinksSheet(context),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // 7. Premium Sign Out
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: OptivusColors.danger.withValues(alpha: 0.1),
-              foregroundColor: OptivusColors.danger,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: const BorderSide(color: OptivusColors.danger, width: 1.2),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-            onPressed: () async {
-              await ref.read(authProvider.notifier).logout();
-              if (context.mounted) context.go('/');
-            },
-            icon: const Icon(Icons.logout_rounded, size: 18),
-            label: const Text(
-              'Sign Out Session',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-        ],
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            OptivusColors.profileTop,
+            Colors.white,
+          ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0.0, 0.4],
+        ),
       ),
-    );
-  }
-
-  // Elegant mock support portal bottom sheet
-  void _showSupportPortalSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFFEEF3FE),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.75,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          expand: false,
-          builder: (context, scrollController) {
-            return SingleChildScrollView(
-              controller: scrollController,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. Header label
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 48,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.blueGrey.shade200,
-                        borderRadius: BorderRadius.circular(10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'one',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.textPrimary,
+                          letterSpacing: -1.0,
+                        ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your Life OS control center',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: OptivusColors.textSecondary.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined, color: OptivusColors.textPrimary),
+                    onPressed: () {},
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.5),
+                      shape: const CircleBorder(),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'SUPPORT PORTAL',
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // 1. Profile Identity Hero Card
+              ProfileHeaderCard(
+                profile: profile,
+                onEditTap: () => showEditProfileSheet(context, ref),
+              ),
+              const SizedBox(height: 24),
+
+              // 2. Identity Statement
+              ProfileIdentityCard(
+                identityStatement: identityStatement,
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Navigate to Identity Goals')),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+
+              // 3. Focus Areas
+              ProfileChipsCard(
+                title: 'Focus Areas',
+                items: focusAreas,
+                emptyMessage: 'No focus areas selected.',
+                actionButtonText: 'Add Focus Area',
+                onActionTap: () {},
+                accentColor: OptivusColors.profileAccent,
+              ),
+              const SizedBox(height: 24),
+
+              // 4. Habits to Break
+              ProfileChipsCard(
+                title: 'Habits to Break',
+                items: habitsToBreak,
+                emptyMessage: 'No habits selected.',
+                actionButtonText: 'Add Habit to Break',
+                onActionTap: () {},
+                accentColor: OptivusColors.danger,
+              ),
+              const SizedBox(height: 24),
+
+              // 5. System Setup Card
+              ProfileSettingGroup(
+                title: 'System Setup',
+                children: [
+                  const LiquidSettingsRow(
+                    icon: Icons.check_circle_outline,
+                    title: 'Onboarding Setup',
+                    iconColor: OptivusColors.success,
+                    trailing: ProfileStatusChip(
+                      label: 'Completed',
+                      type: ProfileStatusType.success,
+                    ),
+                  ),
+                  const LiquidSettingsRow(
+                    icon: Icons.work_outline,
+                    title: 'Life Role & Lifestyle',
+                    subtitle: 'Student + Working',
+                    iconColor: OptivusColors.info,
+                  ),
+                  const LiquidSettingsRow(
+                    icon: Icons.monitor_weight_outlined,
+                    title: 'Body Basics',
+                    subtitle: '52 kg · 5\'9"',
+                    iconColor: OptivusColors.roseAccent,
+                  ),
+                  const LiquidSettingsRow(
+                    icon: Icons.schedule,
+                    title: 'Base Timeline',
+                    subtitle: 'Classes + Eating + Fixed',
+                    iconColor: OptivusColors.purpleAccent,
+                  ),
+                  const LiquidSettingsRow(
+                    icon: Icons.flag_outlined,
+                    title: 'Goals Setup',
+                    subtitle: '3 active goals',
+                    iconColor: OptivusColors.profileAccent,
+                  ),
+                  const LiquidSettingsRow(
+                    icon: Icons.psychology_outlined,
+                    title: 'Coach Setup',
+                    subtitle: 'Sensei · Direct but kind',
+                    iconColor: OptivusColors.mintAccent,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.refresh,
+                    title: 'Reset / Re-run Setup',
+                    iconColor: OptivusColors.textSecondary,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Re-run setup placeholder')),
+                      );
+                    },
+                  ),
+                ],
+              ),
+
+              // 6. Account Card
+              const ProfileSettingGroup(
+                title: 'Account',
+                children: [
+                  LiquidSettingsRow(
+                    icon: Icons.email_outlined,
+                    title: 'Email',
+                    subtitle: 'nairitgpt@gmail.com',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.archive_outlined,
+                    title: 'Archived Identities',
+                    iconColor: OptivusColors.textSecondary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.notifications_active_outlined,
+                    title: 'Notifications',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.download_outlined,
+                    title: 'Export Account Data',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                ],
+              ),
+
+              // 7. Permissions & Data Sources Card
+              const ProfileSettingGroup(
+                title: 'Permissions & Data Sources',
+                children: [
+                  LiquidSettingsRow(
+                    icon: Icons.notifications_outlined,
+                    title: 'Notifications',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: ProfileStatusChip(label: 'Connected', type: ProfileStatusType.success),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.data_usage,
+                    title: 'Usage Access',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: ProfileStatusChip(label: 'Not connected', type: ProfileStatusType.muted),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.location_on_outlined,
+                    title: 'Location',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: ProfileStatusChip(label: 'Connected', type: ProfileStatusType.success),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.monitor_heart_outlined,
+                    title: 'Health Connect',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: ProfileStatusChip(label: 'Not connected', type: ProfileStatusType.muted),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.camera_alt_outlined,
+                    title: 'Camera / Photos',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: ProfileStatusChip(label: 'Not connected', type: ProfileStatusType.muted),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.mic_none,
+                    title: 'Microphone',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: ProfileStatusChip(label: 'Not connected', type: ProfileStatusType.muted),
+                  ),
+                ],
+              ),
+
+              // 8. Connected Services Card
+              const ProfileSettingGroup(
+                title: 'Connected Services',
+                children: [
+                  LiquidSettingsRow(
+                    icon: Icons.upload_file,
+                    title: 'Cloudflare R2 Uploads',
+                    iconColor: OptivusColors.info,
+                    trailing: ProfileStatusChip(label: 'Connected', type: ProfileStatusType.success),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.map_outlined,
+                    title: 'Mapbox',
+                    iconColor: OptivusColors.brandAccent,
+                    trailing: ProfileStatusChip(label: 'Connected', type: ProfileStatusType.success),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.health_and_safety_outlined,
+                    title: 'Health Connect',
+                    iconColor: OptivusColors.textSecondary,
+                    trailing: ProfileStatusChip(label: 'Not connected', type: ProfileStatusType.muted),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.phone_android,
+                    title: 'Android Usage Access',
+                    iconColor: OptivusColors.textSecondary,
+                    trailing: ProfileStatusChip(label: 'Not connected', type: ProfileStatusType.muted),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.cloud_outlined,
+                    title: 'Cloudflare Workers',
+                    iconColor: OptivusColors.info,
+                    trailing: ProfileStatusChip(label: 'Connected', type: ProfileStatusType.success),
+                  ),
+                ],
+              ),
+
+              // 9. App Preferences Card
+              ProfileSettingGroup(
+                title: 'App Preferences',
+                children: [
+                  LiquidSettingsRow(
+                    icon: Icons.vibration,
+                    title: 'Haptic Feedback',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: Switch(
+                      value: true,
+                      onChanged: null,
+                      activeThumbColor: OptivusColors.profileAccent,
+                    ),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.spellcheck,
+                    title: 'Correct Spelling',
+                    iconColor: OptivusColors.textPrimary,
+                    trailing: Switch(
+                      value: true,
+                      onChanged: null,
+                      activeThumbColor: OptivusColors.profileAccent,
+                    ),
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.palette_outlined,
+                    title: 'Theme',
+                    subtitle: 'System',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.format_paint_outlined,
+                    title: 'Accent Color',
+                    subtitle: 'Yellow',
+                    iconColor: OptivusColors.profileAccent,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.settings_suggest_outlined,
+                    title: 'Routine Settings',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.language,
+                    title: 'Language',
+                    subtitle: 'English',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                ],
+              ),
+
+              // 10. Privacy & Security Card
+              const ProfileSettingGroup(
+                title: 'Privacy & Security',
+                children: [
+                  LiquidSettingsRow(
+                    icon: Icons.security,
+                    title: 'Security',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.lock_outline,
+                    title: 'Mind Notebook Privacy',
+                    subtitle: 'Private',
+                    iconColor: OptivusColors.success,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.psychology,
+                    title: 'Coach Context Access',
+                    subtitle: 'Limited',
+                    iconColor: OptivusColors.warning,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.visibility_off_outlined,
+                    title: 'Screen Time Privacy',
+                    subtitle: 'Show app names',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.privacy_tip_outlined,
+                    title: 'Data Privacy',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                ],
+              ),
+
+              // 11. Data Control Card
+              const ProfileSettingGroup(
+                title: 'Data Control',
+                children: [
+                  LiquidSettingsRow(
+                    icon: Icons.download_outlined,
+                    title: 'Export Data',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.delete_sweep_outlined,
+                    title: 'Delete Selected Data',
+                    iconColor: OptivusColors.danger,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.person_remove_outlined,
+                    title: 'Delete Account Request',
+                    iconColor: OptivusColors.danger,
+                  ),
+                ],
+              ),
+
+              // 12. Support & About Card
+              const ProfileSettingGroup(
+                title: 'Support & About',
+                children: [
+                  LiquidSettingsRow(
+                    icon: Icons.bug_report_outlined,
+                    title: 'Report Bug',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.help_outline,
+                    title: 'Help Center',
+                    iconColor: OptivusColors.textPrimary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.description_outlined,
+                    title: 'Terms of Use',
+                    iconColor: OptivusColors.textSecondary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.privacy_tip_outlined,
+                    title: 'Privacy Policy',
+                    iconColor: OptivusColors.textSecondary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.auto_delete_outlined,
+                    title: 'Delete Account Instructions',
+                    iconColor: OptivusColors.textSecondary,
+                  ),
+                  LiquidSettingsRow(
+                    icon: Icons.info_outline,
+                    title: 'Version',
+                    subtitle: 'Optivus v1.0.0',
+                    iconColor: OptivusColors.textMuted,
+                  ),
+                ],
+              ),
+
+              // 13. Log out & 14. Delete account
+              const SizedBox(height: 16),
+              LiquidGlassPanel(
+                padding: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    LiquidSettingsRow(
+                      icon: Icons.logout,
+                      title: 'Log out',
+                      iconColor: OptivusColors.textSecondary,
+                      onTap: () async {
+                        await ref.read(authProvider.notifier).logout();
+                        if (context.mounted) context.go('/');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Serious Delete Account at the bottom
+              GestureDetector(
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Delete account request placeholder')),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: OptivusColors.danger.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: OptivusColors.danger.withValues(alpha: 0.3)),
+                  ),
+                  child: const Text(
+                    'Delete Account',
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Submit Ticket & Help',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  LiquidGlassPanel(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text(
-                          'Need assistance with your Optivus profile?',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Submit a detailed ticket below, and our team will analyze it alongside your mock logs.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const TextField(
-                          decoration: InputDecoration(
-                            labelText: 'Subject / Issue Category',
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        const TextField(
-                          maxLines: 4,
-                          decoration: InputDecoration(
-                            labelText: 'Describe the issue...',
-                            labelStyle: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: OptivusColors.brandAccent,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Support Ticket submitted successfully! Mock Ticket #8928',
-                                ),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                          child: const Text(
-                            'Submit Mock Ticket',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'FREQUENTLY ASKED QUESTIONS',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
+                      color: OptivusColors.danger,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                       letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  _buildFaqItem(
-                    'How do I sync my active outdoor GPS runs?',
-                    'Go to Wearable Sync in your System Portal, and tap "Grant GPS Location Permission".',
-                  ),
-                  const SizedBox(height: 10),
-                  _buildFaqItem(
-                    'What is the Habit Overload Shield?',
-                    'A safeguard designed to prevent burnout by letting you set custom target limits on daily active goals.',
-                  ),
-                ],
+                ),
               ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildFaqItem(String question, String answer) {
-    return LiquidGlassPanel(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            question,
-            style: const TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 12,
-              color: OptivusColors.textPrimary,
-            ),
+              const SizedBox(height: 40),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            answer,
-            style: const TextStyle(
-              fontSize: 11,
-              color: OptivusColors.textSecondary,
-              height: 1.3,
-            ),
-          ),
-        ],
+        ),
       ),
-    );
-  }
-
-  // Elegant mock legal links bottom sheet
-  void _showLegalLinksSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFFEEF3FE),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          minChildSize: 0.4,
-          maxChildSize: 0.85,
-          expand: false,
-          builder: (context, scrollController) {
-            return SingleChildScrollView(
-              controller: scrollController,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 48,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.blueGrey.shade200,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'LEGAL INFORMATION',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  const Text(
-                    'Terms & Conditions',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  LiquidGlassPanel(
-                    padding: const EdgeInsets.all(16),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '1. Mock Service Operations',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Optivus operates entirely as a high-fidelity frontend simulation layout. All data is stored transiently using mock Riverpod states and local memory controls.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                            height: 1.3,
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          '2. Privacy and Safe Health Sync',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Your native health integrations (Health Connect / location logs) are simulated sandbox entities. No telemetry or location logs are transmitted out of your device sandbox.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                            height: 1.3,
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          '3. End-User License Agreement (EULA)',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'By proceeding to use the simulation, you agree to experience high-framerate glassmorphic layouts, consistent habit building systems, and comprehensive AI coaching context models.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: OptivusColors.textSecondary,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: OptivusColors.brandAccent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Accept & Close',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }

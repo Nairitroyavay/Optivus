@@ -44,7 +44,7 @@ class ProfileSettingGroup extends StatelessWidget {
                 width: 3.5,
                 height: 14,
                 decoration: BoxDecoration(
-                  color: OptivusColors.brandAccent,
+                  color: OptivusColors.profileAccent,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
