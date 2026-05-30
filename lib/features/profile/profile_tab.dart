@@ -401,7 +401,7 @@ class ProfileTab extends ConsumerWidget {
                             context,
                             title: 'Service Detail',
                             message:
-                                'Status, what it powers (Walk/Run maps), troubleshooting.',
+                                'Status, what it powers (Fitness Center maps), troubleshooting.',
                           ),
                         ),
                         LiquidSettingsRow(

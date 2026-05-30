@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
@@ -109,22 +111,31 @@ class MoneyTaskCard extends ConsumerWidget {
                 label: 'Save via UPI',
                 color: color,
                 icon: Icons.payment,
-                onTap: () =>
-                    ref.read(routineNotifierProvider.notifier).startTrackerTask(item),
+                onTap: () => showSaveViaUpiFlow(
+                  context,
+                  ref,
+                  source: MoneyEntrySource.routineTask,
+                  routineTaskId: item.id,
+                  onSaved: () => ref
+                      .read(routineNotifierProvider.notifier)
+                      .markCompleted(item.id),
+                ),
               ),
               CardActionButton(
                 label: 'Already saved',
                 color: OptivusColors.success,
                 icon: Icons.check,
-                onTap: () =>
-                    ref.read(routineNotifierProvider.notifier).alreadySaved(item.id),
+                onTap: () => ref
+                    .read(routineNotifierProvider.notifier)
+                    .alreadySaved(item.id),
               ),
               CardActionButton(
                 label: 'Skip',
                 color: OptivusColors.sub.withValues(alpha: 0.7),
                 icon: Icons.skip_next_rounded,
-                onTap: () =>
-                    ref.read(routineNotifierProvider.notifier).markSkipped(item.id),
+                onTap: () => ref
+                    .read(routineNotifierProvider.notifier)
+                    .markSkipped(item.id),
               ),
             ],
           ),

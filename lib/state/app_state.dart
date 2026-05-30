@@ -401,6 +401,27 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     );
   }
 
+  void completeFitnessActivity(FitnessActivity activity) {
+    final session = TrackerSession(
+      id: 'tracker-${activity.id}',
+      category: 'Body',
+      title: '${activity.activityType.shortLabel} completed',
+      timestamp: activity.endedAt ?? DateTime.now(),
+      value: activity.movingDuration.inMinutes,
+      isCompleted: true,
+    );
+
+    state = state.copyWith(
+      fitnessActivities: [...state.fitnessActivities, activity],
+      trackerSessions: [...state.trackerSessions, session],
+    );
+
+    // Later sync hooks:
+    // - complete linked Routine item when linkedRoutineItemId is set
+    // - update Home Body pillar progress and Strong Body goal proof
+    // - expose the completed activity to Tracker graphs and Coach context
+  }
+
   void updateScreenTime(String packageName, int addedMinutes) {
     state = state.copyWith(
       screenTimeApps: [
@@ -418,25 +439,120 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     );
   }
 
-  void logSaving(
-    double amount,
-    String description, {
-    bool isConfirmed = false,
+  String _dateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  String _todayKey() => _dateKey(DateTime.now());
+
+  String _entryId() => 's-${DateTime.now().microsecondsSinceEpoch}';
+
+  bool hasConfirmedSavingForDate(String dateKey) {
+    return state.savingsEntries.any(
+      (entry) => entry.dateKey == dateKey && entry.isConfirmed,
+    );
+  }
+
+  double confirmedSavedForDate(String dateKey) {
+    return state.savingsEntries
+        .where((entry) => entry.dateKey == dateKey && entry.isConfirmed)
+        .fold(0.0, (sum, entry) => sum + entry.amount);
+  }
+
+  double potentialSavedForDate(String dateKey) {
+    return state.savingsEntries
+        .where((entry) => entry.dateKey == dateKey && entry.isPotential)
+        .fold(0.0, (sum, entry) => sum + entry.amount);
+  }
+
+  List<SavingEntry> entriesForDate(String dateKey) {
+    final entries = state.savingsEntries
+        .where((entry) => entry.dateKey == dateKey)
+        .toList(growable: false);
+    return entries..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  MoneyEntrySource _dedupedTodaySource({
+    required MoneyEntrySource requestedSource,
+    required bool alreadyConfirmedToday,
   }) {
-    final entry = SavingEntry(
-      id: 's-${state.savingsEntries.length + 1}',
+    if (!alreadyConfirmedToday) return requestedSource;
+    if (requestedSource == MoneyEntrySource.badHabitConverted ||
+        requestedSource == MoneyEntrySource.adjustment) {
+      return requestedSource;
+    }
+    return MoneyEntrySource.manual;
+  }
+
+  String _saveDescription({
+    required double amount,
+    required MoneyEntrySource source,
+    String? description,
+  }) {
+    if (description != null && description.trim().isNotEmpty) {
+      return description.trim();
+    }
+    if (amount <= state.moneyGoal.tinySaveAmount) {
+      return 'Tiny save';
+    }
+    return switch (source) {
+      MoneyEntrySource.dailyTarget => 'Daily target saved',
+      MoneyEntrySource.upiMock => 'UPI mock transfer marked done',
+      MoneyEntrySource.routineTask => 'Routine Money System task',
+      MoneyEntrySource.badHabitConverted => 'Bad-habit money converted',
+      MoneyEntrySource.adjustment => 'Savings adjustment',
+      MoneyEntrySource.badHabitAvoided => 'Bad-habit money avoided',
+      MoneyEntrySource.manual => 'Manual saving confirmed',
+    };
+  }
+
+  void saveMoneyToday({
+    required double amount,
+    required MoneySaveMethod method,
+    MoneyEntrySource source = MoneyEntrySource.manual,
+    String? description,
+    String? routineTaskId,
+  }) {
+    if (!amount.isFinite || amount <= 0) return;
+
+    final now = DateTime.now();
+    final today = _todayKey();
+    final alreadyConfirmedToday = hasConfirmedSavingForDate(today);
+    final effectiveSource = _dedupedTodaySource(
+      requestedSource: source,
+      alreadyConfirmedToday: alreadyConfirmedToday,
+    );
+    final effectiveDescription = _saveDescription(
       amount: amount,
-      timestamp: 'Today',
+      source: source,
       description: description,
-      isConfirmed: isConfirmed,
     );
 
-    double addConfirmed = isConfirmed ? amount : 0.0;
-    double addPotential = !isConfirmed ? amount : 0.0;
+    final entry = SavingEntry(
+      id: _entryId(),
+      amount: amount,
+      createdAt: now,
+      dateKey: today,
+      description: effectiveDescription,
+      status: MoneyEntryStatus.confirmed,
+      source: effectiveSource,
+      method: method,
+      routineTaskId: routineTaskId,
+    );
 
+    final shouldUpdateStreak = !alreadyConfirmedToday;
+    final nextStreak = shouldUpdateStreak
+        ? state.moneyGoal.streakDays + 1
+        : state.moneyGoal.streakDays;
     final updatedGoal = state.moneyGoal.copyWith(
-      totalConfirmedSaved: state.moneyGoal.totalConfirmedSaved + addConfirmed,
-      totalPotentialSaved: state.moneyGoal.totalPotentialSaved + addPotential,
+      totalConfirmedSaved: state.moneyGoal.totalConfirmedSaved + amount,
+      streakDays: nextStreak,
+      bestStreakDays: nextStreak > state.moneyGoal.bestStreakDays
+          ? nextStreak
+          : state.moneyGoal.bestStreakDays,
+      successfulDaysAtCurrentLevel: shouldUpdateStreak
+          ? state.moneyGoal.successfulDaysAtCurrentLevel + 1
+          : state.moneyGoal.successfulDaysAtCurrentLevel,
     );
 
     state = state.copyWith(
@@ -445,48 +561,194 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     );
   }
 
-  void confirmSaving(String entryId) {
-    double confirmAmount = 0.0;
+  void logPotentialSaving({
+    required double amount,
+    required String description,
+    String? badHabitKey,
+  }) {
+    if (!amount.isFinite || amount <= 0) return;
 
-    // Find the item first to get its amount safely outside the list literal
+    final now = DateTime.now();
+    final entry = SavingEntry(
+      id: _entryId(),
+      amount: amount,
+      createdAt: now,
+      dateKey: _todayKey(),
+      description: description.trim().isEmpty
+          ? 'Bad-habit money avoided'
+          : description.trim(),
+      status: MoneyEntryStatus.potential,
+      source: MoneyEntrySource.badHabitAvoided,
+      method: MoneySaveMethod.none,
+      badHabitKey: badHabitKey,
+    );
+
+    state = state.copyWith(
+      savingsEntries: [...state.savingsEntries, entry],
+      moneyGoal: state.moneyGoal.copyWith(
+        totalPotentialSaved: state.moneyGoal.totalPotentialSaved + amount,
+      ),
+    );
+  }
+
+  void convertPotentialToConfirmed(
+    String entryId, {
+    MoneySaveMethod method = MoneySaveMethod.upiMock,
+  }) {
+    SavingEntry? target;
     for (final entry in state.savingsEntries) {
-      if (entry.id == entryId && !entry.isConfirmed) {
-        confirmAmount = entry.amount;
+      if (entry.id == entryId && entry.isPotential) {
+        target = entry;
         break;
       }
     }
+    if (target == null) return;
 
-    if (confirmAmount > 0.0) {
-      final updatedEntries = [
-        for (final entry in state.savingsEntries)
-          if (entry.id == entryId)
-            SavingEntry(
-              id: entry.id,
-              amount: entry.amount,
-              timestamp: entry.timestamp,
-              description: entry.description,
-              isConfirmed: true,
-            )
-          else
-            entry,
-      ];
+    final today = _todayKey();
+    final shouldUpdateStreak =
+        target.dateKey == today && !hasConfirmedSavingForDate(today);
+    final nextStreak = shouldUpdateStreak
+        ? state.moneyGoal.streakDays + 1
+        : state.moneyGoal.streakDays;
+    final updatedEntries = [
+      for (final entry in state.savingsEntries)
+        if (entry.id == entryId)
+          entry.copyWith(
+            status: MoneyEntryStatus.confirmed,
+            source: MoneyEntrySource.badHabitConverted,
+            method: method,
+            note: entry.note ?? 'Converted to real saving',
+          )
+        else
+          entry,
+    ];
 
-      final updatedGoal = state.moneyGoal.copyWith(
+    state = state.copyWith(
+      savingsEntries: updatedEntries,
+      moneyGoal: state.moneyGoal.copyWith(
         totalConfirmedSaved:
-            state.moneyGoal.totalConfirmedSaved + confirmAmount,
+            state.moneyGoal.totalConfirmedSaved + target.amount,
         totalPotentialSaved:
-            (state.moneyGoal.totalPotentialSaved - confirmAmount).clamp(
-              0,
-              double.infinity,
-            ),
-        streakDays: state.moneyGoal.streakDays + 1,
-      );
+            (state.moneyGoal.totalPotentialSaved - target.amount)
+                .clamp(0.0, double.infinity)
+                .toDouble(),
+        streakDays: nextStreak,
+        bestStreakDays: nextStreak > state.moneyGoal.bestStreakDays
+            ? nextStreak
+            : state.moneyGoal.bestStreakDays,
+        successfulDaysAtCurrentLevel: shouldUpdateStreak
+            ? state.moneyGoal.successfulDaysAtCurrentLevel + 1
+            : state.moneyGoal.successfulDaysAtCurrentLevel,
+      ),
+    );
+  }
 
-      state = state.copyWith(
-        savingsEntries: updatedEntries,
-        moneyGoal: updatedGoal,
-      );
+  void skipMoneyToday({required String reason}) {
+    final today = _todayKey();
+    if (hasConfirmedSavingForDate(today)) return;
+
+    final existingWithoutTodaySkip = state.savingsEntries
+        .where(
+          (entry) =>
+              !(entry.dateKey == today &&
+                  entry.status == MoneyEntryStatus.skipped),
+        )
+        .toList(growable: false);
+
+    final now = DateTime.now();
+    final entry = SavingEntry(
+      id: _entryId(),
+      amount: 0,
+      createdAt: now,
+      dateKey: today,
+      description: 'Skipped today',
+      status: MoneyEntryStatus.skipped,
+      source: MoneyEntrySource.dailyTarget,
+      method: MoneySaveMethod.none,
+      reason: reason.trim().isEmpty ? 'Skipped manually' : reason.trim(),
+    );
+
+    state = state.copyWith(
+      savingsEntries: [...existingWithoutTodaySkip, entry],
+      moneyGoal: state.moneyGoal.copyWith(
+        streakDays: 0,
+        successfulDaysAtCurrentLevel: 0,
+      ),
+    );
+  }
+
+  double _nextMoneyLevel(double current) {
+    const levels = [5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0];
+    for (final level in levels) {
+      if (level > current) return level;
     }
+    return current + 500.0;
+  }
+
+  void levelUpMoneyTarget() {
+    final newLevel = state.moneyGoal.nextLevelAmount;
+    state = state.copyWith(
+      moneyGoal: state.moneyGoal.copyWith(
+        dailyTarget: newLevel,
+        currentLevelAmount: newLevel,
+        streakLevel: state.moneyGoal.streakLevel + 1,
+        successfulDaysAtCurrentLevel: 0,
+        nextLevelAmount: _nextMoneyLevel(newLevel),
+      ),
+    );
+  }
+
+  void stayAtCurrentMoneyTarget() {
+    state = state.copyWith(
+      moneyGoal: state.moneyGoal.copyWith(successfulDaysAtCurrentLevel: 0),
+    );
+  }
+
+  void updateMoneySettings({
+    double? dailyTarget,
+    double? tinySaveAmount,
+    String? destinationLabel,
+    MoneySaveMethod? defaultMethod,
+    String? reminderTimeLabel,
+    int? levelUpAfterDays,
+    bool? manualConfirmationAllowed,
+  }) {
+    final normalizedTarget = dailyTarget != null && dailyTarget.isFinite
+        ? dailyTarget.clamp(1.0, 1000000.0).toDouble()
+        : null;
+    final normalizedTiny = tinySaveAmount != null && tinySaveAmount.isFinite
+        ? tinySaveAmount.clamp(1.0, 1000000.0).toDouble()
+        : null;
+    final currentLevel = normalizedTarget ?? state.moneyGoal.currentLevelAmount;
+
+    state = state.copyWith(
+      moneyGoal: state.moneyGoal.copyWith(
+        dailyTarget: normalizedTarget,
+        tinySaveAmount: normalizedTiny,
+        currentLevelAmount: normalizedTarget,
+        nextLevelAmount: normalizedTarget == null
+            ? null
+            : _nextMoneyLevel(currentLevel),
+        destinationLabel:
+            destinationLabel == null || destinationLabel.trim().isEmpty
+            ? null
+            : destinationLabel.trim(),
+        defaultMethod: defaultMethod,
+        reminderTimeLabel:
+            reminderTimeLabel == null || reminderTimeLabel.trim().isEmpty
+            ? null
+            : reminderTimeLabel.trim(),
+        levelUpAfterDays: levelUpAfterDays?.clamp(1, 365),
+        manualConfirmationAllowed: manualConfirmationAllowed,
+      ),
+    );
+  }
+
+  void resetMoneySystem() {
+    state = state.copyWith(
+      moneyGoal: MoneyGoal(id: state.moneyGoal.id),
+      savingsEntries: const [],
+    );
   }
 
   void logMeditationSession({

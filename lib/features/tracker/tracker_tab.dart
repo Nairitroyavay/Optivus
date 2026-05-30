@@ -4,9 +4,19 @@ import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/features/tracker/fitness/fitness_center_screen.dart';
 import 'package:optivus/features/tracker/meditation/meditation_tracker_screen.dart';
+import 'package:optivus/features/tracker/money/money_system_screen.dart';
+import 'package:optivus/features/tracker/money/money_system_widgets.dart';
+import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/models/money_models.dart';
+import 'package:optivus/models/routine_item.dart';
 
-enum TrackerDetailView { none, meditation }
+enum TrackerDetailView { none, meditation, money, fitness }
+
+final trackerDetailViewRequestProvider = StateProvider<TrackerDetailView>(
+  (ref) => TrackerDetailView.none,
+);
 
 class TrackerTab extends ConsumerStatefulWidget {
   const TrackerTab({super.key});
@@ -35,6 +45,45 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      routineNotifierProvider.select((s) => s.activeTrackerLaunchIntent),
+      (prev, intent) {
+        if (intent != null && intent.trackerType == TrackerType.money) {
+          if (_activeDetailView != TrackerDetailView.money) {
+            setState(() => _activeDetailView = TrackerDetailView.money);
+          }
+        } else if (intent != null &&
+            intent.trackerType == TrackerType.meditation) {
+          if (_activeDetailView != TrackerDetailView.meditation) {
+            setState(() => _activeDetailView = TrackerDetailView.meditation);
+          }
+        } else if (intent != null &&
+            intent.trackerType == TrackerType.workout) {
+          if (_activeDetailView != TrackerDetailView.fitness) {
+            setState(() => _activeDetailView = TrackerDetailView.fitness);
+          }
+        }
+      },
+    );
+    ref.listen(trackerDetailViewRequestProvider, (prev, request) {
+      if (request == TrackerDetailView.none) return;
+      if (_activeDetailView != request) {
+        setState(() => _activeDetailView = request);
+      }
+      ref.read(trackerDetailViewRequestProvider.notifier).state =
+          TrackerDetailView.none;
+    });
+    final pendingDetailRequest = ref.watch(trackerDetailViewRequestProvider);
+    if (pendingDetailRequest != TrackerDetailView.none &&
+        _activeDetailView != pendingDetailRequest) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _activeDetailView = pendingDetailRequest);
+        ref.read(trackerDetailViewRequestProvider.notifier).state =
+            TrackerDetailView.none;
+      });
+    }
+
     final media = MediaQuery.of(context);
     final bottomReserve =
         76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
@@ -47,6 +96,18 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         bottom: false,
         child: _activeDetailView == TrackerDetailView.meditation
             ? MeditationTrackerScreen(
+                onBack: () {
+                  setState(() => _activeDetailView = TrackerDetailView.none);
+                },
+              )
+            : _activeDetailView == TrackerDetailView.money
+            ? MoneySystemScreen(
+                onBack: () {
+                  setState(() => _activeDetailView = TrackerDetailView.none);
+                },
+              )
+            : _activeDetailView == TrackerDetailView.fitness
+            ? FitnessCenterScreen(
                 onBack: () {
                   setState(() => _activeDetailView = TrackerDetailView.none);
                 },
@@ -74,10 +135,14 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                           const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
                           _buildActiveTrackers(snapshot),
                           const SizedBox(height: 32),
-                          const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
+                          const TrackerSectionHeader(
+                            title: 'DISCOVER TRACKERS',
+                          ),
                           _buildDiscoverTrackers(),
                           const SizedBox(height: 32),
-                          const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
+                          const TrackerSectionHeader(
+                            title: 'PHONE DATA SOURCES',
+                          ),
                           _buildPhoneDataSources(snapshot),
                           const SizedBox(height: 32),
                           const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
@@ -181,7 +246,10 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
-                    colors: [OptivusColors.brandAccent, OptivusColors.roseAccent],
+                    colors: [
+                      OptivusColors.brandAccent,
+                      OptivusColors.roseAccent,
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -227,8 +295,9 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                 value: '${snapshot.todaySavedLabel} saved',
               ),
               TrackerMetricChip(
-                category: 'Walk',
-                value: '${snapshot.weeklyDistanceLabel} km',
+                category: 'Movement',
+                value:
+                    '${snapshot.weeklyDistanceLabel} km • ${snapshot.workoutSessionCount} sessions',
               ),
             ],
           ),
@@ -287,7 +356,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         status: '${snapshot.todaySavedLabel} saved today',
         iconEmoji: '💰',
         buttonText: 'View',
-        accentColor: OptivusColors.mintAccent,
+        accentColor: OptivusColors.trackerAccent,
         activationSource: 'routine',
       ),
       _ActiveTrackerConfig(
@@ -300,12 +369,13 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         activationSource: 'mock permission',
       ),
       _ActiveTrackerConfig(
-        title: 'Walk / Run',
-        status: '${snapshot.weeklyDistanceLabel} km this week',
+        title: 'Fitness Center',
+        status:
+            'Walk • Run • Cycling • Workout\n${snapshot.weeklyDistanceLabel} km this week • ${snapshot.workoutSessionCount} sessions',
         iconEmoji: '🏃',
-        buttonText: 'Start',
-        accentColor: OptivusColors.brandAccent,
-        activationSource: 'identity goal',
+        buttonText: 'Open',
+        accentColor: OptivusColors.trackerAccent,
+        activationSource: 'body',
       ),
       _ActiveTrackerConfig(
         title: 'Hydration',
@@ -328,11 +398,15 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               accentColor: tracker.accentColor,
               onAction: () {
                 if (tracker.title == 'Money System') {
-                  context.push('/tracker/money');
+                  setState(() => _activeDetailView = TrackerDetailView.money);
                 } else if (tracker.title == 'Screen Time') {
                   context.push('/tracker/screen-time');
                 } else if (tracker.title == 'Meditation') {
-                  setState(() => _activeDetailView = TrackerDetailView.meditation);
+                  setState(
+                    () => _activeDetailView = TrackerDetailView.meditation,
+                  );
+                } else if (tracker.title == 'Fitness Center') {
+                  setState(() => _activeDetailView = TrackerDetailView.fitness);
                 } else {
                   _showPlaceholder(tracker.title);
                 }
@@ -514,12 +588,12 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           onConnect: () => _showPlaceholder('Screen Time / App Usage'),
         ),
         TrackerDataSourceCard(
-          title: 'Walk / Run GPS',
+          title: 'Fitness GPS',
           subtitle: 'Location permission needed',
           iconEmoji: '📍',
           status: 'Not connected',
           isConnected: false,
-          onConnect: () => _showPlaceholder('Walk / Run GPS'),
+          onConnect: () => _showPlaceholder('Fitness GPS'),
         ),
         TrackerDataSourceCard(
           title: 'Health Connect',
@@ -558,11 +632,16 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         'subtitle': 'Money System',
         'color': OptivusColors.mintAccent,
       },
-      {'title': 'Water logged', 'subtitle': '+250ml', 'color': OptivusColors.blueAccent},
       {
-        'title': 'Walk completed',
-        'subtitle': '${snapshot.weeklyDistanceLabel} km',
-        'color': OptivusColors.brandAccent,
+        'title': 'Water logged',
+        'subtitle': '+250ml',
+        'color': OptivusColors.blueAccent,
+      },
+      {
+        'title': 'Fitness Center activity',
+        'subtitle':
+            '${snapshot.weeklyDistanceLabel} km • ${snapshot.workoutSessionCount} sessions',
+        'color': OptivusColors.trackerAccent,
       },
     ];
 
@@ -609,7 +688,11 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: OptivusColors.sub),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: OptivusColors.sub,
+            ),
           ],
         ),
       ),
@@ -676,7 +759,9 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
                 width: isSelected ? 24 : 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isSelected ? OptivusColors.ink : OptivusColors.ink.withValues(alpha: 0.2),
+                  color: isSelected
+                      ? OptivusColors.ink
+                      : OptivusColors.ink.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
               );
@@ -734,7 +819,11 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
         const SizedBox(height: 5),
         Text(
           graph.subtitle,
-          style: const TextStyle(fontSize: 11, color: OptivusColors.sub, height: 1.25),
+          style: const TextStyle(
+            fontSize: 11,
+            color: OptivusColors.sub,
+            height: 1.25,
+          ),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -792,14 +881,14 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
             '${snapshot.confirmedSavedLabel} confirmed • ${snapshot.potentialSavedLabel} potential\nNext level: ${snapshot.nextMoneyLevelLabel}',
         badgeText: snapshot.todaySavedLabel,
         accentColor: OptivusColors.mintAccent,
-        values: period.moneyValues,
+        values: snapshot.moneyValuesForPeriod(period),
       ),
       _TrackerGraphConfig(
-        title: 'Movement',
+        title: 'Movement & Fitness',
         subtitle:
-            '${snapshot.weeklyDistanceLabel} km • Best pace ${snapshot.bestPaceLabel}\nLongest ${snapshot.longestDistanceLabel} km',
-        badgeText: '+2k',
-        accentColor: OptivusColors.brandAccent,
+            '${snapshot.weeklyDistanceLabel} km this week • ${snapshot.activeMinutesLabel} active\n${snapshot.workoutSessionCount} sessions • Best pace ${snapshot.bestPaceLabel}',
+        badgeText: '${snapshot.weeklyGoalProgressPercent}%',
+        accentColor: OptivusColors.trackerAccent,
         values: period.movementValues,
       ),
       _TrackerGraphConfig(
@@ -841,11 +930,15 @@ class _TrackerUiSnapshot {
   final double weeklyDistanceKm;
   final double longestDistanceKm;
   final double bestPaceMinutesPerKm;
+  final int activeMinutesThisWeek;
+  final int workoutSessionCount;
   final int lifeScorePercent;
   final int activeSystemCount;
   final int waterStreakDays;
   final int workoutStreakDays;
   final int meditationStreakDays;
+  final double nextMoneyLevel;
+  final List<SavingEntry> savingsEntries;
 
   const _TrackerUiSnapshot({
     required this.hydrationMl,
@@ -860,11 +953,15 @@ class _TrackerUiSnapshot {
     required this.weeklyDistanceKm,
     required this.longestDistanceKm,
     required this.bestPaceMinutesPerKm,
+    required this.activeMinutesThisWeek,
+    required this.workoutSessionCount,
     required this.lifeScorePercent,
     required this.activeSystemCount,
     required this.waterStreakDays,
     required this.workoutStreakDays,
     required this.meditationStreakDays,
+    required this.nextMoneyLevel,
+    required this.savingsEntries,
   });
 
   factory _TrackerUiSnapshot.fromState(MockTrackerState state) {
@@ -904,39 +1001,33 @@ class _TrackerUiSnapshot {
     final screenInsight =
         '$insightAppName ${_formatMinutes(insightMinutes)} → $insightRisk distraction risk';
 
+    final today = DateTime.now();
+    final todayKey = moneyDateKey(today);
+
     final confirmedEntries = state.savingsEntries
         .where((entry) => entry.isConfirmed)
         .toList(growable: false);
     final todayConfirmedEntries = confirmedEntries
-        .where((entry) => entry.timestamp.toLowerCase() == 'today')
+        .where((entry) => entry.dateKey == todayKey)
         .toList(growable: false);
     final todaySaved = todayConfirmedEntries.isEmpty
-        ? 10.0
+        ? 0.0
         : todayConfirmedEntries.fold<double>(
             0,
             (total, entry) => total + entry.amount,
           );
-    final confirmedSaved = state.moneyGoal.totalConfirmedSaved > 0
-        ? state.moneyGoal.totalConfirmedSaved
-        : (confirmedEntries.isEmpty
-              ? 80.0
-              : confirmedEntries.fold<double>(
-                  0,
-                  (total, entry) => total + entry.amount,
-                ));
-    final potentialSaved = state.moneyGoal.totalPotentialSaved > 0
-        ? state.moneyGoal.totalPotentialSaved
-        : 40.0;
+    final confirmedSaved = state.moneyGoal.totalConfirmedSaved;
+    final potentialSaved = state.moneyGoal.totalPotentialSaved;
 
     final activities = state.fitnessActivities;
     final weeklyDistanceKm = activities.isEmpty
-        ? 2.4
+        ? 8.4
         : activities.fold<double>(
             0,
             (total, activity) => total + activity.distanceKm,
           );
     final longestDistanceKm = activities.isEmpty
-        ? 2.4
+        ? 7.4
         : activities
               .map((activity) => activity.distanceKm)
               .reduce((a, b) => a > b ? a : b);
@@ -945,8 +1036,16 @@ class _TrackerUiSnapshot {
         .where((pace) => pace > 0)
         .toList(growable: false);
     final bestPaceMinutesPerKm = validPaces.isEmpty
-        ? 6.5
+        ? 6.92
         : validPaces.reduce((a, b) => a < b ? a : b);
+    final trackedActiveMinutes = activities.fold<int>(
+      0,
+      (total, activity) => total + activity.movingDuration.inMinutes,
+    );
+    final activeMinutesThisWeek = trackedActiveMinutes < 124
+        ? 124
+        : trackedActiveMinutes;
+    final workoutSessionCount = activities.isEmpty ? 3 : activities.length;
 
     return _TrackerUiSnapshot(
       hydrationMl: hydrationMl,
@@ -957,12 +1056,12 @@ class _TrackerUiSnapshot {
       todaySaved: todaySaved,
       confirmedSaved: confirmedSaved,
       potentialSaved: potentialSaved,
-      savingStreakDays: state.moneyGoal.streakDays > 0
-          ? state.moneyGoal.streakDays
-          : 3,
+      savingStreakDays: state.moneyGoal.streakDays,
       weeklyDistanceKm: weeklyDistanceKm,
       longestDistanceKm: longestDistanceKm,
       bestPaceMinutesPerKm: bestPaceMinutesPerKm,
+      activeMinutesThisWeek: activeMinutesThisWeek,
+      workoutSessionCount: workoutSessionCount,
       lifeScorePercent: 42,
       activeSystemCount: 5,
       waterStreakDays: state.hydrationLogs.isEmpty
@@ -970,6 +1069,8 @@ class _TrackerUiSnapshot {
           : state.hydrationLogs.length,
       workoutStreakDays: activities.isEmpty ? 2 : activities.length,
       meditationStreakDays: meditationMinutes >= 5 ? 5 : 1,
+      nextMoneyLevel: state.moneyGoal.nextLevelAmount,
+      savingsEntries: state.savingsEntries,
     );
   }
 
@@ -981,9 +1082,98 @@ class _TrackerUiSnapshot {
   String get weeklyDistanceLabel => _formatDistance(weeklyDistanceKm);
   String get longestDistanceLabel => _formatDistance(longestDistanceKm);
   String get bestPaceLabel => _formatPace(bestPaceMinutesPerKm);
-  String get nextMoneyLevelLabel {
-    final nextLevel = confirmedSaved < 100.0 ? 100.0 : confirmedSaved + 50.0;
-    return _formatRupees(nextLevel);
+  String get activeMinutesLabel => '${activeMinutesThisWeek}m';
+  int get weeklyGoalProgressPercent =>
+      ((weeklyDistanceKm / 15).clamp(0.0, 1.0) * 100).round();
+  String get nextMoneyLevelLabel => _formatRupees(nextMoneyLevel);
+
+  List<double> moneyValuesForPeriod(_TrackerPeriodData period) {
+    if (savingsEntries.isEmpty) return period.moneyValues;
+
+    final now = DateTime.now();
+    final totals = switch (period.name) {
+      'Weekly' => _totalsForDailyWindow(
+        DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(Duration(days: now.weekday - 1)),
+        7,
+      ),
+      'Monthly' => List.generate(4, (index) {
+        final end = DateTime(
+          now.year,
+          now.month,
+          now.day,
+        ).subtract(Duration(days: (3 - index) * 7));
+        final start = end.subtract(const Duration(days: 6));
+        return _confirmedBetween(start, end);
+      }),
+      'Yearly' => List.generate(12, (index) {
+        final month = DateTime(now.year, index + 1);
+        final nextMonth = index == 11
+            ? DateTime(now.year + 1)
+            : DateTime(now.year, index + 2);
+        return _confirmedBetween(
+          month,
+          nextMonth.subtract(const Duration(days: 1)),
+        );
+      }),
+      _ => _dailyPartsForToday(now),
+    };
+
+    final maxValue = totals.fold<double>(
+      0,
+      (max, value) => value > max ? value : max,
+    );
+    if (maxValue <= 0) return List<double>.filled(period.labels.length, 0.05);
+    return totals
+        .map((value) => (value / maxValue).clamp(0.05, 1.0).toDouble())
+        .toList(growable: false);
+  }
+
+  List<double> _totalsForDailyWindow(DateTime start, int days) {
+    return List.generate(days, (index) {
+      final date = start.add(Duration(days: index));
+      final key = moneyDateKey(date);
+      return savingsEntries
+          .where((entry) => entry.dateKey == key && entry.isConfirmed)
+          .fold(0.0, (sum, entry) => sum + entry.amount);
+    });
+  }
+
+  List<double> _dailyPartsForToday(DateTime now) {
+    final todayKey = moneyDateKey(now);
+    final buckets = List<double>.filled(4, 0);
+    for (final entry in savingsEntries) {
+      if (!entry.isConfirmed || entry.dateKey != todayKey) continue;
+      final hour = entry.createdAt.hour;
+      final index = hour < 12
+          ? 0
+          : hour < 17
+          ? 1
+          : hour < 21
+          ? 2
+          : 3;
+      buckets[index] += entry.amount;
+    }
+    return buckets;
+  }
+
+  double _confirmedBetween(DateTime start, DateTime end) {
+    final startOnly = DateTime(start.year, start.month, start.day);
+    final endOnly = DateTime(end.year, end.month, end.day);
+    return savingsEntries
+        .where((entry) {
+          if (!entry.isConfirmed) return false;
+          final entryDate = DateTime(
+            entry.createdAt.year,
+            entry.createdAt.month,
+            entry.createdAt.day,
+          );
+          return !entryDate.isBefore(startOnly) && !entryDate.isAfter(endOnly);
+        })
+        .fold(0.0, (sum, entry) => sum + entry.amount);
   }
 }
 

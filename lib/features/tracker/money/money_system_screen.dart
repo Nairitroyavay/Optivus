@@ -1,158 +1,216 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_screen_scaffold.dart';
+import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
 import 'package:optivus/features/tracker/money/money_system_widgets.dart';
+import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 
-class MoneySystemScreen extends StatefulWidget {
-  const MoneySystemScreen({super.key});
+class MoneySystemScreen extends ConsumerStatefulWidget {
+  final VoidCallback? onBack;
+
+  const MoneySystemScreen({super.key, this.onBack});
 
   @override
-  State<MoneySystemScreen> createState() => _MoneySystemScreenState();
+  ConsumerState<MoneySystemScreen> createState() => _MoneySystemScreenState();
 }
 
-class _MoneySystemScreenState extends State<MoneySystemScreen> {
-  // Mock state
-  String _todayStatus = 'Not saved yet';
-  double _confirmedSaved = 240.0;
-  final double _potentialSaved = 350.0;
-  int _streakDays = 7;
-  final double _currentLevel = 10.0;
-  final double _nextLevel = 25.0;
-
+class _MoneySystemScreenState extends ConsumerState<MoneySystemScreen> {
   int _selectedTabIndex = 0;
-  final List<String> _tabs = [
+
+  static const List<String> _tabs = [
     'Today',
     'History',
     'Bad Habit Savings',
     'Goals',
     'Insights',
-    'Settings'
+    'Settings',
   ];
-
-  void _markSaved() {
-    setState(() {
-      _todayStatus = 'Saved';
-      _confirmedSaved += 10.0;
-      _streakDays += 1;
-    });
-  }
-
-  void _markSkipped() {
-    setState(() {
-      _todayStatus = 'Skipped';
-      _streakDays = 0;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
+    final embedded = widget.onBack != null;
+    final body = _MoneySystemContent(
+      selectedTabIndex: _selectedTabIndex,
+      tabs: _tabs,
+      embedded: embedded,
+      onBack: widget.onBack ?? () => Navigator.of(context).pop(),
+      onInfo: () => showMoneyInfoSheet(context),
+      onTabSelected: (index) => setState(() => _selectedTabIndex = index),
+      tabContent: _buildTabContent(),
+    );
+
+    if (embedded) return body;
+
     return LiquidScreenScaffold(
       topColor: OptivusColors.trackerTop,
-      appBar: _buildAppBar(context),
-      child: SafeArea(
-        bottom: false,
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 40),
+      bottomColor: OptivusColors.trackerBottom,
+      child: SafeArea(bottom: false, child: body),
+    );
+  }
+
+  Widget _buildTabContent() {
+    return switch (_selectedTabIndex) {
+      0 => const TodayTabContent(),
+      1 => const HistoryTabContent(),
+      2 => const BadHabitTabContent(),
+      3 => const GoalsTabContent(),
+      4 => const InsightsTabContent(),
+      5 => const SettingsTabContent(),
+      _ => const SizedBox.shrink(),
+    };
+  }
+}
+
+class _MoneySystemContent extends StatelessWidget {
+  final int selectedTabIndex;
+  final List<String> tabs;
+  final bool embedded;
+  final VoidCallback onBack;
+  final VoidCallback onInfo;
+  final ValueChanged<int> onTabSelected;
+  final Widget tabContent;
+
+  const _MoneySystemContent({
+    required this.selectedTabIndex,
+    required this.tabs,
+    required this.embedded,
+    required this.onBack,
+    required this.onInfo,
+    required this.onTabSelected,
+    required this.tabContent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        embedded ? 16 : 20,
+        20,
+        bottomInset + (embedded ? 132 : 40),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _MoneyHeader(onBack: onBack, onInfo: onInfo),
+          const SizedBox(height: 22),
+          const MoneyHeroTargetCard(),
+          const SizedBox(height: 24),
+          const TodayFinanceProofCard(),
+          const SizedBox(height: 24),
+          const WeeklySavingStrip(),
+          const SizedBox(height: 24),
+          const MoneySourcesSummary(),
+          const SizedBox(height: 30),
+          _MoneyTabSelector(
+            tabs: tabs,
+            selectedIndex: selectedTabIndex,
+            onSelected: onTabSelected,
+          ),
+          const SizedBox(height: 22),
+          tabContent,
+        ],
+      ),
+    );
+  }
+}
+
+class _MoneyHeader extends StatelessWidget {
+  final VoidCallback onBack;
+  final VoidCallback onInfo;
+
+  const _MoneyHeader({required this.onBack, required this.onInfo});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        TrackerHeaderButton(
+          icon: Icons.arrow_back_ios_new_rounded,
+          onTap: onBack,
+        ),
+        const SizedBox(width: 14),
+        const Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              MoneyHeroTargetCard(
-                status: _todayStatus,
-                confirmedSaved: _confirmedSaved,
-                potentialSaved: _potentialSaved,
-                streakDays: _streakDays,
-                currentLevel: _currentLevel,
-                nextLevel: _nextLevel,
+              Text(
+                'Money System',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.ink,
+                  letterSpacing: 0,
+                ),
               ),
-              const SizedBox(height: 24),
-              const WeeklySavingStrip(),
-              const SizedBox(height: 24),
-              const MoneySourcesSummary(),
-              const SizedBox(height: 32),
-              _buildTabSelector(),
-              const SizedBox(height: 24),
-              _buildTabContent(),
+              SizedBox(height: 4),
+              Text(
+                'Real saving discipline. Optivus never holds your money.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: OptivusColors.sub,
+                  fontWeight: FontWeight.w700,
+                  height: 1.25,
+                ),
+              ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new, color: OptivusColors.ink, size: 20),
-        onPressed: () => context.pop(),
-      ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
-          Text(
-            'Optivus Money System',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.ink,
-            ),
-          ),
-          SizedBox(height: 2),
-          Text(
-            'Real saving discipline. Optivus never holds your money.',
-            style: TextStyle(
-              fontSize: 10,
-              color: OptivusColors.sub,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.info_outline, color: OptivusColors.sub),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Optivus tracks discipline, not money.')),
-            );
-          },
-        ),
+        const SizedBox(width: 12),
+        TrackerHeaderButton(icon: Icons.info_outline_rounded, onTap: onInfo),
       ],
     );
   }
+}
 
-  Widget _buildTabSelector() {
-    // A horizontal scrolling list of tabs as it's 6 tabs.
+class _MoneyTabSelector extends StatelessWidget {
+  final List<String> tabs;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  const _MoneyTabSelector({
+    required this.tabs,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
       child: Row(
-        children: List.generate(_tabs.length, (index) {
-          final isSelected = _selectedTabIndex == index;
+        children: List.generate(tabs.length, (index) {
+          final selected = selectedIndex == index;
           return GestureDetector(
-            onTap: () {
-              setState(() {
-                _selectedTabIndex = index;
-              });
-            },
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            onTap: () => onSelected(index),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              margin: EdgeInsets.only(right: index == tabs.length - 1 ? 0 : 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
               decoration: BoxDecoration(
-                color: isSelected ? OptivusColors.ink : Colors.transparent,
-                borderRadius: BorderRadius.circular(24),
+                color: selected
+                    ? OptivusColors.trackerAccent.withValues(alpha: 0.16)
+                    : OptivusColors.trackerCardTint.withValues(alpha: 0.68),
+                borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: isSelected ? OptivusColors.ink : OptivusColors.borderSoft,
+                  color: selected
+                      ? OptivusColors.trackerAccent
+                      : OptivusColors.borderSoft,
                 ),
               ),
               child: Text(
-                _tabs[index],
+                tabs[index],
                 style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : OptivusColors.ink,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: selected
+                      ? OptivusColors.trackerAccent
+                      : OptivusColors.ink,
                 ),
               ),
             ),
@@ -160,28 +218,5 @@ class _MoneySystemScreenState extends State<MoneySystemScreen> {
         }),
       ),
     );
-  }
-
-  Widget _buildTabContent() {
-    switch (_selectedTabIndex) {
-      case 0:
-        return TodayTabContent(
-          status: _todayStatus,
-          onSaved: _markSaved,
-          onSkipped: _markSkipped,
-        );
-      case 1:
-        return const HistoryTabContent();
-      case 2:
-        return const BadHabitTabContent();
-      case 3:
-        return const GoalsTabContent();
-      case 4:
-        return const InsightsTabContent();
-      case 5:
-        return const SettingsTabContent();
-      default:
-        return const SizedBox.shrink();
-    }
   }
 }

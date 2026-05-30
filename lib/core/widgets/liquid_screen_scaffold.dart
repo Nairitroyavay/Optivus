@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 class LiquidScreenScaffold extends StatelessWidget {
   final Widget child;
   final Color topColor;
+  final Color bottomColor;
   final Widget? floatingActionButton;
   final bool extendBodyBehindAppBar;
   final PreferredSizeWidget? appBar;
@@ -13,6 +14,7 @@ class LiquidScreenScaffold extends StatelessWidget {
     super.key,
     required this.child,
     required this.topColor,
+    this.bottomColor = Colors.white,
     this.floatingActionButton,
     this.extendBodyBehindAppBar = true,
     this.appBar,
@@ -25,7 +27,7 @@ class LiquidScreenScaffold extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [topColor, Colors.white, Colors.white],
+          colors: [topColor, bottomColor, bottomColor],
           stops: const [0.0, 0.7, 1.0],
         ),
       ),

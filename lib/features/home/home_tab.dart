@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 
 import 'package:optivus/app/app_navigation_controller.dart';
@@ -30,6 +31,34 @@ class HomeTab extends ConsumerWidget {
 
     // We get all home dashboard state from our new provider
     final dashboardState = ref.watch(homeDashboardProvider);
+    final trackerState = ref.watch(mockTrackerProvider);
+    final todayMoneySaved = _confirmedMoneySavedToday(trackerState);
+    final moneyGoal = trackerState.moneyGoal;
+    final checkIns = dashboardState.checkIns
+        .map((item) {
+          if (item.id != 'money_saved') return item;
+          final options = <String>{
+            '₹${moneyGoal.tinySaveAmount.toInt()}',
+            '₹${moneyGoal.dailyTarget.toInt()}',
+            'Custom',
+          }.toList();
+          return CheckInItem(
+            id: item.id,
+            title: item.title,
+            icon: item.icon,
+            options: options,
+            selectedOption: item.selectedOption,
+          );
+        })
+        .toList(growable: false);
+    final missionSummary = HomeMissionSummary(
+      percentage: dashboardState.missionSummary.percentage,
+      actionsDone: dashboardState.missionSummary.actionsDone,
+      actionsTotal: dashboardState.missionSummary.actionsTotal,
+      focusMinutes: dashboardState.missionSummary.focusMinutes,
+      moneySaved: todayMoneySaved.toInt(),
+      badHabitsAvoided: dashboardState.missionSummary.badHabitsAvoided,
+    );
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -51,20 +80,25 @@ class HomeTab extends ConsumerWidget {
                   children: [
                     TodayIdentityCard(
                       identity: dashboardState.identityFocus,
-                      onTap: () => ref.read(appNavigationProvider.notifier).goToGoals(),
+                      onTap: () =>
+                          ref.read(appNavigationProvider.notifier).goToGoals(),
                     ),
                     const SizedBox(height: 16),
-                    NowNextActionCard(actionState: dashboardState.nowNextAction),
+                    NowNextActionCard(
+                      actionState: dashboardState.nowNextAction,
+                    ),
                     const SizedBox(height: 16),
-                    TodayMissionCard(summary: dashboardState.missionSummary),
+                    TodayMissionCard(summary: missionSummary),
                     const SizedBox(height: 16),
                     LifeOsSnapshot(pillars: dashboardState.lifeOsSnapshot),
                     const SizedBox(height: 16),
-                    TodayCheckInCard(checkIns: dashboardState.checkIns),
+                    TodayCheckInCard(checkIns: checkIns),
                     const SizedBox(height: 16),
                     AutoInsightsCard(insights: dashboardState.autoInsights),
                     const SizedBox(height: 24),
-                    TrackerPreviewSection(previews: dashboardState.trackerPreviews),
+                    TrackerPreviewSection(
+                      previews: dashboardState.trackerPreviews,
+                    ),
                     const SizedBox(height: 24),
                     CoachTipCard(tip: dashboardState.coachTip),
                     const SizedBox(height: 16),
@@ -80,4 +114,13 @@ class HomeTab extends ConsumerWidget {
       ),
     );
   }
+}
+
+double _confirmedMoneySavedToday(MockTrackerState state) {
+  final now = DateTime.now();
+  final todayKey =
+      '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  return state.savingsEntries
+      .where((entry) => entry.dateKey == todayKey && entry.isConfirmed)
+      .fold(0.0, (sum, entry) => sum + entry.amount);
 }

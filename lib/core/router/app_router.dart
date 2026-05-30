@@ -10,7 +10,6 @@ import '../../views/screens/app_shell.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import '../../state/auth_state.dart';
 import '../../state/app_state.dart';
-import '../../features/tracker/money/money_system_screen.dart';
 import '../../features/tracker/screen_time/screen_time_screen.dart';
 
 class RouterNotifier extends ChangeNotifier {
@@ -90,7 +89,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/home', redirect: (context, state) => '/app'),
       GoRoute(
         path: '/tracker/money',
-        builder: (context, state) => const MoneySystemScreen(),
+        redirect: (context, state) => '/app?tab=2',
+      ),
+      GoRoute(
+        path: '/tracker/fitness',
+        redirect: (context, state) => '/app?tab=2',
       ),
       GoRoute(
         path: '/tracker/screen-time',
@@ -104,4 +107,3 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-

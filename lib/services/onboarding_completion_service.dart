@@ -15,10 +15,10 @@ class OnboardingCompletionService {
     final baseItems = draft.baseTimeline.blocks
         .where((block) => !block.needsTimeConfirmation)
         .toList();
-    
+
     // We rebuild routine items per day to ensure no hard-block overlaps
     final routineItems = _scheduleRoutineItems(draft, baseItems, preview.items);
-    
+
     final badHabitCheckIns = _badHabitCheckIns(draft, routineItems);
     final goals = _goalModels(draft, routineItems);
     final totalDailySpend = draft.badHabits.fold<double>(
@@ -29,6 +29,8 @@ class OnboardingCompletionService {
         ? MoneyGoal(
             id: 'money-onboarding-${draft.uid}',
             dailyTarget: totalDailySpend.clamp(10, 100000).toDouble(),
+            currentLevelAmount: totalDailySpend.clamp(10, 100000).toDouble(),
+            nextLevelAmount: (totalDailySpend * 2).clamp(25, 100000).toDouble(),
           )
         : null;
 
@@ -57,31 +59,38 @@ class OnboardingCompletionService {
     List<FinalTimelineItem> previewItems,
   ) {
     // Generate base routines
-    final scheduled = baseBlocks.map((b) => RoutineItem(
-      id: b.id,
-      title: b.title,
-      startMinute: b.startMinute,
-      endMinute: b.endMinute,
-      crossesMidnight: b.crossesMidnight,
-      endsNextDay: b.endsNextDay,
-      repeatDays: b.repeatDays,
-      blockType: b.blockType == TimelineBlockDraft.hardBlockKey
-          ? RoutineBlockType.hardBlock
-          : RoutineBlockType.softBlock,
-      location: b.location,
-      mealCategory: b.mealCategory,
-      dishes: b.dishes,
-      caloriesEstimate: b.calories,
-      proteinEstimate: b.protein,
-      skincareProducts: b.skincareProducts,
-    )).toList();
+    final scheduled = baseBlocks
+        .map(
+          (b) => RoutineItem(
+            id: b.id,
+            title: b.title,
+            startMinute: b.startMinute,
+            endMinute: b.endMinute,
+            crossesMidnight: b.crossesMidnight,
+            endsNextDay: b.endsNextDay,
+            repeatDays: b.repeatDays,
+            blockType: b.blockType == TimelineBlockDraft.hardBlockKey
+                ? RoutineBlockType.hardBlock
+                : RoutineBlockType.softBlock,
+            location: b.location,
+            mealCategory: b.mealCategory,
+            dishes: b.dishes,
+            caloriesEstimate: b.calories,
+            proteinEstimate: b.protein,
+            skincareProducts: b.skincareProducts,
+          ),
+        )
+        .toList();
 
     // Group the preview items by priority / flexible status
     // Hard blocks are already added. Now we place flexible tasks carefully.
-    final flexibleItems = previewItems.where((i) => 
-      i.blockType != TimelineBlockDraft.hardBlockKey && 
-      !baseBlocks.any((b) => b.id == i.id)
-    ).toList();
+    final flexibleItems = previewItems
+        .where(
+          (i) =>
+              i.blockType != TimelineBlockDraft.hardBlockKey &&
+              !baseBlocks.any((b) => b.id == i.id),
+        )
+        .toList();
 
     for (final flex in flexibleItems) {
       final blockType = switch (flex.blockType) {
@@ -100,7 +109,7 @@ class OnboardingCompletionService {
         final duration = flex.durationMinutes;
         var start = currentStartMinute;
         var moved = true;
-        
+
         // Scan for conflicts on this specific day
         while (moved && start + duration <= 24 * 60) {
           moved = false;
@@ -108,10 +117,13 @@ class OnboardingCompletionService {
             if (!existing.repeatDays.contains(day)) continue;
             // Basic overlap check
             final eStart = existing.startMinute;
-            final eEnd = existing.crossesMidnight || existing.endsNextDay || existing.endMinute <= eStart
+            final eEnd =
+                existing.crossesMidnight ||
+                    existing.endsNextDay ||
+                    existing.endMinute <= eStart
                 ? (24 * 60) + existing.endMinute
                 : existing.endMinute;
-            
+
             final overlaps = start < eEnd && (start + duration) > eStart;
             if (overlaps) {
               start = eEnd + 10; // Push 10 minutes past the existing block
@@ -119,7 +131,7 @@ class OnboardingCompletionService {
             }
           }
         }
-        
+
         if (start + duration <= 24 * 60) {
           currentStartMinute = start;
           successfulDays.add(day);
@@ -128,26 +140,30 @@ class OnboardingCompletionService {
       }
 
       if (placedAnyDay) {
-        scheduled.add(RoutineItem(
-          id: flex.id,
-          title: flex.title,
-          startMinute: currentStartMinute,
-          endMinute: currentStartMinute + flex.durationMinutes,
-          repeatDays: successfulDays, // Only repeat on days we could fit it
-          blockType: blockType,
-          notes: flex.source,
-        ));
+        scheduled.add(
+          RoutineItem(
+            id: flex.id,
+            title: flex.title,
+            startMinute: currentStartMinute,
+            endMinute: currentStartMinute + flex.durationMinutes,
+            repeatDays: successfulDays, // Only repeat on days we could fit it
+            blockType: blockType,
+            notes: flex.source,
+          ),
+        );
       } else {
         // Fallback: Add as a tiny unscheduled suggestion (0 duration)
-        scheduled.add(RoutineItem(
-          id: flex.id,
-          title: '[Tiny] ${flex.title}',
-          startMinute: 0,
-          endMinute: 0,
-          repeatDays: flex.repeatDays,
-          blockType: RoutineBlockType.flexibleTask,
-          notes: 'Unscheduled fallback due to schedule overflow',
-        ));
+        scheduled.add(
+          RoutineItem(
+            id: flex.id,
+            title: '[Tiny] ${flex.title}',
+            startMinute: 0,
+            endMinute: 0,
+            repeatDays: flex.repeatDays,
+            blockType: RoutineBlockType.flexibleTask,
+            notes: 'Unscheduled fallback due to schedule overflow',
+          ),
+        );
       }
     }
 

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
+import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
+import 'package:optivus/models/money_models.dart';
+import 'package:optivus/state/app_state.dart';
 import 'home_glass_widgets.dart';
 
 class TodayCheckInCard extends ConsumerWidget {
@@ -65,7 +68,9 @@ class TodayCheckInCard extends ConsumerWidget {
             children: item.options.map((option) {
               final isSelected = item.selectedOption == option;
               final useGold = item.id == 'money_saved';
-              final activeColor = useGold ? OptivusColors.brandAccent : OptivusColors.homeAccent;
+              final activeColor = useGold
+                  ? OptivusColors.blockMoney
+                  : OptivusColors.homeAccent;
 
               return HomeActionPill(
                 label: option,
@@ -73,6 +78,33 @@ class TodayCheckInCard extends ConsumerWidget {
                 compact: true,
                 accent: activeColor,
                 onTap: () {
+                  if (item.id == 'money_saved') {
+                    if (option == 'Custom') {
+                      showIAlreadySavedFlow(
+                        context,
+                        ref,
+                        source: MoneyEntrySource.manual,
+                        onSaved: () {
+                          ref
+                              .read(homeDashboardProvider.notifier)
+                              .completeCheckIn(item.id, option);
+                        },
+                      );
+                      return;
+                    }
+                    final amount = double.tryParse(option.replaceAll('₹', ''));
+                    if (amount != null && amount > 0) {
+                      final goal = ref.read(mockTrackerProvider).moneyGoal;
+                      ref
+                          .read(mockTrackerProvider.notifier)
+                          .saveMoneyToday(
+                            amount: amount,
+                            method: goal.defaultMethod,
+                            source: MoneyEntrySource.manual,
+                            description: 'Home money saved check-in',
+                          );
+                    }
+                  }
                   ref
                       .read(homeDashboardProvider.notifier)
                       .completeCheckIn(item.id, option);

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
+import 'package:optivus/features/tracker/money/money_system_widgets.dart';
+import 'package:optivus/features/tracker/tracker_tab.dart';
+import 'package:optivus/state/app_state.dart';
 import 'home_glass_widgets.dart';
 import 'sheets/demo_sheet.dart';
 
@@ -42,7 +45,21 @@ class TrackerPreviewSection extends ConsumerWidget {
     );
   }
 
-  Widget _buildPreviewCard(BuildContext context, WidgetRef ref, TrackerPreview preview) {
+  Widget _buildPreviewCard(
+    BuildContext context,
+    WidgetRef ref,
+    TrackerPreview preview,
+  ) {
+    final trackerState = ref.watch(mockTrackerProvider);
+    final todayKey = moneyDateKey(DateTime.now());
+    final todaySaved = trackerState.savingsEntries
+        .where((entry) => entry.dateKey == todayKey && entry.isConfirmed)
+        .fold(0.0, (sum, entry) => sum + entry.amount);
+    final effectiveSubtitle = preview.id == 'money'
+        ? '${formatMoney(todaySaved)} saved today'
+        : preview.subtitle;
+    final effectiveButton = preview.id == 'money' ? 'Open' : preview.buttonText;
+
     return SizedBox(
       width: 160,
       child: HomeGlassCard(
@@ -50,53 +67,69 @@ class TrackerPreviewSection extends ConsumerWidget {
         radius: 20,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            preview.title,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.textPrimary,
+          children: [
+            Text(
+              preview.title,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            preview.subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: OptivusColors.textSecondary,
+            const SizedBox(height: 4),
+            Text(
+              effectiveSubtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.textSecondary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const Spacer(),
-          SizedBox(
-            width: double.infinity,
-            child: HomeActionPill(
-              label: preview.buttonText,
-              compact: true,
-              selected: true,
-              accent: preview.id == 'money' ? OptivusColors.brandAccent : OptivusColors.homeAccent,
-              onTap: () {
-                if (preview.id == 'money') {
-                  DemoSheet.show(context, title: "Saved", message: "₹50 added to your Money System.");
-                } else if (preview.id == 'hydration') {
-                  DemoSheet.show(context, title: "Hydration", message: "+1 glass of water logged.");
-                } else if (preview.id == 'smoking') {
-                  DemoSheet.show(context, title: "Smoking", message: "Cigarette logged in tracker.");
-                } else if (preview.id == 'focus') {
-                  DemoSheet.show(context, title: "Deep Focus", message: "Deep focus session started.");
-                } else {
-                  ref.read(appNavigationProvider.notifier).goToTracker();
-                }
-              },
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              child: HomeActionPill(
+                label: effectiveButton,
+                compact: true,
+                selected: true,
+                accent: preview.id == 'money'
+                    ? OptivusColors.blockMoney
+                    : OptivusColors.homeAccent,
+                onTap: () {
+                  if (preview.id == 'money') {
+                    ref.read(trackerDetailViewRequestProvider.notifier).state =
+                        TrackerDetailView.money;
+                    ref.read(appNavigationProvider.notifier).goToTracker();
+                  } else if (preview.id == 'hydration') {
+                    DemoSheet.show(
+                      context,
+                      title: "Hydration",
+                      message: "+1 glass of water logged.",
+                    );
+                  } else if (preview.id == 'smoking') {
+                    DemoSheet.show(
+                      context,
+                      title: "Smoking",
+                      message: "Cigarette logged in tracker.",
+                    );
+                  } else if (preview.id == 'focus') {
+                    DemoSheet.show(
+                      context,
+                      title: "Deep Focus",
+                      message: "Deep focus session started.",
+                    );
+                  } else {
+                    ref.read(appNavigationProvider.notifier).goToTracker();
+                  }
+                },
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }

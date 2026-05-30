@@ -7,6 +7,10 @@ import 'package:optivus/models/mind_note.dart';
 import 'package:optivus/models/money_models.dart';
 
 class MockSeedData {
+  static String _dateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
   static UserProfile get defaultUserProfile => UserProfile(
     uid: 'mock-user-123',
     email: 'roy@optivus.app',
@@ -179,11 +183,7 @@ class MockSeedData {
       category: RoutineCategory.habit,
       source: RoutineSource.manual,
       priority: RoutinePriority.goodToDo,
-      subtasks: [
-        'Revise stack',
-        'Solve 1 problem',
-        'Review solution',
-      ],
+      subtasks: ['Revise stack', 'Solve 1 problem', 'Review solution'],
       subtasksCompleted: [false, false, false],
       notes: 'DSA practice session.',
     ),
@@ -225,11 +225,13 @@ class MockSeedData {
   static List<FitnessActivity> get defaultFitnessActivities => [
     FitnessActivity(
       id: 'fit-1',
-      type: 'Run',
-      distanceKm: 5.2,
-      durationSeconds: 1680, // 28 minutes
-      paceMinutesPerKm: 5.38,
-      caloriesBurned: 410,
+      activityType: FitnessActivityType.walk,
+      title: 'Morning Walk',
+      distanceKm: 2.41,
+      durationSeconds: 1692,
+      paceMinutesPerKm: 11.7,
+      caloriesBurned: 142,
+      mapStyleId: 'mapbox://styles/nairitroy/cmozyqm88000c01r14o8h7bn0',
       route: [
         RoutePoint(
           latitude: 12.9716,
@@ -260,11 +262,22 @@ class MockSeedData {
     ),
     FitnessActivity(
       id: 'fit-2',
-      type: 'Walk',
-      distanceKm: 2.5,
-      durationSeconds: 1500, // 25 minutes
-      paceMinutesPerKm: 10.0,
-      caloriesBurned: 150,
+      activityType: FitnessActivityType.run,
+      title: 'Evening Run',
+      distanceKm: 3.24,
+      durationSeconds: 1452,
+      paceMinutesPerKm: 7.47,
+      caloriesBurned: 258,
+      mapStyleId: 'mapbox://styles/nairitroy/cmozyqm88000c01r14o8h7bn0',
+    ),
+    FitnessActivity(
+      id: 'fit-3',
+      activityType: FitnessActivityType.cycling,
+      title: 'Campus Cycling',
+      distanceKm: 2.75,
+      durationSeconds: 1560,
+      caloriesBurned: 92,
+      avgSpeed: 6.35,
     ),
   ];
 
@@ -322,49 +335,77 @@ class MockSeedData {
   static MoneyGoal get defaultMoneyGoal => MoneyGoal(
     id: 'money-goal-1',
     dailyTarget: 10.0,
-    totalConfirmedSaved: 80.0,
-    totalPotentialSaved: 40.0,
-    streakDays: 8,
+    tinySaveAmount: 5.0,
+    totalConfirmedSaved: 50.0,
+    totalPotentialSaved: 30.0,
+    streakDays: 4,
+    bestStreakDays: 8,
     streakLevel: 2,
+    successfulDaysAtCurrentLevel: 4,
+    currentLevelAmount: 10.0,
+    nextLevelAmount: 25.0,
   );
 
-  static List<SavingEntry> get defaultSavingEntries => [
-    SavingEntry(
-      id: 's-1',
-      amount: 10.0,
-      timestamp: 'May 18, 2026',
-      description: 'Avoided vending machine soda',
-      isConfirmed: true,
-    ),
-    SavingEntry(
-      id: 's-2',
-      amount: 10.0,
-      timestamp: 'May 19, 2026',
-      description: 'Brewed coffee at home',
-      isConfirmed: true,
-    ),
-    SavingEntry(
-      id: 's-3',
-      amount: 20.0,
-      timestamp: 'May 20, 2026',
-      description: 'Skipped premium food delivery upgrade',
-      isConfirmed: true,
-    ),
-    SavingEntry(
-      id: 's-4',
-      amount: 10.0,
-      timestamp: 'May 21, 2026',
-      description: 'Walked instead of booking auto rickshaw',
-      isConfirmed: true,
-    ),
-    SavingEntry(
-      id: 's-5',
-      amount: 30.0,
-      timestamp: 'May 22, 2026',
-      description: 'Intercepted Impulse Buying Trigger',
-      isConfirmed: false,
-    ),
-  ];
+  static List<SavingEntry> get defaultSavingEntries {
+    final now = DateTime.now();
+    final fourDaysAgo = now.subtract(const Duration(days: 4));
+    final threeDaysAgo = now.subtract(const Duration(days: 3));
+    final twoDaysAgo = now.subtract(const Duration(days: 2));
+    final yesterday = now.subtract(const Duration(days: 1));
+
+    return [
+      SavingEntry(
+        id: 's-1',
+        amount: 10.0,
+        createdAt: fourDaysAgo,
+        dateKey: _dateKey(fourDaysAgo),
+        description: 'Avoided vending machine soda',
+        status: MoneyEntryStatus.confirmed,
+        source: MoneyEntrySource.badHabitConverted,
+        method: MoneySaveMethod.upiMock,
+      ),
+      SavingEntry(
+        id: 's-2',
+        amount: 10.0,
+        createdAt: threeDaysAgo,
+        dateKey: _dateKey(threeDaysAgo),
+        description: 'Brewed coffee at home',
+        status: MoneyEntryStatus.confirmed,
+        source: MoneyEntrySource.manual,
+        method: MoneySaveMethod.cash,
+      ),
+      SavingEntry(
+        id: 's-3',
+        amount: 20.0,
+        createdAt: twoDaysAgo,
+        dateKey: _dateKey(twoDaysAgo),
+        description: 'Skipped premium food delivery upgrade',
+        status: MoneyEntryStatus.confirmed,
+        source: MoneyEntrySource.manual,
+        method: MoneySaveMethod.bankTransfer,
+      ),
+      SavingEntry(
+        id: 's-4',
+        amount: 10.0,
+        createdAt: yesterday,
+        dateKey: _dateKey(yesterday),
+        description: 'Walked instead of booking auto rickshaw',
+        status: MoneyEntryStatus.confirmed,
+        source: MoneyEntrySource.upiMock,
+        method: MoneySaveMethod.upiMock,
+      ),
+      SavingEntry(
+        id: 's-5',
+        amount: 30.0,
+        createdAt: now,
+        dateKey: _dateKey(now),
+        description: 'Intercepted impulse buying trigger',
+        status: MoneyEntryStatus.potential,
+        source: MoneyEntrySource.badHabitAvoided,
+        method: MoneySaveMethod.none,
+      ),
+    ];
+  }
 
   static List<GoalModel> get defaultGoals => [
     GoalModel(

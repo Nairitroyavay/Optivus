@@ -1,9 +1,12 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/state/app_state.dart';
+
 import 'meditation_mock_data.dart';
 import 'meditation_tracker_widgets.dart';
 
@@ -19,19 +22,17 @@ class MeditationTrackerScreen extends ConsumerStatefulWidget {
 
 class _MeditationTrackerScreenState
     extends ConsumerState<MeditationTrackerScreen> {
-  // ── State ─────────────────────────────────────────────────────────────────
   final String _selectedTypeId = 'calm';
   int _selectedDuration = 5;
   String _selectedSoundId = 'silent';
 
-  // ── Timer State ───────────────────────────────────────────────────────────
-  // Status: ready, running, paused, completed
-  String _status = 'ready';
+  MeditationStatus _status = MeditationStatus.ready;
   int _remainingSeconds = 5 * 60;
+  int _completedDurationMinutes = 0;
+  bool _hasLoggedCompletion = false;
   Timer? _timer;
 
-  // ── Orb State ─────────────────────────────────────────────────────────────
-  String _currentPhase = 'Inhale'; // "ready", "Inhale", "Hold", "Exhale"
+  String _currentPhase = 'ready';
   int _phaseSeconds = 0;
 
   @override
@@ -47,29 +48,38 @@ class _MeditationTrackerScreenState
     super.dispose();
   }
 
-  // ── Duration ──────────────────────────────────────────────────────────────
   void _updateDuration(int duration) {
-    if (_status == 'running' || _status == 'paused') return;
+    if (_status == MeditationStatus.running ||
+        _status == MeditationStatus.paused) {
+      return;
+    }
     setState(() {
       _selectedDuration = duration;
       _remainingSeconds = duration * 60;
+      _completedDurationMinutes = 0;
+      _hasLoggedCompletion = false;
+      _currentPhase = 'ready';
+      _phaseSeconds = 0;
+      _status = MeditationStatus.ready;
     });
   }
 
-  // ── Sound ─────────────────────────────────────────────────────────────────
   void _updateSound(String soundId) {
     setState(() {
       _selectedSoundId = soundId;
     });
   }
 
-  // ── Session Controls ──────────────────────────────────────────────────────
   void _startSession() {
+    _timer?.cancel();
     setState(() {
-      _status = 'running';
+      _status = MeditationStatus.running;
       _currentPhase = 'Inhale';
       _phaseSeconds = 0;
-      if (_remainingSeconds <= 0) {
+      _completedDurationMinutes = 0;
+      _hasLoggedCompletion = false;
+      if (_remainingSeconds <= 0 ||
+          _remainingSeconds > _selectedDuration * 60) {
         _remainingSeconds = _selectedDuration * 60;
       }
     });
@@ -79,13 +89,14 @@ class _MeditationTrackerScreenState
   void _pauseSession() {
     _timer?.cancel();
     setState(() {
-      _status = 'paused';
+      _status = MeditationStatus.paused;
     });
   }
 
   void _resumeSession() {
+    _timer?.cancel();
     setState(() {
-      _status = 'running';
+      _status = MeditationStatus.running;
     });
     _startTimer();
   }
@@ -93,44 +104,70 @@ class _MeditationTrackerScreenState
   void _cancelSession() {
     _timer?.cancel();
     setState(() {
-      _status = 'ready';
+      _status = MeditationStatus.ready;
       _remainingSeconds = _selectedDuration * 60;
       _currentPhase = 'ready';
       _phaseSeconds = 0;
+      _completedDurationMinutes = 0;
+      _hasLoggedCompletion = false;
     });
   }
 
   void _completeSession() {
     _timer?.cancel();
-    setState(() {
-      _status = 'completed';
-      _currentPhase = 'ready';
-    });
 
     final selectedType = mockMeditationSessionTypes.firstWhere(
       (t) => t.id == _selectedTypeId,
     );
 
-    // Log session to provider
-    ref
-        .read(mockTrackerProvider.notifier)
-        .logMeditationSession(
-          durationMinutes: _selectedDuration,
-          type: selectedType.title,
-        );
+    if (!_hasLoggedCompletion) {
+      ref
+          .read(mockTrackerProvider.notifier)
+          .logMeditationSession(
+            durationMinutes: _selectedDuration,
+            type: selectedType.title,
+          );
+    }
+
+    setState(() {
+      _status = MeditationStatus.completed;
+      _remainingSeconds = 0;
+      _currentPhase = 'ready';
+      _phaseSeconds = 0;
+      _completedDurationMinutes = _selectedDuration;
+      _hasLoggedCompletion = true;
+    });
+  }
+
+  void _startAgain() {
+    _timer?.cancel();
+    setState(() {
+      _status = MeditationStatus.ready;
+      _remainingSeconds = _selectedDuration * 60;
+      _currentPhase = 'ready';
+      _phaseSeconds = 0;
+      _completedDurationMinutes = 0;
+      _hasLoggedCompletion = false;
+    });
   }
 
   void _startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_remainingSeconds > 0) {
-        setState(() {
-          _remainingSeconds--;
-          _updateBreathingPhase();
-        });
-      } else {
-        _completeSession();
+      if (!mounted) {
+        timer.cancel();
+        return;
       }
+
+      if (_remainingSeconds <= 1) {
+        _completeSession();
+        return;
+      }
+
+      setState(() {
+        _remainingSeconds--;
+        _updateBreathingPhase();
+      });
     });
   }
 
@@ -140,7 +177,11 @@ class _MeditationTrackerScreenState
     );
     _phaseSeconds++;
 
-    if (_currentPhase == 'Inhale' && _phaseSeconds >= type.inhaleSeconds) {
+    if (_currentPhase == 'ready') {
+      _currentPhase = 'Inhale';
+      _phaseSeconds = 0;
+    } else if (_currentPhase == 'Inhale' &&
+        _phaseSeconds >= type.inhaleSeconds) {
       _currentPhase = type.holdSeconds > 0 ? 'Hold' : 'Exhale';
       _phaseSeconds = 0;
     } else if (_currentPhase == 'Hold' && _phaseSeconds >= type.holdSeconds) {
@@ -153,7 +194,6 @@ class _MeditationTrackerScreenState
     }
   }
 
-  // ── Back navigation ───────────────────────────────────────────────────────
   void _handleBack() {
     _timer?.cancel();
     if (widget.onBack != null) {
@@ -163,7 +203,6 @@ class _MeditationTrackerScreenState
     }
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -174,100 +213,125 @@ class _MeditationTrackerScreenState
     return LayoutBuilder(
       builder: (context, constraints) {
         final h = constraints.maxHeight;
-        final isSmall = h < 720;
+        final w = constraints.maxWidth;
+        final isSmall = h < 720 || w < 380;
         final tabReserve = 112.0 + media.padding.bottom;
-
-        final orbSize = isSmall ? 165.0 : 200.0;
-        final timerFontSize = isSmall ? 42.0 : 50.0;
-        final orbTimerGap = isSmall ? 12.0 : 18.0;
+        final targetHeight = isSmall ? 68.0 : 76.0;
+        final targetBottom = tabReserve;
+        final controlsBottom =
+            targetBottom + targetHeight + (isSmall ? 12.0 : 16.0);
+        final chipHeight = isSmall ? 34.0 : 38.0;
+        final buttonHeight = isSmall ? 44.0 : 48.0;
+        final controlsGap = isSmall ? 10.0 : 14.0;
+        final completedHeight = _status == MeditationStatus.completed
+            ? (isSmall ? 92.0 : 100.0)
+            : buttonHeight;
+        final controlsHeight = chipHeight + controlsGap + completedHeight;
+        final centerTop = 62.0;
+        final centerBottom =
+            controlsBottom + controlsHeight + (isSmall ? 8.0 : 14.0);
+        final centerHeight = math.max(120.0, h - centerTop - centerBottom);
+        final timerFontSize = centerHeight < 260
+            ? 40.0
+            : (isSmall ? 44.0 : 52.0);
+        final baseOrbSize = isSmall ? 162.0 : 202.0;
+        final orbHeightBudget = centerHeight - timerFontSize - 76.0;
+        final minOrbSize = h < 640 ? 124.0 : (isSmall ? 150.0 : 185.0);
+        final orbSize = orbHeightBudget
+            .clamp(minOrbSize, baseOrbSize)
+            .toDouble();
+        final orbTimerGap = isSmall ? 8.0 : 12.0;
+        final filterWidth = w < 360
+            ? 150.0
+            : math.min(175.0, math.max(150.0, w * 0.42));
 
         return Stack(
           children: [
-            // ── Header Row ───────────────────────────────────────────────
             Positioned(
               top: 12,
               left: 20,
               right: 20,
               height: 44,
-              child: _buildHeader(selectedType),
+              child: _buildHeader(filterWidth),
             ),
 
-            // ── Center: Orb + Timer + Phase ──────────────────────────────
             Positioned(
-              top: 70,
+              top: centerTop,
               left: 0,
               right: 0,
-              bottom: tabReserve + 220,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Center(
-                    child: AiLiquidMeditationOrb(
-                      isRunning: _status == 'running',
-                      currentPhase: _currentPhase,
-                      accentColor: selectedType.accentToken,
-                      inhaleSeconds: selectedType.inhaleSeconds,
-                      holdSeconds: selectedType.holdSeconds,
-                      exhaleSeconds: selectedType.exhaleSeconds,
-                      size: orbSize,
-                    ),
+              bottom: centerBottom,
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AiLiquidMeditationOrb(
+                        isRunning: _status == MeditationStatus.running,
+                        currentPhase: _currentPhase,
+                        accentColor: selectedType.accentToken,
+                        inhaleSeconds: selectedType.inhaleSeconds,
+                        holdSeconds: selectedType.holdSeconds,
+                        exhaleSeconds: selectedType.exhaleSeconds,
+                        size: orbSize,
+                      ),
+                      SizedBox(height: orbTimerGap),
+                      TimerDisplay(
+                        remainingSeconds: _remainingSeconds,
+                        status: _status,
+                        currentPhase: _currentPhase,
+                        sessionTypeName: selectedType.title,
+                        fontSize: timerFontSize,
+                      ),
+                    ],
                   ),
-                  SizedBox(height: orbTimerGap),
-                  TimerDisplay(
-                    remainingSeconds: _remainingSeconds,
-                    status: _status,
-                    currentPhase: _currentPhase,
-                    sessionTypeName: selectedType.title,
-                    fontSize: timerFontSize,
-                  ),
-                ],
+                ),
               ),
             ),
 
-            // ── Controls Area ───────────────────────────────────────────
             Positioned(
               left: 20,
               right: 20,
-              bottom: tabReserve + 92,
+              bottom: controlsBottom,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Duration Selector (always visible, disabled during session)
                   MeditationDurationSelector(
                     selectedDuration: _selectedDuration,
                     onSelected: _updateDuration,
-                    enabled: _status == 'ready' || _status == 'completed',
+                    enabled:
+                        _status == MeditationStatus.ready ||
+                        _status == MeditationStatus.completed,
+                    chipHeight: chipHeight,
                   ),
-                  const SizedBox(height: 16),
-
-                  // Control Buttons
+                  SizedBox(height: controlsGap),
                   MeditationControlBar(
                     status: _status,
+                    buttonHeight: buttonHeight,
+                    completedDurationMinutes: _completedDurationMinutes,
                     onStart: _startSession,
                     onPause: _pauseSession,
                     onResume: _resumeSession,
                     onComplete: _completeSession,
                     onCancel: _cancelSession,
                     onDone: () {
-                      _cancelSession();
                       _handleBack();
                     },
-                    onStartAnother: _cancelSession,
+                    onStartAgain: _startAgain,
                   ),
                 ],
               ),
             ),
 
-            // ── Bottom Target Card ───────────────────────────────────────
             Positioned(
               left: 20,
               right: 20,
-              bottom: tabReserve,
-              height: 76,
+              bottom: targetBottom,
+              height: targetHeight,
               child: MeditationTargetCard(
                 targetMinutes: 5,
-                completedMinutes: _status == 'completed'
-                    ? _selectedDuration
+                completedMinutes: _status == MeditationStatus.completed
+                    ? _completedDurationMinutes
                     : 0,
                 streakDays: 5,
               ),
@@ -278,31 +342,40 @@ class _MeditationTrackerScreenState
     );
   }
 
-  Widget _buildHeader(MeditationSessionTypeUiModel selectedType) {
+  Widget _buildHeader(double filterWidth) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            TrackerHeaderButton(
-              icon: Icons.arrow_back_ios_new_rounded,
-              onTap: _handleBack,
-            ),
-            const SizedBox(width: 16),
-            const Text(
-              'Meditation',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.ink,
+        Expanded(
+          child: Row(
+            children: [
+              TrackerHeaderButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: _handleBack,
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              const Flexible(
+                child: Text(
+                  'Meditation',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.ink,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 10),
         MeditationMusicFilter(
           sounds: mockMeditationSounds,
           selectedSoundId: _selectedSoundId,
           onSelected: _updateSound,
+          width: filterWidth,
         ),
       ],
     );

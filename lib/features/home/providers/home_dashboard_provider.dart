@@ -22,27 +22,71 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         actionsDone: 4,
         actionsTotal: 6,
         focusMinutes: 120,
-        moneySaved: 150,
+        moneySaved: 0,
         badHabitsAvoided: 2,
       ),
       lifeOsSnapshot: [
         LifeOsPillarProgress(pillar: LifePillar.body, current: 1, target: 3),
         LifeOsPillarProgress(pillar: LifePillar.mind, current: 2, target: 2),
-        LifeOsPillarProgress(pillar: LifePillar.workStudy, current: 1, target: 2),
+        LifeOsPillarProgress(
+          pillar: LifePillar.workStudy,
+          current: 1,
+          target: 2,
+        ),
         LifeOsPillarProgress(pillar: LifePillar.skill, current: 0, target: 1),
         LifeOsPillarProgress(pillar: LifePillar.finance, current: 1, target: 1),
         LifeOsPillarProgress(pillar: LifePillar.focus, current: 1, target: 2),
         LifeOsPillarProgress(pillar: LifePillar.growth, current: 0, target: 1),
       ],
       checkIns: [
-        CheckInItem(id: 'water', title: 'Water', icon: '💧', options: ['+250ml', 'Done']),
-        CheckInItem(id: 'sleep', title: 'Sleep', icon: '😴', options: ['Good', 'Okay', 'Poor']),
-        CheckInItem(id: 'stress', title: 'Stress', icon: '😫', options: ['Low', 'Medium', 'High']),
-        CheckInItem(id: 'mood', title: 'Mood', icon: '😊', options: ['Good', 'Okay', 'Low']),
-        CheckInItem(id: 'cigarettes', title: 'Cigarettes', icon: '🚬', options: ['Avoided', 'Craving', 'Relapsed']),
-        CheckInItem(id: 'alcohol', title: 'Alcohol', icon: '🍷', options: ['Avoided', 'Craving', 'Relapsed']),
-        CheckInItem(id: 'junk_food', title: 'Junk Food', icon: '🍔', options: ['Avoided', 'Craving', 'Relapsed']),
-        CheckInItem(id: 'money_saved', title: 'Money Saved', icon: '💰', options: ['₹10', '₹20', 'Custom']),
+        CheckInItem(
+          id: 'water',
+          title: 'Water',
+          icon: '💧',
+          options: ['+250ml', 'Done'],
+        ),
+        CheckInItem(
+          id: 'sleep',
+          title: 'Sleep',
+          icon: '😴',
+          options: ['Good', 'Okay', 'Poor'],
+        ),
+        CheckInItem(
+          id: 'stress',
+          title: 'Stress',
+          icon: '😫',
+          options: ['Low', 'Medium', 'High'],
+        ),
+        CheckInItem(
+          id: 'mood',
+          title: 'Mood',
+          icon: '😊',
+          options: ['Good', 'Okay', 'Low'],
+        ),
+        CheckInItem(
+          id: 'cigarettes',
+          title: 'Cigarettes',
+          icon: '🚬',
+          options: ['Avoided', 'Craving', 'Relapsed'],
+        ),
+        CheckInItem(
+          id: 'alcohol',
+          title: 'Alcohol',
+          icon: '🍷',
+          options: ['Avoided', 'Craving', 'Relapsed'],
+        ),
+        CheckInItem(
+          id: 'junk_food',
+          title: 'Junk Food',
+          icon: '🍔',
+          options: ['Avoided', 'Craving', 'Relapsed'],
+        ),
+        CheckInItem(
+          id: 'money_saved',
+          title: 'Money Saved',
+          icon: '💰',
+          options: ['₹10', '₹20', 'Custom'],
+        ),
       ],
       autoInsights: [
         AutoInsight(
@@ -52,13 +96,48 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         ),
       ],
       trackerPreviews: [
-        TrackerPreview(id: 'meditation', title: 'Meditation', subtitle: '0 / 10 min', buttonText: 'Start'),
-        TrackerPreview(id: 'screen_time', title: 'Screen Time', subtitle: '2h 15m (Limit: 3h)', buttonText: 'Log'),
-        TrackerPreview(id: 'money', title: 'Money System', subtitle: 'Save ₹50 today', buttonText: 'Save via UPI'),
-        TrackerPreview(id: 'hydration', title: 'Hydration', subtitle: '3 / 8 glasses', buttonText: 'Drink'),
-        TrackerPreview(id: 'smoking', title: 'Smoking', subtitle: '0 cigarettes', buttonText: 'Log'),
-        TrackerPreview(id: 'workout', title: 'Workout', subtitle: 'Not started', buttonText: 'Start'),
-        TrackerPreview(id: 'focus', title: 'Deep Focus', subtitle: '45m completed', buttonText: 'Focus'),
+        TrackerPreview(
+          id: 'meditation',
+          title: 'Meditation',
+          subtitle: '0 / 10 min',
+          buttonText: 'Start',
+        ),
+        TrackerPreview(
+          id: 'screen_time',
+          title: 'Screen Time',
+          subtitle: '2h 15m (Limit: 3h)',
+          buttonText: 'Log',
+        ),
+        TrackerPreview(
+          id: 'money',
+          title: 'Money System',
+          subtitle: '₹0 saved today',
+          buttonText: 'Open',
+        ),
+        TrackerPreview(
+          id: 'hydration',
+          title: 'Hydration',
+          subtitle: '3 / 8 glasses',
+          buttonText: 'Drink',
+        ),
+        TrackerPreview(
+          id: 'smoking',
+          title: 'Smoking',
+          subtitle: '0 cigarettes',
+          buttonText: 'Log',
+        ),
+        TrackerPreview(
+          id: 'workout',
+          title: 'Workout',
+          subtitle: 'Not started',
+          buttonText: 'Start',
+        ),
+        TrackerPreview(
+          id: 'focus',
+          title: 'Deep Focus',
+          subtitle: '45m completed',
+          buttonText: 'Focus',
+        ),
       ],
       coachTip: CoachTip(
         coachName: 'Sensei',
@@ -117,7 +196,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
     final currentIndex = types.indexOf(state.nowNextAction!.currentType);
     final nextIndex = (currentIndex + 1) % types.length;
     final nextType = types[nextIndex];
-    
+
     NowNextActionState newState;
     switch (nextType) {
       case NowActionType.flexibleTask:
@@ -162,7 +241,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         );
         break;
     }
-    
+
     state = state.copyWith(nowNextAction: newState);
   }
 }

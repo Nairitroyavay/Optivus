@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/tracker_session_link.dart';
 import 'package:optivus/state/app_state.dart';
@@ -67,8 +68,10 @@ class RoutineState {
     return RoutineState(
       items: items ?? this.items,
       selectedDay: selectedDay ?? this.selectedDay,
-      selectedPrimaryFilter: selectedPrimaryFilter ?? this.selectedPrimaryFilter,
-      selectedCategoryFilter: selectedCategoryFilter ?? this.selectedCategoryFilter,
+      selectedPrimaryFilter:
+          selectedPrimaryFilter ?? this.selectedPrimaryFilter,
+      selectedCategoryFilter:
+          selectedCategoryFilter ?? this.selectedCategoryFilter,
       showFullDay: showFullDay ?? this.showFullDay,
       compactMode: compactMode ?? this.compactMode,
       showMinuteTicks: showMinuteTicks ?? this.showMinuteTicks,
@@ -139,14 +142,17 @@ class TrackerLaunchIntent {
   });
 }
 
-class RoutineTrackerLinksNotifier extends StateNotifier<List<TrackerSessionLink>> {
+class RoutineTrackerLinksNotifier
+    extends StateNotifier<List<TrackerSessionLink>> {
   RoutineTrackerLinksNotifier() : super(const []);
 
   void upsert(TrackerSessionLink link) {
     state = [
       for (final existing in state)
         if (existing.routineTaskId == link.routineTaskId) link else existing,
-      if (!state.any((existing) => existing.routineTaskId == link.routineTaskId))
+      if (!state.any(
+        (existing) => existing.routineTaskId == link.routineTaskId,
+      ))
         link,
     ];
   }
@@ -161,9 +167,12 @@ class RoutineTrackerLinksNotifier extends StateNotifier<List<TrackerSessionLink>
 }
 
 final trackerSessionLinksProvider =
-    StateNotifierProvider<RoutineTrackerLinksNotifier, List<TrackerSessionLink>>((ref) {
-  return RoutineTrackerLinksNotifier();
-});
+    StateNotifierProvider<
+      RoutineTrackerLinksNotifier,
+      List<TrackerSessionLink>
+    >((ref) {
+      return RoutineTrackerLinksNotifier();
+    });
 
 enum RoutineConflictType {
   timeOverlap,
@@ -230,7 +239,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   final Ref _ref;
 
   RoutineNotifier(this._repository, this._ref)
-      : super(RoutineState(items: [], selectedDay: TimelineUtils.dateOnly(DateTime.now()))) {
+    : super(
+        RoutineState(
+          items: [],
+          selectedDay: TimelineUtils.dateOnly(DateTime.now()),
+        ),
+      ) {
     _loadItems();
   }
 
@@ -260,15 +274,24 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   void toggleFullDay(bool value) => state = state.copyWith(showFullDay: value);
-  void toggleCompactMode(bool value) => state = state.copyWith(compactMode: value);
-  void toggleMinuteTicks(bool value) => state = state.copyWith(showMinuteTicks: value);
-  void toggleCurrentTimeLine(bool value) => state = state.copyWith(showCurrentTimeLine: value);
-  void togglePrecisionMode(bool value) => state = state.copyWith(precisionMode: value);
-  void setPrimaryFilter(String filter) => state = state.copyWith(selectedPrimaryFilter: filter);
-  void setCategoryFilter(String filter) => state = state.copyWith(selectedCategoryFilter: filter);
-  void toggleAiSuggestions(bool value) => state = state.copyWith(aiRoutineSuggestionsEnabled: value);
-  void toggleConflictResolver(bool value) => state = state.copyWith(conflictResolverEnabled: value);
-  void toggleNotifications(bool value) => state = state.copyWith(routineNotificationsEnabled: value);
+  void toggleCompactMode(bool value) =>
+      state = state.copyWith(compactMode: value);
+  void toggleMinuteTicks(bool value) =>
+      state = state.copyWith(showMinuteTicks: value);
+  void toggleCurrentTimeLine(bool value) =>
+      state = state.copyWith(showCurrentTimeLine: value);
+  void togglePrecisionMode(bool value) =>
+      state = state.copyWith(precisionMode: value);
+  void setPrimaryFilter(String filter) =>
+      state = state.copyWith(selectedPrimaryFilter: filter);
+  void setCategoryFilter(String filter) =>
+      state = state.copyWith(selectedCategoryFilter: filter);
+  void toggleAiSuggestions(bool value) =>
+      state = state.copyWith(aiRoutineSuggestionsEnabled: value);
+  void toggleConflictResolver(bool value) =>
+      state = state.copyWith(conflictResolverEnabled: value);
+  void toggleNotifications(bool value) =>
+      state = state.copyWith(routineNotificationsEnabled: value);
 
   Future<void> addItem(RoutineItem item) async {
     final newItems = [...state.items, item];
@@ -279,7 +302,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   Future<void> updateItem(RoutineItem item) async {
-    final newItems = state.items.map((e) => e.id == item.id ? item : e).toList();
+    final newItems = state.items
+        .map((e) => e.id == item.id ? item : e)
+        .toList();
     state = state.copyWith(items: newItems);
     _recalculateConflicts();
     final uid = _ref.read(mockUserProfileProvider).uid;
@@ -316,17 +341,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   void toggleSubtask(String itemId, int subtaskIndex) {
-    _updateById(
-      itemId,
-      (item) {
-        if (item.subtasksCompleted == null) return item;
-        final list = List<bool>.from(item.subtasksCompleted!);
-        if (subtaskIndex >= 0 && subtaskIndex < list.length) {
-          list[subtaskIndex] = !list[subtaskIndex];
-        }
-        return item.copyWith(subtasksCompleted: list);
-      },
-    );
+    _updateById(itemId, (item) {
+      if (item.subtasksCompleted == null) return item;
+      final list = List<bool>.from(item.subtasksCompleted!);
+      if (subtaskIndex >= 0 && subtaskIndex < list.length) {
+        list[subtaskIndex] = !list[subtaskIndex];
+      }
+      return item.copyWith(subtasksCompleted: list);
+    });
   }
 
   void markCompleted(String itemId) {
@@ -341,6 +363,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 
   void markSkipped(String itemId) {
+    try {
+      final item = state.items.firstWhere((e) => e.id == itemId);
+      if (item.blockType == RoutineBlockType.moneyTask) {
+        _ref
+            .read(mockTrackerProvider.notifier)
+            .skipMoneyToday(reason: 'Skipped from routine');
+      }
+    } catch (_) {}
+
     _updateById(
       itemId,
       (item) => item.copyWith(
@@ -389,10 +420,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  void alreadySaved(String itemId, {double amount = 10}) {
+  void alreadySaved(String itemId, {double? amount}) {
+    final moneyGoal = _ref.read(mockTrackerProvider).moneyGoal;
     _ref
         .read(mockTrackerProvider.notifier)
-        .logSaving(amount, 'Routine Money System task', isConfirmed: true);
+        .saveMoneyToday(
+          amount: amount ?? moneyGoal.dailyTarget,
+          method: moneyGoal.defaultMethod,
+          source: MoneyEntrySource.routineTask,
+          description: 'Routine Money System task',
+          routineTaskId: itemId,
+        );
     markCompleted(itemId);
   }
 
@@ -411,16 +449,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
 
     _ref.read(trackerSessionLinksProvider.notifier).upsert(link);
-    
+
     state = state.copyWith(
       activeTrackerLaunchIntent: TrackerLaunchIntent(
         trackerType: trackerType,
         routineTaskId: item.id,
         sessionId: sessionId,
         startedAt: now,
-      )
+      ),
     );
-    
+
     _updateById(
       item.id,
       (current) => current.copyWith(
@@ -603,9 +641,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   }
 }
 
-final routineNotifierProvider = StateNotifierProvider<RoutineNotifier, RoutineState>((ref) {
-  return RoutineNotifier(ref.watch(routineRepositoryProvider), ref);
-});
+final routineNotifierProvider =
+    StateNotifierProvider<RoutineNotifier, RoutineState>((ref) {
+      return RoutineNotifier(ref.watch(routineRepositoryProvider), ref);
+    });
 
 final selectedDayRoutineItemsProvider = Provider<List<RoutineItem>>((ref) {
   final state = ref.watch(routineNotifierProvider);
@@ -675,7 +714,9 @@ final nextRoutineItemProvider = Provider<RoutineItem?>((ref) {
   return candidates.isEmpty ? null : candidates.first;
 });
 
-final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((ref) {
+final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((
+  ref,
+) {
   final items = ref.watch(todayRoutineItemsProvider);
   final actionable = items
       .where((item) {
