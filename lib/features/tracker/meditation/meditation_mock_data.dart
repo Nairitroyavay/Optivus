@@ -29,10 +29,7 @@ class MeditationCategoryUiModel {
   final String id;
   final String label;
 
-  const MeditationCategoryUiModel({
-    required this.id,
-    required this.label,
-  });
+  const MeditationCategoryUiModel({required this.id, required this.label});
 }
 
 class MeditationSubCategoryUiModel {
@@ -135,26 +132,61 @@ const mockMeditationSessionTypes = [
 const mockMeditationCategories = [
   MeditationCategoryUiModel(id: 'healing_432hz', label: 'Healing 432 Hz'),
   MeditationCategoryUiModel(id: 'nature_sounds', label: 'Nature Sounds'),
-  MeditationCategoryUiModel(id: 'ambient_atmospheric', label: 'Ambient & Atmospheric'),
+  MeditationCategoryUiModel(
+    id: 'ambient_atmospheric',
+    label: 'Ambient & Atmospheric',
+  ),
 ];
 
 const mockMeditationSubCategories = [
-  MeditationSubCategoryUiModel(id: 'deep_healing', categoryId: 'healing_432hz', label: 'Deep Healing'),
-  MeditationSubCategoryUiModel(id: 'om_mantra', categoryId: 'healing_432hz', label: 'Om Mantra'),
-  MeditationSubCategoryUiModel(id: 'rain_sounds', categoryId: 'nature_sounds', label: 'Rain Sounds'),
-  MeditationSubCategoryUiModel(id: 'ocean_water', categoryId: 'nature_sounds', label: 'Ocean Water'),
-  MeditationSubCategoryUiModel(id: 'forest_wind_birds', categoryId: 'nature_sounds', label: 'Forest Wind & Birds'),
-  MeditationSubCategoryUiModel(id: 'ambient_meditation', categoryId: 'ambient_atmospheric', label: 'Ambient Meditation'),
-  MeditationSubCategoryUiModel(id: 'deep_space_meditation', categoryId: 'ambient_atmospheric', label: 'Deep Space Meditation'),
-  MeditationSubCategoryUiModel(id: 'piano_meditation', categoryId: 'ambient_atmospheric', label: 'Piano Meditation'),
+  MeditationSubCategoryUiModel(
+    id: 'deep_healing',
+    categoryId: 'healing_432hz',
+    label: 'Deep Healing',
+  ),
+  MeditationSubCategoryUiModel(
+    id: 'om_mantra',
+    categoryId: 'healing_432hz',
+    label: 'Om Mantra',
+  ),
+  MeditationSubCategoryUiModel(
+    id: 'rain_sounds',
+    categoryId: 'nature_sounds',
+    label: 'Rain Sounds',
+  ),
+  MeditationSubCategoryUiModel(
+    id: 'ocean_water',
+    categoryId: 'nature_sounds',
+    label: 'Ocean Water',
+  ),
+  MeditationSubCategoryUiModel(
+    id: 'forest_wind_birds',
+    categoryId: 'nature_sounds',
+    label: 'Forest Wind & Birds',
+  ),
+  MeditationSubCategoryUiModel(
+    id: 'ambient_meditation',
+    categoryId: 'ambient_atmospheric',
+    label: 'Ambient Meditation',
+  ),
+  MeditationSubCategoryUiModel(
+    id: 'deep_space_meditation',
+    categoryId: 'ambient_atmospheric',
+    label: 'Deep Space Meditation',
+  ),
+  MeditationSubCategoryUiModel(
+    id: 'piano_meditation',
+    categoryId: 'ambient_atmospheric',
+    label: 'Piano Meditation',
+  ),
 ];
 
 const mockMeditationSounds = [
   MeditationSoundUiModel(
-    id: 'silent', 
-    title: 'Silent', 
-    durationLabel: '∞', 
-    categoryId: 'none', 
+    id: 'silent',
+    title: 'Silent',
+    durationLabel: '∞',
+    categoryId: 'none',
     subCategoryId: 'none',
     icon: '🤫',
     isAssetAvailable: true,

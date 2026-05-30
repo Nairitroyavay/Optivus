@@ -488,6 +488,23 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
       );
     }
   }
+
+  void logMeditationSession({
+    required int durationMinutes,
+    required String type,
+  }) {
+    final session = TrackerSession(
+      id: 'meditation-${DateTime.now().millisecondsSinceEpoch}',
+      category: 'Mind',
+      title: type,
+      timestamp: DateTime.now(),
+      value: durationMinutes,
+      isCompleted: true,
+    );
+    state = state.copyWith(
+      trackerSessions: [...state.trackerSessions, session],
+    );
+  }
 }
 
 final mockTrackerProvider =

@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
+import 'package:optivus/state/app_state.dart';
 import 'meditation_mock_data.dart';
 import 'meditation_tracker_widgets.dart';
 
-class MeditationTrackerScreen extends StatefulWidget {
+class MeditationTrackerScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
 
   const MeditationTrackerScreen({super.key, this.onBack});
 
   @override
-  State<MeditationTrackerScreen> createState() =>
+  ConsumerState<MeditationTrackerScreen> createState() =>
       _MeditationTrackerScreenState();
 }
 
-class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
+class _MeditationTrackerScreenState
+    extends ConsumerState<MeditationTrackerScreen> {
   // ── State ─────────────────────────────────────────────────────────────────
   final String _selectedTypeId = 'calm';
   int _selectedDuration = 5;
@@ -28,13 +31,14 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
   Timer? _timer;
 
   // ── Orb State ─────────────────────────────────────────────────────────────
-  String _currentPhase = 'Inhale';
+  String _currentPhase = 'Inhale'; // "ready", "Inhale", "Hold", "Exhale"
   int _phaseSeconds = 0;
 
   @override
   void initState() {
     super.initState();
     _remainingSeconds = _selectedDuration * 60;
+    _currentPhase = 'ready';
   }
 
   @override
@@ -91,7 +95,7 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
     setState(() {
       _status = 'ready';
       _remainingSeconds = _selectedDuration * 60;
-      _currentPhase = 'Inhale';
+      _currentPhase = 'ready';
       _phaseSeconds = 0;
     });
   }
@@ -100,7 +104,20 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
     _timer?.cancel();
     setState(() {
       _status = 'completed';
+      _currentPhase = 'ready';
     });
+
+    final selectedType = mockMeditationSessionTypes.firstWhere(
+      (t) => t.id == _selectedTypeId,
+    );
+
+    // Log session to provider
+    ref
+        .read(mockTrackerProvider.notifier)
+        .logMeditationSession(
+          durationMinutes: _selectedDuration,
+          type: selectedType.title,
+        );
   }
 
   void _startTimer() {
@@ -126,8 +143,7 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
     if (_currentPhase == 'Inhale' && _phaseSeconds >= type.inhaleSeconds) {
       _currentPhase = type.holdSeconds > 0 ? 'Hold' : 'Exhale';
       _phaseSeconds = 0;
-    } else if (_currentPhase == 'Hold' &&
-        _phaseSeconds >= type.holdSeconds) {
+    } else if (_currentPhase == 'Hold' && _phaseSeconds >= type.holdSeconds) {
       _currentPhase = 'Exhale';
       _phaseSeconds = 0;
     } else if (_currentPhase == 'Exhale' &&
@@ -151,40 +167,42 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final bottomReserve = 76.0 + media.padding.bottom + 48.0;
     final selectedType = mockMeditationSessionTypes.firstWhere(
       (t) => t.id == _selectedTypeId,
     );
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final totalH = constraints.maxHeight;
-        final isCompact = totalH < 700;
-        final orbSize = isCompact ? 150.0 : 200.0;
-        final timerFontSize = isCompact ? 38.0 : 46.0;
-        final orbTimerGap = isCompact ? 14.0 : 24.0;
+        final h = constraints.maxHeight;
+        final isSmall = h < 720;
+        final tabReserve = 112.0 + media.padding.bottom;
+
+        final orbSize = isSmall ? 165.0 : 200.0;
+        final timerFontSize = isSmall ? 42.0 : 50.0;
+        final orbTimerGap = isSmall ? 12.0 : 18.0;
 
         return Stack(
           children: [
             // ── Header Row ───────────────────────────────────────────────
             Positioned(
-              top: 16,
+              top: 12,
               left: 20,
               right: 20,
+              height: 44,
               child: _buildHeader(selectedType),
             ),
 
             // ── Center: Orb + Timer + Phase ──────────────────────────────
             Positioned(
-              top: 72,
+              top: 70,
               left: 0,
               right: 0,
-              bottom: bottomReserve + (_status == 'completed' ? 80 : 160),
+              bottom: tabReserve + 220,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Center(
-                    child: LiquidGlassBreathingOrb(
+                    child: AiLiquidMeditationOrb(
                       isRunning: _status == 'running',
                       currentPhase: _currentPhase,
                       accentColor: selectedType.accentToken,
@@ -206,21 +224,21 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
               ),
             ),
 
-            // ── Bottom Controls Area ─────────────────────────────────────
+            // ── Controls Area ───────────────────────────────────────────
             Positioned(
               left: 20,
               right: 20,
-              bottom: bottomReserve,
+              bottom: tabReserve + 92,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Duration Selector (always visible, disabled during session)
-                  DurationSelector(
+                  MeditationDurationSelector(
                     selectedDuration: _selectedDuration,
                     onSelected: _updateDuration,
-                    enabled: _status == 'ready',
+                    enabled: _status == 'ready' || _status == 'completed',
                   ),
-                  SizedBox(height: isCompact ? 10 : 16),
+                  const SizedBox(height: 16),
 
                   // Control Buttons
                   MeditationControlBar(
@@ -236,17 +254,22 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
                     },
                     onStartAnother: _cancelSession,
                   ),
-                  SizedBox(height: isCompact ? 8 : 14),
-
-                  // Target Card
-                  MeditationTargetCard(
-                    targetMinutes: 5,
-                    completedMinutes: _status == 'completed'
-                        ? _selectedDuration
-                        : 0,
-                    streakDays: 5,
-                  ),
                 ],
+              ),
+            ),
+
+            // ── Bottom Target Card ───────────────────────────────────────
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: tabReserve,
+              height: 76,
+              child: MeditationTargetCard(
+                targetMinutes: 5,
+                completedMinutes: _status == 'completed'
+                    ? _selectedDuration
+                    : 0,
+                streakDays: 5,
               ),
             ),
           ],
