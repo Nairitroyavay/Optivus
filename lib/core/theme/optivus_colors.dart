@@ -62,10 +62,10 @@ class OptivusColors {
   // These are the EXACT colour values from the original Optivus Routine UI.
   // Every Routine widget must use these instead of raw hex.
 
-  /// Primary text — matches old `kInk` (0xFF0F111A)
+  /// Primary text — matches old `OptivusColors.ink` (0xFF0F111A)
   static const Color ink = Color(0xFF0F111A);
 
-  /// Secondary text — matches old `kSub` (0xFF6B7280)
+  /// Secondary text — matches old `OptivusColors.sub` (0xFF6B7280)
   static const Color sub = Color(0xFF6B7280);
 
   // ── Routine background (old LiquidBg green gradient) ───────────────────
@@ -83,10 +83,10 @@ class OptivusColors {
   static const Color routinePrismPink = Color(0xFFF472B6);
 
   // ── Category accent colours (old liquid_ui palette) ────────────────────
-  static const Color mintAccent = Color(0xFF60D4A0);   // kMint — skin care
-  static const Color blueAccent = Color(0xFF60B8FF);   // kBlue — classes
-  static const Color roseAccent = Color(0xFFFF9560);   // kRose — eating/time
-  static const Color purpleAccent = Color(0xFF9B8FFF); // kPurple — AI/fixed
+  static const Color mintAccent = Color(0xFF60D4A0);   // OptivusColors.mintAccent — skin care
+  static const Color blueAccent = Color(0xFF60B8FF);   // OptivusColors.blueAccent — classes
+  static const Color roseAccent = Color(0xFFFF9560);   // OptivusColors.roseAccent — eating/time
+  static const Color purpleAccent = Color(0xFF9B8FFF); // OptivusColors.purpleAccent — AI/fixed
   static const Color tealAccent = Color(0xFF14B8A6);   // supplements
 
   // ── Block-type rail colours ────────────────────────────────────────────

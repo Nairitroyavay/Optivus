@@ -17,8 +17,8 @@ const double kTimelineContentGap = 12.0;
 ///
 /// Matches old Optivus timeline rail styling exactly:
 /// - Hour labels: bold and larger
-/// - Hour dots: 8px, kSub@0.16
-/// - Horizontal lines: 1px, kSub@0.055
+/// - Hour dots: 8px, OptivusColors.sub@0.16
+/// - Horizontal lines: 1px, OptivusColors.sub@0.055
 class RoutineTimeRuler extends StatelessWidget {
   final TimelineLayout layout;
 

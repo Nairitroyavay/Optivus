@@ -7,7 +7,7 @@ import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 
 /// Current time indicator — dot + dotted line at the current minute.
 ///
-/// Uses `OptivusColors.roseAccent` (orange, old `kRose`) — NOT green.
+/// Uses `OptivusColors.roseAccent` (orange, old `OptivusColors.roseAccent`) — NOT green.
 /// Matches old Optivus `_CurrentTimeLineAtY` exactly.
 class RoutineCurrentTimeLine extends StatefulWidget {
   final TimelineLayout layout;

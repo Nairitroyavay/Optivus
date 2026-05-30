@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 
@@ -106,7 +105,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
-                      color: kInk,
+                      color: OptivusColors.ink,
                     ),
                   ),
                   SizedBox(height: 4),
@@ -115,7 +114,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: kSub,
+                      color: OptivusColors.sub,
                       height: 1.3,
                     ),
                   ),
@@ -169,14 +168,14 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: kRose),
+              const Icon(Icons.warning_amber_rounded, color: OptivusColors.roseAccent),
               const SizedBox(width: 8),
               const Text(
                 'High Distraction Risk',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: kInk,
+                  color: OptivusColors.ink,
                 ),
               ),
             ],
@@ -186,7 +185,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
             'Your highest risk window is 10:30 PM - 12:00 AM.\nInstagram is your most-used high-risk app today.',
             style: TextStyle(
               fontSize: 13,
-              color: kSub,
+              color: OptivusColors.sub,
               height: 1.4,
             ),
           ),
@@ -194,13 +193,13 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: kRose.withValues(alpha: 0.05),
+              color: OptivusColors.roseAccent.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: kRose.withValues(alpha: 0.2)),
+              border: Border.all(color: OptivusColors.roseAccent.withValues(alpha: 0.2)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.lightbulb_outline, size: 16, color: kRose),
+                const Icon(Icons.lightbulb_outline, size: 16, color: OptivusColors.roseAccent),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -208,7 +207,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: kRose,
+                      color: OptivusColors.roseAccent,
                     ),
                   ),
                 ),
@@ -264,7 +263,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
               color: Colors.white,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: kInk, size: 20),
+            child: Icon(icon, color: OptivusColors.ink, size: 20),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -275,7 +274,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                   title,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: kInk,
+                    color: OptivusColors.ink,
                     fontSize: 14,
                   ),
                 ),
@@ -284,7 +283,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                   subtitle,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: kSub,
+                    color: OptivusColors.sub,
                   ),
                 ),
               ],
@@ -313,7 +312,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: kInk,
+              backgroundColor: OptivusColors.ink,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
@@ -334,12 +333,12 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kInk),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.ink),
           ),
           const SizedBox(height: 4),
           Text(
             apps,
-            style: const TextStyle(fontSize: 12, color: kSub, height: 1.3),
+            style: const TextStyle(fontSize: 12, color: OptivusColors.sub, height: 1.3),
           ),
         ],
       ),
@@ -379,9 +378,9 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           children: [
             Text(
               title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kInk),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: OptivusColors.ink),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: kSub),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: OptivusColors.sub),
           ],
         ),
       ),
@@ -392,18 +391,18 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSub.withValues(alpha: 0.05),
+        color: OptivusColors.sub.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: const [
-          Icon(Icons.privacy_tip_outlined, size: 18, color: kSub),
+          Icon(Icons.privacy_tip_outlined, size: 18, color: OptivusColors.sub),
           SizedBox(width: 12),
           Expanded(
             child: Text(
               'Optivus can track app names and usage duration after permission.\nOptivus cannot read messages, chats, reels, posts, or what you watched.',
-              style: TextStyle(fontSize: 11, color: kSub, height: 1.4),
+              style: TextStyle(fontSize: 11, color: OptivusColors.sub, height: 1.4),
             ),
           ),
         ],
@@ -415,7 +414,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
     return TrackerGlassCard(
       padding: const EdgeInsets.all(20),
       radius: 28,
-      tint: kPurple.withValues(alpha: 0.05),
+      tint: OptivusColors.purpleAccent.withValues(alpha: 0.05),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -428,7 +427,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
-                  color: kInk,
+                  color: OptivusColors.ink,
                 ),
               ),
             ],
@@ -438,7 +437,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
             '“Your risk window starts after 10:30 PM. Put reading before phone use tonight. This may be a focus-loss window.”',
             style: TextStyle(
               fontSize: 14,
-              color: kInk,
+              color: OptivusColors.ink,
               height: 1.5,
               fontWeight: FontWeight.w500,
             ),

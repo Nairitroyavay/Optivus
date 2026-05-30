@@ -12,7 +12,6 @@ import '../../state/auth_state.dart';
 import '../../state/app_state.dart';
 import '../../features/tracker/money/money_system_screen.dart';
 import '../../features/tracker/screen_time/screen_time_screen.dart';
-import '../../features/tracker/meditation/meditation_tracker_screen.dart';
 
 class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -97,10 +96,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/tracker/screen-time',
         builder: (context, state) => const ScreenTimeScreen(),
       ),
+      // /tracker/meditation removed — Meditation opens inside TrackerTab only
       GoRoute(
         path: '/tracker/meditation',
-        builder: (context, state) => const MeditationTrackerScreen(),
+        redirect: (context, state) => '/app?tab=2',
       ),
     ],
   );
 });
+

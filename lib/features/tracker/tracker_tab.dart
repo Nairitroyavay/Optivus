@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/state/app_state.dart';
@@ -108,7 +107,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.2,
-                color: kSub,
+                color: OptivusColors.sub,
               ),
             ),
             const SizedBox(height: 4),
@@ -117,12 +116,12 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               style:
                   Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w900,
-                    color: kInk,
+                    color: OptivusColors.ink,
                   ) ??
                   const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
-                    color: kInk,
+                    color: OptivusColors.ink,
                   ),
             ),
           ],
@@ -159,7 +158,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
-                        color: kInk,
+                        color: OptivusColors.ink,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -168,7 +167,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: kSub,
+                        color: OptivusColors.sub,
                         height: 1.4,
                       ),
                     ),
@@ -182,7 +181,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
-                    colors: [OptivusColors.brandAccent, kRose],
+                    colors: [OptivusColors.brandAccent, OptivusColors.roseAccent],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -257,7 +256,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: kSub,
+              color: OptivusColors.sub,
               height: 1.35,
             ),
           ),
@@ -280,7 +279,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         status: '${snapshot.meditationMinutes} / 5 min today',
         iconEmoji: '🧘',
         buttonText: 'View',
-        accentColor: kPurple,
+        accentColor: OptivusColors.purpleAccent,
         activationSource: 'onboarding',
       ),
       _ActiveTrackerConfig(
@@ -288,7 +287,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         status: '${snapshot.todaySavedLabel} saved today',
         iconEmoji: '💰',
         buttonText: 'View',
-        accentColor: kMint,
+        accentColor: OptivusColors.mintAccent,
         activationSource: 'routine',
       ),
       _ActiveTrackerConfig(
@@ -297,7 +296,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
             '${snapshot.screenTimeLabel} total\nRisk: ${snapshot.screenRisk}',
         iconEmoji: '📱',
         buttonText: 'View',
-        accentColor: kRose,
+        accentColor: OptivusColors.roseAccent,
         activationSource: 'mock permission',
       ),
       _ActiveTrackerConfig(
@@ -305,7 +304,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         status: '${snapshot.weeklyDistanceLabel} km this week',
         iconEmoji: '🏃',
         buttonText: 'Start',
-        accentColor: kAmber,
+        accentColor: OptivusColors.brandAccent,
         activationSource: 'identity goal',
       ),
       _ActiveTrackerConfig(
@@ -313,7 +312,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         status: '${snapshot.hydrationLabel} / 2.5L',
         iconEmoji: '💧',
         buttonText: '+250ml',
-        accentColor: kBlue,
+        accentColor: OptivusColors.blueAccent,
         activationSource: 'manual',
       ),
     ];
@@ -536,7 +535,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           child: Text(
             snapshot.screenInsight,
             style: const TextStyle(
-              color: kSub,
+              color: OptivusColors.sub,
               fontSize: 12,
               fontWeight: FontWeight.w700,
               height: 1.35,
@@ -552,18 +551,18 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       {
         'title': 'Meditation completed',
         'subtitle': '${snapshot.meditationMinutes} min',
-        'color': kPurple,
+        'color': OptivusColors.purpleAccent,
       },
       {
         'title': 'Saved ${snapshot.todaySavedLabel}',
         'subtitle': 'Money System',
-        'color': kMint,
+        'color': OptivusColors.mintAccent,
       },
-      {'title': 'Water logged', 'subtitle': '+250ml', 'color': kBlue},
+      {'title': 'Water logged', 'subtitle': '+250ml', 'color': OptivusColors.blueAccent},
       {
         'title': 'Walk completed',
         'subtitle': '${snapshot.weeklyDistanceLabel} km',
-        'color': kAmber,
+        'color': OptivusColors.brandAccent,
       },
     ];
 
@@ -593,7 +592,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
-                      color: kInk,
+                      color: OptivusColors.ink,
                     ),
                   ),
                   SizedBox(height: 2),
@@ -601,7 +600,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                     'Manage active trackers, permissions, goals, reminders, and data sources.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: kSub,
+                      color: OptivusColors.sub,
                       height: 1.3,
                       fontWeight: FontWeight.w500,
                     ),
@@ -610,7 +609,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: kSub),
+            const Icon(Icons.arrow_forward_ios, size: 16, color: OptivusColors.sub),
           ],
         ),
       ),
@@ -677,7 +676,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
                 width: isSelected ? 24 : 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isSelected ? kInk : kInk.withValues(alpha: 0.2),
+                  color: isSelected ? OptivusColors.ink : OptivusColors.ink.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
               );
@@ -704,7 +703,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
-                  color: kInk,
+                  color: OptivusColors.ink,
                   letterSpacing: 0,
                 ),
                 maxLines: 2,
@@ -735,7 +734,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
         const SizedBox(height: 5),
         Text(
           graph.subtitle,
-          style: const TextStyle(fontSize: 11, color: kSub, height: 1.25),
+          style: const TextStyle(fontSize: 11, color: OptivusColors.sub, height: 1.25),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -776,7 +775,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
         title: 'Life Balance',
         subtitle: 'Body 72% • Mind 80% • Focus 45%\nFinance 90% • Growth 60%',
         badgeText: 'Stable',
-        accentColor: kBlue,
+        accentColor: OptivusColors.blueAccent,
         values: period.lifeBalanceValues,
       ),
       _TrackerGraphConfig(
@@ -784,7 +783,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
         subtitle:
             '${snapshot.screenTimeLabel} total • Risk: ${snapshot.screenRisk}\n${snapshot.screenInsight}',
         badgeText: '-45m',
-        accentColor: kRose,
+        accentColor: OptivusColors.roseAccent,
         values: period.screenTimeValues,
       ),
       _TrackerGraphConfig(
@@ -792,7 +791,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
         subtitle:
             '${snapshot.confirmedSavedLabel} confirmed • ${snapshot.potentialSavedLabel} potential\nNext level: ${snapshot.nextMoneyLevelLabel}',
         badgeText: snapshot.todaySavedLabel,
-        accentColor: kMint,
+        accentColor: OptivusColors.mintAccent,
         values: period.moneyValues,
       ),
       _TrackerGraphConfig(
@@ -800,7 +799,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
         subtitle:
             '${snapshot.weeklyDistanceLabel} km • Best pace ${snapshot.bestPaceLabel}\nLongest ${snapshot.longestDistanceLabel} km',
         badgeText: '+2k',
-        accentColor: kAmber,
+        accentColor: OptivusColors.brandAccent,
         values: period.movementValues,
       ),
       _TrackerGraphConfig(
@@ -808,7 +807,7 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
         subtitle:
             'Meditation ${snapshot.meditationStreakDays}d • Saving ${snapshot.savingStreakDays}d\nWater ${snapshot.waterStreakDays}d • Workout ${snapshot.workoutStreakDays}d',
         badgeText: 'On track',
-        accentColor: kPurple,
+        accentColor: OptivusColors.purpleAccent,
         values: period.consistencyValues,
       ),
     ];
@@ -1298,7 +1297,7 @@ class _TrackerMiniChart extends StatelessWidget {
                     style: TextStyle(
                       fontSize: labelSize,
                       fontWeight: FontWeight.w800,
-                      color: kInk,
+                      color: OptivusColors.ink,
                       letterSpacing: 0,
                     ),
                   ),
@@ -1383,7 +1382,7 @@ class _TrackerCategoryChip extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-          color: kInk,
+          color: OptivusColors.ink,
           fontSize: 11,
           fontWeight: FontWeight.w900,
           letterSpacing: 0,
@@ -1403,7 +1402,7 @@ class _TrackerGroupLabel extends StatelessWidget {
     return Text(
       label,
       style: const TextStyle(
-        color: kSub,
+        color: OptivusColors.sub,
         fontSize: 12,
         fontWeight: FontWeight.w900,
         letterSpacing: 0.8,
@@ -1432,14 +1431,14 @@ class _TrackerLockNotice extends StatelessWidget {
           Icon(
             Icons.lock_outline,
             size: 15,
-            color: kSub.withValues(alpha: 0.9),
+            color: OptivusColors.sub.withValues(alpha: 0.9),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
               style: const TextStyle(
-                color: kSub,
+                color: OptivusColors.sub,
                 fontSize: 11,
                 height: 1.25,
                 fontWeight: FontWeight.w700,

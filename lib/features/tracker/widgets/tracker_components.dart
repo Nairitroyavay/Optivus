@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 
 class TrackerSectionHeader extends StatelessWidget {
@@ -173,7 +172,7 @@ class TrackerHeaderButton extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Icon(icon, color: kInk, size: 18),
+                  Icon(icon, color: OptivusColors.ink, size: 18),
                 ],
               ),
             ),
@@ -214,7 +213,7 @@ class TrackerMetricChip extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: kSub,
+              color: OptivusColors.sub,
             ),
           ),
           const SizedBox(width: 8),
@@ -223,7 +222,7 @@ class TrackerMetricChip extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: kInk,
+              color: OptivusColors.ink,
             ),
           ),
         ],
@@ -269,7 +268,7 @@ class TrackerSegmentedControl extends StatelessWidget {
                 decoration: BoxDecoration(
                   gradient: isSelected
                       ? const LinearGradient(
-                          colors: [OptivusColors.trackerAccent, kBlue],
+                          colors: [OptivusColors.trackerAccent, OptivusColors.blueAccent],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         )
@@ -295,7 +294,7 @@ class TrackerSegmentedControl extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     color: isSelected
                         ? Colors.white
-                        : kInk.withValues(alpha: 0.8),
+                        : OptivusColors.ink.withValues(alpha: 0.8),
                   ),
                 ),
               ),
@@ -319,7 +318,7 @@ class TrackerGraphCard extends StatelessWidget {
     required this.title,
     required this.badgeText,
     required this.values,
-    this.accentColor = kMint,
+    this.accentColor = OptivusColors.mintAccent,
     this.subtitle,
   });
 
@@ -344,7 +343,7 @@ class TrackerGraphCard extends StatelessWidget {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: kInk,
+                      color: OptivusColors.ink,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -374,7 +373,7 @@ class TrackerGraphCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 subtitle!,
-                style: const TextStyle(fontSize: 11, color: kSub),
+                style: const TextStyle(fontSize: 11, color: OptivusColors.sub),
               ),
             ],
             const Spacer(),
@@ -423,7 +422,7 @@ class TrackerGraphCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: kInk,
+                        color: OptivusColors.ink,
                       ),
                     ),
                   ],
@@ -493,7 +492,7 @@ class TrackerActiveCard extends StatelessWidget {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
-                      color: kInk,
+                      color: OptivusColors.ink,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -501,7 +500,7 @@ class TrackerActiveCard extends StatelessWidget {
                     status,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: kSub,
+                      color: OptivusColors.sub,
                       fontWeight: FontWeight.w600,
                       height: 1.3,
                     ),
@@ -594,7 +593,7 @@ class TrackerDiscoverCard extends StatelessWidget {
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 15,
-                                  color: kInk,
+                                  color: OptivusColors.ink,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -607,7 +606,7 @@ class TrackerDiscoverCard extends StatelessWidget {
                           description,
                           style: const TextStyle(
                             fontSize: 12,
-                            color: kSub,
+                            color: OptivusColors.sub,
                             height: 1.3,
                             fontWeight: FontWeight.w500,
                           ),
@@ -635,7 +634,7 @@ class TrackerDiscoverCard extends StatelessWidget {
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 15,
-                                  color: kInk,
+                                  color: OptivusColors.ink,
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -645,7 +644,7 @@ class TrackerDiscoverCard extends StatelessWidget {
                                 description,
                                 style: const TextStyle(
                                   fontSize: 12,
-                                  color: kSub,
+                                  color: OptivusColors.sub,
                                   height: 1.3,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -705,12 +704,12 @@ class _TrackerActivateButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: kSub.withValues(alpha: 0.5), width: 1.5),
+          border: Border.all(color: OptivusColors.sub.withValues(alpha: 0.5), width: 1.5),
         ),
         child: const Text(
           'Activate',
           style: TextStyle(
-            color: kInk,
+            color: OptivusColors.ink,
             fontWeight: FontWeight.bold,
             fontSize: 12,
           ),
@@ -769,7 +768,7 @@ class TrackerDataSourceCard extends StatelessWidget {
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
-                      color: kInk,
+                      color: OptivusColors.ink,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -777,14 +776,14 @@ class TrackerDataSourceCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 12, color: kSub),
+                    style: const TextStyle(fontSize: 12, color: OptivusColors.sub),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'Status: $status',
                     style: TextStyle(
                       fontSize: 11,
-                      color: isConnected ? kMint : kSub,
+                      color: isConnected ? OptivusColors.mintAccent : OptivusColors.sub,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -811,7 +810,7 @@ class TrackerDataSourceCard extends StatelessWidget {
                 child: Text(
                   isConnected ? status : 'Connect',
                   style: TextStyle(
-                    color: isConnected ? kSub : OptivusColors.trackerAccent,
+                    color: isConnected ? OptivusColors.sub : OptivusColors.trackerAccent,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),
@@ -885,7 +884,7 @@ class TrackerActivityTimeline extends StatelessWidget {
                             style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
-                              color: kInk,
+                              color: OptivusColors.ink,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -896,7 +895,7 @@ class TrackerActivityTimeline extends StatelessWidget {
                           item['subtitle'] as String,
                           style: const TextStyle(
                             fontSize: 12,
-                            color: kSub,
+                            color: OptivusColors.sub,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

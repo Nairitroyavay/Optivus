@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 
 class MeditationSessionTypeUiModel {
@@ -95,7 +94,7 @@ const mockMeditationSessionTypes = [
     inhaleSeconds: 4,
     holdSeconds: 2,
     exhaleSeconds: 6,
-    accentToken: kPurple,
+    accentToken: OptivusColors.purpleAccent,
     subtitle: 'Slow, steady breathing to center yourself.',
   ),
   MeditationSessionTypeUiModel(
@@ -106,7 +105,7 @@ const mockMeditationSessionTypes = [
     inhaleSeconds: 4,
     holdSeconds: 2,
     exhaleSeconds: 4,
-    accentToken: kBlue,
+    accentToken: OptivusColors.blueAccent,
     subtitle: 'Alert but calm state for clear thinking.',
   ),
   MeditationSessionTypeUiModel(
@@ -128,7 +127,7 @@ const mockMeditationSessionTypes = [
     inhaleSeconds: 3,
     holdSeconds: 2,
     exhaleSeconds: 6,
-    accentToken: kRose,
+    accentToken: OptivusColors.roseAccent,
     subtitle: 'Regulate your nervous system gently.',
   ),
 ];
