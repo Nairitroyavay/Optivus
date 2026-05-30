@@ -180,49 +180,32 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final bottomReserve = media.padding.bottom + 24.0;
+    final bottomReserve = media.padding.bottom + 120.0;
     
     final selectedType = mockMeditationSessionTypes.firstWhere((t) => t.id == _selectedTypeId);
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            OptivusColors.trackerTop,
-            OptivusColors.trackerCardTint,
-          ],
-          stops: const [0.0, 0.8],
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          bottom: false,
-          child: Column(
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
             children: [
               _buildHeader(),
               Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
+                child: Padding(
                   padding: EdgeInsets.fromLTRB(20, 8, 20, bottomReserve),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Top Area
                       const MeditationHeroCard(
                         targetMinutes: 5,
                         completedMinutes: 0,
                         streakDays: 5,
                       ),
-                      const SizedBox(height: 32),
                       
-                      SessionTypeSelector(
-                        types: mockMeditationSessionTypes,
-                        selectedTypeId: _selectedTypeId,
-                        onSelected: _updateType,
-                      ),
-                      const SizedBox(height: 32),
+                      const Spacer(flex: 2),
 
                       // Orb & Timer Area
                       Center(
@@ -238,40 +221,47 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
                         remainingSeconds: _remainingSeconds,
                         status: _status,
                         currentPhase: _currentPhase,
+                        sessionTypeName: selectedType.title,
                       ),
-                      const SizedBox(height: 24),
+                      
+                      const Spacer(flex: 3),
 
-                      // Duration Selector (hide if running/paused/completed)
+                      // Duration Selector
                       if (_status == 'ready' || _status == 'cancelled')
                         DurationSelector(
                           selectedDuration: _selectedDuration,
                           onSelected: _updateDuration,
                         ),
-                      if (_status == 'ready' || _status == 'cancelled')
-                        const SizedBox(height: 32),
-
+                      
                       // Completion State
                       if (_status == 'completed')
                         CompletionCard(
                           durationMinutes: _selectedDuration,
-                          onDone: () => context.pop(),
+                          onDone: () {
+                            setState(() {
+                              _status = 'ready';
+                            });
+                            context.pop();
+                          },
                           onStartAnother: _cancelSession,
                           onAddNote: _showAddNoteSheet,
                         ),
-                      if (_status == 'completed')
-                        const SizedBox(height: 32),
 
                       // Controls
                       if (_status != 'completed')
-                        MeditationControls(
-                          status: _status,
-                          onStart: _startSession,
-                          onPause: _pauseSession,
-                          onResume: _resumeSession,
-                          onComplete: _completeSession,
-                          onCancel: _cancelSession,
+                        Padding(
+                          padding: const EdgeInsets.only(top: 24),
+                          child: MeditationControls(
+                            status: _status,
+                            onStart: _startSession,
+                            onPause: _pauseSession,
+                            onResume: _resumeSession,
+                            onComplete: _completeSession,
+                            onCancel: _cancelSession,
+                          ),
                         ),
-                      const SizedBox(height: 40),
+                      
+                      const SizedBox(height: 32),
 
                       // Music Selector
                       MusicSelector(
@@ -279,22 +269,6 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
                         selectedSoundId: _selectedSoundId,
                         onSelected: _updateSound,
                       ),
-                      const SizedBox(height: 40),
-                      
-                      const ProgressSummary(),
-                      const SizedBox(height: 32),
-                      
-                      const WeeklyCalmPattern(),
-                      const SizedBox(height: 32),
-                      
-                      const RecentSessionsList(sessions: mockRecentSessions),
-                      const SizedBox(height: 32),
-                      
-                      const InsightCard(),
-                      const SizedBox(height: 32),
-                      
-                      const SettingsPreview(),
-                      const SizedBox(height: 48),
                     ],
                   ),
                 ),
@@ -302,8 +276,7 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildHeader() {
@@ -319,35 +292,33 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
                 onTap: () => context.pop(),
               ),
               const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Meditation',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                      color: kInk,
-                    ),
-                  ),
-                  Text(
-                    'Calm your mind.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: kSub.withValues(alpha: 0.8),
-                    ),
-                  ),
-                ],
+              const Text(
+                'Meditation',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: kInk,
+                ),
               ),
             ],
           ),
           LiquidIconBtn(
-            icon: Icons.info_outline_rounded,
+            icon: Icons.settings,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Meditation info placeholder')),
-              );
+               showModalBottomSheet(
+                 context: context,
+                 isScrollControlled: true,
+                 backgroundColor: Colors.transparent,
+                 builder: (context) {
+                   return MeditationSettingsSheet(
+                     selectedTypeId: _selectedTypeId,
+                     onTypeSelected: (id) {
+                       _updateType(id);
+                       Navigator.pop(context);
+                     },
+                   );
+                 },
+               );
             },
           ),
         ],

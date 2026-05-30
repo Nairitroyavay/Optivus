@@ -18,91 +18,39 @@ class MeditationHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LiquidCard(
-      padding: const EdgeInsets.all(20),
-      radius: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      radius: 20,
       tint: OptivusColors.trackerCardTint.withValues(alpha: 0.6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Today\'s target',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: kSub,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$targetMinutes min',
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: kInk,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Five calm minutes protect your mind today.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: kSub,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
+              const Text(
+                'Today\'s target',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: kSub,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [OptivusColors.trackerAccent, kPurple],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: OptivusColors.trackerAccent.withValues(alpha: 0.3),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '$completedMinutes / $targetMinutes\nmin',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    height: 1.2,
-                  ),
+              const SizedBox(height: 2),
+              Text(
+                '$completedMinutes / $targetMinutes min',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: kInk,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 10,
+          Row(
             children: [
-              _buildMiniChip('Target $targetMinutes min', OptivusColors.trackerAccent),
-              _buildMiniChip('Streak $streakDays days', kAmber),
-              _buildMiniChip('Mind Pillar', kPurple),
-              _buildMiniChip('Inner Peace', kBlue),
+              _buildMiniChip('Streak $streakDays', kAmber),
+              const SizedBox(width: 8),
+              _buildMiniChip('Calm', kPurple),
             ],
           ),
         ],
@@ -112,16 +60,16 @@ class MeditationHeroCard extends StatelessWidget {
 
   Widget _buildMiniChip(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.bold,
           color: color,
         ),
@@ -239,11 +187,12 @@ class DurationSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final durations = [1, 3, 5, 10, 15];
+    final durations = [1, 3, 5, 10];
 
     return Wrap(
       spacing: 10,
       runSpacing: 10,
+      alignment: WrapAlignment.center,
       children: [
         ...durations.map((duration) {
           final isSelected = selectedDuration == duration;
@@ -256,19 +205,59 @@ class DurationSelector extends StatelessWidget {
         }),
         LiquidChip(
           label: 'Custom',
-          selected: false,
+          selected: ![1, 3, 5, 10].contains(selectedDuration),
           onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Text('Custom duration placeholder'),
-                backgroundColor: OptivusColors.trackerAccent,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+             _showCustomDurationSheet(context);
           },
           accentColor: kSub,
         ),
       ],
+    );
+  }
+
+  void _showCustomDurationSheet(BuildContext context) {
+    final customOptions = [2, 7, 15, 20, 30];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(
+            color: OptivusColors.trackerCardTint,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Select Duration',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kInk),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                alignment: WrapAlignment.center,
+                children: customOptions.map((d) {
+                   return LiquidChip(
+                     label: '$d min', 
+                     selected: selectedDuration == d, 
+                     onTap: () {
+                       onSelected(d);
+                       Navigator.pop(context);
+                     }, 
+                     accentColor: OptivusColors.trackerAccent,
+                   );
+                }).toList(),
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -300,8 +289,8 @@ class _BreathingOrbState extends State<BreathingOrb> with SingleTickerProviderSt
       vsync: this,
       duration: const Duration(seconds: 4),
     );
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    _scaleAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
     );
 
     if (widget.isRunning) {
@@ -320,8 +309,6 @@ class _BreathingOrbState extends State<BreathingOrb> with SingleTickerProviderSt
       }
     }
     
-    // We roughly match the phase with the scale if we had a perfect breath engine, 
-    // but for mock/local we just pulse smoothly or adjust based on phase.
     if (widget.isRunning && widget.currentPhase != oldWidget.currentPhase) {
         if (widget.currentPhase == 'Breathe in') {
             _controller.forward();
@@ -359,30 +346,70 @@ class _BreathingOrbState extends State<BreathingOrb> with SingleTickerProviderSt
         return Transform.scale(
           scale: widget.isRunning ? _scaleAnimation.value : 1.0,
           child: Container(
-            width: 200,
-            height: 200,
+            width: 220,
+            height: 220,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: widget.accentColor.withValues(alpha: 0.15),
+              color: widget.accentColor.withValues(alpha: 0.05),
               boxShadow: [
                 BoxShadow(
-                  color: widget.accentColor.withValues(alpha: 0.3),
-                  blurRadius: 40,
-                  spreadRadius: widget.isRunning ? 20 * _scaleAnimation.value : 0,
+                  color: widget.accentColor.withValues(alpha: 0.15),
+                  blurRadius: 60,
+                  spreadRadius: widget.isRunning ? 20 * _scaleAnimation.value : 10,
+                ),
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  blurRadius: 20,
+                  spreadRadius: -5,
                 ),
               ],
             ),
             child: Center(
               child: Container(
-                width: 140,
-                height: 140,
+                width: 160,
+                height: 160,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      Colors.white.withValues(alpha: 0.8),
-                      widget.accentColor.withValues(alpha: 0.5),
+                      Colors.white.withValues(alpha: 0.9),
+                      Colors.white.withValues(alpha: 0.4),
+                      widget.accentColor.withValues(alpha: 0.3),
                     ],
+                    stops: const [0.2, 0.7, 1.0],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.accentColor.withValues(alpha: 0.2),
+                      blurRadius: 20,
+                      offset: const Offset(0, 10),
+                    ),
+                    const BoxShadow(
+                      color: Colors.white,
+                      blurRadius: 10,
+                      offset: Offset(-5, -5),
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.8),
+                          widget.accentColor.withValues(alpha: 0.1),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -398,12 +425,14 @@ class TimerDisplay extends StatelessWidget {
   final int remainingSeconds;
   final String status;
   final String currentPhase;
+  final String sessionTypeName;
 
   const TimerDisplay({
     super.key,
     required this.remainingSeconds,
     required this.status,
     required this.currentPhase,
+    required this.sessionTypeName,
   });
 
   @override
@@ -424,7 +453,7 @@ class TimerDisplay extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          status == 'running' ? currentPhase : status.toUpperCase(),
+          status == 'running' ? currentPhase : '$sessionTypeName Meditation',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
@@ -451,40 +480,295 @@ class MusicSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'SOUNDSCAPE',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
-            color: kSub,
+    final selectedSound = sounds.firstWhere(
+      (s) => s.id == selectedSoundId,
+      orElse: () => sounds.first,
+    );
+
+    return Align(
+      alignment: Alignment.center,
+      child: GestureDetector(
+        onTap: () => _showMusicSheet(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white, width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: kBlue.withValues(alpha: 0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          clipBehavior: Clip.none,
           child: Row(
-            children: sounds.map((sound) {
-              final isSelected = sound.id == selectedSoundId;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: LiquidChip(
-                  label: sound.title,
-                  emoji: sound.id == 'silent' ? '🤫' : '🎵',
-                  selected: isSelected,
-                  onTap: () => onSelected(sound.id),
-                  accentColor: kBlue,
-                ),
-              );
-            }).toList(),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(selectedSound.icon, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'SOUNDSCAPE',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                      color: kSub,
+                    ),
+                  ),
+                  Text(
+                    selectedSound.title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: kInk,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 12),
+              const Icon(Icons.keyboard_arrow_down, color: kSub),
+            ],
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  void _showMusicSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return _MusicSelectionSheet(
+          sounds: sounds,
+          selectedSoundId: selectedSoundId,
+          onSelected: (id) {
+            onSelected(id);
+            Navigator.pop(context);
+          },
+        );
+      },
+    );
+  }
+}
+
+class _MusicSelectionSheet extends StatefulWidget {
+  final List<MeditationSoundUiModel> sounds;
+  final String selectedSoundId;
+  final ValueChanged<String> onSelected;
+
+  const _MusicSelectionSheet({
+    required this.sounds,
+    required this.selectedSoundId,
+    required this.onSelected,
+  });
+
+  @override
+  State<_MusicSelectionSheet> createState() => _MusicSelectionSheetState();
+}
+
+class _MusicSelectionSheetState extends State<_MusicSelectionSheet> {
+  String? _expandedCategoryId;
+  String? _expandedSubCategoryId;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    
+    return Container(
+      height: media.size.height * 0.7,
+      padding: const EdgeInsets.only(top: 24, left: 24, right: 24),
+      decoration: const BoxDecoration(
+        color: OptivusColors.trackerCardTint,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Select Music',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kInk),
+              ),
+              LiquidIconBtn(
+                icon: Icons.close,
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Silent option
+          LiquidCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            radius: 16,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Text('🤫', style: TextStyle(fontSize: 24)),
+              title: const Text('Silent', style: TextStyle(fontWeight: FontWeight.bold)),
+              trailing: widget.selectedSoundId == 'silent' ? const Icon(Icons.check, color: OptivusColors.trackerAccent) : null,
+              onTap: () => widget.onSelected('silent'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              children: mockMeditationCategories.map((category) {
+                final isExpanded = _expandedCategoryId == category.id;
+                final categorySounds = widget.sounds.where((s) => s.categoryId == category.id).toList();
+                
+                return Column(
+                  children: [
+                    LiquidCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      radius: 16,
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(category.label, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        trailing: Icon(isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: kSub),
+                        onTap: () {
+                          setState(() {
+                            if (isExpanded) {
+                              _expandedCategoryId = null;
+                            } else {
+                              _expandedCategoryId = category.id;
+                              _expandedSubCategoryId = null; // Reset sub
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    if (isExpanded)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
+                        child: Column(
+                          children: mockMeditationSubCategories.where((sub) => sub.categoryId == category.id).map((sub) {
+                            final isSubExpanded = _expandedSubCategoryId == sub.id;
+                            final subSounds = categorySounds.where((s) => s.subCategoryId == sub.id).toList();
+                            
+                            return Column(
+                              children: [
+                                ListTile(
+                                  title: Text(sub.label, style: const TextStyle(fontWeight: FontWeight.w600, color: kInk)),
+                                  trailing: Icon(isSubExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: kSub, size: 20),
+                                  onTap: () {
+                                    setState(() {
+                                      _expandedSubCategoryId = isSubExpanded ? null : sub.id;
+                                    });
+                                  },
+                                ),
+                                if (isSubExpanded)
+                                  ...subSounds.map((sound) {
+                                    final isSelected = widget.selectedSoundId == sound.id;
+                                    return Padding(
+                                      padding: const EdgeInsets.only(left: 16, bottom: 8),
+                                      child: LiquidCard(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                        radius: 12,
+                                        tint: isSelected ? OptivusColors.trackerAccent.withValues(alpha: 0.1) : null,
+                                        child: ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: Text(sound.icon, style: const TextStyle(fontSize: 20)),
+                                          title: Text(sound.title, style: TextStyle(fontWeight: FontWeight.w600, color: isSelected ? OptivusColors.trackerAccent : kInk)),
+                                          subtitle: Text(sound.durationLabel, style: const TextStyle(fontSize: 12, color: kSub)),
+                                          trailing: isSelected ? const Icon(Icons.check, color: OptivusColors.trackerAccent) : null,
+                                          onTap: () => widget.onSelected(sound.id),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+          SizedBox(height: media.padding.bottom + 16),
+        ],
+      ),
+    );
+  }
+}
+
+class MeditationSettingsSheet extends StatelessWidget {
+  final String selectedTypeId;
+  final ValueChanged<String> onTypeSelected;
+
+  const MeditationSettingsSheet({
+    super.key,
+    required this.selectedTypeId,
+    required this.onTypeSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return Container(
+      height: media.size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: OptivusColors.trackerCardTint,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Meditation Settings',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kInk),
+                ),
+                LiquidIconBtn(
+                  icon: Icons.close,
+                  onTap: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(24, 0, 24, media.padding.bottom + 24),
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SessionTypeSelector(
+                    types: mockMeditationSessionTypes,
+                    selectedTypeId: selectedTypeId,
+                    onSelected: onTypeSelected,
+                  ),
+                  const SizedBox(height: 32),
+                  const ProgressSummary(),
+                  const SizedBox(height: 32),
+                  const WeeklyCalmPattern(),
+                  const SizedBox(height: 32),
+                  const RecentSessionsList(sessions: mockRecentSessions),
+                  const SizedBox(height: 32),
+                  const InsightCard(),
+                  const SizedBox(height: 32),
+                  const SettingsPreview(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
