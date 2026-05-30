@@ -125,8 +125,9 @@ class _CoachTabState extends ConsumerState<CoachTab> {
     final messages = activeSession.messages;
 
     return Scaffold(
-      backgroundColor: OptivusColors.coachTop.withValues(alpha: 0.3), // Calm purple background
+      backgroundColor: Colors.transparent, // Calm purple background handled by AppShell
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             // ── Header ──
@@ -144,7 +145,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
             Expanded(
               child: ListView.builder(
                 controller: _chatScrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16).copyWith(bottom: MediaQuery.of(context).padding.bottom + 80),
                 physics: const BouncingScrollPhysics(),
                 itemCount: (messages.isEmpty ? 1 : messages.length) + (_isTyping ? 1 : 0),
                 itemBuilder: (context, index) {
@@ -182,11 +183,14 @@ class _CoachTabState extends ConsumerState<CoachTab> {
             ),
             
             // ── Input Bar ──
-            CoachInputField(
-              controller: _messageController,
-              focusNode: _focusNode,
-              hasText: _messageController.text.isNotEmpty,
-              onSend: () => _sendMessage(_messageController.text),
+            Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + 60), // Space for floating nav
+              child: CoachInputField(
+                controller: _messageController,
+                focusNode: _focusNode,
+                hasText: _messageController.text.isNotEmpty,
+                onSend: () => _sendMessage(_messageController.text),
+              ),
             ),
           ],
         ),

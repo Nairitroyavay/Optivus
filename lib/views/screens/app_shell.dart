@@ -14,10 +14,10 @@ import 'package:optivus/app/app_navigation_controller.dart';
 const List<List<Color>> _tabGradients = [
   [OptivusColors.homeTop, Color(0xFFFFEDED)], // Home: #FFE0E0 to #FFEDED
   [OptivusColors.routineBgTop, OptivusColors.routineBgBottom], // Routine: RoutineTab also paints this
-  [OptivusColors.trackerTop, Colors.white], // Tracker: #BFFFFE
-  [OptivusColors.coachTop, Colors.white], // Coach: #F7E0FF
-  [OptivusColors.goalsTop, Colors.white], // Goals: #FFD9F2
-  [OptivusColors.profileTop, Colors.white], // Profile: #FCFFD6
+  [OptivusColors.trackerTop, OptivusColors.trackerBottom], // Tracker: #BFFFFE
+  [OptivusColors.coachTop, OptivusColors.coachBottom], // Coach: #F7E0FF
+  [OptivusColors.goalsTop, OptivusColors.goalsBottom], // Goals: #FFD9F2
+  [OptivusColors.profileTop, OptivusColors.profileBottom], // Profile: #FAFFE3
 ];
 
 // Per-tab accent colors for active indicator
@@ -87,24 +87,13 @@ class _AppShellState extends ConsumerState<AppShell> {
             stops: const [0.0, 0.80],
           ),
         ),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              // Dynamic Premium Header
-              _buildHeader(currentIndex),
-
-              // Active Tab Content inside a state-preserving stack
-              Expanded(
-                child: IndexedStack(
-                  index: currentIndex,
-                  children: List.generate(
-                    _tabGradients.length,
-                    (index) => _tabCache[index] ?? const SizedBox.shrink(),
-                  ),
-                ),
-              ),
-            ],
+        // IndexedStack preserves state across tabs. 
+        // No global SafeArea here; each tab manages its own SafeArea.
+        child: IndexedStack(
+          index: currentIndex,
+          children: List.generate(
+            _tabGradients.length,
+            (index) => _tabCache[index] ?? const SizedBox.shrink(),
           ),
         ),
       ),
@@ -114,62 +103,6 @@ class _AppShellState extends ConsumerState<AppShell> {
           ref.read(appNavigationProvider.notifier).setTab(index);
         },
         activeColor: _tabAccents[currentIndex],
-      ),
-    );
-  }
-
-  Widget _buildHeader(int currentIndex) {
-    // Home (0), Routine (1), Tracker (2), and Goals (4) tabs render their own custom headers
-    if (currentIndex == 0 || currentIndex == 1 || currentIndex == 2 || currentIndex == 4) {
-      return const SizedBox.shrink();
-    }
-
-    String title = '';
-    String subtitle = '';
-    Widget trailing = const SizedBox.shrink();
-
-    switch (currentIndex) {
-      case 3:
-        title = 'AI Coach';
-        subtitle = 'Always supportive, never shaming';
-        break;
-      default:
-        title = 'Profile';
-        subtitle = 'Account details & preferences';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF0F111A),
-                    letterSpacing: -0.8,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.blueGrey.shade700,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          trailing,
-        ],
       ),
     );
   }

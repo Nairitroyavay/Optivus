@@ -38,58 +38,48 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
     final trackerState = ref.watch(mockTrackerProvider);
     final snapshot = _TrackerUiSnapshot.fromState(trackerState);
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [OptivusColors.trackerTop, OptivusColors.trackerCardTint],
-          stops: [0.0, 0.80],
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: _buildHeader(context),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildPeriodSelector(),
-                      const SizedBox(height: 20),
-                      _buildProgressCarousel(snapshot),
-                      const SizedBox(height: 28),
-                      _buildTodayProgressHero(context, snapshot),
-                      const SizedBox(height: 36),
-                      const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
-                      _buildActiveTrackers(snapshot),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
-                      _buildDiscoverTrackers(),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
-                      _buildPhoneDataSources(snapshot),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
-                      _buildRecentActivity(snapshot),
-                      const SizedBox(height: 48),
-                      _buildTrackerSettingsTeaser(),
-                    ],
-                  ),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: _buildHeader(context),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildPeriodSelector(),
+                    const SizedBox(height: 20),
+                    _buildProgressCarousel(snapshot),
+                    const SizedBox(height: 28),
+                    _buildTodayProgressHero(context, snapshot),
+                    const SizedBox(height: 36),
+                    const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
+                    _buildActiveTrackers(snapshot),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
+                    _buildDiscoverTrackers(),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
+                    _buildPhoneDataSources(snapshot),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
+                    _buildRecentActivity(snapshot),
+                    const SizedBox(height: 48),
+                    _buildTrackerSettingsTeaser(),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -29,30 +29,34 @@ class OptivusColors {
   static const Color routineCardTint = Color(0xFFF2FCEC);
 
   // Tracker
-  static const Color trackerTop = Color(0xFFBFFFFE);
+  static const Color trackerTop = Color(0xFFD6FFFE);
+  static const Color trackerBottom = Color(0xFFF5FFFF);
   static const Color trackerAccent = Color(0xFF3ED8E6);
   static const Color trackerCardTint = Color(0xFFEEFFFF);
 
   // Coach
   static const Color coachTop = Color(0xFFF7E0FF);
+  static const Color coachBottom = Color(0xFFFCF2FF);
   static const Color coachAccent = Color(0xFFA56CF0);
   static const Color coachCardTint = Color(0xFFFCF2FF);
 
   // Goals
-  static const Color goalsTop = Color(0xFFFFD9F2);
+  static const Color goalsTop = Color(0xFFFFEBF8);
+  static const Color goalsBottom = Color(0xFFFFF2FB);
   static const Color goalsAccent = Color(0xFFEC5FAE);
   static const Color goalsCardTint = Color(0xFFFFF0FA);
 
   // Profile
-  static const Color profileTop = Color(0xFFFCFFD6);
-  static const Color profileAccent = Color(0xFFC9B63C);
+  static const Color profileTop = Color(0xFFFFE5CF);
+  static const Color profileBottom = Color(0xFFFFEEE6);
+  static const Color profileAccent = Color(0xFFF36F78);
   static const Color profileCardTint = Color(0xFFFEFFE9);
 
   // Onboarding & Auth
   static const Color onboardingTop = Color(0xFFFFF4D8);
   static const Color onboardingBottom = Color(0xFFFFFFFF);
   static const Color brandAccent = Color(0xFFE0B51F);
-  static const Color aquaAccent = Color(0xFF7BE6DC);
+  static const Color aquaAccent = Color(0xFFF36F78);
 
   // ── Old-codebase-matched tokens (liquid_ui.dart kXxx equivalents) ─────────
   // These are the EXACT colour values from the original Optivus Routine UI.

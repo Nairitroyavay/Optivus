@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
-import 'package:optivus/core/theme/optivus_colors.dart';
 
 import 'package:optivus/app/app_navigation_controller.dart';
 
@@ -32,22 +31,10 @@ class HomeTab extends ConsumerWidget {
     // We get all home dashboard state from our new provider
     final dashboardState = ref.watch(homeDashboardProvider);
 
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            OptivusColors.homeTop,
-            Color(0xFFFFEDED),
-          ],
-          stops: [0.0, 0.80],
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent, // Background gradient is handled by container wrapper
-        body: SafeArea(
-          bottom: false,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             Padding(
@@ -91,7 +78,6 @@ class HomeTab extends ConsumerWidget {
           ],
         ),
       ),
-      ), // Scaffold
-    ); // Container
+    );
   }
 }

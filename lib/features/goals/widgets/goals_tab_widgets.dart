@@ -58,14 +58,14 @@ class GoalsGlassCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(radius),
         boxShadow: [
           BoxShadow(
-            color: OptivusColors.ink.withValues(alpha: 0.04),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            color: OptivusColors.ink.withValues(alpha: 0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
           BoxShadow(
-            color: glowColor.withValues(alpha: 0.12),
-            blurRadius: 32,
-            offset: const Offset(0, 6),
+            color: glowColor.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -205,40 +205,65 @@ class GoalsHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Become . Prove . Evolve',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: OptivusColors.sub,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Goals',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.ink,
+                    ) ??
+                    const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.ink,
+                      letterSpacing: -0.8,
+                    ),
               ),
+              const SizedBox(height: 4),
+              Text(
+                'Build the person you chose to become',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                  color: Colors.blueGrey.shade700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Row(
+          children: [
+            GoalsHeaderButton(
+              icon: Icons.add,
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Add Identity Goal')),
+                );
+              },
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Goal.',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.ink,
-                  ) ??
-                  const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.ink,
-                  ),
+            const SizedBox(width: 8),
+            GoalsHeaderButton(
+              icon: Icons.assignment_outlined,
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Weekly Review')),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+            GoalsHeaderButton(
+              icon: Icons.settings_outlined,
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Goal Settings')),
+                );
+              },
             ),
           ],
-        ),
-        GoalsHeaderButton(
-          icon: Icons.add,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Add Identity Goal')),
-            );
-          },
         ),
       ],
     );
@@ -287,9 +312,9 @@ class GoalsEmptyIdentityCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: OptivusColors.goalsAccent.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+                    color: OptivusColors.goalsAccent.withValues(alpha: 0.15),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -419,20 +444,39 @@ class TodayIdentityFocusCard extends StatelessWidget {
                     ),
                     alignment: Alignment.center,
                     child: const Text(
-                      'View Identity',
+                      'View Routine',
                       style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () {},
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: OptivusColors.coachTop,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: OptivusColors.coachTop, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      'Ask Coach',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.coachAccent),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.5),
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.edit_outlined, color: OptivusColors.ink),
+                  icon: const Icon(Icons.swap_horiz_outlined, color: OptivusColors.ink),
                   onPressed: () {},
                 ),
               ),
@@ -450,26 +494,6 @@ class TodayProofsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goals = ref.watch(mockGoalProvider);
-    final incompleteGoals = goals.where((g) => !g.dailyProof.isCompleted).toList();
-    final nextGoal = incompleteGoals.isNotEmpty ? incompleteGoals.first : (goals.isNotEmpty ? goals.first : null);
-
-    if (nextGoal == null) {
-      return GoalsGlassCard(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            const Icon(Icons.check_circle, color: OptivusColors.success, size: 48),
-            const SizedBox(height: 12),
-            const Text(
-              'All proofs completed!',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: OptivusColors.ink),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final proof = nextGoal.dailyProof;
 
     return GoalsGlassCard(
       padding: const EdgeInsets.all(24),
@@ -483,107 +507,126 @@ class TodayProofsCard extends ConsumerWidget {
               const Icon(Icons.bolt_rounded, color: OptivusColors.brandAccent, size: 24),
               const SizedBox(width: 8),
               const Text(
-                'Next Proof',
+                'Today\'s Proofs',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 16,
                   fontWeight: FontWeight.w900,
                   color: OptivusColors.ink,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            proof.title,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: OptivusColors.ink,
-              height: 1.2,
+          const SizedBox(height: 20),
+          if (goals.isEmpty)
+            const Text(
+              'No proofs today.',
+              style: TextStyle(color: OptivusColors.sub),
+            )
+          else
+            ...goals.map((g) => _buildProofRow(context, ref, g)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProofRow(BuildContext context, WidgetRef ref, GoalModel goal) {
+    final proof = goal.dailyProof;
+    final isCompleted = proof.isCompleted;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isCompleted ? OptivusColors.success.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isCompleted ? Icons.check : Icons.circle_outlined,
+              color: isCompleted ? OptivusColors.success : OptivusColors.sub,
+              size: 18,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'For: ${nextGoal.identityTitle}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: OptivusColors.sub,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: InkWell(
-                  onTap: () {
-                    ref.read(mockGoalProvider.notifier).toggleGoalProofCompleted(nextGoal.id);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [OptivusColors.success, Color(0xFF2E995A)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: OptivusColors.success.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      'Done',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 1,
-                child: InkWell(
-                  onTap: () {},
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      'Do Tiny',
-                      style: TextStyle(color: OptivusColors.ink, fontWeight: FontWeight.w800, fontSize: 14),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Center(
-            child: InkWell(
-              onTap: () {},
-              child: const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text(
-                  'Skip / Not Today',
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  goal.identityTitle,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: OptivusColors.sub,
-                    decoration: TextDecoration.underline,
+                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  proof.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.ink,
+                    decoration: isCompleted ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Source: ${goal.systems.isNotEmpty ? goal.systems.first.description.split(' ').first : 'Core'}',
+                  style: const TextStyle(fontSize: 10, color: OptivusColors.sub),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (!isCompleted)
+            InkWell(
+              onTap: () {
+                ref.read(mockGoalProvider.notifier).toggleGoalProofCompleted(goal.id);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: OptivusColors.goalsAccent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: OptivusColors.goalsAccent.withValues(alpha: 0.15),
+                      blurRadius: 2,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Start',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
                   ),
                 ),
               ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: OptivusColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Done',
+                style: TextStyle(
+                  color: OptivusColors.success,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -698,21 +741,88 @@ class GoalSystemsSection extends ConsumerWidget {
 
     if (allSystems.isEmpty) return const SizedBox.shrink();
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 12,
-      children: allSystems.map((sys) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white, width: 1.5),
-        ),
-        child: Text(
-          sys.description,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.ink),
-        ),
+    return Column(
+      children: allSystems.map((sys) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _BlueprintSystemCard(system: sys),
       )).toList(),
+    );
+  }
+}
+
+class _BlueprintSystemCard extends StatelessWidget {
+  final GoalSystem system;
+
+  const _BlueprintSystemCard({required this.system});
+
+  @override
+  Widget build(BuildContext context) {
+    return GoalsGlassCard(
+      padding: const EdgeInsets.all(16),
+      radius: 20,
+      opacity: 0.6,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.hub_outlined, color: OptivusColors.goalsAccent, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'SYSTEM CORE',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: OptivusColors.goalsAccent, letterSpacing: 0.8),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            system.description,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: OptivusColors.ink),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              if (system.linkedRoutineTaskIds.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: OptivusColors.routineAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: OptivusColors.routineAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_circle_outline, color: OptivusColors.routineAccent, size: 14),
+                      const SizedBox(width: 6),
+                      Text('${system.linkedRoutineTaskIds.length} Routine Linked', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: OptivusColors.routineAccent)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (system.linkedTrackerIds.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: OptivusColors.trackerAccent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: OptivusColors.trackerAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.insights, color: OptivusColors.trackerAccent, size: 14),
+                      const SizedBox(width: 6),
+                      Text('${system.linkedTrackerIds.length} Tracker Linked', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: OptivusColors.trackerAccent)),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          )
+        ],
+      ),
     );
   }
 }
@@ -805,10 +915,10 @@ class TinyVersionCard extends StatelessWidget {
   }
 }
 
-class OverloadProtectionCard extends StatelessWidget {
+class GoalHealthCard extends StatelessWidget {
   final int activeCount;
 
-  const OverloadProtectionCard({super.key, required this.activeCount});
+  const GoalHealthCard({super.key, required this.activeCount});
 
   @override
   Widget build(BuildContext context) {
@@ -823,8 +933,8 @@ class OverloadProtectionCard extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isOverloaded ? Icons.warning_amber_rounded : Icons.info_outline_rounded,
-            color: isOverloaded ? OptivusColors.warning : OptivusColors.sub,
+            isOverloaded ? Icons.warning_amber_rounded : Icons.health_and_safety_outlined,
+            color: isOverloaded ? OptivusColors.warning : OptivusColors.success,
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -839,10 +949,116 @@ class OverloadProtectionCard extends StatelessWidget {
             ),
           ),
           if (isOverloaded)
-            Text(
+            const Text(
               'Pause one',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.sub, decoration: TextDecoration.underline),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class WeeklyGoalProgressCard extends StatelessWidget {
+  const WeeklyGoalProgressCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GoalsGlassCard(
+      padding: const EdgeInsets.all(20),
+      radius: 24,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This Week',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: OptivusColors.ink),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  children: [
+                    Text('14', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: OptivusColors.goalsAccent)),
+                    const Text('Proofs', style: TextStyle(fontSize: 12, color: OptivusColors.sub)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    const Text('85%', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: OptivusColors.success)),
+                    const Text('Consistency', style: TextStyle(fontSize: 12, color: OptivusColors.sub)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class GoalInsightsCard extends StatelessWidget {
+  const GoalInsightsCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GoalsGlassCard(
+      padding: const EdgeInsets.all(20),
+      radius: 20,
+      opacity: 0.6,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: OptivusColors.coachTop.withValues(alpha: 0.3),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.psychology, color: OptivusColors.coachAccent),
+          ),
+          const SizedBox(width: 16),
+          const Expanded(
+            child: Text(
+              '"You\'ve completed 5 fitness proofs this week. You\'re building strong momentum toward your Athlete identity."',
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: OptivusColors.ink, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class UpcomingReviewsCard extends StatelessWidget {
+  const UpcomingReviewsCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GoalsGlassCard(
+      padding: const EdgeInsets.all(16),
+      radius: 16,
+      child: Row(
+        children: [
+          const Icon(Icons.event, color: OptivusColors.sub),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Weekly Identity Review',
+              style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text('Sun, 6PM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.goalsAccent)),
+          ),
         ],
       ),
     );

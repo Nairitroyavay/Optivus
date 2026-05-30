@@ -26,66 +26,71 @@ class GoalsTab extends ConsumerWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [OptivusColors.goalsTop, OptivusColors.goalsCardTint],
+          colors: [OptivusColors.goalsTop, OptivusColors.goalsBottom],
           stops: [0.0, 0.80],
         ),
       ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              Container(
-                color: OptivusColors.goalsTop,
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: const GoalsHeader(),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (primaryGoal != null) ...[
-                        TodayIdentityFocusCard(primaryGoal: primaryGoal),
-                        const SizedBox(height: 32),
-                      ] else ...[
-                        const GoalsEmptyIdentityCard(),
-                        const SizedBox(height: 32),
-                      ],
-
-                      const TodayProofsCard(),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: const GoalsHeader(),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (primaryGoal != null) ...[
+                      TodayIdentityFocusCard(primaryGoal: primaryGoal),
                       const SizedBox(height: 32),
-
-                      const GoalsSectionHeader(title: 'ACTIVE IDENTITIES'),
-                      const ActiveIdentityGoalsSection(),
+                    ] else ...[
+                      const GoalsEmptyIdentityCard(),
                       const SizedBox(height: 32),
-
-                      const GoalsSectionHeader(title: 'FOCUS AREAS'),
-                      const GoalSystemsSection(),
-                      const SizedBox(height: 32),
-
-                      const GoalsSectionHeader(title: 'MILESTONES'),
-                      const MilestonesCard(),
-                      const SizedBox(height: 32),
-
-                      // Tiny version/comeback card 
-                      const TinyVersionCard(),
-                      const SizedBox(height: 24),
-
-                      OverloadProtectionCard(activeCount: overloadCount),
-                      if (overloadCount > 0) const SizedBox(height: 32),
-
-                      const ArchivedGoalsShortcut(),
                     ],
-                  ),
+
+                    const TodayProofsCard(),
+                    const SizedBox(height: 32),
+
+                    const GoalsSectionHeader(title: 'ACTIVE IDENTITIES'),
+                    const ActiveIdentityGoalsSection(),
+                    const SizedBox(height: 32),
+
+                    const GoalsSectionHeader(title: 'SYSTEMS'),
+                    const GoalSystemsSection(),
+                    const SizedBox(height: 32),
+
+                    const GoalsSectionHeader(title: 'GOAL HEALTH'),
+                    GoalHealthCard(activeCount: overloadCount),
+                    const SizedBox(height: 32),
+
+                    const GoalsSectionHeader(title: 'WEEKLY PROGRESS'),
+                    const WeeklyGoalProgressCard(),
+                    const SizedBox(height: 32),
+
+                    const GoalsSectionHeader(title: 'INSIGHTS'),
+                    const GoalInsightsCard(),
+                    const SizedBox(height: 32),
+
+                    const GoalsSectionHeader(title: 'MILESTONES'),
+                    const MilestonesCard(),
+                    const SizedBox(height: 32),
+
+                    const GoalsSectionHeader(title: 'UPCOMING REVIEWS'),
+                    const UpcomingReviewsCard(),
+                    const SizedBox(height: 32),
+
+                    const ArchivedGoalsShortcut(),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

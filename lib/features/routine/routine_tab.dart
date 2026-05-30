@@ -71,83 +71,70 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     final conflictCount = conflicts.length;
 
     // ── Layout matches old: LiquidBg → Scaffold(transparent) → Stack ──
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            OptivusColors.routineBgTop, // #A3FF91
-            OptivusColors.routineBgBottom, // #EFFEEC
-          ],
-          stops: [0.0, 0.55],
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
-          children: [
-            SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  // ── Header: Date + AI/Add/Settings ──
-                  RoutineHeader(
-                    onAITap: () => showAIAssistantSheet(context, ref),
-                    onAddTap: () => showAddRoutineSheet(context, ref),
-                    onSettingsTap: () => showRoutineSettingsSheet(context, ref),
-                  ),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                // ── Header: Date + AI/Add/Settings ──
+                RoutineHeader(
+                  onAITap: () => showAIAssistantSheet(context, ref),
+                  onAddTap: () => showAddRoutineSheet(context, ref),
+                  onSettingsTap: () => showRoutineSettingsSheet(context, ref),
+                ),
 
-                  // ── Title + Filter (inside same padding block as header) ──
-                  const RoutineTitleFilterRow(),
-                  const SizedBox(height: 16),
+                // ── Title + Filter (inside same padding block as header) ──
+                const RoutineTitleFilterRow(),
+                const SizedBox(height: 16),
 
-                  // ── Day Selector ──
-                  const RoutineDaySelector(),
-                  const SizedBox(height: 16),
+                // ── Day Selector ──
+                const RoutineDaySelector(),
+                const SizedBox(height: 16),
 
-                  // ── Conflict Banner ──
-                  ConflictBanner(
-                    conflictCount: conflictCount,
-                    onTap: () {
-                      ref.read(routineNotifierProvider.notifier).setPrimaryFilter('conflicts');
-                    },
-                  ),
+                // ── Conflict Banner ──
+                ConflictBanner(
+                  conflictCount: conflictCount,
+                  onTap: () {
+                    ref.read(routineNotifierProvider.notifier).setPrimaryFilter('conflicts');
+                  },
+                ),
 
-                  // Add a small spacing if there are conflicts so timeline doesn't touch it
-                  if (conflictCount > 0) const SizedBox(height: 12),
+                // Add a small spacing if there are conflicts so timeline doesn't touch it
+                if (conflictCount > 0) const SizedBox(height: 12),
 
-                  // ── Timeline or Empty State ──
-                  Expanded(
-                    child: sortedItems.isEmpty
-                        ? Stack(
-                            children: [
-                              RoutineTimelineViewport(
-                                items: const [],
-                                layout: layout,
-                                isToday: isToday,
-                                showCurrentTimeLine: showCurrentTimeLine,
-                              ),
-                              Positioned.fill(
-                                child: IgnorePointer(child: _buildEmptyState()),
-                              ),
-                            ],
-                          )
-                        : RoutineTimelineViewport(
-                            items: sortedItems,
-                            layout: layout,
-                            isToday: isToday,
-                            showCurrentTimeLine: showCurrentTimeLine,
-                            onCardTap: (item) {
-                              showRoutineDetailSheet(context, ref, item);
-                            },
-                          ),
-                  ),
-                ],
-              ),
+                // ── Timeline or Empty State ──
+                Expanded(
+                  child: sortedItems.isEmpty
+                      ? Stack(
+                          children: [
+                            RoutineTimelineViewport(
+                              items: const [],
+                              layout: layout,
+                              isToday: isToday,
+                              showCurrentTimeLine: showCurrentTimeLine,
+                            ),
+                            Positioned.fill(
+                              child: IgnorePointer(child: _buildEmptyState()),
+                            ),
+                          ],
+                        )
+                      : RoutineTimelineViewport(
+                          items: sortedItems,
+                          layout: layout,
+                          isToday: isToday,
+                          showCurrentTimeLine: showCurrentTimeLine,
+                          onCardTap: (item) {
+                            showRoutineDetailSheet(context, ref, item);
+                          },
+                        ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
