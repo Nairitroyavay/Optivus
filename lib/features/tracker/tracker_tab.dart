@@ -5,6 +5,9 @@ import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/features/tracker/meditation/meditation_tracker_screen.dart';
+
+enum TrackerDetailView { none, meditation }
 
 class TrackerTab extends ConsumerStatefulWidget {
   const TrackerTab({super.key});
@@ -15,6 +18,7 @@ class TrackerTab extends ConsumerStatefulWidget {
 
 class _TrackerTabState extends ConsumerState<TrackerTab> {
   String _activeMetricView = 'Daily';
+  TrackerDetailView _activeDetailView = TrackerDetailView.none;
 
   void _showPlaceholder(String title) {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -42,45 +46,51 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       backgroundColor: Colors.transparent,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: _buildHeader(context),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildPeriodSelector(),
-                    const SizedBox(height: 20),
-                    _buildProgressCarousel(snapshot),
-                    const SizedBox(height: 28),
-                    _buildTodayProgressHero(context, snapshot),
-                    const SizedBox(height: 36),
-                    const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
-                    _buildActiveTrackers(snapshot),
-                    const SizedBox(height: 32),
-                    const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
-                    _buildDiscoverTrackers(),
-                    const SizedBox(height: 32),
-                    const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
-                    _buildPhoneDataSources(snapshot),
-                    const SizedBox(height: 32),
-                    const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
-                    _buildRecentActivity(snapshot),
-                    const SizedBox(height: 48),
-                    _buildTrackerSettingsTeaser(),
-                  ],
-                ),
+        child: _activeDetailView == TrackerDetailView.meditation
+            ? MeditationTrackerScreen(
+                onBack: () {
+                  setState(() => _activeDetailView = TrackerDetailView.none);
+                },
+              )
+            : Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                    child: _buildHeader(context),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildPeriodSelector(),
+                          const SizedBox(height: 20),
+                          _buildProgressCarousel(snapshot),
+                          const SizedBox(height: 28),
+                          _buildTodayProgressHero(context, snapshot),
+                          const SizedBox(height: 36),
+                          const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
+                          _buildActiveTrackers(snapshot),
+                          const SizedBox(height: 32),
+                          const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
+                          _buildDiscoverTrackers(),
+                          const SizedBox(height: 32),
+                          const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
+                          _buildPhoneDataSources(snapshot),
+                          const SizedBox(height: 32),
+                          const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
+                          _buildRecentActivity(snapshot),
+                          const SizedBox(height: 48),
+                          _buildTrackerSettingsTeaser(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -323,7 +333,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
                 } else if (tracker.title == 'Screen Time') {
                   context.push('/tracker/screen-time');
                 } else if (tracker.title == 'Meditation') {
-                  context.push('/tracker/meditation');
+                  setState(() => _activeDetailView = TrackerDetailView.meditation);
                 } else {
                   _showPlaceholder(tracker.title);
                 }

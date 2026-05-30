@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
+import 'dart:math' as math;
 import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'meditation_mock_data.dart';
 
-class MeditationHeroCard extends StatelessWidget {
+class MeditationTargetCard extends StatelessWidget {
   final int targetMinutes;
   final int completedMinutes;
   final int streakDays;
 
-  const MeditationHeroCard({
+  const MeditationTargetCard({
     super.key,
     required this.targetMinutes,
     required this.completedMinutes,
@@ -17,10 +20,10 @@ class MeditationHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LiquidCard(
+    return TrackerGlassCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      radius: 20,
-      tint: OptivusColors.trackerCardTint.withValues(alpha: 0.6),
+      radius: 24,
+      opacity: 0.7,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -36,13 +39,17 @@ class MeditationHeroCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 2),
-              Text(
-                '$completedMinutes / $targetMinutes min',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: kInk,
-                ),
+              Row(
+                children: [
+                  Text(
+                    '$completedMinutes / $targetMinutes min',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: kInk,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -262,12 +269,12 @@ class DurationSelector extends StatelessWidget {
   }
 }
 
-class BreathingOrb extends StatefulWidget {
+class LiquidGlassBreathingOrb extends StatefulWidget {
   final bool isRunning;
   final String currentPhase;
   final Color accentColor;
 
-  const BreathingOrb({
+  const LiquidGlassBreathingOrb({
     super.key,
     required this.isRunning,
     required this.currentPhase,
@@ -275,23 +282,29 @@ class BreathingOrb extends StatefulWidget {
   });
 
   @override
-  State<BreathingOrb> createState() => _BreathingOrbState();
+  State<LiquidGlassBreathingOrb> createState() => _LiquidGlassBreathingOrbState();
 }
 
-class _BreathingOrbState extends State<BreathingOrb> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+class _LiquidGlassBreathingOrbState extends State<LiquidGlassBreathingOrb> with TickerProviderStateMixin {
+  late AnimationController _breathingController;
+  late AnimationController _liquidController;
   late Animation<double> _scaleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _breathingController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     );
     _scaleAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
+      CurvedAnimation(parent: _breathingController, curve: Curves.easeInOutSine),
     );
+
+    _liquidController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat();
 
     if (widget.isRunning) {
       _startAnimation();
@@ -299,120 +312,245 @@ class _BreathingOrbState extends State<BreathingOrb> with SingleTickerProviderSt
   }
 
   @override
-  void didUpdateWidget(covariant BreathingOrb oldWidget) {
+  void didUpdateWidget(covariant LiquidGlassBreathingOrb oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isRunning != oldWidget.isRunning) {
       if (widget.isRunning) {
         _startAnimation();
       } else {
-        _controller.stop();
+        _breathingController.stop();
       }
     }
     
     if (widget.isRunning && widget.currentPhase != oldWidget.currentPhase) {
         if (widget.currentPhase == 'Breathe in') {
-            _controller.forward();
+            _breathingController.forward();
         } else if (widget.currentPhase == 'Hold') {
-            _controller.stop();
+            _breathingController.stop();
         } else if (widget.currentPhase == 'Breathe out') {
-            _controller.reverse();
+            _breathingController.reverse();
         } else if (widget.currentPhase == 'Rest') {
-            _controller.stop();
+            _breathingController.stop();
         }
     }
   }
 
   void _startAnimation() {
       if (widget.currentPhase == 'Breathe in') {
-          _controller.forward();
+          _breathingController.forward();
       } else if (widget.currentPhase == 'Breathe out') {
-          _controller.reverse();
-      } else if (!_controller.isAnimating) {
-         _controller.repeat(reverse: true);
+          _breathingController.reverse();
+      } else if (!_breathingController.isAnimating) {
+         _breathingController.repeat(reverse: true);
       }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _breathingController.dispose();
+    _liquidController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _scaleAnimation,
+      animation: Listenable.merge([_scaleAnimation, _liquidController]),
       builder: (context, child) {
+        final scale = widget.isRunning ? _scaleAnimation.value : 1.0;
+        final rotation = _liquidController.value * 2 * math.pi;
+
         return Transform.scale(
-          scale: widget.isRunning ? _scaleAnimation.value : 1.0,
+          scale: scale,
           child: Container(
-            width: 220,
-            height: 220,
+            width: 240,
+            height: 240,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: widget.accentColor.withValues(alpha: 0.05),
               boxShadow: [
+                // Colorful caustics shadow cast downward
                 BoxShadow(
-                  color: widget.accentColor.withValues(alpha: 0.15),
-                  blurRadius: 60,
-                  spreadRadius: widget.isRunning ? 20 * _scaleAnimation.value : 10,
+                  color: widget.accentColor.withValues(alpha: 0.35),
+                  blurRadius: 50,
+                  spreadRadius: widget.isRunning ? 15 * _scaleAnimation.value : 5,
+                  offset: const Offset(0, 20),
                 ),
                 BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  blurRadius: 20,
-                  spreadRadius: -5,
+                  color: kPurple.withValues(alpha: 0.15),
+                  blurRadius: 80,
+                  spreadRadius: 20,
+                  offset: const Offset(0, 40),
                 ),
               ],
             ),
-            child: Center(
-              child: Container(
-                width: 160,
-                height: 160,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.9),
-                      Colors.white.withValues(alpha: 0.4),
-                      widget.accentColor.withValues(alpha: 0.3),
+            child: Stack(
+              children: [
+                // Inner vibrant liquid core
+                ClipOval(
+                  child: Stack(
+                    children: [
+                      // Base iridescent gradient
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: SweepGradient(
+                            center: Alignment.center,
+                            transform: GradientRotation(rotation),
+                            colors: [
+                              widget.accentColor,
+                              kPurple,
+                              kBlue,
+                              widget.accentColor,
+                            ],
+                            stops: const [0.0, 0.33, 0.66, 1.0],
+                          ),
+                        ),
+                      ),
+                      // Floating blob 1
+                      Transform.translate(
+                        offset: Offset(40 * math.cos(rotation), 40 * math.sin(rotation)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              center: const Alignment(-0.5, -0.5),
+                              radius: 0.8,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.8),
+                                widget.accentColor.withValues(alpha: 0.8),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Floating blob 2
+                      Transform.translate(
+                        offset: Offset(-50 * math.cos(rotation * 1.5), -50 * math.sin(rotation * 1.5)),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              center: const Alignment(0.5, 0.5),
+                              radius: 0.7,
+                              colors: [
+                                kPurple.withValues(alpha: 0.9),
+                                Colors.transparent,
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
-                    stops: const [0.2, 0.7, 1.0],
                   ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.6),
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.accentColor.withValues(alpha: 0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                    const BoxShadow(
-                      color: Colors.white,
-                      blurRadius: 10,
-                      offset: Offset(-5, -5),
-                    ),
-                  ],
                 ),
-                child: Center(
+                
+                // Heavy Frosted glass blur effect for thick refraction
+                ClipOval(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+                    child: Container(
+                      color: Colors.white.withValues(alpha: 0.05),
+                    ),
+                  ),
+                ),
+                
+                // 3D Glass Shell (Thick refractive edge & Ambient Occlusion)
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      width: 2.0,
+                    ),
+                    gradient: RadialGradient(
+                      center: const Alignment(-0.3, -0.3),
+                      radius: 1.05,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.4), // Top left light hit
+                        Colors.white.withValues(alpha: 0.0), // Transparent center
+                        Colors.black.withValues(alpha: 0.5), // Bottom right ambient occlusion
+                      ],
+                      stops: const [0.0, 0.4, 1.0],
+                    ),
+                    boxShadow: [
+                      // Intense inner glow top-left
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        blurRadius: 24,
+                        spreadRadius: -6,
+                        offset: const Offset(-8, -8),
+                        blurStyle: BlurStyle.inner,
+                      ),
+                      // Inner cyan/purple glow
+                      BoxShadow(
+                        color: widget.accentColor.withValues(alpha: 0.5),
+                        blurRadius: 40,
+                        spreadRadius: -10,
+                        offset: const Offset(10, 10),
+                        blurStyle: BlurStyle.inner,
+                      ),
+                      // Intense inner dark shadow bottom-right
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 35,
+                        spreadRadius: -10,
+                        offset: const Offset(15, 15),
+                        blurStyle: BlurStyle.inner,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Primary Specular Highlight (Crisp top-left crescent)
+                Positioned(
+                  top: 6,
+                  left: 24,
+                  right: 24,
+                  height: 100,
                   child: Container(
-                    width: 100,
-                    height: 100,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(120),
+                        bottom: Radius.circular(80),
+                      ),
                       gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
                         colors: [
-                          Colors.white.withValues(alpha: 0.8),
-                          widget.accentColor.withValues(alpha: 0.1),
+                          Colors.white.withValues(alpha: 0.85),
+                          Colors.white.withValues(alpha: 0.0),
                         ],
+                        stops: const [0.0, 0.8],
                       ),
                     ),
                   ),
                 ),
-              ),
+                
+                // Secondary Bounce Light (Bottom right curve)
+                Positioned(
+                  bottom: 6,
+                  left: 36,
+                  right: 36,
+                  height: 40,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(80),
+                        bottom: Radius.circular(120),
+                      ),
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.5),
+                          Colors.white.withValues(alpha: 0.0),
+                        ],
+                        stops: const [0.0, 0.9],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -466,12 +604,44 @@ class TimerDisplay extends StatelessWidget {
   }
 }
 
-class MusicSelector extends StatelessWidget {
+class TrackerGlassHighlightPainter extends CustomPainter {
+  final double radius;
+
+  TrackerGlassHighlightPainter({this.radius = 24});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: 0.6),
+          Colors.white.withValues(alpha: 0.1),
+          Colors.white.withValues(alpha: 0.0),
+          Colors.white.withValues(alpha: 0.2),
+        ],
+        stops: const [0.0, 0.2, 0.8, 1.0],
+      ).createShader(rect);
+
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class MeditationMusicFilter extends StatefulWidget {
   final List<MeditationSoundUiModel> sounds;
   final String selectedSoundId;
   final ValueChanged<String> onSelected;
 
-  const MusicSelector({
+  const MeditationMusicFilter({
     super.key,
     required this.sounds,
     required this.selectedSoundId,
@@ -479,226 +649,237 @@ class MusicSelector extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final selectedSound = sounds.firstWhere(
-      (s) => s.id == selectedSoundId,
-      orElse: () => sounds.first,
+  State<MeditationMusicFilter> createState() => _MeditationMusicFilterState();
+}
+
+class _MeditationMusicFilterState extends State<MeditationMusicFilter> {
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+  bool _isOpen = false;
+
+  void _toggleDropdown() {
+    if (_isOpen) {
+      _closeDropdown();
+    } else {
+      _showDropdown();
+    }
+  }
+
+  void _closeDropdown() {
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    }
+    if (mounted) {
+      setState(() {
+        _isOpen = false;
+      });
+    }
+  }
+
+  void _showDropdown() {
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+    final dropdownWidth = 240.0;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        return Stack(
+          children: [
+            GestureDetector(
+              onTap: _closeDropdown,
+              behavior: HitTestBehavior.opaque,
+              child: Container(color: Colors.transparent),
+            ),
+            CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: Offset(size.width - dropdownWidth, size.height + 8),
+              child: Material(
+                color: Colors.transparent,
+                child: _buildDropdownContent(dropdownWidth),
+              ),
+            ),
+          ],
+        );
+      },
     );
 
-    return Align(
-      alignment: Alignment.center,
-      child: GestureDetector(
-        onTap: () => _showMusicSheet(context),
+    Overlay.of(context).insert(_overlayEntry!);
+    setState(() {
+      _isOpen = true;
+    });
+  }
+
+  Widget _buildDropdownContent(double width) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          width: width,
+          constraints: const BoxConstraints(maxHeight: 320),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white, width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: kBlue.withValues(alpha: 0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            color: Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(selectedSound.icon, style: const TextStyle(fontSize: 16)),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'SOUNDSCAPE',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                      color: kSub,
-                    ),
-                  ),
-                  Text(
-                    selectedSound.title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: kInk,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 12),
-              const Icon(Icons.keyboard_arrow_down, color: kSub),
-            ],
+          child: CustomPaint(
+            painter: TrackerGlassHighlightPainter(radius: 20),
+            child: ListView(
+              padding: const EdgeInsets.all(8),
+              shrinkWrap: true,
+              physics: const BouncingScrollPhysics(),
+              children: [
+                _buildTrackItem(
+                  id: 'silent',
+                  title: 'Silent',
+                  icon: '🤫',
+                  isSelected: widget.selectedSoundId == 'silent',
+                ),
+                ...mockMeditationCategories.map((cat) {
+                  final catTracks = widget.sounds.where((s) => s.categoryId == cat.id).toList();
+                  if (catTracks.isEmpty) return const SizedBox.shrink();
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                        child: Text(
+                          cat.label.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: kSub,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ),
+                      ...catTracks.map((track) => _buildTrackItem(
+                            id: track.id,
+                            title: track.title,
+                            icon: track.icon,
+                            isSelected: widget.selectedSoundId == track.id,
+                          )),
+                    ],
+                  );
+                }),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  void _showMusicSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return _MusicSelectionSheet(
-          sounds: sounds,
-          selectedSoundId: selectedSoundId,
-          onSelected: (id) {
-            onSelected(id);
-            Navigator.pop(context);
-          },
-        );
+  Widget _buildTrackItem({required String id, required String title, required String icon, required bool isSelected}) {
+    return GestureDetector(
+      onTap: () {
+        widget.onSelected(id);
+        _closeDropdown();
       },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? OptivusColors.trackerAccent.withValues(alpha: 0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? kInk : kSub,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (isSelected) const Icon(Icons.check, color: OptivusColors.trackerAccent, size: 16),
+          ],
+        ),
+      ),
     );
   }
-}
-
-class _MusicSelectionSheet extends StatefulWidget {
-  final List<MeditationSoundUiModel> sounds;
-  final String selectedSoundId;
-  final ValueChanged<String> onSelected;
-
-  const _MusicSelectionSheet({
-    required this.sounds,
-    required this.selectedSoundId,
-    required this.onSelected,
-  });
 
   @override
-  State<_MusicSelectionSheet> createState() => _MusicSelectionSheetState();
-}
+  void dispose() {
+    _closeDropdown();
+    super.dispose();
+  }
 
-class _MusicSelectionSheetState extends State<_MusicSelectionSheet> {
-  String? _expandedCategoryId;
-  String? _expandedSubCategoryId;
+  @override
+  void didUpdateWidget(MeditationMusicFilter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedSoundId != oldWidget.selectedSoundId && _isOpen) {
+      _closeDropdown();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    
-    return Container(
-      height: media.size.height * 0.7,
-      padding: const EdgeInsets.only(top: 24, left: 24, right: 24),
-      decoration: const BoxDecoration(
-        color: OptivusColors.trackerCardTint,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+    final selectedSound = widget.sounds.firstWhere(
+      (s) => s.id == widget.selectedSoundId,
+      orElse: () => MeditationSoundUiModel(
+        id: 'silent',
+        categoryId: '',
+        subCategoryId: '',
+        title: 'Silent',
+        icon: '🤫',
+        durationLabel: '',
+        sortOrder: 0,
+        isActive: true,
+        isAssetAvailable: false,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Select Music',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kInk),
+    );
+
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: GestureDetector(
+        onTap: _toggleDropdown,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(20),
               ),
-              LiquidIconBtn(
-                icon: Icons.close,
-                onTap: () => Navigator.pop(context),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Silent option
-          LiquidCard(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            radius: 16,
-            child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Text('🤫', style: TextStyle(fontSize: 24)),
-              title: const Text('Silent', style: TextStyle(fontWeight: FontWeight.bold)),
-              trailing: widget.selectedSoundId == 'silent' ? const Icon(Icons.check, color: OptivusColors.trackerAccent) : null,
-              onTap: () => widget.onSelected('silent'),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              children: mockMeditationCategories.map((category) {
-                final isExpanded = _expandedCategoryId == category.id;
-                final categorySounds = widget.sounds.where((s) => s.categoryId == category.id).toList();
-                
-                return Column(
+              child: CustomPaint(
+                painter: TrackerGlassHighlightPainter(radius: 20),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    LiquidCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      radius: 16,
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(category.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        trailing: Icon(isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: kSub),
-                        onTap: () {
-                          setState(() {
-                            if (isExpanded) {
-                              _expandedCategoryId = null;
-                            } else {
-                              _expandedCategoryId = category.id;
-                              _expandedSubCategoryId = null; // Reset sub
-                            }
-                          });
-                        },
+                    const Icon(Icons.music_note_rounded, size: 14, color: kInk),
+                    const SizedBox(width: 4),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 80),
+                      child: Text(
+                        selectedSound.title,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: kInk,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (isExpanded)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
-                        child: Column(
-                          children: mockMeditationSubCategories.where((sub) => sub.categoryId == category.id).map((sub) {
-                            final isSubExpanded = _expandedSubCategoryId == sub.id;
-                            final subSounds = categorySounds.where((s) => s.subCategoryId == sub.id).toList();
-                            
-                            return Column(
-                              children: [
-                                ListTile(
-                                  title: Text(sub.label, style: const TextStyle(fontWeight: FontWeight.w600, color: kInk)),
-                                  trailing: Icon(isSubExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: kSub, size: 20),
-                                  onTap: () {
-                                    setState(() {
-                                      _expandedSubCategoryId = isSubExpanded ? null : sub.id;
-                                    });
-                                  },
-                                ),
-                                if (isSubExpanded)
-                                  ...subSounds.map((sound) {
-                                    final isSelected = widget.selectedSoundId == sound.id;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(left: 16, bottom: 8),
-                                      child: LiquidCard(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                        radius: 12,
-                                        tint: isSelected ? OptivusColors.trackerAccent.withValues(alpha: 0.1) : null,
-                                        child: ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          leading: Text(sound.icon, style: const TextStyle(fontSize: 20)),
-                                          title: Text(sound.title, style: TextStyle(fontWeight: FontWeight.w600, color: isSelected ? OptivusColors.trackerAccent : kInk)),
-                                          subtitle: Text(sound.durationLabel, style: const TextStyle(fontSize: 12, color: kSub)),
-                                          trailing: isSelected ? const Icon(Icons.check, color: OptivusColors.trackerAccent) : null,
-                                          onTap: () => widget.onSelected(sound.id),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    const SizedBox(height: 8),
+                    const SizedBox(width: 4),
+                    Icon(_isOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, size: 16, color: kInk),
                   ],
-                );
-              }).toList(),
+                ),
+              ),
             ),
           ),
-          SizedBox(height: media.padding.bottom + 16),
-        ],
+        ),
       ),
     );
   }
@@ -773,7 +954,7 @@ class MeditationSettingsSheet extends StatelessWidget {
   }
 }
 
-class MeditationControls extends StatelessWidget {
+class MeditationControlBar extends StatelessWidget {
   final String status;
   final VoidCallback onStart;
   final VoidCallback onPause;
@@ -781,7 +962,7 @@ class MeditationControls extends StatelessWidget {
   final VoidCallback onComplete;
   final VoidCallback onCancel;
 
-  const MeditationControls({
+  const MeditationControlBar({
     super.key,
     required this.status,
     required this.onStart,
@@ -794,49 +975,32 @@ class MeditationControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (status == 'ready' || status == 'cancelled') {
-      return LiquidButton(
-        label: status == 'ready' ? 'Start Session' : 'Restart Session',
-        onTap: onStart,
-        color: OptivusColors.trackerAccent,
+      return Center(
+        child: LiquidButton(
+          label: 'Start Session',
+          onTap: onStart,
+          color: OptivusColors.trackerAccent,
+        ),
       );
     }
 
-    if (status == 'running') {
+    if (status == 'running' || status == 'paused') {
+      final isPaused = status == 'paused';
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _buildSecondaryBtn('Cancel', onCancel, isDestructive: true),
+          _buildSecondaryBtn(Icons.close, 'Cancel', onCancel, kRose),
           const SizedBox(width: 16),
           Expanded(
             child: LiquidButton(
-              label: 'Pause',
-              onTap: onPause,
-              color: kAmber,
-              leading: const Icon(Icons.pause, color: Colors.white, size: 20),
+              label: isPaused ? 'Resume' : 'Pause',
+              onTap: isPaused ? onResume : onPause,
+              color: isPaused ? kMint : kAmber,
+              leading: Icon(isPaused ? Icons.play_arrow : Icons.pause, color: Colors.white, size: 20),
             ),
           ),
           const SizedBox(width: 16),
-          _buildSecondaryBtn('Complete', onComplete),
-        ],
-      );
-    }
-
-    if (status == 'paused') {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildSecondaryBtn('Cancel', onCancel, isDestructive: true),
-          const SizedBox(width: 16),
-          Expanded(
-            child: LiquidButton(
-              label: 'Resume',
-              onTap: onResume,
-              color: kMint,
-              leading: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
-            ),
-          ),
-          const SizedBox(width: 16),
-          _buildSecondaryBtn('Complete', onComplete),
+          _buildSecondaryBtn(Icons.check, 'Finish', onComplete, kMint),
         ],
       );
     }
@@ -844,25 +1008,38 @@ class MeditationControls extends StatelessWidget {
     return const SizedBox.shrink();
   }
 
-  Widget _buildSecondaryBtn(String label, VoidCallback onTap, {bool isDestructive = false}) {
+  Widget _buildSecondaryBtn(IconData icon, String label, VoidCallback onTap, Color color) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        decoration: BoxDecoration(
-          color: isDestructive ? kRose.withValues(alpha: 0.1) : kWhite.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(
-            color: isDestructive ? kRose.withValues(alpha: 0.3) : kWhite,
-            width: 1.5,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            color: isDestructive ? kRose : kInk,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: color, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

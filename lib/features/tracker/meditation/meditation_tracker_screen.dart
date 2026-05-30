@@ -3,11 +3,14 @@ import 'package:go_router/go_router.dart';
 import 'dart:async';
 import 'package:optivus/core/liquid_ui/liquid_ui.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'meditation_mock_data.dart';
 import 'meditation_tracker_widgets.dart';
 
 class MeditationTrackerScreen extends StatefulWidget {
-  const MeditationTrackerScreen({super.key});
+  final VoidCallback? onBack;
+
+  const MeditationTrackerScreen({super.key, this.onBack});
 
   @override
   State<MeditationTrackerScreen> createState() => _MeditationTrackerScreenState();
@@ -15,18 +18,18 @@ class MeditationTrackerScreen extends StatefulWidget {
 
 class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
   // State
-  String _selectedTypeId = 'calm';
+  final String _selectedTypeId = 'calm';
   int _selectedDuration = 5;
   String _selectedSoundId = 'silent';
   
   // Timer State
-  // Status: ready, running, paused, completed, cancelled
+  // Status: ready, running, paused, completed
   String _status = 'ready';
   int _remainingSeconds = 5 * 60;
   Timer? _timer;
   
   // Orb State
-  String _currentPhase = 'Breathe in';
+  String _currentPhase = 'Inhale';
   int _phaseSeconds = 0;
 
   @override
@@ -39,13 +42,6 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
-  }
-
-  void _updateType(String typeId) {
-    if (_status == 'running' || _status == 'paused') return;
-    setState(() {
-      _selectedTypeId = typeId;
-    });
   }
 
   void _updateDuration(int duration) {
@@ -65,7 +61,7 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
   void _startSession() {
     setState(() {
       _status = 'running';
-      _currentPhase = 'Breathe in';
+      _currentPhase = 'Inhale';
       _phaseSeconds = 0;
       if (_remainingSeconds <= 0) {
         _remainingSeconds = _selectedDuration * 60;
@@ -91,9 +87,9 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
   void _cancelSession() {
     _timer?.cancel();
     setState(() {
-      _status = 'cancelled';
+      _status = 'ready';
       _remainingSeconds = _selectedDuration * 60;
-      _currentPhase = 'Breathe in';
+      _currentPhase = 'Inhale';
       _phaseSeconds = 0;
     });
   }
@@ -124,14 +120,14 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
     _phaseSeconds++;
     
     // Cycle logic
-    if (_currentPhase == 'Breathe in' && _phaseSeconds >= type.inhaleSeconds) {
-      _currentPhase = type.holdSeconds > 0 ? 'Hold' : 'Breathe out';
+    if (_currentPhase == 'Inhale' && _phaseSeconds >= type.inhaleSeconds) {
+      _currentPhase = type.holdSeconds > 0 ? 'Hold' : 'Exhale';
       _phaseSeconds = 0;
     } else if (_currentPhase == 'Hold' && _phaseSeconds >= type.holdSeconds) {
-      _currentPhase = 'Breathe out';
+      _currentPhase = 'Exhale';
       _phaseSeconds = 0;
-    } else if (_currentPhase == 'Breathe out' && _phaseSeconds >= type.exhaleSeconds) {
-      _currentPhase = 'Breathe in'; // Skipping 'rest' for simplicity, unless we add it to model
+    } else if (_currentPhase == 'Exhale' && _phaseSeconds >= type.exhaleSeconds) {
+      _currentPhase = 'Inhale';
       _phaseSeconds = 0;
     }
   }
@@ -184,99 +180,91 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
     
     final selectedType = mockMeditationSessionTypes.firstWhere((t) => t.id == _selectedTypeId);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(20, 8, 20, bottomReserve),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Top Area
-                      const MeditationHeroCard(
-                        targetMinutes: 5,
-                        completedMinutes: 0,
-                        streakDays: 5,
-                      ),
-                      
-                      const Spacer(flex: 2),
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomReserve),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(flex: 2),
 
-                      // Orb & Timer Area
-                      Center(
-                        child: BreathingOrb(
-                          isRunning: _status == 'running',
-                          currentPhase: _currentPhase,
-                          accentColor: selectedType.accentToken,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      
-                      TimerDisplay(
-                        remainingSeconds: _remainingSeconds,
-                        status: _status,
-                        currentPhase: _currentPhase,
-                        sessionTypeName: selectedType.title,
-                      ),
-                      
-                      const Spacer(flex: 3),
-
-                      // Duration Selector
-                      if (_status == 'ready' || _status == 'cancelled')
-                        DurationSelector(
-                          selectedDuration: _selectedDuration,
-                          onSelected: _updateDuration,
-                        ),
-                      
-                      // Completion State
-                      if (_status == 'completed')
-                        CompletionCard(
-                          durationMinutes: _selectedDuration,
-                          onDone: () {
-                            setState(() {
-                              _status = 'ready';
-                            });
-                            context.pop();
-                          },
-                          onStartAnother: _cancelSession,
-                          onAddNote: _showAddNoteSheet,
-                        ),
-
-                      // Controls
-                      if (_status != 'completed')
-                        Padding(
-                          padding: const EdgeInsets.only(top: 24),
-                          child: MeditationControls(
-                            status: _status,
-                            onStart: _startSession,
-                            onPause: _pauseSession,
-                            onResume: _resumeSession,
-                            onComplete: _completeSession,
-                            onCancel: _cancelSession,
-                          ),
-                        ),
-                      
-                      const SizedBox(height: 32),
-
-                      // Music Selector
-                      MusicSelector(
-                        sounds: mockMeditationSounds,
-                        selectedSoundId: _selectedSoundId,
-                        onSelected: _updateSound,
-                      ),
-                    ],
+                // Orb & Timer Area
+                Center(
+                  child: LiquidGlassBreathingOrb(
+                    isRunning: _status == 'running',
+                    currentPhase: _currentPhase,
+                    accentColor: selectedType.accentToken,
                   ),
                 ),
-              )
-            ],
-          ),
-        ),
-      );
+                const SizedBox(height: 32),
+                
+                TimerDisplay(
+                  remainingSeconds: _remainingSeconds,
+                  status: _status,
+                  currentPhase: _currentPhase,
+                  sessionTypeName: selectedType.title,
+                ),
+                
+                const Spacer(flex: 3),
+
+                // Duration Selector
+                if (_status == 'ready')
+                  DurationSelector(
+                    selectedDuration: _selectedDuration,
+                    onSelected: _updateDuration,
+                  ),
+                
+                // Completion State
+                if (_status == 'completed')
+                  CompletionCard(
+                    durationMinutes: _selectedDuration,
+                    onDone: () {
+                      setState(() {
+                        _status = 'ready';
+                      });
+                      if (widget.onBack != null) {
+                         widget.onBack!();
+                      } else {
+                         context.pop();
+                      }
+                    },
+                    onStartAnother: _cancelSession,
+                    onAddNote: _showAddNoteSheet,
+                  ),
+
+                // Controls
+                if (_status != 'completed')
+                  Padding(
+                    padding: const EdgeInsets.only(top: 24, bottom: 24),
+                    child: MeditationControlBar(
+                      status: _status,
+                      onStart: _startSession,
+                      onPause: _pauseSession,
+                      onResume: _resumeSession,
+                      onComplete: _completeSession,
+                      onCancel: _cancelSession,
+                    ),
+                  ),
+
+                // Target Card at bottom
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: MeditationTargetCard(
+                    targetMinutes: 5,
+                    completedMinutes: 0,
+                    streakDays: 5,
+                  ),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
   }
 
   Widget _buildHeader() {
@@ -287,9 +275,15 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
         children: [
           Row(
             children: [
-              LiquidIconBtn(
+              TrackerHeaderButton(
                 icon: Icons.arrow_back_ios_new_rounded,
-                onTap: () => context.pop(),
+                onTap: () {
+                  if (widget.onBack != null) {
+                    widget.onBack!();
+                  } else {
+                    context.pop();
+                  }
+                },
               ),
               const SizedBox(width: 16),
               const Text(
@@ -302,24 +296,10 @@ class _MeditationTrackerScreenState extends State<MeditationTrackerScreen> {
               ),
             ],
           ),
-          LiquidIconBtn(
-            icon: Icons.settings,
-            onTap: () {
-               showModalBottomSheet(
-                 context: context,
-                 isScrollControlled: true,
-                 backgroundColor: Colors.transparent,
-                 builder: (context) {
-                   return MeditationSettingsSheet(
-                     selectedTypeId: _selectedTypeId,
-                     onTypeSelected: (id) {
-                       _updateType(id);
-                       Navigator.pop(context);
-                     },
-                   );
-                 },
-               );
-            },
+          MeditationMusicFilter(
+            sounds: mockMeditationSounds,
+            selectedSoundId: _selectedSoundId,
+            onSelected: _updateSound,
           ),
         ],
       ),
