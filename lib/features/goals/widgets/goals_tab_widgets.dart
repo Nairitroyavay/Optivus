@@ -18,16 +18,18 @@ class GoalsSectionHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.2,
-          color: OptivusColors.textSecondary,
-        ) ?? TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 1.2,
-          color: OptivusColors.textSecondary,
-        ),
+        style:
+            Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.2,
+              color: OptivusColors.textSecondary,
+            ) ??
+            TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.2,
+              color: OptivusColors.textSecondary,
+            ),
       ),
     );
   }
@@ -126,11 +128,7 @@ class GoalsHeaderButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const GoalsHeaderButton({
-    super.key,
-    required this.icon,
-    required this.onTap,
-  });
+  const GoalsHeaderButton({super.key, required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -211,7 +209,8 @@ class GoalsHeader extends StatelessWidget {
             children: [
               Text(
                 'Goals',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                style:
+                    Theme.of(context).textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                       color: OptivusColors.ink,
                     ) ??
@@ -249,18 +248,18 @@ class GoalsHeader extends StatelessWidget {
             GoalsHeaderButton(
               icon: Icons.assignment_outlined,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Weekly Review')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Weekly Review')));
               },
             ),
             const SizedBox(width: 8),
             GoalsHeaderButton(
               icon: Icons.settings_outlined,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Goal Settings')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Goal Settings')));
               },
             ),
           ],
@@ -281,7 +280,11 @@ class GoalsEmptyIdentityCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.person_outline, size: 48, color: OptivusColors.goalsAccent),
+          Icon(
+            Icons.person_outline,
+            size: 48,
+            color: OptivusColors.goalsAccent,
+          ),
           const SizedBox(height: 16),
           const Text(
             'No identity goal selected yet.',
@@ -351,7 +354,10 @@ class TodayIdentityFocusCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: OptivusColors.goalsAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
@@ -367,7 +373,11 @@ class TodayIdentityFocusCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              const Icon(Icons.star_rounded, color: OptivusColors.brandAccent, size: 24),
+              const Icon(
+                Icons.star_rounded,
+                color: OptivusColors.brandAccent,
+                size: 24,
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -399,17 +409,29 @@ class TodayIdentityFocusCard extends StatelessWidget {
                   children: [
                     const Text(
                       'Progress',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.sub),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: OptivusColors.sub,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${(primaryGoal.progressPercent * 100).toInt()}%',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: OptivusColors.ink),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.ink,
+                      ),
                     ),
                   ],
                 ),
               ),
-              Container(width: 1, height: 40, color: OptivusColors.sub.withValues(alpha: 0.2)),
+              Container(
+                width: 1,
+                height: 40,
+                color: OptivusColors.sub.withValues(alpha: 0.2),
+              ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -417,12 +439,20 @@ class TodayIdentityFocusCard extends StatelessWidget {
                   children: [
                     const Text(
                       'Proofs',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.sub),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: OptivusColors.sub,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${primaryGoal.streakDays > 0 ? primaryGoal.streakDays : 3} this week',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: OptivusColors.ink),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: OptivusColors.ink,
+                      ),
                     ),
                   ],
                 ),
@@ -445,7 +475,10 @@ class TodayIdentityFocusCard extends StatelessWidget {
                     alignment: Alignment.center,
                     child: const Text(
                       'View Routine',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: OptivusColors.ink,
+                      ),
                     ),
                   ),
                 ),
@@ -459,12 +492,18 @@ class TodayIdentityFocusCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: OptivusColors.coachTop,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: OptivusColors.coachTop, width: 2),
+                      border: Border.all(
+                        color: OptivusColors.coachTop,
+                        width: 2,
+                      ),
                     ),
                     alignment: Alignment.center,
                     child: const Text(
                       'Ask Coach',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.coachAccent),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: OptivusColors.coachAccent,
+                      ),
                     ),
                   ),
                 ),
@@ -476,7 +515,10 @@ class TodayIdentityFocusCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.swap_horiz_outlined, color: OptivusColors.ink),
+                  icon: const Icon(
+                    Icons.swap_horiz_outlined,
+                    color: OptivusColors.ink,
+                  ),
                   onPressed: () {},
                 ),
               ),
@@ -504,7 +546,11 @@ class TodayProofsCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.bolt_rounded, color: OptivusColors.brandAccent, size: 24),
+              const Icon(
+                Icons.bolt_rounded,
+                color: OptivusColors.brandAccent,
+                size: 24,
+              ),
               const SizedBox(width: 8),
               const Text(
                 'Today\'s Proofs',
@@ -541,7 +587,9 @@ class TodayProofsCard extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: isCompleted ? OptivusColors.success.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.5),
+              color: isCompleted
+                  ? OptivusColors.success.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.5),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -577,7 +625,10 @@ class TodayProofsCard extends ConsumerWidget {
                 const SizedBox(height: 4),
                 Text(
                   'Source: ${goal.systems.isNotEmpty ? goal.systems.first.description.split(' ').first : 'Core'}',
-                  style: const TextStyle(fontSize: 10, color: OptivusColors.sub),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: OptivusColors.sub,
+                  ),
                 ),
               ],
             ),
@@ -586,10 +637,15 @@ class TodayProofsCard extends ConsumerWidget {
           if (!isCompleted)
             InkWell(
               onTap: () {
-                ref.read(mockGoalProvider.notifier).toggleGoalProofCompleted(goal.id);
+                ref
+                    .read(mockGoalProvider.notifier)
+                    .toggleGoalProofCompleted(goal.id);
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: OptivusColors.goalsAccent,
                   borderRadius: BorderRadius.circular(12),
@@ -641,10 +697,14 @@ class ActiveIdentityGoalsSection extends ConsumerWidget {
     final goals = ref.watch(mockGoalProvider);
 
     return Column(
-      children: goals.map((goal) => Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: ActiveIdentityGoalCard(goal: goal),
-      )).toList(),
+      children: goals
+          .map(
+            (goal) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: ActiveIdentityGoalCard(goal: goal),
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -657,7 +717,9 @@ class ActiveIdentityGoalCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isNeedsAttention = goal.streakDays == 0;
-    final statusColor = isNeedsAttention ? OptivusColors.warning : OptivusColors.success;
+    final statusColor = isNeedsAttention
+        ? OptivusColors.warning
+        : OptivusColors.success;
 
     return GoalsGlassCard(
       padding: const EdgeInsets.all(16),
@@ -672,33 +734,53 @@ class ActiveIdentityGoalCard extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        goal.systems.isNotEmpty ? goal.systems.first.description.split(' ').first : 'Core',
-                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: OptivusColors.sub),
+                        goal.systems.isNotEmpty
+                            ? goal.systems.first.description.split(' ').first
+                            : 'Core',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: OptivusColors.sub,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: statusColor),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: statusColor,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(
                   goal.identityTitle,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: OptivusColors.ink),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: OptivusColors.ink,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '${goal.streakDays}-day streak',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: OptivusColors.sub),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: OptivusColors.sub,
+                  ),
                 ),
               ],
             ),
@@ -714,12 +796,18 @@ class ActiveIdentityGoalCard extends StatelessWidget {
                   value: goal.progressPercent,
                   strokeWidth: 6,
                   backgroundColor: Colors.white.withValues(alpha: 0.5),
-                  valueColor: AlwaysStoppedAnimation<Color>(OptivusColors.goalsAccent),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    OptivusColors.goalsAccent,
+                  ),
                 ),
                 Center(
                   child: Text(
                     '${(goal.progressPercent * 100).toInt()}%',
-                    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: OptivusColors.ink),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.ink,
+                    ),
                   ),
                 ),
               ],
@@ -742,10 +830,14 @@ class GoalSystemsSection extends ConsumerWidget {
     if (allSystems.isEmpty) return const SizedBox.shrink();
 
     return Column(
-      children: allSystems.map((sys) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: _BlueprintSystemCard(system: sys),
-      )).toList(),
+      children: allSystems
+          .map(
+            (sys) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _BlueprintSystemCard(system: sys),
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -766,36 +858,65 @@ class _BlueprintSystemCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.hub_outlined, color: OptivusColors.goalsAccent, size: 18),
+              const Icon(
+                Icons.hub_outlined,
+                color: OptivusColors.goalsAccent,
+                size: 18,
+              ),
               const SizedBox(width: 8),
               Text(
                 'SYSTEM CORE',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: OptivusColors.goalsAccent, letterSpacing: 0.8),
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                  color: OptivusColors.goalsAccent,
+                  letterSpacing: 0.8,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             system.description,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: OptivusColors.ink),
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.ink,
+            ),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
               if (system.linkedRoutineTaskIds.isNotEmpty) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: OptivusColors.routineAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: OptivusColors.routineAccent.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: OptivusColors.routineAccent.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_circle_outline, color: OptivusColors.routineAccent, size: 14),
+                      const Icon(
+                        Icons.check_circle_outline,
+                        color: OptivusColors.routineAccent,
+                        size: 14,
+                      ),
                       const SizedBox(width: 6),
-                      Text('${system.linkedRoutineTaskIds.length} Routine Linked', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: OptivusColors.routineAccent)),
+                      Text(
+                        '${system.linkedRoutineTaskIds.length} Routine Linked',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: OptivusColors.routineAccent,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -803,24 +924,40 @@ class _BlueprintSystemCard extends StatelessWidget {
               ],
               if (system.linkedTrackerIds.isNotEmpty) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: OptivusColors.trackerAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: OptivusColors.trackerAccent.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: OptivusColors.trackerAccent.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.insights, color: OptivusColors.trackerAccent, size: 14),
+                      const Icon(
+                        Icons.insights,
+                        color: OptivusColors.trackerAccent,
+                        size: 14,
+                      ),
                       const SizedBox(width: 6),
-                      Text('${system.linkedTrackerIds.length} Tracker Linked', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: OptivusColors.trackerAccent)),
+                      Text(
+                        '${system.linkedTrackerIds.length} Tracker Linked',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: OptivusColors.trackerAccent,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ],
-          )
+          ),
         ],
       ),
     );
@@ -838,22 +975,44 @@ class MilestonesCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildMilestoneRow(title: 'Week 1: Start identity', isCompleted: true),
-          _buildMilestoneRow(title: 'Week 2: Consistency proof', isCompleted: false, isCurrent: true),
-          _buildMilestoneRow(title: 'Month 1: Visible progress', isCompleted: false),
+          _buildMilestoneRow(
+            title: 'Week 1: Start identity',
+            isCompleted: true,
+          ),
+          _buildMilestoneRow(
+            title: 'Week 2: Consistency proof',
+            isCompleted: false,
+            isCurrent: true,
+          ),
+          _buildMilestoneRow(
+            title: 'Month 1: Visible progress',
+            isCompleted: false,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMilestoneRow({required String title, required bool isCompleted, bool isCurrent = false}) {
+  Widget _buildMilestoneRow({
+    required String title,
+    required bool isCompleted,
+    bool isCurrent = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           Icon(
-            isCompleted ? Icons.check_circle : (isCurrent ? Icons.radio_button_checked : Icons.radio_button_unchecked),
-            color: isCompleted ? OptivusColors.success : (isCurrent ? OptivusColors.goalsAccent : OptivusColors.sub.withValues(alpha: 0.5)),
+            isCompleted
+                ? Icons.check_circle
+                : (isCurrent
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked),
+            color: isCompleted
+                ? OptivusColors.success
+                : (isCurrent
+                      ? OptivusColors.goalsAccent
+                      : OptivusColors.sub.withValues(alpha: 0.5)),
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -890,7 +1049,10 @@ class TinyVersionCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.6),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.battery_2_bar_rounded, color: OptivusColors.brandAccent),
+            child: const Icon(
+              Icons.battery_2_bar_rounded,
+              color: OptivusColors.brandAccent,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -899,12 +1061,20 @@ class TinyVersionCard extends StatelessWidget {
               children: [
                 const Text(
                   'Low energy today?',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: OptivusColors.ink),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: OptivusColors.ink,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 const Text(
                   'Switch to tiny versions to protect your streak.',
-                  style: TextStyle(fontSize: 12, color: OptivusColors.sub, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: OptivusColors.sub,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -923,7 +1093,7 @@ class GoalHealthCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (activeCount == 0) return const SizedBox.shrink();
-    
+
     final bool isOverloaded = activeCount >= 4;
 
     return GoalsGlassCard(
@@ -933,14 +1103,18 @@ class GoalHealthCard extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isOverloaded ? Icons.warning_amber_rounded : Icons.health_and_safety_outlined,
+            isOverloaded
+                ? Icons.warning_amber_rounded
+                : Icons.health_and_safety_outlined,
             color: isOverloaded ? OptivusColors.warning : OptivusColors.success,
             size: 20,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              isOverloaded ? '$activeCount active goals · Overload risk' : '$activeCount active goals · Healthy load',
+              isOverloaded
+                  ? '$activeCount active goals · Overload risk'
+                  : '$activeCount active goals · Healthy load',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
@@ -951,7 +1125,12 @@ class GoalHealthCard extends StatelessWidget {
           if (isOverloaded)
             const Text(
               'Pause one',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.sub, decoration: TextDecoration.underline),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: OptivusColors.sub,
+                decoration: TextDecoration.underline,
+              ),
             ),
         ],
       ),
@@ -972,7 +1151,11 @@ class WeeklyGoalProgressCard extends StatelessWidget {
         children: [
           const Text(
             'This Week',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: OptivusColors.ink),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.ink,
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -980,16 +1163,36 @@ class WeeklyGoalProgressCard extends StatelessWidget {
               Expanded(
                 child: Column(
                   children: [
-                    Text('14', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: OptivusColors.goalsAccent)),
-                    const Text('Proofs', style: TextStyle(fontSize: 12, color: OptivusColors.sub)),
+                    Text(
+                      '14',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.goalsAccent,
+                      ),
+                    ),
+                    const Text(
+                      'Proofs',
+                      style: TextStyle(fontSize: 12, color: OptivusColors.sub),
+                    ),
                   ],
                 ),
               ),
               Expanded(
                 child: Column(
                   children: [
-                    const Text('85%', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: OptivusColors.success)),
-                    const Text('Consistency', style: TextStyle(fontSize: 12, color: OptivusColors.sub)),
+                    const Text(
+                      '85%',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.success,
+                      ),
+                    ),
+                    const Text(
+                      'Consistency',
+                      style: TextStyle(fontSize: 12, color: OptivusColors.sub),
+                    ),
                   ],
                 ),
               ),
@@ -1018,13 +1221,21 @@ class GoalInsightsCard extends StatelessWidget {
               color: OptivusColors.coachTop.withValues(alpha: 0.3),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.psychology, color: OptivusColors.coachAccent),
+            child: const Icon(
+              Icons.psychology,
+              color: OptivusColors.coachAccent,
+            ),
           ),
           const SizedBox(width: 16),
           const Expanded(
             child: Text(
               '"You\'ve completed 5 fitness proofs this week. You\'re building strong momentum toward your Athlete identity."',
-              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: OptivusColors.ink, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+                color: OptivusColors.ink,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -1048,7 +1259,10 @@ class UpcomingReviewsCard extends StatelessWidget {
           const Expanded(
             child: Text(
               'Weekly Identity Review',
-              style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: OptivusColors.ink,
+              ),
             ),
           ),
           Container(
@@ -1057,7 +1271,14 @@ class UpcomingReviewsCard extends StatelessWidget {
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text('Sun, 6PM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.goalsAccent)),
+            child: const Text(
+              'Sun, 6PM',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: OptivusColors.goalsAccent,
+              ),
+            ),
           ),
         ],
       ),
@@ -1098,7 +1319,11 @@ class ArchivedGoalsShortcut extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.ink),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.ink,
+            ),
           ),
         ],
       ),

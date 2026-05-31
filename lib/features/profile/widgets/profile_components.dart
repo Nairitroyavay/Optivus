@@ -35,11 +35,11 @@ class ProfileIdentityCard extends StatelessWidget {
                 Text(
                   'IDENTITY STATEMENT',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.5,
-                        fontSize: 10,
-                        color: OptivusColors.textSecondary,
-                      ),
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                    fontSize: 10,
+                    color: OptivusColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -99,11 +99,11 @@ class ProfileChipsCard extends StatelessWidget {
               Text(
                 title.toUpperCase(),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
-                      fontSize: 10,
-                      color: OptivusColors.textSecondary,
-                    ),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  fontSize: 10,
+                  color: OptivusColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -121,7 +121,10 @@ class ProfileChipsCard extends StatelessWidget {
             GestureDetector(
               onTap: onActionTap,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: accentColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -141,7 +144,12 @@ class ProfileChipsCard extends StatelessWidget {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: items.map((item) => ProfileChip(label: item, accentColor: accentColor)).toList(),
+              children: items
+                  .map(
+                    (item) =>
+                        ProfileChip(label: item, accentColor: accentColor),
+                  )
+                  .toList(),
             ),
         ],
       ),
@@ -166,7 +174,10 @@ class ProfileChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.8),
+          width: 1,
+        ),
       ),
       child: Text(
         label,

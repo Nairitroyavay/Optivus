@@ -15,7 +15,11 @@ class TimeRangePickerRow extends StatelessWidget {
     required this.onEndTimeChanged,
   });
 
-  Future<void> _pickTime(BuildContext context, TimeOfDay initialTime, ValueChanged<TimeOfDay> onChanged) async {
+  Future<void> _pickTime(
+    BuildContext context,
+    TimeOfDay initialTime,
+    ValueChanged<TimeOfDay> onChanged,
+  ) async {
     final picked = await showTimePicker(
       context: context,
       initialTime: initialTime,

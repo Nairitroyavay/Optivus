@@ -10,7 +10,8 @@ import '../../views/screens/app_shell.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import '../../state/auth_state.dart';
 import '../../state/app_state.dart';
-import '../../features/tracker/screen_time/screen_time_screen.dart';
+import '../../app/app_navigation_controller.dart';
+import '../../features/tracker/providers/tracker_navigation_provider.dart';
 
 class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -25,6 +26,12 @@ final routerNotifierProvider = Provider((ref) => RouterNotifier(ref));
 
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
+
+  String openTrackerDetail(TrackerDetailView detail) {
+    ref.read(appNavigationProvider.notifier).goToTracker();
+    ref.read(trackerDetailViewRequestProvider.notifier).state = detail;
+    return '/app?tab=2';
+  }
 
   return GoRouter(
     refreshListenable: notifier,
@@ -89,20 +96,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/home', redirect: (context, state) => '/app'),
       GoRoute(
         path: '/tracker/money',
-        redirect: (context, state) => '/app?tab=2',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.money),
       ),
       GoRoute(
         path: '/tracker/fitness',
-        redirect: (context, state) => '/app?tab=2',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.fitness),
       ),
       GoRoute(
         path: '/tracker/screen-time',
-        builder: (context, state) => const ScreenTimeScreen(),
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.screenTime),
       ),
-      // /tracker/meditation removed — Meditation opens inside TrackerTab only
       GoRoute(
         path: '/tracker/meditation',
-        redirect: (context, state) => '/app?tab=2',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.meditation),
+      ),
+      GoRoute(
+        path: '/tracker/hydration',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.hydration),
       ),
     ],
   );

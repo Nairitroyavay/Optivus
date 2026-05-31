@@ -12,19 +12,23 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
     subtitle: 'Alert Pacing & Quiet Hours',
     child: StatefulBuilder(
       builder: (context, setState) {
-        double pacingIntensity = 1.0; // 0: Gentle, 1: Balanced, 2: Focus Focused
+        double pacingIntensity =
+            1.0; // 0: Gentle, 1: Balanced, 2: Focus Focused
         double quietHoursStart = 22.0; // 10 PM
         double quietHoursEnd = 7.0; // 7 AM
         bool blockWeekends = true;
 
         String intensityLabel = 'Standard Balance';
-        String intensityDesc = 'Summarized reports 3 times a day. Minimal micro-intrusiveness.';
+        String intensityDesc =
+            'Summarized reports 3 times a day. Minimal micro-intrusiveness.';
         if (pacingIntensity < 0.5) {
           intensityLabel = 'Gentle Whisper';
-          intensityDesc = 'No direct alerts. Reports only show up inside the Daily Dashboard.';
+          intensityDesc =
+              'No direct alerts. Reports only show up inside the Daily Dashboard.';
         } else if (pacingIntensity > 1.5) {
           intensityLabel = 'Extreme Accountability';
-          intensityDesc = 'Immediate alert ping when habits go overdue. AI Coach check-ins active.';
+          intensityDesc =
+              'Immediate alert ping when habits go overdue. AI Coach check-ins active.';
         }
 
         return Column(
@@ -32,7 +36,12 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
           children: [
             const Text(
               'ALERT INTEGRITY MODE',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             LiquidGlassPanel(
@@ -43,8 +52,20 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Pacing level', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text(intensityLabel, style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Pacing level',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        intensityLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -59,7 +80,12 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
                   ),
                   Text(
                     intensityDesc,
-                    style: const TextStyle(fontSize: 10, height: 1.35, color: OptivusColors.textSecondary, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      height: 1.35,
+                      color: OptivusColors.textSecondary,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
@@ -67,7 +93,12 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
             const SizedBox(height: 20),
             const Text(
               'QUIET BOUNDARIES',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             LiquidGlassPanel(
@@ -77,8 +108,20 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Quiet hours start', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('${quietHoursStart.toInt()}:00', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Quiet hours start',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${quietHoursStart.toInt()}:00',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -94,8 +137,20 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Quiet hours end', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('0${quietHoursEnd.toInt()}:00', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Quiet hours end',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '0${quietHoursEnd.toInt()}:00',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -115,8 +170,14 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               child: SwitchListTile.adaptive(
                 activeTrackColor: OptivusColors.brandAccent,
-                title: const Text('Block Weekend Coaching Pings', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                subtitle: const Text('Absolute silence from Friday 20:00 to Monday 08:00', style: TextStyle(fontSize: 10)),
+                title: const Text(
+                  'Block Weekend Coaching Pings',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                subtitle: const Text(
+                  'Absolute silence from Friday 20:00 to Monday 08:00',
+                  style: TextStyle(fontSize: 10),
+                ),
                 value: blockWeekends,
                 onChanged: (val) => setState(() => blockWeekends = val),
               ),
@@ -126,16 +187,24 @@ void showAlertPacingSheet(BuildContext context, WidgetRef ref) {
               style: ElevatedButton.styleFrom(
                 backgroundColor: OptivusColors.brandAccent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Alert pacing filters applied.'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Alert pacing filters applied.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               },
-              child: const Text('Confirm Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Confirm Settings',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );

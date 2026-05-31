@@ -46,9 +46,13 @@ class DaySelectorChips extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isSelected ? OptivusColors.routineAccent : Colors.transparent,
+              color: isSelected
+                  ? OptivusColors.routineAccent
+                  : Colors.transparent,
               border: Border.all(
-                color: isSelected ? OptivusColors.routineAccent : OptivusColors.textMuted.withValues(alpha: 0.3),
+                color: isSelected
+                    ? OptivusColors.routineAccent
+                    : OptivusColors.textMuted.withValues(alpha: 0.3),
                 width: 1.5,
               ),
             ),

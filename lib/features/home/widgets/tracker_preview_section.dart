@@ -4,7 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/features/tracker/money/money_system_widgets.dart';
-import 'package:optivus/features/tracker/tracker_tab.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/state/app_state.dart';
 import 'home_glass_widgets.dart';
 import 'sheets/demo_sheet.dart';
@@ -105,11 +105,9 @@ class TrackerPreviewSection extends ConsumerWidget {
                         TrackerDetailView.money;
                     ref.read(appNavigationProvider.notifier).goToTracker();
                   } else if (preview.id == 'hydration') {
-                    DemoSheet.show(
-                      context,
-                      title: "Hydration",
-                      message: "+1 glass of water logged.",
-                    );
+                    ref.read(trackerDetailViewRequestProvider.notifier).state =
+                        TrackerDetailView.hydration;
+                    ref.read(appNavigationProvider.notifier).goToTracker();
                   } else if (preview.id == 'smoking') {
                     DemoSheet.show(
                       context,

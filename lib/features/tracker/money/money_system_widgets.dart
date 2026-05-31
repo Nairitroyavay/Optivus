@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/core/widgets/liquid_blur_card.dart';
 import 'package:optivus/core/widgets/liquid_buttons.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
@@ -775,48 +774,48 @@ class BadHabitTabContent extends ConsumerWidget {
                 radius: 24,
                 padding: const EdgeInsets.all(18),
                 child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.description,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.ink,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.description,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.ink,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${formatMoney(entry.amount)} potential • ${entry.dateKey}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: OptivusColors.purpleAccent,
+                    const SizedBox(height: 6),
+                    Text(
+                      '${formatMoney(entry.amount)} potential • ${entry.dateKey}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: OptivusColors.purpleAccent,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 14),
-                  LiquidPrimaryButton(
-                    label: 'Convert to real saving',
-                    icon: Icons.swap_horiz_rounded,
-                    backgroundColor: OptivusColors.trackerAccent,
-                    foregroundColor: OptivusColors.ink,
-                    onPressed: () => showSaveViaUpiFlow(
-                      context,
-                      ref,
-                      convertEntryId: entry.id,
+                    const SizedBox(height: 14),
+                    LiquidPrimaryButton(
+                      label: 'Convert to real saving',
+                      icon: Icons.swap_horiz_rounded,
+                      backgroundColor: OptivusColors.trackerAccent,
+                      foregroundColor: OptivusColors.ink,
+                      onPressed: () => showSaveViaUpiFlow(
+                        context,
+                        ref,
+                        convertEntryId: entry.id,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  LiquidOutlineButton(
-                    label: 'Keep as potential',
-                    borderColor: OptivusColors.purpleAccent,
-                    onPressed: () {},
-                  ),
-                ],
+                    const SizedBox(height: 10),
+                    LiquidOutlineButton(
+                      label: 'Keep as potential',
+                      borderColor: OptivusColors.purpleAccent,
+                      onPressed: () {},
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -1344,7 +1343,6 @@ class _StatusPill extends StatelessWidget {
     );
   }
 }
-
 
 class _SourceRow extends StatelessWidget {
   final String label;

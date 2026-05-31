@@ -15,10 +15,15 @@ class BaseTimelineBlockCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final timeStr = TimelineUtils.formatTimeRange(item.startMinute, item.endMinute);
-    final daysStr = item.repeatDays.isEmpty 
-        ? 'One time' 
-        : item.repeatDays.map((d) => TimelineUtils.getShortDayName(d)).join(', ');
+    final timeStr = TimelineUtils.formatTimeRange(
+      item.startMinute,
+      item.endMinute,
+    );
+    final daysStr = item.repeatDays.isEmpty
+        ? 'One time'
+        : item.repeatDays
+              .map((d) => TimelineUtils.getShortDayName(d))
+              .join(', ');
 
     return GestureDetector(
       onTap: onTap,

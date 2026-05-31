@@ -22,15 +22,26 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
           children: [
             const Text(
               'BIOMETRIC AUTHS',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             LiquidGlassPanel(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
               child: SwitchListTile.adaptive(
                 activeTrackColor: OptivusColors.brandAccent,
-                title: const Text('Face ID / Touch ID SDK', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                subtitle: const Text('Unlock app using biometric hardware credential', style: TextStyle(fontSize: 10)),
+                title: const Text(
+                  'Face ID / Touch ID SDK',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                subtitle: const Text(
+                  'Unlock app using biometric hardware credential',
+                  style: TextStyle(fontSize: 10),
+                ),
                 value: biometricEnabled,
                 onChanged: (val) => setState(() => biometricEnabled = val),
               ),
@@ -38,7 +49,12 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
             const SizedBox(height: 20),
             const Text(
               '4-DIGIT SECURE PIN LOCK',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             LiquidGlassPanel(
@@ -49,8 +65,17 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
                   SwitchListTile.adaptive(
                     activeTrackColor: OptivusColors.brandAccent,
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Secure PIN Code Lock', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    subtitle: const Text('Required on app startup if biometric fails', style: TextStyle(fontSize: 10)),
+                    title: const Text(
+                      'Secure PIN Code Lock',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Required on app startup if biometric fails',
+                      style: TextStyle(fontSize: 10),
+                    ),
                     value: pinEnabled,
                     onChanged: (val) {
                       setState(() {
@@ -69,7 +94,11 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
                     Center(
                       child: Text(
                         pinStatusText,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: OptivusColors.brandAccent),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: OptivusColors.brandAccent,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -84,8 +113,14 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
                           margin: const EdgeInsets.symmetric(horizontal: 8),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: filled ? OptivusColors.brandAccent : Colors.grey.shade300,
-                            border: Border.all(color: filled ? OptivusColors.brandAccent : Colors.grey.shade400),
+                            color: filled
+                                ? OptivusColors.brandAccent
+                                : Colors.grey.shade300,
+                            border: Border.all(
+                              color: filled
+                                  ? OptivusColors.brandAccent
+                                  : Colors.grey.shade400,
+                            ),
                           ),
                         );
                       }),
@@ -96,12 +131,13 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: 12,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 1.8,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 1.8,
+                          ),
                       itemBuilder: (context, index) {
                         if (index == 9) {
                           return IconButton(
@@ -113,29 +149,42 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
                           return IconButton(
                             icon: const Icon(Icons.backspace),
                             onPressed: () {
-                              if (typedPin.isNotEmpty) setState(() => typedPin.removeLast());
+                              if (typedPin.isNotEmpty) {
+                                setState(() => typedPin.removeLast());
+                              }
                             },
                           );
                         }
                         final num = index == 10 ? 0 : index + 1;
                         return ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white.withValues(alpha: 0.8),
+                            backgroundColor: Colors.white.withValues(
+                              alpha: 0.8,
+                            ),
                             foregroundColor: Colors.black,
                             elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           onPressed: () {
                             if (typedPin.length < 4) {
                               setState(() {
                                 typedPin.add(num);
                                 if (typedPin.length == 4) {
-                                  pinStatusText = 'PIN setup complete: ${typedPin.join()}';
+                                  pinStatusText =
+                                      'PIN setup complete: ${typedPin.join()}';
                                 }
                               });
                             }
                           },
-                          child: Text('$num', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          child: Text(
+                            '$num',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -148,16 +197,24 @@ void showBiometricSecuritySheet(BuildContext context, WidgetRef ref) {
               style: ElevatedButton.styleFrom(
                 backgroundColor: OptivusColors.brandAccent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('App Lock authentication settings active.'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('App Lock authentication settings active.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               },
-              child: const Text('Save Security Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Save Security Settings',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );

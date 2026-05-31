@@ -57,11 +57,7 @@ class ProfileSystemShortcutCard extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: activeColor.withValues(alpha: 0.12),
                   ),
-                  child: Icon(
-                    icon,
-                    size: 22,
-                    color: activeColor,
-                  ),
+                  child: Icon(icon, size: 22, color: activeColor),
                 ),
                 statusWidget ?? const SizedBox.shrink(),
               ],

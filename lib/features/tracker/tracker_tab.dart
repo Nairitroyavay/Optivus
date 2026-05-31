@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/tracker/fitness/fitness_center_screen.dart';
+import 'package:optivus/features/tracker/hydration/hydration_tracker_screen.dart';
 import 'package:optivus/features/tracker/meditation/meditation_tracker_screen.dart';
 import 'package:optivus/features/tracker/money/money_system_screen.dart';
 import 'package:optivus/features/tracker/money/money_system_widgets.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
+import 'package:optivus/features/tracker/screens/health_connect_setup_screen.dart';
+import 'package:optivus/features/tracker/screens/location_mapbox_setup_screen.dart';
+import 'package:optivus/features/tracker/screens/tracker_settings_screen.dart';
+import 'package:optivus/features/tracker/screens/usage_access_setup_screen.dart';
+import 'package:optivus/features/tracker/screen_time/screen_time_screen.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/routine_item.dart';
-
-enum TrackerDetailView { none, meditation, money, fitness }
-
-final trackerDetailViewRequestProvider = StateProvider<TrackerDetailView>(
-  (ref) => TrackerDetailView.none,
-);
 
 class TrackerTab extends ConsumerStatefulWidget {
   const TrackerTab({super.key});
@@ -28,6 +28,14 @@ class TrackerTab extends ConsumerStatefulWidget {
 class _TrackerTabState extends ConsumerState<TrackerTab> {
   String _activeMetricView = 'Daily';
   TrackerDetailView _activeDetailView = TrackerDetailView.none;
+
+  void _openDetail(TrackerDetailView view) {
+    setState(() => _activeDetailView = view);
+  }
+
+  void _closeDetail() {
+    setState(() => _activeDetailView = TrackerDetailView.none);
+  }
 
   void _showPlaceholder(String title) {
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -90,71 +98,85 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
     final trackerState = ref.watch(mockTrackerProvider);
     final snapshot = _TrackerUiSnapshot.fromState(trackerState);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        bottom: false,
-        child: _activeDetailView == TrackerDetailView.meditation
-            ? MeditationTrackerScreen(
-                onBack: () {
-                  setState(() => _activeDetailView = TrackerDetailView.none);
-                },
-              )
-            : _activeDetailView == TrackerDetailView.money
-            ? MoneySystemScreen(
-                onBack: () {
-                  setState(() => _activeDetailView = TrackerDetailView.none);
-                },
-              )
-            : _activeDetailView == TrackerDetailView.fitness
-            ? FitnessCenterScreen(
-                onBack: () {
-                  setState(() => _activeDetailView = TrackerDetailView.none);
-                },
-              )
-            : Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                    child: _buildHeader(context),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const BouncingScrollPhysics(),
-                      padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildPeriodSelector(),
-                          const SizedBox(height: 20),
-                          _buildProgressCarousel(snapshot),
-                          const SizedBox(height: 28),
-                          _buildTodayProgressHero(context, snapshot),
-                          const SizedBox(height: 36),
-                          const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
-                          _buildActiveTrackers(snapshot),
-                          const SizedBox(height: 32),
-                          const TrackerSectionHeader(
-                            title: 'DISCOVER TRACKERS',
-                          ),
-                          _buildDiscoverTrackers(),
-                          const SizedBox(height: 32),
-                          const TrackerSectionHeader(
-                            title: 'PHONE DATA SOURCES',
-                          ),
-                          _buildPhoneDataSources(snapshot),
-                          const SizedBox(height: 32),
-                          const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
-                          _buildRecentActivity(snapshot),
-                          const SizedBox(height: 48),
-                          _buildTrackerSettingsTeaser(),
-                        ],
-                      ),
+    return PopScope(
+      canPop: _activeDetailView == TrackerDetailView.none,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _activeDetailView != TrackerDetailView.none) {
+          _closeDetail();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: switch (_activeDetailView) {
+            TrackerDetailView.meditation => MeditationTrackerScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.money => MoneySystemScreen(onBack: _closeDetail),
+            TrackerDetailView.fitness => FitnessCenterScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.screenTime => ScreenTimeScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.hydration => HydrationTrackerScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.trackerSettings => TrackerSettingsScreen(
+              onBack: _closeDetail,
+              onOpenDetail: _openDetail,
+            ),
+            TrackerDetailView.usageAccessSetup => UsageAccessSetupScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.healthConnectSetup => HealthConnectSetupScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.locationMapboxSetup => LocationMapboxSetupScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.none => Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: _buildHeader(context),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildPeriodSelector(),
+                        const SizedBox(height: 20),
+                        _buildProgressCarousel(snapshot),
+                        const SizedBox(height: 28),
+                        _buildTodayProgressHero(context, snapshot),
+                        const SizedBox(height: 36),
+                        const TrackerSectionHeader(title: 'ACTIVE TRACKERS'),
+                        _buildActiveTrackers(snapshot),
+                        const SizedBox(height: 32),
+                        const TrackerSectionHeader(title: 'DISCOVER TRACKERS'),
+                        _buildDiscoverTrackers(),
+                        const SizedBox(height: 32),
+                        const TrackerSectionHeader(title: 'PHONE DATA SOURCES'),
+                        _buildPhoneDataSources(snapshot),
+                        const SizedBox(height: 32),
+                        const TrackerSectionHeader(title: 'RECENT ACTIVITY'),
+                        _buildRecentActivity(snapshot),
+                        const SizedBox(height: 48),
+                        _buildTrackerSettingsTeaser(),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
+            ),
+          },
+        ),
       ),
     );
   }
@@ -193,7 +215,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         ),
         TrackerHeaderButton(
           icon: Icons.settings,
-          onTap: () => _showPlaceholder('Tracker Settings'),
+          onTap: () => _openDetail(TrackerDetailView.trackerSettings),
         ),
       ],
     );
@@ -398,15 +420,15 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               accentColor: tracker.accentColor,
               onAction: () {
                 if (tracker.title == 'Money System') {
-                  setState(() => _activeDetailView = TrackerDetailView.money);
+                  _openDetail(TrackerDetailView.money);
                 } else if (tracker.title == 'Screen Time') {
-                  context.push('/tracker/screen-time');
+                  _openDetail(TrackerDetailView.screenTime);
                 } else if (tracker.title == 'Meditation') {
-                  setState(
-                    () => _activeDetailView = TrackerDetailView.meditation,
-                  );
+                  _openDetail(TrackerDetailView.meditation);
                 } else if (tracker.title == 'Fitness Center') {
-                  setState(() => _activeDetailView = TrackerDetailView.fitness);
+                  _openDetail(TrackerDetailView.fitness);
+                } else if (tracker.title == 'Hydration') {
+                  _openDetail(TrackerDetailView.hydration);
                 } else {
                   _showPlaceholder(tracker.title);
                 }
@@ -585,7 +607,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           iconEmoji: '📱',
           status: 'Not connected',
           isConnected: false,
-          onConnect: () => _showPlaceholder('Screen Time / App Usage'),
+          onConnect: () => _openDetail(TrackerDetailView.usageAccessSetup),
         ),
         TrackerDataSourceCard(
           title: 'Fitness GPS',
@@ -593,7 +615,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           iconEmoji: '📍',
           status: 'Not connected',
           isConnected: false,
-          onConnect: () => _showPlaceholder('Fitness GPS'),
+          onConnect: () => _openDetail(TrackerDetailView.locationMapboxSetup),
         ),
         TrackerDataSourceCard(
           title: 'Health Connect',
@@ -601,7 +623,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           iconEmoji: '❤️',
           status: 'Not connected',
           isConnected: false,
-          onConnect: () => _showPlaceholder('Health Connect'),
+          onConnect: () => _openDetail(TrackerDetailView.healthConnectSetup),
         ),
         const SizedBox(height: 4),
         Padding(
@@ -650,7 +672,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
 
   Widget _buildTrackerSettingsTeaser() {
     return GestureDetector(
-      onTap: () => _showPlaceholder('Tracker Settings'),
+      onTap: () => _openDetail(TrackerDetailView.trackerSettings),
       child: TrackerGlassCard(
         padding: const EdgeInsets.all(20),
         radius: 20,
@@ -659,7 +681,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           children: [
             TrackerHeaderButton(
               icon: Icons.settings,
-              onTap: () => _showPlaceholder('Tracker Settings'),
+              onTap: () => _openDetail(TrackerDetailView.trackerSettings),
             ),
             const SizedBox(width: 16),
             const Expanded(

@@ -24,14 +24,24 @@ void showDataExportPurgeSheet(BuildContext context, WidgetRef ref) {
           children: [
             const Text(
               'YOUR DATA PORTABILITY',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             exportContainer,
             const SizedBox(height: 24),
             const Text(
               'ACCOUNT PURGE & RESET',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.danger, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.danger,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             Container(
@@ -39,22 +49,41 @@ void showDataExportPurgeSheet(BuildContext context, WidgetRef ref) {
               decoration: BoxDecoration(
                 color: OptivusColors.danger.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: OptivusColors.danger.withValues(alpha: 0.3), width: 1.5),
+                border: Border.all(
+                  color: OptivusColors.danger.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     children: const [
-                      Icon(Icons.warning, color: OptivusColors.danger, size: 18),
+                      Icon(
+                        Icons.warning,
+                        color: OptivusColors.danger,
+                        size: 18,
+                      ),
                       SizedBox(width: 8),
-                      Text('Irreversible Actions Warning', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.danger)),
+                      Text(
+                        'Irreversible Actions Warning',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: OptivusColors.danger,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Performing a Factory Reset completely purges all local databases, routines lists, habit records, goals, and credentials. It resets onboarding back to step zero.',
-                    style: TextStyle(fontSize: 10, height: 1.35, color: OptivusColors.textBody, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 10,
+                      height: 1.35,
+                      color: OptivusColors.textBody,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
@@ -62,40 +91,66 @@ void showDataExportPurgeSheet(BuildContext context, WidgetRef ref) {
                       backgroundColor: OptivusColors.danger,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     onPressed: () {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
-                          title: const Text('Double Confirmation', style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.danger)),
-                          content: const Text('Are you absolutely certain you want to purge all records? This action cannot be reversed.'),
+                          title: const Text(
+                            'Double Confirmation',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: OptivusColors.danger,
+                            ),
+                          ),
+                          content: const Text(
+                            'Are you absolutely certain you want to purge all records? This action cannot be reversed.',
+                          ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
-                              child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.bold)),
+                              child: const Text(
+                                'Cancel',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                             ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: OptivusColors.danger, foregroundColor: Colors.white),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: OptivusColors.danger,
+                                foregroundColor: Colors.white,
+                              ),
                               onPressed: () {
                                 Navigator.pop(context); // Dialog
                                 Navigator.pop(context); // Sheet
-                                ref.read(mockUserProfileProvider.notifier).updateProfile(UserProfile.empty(uid: ''));
+                                ref
+                                    .read(mockUserProfileProvider.notifier)
+                                    .updateProfile(UserProfile.empty(uid: ''));
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Account reset completely. Logging out.'),
+                                    content: Text(
+                                      'Account reset completely. Logging out.',
+                                    ),
                                     behavior: SnackBarBehavior.floating,
                                     backgroundColor: OptivusColors.danger,
                                   ),
                                 );
                               },
-                              child: const Text('Yes, Purge Everything', style: TextStyle(fontWeight: FontWeight.bold)),
+                              child: const Text(
+                                'Yes, Purge Everything',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ],
                         ),
                       );
                     },
-                    child: const Text('Perform Factory Reset', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'Perform Factory Reset',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ],
               ),
@@ -128,14 +183,20 @@ class _DataExportWidgetState extends State<_DataExportWidget> {
         children: [
           const Text(
             'In compliance with GDPR specifications, you are permitted to export a complete copy of your local data matrix at any point.',
-            style: TextStyle(fontSize: 11, height: 1.4, color: OptivusColors.textBody),
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.4,
+              color: OptivusColors.textBody,
+            ),
           ),
           const SizedBox(height: 16),
           if (_isExporting)
             const Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 12.0),
-                child: CircularProgressIndicator(color: OptivusColors.brandAccent),
+                child: CircularProgressIndicator(
+                  color: OptivusColors.brandAccent,
+                ),
               ),
             )
           else if (_exportedJson != null) ...[
@@ -157,13 +218,22 @@ class _DataExportWidgetState extends State<_DataExportWidget> {
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: OptivusColors.brandAccent, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: OptivusColors.brandAccent,
+                foregroundColor: Colors.white,
+              ),
               icon: const Icon(Icons.copy, size: 14),
-              label: const Text('Copy JSON to Clipboard', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Copy JSON to Clipboard',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: _exportedJson ?? ''));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('JSON copied to clipboard!'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('JSON copied to clipboard!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               },
             ),
@@ -172,10 +242,16 @@ class _DataExportWidgetState extends State<_DataExportWidget> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: OptivusColors.brandAccent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: OptivusColors.brandAccent)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: OptivusColors.brandAccent),
+                ),
               ),
               icon: const Icon(Icons.download, size: 16),
-              label: const Text('Generate Export Package', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              label: const Text(
+                'Generate Export Package',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
               onPressed: () {
                 setState(() => _isExporting = true);
                 Future.delayed(const Duration(milliseconds: 1200), () {
@@ -193,12 +269,14 @@ class _DataExportWidgetState extends State<_DataExportWidget> {
                     'compliance': {
                       'gdprOptIn': true,
                       'localDecryptionKey': 'aes-256-gcm-mock',
-                    }
+                    },
                   };
                   if (mounted) {
                     setState(() {
                       _isExporting = false;
-                      _exportedJson = const JsonEncoder.withIndent('  ').convert(map);
+                      _exportedJson = const JsonEncoder.withIndent(
+                        '  ',
+                      ).convert(map);
                     });
                   }
                 });

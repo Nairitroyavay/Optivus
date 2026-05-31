@@ -268,7 +268,10 @@ class TrackerSegmentedControl extends StatelessWidget {
                 decoration: BoxDecoration(
                   gradient: isSelected
                       ? const LinearGradient(
-                          colors: [OptivusColors.trackerAccent, OptivusColors.blueAccent],
+                          colors: [
+                            OptivusColors.trackerAccent,
+                            OptivusColors.blueAccent,
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         )
@@ -704,7 +707,10 @@ class _TrackerActivateButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: OptivusColors.sub.withValues(alpha: 0.5), width: 1.5),
+          border: Border.all(
+            color: OptivusColors.sub.withValues(alpha: 0.5),
+            width: 1.5,
+          ),
         ),
         child: const Text(
           'Activate',
@@ -776,14 +782,19 @@ class TrackerDataSourceCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 12, color: OptivusColors.sub),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: OptivusColors.sub,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     'Status: $status',
                     style: TextStyle(
                       fontSize: 11,
-                      color: isConnected ? OptivusColors.mintAccent : OptivusColors.sub,
+                      color: isConnected
+                          ? OptivusColors.mintAccent
+                          : OptivusColors.sub,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -810,7 +821,9 @@ class TrackerDataSourceCard extends StatelessWidget {
                 child: Text(
                   isConnected ? status : 'Connect',
                   style: TextStyle(
-                    color: isConnected ? OptivusColors.sub : OptivusColors.trackerAccent,
+                    color: isConnected
+                        ? OptivusColors.sub
+                        : OptivusColors.trackerAccent,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                   ),

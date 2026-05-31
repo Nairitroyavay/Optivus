@@ -22,7 +22,11 @@ class ScreenTimeUsageStatusCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.check_circle, color: OptivusColors.mintAccent, size: 20),
+                const Icon(
+                  Icons.check_circle,
+                  color: OptivusColors.mintAccent,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -35,7 +39,10 @@ class ScreenTimeUsageStatusCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: OptivusColors.mintAccent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
@@ -54,7 +61,11 @@ class ScreenTimeUsageStatusCard extends StatelessWidget {
             const SizedBox(height: 8),
             const Text(
               'Using mock app usage data for this UI pass.\n\nOptivus reads app usage duration, not your messages, chats, reels, or content.',
-              style: TextStyle(fontSize: 12, color: OptivusColors.sub, height: 1.4),
+              style: TextStyle(
+                fontSize: 12,
+                color: OptivusColors.sub,
+                height: 1.4,
+              ),
             ),
           ],
         ),
@@ -70,7 +81,11 @@ class ScreenTimeUsageStatusCard extends StatelessWidget {
         children: [
           Row(
             children: const [
-              Icon(Icons.lock_outline, color: OptivusColors.roseAccent, size: 20),
+              Icon(
+                Icons.lock_outline,
+                color: OptivusColors.roseAccent,
+                size: 20,
+              ),
               SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -87,19 +102,28 @@ class ScreenTimeUsageStatusCard extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'Connect Android Usage Access later to track total screen time, top apps, usage by time range, and focus-loss windows.',
-            style: TextStyle(fontSize: 12, color: OptivusColors.sub, height: 1.4),
+            style: TextStyle(
+              fontSize: 12,
+              color: OptivusColors.sub,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,
             child: GestureDetector(
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mock: Usage Access Connection Sheet')),
+                _showScreenTimeControlSheet(
+                  context,
+                  'Usage Access',
+                  'Open Tracker Usage Access Setup from Phone Data Sources to connect Android app usage. This frontend card is ready for the native settings intent.',
                 );
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: OptivusColors.ink,
                   borderRadius: BorderRadius.circular(16),
@@ -146,7 +170,10 @@ class ScreenTimeHeroCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: OptivusColors.roseAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
@@ -174,7 +201,9 @@ class ScreenTimeHeroCard extends StatelessWidget {
                     value: 0.75,
                     strokeWidth: 8,
                     backgroundColor: OptivusColors.sub.withValues(alpha: 0.1),
-                    valueColor: const AlwaysStoppedAnimation<Color>(OptivusColors.roseAccent),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      OptivusColors.roseAccent,
+                    ),
                     strokeCap: StrokeCap.round,
                   ),
                   Column(
@@ -306,7 +335,9 @@ class ScreenTimeAppUsageRow extends StatelessWidget {
                       app.formattedDuration,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: app.isLimitCrossed ? OptivusColors.roseAccent : OptivusColors.ink,
+                        color: app.isLimitCrossed
+                            ? OptivusColors.roseAccent
+                            : OptivusColors.ink,
                         fontSize: 13,
                       ),
                     ),
@@ -325,26 +356,44 @@ class ScreenTimeAppUsageRow extends StatelessWidget {
                     if (app.isLimitCrossed) ...[
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: OptivusColors.roseAccent.withValues(alpha: 0.1),
+                          color: OptivusColors.roseAccent.withValues(
+                            alpha: 0.1,
+                          ),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: const Text(
                           'Crossed limit',
-                          style: TextStyle(fontSize: 9, color: OptivusColors.roseAccent, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: OptivusColors.roseAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ]
+                    ],
                   ],
                 ),
                 const SizedBox(height: 6),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(2),
                   child: LinearProgressIndicator(
-                    value: app.limitMinutes != null ? (app.minutes / (app.limitMinutes! * 1.5)).clamp(0.0, 1.0) : 0.5,
+                    value: app.limitMinutes != null
+                        ? (app.minutes / (app.limitMinutes! * 1.5)).clamp(
+                            0.0,
+                            1.0,
+                          )
+                        : 0.5,
                     backgroundColor: OptivusColors.sub.withValues(alpha: 0.1),
-                    valueColor: AlwaysStoppedAnimation<Color>(app.isLimitCrossed ? OptivusColors.roseAccent : OptivusColors.blueAccent),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      app.isLimitCrossed
+                          ? OptivusColors.roseAccent
+                          : OptivusColors.blueAccent,
+                    ),
                     minHeight: 4,
                   ),
                 ),
@@ -360,55 +409,6 @@ class ScreenTimeAppUsageRow extends StatelessWidget {
 class ScreenTimeQuickControls extends StatelessWidget {
   const ScreenTimeQuickControls({super.key});
 
-  void _showMockSheet(BuildContext context, String title) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: OptivusColors.ink,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'This is a placeholder for the mock bottom sheet requested in the plan.',
-              style: TextStyle(color: OptivusColors.sub, height: 1.4),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: OptivusColors.ink,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('Close'),
-              ),
-            ),
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -420,35 +420,56 @@ class ScreenTimeQuickControls extends StatelessWidget {
             context,
             'Set soft limit',
             Icons.timer_outlined,
-            () => _showMockSheet(context, 'Set soft limit'),
+            () => _showScreenTimeControlSheet(
+              context,
+              'Set soft limit',
+              'Create a soft daily warning for doom apps without blocking phone access. Native persistence will connect here later.',
+            ),
           ),
           const SizedBox(width: 12),
           _buildControlButton(
             context,
             'Customize categories',
             Icons.category_outlined,
-            () => _showMockSheet(context, 'Customize app category'),
+            () => _showScreenTimeControlSheet(
+              context,
+              'Customize app category',
+              'Review doom, productive, and neutral app groups before saving category changes.',
+            ),
           ),
           const SizedBox(width: 12),
           _buildControlButton(
             context,
             'View weekly',
             Icons.calendar_view_week_outlined,
-            () => _showMockSheet(context, 'Weekly Report'),
+            () => _showScreenTimeControlSheet(
+              context,
+              'Weekly Report',
+              'Weekly report combines total time, risk windows, best focus blocks, and top categories.',
+            ),
           ),
           const SizedBox(width: 12),
           _buildControlButton(
             context,
             'Permissions',
             Icons.settings_outlined,
-            () => _showMockSheet(context, 'Usage Access Settings'),
+            () => _showScreenTimeControlSheet(
+              context,
+              'Usage Access Settings',
+              'Open the Tracker Usage Access setup screen from Phone Data Sources to recheck Android status.',
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildControlButton(BuildContext context, String label, IconData icon, VoidCallback onTap) {
+  Widget _buildControlButton(
+    BuildContext context,
+    String label,
+    IconData icon,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -484,6 +505,78 @@ class ScreenTimeQuickControls extends StatelessWidget {
   }
 }
 
+void _showScreenTimeControlSheet(
+  BuildContext context,
+  String title,
+  String body,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) => Container(
+      margin: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        22,
+        18,
+        22,
+        22 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: OptivusColors.borderSoft,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.ink,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            body,
+            style: const TextStyle(
+              color: OptivusColors.sub,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: OptivusColors.ink,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class ScreenTimeHourlyHeatmap extends StatelessWidget {
   const ScreenTimeHourlyHeatmap({super.key});
 
@@ -501,7 +594,11 @@ class ScreenTimeHourlyHeatmap extends StatelessWidget {
         children: [
           const Text(
             'Hourly Usage Heatmap',
-            style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink, fontSize: 14),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.ink,
+              fontSize: 14,
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -523,14 +620,20 @@ class ScreenTimeHourlyHeatmap extends StatelessWidget {
                       width: 24,
                       height: 40 * values[index] + 4,
                       decoration: BoxDecoration(
-                        color: isRisk ? OptivusColors.roseAccent.withValues(alpha: 0.8) : OptivusColors.blueAccent.withValues(alpha: 0.4),
+                        color: isRisk
+                            ? OptivusColors.roseAccent.withValues(alpha: 0.8)
+                            : OptivusColors.blueAccent.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       hours[index],
-                      style: const TextStyle(fontSize: 10, color: OptivusColors.sub, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: OptivusColors.sub,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 );
@@ -557,7 +660,11 @@ class ScreenTimeTopAppTimeline extends StatelessWidget {
         children: [
           const Text(
             'Top App Timeline',
-            style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink, fontSize: 14),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.ink,
+              fontSize: 14,
+            ),
           ),
           const SizedBox(height: 16),
           _buildTimelineRow('Morning', 'Chrome 20m, WhatsApp 10m'),
@@ -579,7 +686,11 @@ class ScreenTimeTopAppTimeline extends StatelessWidget {
             width: 70,
             child: Text(
               time,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.sub),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: OptivusColors.sub,
+              ),
             ),
           ),
           Expanded(
@@ -612,12 +723,28 @@ class ScreenTimeFocusLossWindows extends StatelessWidget {
         children: [
           const Text(
             'Focus Loss Windows',
-            style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink, fontSize: 14),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.ink,
+              fontSize: 14,
+            ),
           ),
           const SizedBox(height: 16),
-          _buildWindowRow('10:30 PM - 12:00 AM', 'High', OptivusColors.roseAccent),
-          _buildWindowRow('4:00 PM - 4:40 PM', 'Medium', OptivusColors.brandAccent),
-          _buildWindowRow('12:30 PM - 1:00 PM', 'Low', OptivusColors.blueAccent),
+          _buildWindowRow(
+            '10:30 PM - 12:00 AM',
+            'High',
+            OptivusColors.roseAccent,
+          ),
+          _buildWindowRow(
+            '4:00 PM - 4:40 PM',
+            'Medium',
+            OptivusColors.brandAccent,
+          ),
+          _buildWindowRow(
+            '12:30 PM - 1:00 PM',
+            'Low',
+            OptivusColors.blueAccent,
+          ),
         ],
       ),
     );
@@ -631,7 +758,11 @@ class ScreenTimeFocusLossWindows extends StatelessWidget {
         children: [
           Text(
             time,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: OptivusColors.ink),
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: OptivusColors.ink,
+            ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -641,7 +772,11 @@ class ScreenTimeFocusLossWindows extends StatelessWidget {
             ),
             child: Text(
               risk,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
         ],
@@ -667,7 +802,11 @@ class ScreenTimeWeeklyComparison extends StatelessWidget {
             children: [
               const Text(
                 'Weekly Comparison',
-                style: TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.ink, fontSize: 14),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: OptivusColors.ink,
+                  fontSize: 14,
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -677,7 +816,11 @@ class ScreenTimeWeeklyComparison extends StatelessWidget {
                 ),
                 child: const Text(
                   '-18%',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: OptivusColors.mintAccent),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: OptivusColors.mintAccent,
+                  ),
                 ),
               ),
             ],
@@ -699,21 +842,31 @@ class ScreenTimeWeeklyComparison extends StatelessWidget {
                 children: [
                   Text(
                     data.formattedDuration,
-                    style: const TextStyle(fontSize: 9, color: OptivusColors.sub, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 9,
+                      color: OptivusColors.sub,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Container(
                     width: 28,
                     height: height,
                     decoration: BoxDecoration(
-                      color: isHigh ? OptivusColors.roseAccent.withValues(alpha: 0.8) : OptivusColors.blueAccent.withValues(alpha: 0.5),
+                      color: isHigh
+                          ? OptivusColors.roseAccent.withValues(alpha: 0.8)
+                          : OptivusColors.blueAccent.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     data.dayLabel,
-                    style: const TextStyle(fontSize: 11, color: OptivusColors.ink, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: OptivusColors.ink,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               );

@@ -21,7 +21,12 @@ void showOverloadLimitsSheet(BuildContext context, WidgetRef ref) {
           children: [
             const Text(
               'DAILY CAP LIMITS',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             LiquidGlassPanel(
@@ -31,8 +36,20 @@ void showOverloadLimitsSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Maximum Active Goals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('${maxGoals.toInt()} active', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Maximum Active Goals',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${maxGoals.toInt()} active',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -49,8 +66,20 @@ void showOverloadLimitsSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Maximum Routine Habits', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('${maxRoutines.toInt()} items', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Maximum Routine Habits',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${maxRoutines.toInt()} items',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -66,8 +95,20 @@ void showOverloadLimitsSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Maximum Focus Hours cap', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('${maxFocusHours.toInt()} hours', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Maximum Focus Hours cap',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${maxFocusHours.toInt()} hours',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -89,15 +130,24 @@ void showOverloadLimitsSheet(BuildContext context, WidgetRef ref) {
               decoration: BoxDecoration(
                 color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.orange.withValues(alpha: 0.4), width: 1.5),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
               ),
               child: Row(
                 children: [
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
-                    child: const Icon(Icons.shield_outlined, color: Colors.white),
+                    decoration: const BoxDecoration(
+                      color: Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.shield_outlined,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -106,12 +156,20 @@ void showOverloadLimitsSheet(BuildContext context, WidgetRef ref) {
                       children: const [
                         Text(
                           'Active Guard Shield: ENABLED',
-                          style: TextStyle(fontWeight: FontWeight.w900, color: Colors.orange, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.orange,
+                            fontSize: 13,
+                          ),
                         ),
                         SizedBox(height: 2),
                         Text(
                           'Restricts your daily layout to prevent planning too many tasks, keeping cognitive burnouts at zero.',
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: OptivusColors.textSecondary),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: OptivusColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -124,16 +182,24 @@ void showOverloadLimitsSheet(BuildContext context, WidgetRef ref) {
               style: ElevatedButton.styleFrom(
                 backgroundColor: OptivusColors.brandAccent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Overload guard parameters locked.'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Overload guard parameters locked.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               },
-              child: const Text('Confirm Overload Safeguard', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Confirm Overload Safeguard',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );

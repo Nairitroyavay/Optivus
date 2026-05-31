@@ -9,11 +9,7 @@ class ProfileHeaderCard extends StatelessWidget {
   final UserProfile profile;
   final VoidCallback? onEditTap;
 
-  const ProfileHeaderCard({
-    super.key,
-    required this.profile,
-    this.onEditTap,
-  });
+  const ProfileHeaderCard({super.key, required this.profile, this.onEditTap});
 
   @override
   Widget build(BuildContext context) {
@@ -36,11 +32,11 @@ class ProfileHeaderCard extends StatelessWidget {
               Text(
                 'YOUR PROFILE',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.5,
-                      fontSize: 10,
-                      color: OptivusColors.textSecondary,
-                    ),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  fontSize: 10,
+                  color: OptivusColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -59,7 +55,9 @@ class ProfileHeaderCard extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: OptivusColors.profileAccent.withValues(alpha: 0.3),
+                          color: OptivusColors.profileAccent.withValues(
+                            alpha: 0.3,
+                          ),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -85,12 +83,14 @@ class ProfileHeaderCard extends StatelessWidget {
                   SizedBox(
                     width: 80,
                     child: Text(
-                      'Photo upload coming soon',
+                      'Manage photo in Edit Profile',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 9,
                         fontWeight: FontWeight.w600,
-                        color: OptivusColors.textSecondary.withValues(alpha: 0.8),
+                        color: OptivusColors.textSecondary.withValues(
+                          alpha: 0.8,
+                        ),
                         height: 1.2,
                       ),
                     ),
@@ -105,7 +105,9 @@ class ProfileHeaderCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      profile.displayName.isNotEmpty ? profile.displayName : 'Nairit Roy',
+                      profile.displayName.isNotEmpty
+                          ? profile.displayName
+                          : 'Nairit Roy',
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
@@ -150,7 +152,9 @@ class ProfileHeaderCard extends StatelessWidget {
           ElevatedButton(
             onPressed: onEditTap,
             style: ElevatedButton.styleFrom(
-              backgroundColor: OptivusColors.profileAccent.withValues(alpha: 0.1),
+              backgroundColor: OptivusColors.profileAccent.withValues(
+                alpha: 0.1,
+              ),
               foregroundColor: OptivusColors.profileAccent,
               elevation: 0,
               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -163,10 +167,7 @@ class ProfileHeaderCard extends StatelessWidget {
             ),
             child: const Text(
               'Edit Profile',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
           ),
         ],

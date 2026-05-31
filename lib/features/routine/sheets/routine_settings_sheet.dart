@@ -5,7 +5,7 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/features/routine/managers/base_timeline/base_timeline_manager_screen.dart';
+import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 
 /// Shows the Routine Settings bottom sheet.
 void showRoutineSettingsSheet(BuildContext context, WidgetRef ref) {
@@ -33,7 +33,10 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+              colors: [
+                OptivusColors.routineSheetTop,
+                OptivusColors.routineSheetBottom,
+              ],
             ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(28),
@@ -117,61 +120,76 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
               // Working toggles
               Consumer(
                 builder: (ctx, ref, _) {
-                  final showFullDay = ref.watch(routineNotifierProvider).showFullDay;
+                  final showFullDay = ref
+                      .watch(routineNotifierProvider)
+                      .showFullDay;
                   return _ToggleTile(
                     title: 'Full 24h mode',
                     subtitle: 'Show all 24 hours',
                     value: showFullDay,
-                    onChanged: (v) =>
-                        ref.read(routineNotifierProvider.notifier).toggleFullDay(v),
+                    onChanged: (v) => ref
+                        .read(routineNotifierProvider.notifier)
+                        .toggleFullDay(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final showMinuteTicks = ref.watch(routineNotifierProvider).showMinuteTicks;
+                  final showMinuteTicks = ref
+                      .watch(routineNotifierProvider)
+                      .showMinuteTicks;
                   return _ToggleTile(
                     title: 'Show minute ticks',
                     subtitle: '1-min and 5-min markers on ruler',
                     value: showMinuteTicks,
-                    onChanged: (v) =>
-                        ref.read(routineNotifierProvider.notifier).toggleMinuteTicks(v),
+                    onChanged: (v) => ref
+                        .read(routineNotifierProvider.notifier)
+                        .toggleMinuteTicks(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final compactMode = ref.watch(routineNotifierProvider).compactMode;
+                  final compactMode = ref
+                      .watch(routineNotifierProvider)
+                      .compactMode;
                   return _ToggleTile(
                     title: 'Compact mode',
                     subtitle: 'Smaller card heights',
                     value: compactMode,
-                    onChanged: (v) =>
-                        ref.read(routineNotifierProvider.notifier).toggleCompactMode(v),
+                    onChanged: (v) => ref
+                        .read(routineNotifierProvider.notifier)
+                        .toggleCompactMode(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final showCurrentTimeLine = ref.watch(routineNotifierProvider).showCurrentTimeLine;
+                  final showCurrentTimeLine = ref
+                      .watch(routineNotifierProvider)
+                      .showCurrentTimeLine;
                   return _ToggleTile(
                     title: 'Current Time Line',
                     subtitle: 'Show floating indicator',
                     value: showCurrentTimeLine,
-                    onChanged: (v) =>
-                        ref.read(routineNotifierProvider.notifier).toggleCurrentTimeLine(v),
+                    onChanged: (v) => ref
+                        .read(routineNotifierProvider.notifier)
+                        .toggleCurrentTimeLine(v),
                   );
                 },
               ),
               Consumer(
                 builder: (ctx, ref, _) {
-                  final precisionMode = ref.watch(routineNotifierProvider).precisionMode;
+                  final precisionMode = ref
+                      .watch(routineNotifierProvider)
+                      .precisionMode;
                   return _ToggleTile(
                     title: 'Precision mode',
                     subtitle: 'Move controls snap to 1 minute',
                     value: precisionMode,
-                    onChanged: (v) =>
-                        ref.read(routineNotifierProvider.notifier).togglePrecisionMode(v),
+                    onChanged: (v) => ref
+                        .read(routineNotifierProvider.notifier)
+                        .togglePrecisionMode(v),
                   );
                 },
               ),
@@ -229,10 +247,8 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
 
   void _showBaseTimelineManager(BuildContext context) {
     Navigator.of(context).pop(); // Close the settings sheet first
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const BaseTimelineManagerScreen()),
-    );
+    parentRef.read(routineDetailViewRequestProvider.notifier).state =
+        const RoutineDetailTarget(view: RoutineDetailView.baseTimelineManager);
   }
 
   void _showHabitSystems(BuildContext context) {
@@ -269,7 +285,8 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
   void _showRoutineHistory(BuildContext context) {
     final history =
         parentRef
-            .watch(routineNotifierProvider).items
+            .watch(routineNotifierProvider)
+            .items
             .where(
               (item) =>
                   item.status == RoutineStatus.completed ||
@@ -386,8 +403,6 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
     );
   }
 
-
-
   Widget _itemTile(RoutineItem item) {
     return _InfoRowBox(
       text:
@@ -415,7 +430,10 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+                colors: [
+                  OptivusColors.routineSheetTop,
+                  OptivusColors.routineSheetBottom,
+                ],
               ),
               borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
@@ -556,52 +574,64 @@ class _ConflictResolverTile extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (onKeepBoth != null)
-                  _MiniAction(
-                    label: 'Keep both',
-                    color: OptivusColors.warning,
-                    onTap: onKeepBoth,
-                  ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (onKeepBoth != null)
                 _MiniAction(
-                  label: 'Find free slot',
-                  color: OptivusColors.success,
-                  onTap: () {
-                    final item = ref.read(routineNotifierProvider).items.firstWhere((i) => i.id == conflict.itemId);
-                    final start = ref.read(routineNotifierProvider.notifier).findFreeSlot(
-                      item: item,
-                      date: ref.read(routineNotifierProvider).selectedDay,
-                    );
-                    if (start != null) {
-                      ref.read(routineNotifierProvider.notifier).moveItem(
-                        itemId: item.id,
+                  label: 'Keep both',
+                  color: OptivusColors.warning,
+                  onTap: onKeepBoth,
+                ),
+              _MiniAction(
+                label: 'Find free slot',
+                color: OptivusColors.success,
+                onTap: () {
+                  final item = ref
+                      .read(routineNotifierProvider)
+                      .items
+                      .firstWhere((i) => i.id == conflict.itemId);
+                  final start = ref
+                      .read(routineNotifierProvider.notifier)
+                      .findFreeSlot(
+                        item: item,
                         date: ref.read(routineNotifierProvider).selectedDay,
-                        startMinute: start,
-                        durationMinutes: item.durationMinutes,
                       );
-                    }
-                    Navigator.of(context).pop();
-                  },
-                ),
-                _MiniAction(
-                  label: 'Make tiny version',
-                  color: OptivusColors.routineAccent,
-                  onTap: () {
-                    final item = ref.read(routineNotifierProvider).items.firstWhere((i) => i.id == conflict.itemId);
-                    ref.read(routineNotifierProvider.notifier).makeTinyVersion(item);
-                    Navigator.of(context).pop();
-                  },
-                ),
-                _MiniAction(
-                  label: 'Mark flexible',
-                  color: OptivusColors.textSecondary,
-                  onTap: onMarkFlexible,
-                ),
-              ],
-            ),
+                  if (start != null) {
+                    ref
+                        .read(routineNotifierProvider.notifier)
+                        .moveItem(
+                          itemId: item.id,
+                          date: ref.read(routineNotifierProvider).selectedDay,
+                          startMinute: start,
+                          durationMinutes: item.durationMinutes,
+                        );
+                  }
+                  Navigator.of(context).pop();
+                },
+              ),
+              _MiniAction(
+                label: 'Make tiny version',
+                color: OptivusColors.routineAccent,
+                onTap: () {
+                  final item = ref
+                      .read(routineNotifierProvider)
+                      .items
+                      .firstWhere((i) => i.id == conflict.itemId);
+                  ref
+                      .read(routineNotifierProvider.notifier)
+                      .makeTinyVersion(item);
+                  Navigator.of(context).pop();
+                },
+              ),
+              _MiniAction(
+                label: 'Mark flexible',
+                color: OptivusColors.textSecondary,
+                onTap: onMarkFlexible,
+              ),
+            ],
+          ),
         ],
       ),
     );

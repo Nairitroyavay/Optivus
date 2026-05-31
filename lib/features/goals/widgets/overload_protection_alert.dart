@@ -6,10 +6,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 class OverloadProtectionAlert extends StatelessWidget {
   final int overloadCount;
 
-  const OverloadProtectionAlert({
-    super.key,
-    required this.overloadCount,
-  });
+  const OverloadProtectionAlert({super.key, required this.overloadCount});
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +23,11 @@ class OverloadProtectionAlert extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.shield_outlined,
-              color: OptivusColors.danger, size: 28),
+          const Icon(
+            Icons.shield_outlined,
+            color: OptivusColors.danger,
+            size: 28,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

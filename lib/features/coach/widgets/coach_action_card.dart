@@ -8,11 +8,7 @@ class CoachActionCard extends StatelessWidget {
   final CoachResponseBlock block;
   final VoidCallback? onPressed;
 
-  const CoachActionCard({
-    super.key,
-    required this.block,
-    this.onPressed,
-  });
+  const CoachActionCard({super.key, required this.block, this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -60,9 +56,10 @@ class CoachActionCard extends StatelessWidget {
               Text(
                 block.heading ?? '',
                 style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                    color: blockColor),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                  color: blockColor,
+                ),
               ),
             ],
           ),
@@ -70,9 +67,10 @@ class CoachActionCard extends StatelessWidget {
           Text(
             block.body ?? '',
             style: const TextStyle(
-                fontSize: 10,
-                height: 1.3,
-                color: OptivusColors.textBody),
+              fontSize: 10,
+              height: 1.3,
+              color: OptivusColors.textBody,
+            ),
           ),
           const SizedBox(height: 10),
           ElevatedButton(
@@ -80,14 +78,16 @@ class CoachActionCard extends StatelessWidget {
               backgroundColor: blockColor,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
               padding: const EdgeInsets.symmetric(vertical: 8),
               elevation: 0,
             ),
             onPressed: onPressed,
-            child: Text(block.buttonLabel ?? 'Confirm',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 11)),
+            child: Text(
+              block.buttonLabel ?? 'Confirm',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+            ),
           ),
         ],
       ),

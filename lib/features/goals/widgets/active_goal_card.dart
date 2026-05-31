@@ -10,11 +10,7 @@ class ActiveGoalCard extends ConsumerWidget {
   final GoalModel goal;
   final VoidCallback? onTap;
 
-  const ActiveGoalCard({
-    super.key,
-    required this.goal,
-    this.onTap,
-  });
+  const ActiveGoalCard({super.key, required this.goal, this.onTap});
 
   Color _getLabelColor() {
     final idLower = goal.id.toLowerCase();
@@ -82,8 +78,11 @@ class ActiveGoalCard extends ConsumerWidget {
                             color: labelColor.withValues(alpha: 0.25),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(icon,
-                              color: Colors.blueGrey.shade800, size: 20),
+                          child: Icon(
+                            icon,
+                            color: Colors.blueGrey.shade800,
+                            size: 20,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -93,10 +92,11 @@ class ActiveGoalCard extends ConsumerWidget {
                               const Text(
                                 'IDENTITY ALIGNMENT',
                                 style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                    color: OptivusColors.textSecondary,
-                                    letterSpacing: 0.8),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  color: OptivusColors.textSecondary,
+                                  letterSpacing: 0.8,
+                                ),
                               ),
                               const SizedBox(height: 2),
                               Text(
@@ -116,15 +116,19 @@ class ActiveGoalCard extends ConsumerWidget {
                             Text(
                               '${goal.streakDays} Days',
                               style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w900,
-                                  color: OptivusColors.brandAccent),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.brandAccent,
+                              ),
                             ),
-                            const Text('STREAK',
-                                style: TextStyle(
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    color: OptivusColors.textSecondary)),
+                            const Text(
+                              'STREAK',
+                              style: TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.bold,
+                                color: OptivusColors.textSecondary,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -136,17 +140,15 @@ class ActiveGoalCard extends ConsumerWidget {
                       color: labelColor == const Color(0xFFDCCBFF)
                           ? Colors.deepPurple
                           : (labelColor == Colors.grey
-                              ? OptivusColors.brandAccent
-                              : labelColor),
+                                ? OptivusColors.brandAccent
+                                : labelColor),
                     ),
                   ],
                 ),
               ),
 
               // Daily Proof Panel
-              DailyProofPanel(
-                goal: goal,
-              ),
+              DailyProofPanel(goal: goal),
             ],
           ),
         ),
@@ -185,9 +187,10 @@ class GoalProgressBar extends StatelessWidget {
         Text(
           '${(progress * 100).toInt()}% Completed',
           style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: OptivusColors.textSecondary),
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: OptivusColors.textSecondary,
+          ),
         ),
       ],
     );
@@ -218,9 +221,10 @@ class DailyProofPanel extends ConsumerWidget {
                 child: Text(
                   'DAILY MICRO PROOF: ${proof.title.toUpperCase()}',
                   style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textSecondary),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textSecondary,
+                  ),
                 ),
               ),
               InkWell(
@@ -231,8 +235,10 @@ class DailyProofPanel extends ConsumerWidget {
                 },
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: isDone
                         ? OptivusColors.success.withValues(alpha: 0.15)
@@ -249,9 +255,7 @@ class DailyProofPanel extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isDone
-                            ? Icons.verified
-                            : Icons.radio_button_unchecked,
+                        isDone ? Icons.verified : Icons.radio_button_unchecked,
                         color: isDone
                             ? OptivusColors.success
                             : OptivusColors.brandAccent,
@@ -279,26 +283,29 @@ class DailyProofPanel extends ConsumerWidget {
           Row(
             children: [
               _DifficultyChip(
-                  goalId: goal.id,
-                  label: 'Tiny',
-                  valCode: 'tiny',
-                  currentDifficulty: proof.selectedDifficulty,
-                  activeColor: OptivusColors.success,
-                  isDone: isDone),
+                goalId: goal.id,
+                label: 'Tiny',
+                valCode: 'tiny',
+                currentDifficulty: proof.selectedDifficulty,
+                activeColor: OptivusColors.success,
+                isDone: isDone,
+              ),
               _DifficultyChip(
-                  goalId: goal.id,
-                  label: 'Standard',
-                  valCode: 'normal',
-                  currentDifficulty: proof.selectedDifficulty,
-                  activeColor: OptivusColors.brandAccent,
-                  isDone: isDone),
+                goalId: goal.id,
+                label: 'Standard',
+                valCode: 'normal',
+                currentDifficulty: proof.selectedDifficulty,
+                activeColor: OptivusColors.brandAccent,
+                isDone: isDone,
+              ),
               _DifficultyChip(
-                  goalId: goal.id,
-                  label: 'Overload',
-                  valCode: 'strong',
-                  currentDifficulty: proof.selectedDifficulty,
-                  activeColor: OptivusColors.danger,
-                  isDone: isDone),
+                goalId: goal.id,
+                label: 'Overload',
+                valCode: 'strong',
+                currentDifficulty: proof.selectedDifficulty,
+                activeColor: OptivusColors.danger,
+                isDone: isDone,
+              ),
             ],
           ),
         ],
@@ -326,8 +333,7 @@ class _DifficultyChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isSel =
-        currentDifficulty.toLowerCase() == valCode.toLowerCase();
+    final isSel = currentDifficulty.toLowerCase() == valCode.toLowerCase();
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.only(right: 6.0),

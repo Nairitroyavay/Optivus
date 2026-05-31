@@ -28,7 +28,11 @@ class TodayPlanCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.wb_sunny_rounded, color: OptivusColors.warning, size: 20),
+              const Icon(
+                Icons.wb_sunny_rounded,
+                color: OptivusColors.warning,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               const Text(
                 'Today\'s plan is:',
@@ -52,7 +56,9 @@ class TodayPlanCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: OptivusColors.success.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: OptivusColors.success.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: OptivusColors.success.withValues(alpha: 0.3),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,11 +87,23 @@ class TodayPlanCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildButton('Start Meditation', OptivusColors.success, onStartMeditation),
-              _buildButton('Open Routine', OptivusColors.brandAccent, onOpenRoutine),
-              _buildButton('Improve Plan', OptivusColors.coachAccent, onImprovePlan),
+              _buildButton(
+                'Start Meditation',
+                OptivusColors.success,
+                onStartMeditation,
+              ),
+              _buildButton(
+                'Open Routine',
+                OptivusColors.brandAccent,
+                onOpenRoutine,
+              ),
+              _buildButton(
+                'Improve Plan',
+                OptivusColors.coachAccent,
+                onImprovePlan,
+              ),
             ],
-          )
+          ),
         ],
       ),
     );

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 
-void showPlaceholderSheet(BuildContext context, {required String title, required String message}) {
+void showPlaceholderSheet(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) {
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
@@ -37,7 +41,11 @@ void showPlaceholderSheet(BuildContext context, {required String title, required
                   ),
                 ),
                 const SizedBox(height: 32),
-                Icon(Icons.construction_rounded, size: 48, color: OptivusColors.profileAccent),
+                Icon(
+                  Icons.construction_rounded,
+                  size: 48,
+                  color: OptivusColors.profileAccent,
+                ),
                 const SizedBox(height: 24),
                 Text(
                   title,
@@ -71,7 +79,10 @@ void showPlaceholderSheet(BuildContext context, {required String title, required
                     ),
                     elevation: 0,
                   ),
-                  child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Got it',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -86,7 +97,8 @@ void showDeleteAccountFlow(BuildContext context) {
   showPlaceholderSheet(
     context,
     title: 'Delete Account Request',
-    message: 'Must be serious:\n1. show what will be deleted\n2. offer Export Data first\n3. re-authentication placeholder\n4. type DELETE\n5. create deletion request placeholder\n6. show 7-day cancellation window placeholder',
+    message:
+        'Must be serious:\n1. show what will be deleted\n2. offer Export Data first\n3. re-authentication placeholder\n4. type DELETE\n5. create deletion request placeholder\n6. show 7-day cancellation window placeholder',
   );
 }
 
@@ -99,7 +111,10 @@ void showLogoutDialog(BuildContext context, VoidCallback onLogout) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text(
           'Log out?',
-          style: TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.textPrimary),
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            color: OptivusColors.textPrimary,
+          ),
         ),
         content: const Text(
           'Your data will stay safe in your account.',
@@ -108,7 +123,13 @@ void showLogoutDialog(BuildContext context, VoidCallback onLogout) {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: OptivusColors.textSecondary, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: OptivusColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -120,7 +141,10 @@ void showLogoutDialog(BuildContext context, VoidCallback onLogout) {
               foregroundColor: Colors.white,
               elevation: 0,
             ),
-            child: const Text('Log out', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Log out',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       );

@@ -10,27 +10,39 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
 
 class SkinCareRoutineSetupScreen extends ConsumerStatefulWidget {
-  const SkinCareRoutineSetupScreen({super.key});
+  final VoidCallback? onBack;
+
+  const SkinCareRoutineSetupScreen({super.key, this.onBack});
 
   @override
-  ConsumerState<SkinCareRoutineSetupScreen> createState() => _SkinCareRoutineSetupScreenState();
+  ConsumerState<SkinCareRoutineSetupScreen> createState() =>
+      _SkinCareRoutineSetupScreenState();
 }
 
-class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetupScreen> {
+class _SkinCareRoutineSetupScreenState
+    extends ConsumerState<SkinCareRoutineSetupScreen> {
   void _showForm({RoutineItem? existingItem}) {
     final isEdit = existingItem != null;
     final titleCtrl = TextEditingController(text: existingItem?.title ?? '');
     final notesCtrl = TextEditingController(text: existingItem?.notes ?? '');
-    
+
     // We can extract steps into a text field separated by commas
-    final stepsCtrl = TextEditingController(text: existingItem?.steps?.join(', ') ?? '');
+    final stepsCtrl = TextEditingController(
+      text: existingItem?.steps?.join(', ') ?? '',
+    );
 
     TimeOfDay startTime = existingItem != null
-        ? TimeOfDay(hour: existingItem.startMinute ~/ 60, minute: existingItem.startMinute % 60)
+        ? TimeOfDay(
+            hour: existingItem.startMinute ~/ 60,
+            minute: existingItem.startMinute % 60,
+          )
         : const TimeOfDay(hour: 8, minute: 0);
 
     TimeOfDay endTime = existingItem != null
-        ? TimeOfDay(hour: existingItem.endMinute ~/ 60, minute: existingItem.endMinute % 60)
+        ? TimeOfDay(
+            hour: existingItem.endMinute ~/ 60,
+            minute: existingItem.endMinute % 60,
+          )
         : const TimeOfDay(hour: 8, minute: 15);
 
     List<int> selectedDays = existingItem?.repeatDays ?? [];
@@ -48,7 +60,9 @@ class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetu
               isEdit: isEdit,
               onDelete: isEdit
                   ? () {
-                      ref.read(routineNotifierProvider.notifier).deleteItem(existingItem.id);
+                      ref
+                          .read(routineNotifierProvider.notifier)
+                          .deleteItem(existingItem.id);
                       Navigator.pop(ctx);
                     }
                   : null,
@@ -65,10 +79,15 @@ class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetu
 
                 final startMin = startTime.hour * 60 + startTime.minute;
                 final endMin = endTime.hour * 60 + endTime.minute;
-                
-                final rawSteps = stepsCtrl.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 
-                final item = existingItem?.copyWith(
+                final rawSteps = stepsCtrl.text
+                    .split(',')
+                    .map((s) => s.trim())
+                    .where((s) => s.isNotEmpty)
+                    .toList();
+
+                final item =
+                    existingItem?.copyWith(
                       title: title,
                       notes: notesCtrl.text.trim(),
                       steps: rawSteps,
@@ -103,30 +122,50 @@ class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetu
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _TextField(controller: titleCtrl, label: 'Routine Name (e.g. Morning Glow)'),
+                  _TextField(
+                    controller: titleCtrl,
+                    label: 'Routine Name (e.g. Morning Glow)',
+                  ),
                   const SizedBox(height: 24),
-                  const Text('Time Window', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Text(
+                    'Time Window',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: 12),
                   TimeRangePickerRow(
                     startTime: startTime,
                     endTime: endTime,
-                    onStartTimeChanged: (time) => setModal(() => startTime = time),
+                    onStartTimeChanged: (time) =>
+                        setModal(() => startTime = time),
                     onEndTimeChanged: (time) => setModal(() => endTime = time),
                   ),
                   const SizedBox(height: 24),
-                  const Text('Repeat Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Text(
+                    'Repeat Days',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: 12),
                   DaySelectorChips(
                     selectedDays: selectedDays,
                     onChanged: (days) => setModal(() => selectedDays = days),
                   ),
                   const SizedBox(height: 24),
-                  _TextField(controller: stepsCtrl, label: 'Steps (comma separated)', maxLines: 2),
+                  _TextField(
+                    controller: stepsCtrl,
+                    label: 'Steps (comma separated)',
+                    maxLines: 2,
+                  ),
                   const SizedBox(height: 16),
                   _TextField(controller: notesCtrl, label: 'Notes (optional)'),
                   if (errorMsg != null) ...[
                     const SizedBox(height: 24),
-                    Text(errorMsg!, style: const TextStyle(color: OptivusColors.danger, fontWeight: FontWeight.w600)),
+                    Text(
+                      errorMsg!,
+                      style: const TextStyle(
+                        color: OptivusColors.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -143,13 +182,18 @@ class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetu
     final skinCare = BaseTimelineFilterUtils.getSkinCareItems(allItems);
 
     return Scaffold(
-      backgroundColor: OptivusColors.routineBgBottom,
+      backgroundColor: widget.onBack == null
+          ? OptivusColors.routineBgBottom
+          : Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: OptivusColors.textPrimary,
+          ),
+          onPressed: widget.onBack ?? () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Skin Care Routine',
@@ -166,11 +210,19 @@ class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetu
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.face_retouching_natural_rounded, size: 64, color: OptivusColors.textMuted),
+                  const Icon(
+                    Icons.face_retouching_natural_rounded,
+                    size: 64,
+                    color: OptivusColors.textMuted,
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'No skin care sets yet.',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: OptivusColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: OptivusColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
@@ -180,16 +232,20 @@ class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetu
                       foregroundColor: Colors.white,
                     ),
                     child: const Text('Add Skin Care'),
-                  )
+                  ),
                 ],
               ),
             )
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-              children: skinCare.map((s) => BaseTimelineBlockCard(
-                item: s,
-                onTap: () => _showForm(existingItem: s),
-              )).toList(),
+              children: skinCare
+                  .map(
+                    (s) => BaseTimelineBlockCard(
+                      item: s,
+                      onTap: () => _showForm(existingItem: s),
+                    ),
+                  )
+                  .toList(),
             ),
       floatingActionButton: skinCare.isNotEmpty
           ? FloatingActionButton.extended(
@@ -197,7 +253,10 @@ class _SkinCareRoutineSetupScreenState extends ConsumerState<SkinCareRoutineSetu
               backgroundColor: OptivusColors.routineAccent,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Skin Care', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Add Skin Care',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             )
           : null,
     );
@@ -209,14 +268,21 @@ class _TextField extends StatelessWidget {
   final String label;
   final int maxLines;
 
-  const _TextField({required this.controller, required this.label, this.maxLines = 1});
+  const _TextField({
+    required this.controller,
+    required this.label,
+    this.maxLines = 1,
+  });
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
-      style: const TextStyle(fontWeight: FontWeight.w600, color: OptivusColors.textPrimary),
+      style: const TextStyle(
+        fontWeight: FontWeight.w600,
+        color: OptivusColors.textPrimary,
+      ),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: OptivusColors.textSecondary),

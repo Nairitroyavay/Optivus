@@ -9,7 +9,9 @@ void showGoalDetailScreen(BuildContext context, WidgetRef ref, GoalModel goal) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFFFFECEC), // Goals visual gradient background color match
+    backgroundColor: const Color(
+      0xFFFFECEC,
+    ), // Goals visual gradient background color match
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
     ),
@@ -50,18 +52,30 @@ void showGoalDetailScreen(BuildContext context, WidgetRef ref, GoalModel goal) {
                         children: [
                           const Text(
                             'IDENTITY ANCHOR & SYSTEM MAPS',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.8),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textSecondary,
+                              letterSpacing: 0.8,
+                            ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             goal.identityTitle,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: OptivusColors.textPrimary),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textPrimary,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
@@ -69,9 +83,13 @@ void showGoalDetailScreen(BuildContext context, WidgetRef ref, GoalModel goal) {
                       ),
                       child: Text(
                         '${goal.streakDays}d Streak',
-                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
                       ),
-                    )
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -84,15 +102,31 @@ void showGoalDetailScreen(BuildContext context, WidgetRef ref, GoalModel goal) {
                     children: [
                       Row(
                         children: const [
-                          Icon(Icons.psychology, color: Colors.indigo, size: 16),
+                          Icon(
+                            Icons.psychology,
+                            color: Colors.indigo,
+                            size: 16,
+                          ),
                           SizedBox(width: 8),
-                          Text('PURPOSE STATEMENT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary)),
+                          Text(
+                            'PURPOSE STATEMENT',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
                         goal.purposeStatement,
-                        style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, height: 1.35, color: OptivusColors.textPrimary),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
+                          height: 1.35,
+                          color: OptivusColors.textPrimary,
+                        ),
                       ),
                     ],
                   ),
@@ -102,20 +136,46 @@ void showGoalDetailScreen(BuildContext context, WidgetRef ref, GoalModel goal) {
                 // Milestone progress list
                 const Text(
                   'COMPLETION MILESTONES Checklist',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.8),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textSecondary,
+                    letterSpacing: 0.8,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                MilestoneCard(title: 'Establish baseline streak of 7 days', date: 'Completed 3 days ago', isCompleted: true),
-                MilestoneCard(title: 'Increase frequency to Standard levels', date: 'Unlocked today', isCompleted: true),
-                MilestoneCard(title: 'Complete 30 days unbroken target streak', date: 'In Progress (Estimated: June 15)', isCompleted: false),
-                MilestoneCard(title: 'Sync total with Aura Coach reflection logs', date: 'Locked', isCompleted: false),
+                MilestoneCard(
+                  title: 'Establish baseline streak of 7 days',
+                  date: 'Completed 3 days ago',
+                  isCompleted: true,
+                ),
+                MilestoneCard(
+                  title: 'Increase frequency to Standard levels',
+                  date: 'Unlocked today',
+                  isCompleted: true,
+                ),
+                MilestoneCard(
+                  title: 'Complete 30 days unbroken target streak',
+                  date: 'In Progress (Estimated: June 15)',
+                  isCompleted: false,
+                ),
+                MilestoneCard(
+                  title: 'Sync total with Aura Coach reflection logs',
+                  date: 'Locked',
+                  isCompleted: false,
+                ),
                 const SizedBox(height: 24),
 
                 // Systems processes cards mapping
                 if (goal.systems.isNotEmpty) ...[
                   const Text(
                     'ROUTINES & LOGIC LOOPS MAP',
-                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.8),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textSecondary,
+                      letterSpacing: 0.8,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   for (final sys in goal.systems) GoalSystemCard(system: sys),
@@ -127,11 +187,16 @@ void showGoalDetailScreen(BuildContext context, WidgetRef ref, GoalModel goal) {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: OptivusColors.brandAccent,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Back to Identity Goals', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Back to Identity Goals',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
                 const SizedBox(height: 20),
               ],

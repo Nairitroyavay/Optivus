@@ -796,6 +796,27 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
     state = [...state, goal];
   }
 
+  void updateGoal(GoalModel updatedGoal) {
+    state = [
+      for (final goal in state)
+        if (goal.id == updatedGoal.id) updatedGoal else goal,
+    ];
+  }
+
+  void archiveGoal(String goalId) {
+    state = [
+      for (final goal in state)
+        if (goal.id == goalId) goal.copyWith(isArchived: true) else goal,
+    ];
+  }
+
+  void restoreGoal(String goalId) {
+    state = [
+      for (final goal in state)
+        if (goal.id == goalId) goal.copyWith(isArchived: false) else goal,
+    ];
+  }
+
   void toggleGoalProofCompleted(String goalId) {
     state = [
       for (final goal in state)
@@ -914,6 +935,10 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
 
   void replaceWith(List<CoachSession> sessions) {
     state = List<CoachSession>.from(sessions);
+  }
+
+  void deleteSession(String sessionId) {
+    state = state.where((session) => session.id != sessionId).toList();
   }
 
   void sendMessage(String sessionId, String content) {

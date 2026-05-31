@@ -6,7 +6,9 @@ import 'screen_time_mock_data.dart';
 import 'screen_time_widgets.dart';
 
 class ScreenTimeScreen extends StatefulWidget {
-  const ScreenTimeScreen({super.key});
+  final VoidCallback? onBack;
+
+  const ScreenTimeScreen({super.key, this.onBack});
 
   @override
   State<ScreenTimeScreen> createState() => _ScreenTimeScreenState();
@@ -19,68 +21,75 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final bottomReserve = media.padding.bottom + 48.0;
+    final bottomReserve = widget.onBack == null
+        ? media.padding.bottom + 48.0
+        : 76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
 
-    return Scaffold(
+    final content = Scaffold(
       backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [OptivusColors.trackerTop, OptivusColors.trackerCardTint],
-            stops: [0.0, 0.80],
-          ),
-        ),
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            children: [
-              _buildHeader(context),
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ScreenTimeUsageStatusCard(isConnected: _isUsageAccessConnected),
-                      const SizedBox(height: 24),
-                      _buildPeriodSelector(),
-                      const SizedBox(height: 24),
-                      const ScreenTimeHeroCard(),
-                      const SizedBox(height: 24),
-                      const TrackerSectionHeader(title: 'QUICK CONTROLS'),
-                      const ScreenTimeQuickControls(),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'TOP APPS'),
-                      _buildTopAppsCard(),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'DISTRACTION RISK'),
-                      _buildDistractionRiskCard(),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'ADVANCED INSIGHTS'),
-                      _buildAdvancedInsights(),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'COACH INSIGHT'),
-                      _buildCoachInsightCard(),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'APP CATEGORIES'),
-                      _buildCategoryManagementPreview(),
-                      const SizedBox(height: 32),
-                      const TrackerSectionHeader(title: 'SETTINGS & LIMITS'),
-                      _buildSettingsPreview(),
-                      const SizedBox(height: 40),
-                      _buildPrivacyNote(),
-                      const SizedBox(height: 48),
-                    ],
-                  ),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ScreenTimeUsageStatusCard(
+                      isConnected: _isUsageAccessConnected,
+                    ),
+                    const SizedBox(height: 24),
+                    _buildPeriodSelector(),
+                    const SizedBox(height: 24),
+                    const ScreenTimeHeroCard(),
+                    const SizedBox(height: 24),
+                    const TrackerSectionHeader(title: 'QUICK CONTROLS'),
+                    const ScreenTimeQuickControls(),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'TOP APPS'),
+                    _buildTopAppsCard(),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'DISTRACTION RISK'),
+                    _buildDistractionRiskCard(),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'ADVANCED INSIGHTS'),
+                    _buildAdvancedInsights(),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'COACH INSIGHT'),
+                    _buildCoachInsightCard(),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'APP CATEGORIES'),
+                    _buildCategoryManagementPreview(),
+                    const SizedBox(height: 32),
+                    const TrackerSectionHeader(title: 'SETTINGS & LIMITS'),
+                    _buildSettingsPreview(),
+                    const SizedBox(height: 40),
+                    _buildPrivacyNote(),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+
+    if (widget.onBack != null) return content;
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [OptivusColors.trackerTop, OptivusColors.trackerCardTint],
+          stops: [0.0, 0.80],
+        ),
+      ),
+      child: content,
     );
   }
 
@@ -94,7 +103,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
             children: [
               TrackerHeaderButton(
                 icon: Icons.arrow_back_ios_new,
-                onTap: () => Navigator.of(context).pop(),
+                onTap: widget.onBack ?? () => Navigator.of(context).pop(),
               ),
               const SizedBox(width: 16),
               Column(
@@ -124,11 +133,28 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           ),
           TrackerHeaderButton(
             icon: Icons.info_outline,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Screen time tracking info')),
-              );
-            },
+            onTap: () => _showScreenTimeInfo(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showScreenTimeInfo(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _ScreenTimeSheet(
+        title: 'Screen Time privacy',
+        children: const [
+          Text(
+            'Optivus reads app usage duration and package/category metadata after Android Usage Access is granted. It cannot read messages, chats, posts, reels, or page content.',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: OptivusColors.sub,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -152,7 +178,9 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...ScreenTimeMockData.topAppsToday.map((app) => ScreenTimeAppUsageRow(app: app)),
+          ...ScreenTimeMockData.topAppsToday.map(
+            (app) => ScreenTimeAppUsageRow(app: app),
+          ),
         ],
       ),
     );
@@ -168,7 +196,10 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: OptivusColors.roseAccent),
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: OptivusColors.roseAccent,
+              ),
               const SizedBox(width: 8),
               const Text(
                 'High Distraction Risk',
@@ -195,11 +226,17 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
             decoration: BoxDecoration(
               color: OptivusColors.roseAccent.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: OptivusColors.roseAccent.withValues(alpha: 0.2)),
+              border: Border.all(
+                color: OptivusColors.roseAccent.withValues(alpha: 0.2),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.lightbulb_outline, size: 16, color: OptivusColors.roseAccent),
+                const Icon(
+                  Icons.lightbulb_outline,
+                  size: 16,
+                  color: OptivusColors.roseAccent,
+                ),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
@@ -297,29 +334,72 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
   Widget _buildCategoryManagementPreview() {
     return Column(
       children: [
-        _buildCategoryPreviewCard('Doom apps', ScreenTimeMockData.doomAppsCategories.join(', ')),
+        _buildCategoryPreviewCard(
+          'Doom apps',
+          ScreenTimeMockData.doomAppsCategories.join(', '),
+        ),
         const SizedBox(height: 12),
-        _buildCategoryPreviewCard('Productive apps', ScreenTimeMockData.productiveAppsCategories.join(', ')),
+        _buildCategoryPreviewCard(
+          'Productive apps',
+          ScreenTimeMockData.productiveAppsCategories.join(', '),
+        ),
         const SizedBox(height: 12),
-        _buildCategoryPreviewCard('Neutral apps', ScreenTimeMockData.neutralAppsCategories.join(', ')),
+        _buildCategoryPreviewCard(
+          'Neutral apps',
+          ScreenTimeMockData.neutralAppsCategories.join(', '),
+        ),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Mock: Customize categories sheet')),
-              );
-            },
+            onPressed: () => _showCategoryEditor(context),
             style: ElevatedButton.styleFrom(
               backgroundColor: OptivusColors.ink,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             child: const Text('Customize categories'),
           ),
         ),
       ],
+    );
+  }
+
+  void _showCategoryEditor(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _ScreenTimeSheet(
+        title: 'Customize categories',
+        children: [
+          _buildCategoryPreviewCard(
+            'Doom apps',
+            ScreenTimeMockData.doomAppsCategories.join(', '),
+          ),
+          const SizedBox(height: 10),
+          _buildCategoryPreviewCard(
+            'Productive apps',
+            ScreenTimeMockData.productiveAppsCategories.join(', '),
+          ),
+          const SizedBox(height: 10),
+          _buildCategoryPreviewCard(
+            'Neutral apps',
+            ScreenTimeMockData.neutralAppsCategories.join(', '),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Android live app category editing will save these groups later. This frontend keeps the category review flow visible now.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: OptivusColors.sub,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -333,12 +413,20 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: OptivusColors.ink),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: OptivusColors.ink,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             apps,
-            style: const TextStyle(fontSize: 12, color: OptivusColors.sub, height: 1.3),
+            style: const TextStyle(
+              fontSize: 12,
+              color: OptivusColors.sub,
+              height: 1.3,
+            ),
           ),
         ],
       ),
@@ -366,11 +454,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
 
   Widget _buildSettingsRow(String title, {bool isLast = false}) {
     return InkWell(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mock: Open $title settings')),
-        );
-      },
+      onTap: () => _showSettingsEditor(context, title),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
@@ -378,11 +462,53 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           children: [
             Text(
               title,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: OptivusColors.ink),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.ink,
+              ),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: OptivusColors.sub),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 14,
+              color: OptivusColors.sub,
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showSettingsEditor(BuildContext context, String title) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _ScreenTimeSheet(
+        title: title,
+        children: [
+          Text(
+            switch (title) {
+              'Usage Access' =>
+                'Open Tracker Usage Access Setup from Phone Data Sources to connect Android app usage.',
+              'Privacy: show app names' =>
+                'Switch between app names and category-only privacy mode from Tracker Settings.',
+              'Soft limits' =>
+                'Soft limits warn you when a doom app crosses a daily threshold without locking your phone.',
+              'Risk windows' =>
+                'Risk windows highlight the times when doom scrolling tends to start.',
+              'Weekly report' =>
+                'Weekly reports summarize focus score, top apps, and best focus blocks.',
+              _ =>
+                'This setting is represented in the Screen Time frontend and ready for native persistence.',
+            },
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: OptivusColors.sub,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -402,7 +528,11 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
           Expanded(
             child: Text(
               'Optivus can track app names and usage duration after permission.\nOptivus cannot read messages, chats, reels, posts, or what you watched.',
-              style: TextStyle(fontSize: 11, color: OptivusColors.sub, height: 1.4),
+              style: TextStyle(
+                fontSize: 11,
+                color: OptivusColors.sub,
+                height: 1.4,
+              ),
             ),
           ),
         ],
@@ -441,6 +571,71 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
               height: 1.5,
               fontWeight: FontWeight.w500,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScreenTimeSheet extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _ScreenTimeSheet({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        20 + MediaQuery.of(context).padding.bottom,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: OptivusColors.borderSoft,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.ink,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ...children,
+          const SizedBox(height: 18),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: OptivusColors.ink,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            child: const Text('Done'),
           ),
         ],
       ),

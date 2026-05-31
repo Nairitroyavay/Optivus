@@ -43,7 +43,12 @@ class _SystemLogsConsoleState extends State<_SystemLogsConsole> {
       children: [
         const Text(
           'LIVE SYSTEM HEALTH',
-          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            color: OptivusColors.textSecondary,
+            letterSpacing: 0.5,
+          ),
         ),
         const SizedBox(height: 10),
         LiquidGlassPanel(
@@ -60,7 +65,12 @@ class _SystemLogsConsoleState extends State<_SystemLogsConsole> {
         const SizedBox(height: 20),
         const Text(
           'DIAGNOSTIC LOG STREAM',
-          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            color: OptivusColors.textSecondary,
+            letterSpacing: 0.5,
+          ),
         ),
         const SizedBox(height: 10),
         Container(
@@ -103,18 +113,29 @@ class _SystemLogsConsoleState extends State<_SystemLogsConsole> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.black87,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.grey.shade300),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 icon: const Icon(Icons.delete_outline, size: 16),
-                label: const Text('Clear Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                label: const Text(
+                  'Clear Logs',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                ),
                 onPressed: () {
                   setState(() {
                     _mockLogs.clear();
-                    _mockLogs.add('[14:42:00 INFO] System log stream cleared by developer console.');
+                    _mockLogs.add(
+                      '[14:42:00 INFO] System log stream cleared by developer console.',
+                    );
                   });
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Console logs cleared.'), behavior: SnackBarBehavior.floating),
+                    const SnackBar(
+                      content: Text('Console logs cleared.'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
                   );
                 },
               ),
@@ -125,15 +146,24 @@ class _SystemLogsConsoleState extends State<_SystemLogsConsole> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: OptivusColors.brandAccent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: OptivusColors.brandAccent)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: OptivusColors.brandAccent),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 icon: const Icon(Icons.share, size: 16),
-                label: const Text('Export logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                label: const Text(
+                  'Export logs',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                ),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: _mockLogs.join('\n')));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('All logs copied to clipboard!'), behavior: SnackBarBehavior.floating),
+                    const SnackBar(
+                      content: Text('All logs copied to clipboard!'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
                   );
                 },
               ),
@@ -145,11 +175,16 @@ class _SystemLogsConsoleState extends State<_SystemLogsConsole> {
           style: ElevatedButton.styleFrom(
             backgroundColor: OptivusColors.brandAccent,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             padding: const EdgeInsets.symmetric(vertical: 16),
           ),
           onPressed: () => Navigator.pop(context),
-          child: const Text('Back to Control Center', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: const Text(
+            'Back to Control Center',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
       ],
     );
@@ -161,12 +196,20 @@ Widget _buildHealthIndicator(String label, String value, Color color) {
     children: [
       Text(
         label,
-        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: OptivusColors.textSecondary),
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: OptivusColors.textSecondary,
+        ),
       ),
       const SizedBox(height: 4),
       Text(
         value,
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: color),
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          color: color,
+        ),
       ),
     ],
   );

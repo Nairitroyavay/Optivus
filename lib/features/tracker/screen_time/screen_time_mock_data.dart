@@ -45,7 +45,8 @@ class ScreenTimeMockData {
       endLabel: '12:00 AM',
       riskLevel: 'High',
       topApp: 'Instagram',
-      suggestion: 'Your highest risk window is 10:30 PM - 12:00 AM. Instagram is your most-used high-risk app today.',
+      suggestion:
+          'Your highest risk window is 10:30 PM - 12:00 AM. Instagram is your most-used high-risk app today.',
     ),
     ScreenTimeRiskWindowUiModel(
       startLabel: '4:00 PM',
@@ -60,24 +61,64 @@ class ScreenTimeMockData {
   ];
 
   static const List<ScreenTimeWeeklyPointUiModel> weeklyData = [
-    ScreenTimeWeeklyPointUiModel(dayLabel: 'Mon', totalMinutes: 220, riskLevel: 'Medium'), // 3h 40m
-    ScreenTimeWeeklyPointUiModel(dayLabel: 'Tue', totalMinutes: 175, riskLevel: 'Low'), // 2h 55m
-    ScreenTimeWeeklyPointUiModel(dayLabel: 'Wed', totalMinutes: 260, riskLevel: 'High'), // 4h 20m
-    ScreenTimeWeeklyPointUiModel(dayLabel: 'Thu', totalMinutes: 190, riskLevel: 'Medium'), // 3h 10m
-    ScreenTimeWeeklyPointUiModel(dayLabel: 'Fri', totalMinutes: 230, riskLevel: 'High'), // 3h 50m
-    ScreenTimeWeeklyPointUiModel(dayLabel: 'Sat', totalMinutes: 305, riskLevel: 'High'), // 5h 05m
-    ScreenTimeWeeklyPointUiModel(dayLabel: 'Sun', totalMinutes: 240, riskLevel: 'High'), // 4h 00m
+    ScreenTimeWeeklyPointUiModel(
+      dayLabel: 'Mon',
+      totalMinutes: 220,
+      riskLevel: 'Medium',
+    ), // 3h 40m
+    ScreenTimeWeeklyPointUiModel(
+      dayLabel: 'Tue',
+      totalMinutes: 175,
+      riskLevel: 'Low',
+    ), // 2h 55m
+    ScreenTimeWeeklyPointUiModel(
+      dayLabel: 'Wed',
+      totalMinutes: 260,
+      riskLevel: 'High',
+    ), // 4h 20m
+    ScreenTimeWeeklyPointUiModel(
+      dayLabel: 'Thu',
+      totalMinutes: 190,
+      riskLevel: 'Medium',
+    ), // 3h 10m
+    ScreenTimeWeeklyPointUiModel(
+      dayLabel: 'Fri',
+      totalMinutes: 230,
+      riskLevel: 'High',
+    ), // 3h 50m
+    ScreenTimeWeeklyPointUiModel(
+      dayLabel: 'Sat',
+      totalMinutes: 305,
+      riskLevel: 'High',
+    ), // 5h 05m
+    ScreenTimeWeeklyPointUiModel(
+      dayLabel: 'Sun',
+      totalMinutes: 240,
+      riskLevel: 'High',
+    ), // 4h 00m
   ];
 
   static const List<String> doomAppsCategories = [
-    'Instagram', 'YouTube Shorts', 'Facebook', 'Snapchat', 'X', 'short-video apps'
+    'Instagram',
+    'YouTube Shorts',
+    'Facebook',
+    'Snapchat',
+    'X',
+    'short-video apps',
   ];
 
   static const List<String> productiveAppsCategories = [
-    'Notes', 'learning apps', 'reading apps', 'work apps', 'coding apps'
+    'Notes',
+    'learning apps',
+    'reading apps',
+    'work apps',
+    'coding apps',
   ];
 
   static const List<String> neutralAppsCategories = [
-    'Maps', 'Phone', 'Messages', 'Utilities'
+    'Maps',
+    'Phone',
+    'Messages',
+    'Utilities',
   ];
 }

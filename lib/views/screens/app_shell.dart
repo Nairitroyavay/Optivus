@@ -13,7 +13,10 @@ import 'package:optivus/app/app_navigation_controller.dart';
 // Per-tab gradient definitions using the blueprint OptivusColors tokens exactly
 const List<List<Color>> _tabGradients = [
   [OptivusColors.homeTop, Color(0xFFFFEDED)], // Home: #FFE0E0 to #FFEDED
-  [OptivusColors.routineBgTop, OptivusColors.routineBgBottom], // Routine: RoutineTab also paints this
+  [
+    OptivusColors.routineBgTop,
+    OptivusColors.routineBgBottom,
+  ], // Routine: RoutineTab also paints this
   [OptivusColors.trackerTop, OptivusColors.trackerBottom], // Tracker: #BFFFFE
   [OptivusColors.coachTop, OptivusColors.coachBottom], // Coach: #F7E0FF
   [OptivusColors.goalsTop, OptivusColors.goalsBottom], // Goals: #FFD9F2
@@ -48,10 +51,23 @@ class _AppShellState extends ConsumerState<AppShell> {
     _tabCache = List<Widget?>.filled(_tabGradients.length, null);
     _ensureTabLoaded(widget.initialIndex.clamp(0, _tabGradients.length - 1));
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(appNavigationProvider.notifier).setTab(
-        widget.initialIndex.clamp(0, _tabGradients.length - 1),
-      );
+      ref
+          .read(appNavigationProvider.notifier)
+          .setTab(widget.initialIndex.clamp(0, _tabGradients.length - 1));
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialIndex != widget.initialIndex) {
+      final nextIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
+      _ensureTabLoaded(nextIndex);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref.read(appNavigationProvider.notifier).setTab(nextIndex);
+      });
+    }
   }
 
   void _ensureTabLoaded(int index) {
@@ -87,7 +103,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             stops: const [0.0, 0.80],
           ),
         ),
-        // IndexedStack preserves state across tabs. 
+        // IndexedStack preserves state across tabs.
         // No global SafeArea here; each tab manages its own SafeArea.
         child: IndexedStack(
           index: currentIndex,

@@ -22,7 +22,9 @@ class BaseTimelineOptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusText = itemCount == 0 ? 'Not set' : 'Active';
-    final statusColor = itemCount == 0 ? OptivusColors.textMuted : OptivusColors.success;
+    final statusColor = itemCount == 0
+        ? OptivusColors.textMuted
+        : OptivusColors.success;
 
     return GestureDetector(
       onTap: onTap,
@@ -59,7 +61,11 @@ class BaseTimelineOptionCard extends StatelessWidget {
                     color: OptivusColors.routineAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(icon, color: OptivusColors.routineAccent, size: 28),
+                  child: Icon(
+                    icon,
+                    color: OptivusColors.routineAccent,
+                    size: 28,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -86,7 +92,10 @@ class BaseTimelineOptionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: OptivusColors.textMuted),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: OptivusColors.textMuted,
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -94,7 +103,10 @@ class BaseTimelineOptionCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),

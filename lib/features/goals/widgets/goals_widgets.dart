@@ -22,13 +22,19 @@ class MilestoneCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isCompleted ? OptivusColors.success.withValues(alpha: 0.4) : OptivusColors.borderSoft),
+        border: Border.all(
+          color: isCompleted
+              ? OptivusColors.success.withValues(alpha: 0.4)
+              : OptivusColors.borderSoft,
+        ),
       ),
       child: Row(
         children: [
           Icon(
             isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-            color: isCompleted ? OptivusColors.success : OptivusColors.textSecondary,
+            color: isCompleted
+                ? OptivusColors.success
+                : OptivusColors.textSecondary,
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -41,13 +47,18 @@ class MilestoneCard extends StatelessWidget {
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
-                    color: isCompleted ? OptivusColors.textSecondary : OptivusColors.textPrimary,
+                    color: isCompleted
+                        ? OptivusColors.textSecondary
+                        : OptivusColors.textPrimary,
                     decoration: isCompleted ? TextDecoration.lineThrough : null,
                   ),
                 ),
                 Text(
                   date,
-                  style: const TextStyle(fontSize: 9, color: OptivusColors.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: OptivusColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -61,10 +72,7 @@ class MilestoneCard extends StatelessWidget {
 class GoalSystemCard extends StatelessWidget {
   final GoalSystem system;
 
-  const GoalSystemCard({
-    super.key,
-    required this.system,
-  });
+  const GoalSystemCard({super.key, required this.system});
 
   @override
   Widget build(BuildContext context) {
@@ -81,36 +89,61 @@ class GoalSystemCard extends StatelessWidget {
         children: [
           Row(
             children: const [
-              Icon(Icons.settings_suggest_outlined, color: OptivusColors.brandAccent, size: 18),
+              Icon(
+                Icons.settings_suggest_outlined,
+                color: OptivusColors.brandAccent,
+                size: 18,
+              ),
               SizedBox(width: 8),
               Text(
                 'SYSTEM PROCESS MAP',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: OptivusColors.textSecondary, letterSpacing: 0.8),
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                  color: OptivusColors.textSecondary,
+                  letterSpacing: 0.8,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
             system.description,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: OptivusColors.textPrimary),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: OptivusColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
             children: [
               if (system.linkedRoutineTaskIds.isNotEmpty) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.teal.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.teal.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: const [
                       Icon(Icons.lock_reset, color: Colors.teal, size: 12),
                       SizedBox(width: 4),
-                      Text('1 Routine Linked', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      Text(
+                        '1 Routine Linked',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -118,24 +151,40 @@ class GoalSystemCard extends StatelessWidget {
               ],
               if (system.linkedTrackerIds.isNotEmpty) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: OptivusColors.brandAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: OptivusColors.brandAccent.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: OptivusColors.brandAccent.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: const [
-                      Icon(Icons.insights, color: OptivusColors.brandAccent, size: 12),
+                      Icon(
+                        Icons.insights,
+                        color: OptivusColors.brandAccent,
+                        size: 12,
+                      ),
                       SizedBox(width: 4),
-                      Text('1 Telemetry Linked', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: OptivusColors.brandAccent)),
+                      Text(
+                        '1 Telemetry Linked',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ],
-          )
+          ),
         ],
       ),
     );

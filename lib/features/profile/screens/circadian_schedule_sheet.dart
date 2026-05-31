@@ -21,7 +21,12 @@ void showCircadianScheduleSheet(BuildContext context, WidgetRef ref) {
           children: [
             const Text(
               'SLEEP-WAKE CIRCADIAN BOUNDARIES',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             LiquidGlassPanel(
@@ -31,17 +36,42 @@ void showCircadianScheduleSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Target sleep boundary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const Text(
+                        'Target sleep boundary',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                       DropdownButton<String>(
                         value: sleepTime,
                         underline: const SizedBox(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.brandAccent, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: OptivusColors.brandAccent,
+                          fontSize: 13,
+                        ),
                         items: const [
-                          DropdownMenuItem(value: '21:30', child: Text('21:30')),
-                          DropdownMenuItem(value: '22:00', child: Text('22:00')),
-                          DropdownMenuItem(value: '22:30', child: Text('22:30')),
-                          DropdownMenuItem(value: '23:00', child: Text('23:00')),
-                          DropdownMenuItem(value: '23:30', child: Text('23:30')),
+                          DropdownMenuItem(
+                            value: '21:30',
+                            child: Text('21:30'),
+                          ),
+                          DropdownMenuItem(
+                            value: '22:00',
+                            child: Text('22:00'),
+                          ),
+                          DropdownMenuItem(
+                            value: '22:30',
+                            child: Text('22:30'),
+                          ),
+                          DropdownMenuItem(
+                            value: '23:00',
+                            child: Text('23:00'),
+                          ),
+                          DropdownMenuItem(
+                            value: '23:30',
+                            child: Text('23:30'),
+                          ),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => sleepTime = val);
@@ -53,17 +83,42 @@ void showCircadianScheduleSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Target wake boundary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const Text(
+                        'Target wake boundary',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                       DropdownButton<String>(
                         value: wakeTime,
                         underline: const SizedBox(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: OptivusColors.brandAccent, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: OptivusColors.brandAccent,
+                          fontSize: 13,
+                        ),
                         items: const [
-                          DropdownMenuItem(value: '05:30', child: Text('05:30')),
-                          DropdownMenuItem(value: '06:00', child: Text('06:00')),
-                          DropdownMenuItem(value: '06:30', child: Text('06:30')),
-                          DropdownMenuItem(value: '07:00', child: Text('07:00')),
-                          DropdownMenuItem(value: '07:30', child: Text('07:30')),
+                          DropdownMenuItem(
+                            value: '05:30',
+                            child: Text('05:30'),
+                          ),
+                          DropdownMenuItem(
+                            value: '06:00',
+                            child: Text('06:00'),
+                          ),
+                          DropdownMenuItem(
+                            value: '06:30',
+                            child: Text('06:30'),
+                          ),
+                          DropdownMenuItem(
+                            value: '07:00',
+                            child: Text('07:00'),
+                          ),
+                          DropdownMenuItem(
+                            value: '07:30',
+                            child: Text('07:30'),
+                          ),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => wakeTime = val);
@@ -77,7 +132,12 @@ void showCircadianScheduleSheet(BuildContext context, WidgetRef ref) {
             const SizedBox(height: 20),
             const Text(
               'WAKING TIMELINE BUFFER',
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textSecondary,
+                letterSpacing: 0.5,
+              ),
             ),
             const SizedBox(height: 10),
             LiquidGlassPanel(
@@ -87,8 +147,20 @@ void showCircadianScheduleSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Buffer delay padding', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('${offsetMinutes.toInt()} min', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Buffer delay padding',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${offsetMinutes.toInt()} min',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -102,7 +174,11 @@ void showCircadianScheduleSheet(BuildContext context, WidgetRef ref) {
                   ),
                   const Text(
                     'Shifts routines dynamically to fit your real chemical sleep inertia window.',
-                    style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: OptivusColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                      color: OptivusColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -112,16 +188,26 @@ void showCircadianScheduleSheet(BuildContext context, WidgetRef ref) {
               style: ElevatedButton.styleFrom(
                 backgroundColor: OptivusColors.brandAccent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               onPressed: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Circadian Offset aligned: Wake boundary $wakeTime +${offsetMinutes.toInt()}m padding.'), behavior: SnackBarBehavior.floating),
+                  SnackBar(
+                    content: Text(
+                      'Circadian Offset aligned: Wake boundary $wakeTime +${offsetMinutes.toInt()}m padding.',
+                    ),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               },
-              child: const Text('Align Chrono-Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Align Chrono-Schedule',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );

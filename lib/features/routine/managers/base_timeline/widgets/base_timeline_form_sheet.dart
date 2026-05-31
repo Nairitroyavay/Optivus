@@ -20,7 +20,9 @@ class BaseTimelineFormSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         decoration: const BoxDecoration(
           color: OptivusColors.routineBgBottom,
@@ -63,7 +65,10 @@ class BaseTimelineFormSheet extends StatelessWidget {
                   ),
                   if (isEdit && onDelete != null)
                     IconButton(
-                      icon: const Icon(Icons.delete_outline, color: OptivusColors.danger),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: OptivusColors.danger,
+                      ),
                       onPressed: onDelete,
                     ),
                 ],

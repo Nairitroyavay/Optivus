@@ -46,20 +46,32 @@ void showEditProfileSheet(BuildContext context, WidgetRef ref) {
                 children: [
                   TextField(
                     controller: nameController,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Display Name',
-                      labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      labelStyle: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: roleController,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Primary Lifestyle Role',
-                      labelStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      labelStyle: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -70,10 +82,10 @@ void showEditProfileSheet(BuildContext context, WidgetRef ref) {
             Text(
               'BODY METRICS & ESTIMATES',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.0,
-                    color: OptivusColors.textSecondary,
-                  ),
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.0,
+                color: OptivusColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 12),
             LiquidGlassPanel(
@@ -84,8 +96,20 @@ void showEditProfileSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Height (cm)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('${currentHeight.toInt()} cm', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Height (cm)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${currentHeight.toInt()} cm',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -101,8 +125,20 @@ void showEditProfileSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Weight (kg)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('${currentWeight.toInt()} kg', style: const TextStyle(fontWeight: FontWeight.w900, color: OptivusColors.brandAccent)),
+                      const Text(
+                        'Weight (kg)',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Text(
+                        '${currentWeight.toInt()} kg',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.brandAccent,
+                        ),
+                      ),
                     ],
                   ),
                   Slider(
@@ -124,15 +160,24 @@ void showEditProfileSheet(BuildContext context, WidgetRef ref) {
               decoration: BoxDecoration(
                 color: bmiColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: bmiColor.withValues(alpha: 0.4), width: 1.5),
+                border: Border.all(
+                  color: bmiColor.withValues(alpha: 0.4),
+                  width: 1.5,
+                ),
               ),
               child: Row(
                 children: [
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: BoxDecoration(color: bmiColor, shape: BoxShape.circle),
-                    child: const Icon(Icons.monitor_weight_outlined, color: Colors.white),
+                    decoration: BoxDecoration(
+                      color: bmiColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.monitor_weight_outlined,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -141,12 +186,20 @@ void showEditProfileSheet(BuildContext context, WidgetRef ref) {
                       children: [
                         Text(
                           'Estimated BMI: ${bmi.toStringAsFixed(1)}',
-                          style: TextStyle(fontWeight: FontWeight.w900, color: bmiColor, fontSize: 14),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: bmiColor,
+                            fontSize: 14,
+                          ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Category: $bmiCategory | Balanced target range: 18.5–24.9',
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: OptivusColors.textSecondary),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: OptivusColors.textSecondary,
+                          ),
                         ),
                       ],
                     ),
@@ -159,27 +212,39 @@ void showEditProfileSheet(BuildContext context, WidgetRef ref) {
               style: ElevatedButton.styleFrom(
                 backgroundColor: OptivusColors.brandAccent,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               onPressed: () {
                 final current = ref.read(mockUserProfileProvider);
-                ref.read(mockUserProfileProvider.notifier).updateProfile(
+                ref
+                    .read(mockUserProfileProvider.notifier)
+                    .updateProfile(
                       current.copyWith(
                         displayName: nameController.text.trim(),
                         lifeRole: roleController.text.trim(),
                       ),
                     );
-                ref.read(mockUserProfileProvider.notifier).updateBodyBasics(
+                ref
+                    .read(mockUserProfileProvider.notifier)
+                    .updateBodyBasics(
                       height: currentHeight,
                       weight: currentWeight,
                     );
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Identity Profile updated successfully!'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(
+                    content: Text('Identity Profile updated successfully!'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
                 );
               },
-              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Save Changes',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );

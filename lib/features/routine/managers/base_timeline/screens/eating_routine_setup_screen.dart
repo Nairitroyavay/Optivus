@@ -10,27 +10,43 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
 
 class EatingRoutineSetupScreen extends ConsumerStatefulWidget {
-  const EatingRoutineSetupScreen({super.key});
+  final VoidCallback? onBack;
+
+  const EatingRoutineSetupScreen({super.key, this.onBack});
 
   @override
-  ConsumerState<EatingRoutineSetupScreen> createState() => _EatingRoutineSetupScreenState();
+  ConsumerState<EatingRoutineSetupScreen> createState() =>
+      _EatingRoutineSetupScreenState();
 }
 
-class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScreen> {
+class _EatingRoutineSetupScreenState
+    extends ConsumerState<EatingRoutineSetupScreen> {
   void _showForm({RoutineItem? existingItem}) {
     final isEdit = existingItem != null;
     final titleCtrl = TextEditingController(text: existingItem?.title ?? '');
-    final mealCategoryCtrl = TextEditingController(text: existingItem?.mealCategory ?? '');
-    final calCtrl = TextEditingController(text: existingItem?.caloriesEstimate?.toString() ?? '');
-    final proteinCtrl = TextEditingController(text: existingItem?.proteinEstimate?.toString() ?? '');
+    final mealCategoryCtrl = TextEditingController(
+      text: existingItem?.mealCategory ?? '',
+    );
+    final calCtrl = TextEditingController(
+      text: existingItem?.caloriesEstimate?.toString() ?? '',
+    );
+    final proteinCtrl = TextEditingController(
+      text: existingItem?.proteinEstimate?.toString() ?? '',
+    );
     final notesCtrl = TextEditingController(text: existingItem?.notes ?? '');
 
     TimeOfDay startTime = existingItem != null
-        ? TimeOfDay(hour: existingItem.startMinute ~/ 60, minute: existingItem.startMinute % 60)
+        ? TimeOfDay(
+            hour: existingItem.startMinute ~/ 60,
+            minute: existingItem.startMinute % 60,
+          )
         : const TimeOfDay(hour: 13, minute: 0);
 
     TimeOfDay endTime = existingItem != null
-        ? TimeOfDay(hour: existingItem.endMinute ~/ 60, minute: existingItem.endMinute % 60)
+        ? TimeOfDay(
+            hour: existingItem.endMinute ~/ 60,
+            minute: existingItem.endMinute % 60,
+          )
         : const TimeOfDay(hour: 13, minute: 30);
 
     List<int> selectedDays = existingItem?.repeatDays ?? [];
@@ -48,7 +64,9 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
               isEdit: isEdit,
               onDelete: isEdit
                   ? () {
-                      ref.read(routineNotifierProvider.notifier).deleteItem(existingItem.id);
+                      ref
+                          .read(routineNotifierProvider.notifier)
+                          .deleteItem(existingItem.id);
                       Navigator.pop(ctx);
                     }
                   : null,
@@ -65,11 +83,12 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
 
                 final startMin = startTime.hour * 60 + startTime.minute;
                 final endMin = endTime.hour * 60 + endTime.minute;
-                
+
                 final cals = double.tryParse(calCtrl.text.trim());
                 final protein = double.tryParse(proteinCtrl.text.trim());
 
-                final item = existingItem?.copyWith(
+                final item =
+                    existingItem?.copyWith(
                       title: title,
                       mealCategory: mealCategoryCtrl.text.trim(),
                       caloriesEstimate: cals,
@@ -92,7 +111,8 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
                       proteinEstimate: protein,
                       notes: notesCtrl.text.trim(),
                       category: RoutineCategory.eating,
-                      blockType: RoutineBlockType.softBlock, // Eating is usually soft
+                      blockType:
+                          RoutineBlockType.softBlock, // Eating is usually soft
                       source: RoutineSource.manual,
                       hardBlock: false,
                     );
@@ -108,20 +128,33 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _TextField(controller: titleCtrl, label: 'Meal Title (e.g. Lunch, Post-workout)'),
+                  _TextField(
+                    controller: titleCtrl,
+                    label: 'Meal Title (e.g. Lunch, Post-workout)',
+                  ),
                   const SizedBox(height: 16),
-                  _TextField(controller: mealCategoryCtrl, label: 'Meal Category (e.g. Breakfast)'),
+                  _TextField(
+                    controller: mealCategoryCtrl,
+                    label: 'Meal Category (e.g. Breakfast)',
+                  ),
                   const SizedBox(height: 24),
-                  const Text('Time Window', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Text(
+                    'Time Window',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: 12),
                   TimeRangePickerRow(
                     startTime: startTime,
                     endTime: endTime,
-                    onStartTimeChanged: (time) => setModal(() => startTime = time),
+                    onStartTimeChanged: (time) =>
+                        setModal(() => startTime = time),
                     onEndTimeChanged: (time) => setModal(() => endTime = time),
                   ),
                   const SizedBox(height: 24),
-                  const Text('Repeat Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Text(
+                    'Repeat Days',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: 12),
                   DaySelectorChips(
                     selectedDays: selectedDays,
@@ -130,16 +163,37 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
                   const SizedBox(height: 24),
                   Row(
                     children: [
-                      Expanded(child: _TextField(controller: calCtrl, label: 'Calories', isNum: true)),
+                      Expanded(
+                        child: _TextField(
+                          controller: calCtrl,
+                          label: 'Calories',
+                          isNum: true,
+                        ),
+                      ),
                       const SizedBox(width: 16),
-                      Expanded(child: _TextField(controller: proteinCtrl, label: 'Protein (g)', isNum: true)),
+                      Expanded(
+                        child: _TextField(
+                          controller: proteinCtrl,
+                          label: 'Protein (g)',
+                          isNum: true,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _TextField(controller: notesCtrl, label: 'Notes (e.g. Items/Dishes)'),
+                  _TextField(
+                    controller: notesCtrl,
+                    label: 'Notes (e.g. Items/Dishes)',
+                  ),
                   if (errorMsg != null) ...[
                     const SizedBox(height: 24),
-                    Text(errorMsg!, style: const TextStyle(color: OptivusColors.danger, fontWeight: FontWeight.w600)),
+                    Text(
+                      errorMsg!,
+                      style: const TextStyle(
+                        color: OptivusColors.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -156,13 +210,18 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
     final meals = BaseTimelineFilterUtils.getEatingItems(allItems);
 
     return Scaffold(
-      backgroundColor: OptivusColors.routineBgBottom,
+      backgroundColor: widget.onBack == null
+          ? OptivusColors.routineBgBottom
+          : Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: OptivusColors.textPrimary,
+          ),
+          onPressed: widget.onBack ?? () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Eating Routine',
@@ -179,11 +238,19 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.restaurant_outlined, size: 64, color: OptivusColors.textMuted),
+                  const Icon(
+                    Icons.restaurant_outlined,
+                    size: 64,
+                    color: OptivusColors.textMuted,
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'No eating windows set yet.',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: OptivusColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: OptivusColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
@@ -193,16 +260,20 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
                       foregroundColor: Colors.white,
                     ),
                     child: const Text('Add Meal'),
-                  )
+                  ),
                 ],
               ),
             )
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-              children: meals.map((m) => BaseTimelineBlockCard(
-                item: m,
-                onTap: () => _showForm(existingItem: m),
-              )).toList(),
+              children: meals
+                  .map(
+                    (m) => BaseTimelineBlockCard(
+                      item: m,
+                      onTap: () => _showForm(existingItem: m),
+                    ),
+                  )
+                  .toList(),
             ),
       floatingActionButton: meals.isNotEmpty
           ? FloatingActionButton.extended(
@@ -210,7 +281,10 @@ class _EatingRoutineSetupScreenState extends ConsumerState<EatingRoutineSetupScr
               backgroundColor: OptivusColors.routineAccent,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Meal', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Add Meal',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             )
           : null,
     );
@@ -222,14 +296,21 @@ class _TextField extends StatelessWidget {
   final String label;
   final bool isNum;
 
-  const _TextField({required this.controller, required this.label, this.isNum = false});
+  const _TextField({
+    required this.controller,
+    required this.label,
+    this.isNum = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
       keyboardType: isNum ? TextInputType.number : TextInputType.text,
-      style: const TextStyle(fontWeight: FontWeight.w600, color: OptivusColors.textPrimary),
+      style: const TextStyle(
+        fontWeight: FontWeight.w600,
+        color: OptivusColors.textPrimary,
+      ),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: OptivusColors.textSecondary),

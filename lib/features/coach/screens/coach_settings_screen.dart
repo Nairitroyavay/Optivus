@@ -27,74 +27,146 @@ void showCoachSettingsScreen(BuildContext context, WidgetRef ref) {
                   child: Container(
                     width: 48,
                     height: 5,
-                    decoration: BoxDecoration(color: OptivusColors.borderSoft, borderRadius: BorderRadius.circular(10)),
+                    decoration: BoxDecoration(
+                      color: OptivusColors.borderSoft,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
 
                 const Text(
                   'COACH PERSONALITY CONFIGS',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.8),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textSecondary,
+                    letterSpacing: 0.8,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 const Text(
                   'Customize Aura Persona',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: OptivusColors.textPrimary),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 16),
 
                 // Name editor
                 TextField(
                   controller: TextEditingController(text: profile.coachName),
-                  decoration: const InputDecoration(labelText: 'Custom Coach Name', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    labelText: 'Custom Coach Name',
+                    border: OutlineInputBorder(),
+                  ),
                   onSubmitted: (val) {
                     if (val.trim().isEmpty) return;
-                    ref.read(mockUserProfileProvider.notifier).updateCoachPreferences(coachName: val.trim());
+                    ref
+                        .read(mockUserProfileProvider.notifier)
+                        .updateCoachPreferences(coachName: val.trim());
                   },
                 ),
                 const SizedBox(height: 16),
 
                 // Style toggles Compassionate vs Direct
-                const Text('COACHING DISCIPLINE ARCHETYPE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary)),
+                const Text(
+                  'COACHING DISCIPLINE ARCHETYPE',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _buildArchetypeBtn(ref, 'Compassionate', profile.coachStyle == 'Compassionate', () {
-                      ref.read(mockUserProfileProvider.notifier).updateCoachPreferences(coachStyle: 'Compassionate');
-                    }),
+                    _buildArchetypeBtn(
+                      ref,
+                      'Compassionate',
+                      profile.coachStyle == 'Compassionate',
+                      () {
+                        ref
+                            .read(mockUserProfileProvider.notifier)
+                            .updateCoachPreferences(
+                              coachStyle: 'Compassionate',
+                            );
+                      },
+                    ),
                     const SizedBox(width: 8),
-                    _buildArchetypeBtn(ref, 'Direct / Stoic', profile.coachStyle == 'Direct', () {
-                      ref.read(mockUserProfileProvider.notifier).updateCoachPreferences(coachStyle: 'Direct');
-                    }),
+                    _buildArchetypeBtn(
+                      ref,
+                      'Direct / Stoic',
+                      profile.coachStyle == 'Direct',
+                      () {
+                        ref
+                            .read(mockUserProfileProvider.notifier)
+                            .updateCoachPreferences(coachStyle: 'Direct');
+                      },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
                 // Slip-up accountability
-                const Text('SLIP-UP ACTION RESPONSE STYLE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary)),
+                const Text(
+                  'SLIP-UP ACTION RESPONSE STYLE',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _buildArchetypeBtn(ref, 'Compassionate', profile.slipUpStyle == 'Compassionate', () {
-                      ref.read(mockUserProfileProvider.notifier).updateCoachPreferences(slipUpStyle: 'Compassionate');
-                    }),
+                    _buildArchetypeBtn(
+                      ref,
+                      'Compassionate',
+                      profile.slipUpStyle == 'Compassionate',
+                      () {
+                        ref
+                            .read(mockUserProfileProvider.notifier)
+                            .updateCoachPreferences(
+                              slipUpStyle: 'Compassionate',
+                            );
+                      },
+                    ),
                     const SizedBox(width: 8),
-                    _buildArchetypeBtn(ref, 'Balanced Wisdom', profile.slipUpStyle == 'Balanced', () {
-                      ref.read(mockUserProfileProvider.notifier).updateCoachPreferences(slipUpStyle: 'Balanced');
-                    }),
+                    _buildArchetypeBtn(
+                      ref,
+                      'Balanced Wisdom',
+                      profile.slipUpStyle == 'Balanced',
+                      () {
+                        ref
+                            .read(mockUserProfileProvider.notifier)
+                            .updateCoachPreferences(slipUpStyle: 'Balanced');
+                      },
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
 
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: OptivusColors.coachAccent, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: OptivusColors.coachAccent,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: () {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Aura Persona Settings Calibrated!'), behavior: SnackBarBehavior.floating),
+                      const SnackBar(
+                        content: Text('Aura Persona Settings Calibrated!'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
                     );
                   },
-                  child: const Text('Save & Apply Persona', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Save & Apply Persona',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
                 const SizedBox(height: 10),
               ],
@@ -106,7 +178,12 @@ void showCoachSettingsScreen(BuildContext context, WidgetRef ref) {
   );
 }
 
-Widget _buildArchetypeBtn(WidgetRef ref, String label, bool isActive, VoidCallback onTap) {
+Widget _buildArchetypeBtn(
+  WidgetRef ref,
+  String label,
+  bool isActive,
+  VoidCallback onTap,
+) {
   return Expanded(
     child: InkWell(
       onTap: onTap,
@@ -114,9 +191,16 @@ Widget _buildArchetypeBtn(WidgetRef ref, String label, bool isActive, VoidCallba
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: isActive ? OptivusColors.coachAccent.withValues(alpha: 0.15) : Colors.white,
+          color: isActive
+              ? OptivusColors.coachAccent.withValues(alpha: 0.15)
+              : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isActive ? OptivusColors.coachAccent : OptivusColors.borderSoft, width: 1.5),
+          border: Border.all(
+            color: isActive
+                ? OptivusColors.coachAccent
+                : OptivusColors.borderSoft,
+            width: 1.5,
+          ),
         ),
         child: Center(
           child: Text(
@@ -124,7 +208,9 @@ Widget _buildArchetypeBtn(WidgetRef ref, String label, bool isActive, VoidCallba
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: isActive ? OptivusColors.coachAccent : OptivusColors.textSecondary,
+              color: isActive
+                  ? OptivusColors.coachAccent
+                  : OptivusColors.textSecondary,
             ),
           ),
         ),

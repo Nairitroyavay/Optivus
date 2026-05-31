@@ -46,7 +46,12 @@ class _QuickRepliesManagerState extends State<_QuickRepliesManager> {
       children: [
         const Text(
           'CURRENT CHIPS IN ROTATION',
-          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            color: OptivusColors.textSecondary,
+            letterSpacing: 0.5,
+          ),
         ),
         const SizedBox(height: 10),
         LiquidGlassPanel(
@@ -59,24 +64,43 @@ class _QuickRepliesManagerState extends State<_QuickRepliesManager> {
                 Chip(
                   backgroundColor: Colors.white.withValues(alpha: 0.8),
                   side: const BorderSide(color: OptivusColors.borderSoft),
-                  label: Text(r, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: OptivusColors.brandAccent)),
-                  deleteIcon: const Icon(Icons.cancel, size: 14, color: OptivusColors.danger),
+                  label: Text(
+                    r,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: OptivusColors.brandAccent,
+                    ),
+                  ),
+                  deleteIcon: const Icon(
+                    Icons.cancel,
+                    size: 14,
+                    color: OptivusColors.danger,
+                  ),
                   onDeleted: () {
                     setState(() {
                       _repliesList.remove(r);
                     });
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Deleted chip suggestion: "$r"'), behavior: SnackBarBehavior.floating),
+                      SnackBar(
+                        content: Text('Deleted chip suggestion: "$r"'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
                     );
                   },
-                )
+                ),
             ],
           ),
         ),
         const SizedBox(height: 20),
         const Text(
           'ADD CUSTOM DIALOG PRESET',
-          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: OptivusColors.textSecondary, letterSpacing: 0.5),
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w900,
+            color: OptivusColors.textSecondary,
+            letterSpacing: 0.5,
+          ),
         ),
         const SizedBox(height: 10),
         LiquidGlassPanel(
@@ -86,17 +110,26 @@ class _QuickRepliesManagerState extends State<_QuickRepliesManager> {
               Expanded(
                 child: TextField(
                   controller: _textController,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                   decoration: const InputDecoration(
                     hintText: 'Type customized quick reply...',
                     border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: OptivusColors.brandAccent, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: OptivusColors.brandAccent,
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: () {
                   final val = _textController.text.trim();
                   if (val.isNotEmpty) {
@@ -105,11 +138,17 @@ class _QuickRepliesManagerState extends State<_QuickRepliesManager> {
                     });
                     _textController.clear();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Added new chip suggestion: "$val"'), behavior: SnackBarBehavior.floating),
+                      SnackBar(
+                        content: Text('Added new chip suggestion: "$val"'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
                     );
                   }
                 },
-                child: const Text('Add Chip', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                child: const Text(
+                  'Add Chip',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                ),
               ),
             ],
           ),
@@ -119,16 +158,24 @@ class _QuickRepliesManagerState extends State<_QuickRepliesManager> {
           style: ElevatedButton.styleFrom(
             backgroundColor: OptivusColors.brandAccent,
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             padding: const EdgeInsets.symmetric(vertical: 16),
           ),
           onPressed: () {
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Coach dialogue chips calibrated.'), behavior: SnackBarBehavior.floating),
+              const SnackBar(
+                content: Text('Coach dialogue chips calibrated.'),
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           },
-          child: const Text('Back to Profile', style: TextStyle(fontWeight: FontWeight.bold)),
+          child: const Text(
+            'Back to Profile',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
         ),
       ],
     );

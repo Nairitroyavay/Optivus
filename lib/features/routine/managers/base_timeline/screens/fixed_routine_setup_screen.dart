@@ -11,32 +11,45 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
 
 class FixedRoutineSetupScreen extends ConsumerStatefulWidget {
-  const FixedRoutineSetupScreen({super.key});
+  final VoidCallback? onBack;
+
+  const FixedRoutineSetupScreen({super.key, this.onBack});
 
   @override
-  ConsumerState<FixedRoutineSetupScreen> createState() => _FixedRoutineSetupScreenState();
+  ConsumerState<FixedRoutineSetupScreen> createState() =>
+      _FixedRoutineSetupScreenState();
 }
 
-class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScreen> {
+class _FixedRoutineSetupScreenState
+    extends ConsumerState<FixedRoutineSetupScreen> {
   void _showForm({RoutineItem? existingItem}) {
     final isEdit = existingItem != null;
     final titleCtrl = TextEditingController(text: existingItem?.title ?? '');
-    
+
     String fixedType = 'fixed';
-    if (existingItem != null && existingItem.category == RoutineCategory.sleep) {
+    if (existingItem != null &&
+        existingItem.category == RoutineCategory.sleep) {
       fixedType = 'sleep';
-    } else if (existingItem != null && existingItem.title.toLowerCase().contains('bath')) {
+    } else if (existingItem != null &&
+        existingItem.title.toLowerCase().contains('bath')) {
       fixedType = 'bath';
-    } else if (existingItem != null && existingItem.title.toLowerCase().contains('travel')) {
+    } else if (existingItem != null &&
+        existingItem.title.toLowerCase().contains('travel')) {
       fixedType = 'travel';
     }
 
     TimeOfDay startTime = existingItem != null
-        ? TimeOfDay(hour: existingItem.startMinute ~/ 60, minute: existingItem.startMinute % 60)
+        ? TimeOfDay(
+            hour: existingItem.startMinute ~/ 60,
+            minute: existingItem.startMinute % 60,
+          )
         : const TimeOfDay(hour: 22, minute: 30);
 
     TimeOfDay endTime = existingItem != null
-        ? TimeOfDay(hour: existingItem.endMinute ~/ 60, minute: existingItem.endMinute % 60)
+        ? TimeOfDay(
+            hour: existingItem.endMinute ~/ 60,
+            minute: existingItem.endMinute % 60,
+          )
         : const TimeOfDay(hour: 6, minute: 30);
 
     List<int> selectedDays = existingItem?.repeatDays ?? [];
@@ -49,14 +62,18 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModal) {
-            final isOvernight = (endTime.hour * 60 + endTime.minute) <= (startTime.hour * 60 + startTime.minute);
+            final isOvernight =
+                (endTime.hour * 60 + endTime.minute) <=
+                (startTime.hour * 60 + startTime.minute);
 
             return BaseTimelineFormSheet(
               title: isEdit ? 'Edit Fixed Block' : 'Add Fixed Block',
               isEdit: isEdit,
               onDelete: isEdit
                   ? () {
-                      ref.read(routineNotifierProvider.notifier).deleteItem(existingItem.id);
+                      ref
+                          .read(routineNotifierProvider.notifier)
+                          .deleteItem(existingItem.id);
                       Navigator.pop(ctx);
                     }
                   : null,
@@ -73,9 +90,12 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
 
                 final startMin = startTime.hour * 60 + startTime.minute;
                 final endMin = endTime.hour * 60 + endTime.minute;
-                final category = fixedType == 'sleep' ? RoutineCategory.sleep : RoutineCategory.fixed;
+                final category = fixedType == 'sleep'
+                    ? RoutineCategory.sleep
+                    : RoutineCategory.fixed;
 
-                final item = existingItem?.copyWith(
+                final item =
+                    existingItem?.copyWith(
                       title: title,
                       startMinute: startMin,
                       endMinute: endMin,
@@ -99,9 +119,15 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
                     );
 
                 final allItems = ref.read(routineNotifierProvider).items;
-                final conflicts = BaseTimelineConflictUtils.findConflicts(item, allItems);
+                final conflicts = BaseTimelineConflictUtils.findConflicts(
+                  item,
+                  allItems,
+                );
                 if (conflicts.isNotEmpty) {
-                  setModal(() => errorMsg = 'Conflict detected with ${conflicts.first.title}.');
+                  setModal(
+                    () => errorMsg =
+                        'Conflict detected with ${conflicts.first.title}.',
+                  );
                   return;
                 }
 
@@ -116,36 +142,72 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
               content: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _TextField(controller: titleCtrl, label: 'Block Title (e.g. Sleep, Bath, Commute)'),
+                  _TextField(
+                    controller: titleCtrl,
+                    label: 'Block Title (e.g. Sleep, Bath, Commute)',
+                  ),
                   const SizedBox(height: 16),
-                  const Text('Type', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Text(
+                    'Type',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _TypeChip(label: 'Sleep', selected: fixedType == 'sleep', onTap: () => setModal(() => fixedType = 'sleep')),
-                      _TypeChip(label: 'Bath', selected: fixedType == 'bath', onTap: () => setModal(() => fixedType = 'bath')),
-                      _TypeChip(label: 'Travel', selected: fixedType == 'travel', onTap: () => setModal(() => fixedType = 'travel')),
-                      _TypeChip(label: 'Other Fixed', selected: fixedType == 'fixed', onTap: () => setModal(() => fixedType = 'fixed')),
+                      _TypeChip(
+                        label: 'Sleep',
+                        selected: fixedType == 'sleep',
+                        onTap: () => setModal(() => fixedType = 'sleep'),
+                      ),
+                      _TypeChip(
+                        label: 'Bath',
+                        selected: fixedType == 'bath',
+                        onTap: () => setModal(() => fixedType = 'bath'),
+                      ),
+                      _TypeChip(
+                        label: 'Travel',
+                        selected: fixedType == 'travel',
+                        onTap: () => setModal(() => fixedType = 'travel'),
+                      ),
+                      _TypeChip(
+                        label: 'Other Fixed',
+                        selected: fixedType == 'fixed',
+                        onTap: () => setModal(() => fixedType = 'fixed'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  const Text('Time', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Text(
+                    'Time',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: 12),
                   TimeRangePickerRow(
                     startTime: startTime,
                     endTime: endTime,
-                    onStartTimeChanged: (time) => setModal(() => startTime = time),
+                    onStartTimeChanged: (time) =>
+                        setModal(() => startTime = time),
                     onEndTimeChanged: (time) => setModal(() => endTime = time),
                   ),
                   if (isOvernight)
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
-                      child: Text('🌙 This block crosses midnight (overnight)', style: TextStyle(fontSize: 12, color: OptivusColors.routineAccent, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        '🌙 This block crosses midnight (overnight)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: OptivusColors.routineAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   const SizedBox(height: 24),
-                  const Text('Repeat Days', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Text(
+                    'Repeat Days',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
                   const SizedBox(height: 12),
                   DaySelectorChips(
                     selectedDays: selectedDays,
@@ -153,7 +215,13 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
                   ),
                   if (errorMsg != null) ...[
                     const SizedBox(height: 24),
-                    Text(errorMsg!, style: const TextStyle(color: OptivusColors.danger, fontWeight: FontWeight.w600)),
+                    Text(
+                      errorMsg!,
+                      style: const TextStyle(
+                        color: OptivusColors.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ],
               ),
@@ -170,13 +238,18 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
     final fixedItems = BaseTimelineFilterUtils.getFixedItems(allItems);
 
     return Scaffold(
-      backgroundColor: OptivusColors.routineBgBottom,
+      backgroundColor: widget.onBack == null
+          ? OptivusColors.routineBgBottom
+          : Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: OptivusColors.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(
+            Icons.arrow_back_rounded,
+            color: OptivusColors.textPrimary,
+          ),
+          onPressed: widget.onBack ?? () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'Fixed Blocks',
@@ -193,11 +266,19 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.schedule_rounded, size: 64, color: OptivusColors.textMuted),
+                  const Icon(
+                    Icons.schedule_rounded,
+                    size: 64,
+                    color: OptivusColors.textMuted,
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'No fixed blocks set yet.',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: OptivusColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: OptivusColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
@@ -207,16 +288,20 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
                       foregroundColor: Colors.white,
                     ),
                     child: const Text('Add Fixed Block'),
-                  )
+                  ),
                 ],
               ),
             )
           : ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-              children: fixedItems.map((f) => BaseTimelineBlockCard(
-                item: f,
-                onTap: () => _showForm(existingItem: f),
-              )).toList(),
+              children: fixedItems
+                  .map(
+                    (f) => BaseTimelineBlockCard(
+                      item: f,
+                      onTap: () => _showForm(existingItem: f),
+                    ),
+                  )
+                  .toList(),
             ),
       floatingActionButton: fixedItems.isNotEmpty
           ? FloatingActionButton.extended(
@@ -224,7 +309,10 @@ class _FixedRoutineSetupScreenState extends ConsumerState<FixedRoutineSetupScree
               backgroundColor: OptivusColors.routineAccent,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Fixed Block', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text(
+                'Add Fixed Block',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             )
           : null,
     );
@@ -241,7 +329,10 @@ class _TextField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
-      style: const TextStyle(fontWeight: FontWeight.w600, color: OptivusColors.textPrimary),
+      style: const TextStyle(
+        fontWeight: FontWeight.w600,
+        color: OptivusColors.textPrimary,
+      ),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: OptivusColors.textSecondary),
@@ -261,7 +352,11 @@ class _TypeChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _TypeChip({required this.label, required this.selected, required this.onTap});
+  const _TypeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -270,16 +365,22 @@ class _TypeChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? OptivusColors.routineAccent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.5),
+          color: selected
+              ? OptivusColors.routineAccent.withValues(alpha: 0.2)
+              : Colors.white.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? OptivusColors.routineAccent : Colors.transparent),
+          border: Border.all(
+            color: selected ? OptivusColors.routineAccent : Colors.transparent,
+          ),
         ),
         child: Text(
           label,
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: selected ? OptivusColors.routineAccent : OptivusColors.textSecondary,
+            color: selected
+                ? OptivusColors.routineAccent
+                : OptivusColors.textSecondary,
           ),
         ),
       ),

@@ -19,8 +19,9 @@ Path _buildBubblePath(Size size, {required bool isUser}) {
   final r = _kR;
 
   final double tailEdgeOffset = isUser ? w - _kTailX : _kTailX;
-  final double tailTipX =
-      isUser ? tailEdgeOffset + _kTailW * 0.5 : tailEdgeOffset - _kTailW * 0.5;
+  final double tailTipX = isUser
+      ? tailEdgeOffset + _kTailW * 0.5
+      : tailEdgeOffset - _kTailW * 0.5;
 
   final p = Path();
 
@@ -169,7 +170,7 @@ class _HeavyGlassPainter extends CustomPainter {
         ).createShader(rect),
     );
 
-    canvas.restore(); 
+    canvas.restore();
 
     final lensPath = Path();
     lensPath.moveTo(0, size.height * 0.35);
@@ -248,10 +249,13 @@ class CoachMessageBubble extends StatelessWidget {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
+        ),
         child: Column(
-          crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: isUser
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             CustomPaint(
               painter: _BubbleShadowPainter(isUser: isUser),
@@ -261,9 +265,9 @@ class CoachMessageBubble extends StatelessWidget {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                   child: Container(
-                    color: isUser 
-                      ? OptivusColors.glassFill 
-                      : OptivusColors.coachTop.withValues(alpha: 0.2),
+                    color: isUser
+                        ? OptivusColors.glassFill
+                        : OptivusColors.coachTop.withValues(alpha: 0.2),
                     padding: contentPad,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,7 +282,8 @@ class CoachMessageBubble extends StatelessWidget {
                             letterSpacing: -0.3,
                           ),
                         ),
-                        if (message.blocks.isNotEmpty && onBuildActionCard != null) ...[
+                        if (message.blocks.isNotEmpty &&
+                            onBuildActionCard != null) ...[
                           const SizedBox(height: 12),
                           for (final block in message.blocks)
                             onBuildActionCard!(block),
@@ -293,9 +298,10 @@ class CoachMessageBubble extends StatelessWidget {
             Text(
               message.timestamp,
               style: const TextStyle(
-                  fontSize: 10,
-                  color: OptivusColors.textSecondary,
-                  fontWeight: FontWeight.bold),
+                fontSize: 10,
+                color: OptivusColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
@@ -317,8 +323,9 @@ class _TypingBubbleState extends State<TypingBubble>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat();
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
   }
 
   @override
@@ -355,9 +362,11 @@ class _TypingBubbleState extends State<TypingBubble>
                         height: 10,
                         transform: Matrix4.translationValues(0, -bounce * 6, 0),
                         decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: OptivusColors.textSecondary
-                                .withValues(alpha: 0.4 + bounce * 0.6)),
+                          shape: BoxShape.circle,
+                          color: OptivusColors.textSecondary.withValues(
+                            alpha: 0.4 + bounce * 0.6,
+                          ),
+                        ),
                       );
                     },
                   );

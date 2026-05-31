@@ -2,7 +2,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/managers/base_timeline/base_timeline_manager_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/classes_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/eating_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/fixed_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/skin_care_routine_setup_screen.dart';
+import 'package:optivus/features/routine/managers/base_timeline/screens/work_routine_setup_screen.dart';
+import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_header.dart';
@@ -28,6 +37,7 @@ class RoutineTab extends ConsumerStatefulWidget {
 
 class _RoutineTabState extends ConsumerState<RoutineTab> {
   Timer? _minuteTimer;
+  RoutineDetailTarget _activeDetail = RoutineDetailTarget.none;
 
   @override
   void initState() {
@@ -44,8 +54,44 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     super.dispose();
   }
 
+  void _openDetail(RoutineDetailTarget target) {
+    setState(() => _activeDetail = target);
+  }
+
+  void _closeDetail() {
+    setState(() => _activeDetail = RoutineDetailTarget.none);
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen(routineDetailViewRequestProvider, (previous, next) {
+      if (next.view == RoutineDetailView.none) return;
+      _openDetail(next);
+      ref.read(routineDetailViewRequestProvider.notifier).state =
+          RoutineDetailTarget.none;
+    });
+
+    final pending = ref.watch(routineDetailViewRequestProvider);
+    if (pending.view != RoutineDetailView.none &&
+        _activeDetail.view != pending.view) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _openDetail(pending);
+        ref.read(routineDetailViewRequestProvider.notifier).state =
+            RoutineDetailTarget.none;
+      });
+    }
+
+    if (_activeDetail.view != RoutineDetailView.none) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _closeDetail();
+        },
+        child: _buildDetail(),
+      );
+    }
+
     final state = ref.watch(routineNotifierProvider);
     final selectedDay = state.selectedDay;
     final showFullDay = state.showFullDay;
@@ -98,7 +144,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                 ConflictBanner(
                   conflictCount: conflictCount,
                   onTap: () {
-                    ref.read(routineNotifierProvider.notifier).setPrimaryFilter('conflicts');
+                    ref
+                        .read(routineNotifierProvider.notifier)
+                        .setPrimaryFilter('conflicts');
                   },
                 ),
 
@@ -137,6 +185,39 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
         ],
       ),
     );
+  }
+
+  Widget _buildDetail() {
+    return switch (_activeDetail.view) {
+      RoutineDetailView.baseTimelineManager => BaseTimelineManagerScreen(
+        onBack: _closeDetail,
+        onOpenDetail: _openDetail,
+      ),
+      RoutineDetailView.classesSetup => ClassesRoutineSetupScreen(
+        onBack: _closeDetail,
+      ),
+      RoutineDetailView.workSetup => WorkRoutineSetupScreen(
+        onBack: _closeDetail,
+      ),
+      RoutineDetailView.eatingSetup => EatingRoutineSetupScreen(
+        onBack: _closeDetail,
+      ),
+      RoutineDetailView.fixedSetup => FixedRoutineSetupScreen(
+        onBack: _closeDetail,
+      ),
+      RoutineDetailView.skinCareSetup => SkinCareRoutineSetupScreen(
+        onBack: _closeDetail,
+      ),
+      RoutineDetailView.importReview => RoutineImportReviewScreen(
+        onBack: _closeDetail,
+        source: _activeDetail.importSource ?? RoutineImportSource.classes,
+      ),
+      RoutineDetailView.routineSettings => _RoutineSettingsInline(
+        onBack: _closeDetail,
+        onOpenDetail: _openDetail,
+      ),
+      RoutineDetailView.none => const SizedBox.shrink(),
+    };
   }
 
   Widget _buildEmptyState() {
@@ -182,6 +263,139 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RoutineSettingsInline extends ConsumerWidget {
+  final VoidCallback onBack;
+  final ValueChanged<RoutineDetailTarget> onOpenDetail;
+
+  const _RoutineSettingsInline({
+    required this.onBack,
+    required this.onOpenDetail,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(routineNotifierProvider);
+    final notifier = ref.read(routineNotifierProvider.notifier);
+
+    return LiquidDetailScaffold(
+      eyebrow: 'Routine',
+      title: 'Routine Settings',
+      subtitle:
+          'Timeline display, automation, base timeline, and export preview.',
+      accentColor: OptivusColors.routineAccent,
+      onBack: onBack,
+      children: [
+        LiquidDetailSection(
+          title: 'Managers',
+          children: [
+            LiquidActionRow(
+              icon: Icons.schedule_rounded,
+              title: 'Base Timeline Manager',
+              subtitle: 'Classes, work, eating, fixed, and skin care.',
+              accentColor: OptivusColors.routineAccent,
+              onTap: () => onOpenDetail(
+                const RoutineDetailTarget(
+                  view: RoutineDetailView.baseTimelineManager,
+                ),
+              ),
+            ),
+          ],
+        ),
+        LiquidDetailSection(
+          title: 'Timeline View',
+          children: [
+            _RoutineSwitch(
+              title: 'Full 24h mode',
+              value: state.showFullDay,
+              onChanged: notifier.toggleFullDay,
+            ),
+            _RoutineSwitch(
+              title: 'Show minute ticks',
+              value: state.showMinuteTicks,
+              onChanged: notifier.toggleMinuteTicks,
+            ),
+            _RoutineSwitch(
+              title: 'Compact mode',
+              value: state.compactMode,
+              onChanged: notifier.toggleCompactMode,
+            ),
+            _RoutineSwitch(
+              title: 'Current Time Line',
+              value: state.showCurrentTimeLine,
+              onChanged: notifier.toggleCurrentTimeLine,
+            ),
+            _RoutineSwitch(
+              title: 'Precision mode',
+              value: state.precisionMode,
+              onChanged: notifier.togglePrecisionMode,
+            ),
+          ],
+        ),
+        LiquidDetailSection(
+          title: 'Automation',
+          children: [
+            _RoutineSwitch(
+              title: 'AI Suggestions',
+              value: state.aiRoutineSuggestionsEnabled,
+              onChanged: notifier.toggleAiSuggestions,
+            ),
+            _RoutineSwitch(
+              title: 'Conflict Resolver',
+              value: state.conflictResolverEnabled,
+              onChanged: notifier.toggleConflictResolver,
+            ),
+            _RoutineSwitch(
+              title: 'Notifications',
+              value: state.routineNotificationsEnabled,
+              onChanged: notifier.toggleNotifications,
+            ),
+          ],
+        ),
+        const LiquidDetailSection(
+          title: 'Export',
+          children: [
+            Text(
+              'Export Schedule preview is local-share ready. Full generated exports should use Cloudflare R2 or local share, not Firebase Storage.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RoutineSwitch extends StatelessWidget {
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _RoutineSwitch({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LiquidActionRow(
+      icon: Icons.tune_rounded,
+      title: title,
+      accentColor: OptivusColors.routineAccent,
+      trailing: Switch(
+        value: value,
+        activeThumbColor: OptivusColors.routineAccent,
+        onChanged: onChanged,
       ),
     );
   }
