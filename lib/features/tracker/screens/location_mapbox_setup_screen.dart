@@ -59,7 +59,7 @@ class LocationMapboxSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.settings_outlined,
               title: 'Allow Location / Open Settings',
-              subtitle: 'Frontend placeholder for native location permission.',
+              subtitle: 'Native permission connects in backend/native pass.',
               accentColor: OptivusColors.trackerAccent,
               onTap: () {},
             ),

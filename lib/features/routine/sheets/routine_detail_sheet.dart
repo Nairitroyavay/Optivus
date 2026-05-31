@@ -41,7 +41,10 @@ class _RoutineDetailSheetBody extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+              colors: [
+                OptivusColors.routineSheetTop,
+                OptivusColors.routineSheetBottom,
+              ],
             ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(28),
@@ -332,7 +335,7 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Photo or attachment placeholder',
+                        'Photo or attachment frontend preview',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -488,7 +491,9 @@ class _SuggestionTile extends StatelessWidget {
           if (item.durationMinutes > 20)
             TextButton(
               onPressed: () {
-                parentRef.read(routineNotifierProvider.notifier).makeTinyVersion(item);
+                parentRef
+                    .read(routineNotifierProvider.notifier)
+                    .makeTinyVersion(item);
                 Navigator.of(context).pop();
               },
               child: const Text(

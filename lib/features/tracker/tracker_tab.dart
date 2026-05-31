@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/tracker/bad_habits/bad_habit_tracker_screen.dart';
+import 'package:optivus/features/tracker/focus/focus_timer_screen.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/tracker/fitness/fitness_center_screen.dart';
@@ -9,10 +11,15 @@ import 'package:optivus/features/tracker/meditation/meditation_tracker_screen.da
 import 'package:optivus/features/tracker/money/money_system_screen.dart';
 import 'package:optivus/features/tracker/money/money_system_widgets.dart';
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
+import 'package:optivus/features/tracker/providers/tracker_settings_provider.dart';
 import 'package:optivus/features/tracker/screens/health_connect_setup_screen.dart';
 import 'package:optivus/features/tracker/screens/location_mapbox_setup_screen.dart';
+import 'package:optivus/features/tracker/screens/tracker_activation_screen.dart';
+import 'package:optivus/features/tracker/screens/tracker_history_screen.dart';
 import 'package:optivus/features/tracker/screens/tracker_settings_screen.dart';
 import 'package:optivus/features/tracker/screens/usage_access_setup_screen.dart';
+import 'package:optivus/features/tracker/sleep/sleep_tracker_screen.dart';
+import 'package:optivus/features/tracker/nutrition/nutrition_tracker_screen.dart';
 import 'package:optivus/features/tracker/screen_time/screen_time_screen.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/money_models.dart';
@@ -27,28 +34,24 @@ class TrackerTab extends ConsumerStatefulWidget {
 
 class _TrackerTabState extends ConsumerState<TrackerTab> {
   String _activeMetricView = 'Daily';
-  TrackerDetailView _activeDetailView = TrackerDetailView.none;
+  TrackerDetailTarget _activeDetail = TrackerDetailTarget.none;
 
-  void _openDetail(TrackerDetailView view) {
-    setState(() => _activeDetailView = view);
+  TrackerDetailView get _activeDetailView => _activeDetail.view;
+
+  void _openDetail(TrackerDetailTarget target) {
+    if (target.view == TrackerDetailView.none) {
+      _closeDetail();
+      return;
+    }
+    setState(() => _activeDetail = target);
+  }
+
+  void _openView(TrackerDetailView view) {
+    _openDetail(TrackerDetailTarget.view(view));
   }
 
   void _closeDetail() {
-    setState(() => _activeDetailView = TrackerDetailView.none);
-  }
-
-  void _showPlaceholder(String title) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$title: This detailed tracker screen will be built next.',
-        ),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: OptivusColors.trackerAccent,
-      ),
-    );
+    setState(() => _activeDetail = TrackerDetailTarget.none);
   }
 
   @override
@@ -58,37 +61,40 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       (prev, intent) {
         if (intent != null && intent.trackerType == TrackerType.money) {
           if (_activeDetailView != TrackerDetailView.money) {
-            setState(() => _activeDetailView = TrackerDetailView.money);
+            _openView(TrackerDetailView.money);
           }
         } else if (intent != null &&
             intent.trackerType == TrackerType.meditation) {
           if (_activeDetailView != TrackerDetailView.meditation) {
-            setState(() => _activeDetailView = TrackerDetailView.meditation);
+            _openView(TrackerDetailView.meditation);
           }
         } else if (intent != null &&
             intent.trackerType == TrackerType.workout) {
           if (_activeDetailView != TrackerDetailView.fitness) {
-            setState(() => _activeDetailView = TrackerDetailView.fitness);
+            _openView(TrackerDetailView.fitness);
+          }
+        } else if (intent != null &&
+            intent.trackerType == TrackerType.focus) {
+          if (_activeDetailView != TrackerDetailView.focusTimer) {
+            _openView(TrackerDetailView.focusTimer);
           }
         }
       },
     );
     ref.listen(trackerDetailViewRequestProvider, (prev, request) {
-      if (request == TrackerDetailView.none) return;
-      if (_activeDetailView != request) {
-        setState(() => _activeDetailView = request);
-      }
+      if (request.view == TrackerDetailView.none) return;
+      _openDetail(request);
       ref.read(trackerDetailViewRequestProvider.notifier).state =
-          TrackerDetailView.none;
+          TrackerDetailTarget.none;
     });
     final pendingDetailRequest = ref.watch(trackerDetailViewRequestProvider);
-    if (pendingDetailRequest != TrackerDetailView.none &&
-        _activeDetailView != pendingDetailRequest) {
+    if (pendingDetailRequest.view != TrackerDetailView.none &&
+        _activeDetailView != pendingDetailRequest.view) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _activeDetailView = pendingDetailRequest);
+        _openDetail(pendingDetailRequest);
         ref.read(trackerDetailViewRequestProvider.notifier).state =
-            TrackerDetailView.none;
+            TrackerDetailTarget.none;
       });
     }
 
@@ -116,6 +122,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
             TrackerDetailView.money => MoneySystemScreen(onBack: _closeDetail),
             TrackerDetailView.fitness => FitnessCenterScreen(
               onBack: _closeDetail,
+              onOpenDetail: _openDetail,
             ),
             TrackerDetailView.screenTime => ScreenTimeScreen(
               onBack: _closeDetail,
@@ -134,6 +141,34 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               onBack: _closeDetail,
             ),
             TrackerDetailView.locationMapboxSetup => LocationMapboxSetupScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.trackerActivation => TrackerActivationScreen(
+              onBack: _closeDetail,
+              trackerType: _activeDetail.trackerType ?? 'Custom',
+              badHabitType: _activeDetail.badHabitType,
+              onActivated: (target) {
+                if (target.view == TrackerDetailView.none) {
+                  _closeDetail();
+                } else {
+                  _openDetail(target);
+                }
+              },
+            ),
+            TrackerDetailView.trackerHistory => TrackerHistoryScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.focusTimer => FocusTimerScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.badHabit => BadHabitTrackerScreen(
+              onBack: _closeDetail,
+              title: _activeDetail.trackerType ?? 'Smoking',
+              badHabitType: _activeDetail.badHabitType ?? 'smoking',
+              onOpenDetail: _openDetail,
+            ),
+            TrackerDetailView.sleep => SleepTrackerScreen(onBack: _closeDetail),
+            TrackerDetailView.nutrition => NutritionTrackerScreen(
               onBack: _closeDetail,
             ),
             TrackerDetailView.none => Column(
@@ -215,7 +250,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         ),
         TrackerHeaderButton(
           icon: Icons.settings,
-          onTap: () => _openDetail(TrackerDetailView.trackerSettings),
+          onTap: () => _openView(TrackerDetailView.trackerSettings),
         ),
       ],
     );
@@ -364,7 +399,8 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
   }
 
   Widget _buildActiveTrackers(_TrackerUiSnapshot snapshot) {
-    final trackers = [
+    final settings = ref.watch(trackerSettingsProvider);
+    final trackers = <_ActiveTrackerConfig>[
       _ActiveTrackerConfig(
         title: 'Meditation',
         status: '${snapshot.meditationMinutes} / 5 min today',
@@ -372,6 +408,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         buttonText: 'View',
         accentColor: OptivusColors.purpleAccent,
         activationSource: 'onboarding',
+        target: TrackerDetailTarget.view(TrackerDetailView.meditation),
       ),
       _ActiveTrackerConfig(
         title: 'Money System',
@@ -380,6 +417,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         buttonText: 'View',
         accentColor: OptivusColors.trackerAccent,
         activationSource: 'routine',
+        target: TrackerDetailTarget.view(TrackerDetailView.money),
       ),
       _ActiveTrackerConfig(
         title: 'Screen Time',
@@ -389,6 +427,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         buttonText: 'View',
         accentColor: OptivusColors.roseAccent,
         activationSource: 'mock permission',
+        target: TrackerDetailTarget.view(TrackerDetailView.screenTime),
       ),
       _ActiveTrackerConfig(
         title: 'Fitness Center',
@@ -398,6 +437,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         buttonText: 'Open',
         accentColor: OptivusColors.trackerAccent,
         activationSource: 'body',
+        target: TrackerDetailTarget.view(TrackerDetailView.fitness),
       ),
       _ActiveTrackerConfig(
         title: 'Hydration',
@@ -406,8 +446,62 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         buttonText: '+250ml',
         accentColor: OptivusColors.blueAccent,
         activationSource: 'manual',
+        target: TrackerDetailTarget.view(TrackerDetailView.hydration),
       ),
     ];
+    final optionalTrackers = <_ActiveTrackerConfig>[
+      _ActiveTrackerConfig(
+        title: 'Focus Timer',
+        status: 'Deep work sessions ready',
+        iconEmoji: '🎯',
+        buttonText: 'Start',
+        accentColor: OptivusColors.trackerAccent,
+        activationSource: 'manual',
+        target: TrackerDetailTarget.view(TrackerDetailView.focusTimer),
+      ),
+      _ActiveTrackerConfig(
+        title: 'Sleep',
+        status: 'Manual sleep log and Health Connect path',
+        iconEmoji: '😴',
+        buttonText: 'Log',
+        accentColor: OptivusColors.purpleAccent,
+        activationSource: 'manual',
+        target: TrackerDetailTarget.view(TrackerDetailView.sleep),
+      ),
+      _ActiveTrackerConfig(
+        title: 'Nutrition',
+        status: 'Meals, calories, protein, and source',
+        iconEmoji: '🍽',
+        buttonText: 'Open',
+        accentColor: OptivusColors.roseAccent,
+        activationSource: 'routine',
+        target: TrackerDetailTarget.view(TrackerDetailView.nutrition),
+      ),
+      ...['Smoking', 'Alcohol', 'Junk Food', 'Custom Bad Habit']
+          .where((title) => settings.activeTrackers[title] == true)
+          .map(
+            (title) => _ActiveTrackerConfig(
+              title: title,
+              status: 'Check-in ready · avoided, craving, relapse',
+              iconEmoji: _badHabitEmoji(title),
+              buttonText: 'Check in',
+              accentColor: OptivusColors.danger,
+              activationSource: 'setup',
+              target: TrackerDetailTarget(
+                view: TrackerDetailView.badHabit,
+                trackerType: title,
+                badHabitType: _badHabitKey(title),
+              ),
+            ),
+          ),
+    ];
+
+    for (final tracker in optionalTrackers) {
+      if (settings.activeTrackers[tracker.title] == true &&
+          !trackers.any((item) => item.title == tracker.title)) {
+        trackers.add(tracker);
+      }
+    }
 
     return Column(
       children: trackers
@@ -418,21 +512,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               iconEmoji: tracker.iconEmoji,
               buttonText: tracker.buttonText,
               accentColor: tracker.accentColor,
-              onAction: () {
-                if (tracker.title == 'Money System') {
-                  _openDetail(TrackerDetailView.money);
-                } else if (tracker.title == 'Screen Time') {
-                  _openDetail(TrackerDetailView.screenTime);
-                } else if (tracker.title == 'Meditation') {
-                  _openDetail(TrackerDetailView.meditation);
-                } else if (tracker.title == 'Fitness Center') {
-                  _openDetail(TrackerDetailView.fitness);
-                } else if (tracker.title == 'Hydration') {
-                  _openDetail(TrackerDetailView.hydration);
-                } else {
-                  _showPlaceholder(tracker.title);
-                }
-              },
+              onAction: () => _openDetail(tracker.target),
             ),
           )
           .toList(),
@@ -525,7 +605,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
             iconEmoji: '📚',
           ),
           _DiscoverTrackerConfig(
-            title: 'Language',
+            title: 'Language Learning',
             description: 'Not set up\nTrack learning practice.',
             iconEmoji: '🗣️',
           ),
@@ -590,7 +670,13 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
               title: tracker.title,
               description: tracker.description,
               iconEmoji: tracker.iconEmoji,
-              onActivate: () => _showPlaceholder(tracker.title),
+              onActivate: () => _openDetail(
+                TrackerDetailTarget(
+                  view: TrackerDetailView.trackerActivation,
+                  trackerType: tracker.title,
+                  badHabitType: _badHabitKey(tracker.title),
+                ),
+              ),
             );
           },
         );
@@ -607,7 +693,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           iconEmoji: '📱',
           status: 'Not connected',
           isConnected: false,
-          onConnect: () => _openDetail(TrackerDetailView.usageAccessSetup),
+          onConnect: () => _openView(TrackerDetailView.usageAccessSetup),
         ),
         TrackerDataSourceCard(
           title: 'Fitness GPS',
@@ -615,7 +701,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           iconEmoji: '📍',
           status: 'Not connected',
           isConnected: false,
-          onConnect: () => _openDetail(TrackerDetailView.locationMapboxSetup),
+          onConnect: () => _openView(TrackerDetailView.locationMapboxSetup),
         ),
         TrackerDataSourceCard(
           title: 'Health Connect',
@@ -623,7 +709,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           iconEmoji: '❤️',
           status: 'Not connected',
           isConnected: false,
-          onConnect: () => _openDetail(TrackerDetailView.healthConnectSetup),
+          onConnect: () => _openView(TrackerDetailView.healthConnectSetup),
         ),
         const SizedBox(height: 4),
         Padding(
@@ -667,12 +753,16 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       },
     ];
 
-    return TrackerActivityTimeline(activities: activities);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openView(TrackerDetailView.trackerHistory),
+      child: TrackerActivityTimeline(activities: activities),
+    );
   }
 
   Widget _buildTrackerSettingsTeaser() {
     return GestureDetector(
-      onTap: () => _openDetail(TrackerDetailView.trackerSettings),
+      onTap: () => _openView(TrackerDetailView.trackerSettings),
       child: TrackerGlassCard(
         padding: const EdgeInsets.all(20),
         radius: 20,
@@ -681,7 +771,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           children: [
             TrackerHeaderButton(
               icon: Icons.settings,
-              onTap: () => _openDetail(TrackerDetailView.trackerSettings),
+              onTap: () => _openView(TrackerDetailView.trackerSettings),
             ),
             const SizedBox(width: 16),
             const Expanded(
@@ -937,6 +1027,23 @@ String _periodUnlockCopy(String period) {
 double _discoverTileWidth(double maxWidth, bool useTwoColumns) {
   if (!useTwoColumns) return maxWidth;
   return (maxWidth - 12) / 2;
+}
+
+String? _badHabitKey(String title) {
+  final normalized = title.toLowerCase();
+  if (normalized.contains('smoking')) return 'smoking';
+  if (normalized.contains('alcohol')) return 'alcohol';
+  if (normalized.contains('junk')) return 'junk_food';
+  if (normalized.contains('custom bad')) return 'custom';
+  return null;
+}
+
+String _badHabitEmoji(String title) {
+  final normalized = title.toLowerCase();
+  if (normalized.contains('alcohol')) return '🍺';
+  if (normalized.contains('junk')) return '🍔';
+  if (normalized.contains('custom')) return '🚫';
+  return '🚭';
 }
 
 class _TrackerUiSnapshot {
@@ -1206,6 +1313,7 @@ class _ActiveTrackerConfig {
   final String buttonText;
   final Color accentColor;
   final String activationSource;
+  final TrackerDetailTarget target;
 
   const _ActiveTrackerConfig({
     required this.title,
@@ -1214,6 +1322,7 @@ class _ActiveTrackerConfig {
     required this.buttonText,
     required this.accentColor,
     required this.activationSource,
+    required this.target,
   });
 }
 

@@ -285,7 +285,12 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               ),
               const SizedBox(height: 12),
               _conflictResolver(),
-              if (ref.watch(mockOnboardingProvider).draft.baseTimeline.detectConflicts().isNotEmpty)
+              if (ref
+                  .watch(mockOnboardingProvider)
+                  .draft
+                  .baseTimeline
+                  .detectConflicts()
+                  .isNotEmpty)
                 const SizedBox(height: 12),
               OnboardingGlassCard(
                 padding: const EdgeInsets.all(12),
@@ -332,7 +337,6 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             controller: _tabController,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              
               _section(
                 enabled: _classesEnabled(role),
                 requiredLabel: _classesRequired(role)
@@ -387,7 +391,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               _eatingSection(),
               _fixedSection(),
               _skinCareSection(),
-],
+            ],
           ),
         ),
       ],
@@ -435,7 +439,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           const SizedBox(height: 12),
           _setupHeaderStrip('Set Your Weekly $title Schedule', accent),
           const SizedBox(height: 12),
-          if (_setupMode != 'Manual') _placeholderImportCard(),
+          if (_setupMode != 'Manual') _importPreviewCard(),
           if (extra != null) ...[extra, const SizedBox(height: 12)],
           _routineSetupFrame(
             title: title == 'Classes'
@@ -780,7 +784,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           onTap: () => setState(() => _setupMode = 'Manual'),
         ),
         OnboardingChip(
-          label: 'AI Text placeholder',
+          label: 'AI Text import preview',
           selected: _setupMode == 'AI Text',
           icon: Icons.text_fields_rounded,
           onTap: () {
@@ -790,7 +794,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           accent: OptivusColors.aquaAccent,
         ),
         OnboardingChip(
-          label: 'Photo Upload placeholder',
+          label: 'Photo Upload preview',
           selected: _setupMode == 'Photo Upload',
           icon: Icons.document_scanner_rounded,
           onTap: () {
@@ -817,7 +821,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
 
-  Widget _placeholderImportCard() {
+  Widget _importPreviewCard() {
     final currentImport = _currentPendingImport();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1867,13 +1871,19 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                                   children: [
                                     if (item.notes == 'Eating')
                                       Text(
-                                        item.mealCategory == 'Breakfast' ? '🥞' : (item.mealCategory == 'Lunch' ? '🍛' : '🍲'),
+                                        item.mealCategory == 'Breakfast'
+                                            ? '🥞'
+                                            : (item.mealCategory == 'Lunch'
+                                                  ? '🍛'
+                                                  : '🍲'),
                                         style: const TextStyle(fontSize: 18),
                                       )
                                     else
                                       Icon(
                                         _iconForRoutine(item),
-                                        color: blockAccent.withValues(alpha: 0.9),
+                                        color: blockAccent.withValues(
+                                          alpha: 0.9,
+                                        ),
                                         size: 20,
                                       ),
                                     const SizedBox(width: 8),
@@ -1904,13 +1914,20 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                                   children: [
                                     Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 4),
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.6),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.6,
+                                        ),
                                         borderRadius: BorderRadius.circular(10),
                                         border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.8),
-                                            width: 1),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.8,
+                                          ),
+                                          width: 1,
+                                        ),
                                       ),
                                       child: Text(
                                         '${_minuteLabel(item.startMinute)} - ${_minuteLabel(item.endMinute)}${item.crossesMidnight ? ' overnight' : ''}',
@@ -1923,13 +1940,20 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                                     ),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 4),
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.45),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.45,
+                                        ),
                                         borderRadius: BorderRadius.circular(10),
                                         border: Border.all(
-                                            color: Colors.white.withValues(alpha: 0.8),
-                                            width: 1),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.8,
+                                          ),
+                                          width: 1,
+                                        ),
                                       ),
                                       child: Text(
                                         dayLabel,
@@ -1940,16 +1964,26 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                                         ),
                                       ),
                                     ),
-                                    if (item.location != null && item.location!.isNotEmpty)
+                                    if (item.location != null &&
+                                        item.location!.isNotEmpty)
                                       Container(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 4),
+                                          horizontal: 10,
+                                          vertical: 4,
+                                        ),
                                         decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.45),
-                                          borderRadius: BorderRadius.circular(10),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.45,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                           border: Border.all(
-                                              color: Colors.white.withValues(alpha: 0.8),
-                                              width: 1),
+                                            color: Colors.white.withValues(
+                                              alpha: 0.8,
+                                            ),
+                                            width: 1,
+                                          ),
                                         ),
                                         child: Text(
                                           item.location!,
@@ -2028,7 +2062,10 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: Colors.white.withValues(alpha: 0.25),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.2,
+        ),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0F000000),
@@ -2053,7 +2090,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   BoxShadow(
                     color: Colors.white.withValues(alpha: 0.4),
                     blurRadius: 6,
-                  )
+                  ),
                 ],
               ),
             ),
@@ -2071,7 +2108,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                   BoxShadow(
                     color: Colors.white.withValues(alpha: 0.6),
                     blurRadius: 4,
-                  )
+                  ),
                 ],
               ),
             ),
@@ -2226,7 +2263,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             OptivusColors.success,
           ),
           const SizedBox(height: 12),
-          if (_setupMode != 'Manual') _placeholderImportCard(),
+          if (_setupMode != 'Manual') _importPreviewCard(),
           OnboardingGlassCard(
             child: Wrap(
               spacing: 8,
@@ -2678,7 +2715,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               OptivusColors.aquaAccent,
             ),
             const SizedBox(height: 12),
-            if (_setupMode != 'Manual') _placeholderImportCard(),
+            if (_setupMode != 'Manual') _importPreviewCard(),
             _routineSetupFrame(
               title: 'Your Skincare Schedule',
               subtitle:
@@ -2749,7 +2786,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           ),
           const SizedBox(height: 8),
           const Text(
-            'Manual entries stay local in mock onboarding state. Imported AI/photo review is represented as placeholder UI only.',
+            'Manual entries stay local in mock onboarding state. Imported AI/photo review is represented as frontend preview UI only.',
             style: TextStyle(
               fontSize: 11,
               color: OptivusColors.textSecondary,

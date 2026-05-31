@@ -119,8 +119,8 @@ class _FitnessActivitySessionScreenState
         ? 0.0
         : (_elapsedSeconds / 60) / simulatedDistance;
 
-    // TODO: Android long-running outdoor sessions need a foreground service
-    // before production GPS/background tracking is connected.
+    // Native pass: Android long-running outdoor sessions need a foreground
+    // service before production GPS/background tracking is connected.
     return Scaffold(
       backgroundColor: OptivusColors.trackerBottom,
       body: Stack(

@@ -8,7 +8,7 @@ import 'package:optivus/features/tracker/providers/tracker_settings_provider.dar
 
 class TrackerSettingsScreen extends ConsumerWidget {
   final VoidCallback onBack;
-  final ValueChanged<TrackerDetailView> onOpenDetail;
+  final ValueChanged<TrackerDetailTarget> onOpenDetail;
 
   const TrackerSettingsScreen({
     super.key,
@@ -107,25 +107,40 @@ class TrackerSettingsScreen extends ConsumerWidget {
           title: 'Permission and data sources',
           children: [
             LiquidActionRow(
+              icon: Icons.history_rounded,
+              title: 'Tracker History',
+              subtitle: 'All sessions, check-ins, logs, and summaries.',
+              accentColor: OptivusColors.trackerAccent,
+              onTap: () => onOpenDetail(
+                TrackerDetailTarget.view(TrackerDetailView.trackerHistory),
+              ),
+            ),
+            LiquidActionRow(
               icon: Icons.data_usage_rounded,
               title: 'Usage Access',
               subtitle: 'Screen Time and focus-loss windows.',
               accentColor: OptivusColors.roseAccent,
-              onTap: () => onOpenDetail(TrackerDetailView.usageAccessSetup),
+              onTap: () => onOpenDetail(
+                TrackerDetailTarget.view(TrackerDetailView.usageAccessSetup),
+              ),
             ),
             LiquidActionRow(
               icon: Icons.monitor_heart_outlined,
               title: 'Health Connect',
               subtitle: 'Steps, sleep, calories, workouts, heart rate.',
               accentColor: OptivusColors.success,
-              onTap: () => onOpenDetail(TrackerDetailView.healthConnectSetup),
+              onTap: () => onOpenDetail(
+                TrackerDetailTarget.view(TrackerDetailView.healthConnectSetup),
+              ),
             ),
             LiquidActionRow(
               icon: Icons.location_on_outlined,
               title: 'Location + Mapbox',
               subtitle: 'Walk/run route maps and selected style.',
               accentColor: OptivusColors.trackerAccent,
-              onTap: () => onOpenDetail(TrackerDetailView.locationMapboxSetup),
+              onTap: () => onOpenDetail(
+                TrackerDetailTarget.view(TrackerDetailView.locationMapboxSetup),
+              ),
             ),
           ],
         ),
@@ -167,9 +182,16 @@ class TrackerSettingsScreen extends ConsumerWidget {
       'Screen Time' => Icons.phone_android_rounded,
       'Fitness Center' => Icons.directions_run_rounded,
       'Hydration' => Icons.water_drop_outlined,
-      'Nutrition later' => Icons.restaurant_outlined,
-      'Sleep later' => Icons.bedtime_outlined,
-      'Smoking later' => Icons.smoke_free_outlined,
+      'Focus Timer' => Icons.center_focus_strong_rounded,
+      'Nutrition' => Icons.restaurant_outlined,
+      'Sleep' => Icons.bedtime_outlined,
+      'Smoking' => Icons.smoke_free_outlined,
+      'Alcohol' => Icons.no_drinks_outlined,
+      'Junk Food' => Icons.no_food_outlined,
+      'Reading' => Icons.menu_book_outlined,
+      'Language Learning' => Icons.translate_rounded,
+      'Skill Practice' => Icons.construction_rounded,
+      'Skin Care' => Icons.spa_outlined,
       _ => Icons.track_changes_rounded,
     };
   }

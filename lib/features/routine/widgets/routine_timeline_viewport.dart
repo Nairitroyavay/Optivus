@@ -39,9 +39,10 @@ class RoutineTimelineViewport extends ConsumerStatefulWidget {
       _RoutineTimelineViewportState();
 }
 
-class _RoutineTimelineViewportState extends ConsumerState<RoutineTimelineViewport> {
+class _RoutineTimelineViewportState
+    extends ConsumerState<RoutineTimelineViewport> {
   late ScrollController _scrollController;
-  
+
   String? _dragItemId;
   double _dragTop = 0.0;
   double _dragStartTop = 0.0;
@@ -146,9 +147,7 @@ class _RoutineTimelineViewportState extends ConsumerState<RoutineTimelineViewpor
             ),
 
             // ── Content card layer: readable overlays that do not affect anchors ──
-            // TODO: Implement vertical drag-and-drop for cards.
-            // On long press/drag card vertically, show floating time bubble.
-            // Snap = 5 min or 1 min (precision mode). Warn if hitting hard block.
+            // Long press drag moves cards with 5 min or precision-mode snapping.
             ...itemLayouts.map((entry) {
               final item = entry.item;
               final now = DateTime.now();
@@ -180,23 +179,34 @@ class _RoutineTimelineViewportState extends ConsumerState<RoutineTimelineViewpor
                   onLongPressMoveUpdate: (details) {
                     if (_dragItemId == item.id) {
                       setState(() {
-                        _dragTop = _dragStartTop + (details.globalPosition.dy - _dragInitialGlobalY);
+                        _dragTop =
+                            _dragStartTop +
+                            (details.globalPosition.dy - _dragInitialGlobalY);
                       });
                     }
                   },
                   onLongPressEnd: (details) {
                     if (_dragItemId == item.id) {
-                      final snap = ref.read(routineNotifierProvider).precisionMode ? 1 : 5;
-                      int newMinute = widget.layout.minuteForTop(_dragTop).clamp(0, 1439);
+                      final snap =
+                          ref.read(routineNotifierProvider).precisionMode
+                          ? 1
+                          : 5;
+                      int newMinute = widget.layout
+                          .minuteForTop(_dragTop)
+                          .clamp(0, 1439);
                       newMinute = (newMinute / snap).round() * snap;
-                      
-                      ref.read(routineNotifierProvider.notifier).moveItem(
-                        itemId: item.id,
-                        date: item.date ?? ref.read(routineNotifierProvider).selectedDay,
-                        startMinute: newMinute,
-                        durationMinutes: item.durationMinutes,
-                      );
-                      
+
+                      ref
+                          .read(routineNotifierProvider.notifier)
+                          .moveItem(
+                            itemId: item.id,
+                            date:
+                                item.date ??
+                                ref.read(routineNotifierProvider).selectedDay,
+                            startMinute: newMinute,
+                            durationMinutes: item.durationMinutes,
+                          );
+
                       setState(() {
                         _dragItemId = null;
                       });
@@ -215,13 +225,7 @@ class _RoutineTimelineViewportState extends ConsumerState<RoutineTimelineViewpor
                     ),
                     child: Opacity(
                       opacity: isDragging ? 0.8 : 1.0,
-                      // TODO(Phase 8): Implement drag-to-move behavior using LongPressDraggable.
-                      // Wrap this RoutineCardFactory.buildCard in a GestureDetector (for long press)
-                      // or LongPressDraggable to allow vertical dragging. On drag update, calculate
-                      // the snapped target time (using precision mode vs 5-minute snap) and display
-                      // a floating time bubble. On drop, trigger the move action with conflict resolution.
-                      // Leaving this as a "safe partial" implementation for now per blueprint rules,
-                      // since the standalone Move Sheet handles moving robustly.
+                      // Drag-to-move is handled by the surrounding GestureDetector.
                       child: RoutineCardFactory.buildCard(
                         item: item,
                         isNow: isNow,

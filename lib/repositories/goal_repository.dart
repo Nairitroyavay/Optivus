@@ -6,6 +6,9 @@ abstract class GoalRepository {
   Future<List<GoalModel>> fetchGoals(String uid);
   Future<void> saveGoal(String uid, GoalModel goal);
   Future<void> saveGoals(String uid, List<GoalModel> goals);
+  Future<void> archiveGoal(String uid, String goalId);
+  Future<void> restoreGoal(String uid, String goalId);
+  Future<void> saveDailyProof(String uid, String goalId, GoalProof proof);
 }
 
 class FakeGoalRepository implements GoalRepository {
@@ -30,6 +33,37 @@ class FakeGoalRepository implements GoalRepository {
   Future<void> saveGoals(String uid, List<GoalModel> goals) async {
     await Future.delayed(const Duration(milliseconds: 500));
     _goals[uid] = goals;
+  }
+
+  @override
+  Future<void> archiveGoal(String uid, String goalId) async {
+    final goals = [...await fetchGoals(uid)];
+    _goals[uid] = [
+      for (final goal in goals)
+        if (goal.id == goalId) goal.copyWith(isArchived: true) else goal,
+    ];
+  }
+
+  @override
+  Future<void> restoreGoal(String uid, String goalId) async {
+    final goals = [...await fetchGoals(uid)];
+    _goals[uid] = [
+      for (final goal in goals)
+        if (goal.id == goalId) goal.copyWith(isArchived: false) else goal,
+    ];
+  }
+
+  @override
+  Future<void> saveDailyProof(
+    String uid,
+    String goalId,
+    GoalProof proof,
+  ) async {
+    final goals = [...await fetchGoals(uid)];
+    _goals[uid] = [
+      for (final goal in goals)
+        if (goal.id == goalId) goal.copyWith(dailyProof: proof) else goal,
+    ];
   }
 }
 

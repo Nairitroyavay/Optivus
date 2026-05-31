@@ -11,14 +11,51 @@ class FitnessActivityFinishScreen extends StatelessWidget {
 
   const FitnessActivityFinishScreen({super.key, required this.activity});
 
-  void _showPlaceholder(BuildContext context, String label) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$label is ready for the next pass.'),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: OptivusColors.trackerAccent,
+  void _showActionSheet(
+    BuildContext context, {
+    required String title,
+    required String message,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+          18,
+          18,
+          18,
+          18 + MediaQuery.of(context).padding.bottom,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -133,7 +170,12 @@ class FitnessActivityFinishScreen extends StatelessWidget {
                       child: FitnessOutlineButton(
                         label: 'Add Note',
                         icon: Icons.note_add_rounded,
-                        onTap: () => _showPlaceholder(context, 'Add note'),
+                        onTap: () => _showActionSheet(
+                          context,
+                          title: 'Activity note',
+                          message:
+                              'Notes are captured in the FitnessActivity.notes field during the backend pass. This frontend path already preserves the action point.',
+                        ),
                       ),
                     ),
                   ],
@@ -145,7 +187,12 @@ class FitnessActivityFinishScreen extends StatelessWidget {
                       child: FitnessOutlineButton(
                         label: 'Share Image',
                         icon: Icons.ios_share_rounded,
-                        onTap: () => _showPlaceholder(context, 'Share image'),
+                        onTap: () => _showActionSheet(
+                          context,
+                          title: 'Share image',
+                          message:
+                              'Share-card generation will use local render or Cloudflare R2 upload path, not Firebase Storage.',
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),

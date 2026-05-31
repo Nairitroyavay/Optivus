@@ -4,7 +4,6 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/sheets/week_planner_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
-import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 
 /// Shows the Routine Settings bottom sheet.
@@ -252,64 +251,15 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
   }
 
   void _showHabitSystems(BuildContext context) {
-    final items = parentRef.watch(routineNotifierProvider).items;
-    _showListSheet(
-      context,
-      title: 'Habit Systems',
-      icon: Icons.psychology_rounded,
-      children: [
-        const _SectionLabel('Good Habits'),
-        ...items
-            .where(
-              (item) =>
-                  item.category == RoutineCategory.habit ||
-                  item.category == RoutineCategory.identity,
-            )
-            .map(_itemTile),
-        const _SectionLabel('Bad Habits'),
-        ...items
-            .where(
-              (item) =>
-                  item.category == RoutineCategory.badHabit ||
-                  item.blockType == RoutineBlockType.checkIn,
-            )
-            .map(_itemTile),
-        const _SectionLabel('Identity Goals'),
-        ...items
-            .where((item) => item.priority == RoutinePriority.mustDo)
-            .map(_itemTile),
-      ],
-    );
+    Navigator.of(context).pop();
+    parentRef.read(routineDetailViewRequestProvider.notifier).state =
+        const RoutineDetailTarget(view: RoutineDetailView.habitSystems);
   }
 
   void _showRoutineHistory(BuildContext context) {
-    final history =
-        parentRef
-            .watch(routineNotifierProvider)
-            .items
-            .where(
-              (item) =>
-                  item.status == RoutineStatus.completed ||
-                  item.status == RoutineStatus.skipped ||
-                  item.status == RoutineStatus.missed ||
-                  item.isCompleted ||
-                  item.isMissed,
-            )
-            .toList()
-          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    _showListSheet(
-      context,
-      title: 'Routine History',
-      icon: Icons.history_rounded,
-      children: history.isEmpty
-          ? [
-              const _InfoRowBox(
-                text:
-                    'Completed, skipped, and missed routine items appear here.',
-              ),
-            ]
-          : history.map(_itemTile).toList(),
-    );
+    Navigator.of(context).pop();
+    parentRef.read(routineDetailViewRequestProvider.notifier).state =
+        const RoutineDetailTarget(view: RoutineDetailView.routineHistory);
   }
 
   void _showAutomationSheet(BuildContext context) {
@@ -403,13 +353,6 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
     );
   }
 
-  Widget _itemTile(RoutineItem item) {
-    return _InfoRowBox(
-      text:
-          '${item.title}\n${TimelineUtils.formatTimeRange(item.startMinute, item.endMinute)} • ${item.blockTypeLabel} • ${item.statusLabel}',
-    );
-  }
-
   void _showListSheet(
     BuildContext context, {
     required String title,
@@ -472,28 +415,6 @@ class _RoutineSettingsSheetBody extends StatelessWidget {
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String label;
-
-  const _SectionLabel(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 8),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w900,
-          color: OptivusColors.textSecondary,
-          letterSpacing: 0.4,
-        ),
       ),
     );
   }

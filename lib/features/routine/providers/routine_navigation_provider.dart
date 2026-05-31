@@ -10,23 +10,17 @@ enum RoutineDetailView {
   skinCareSetup,
   importReview,
   routineSettings,
+  habitSystems,
+  routineHistory,
 }
 
-enum RoutineImportSource {
-  classes,
-  work,
-  eating,
-  skinCare,
-}
+enum RoutineImportSource { classes, work, eating, skinCare }
 
 class RoutineDetailTarget {
   final RoutineDetailView view;
   final RoutineImportSource? importSource;
 
-  const RoutineDetailTarget({
-    required this.view,
-    this.importSource,
-  });
+  const RoutineDetailTarget({required this.view, this.importSource});
 
   static const none = RoutineDetailTarget(view: RoutineDetailView.none);
 }

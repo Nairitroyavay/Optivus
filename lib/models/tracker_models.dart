@@ -423,3 +423,360 @@ class TrackerSession {
     this.isCompleted = true,
   });
 }
+
+enum FocusSessionMode { pomodoro25, deepWork45, custom }
+
+enum FocusSessionStatus { planned, active, paused, completed, cancelled }
+
+class FocusSession {
+  final String id;
+  final String userId;
+  final FocusSessionMode mode;
+  final DateTime startedAt;
+  final DateTime? completedAt;
+  final int targetMinutes;
+  final int completedMinutes;
+  final String? linkedRoutineItemId;
+  final String? linkedRoutineTitle;
+  final FocusSessionStatus status;
+  final int distractionRiskScore;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  FocusSession({
+    required this.id,
+    this.userId = 'mock-user',
+    required this.mode,
+    required this.startedAt,
+    this.completedAt,
+    required this.targetMinutes,
+    this.completedMinutes = 0,
+    this.linkedRoutineItemId,
+    this.linkedRoutineTitle,
+    this.status = FocusSessionStatus.planned,
+    this.distractionRiskScore = 0,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
+
+  FocusSession copyWith({
+    String? id,
+    String? userId,
+    FocusSessionMode? mode,
+    DateTime? startedAt,
+    DateTime? completedAt,
+    int? targetMinutes,
+    int? completedMinutes,
+    String? linkedRoutineItemId,
+    String? linkedRoutineTitle,
+    FocusSessionStatus? status,
+    int? distractionRiskScore,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return FocusSession(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      mode: mode ?? this.mode,
+      startedAt: startedAt ?? this.startedAt,
+      completedAt: completedAt ?? this.completedAt,
+      targetMinutes: targetMinutes ?? this.targetMinutes,
+      completedMinutes: completedMinutes ?? this.completedMinutes,
+      linkedRoutineItemId: linkedRoutineItemId ?? this.linkedRoutineItemId,
+      linkedRoutineTitle: linkedRoutineTitle ?? this.linkedRoutineTitle,
+      status: status ?? this.status,
+      distractionRiskScore: distractionRiskScore ?? this.distractionRiskScore,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'mode': mode.name,
+      'startedAt': startedAt.toIso8601String(),
+      'completedAt': completedAt?.toIso8601String(),
+      'targetMinutes': targetMinutes,
+      'completedMinutes': completedMinutes,
+      'linkedRoutineItemId': linkedRoutineItemId,
+      'linkedRoutineTitle': linkedRoutineTitle,
+      'status': status.name,
+      'distractionRiskScore': distractionRiskScore,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+}
+
+enum BadHabitType { smoking, alcohol, junkFood, custom }
+
+enum BadHabitCheckInStatus { avoided, craving, relapsed }
+
+enum CravingIntensity { low, medium, high }
+
+class BadHabitLog {
+  final String id;
+  final String userId;
+  final BadHabitType habitType;
+  final String title;
+  final BadHabitCheckInStatus status;
+  final DateTime loggedAt;
+  final String dateKey;
+  final double dailyCost;
+  final double potentialSaved;
+  final double convertedSaved;
+  final CravingIntensity? cravingIntensity;
+  final String? trigger;
+  final int? relapseCount;
+  final String? reason;
+  final String? comebackAction;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  BadHabitLog({
+    required this.id,
+    this.userId = 'mock-user',
+    required this.habitType,
+    required this.title,
+    required this.status,
+    required this.loggedAt,
+    required this.dateKey,
+    this.dailyCost = 0,
+    this.potentialSaved = 0,
+    this.convertedSaved = 0,
+    this.cravingIntensity,
+    this.trigger,
+    this.relapseCount,
+    this.reason,
+    this.comebackAction,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'habitType': habitType.name,
+      'title': title,
+      'status': status.name,
+      'loggedAt': loggedAt.toIso8601String(),
+      'dateKey': dateKey,
+      'dailyCost': dailyCost,
+      'potentialSaved': potentialSaved,
+      'convertedSaved': convertedSaved,
+      'cravingIntensity': cravingIntensity?.name,
+      'trigger': trigger,
+      'relapseCount': relapseCount,
+      'reason': reason,
+      'comebackAction': comebackAction,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+}
+
+enum SleepQuality { poor, okay, good }
+
+class SleepLog {
+  final String id;
+  final String userId;
+  final DateTime sleepStartDateTime;
+  final DateTime wakeDateTime;
+  final int durationMinutes;
+  final SleepQuality quality;
+  final DateTime progressDate;
+  final String? source;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  SleepLog({
+    required this.id,
+    this.userId = 'mock-user',
+    required this.sleepStartDateTime,
+    required this.wakeDateTime,
+    required this.durationMinutes,
+    required this.quality,
+    required this.progressDate,
+    this.source,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
+
+  factory SleepLog.fromRange({
+    required String id,
+    String userId = 'mock-user',
+    required DateTime sleepStartDateTime,
+    required DateTime wakeDateTime,
+    required SleepQuality quality,
+    String? source,
+  }) {
+    final duration = wakeDateTime.difference(sleepStartDateTime);
+    final wakeDay = DateTime(
+      wakeDateTime.year,
+      wakeDateTime.month,
+      wakeDateTime.day,
+    );
+    return SleepLog(
+      id: id,
+      userId: userId,
+      sleepStartDateTime: sleepStartDateTime,
+      wakeDateTime: wakeDateTime,
+      durationMinutes: duration.inMinutes,
+      quality: quality,
+      progressDate: wakeDay,
+      source: source,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'sleepStartDateTime': sleepStartDateTime.toIso8601String(),
+      'wakeDateTime': wakeDateTime.toIso8601String(),
+      'durationMinutes': durationMinutes,
+      'quality': quality.name,
+      'progressDate': progressDate.toIso8601String(),
+      'source': source,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+}
+
+enum MealType { breakfast, lunch, snacks, dinner }
+
+enum MealSource { home, hostel, pg, mess, flat, mixed }
+
+class NutritionLog {
+  final String id;
+  final String userId;
+  final MealType mealType;
+  final DateTime loggedAt;
+  final String dateKey;
+  final bool done;
+  final double estimatedCalories;
+  final double estimatedProtein;
+  final MealSource source;
+  final List<String> dishes;
+  final String? linkedRoutineItemId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  NutritionLog({
+    required this.id,
+    this.userId = 'mock-user',
+    required this.mealType,
+    required this.loggedAt,
+    required this.dateKey,
+    this.done = false,
+    this.estimatedCalories = 0,
+    this.estimatedProtein = 0,
+    this.source = MealSource.home,
+    this.dishes = const [],
+    this.linkedRoutineItemId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) : createdAt = createdAt ?? DateTime.now(),
+       updatedAt = updatedAt ?? DateTime.now();
+
+  NutritionLog copyWith({
+    String? id,
+    String? userId,
+    MealType? mealType,
+    DateTime? loggedAt,
+    String? dateKey,
+    bool? done,
+    double? estimatedCalories,
+    double? estimatedProtein,
+    MealSource? source,
+    List<String>? dishes,
+    String? linkedRoutineItemId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return NutritionLog(
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
+      mealType: mealType ?? this.mealType,
+      loggedAt: loggedAt ?? this.loggedAt,
+      dateKey: dateKey ?? this.dateKey,
+      done: done ?? this.done,
+      estimatedCalories: estimatedCalories ?? this.estimatedCalories,
+      estimatedProtein: estimatedProtein ?? this.estimatedProtein,
+      source: source ?? this.source,
+      dishes: dishes ?? this.dishes,
+      linkedRoutineItemId: linkedRoutineItemId ?? this.linkedRoutineItemId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'mealType': mealType.name,
+      'loggedAt': loggedAt.toIso8601String(),
+      'dateKey': dateKey,
+      'done': done,
+      'estimatedCalories': estimatedCalories,
+      'estimatedProtein': estimatedProtein,
+      'source': source.name,
+      'dishes': dishes,
+      'linkedRoutineItemId': linkedRoutineItemId,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+}
+
+class TrackerHistoryEntry {
+  final String id;
+  final String userId;
+  final String trackerType;
+  final String category;
+  final String title;
+  final String subtitle;
+  final DateTime occurredAt;
+  final String? sourceId;
+  final String? valueLabel;
+  final bool completed;
+  final DateTime createdAt;
+
+  TrackerHistoryEntry({
+    required this.id,
+    this.userId = 'mock-user',
+    required this.trackerType,
+    required this.category,
+    required this.title,
+    required this.subtitle,
+    required this.occurredAt,
+    this.sourceId,
+    this.valueLabel,
+    this.completed = true,
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'userId': userId,
+      'trackerType': trackerType,
+      'category': category,
+      'title': title,
+      'subtitle': subtitle,
+      'occurredAt': occurredAt.toIso8601String(),
+      'sourceId': sourceId,
+      'valueLabel': valueLabel,
+      'completed': completed,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+}

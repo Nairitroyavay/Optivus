@@ -112,7 +112,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
         onStartMeditation: () {
           ref.read(appNavigationProvider.notifier).goToTracker();
           ref.read(trackerDetailViewRequestProvider.notifier).state =
-              TrackerDetailView.meditation;
+              TrackerDetailTarget.view(TrackerDetailView.meditation);
         },
         onOpenRoutine: () {
           ref.read(appNavigationProvider.notifier).goToRoutine();

@@ -7,7 +7,6 @@ import 'package:optivus/features/tracker/money/money_system_widgets.dart';
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/state/app_state.dart';
 import 'home_glass_widgets.dart';
-import 'sheets/demo_sheet.dart';
 
 class TrackerPreviewSection extends ConsumerWidget {
   final List<TrackerPreview> previews;
@@ -102,24 +101,25 @@ class TrackerPreviewSection extends ConsumerWidget {
                 onTap: () {
                   if (preview.id == 'money') {
                     ref.read(trackerDetailViewRequestProvider.notifier).state =
-                        TrackerDetailView.money;
+                        TrackerDetailTarget.view(TrackerDetailView.money);
                     ref.read(appNavigationProvider.notifier).goToTracker();
                   } else if (preview.id == 'hydration') {
                     ref.read(trackerDetailViewRequestProvider.notifier).state =
-                        TrackerDetailView.hydration;
+                        TrackerDetailTarget.view(TrackerDetailView.hydration);
                     ref.read(appNavigationProvider.notifier).goToTracker();
                   } else if (preview.id == 'smoking') {
-                    DemoSheet.show(
-                      context,
-                      title: "Smoking",
-                      message: "Cigarette logged in tracker.",
+                    ref
+                        .read(trackerDetailViewRequestProvider.notifier)
+                        .state = const TrackerDetailTarget(
+                      view: TrackerDetailView.badHabit,
+                      trackerType: 'Smoking',
+                      badHabitType: 'smoking',
                     );
+                    ref.read(appNavigationProvider.notifier).goToTracker();
                   } else if (preview.id == 'focus') {
-                    DemoSheet.show(
-                      context,
-                      title: "Deep Focus",
-                      message: "Deep focus session started.",
-                    );
+                    ref.read(trackerDetailViewRequestProvider.notifier).state =
+                        TrackerDetailTarget.view(TrackerDetailView.focusTimer);
+                    ref.read(appNavigationProvider.notifier).goToTracker();
                   } else {
                     ref.read(appNavigationProvider.notifier).goToTracker();
                   }

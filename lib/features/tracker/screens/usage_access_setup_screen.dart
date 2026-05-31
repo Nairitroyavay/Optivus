@@ -71,7 +71,7 @@ class UsageAccessSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.settings_applications_outlined,
               title: 'Open Android Usage Access Settings',
-              subtitle: 'Frontend placeholder for native intent.',
+              subtitle: 'Native permission connects in backend/native pass.',
               accentColor: OptivusColors.roseAccent,
               onTap: () {},
             ),

@@ -13,6 +13,8 @@ import 'package:optivus/features/routine/managers/base_timeline/screens/skin_car
 import 'package:optivus/features/routine/managers/base_timeline/screens/work_routine_setup_screen.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/screens/routine_habit_systems_screen.dart';
+import 'package:optivus/features/routine/screens/routine_history_screen.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/routine_header.dart';
 import 'package:optivus/features/routine/widgets/routine_title_filter_row.dart';
@@ -216,6 +218,12 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
         onBack: _closeDetail,
         onOpenDetail: _openDetail,
       ),
+      RoutineDetailView.habitSystems => RoutineHabitSystemsScreen(
+        onBack: _closeDetail,
+      ),
+      RoutineDetailView.routineHistory => RoutineHistoryScreen(
+        onBack: _closeDetail,
+      ),
       RoutineDetailView.none => const SizedBox.shrink(),
     };
   }
@@ -304,6 +312,15 @@ class _RoutineSettingsInline extends ConsumerWidget {
                 ),
               ),
             ),
+            LiquidActionRow(
+              icon: Icons.psychology_rounded,
+              title: 'Habit Systems',
+              subtitle: 'Good habits, bad habits, and identity systems.',
+              accentColor: OptivusColors.routineAccent,
+              onTap: () => onOpenDetail(
+                const RoutineDetailTarget(view: RoutineDetailView.habitSystems),
+              ),
+            ),
           ],
         ),
         LiquidDetailSection(
@@ -353,6 +370,22 @@ class _RoutineSettingsInline extends ConsumerWidget {
               title: 'Notifications',
               value: state.routineNotificationsEnabled,
               onChanged: notifier.toggleNotifications,
+            ),
+          ],
+        ),
+        LiquidDetailSection(
+          title: 'History',
+          children: [
+            LiquidActionRow(
+              icon: Icons.history_rounded,
+              title: 'Routine History',
+              subtitle: 'Completed, skipped, missed, moved, and check-ins.',
+              accentColor: OptivusColors.routineAccent,
+              onTap: () => onOpenDetail(
+                const RoutineDetailTarget(
+                  view: RoutineDetailView.routineHistory,
+                ),
+              ),
             ),
           ],
         ),

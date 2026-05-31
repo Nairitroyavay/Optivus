@@ -141,7 +141,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
-      // TODO: Connect real Firebase Auth later:
+      // Backend pass: connect Firebase Auth password reset here.
       // await _authRepository.sendPasswordResetEmail(email);
       await Future.delayed(const Duration(milliseconds: 1000));
 

@@ -296,6 +296,10 @@ class MockTrackerState {
   final List<TrackerSession> trackerSessions;
   final MoneyGoal moneyGoal;
   final List<SavingEntry> savingsEntries;
+  final List<FocusSession> focusSessions;
+  final List<BadHabitLog> badHabitLogs;
+  final List<SleepLog> sleepLogs;
+  final List<NutritionLog> nutritionLogs;
 
   MockTrackerState({
     required this.hydrationLogs,
@@ -304,6 +308,10 @@ class MockTrackerState {
     required this.trackerSessions,
     required this.moneyGoal,
     required this.savingsEntries,
+    required this.focusSessions,
+    required this.badHabitLogs,
+    required this.sleepLogs,
+    required this.nutritionLogs,
   });
 
   MockTrackerState copyWith({
@@ -313,6 +321,10 @@ class MockTrackerState {
     List<TrackerSession>? trackerSessions,
     MoneyGoal? moneyGoal,
     List<SavingEntry>? savingsEntries,
+    List<FocusSession>? focusSessions,
+    List<BadHabitLog>? badHabitLogs,
+    List<SleepLog>? sleepLogs,
+    List<NutritionLog>? nutritionLogs,
   }) {
     return MockTrackerState(
       hydrationLogs: hydrationLogs ?? this.hydrationLogs,
@@ -321,6 +333,10 @@ class MockTrackerState {
       trackerSessions: trackerSessions ?? this.trackerSessions,
       moneyGoal: moneyGoal ?? this.moneyGoal,
       savingsEntries: savingsEntries ?? this.savingsEntries,
+      focusSessions: focusSessions ?? this.focusSessions,
+      badHabitLogs: badHabitLogs ?? this.badHabitLogs,
+      sleepLogs: sleepLogs ?? this.sleepLogs,
+      nutritionLogs: nutritionLogs ?? this.nutritionLogs,
     );
   }
 }
@@ -336,10 +352,17 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
       trackerSessions: const [],
       moneyGoal: MoneyGoal(id: 'money-goal-empty'),
       savingsEntries: const [],
+      focusSessions: const [],
+      badHabitLogs: const [],
+      sleepLogs: const [],
+      nutritionLogs: const [],
     );
   }
 
   static MockTrackerState _seedState() {
+    final now = DateTime.now();
+    final todayKey =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     return MockTrackerState(
       hydrationLogs: MockSeedData.defaultHydrationLogs,
       fitnessActivities: MockSeedData.defaultFitnessActivities,
@@ -347,6 +370,60 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
       trackerSessions: MockSeedData.defaultTrackerSessions,
       moneyGoal: MockSeedData.defaultMoneyGoal,
       savingsEntries: MockSeedData.defaultSavingEntries,
+      focusSessions: [
+        FocusSession(
+          id: 'focus-seed-1',
+          mode: FocusSessionMode.pomodoro25,
+          startedAt: now.subtract(const Duration(hours: 2)),
+          completedAt: now.subtract(const Duration(hours: 1, minutes: 35)),
+          targetMinutes: 25,
+          completedMinutes: 25,
+          linkedRoutineTitle: 'Study block',
+          status: FocusSessionStatus.completed,
+          distractionRiskScore: 72,
+        ),
+      ],
+      badHabitLogs: [
+        BadHabitLog(
+          id: 'habit-seed-1',
+          habitType: BadHabitType.smoking,
+          title: 'Smoking',
+          status: BadHabitCheckInStatus.avoided,
+          loggedAt: now.subtract(const Duration(hours: 3)),
+          dateKey: todayKey,
+          dailyCost: 120,
+          potentialSaved: 120,
+          trigger: 'Evening break',
+        ),
+      ],
+      sleepLogs: [
+        SleepLog.fromRange(
+          id: 'sleep-seed-1',
+          sleepStartDateTime: DateTime(
+            now.year,
+            now.month,
+            now.day - 1,
+            22,
+            30,
+          ),
+          wakeDateTime: DateTime(now.year, now.month, now.day, 7, 30),
+          quality: SleepQuality.good,
+          source: 'manual',
+        ),
+      ],
+      nutritionLogs: [
+        NutritionLog(
+          id: 'meal-seed-breakfast',
+          mealType: MealType.breakfast,
+          loggedAt: now.subtract(const Duration(hours: 4)),
+          dateKey: todayKey,
+          done: true,
+          estimatedCalories: 420,
+          estimatedProtein: 22,
+          source: MealSource.home,
+          dishes: const ['Oats', 'Milk', 'Banana'],
+        ),
+      ],
     );
   }
 
@@ -765,6 +842,76 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     );
     state = state.copyWith(
       trackerSessions: [...state.trackerSessions, session],
+    );
+  }
+
+  void completeFocusSession(FocusSession session) {
+    final completed = session.copyWith(
+      completedAt: session.completedAt ?? DateTime.now(),
+      completedMinutes: session.completedMinutes <= 0
+          ? session.targetMinutes
+          : session.completedMinutes,
+      status: FocusSessionStatus.completed,
+    );
+    final trackerSession = TrackerSession(
+      id: 'tracker-${completed.id}',
+      category: 'Focus',
+      title: 'Focus session completed',
+      timestamp: completed.completedAt ?? DateTime.now(),
+      value: completed.completedMinutes,
+      isCompleted: true,
+    );
+    state = state.copyWith(
+      focusSessions: [...state.focusSessions, completed],
+      trackerSessions: [...state.trackerSessions, trackerSession],
+    );
+  }
+
+  void addBadHabitLog(BadHabitLog log, {bool addPotentialSaving = false}) {
+    state = state.copyWith(badHabitLogs: [...state.badHabitLogs, log]);
+    if (addPotentialSaving && log.potentialSaved > 0) {
+      logPotentialSaving(
+        amount: log.potentialSaved,
+        description: '${log.title} avoided',
+        badHabitKey: log.habitType.name,
+      );
+    }
+  }
+
+  void addSleepLog(SleepLog log) {
+    final session = TrackerSession(
+      id: 'tracker-${log.id}',
+      category: 'Body',
+      title: 'Sleep logged',
+      timestamp: log.wakeDateTime,
+      value: log.durationMinutes,
+      isCompleted: true,
+    );
+    state = state.copyWith(
+      sleepLogs: [...state.sleepLogs, log],
+      trackerSessions: [...state.trackerSessions, session],
+    );
+  }
+
+  void upsertNutritionLog(NutritionLog log) {
+    final updated = [
+      for (final existing in state.nutritionLogs)
+        if (existing.id == log.id) log else existing,
+      if (!state.nutritionLogs.any((existing) => existing.id == log.id)) log,
+    ];
+    final session = TrackerSession(
+      id: 'tracker-${log.id}',
+      category: 'Body',
+      title: '${log.mealType.name} logged',
+      timestamp: log.loggedAt,
+      value: log.done ? 1 : 0,
+      isCompleted: log.done,
+    );
+    state = state.copyWith(
+      nutritionLogs: updated,
+      trackerSessions: log.done
+          ? [...state.trackerSessions, session]
+          : state.trackerSessions,
     );
   }
 }

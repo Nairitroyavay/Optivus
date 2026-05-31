@@ -998,7 +998,7 @@ class DataControlScreen extends ConsumerWidget {
               icon: Icons.person_remove_outlined,
               title: 'Delete Account Request',
               subtitle:
-                  'Requires export offer, re-auth placeholder, and typing DELETE.',
+                  'Requires export offer, re-auth preview, and typing DELETE.',
               accentColor: OptivusColors.danger,
               destructive: true,
               onTap: () => onOpenProfileDetail(
@@ -1289,7 +1289,7 @@ class _DeleteAccountRequestScreenState
               value: _reauthChecked,
               activeColor: OptivusColors.danger,
               title: const Text(
-                'Re-authenticate / re-login placeholder completed',
+                'Re-authenticate / re-login preview completed',
                 style: TextStyle(fontWeight: FontWeight.w800),
               ),
               onChanged: (v) => setState(() => _reauthChecked = v ?? false),
@@ -1545,7 +1545,7 @@ class HelpCenterScreen extends StatelessWidget {
                   onTap: () => _showSetupReview(
                     context,
                     topic,
-                    'Help article placeholder card. Final hosted article can live on Cloudflare Pages.',
+                    'Help article frontend preview. Final hosted article can live on Cloudflare Pages.',
                   ),
                 ),
               )
@@ -1575,7 +1575,7 @@ class HelpCenterScreen extends StatelessWidget {
             LiquidActionRow(
               icon: Icons.support_agent_outlined,
               title: 'Support',
-              subtitle: 'Support link placeholder.',
+              subtitle: 'Support link frontend preview.',
               accentColor: _profileAccent,
             ),
           ],
@@ -1617,7 +1617,7 @@ class AboutVersionScreen extends StatelessWidget {
           title: 'Spark-only guardrail',
           children: [
             Text(
-              'No Firebase Functions. No Firebase Storage. No paid Google APIs. Upload/export placeholders are designed around Cloudflare R2 or local share. AI placeholders are designed around Cloudflare Workers.',
+              'No Firebase Functions. No Firebase Storage. No paid Google APIs. Upload/export previews are designed around Cloudflare R2 or local share. AI previews are designed around Cloudflare Workers.',
               style: TextStyle(
                 fontSize: 13,
                 height: 1.45,

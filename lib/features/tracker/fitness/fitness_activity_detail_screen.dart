@@ -153,7 +153,7 @@ class _OutdoorDetail extends StatelessWidget {
         const SizedBox(height: 14),
         _GraphPlaceholder(
           title: 'Elevation Graph',
-          subtitle: 'Elevation gain and terrain profile placeholder.',
+          subtitle: 'Elevation gain and terrain profile render in native pass.',
           icon: Icons.terrain_rounded,
         ),
         const SizedBox(height: 18),

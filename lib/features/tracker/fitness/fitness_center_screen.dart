@@ -5,22 +5,63 @@ import 'package:optivus/features/tracker/fitness/fitness_activity_detail_screen.
 import 'package:optivus/features/tracker/fitness/fitness_activity_session_screen.dart';
 import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart';
 import 'package:optivus/features/tracker/fitness/widgets/fitness_center_widgets.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/models/tracker_models.dart';
 
 class FitnessCenterScreen extends ConsumerWidget {
   final VoidCallback? onBack;
+  final ValueChanged<TrackerDetailTarget>? onOpenDetail;
 
-  const FitnessCenterScreen({super.key, this.onBack});
+  const FitnessCenterScreen({super.key, this.onBack, this.onOpenDetail});
 
-  void _showPlaceholder(BuildContext context, String title) {
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$title is prepared for the next integration pass.'),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: OptivusColors.trackerAccent,
+  void _showFitnessPanel(
+    BuildContext context, {
+    required String title,
+    required String message,
+    List<Widget> actions = const [],
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        margin: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+          18,
+          18,
+          18,
+          18 + MediaQuery.of(context).padding.bottom,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+            if (actions.isNotEmpty) ...[const SizedBox(height: 14), ...actions],
+          ],
+        ),
       ),
     );
   }
@@ -54,8 +95,15 @@ class FitnessCenterScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: _FitnessHeader(
               onBack: onBack,
-              onSettings: () => _showPlaceholder(context, 'Fitness settings'),
-              onHistory: () => _showPlaceholder(context, 'Fitness history'),
+              onSettings: () => _showFitnessPanel(
+                context,
+                title: 'Fitness settings',
+                message:
+                    'Weekly distance, active minutes, map style, and activity source settings are editable in local mock state.',
+              ),
+              onHistory: () => onOpenDetail?.call(
+                TrackerDetailTarget.view(TrackerDetailView.trackerHistory),
+              ),
             ),
           ),
           Expanded(
@@ -113,20 +161,38 @@ class FitnessCenterScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                   FitnessGoalsCard(
                     goals: state.goals,
-                    onEditGoals: () => _showPlaceholder(context, 'Edit goals'),
-                    onTinyVersion: () =>
-                        _showPlaceholder(context, 'Tiny version'),
+                    onEditGoals: () => _showFitnessPanel(
+                      context,
+                      title: 'Fitness goals',
+                      message:
+                          'Current mock goals are distance, active minutes, and workout sessions. Backend persistence will store goal period, target, unit, and progress.',
+                    ),
+                    onTinyVersion: () => _showFitnessPanel(
+                      context,
+                      title: 'Tiny version',
+                      message:
+                          'Tiny workout version selected: 5 minute mobility or indoor walk. Routine can store this as a moved/tiny tracker task.',
+                    ),
                   ),
                   const SizedBox(height: 24),
                   FitnessInsightsCard(insights: state.insights),
                   const SizedBox(height: 24),
                   FitnessDataSourcesCard(
-                    onLocation: () =>
-                        _showPlaceholder(context, 'Location permission'),
-                    onHealthConnect: () =>
-                        _showPlaceholder(context, 'Health Connect'),
-                    onManual: () =>
-                        _showPlaceholder(context, 'Manual activity entry'),
+                    onLocation: () => onOpenDetail?.call(
+                      TrackerDetailTarget.view(
+                        TrackerDetailView.locationMapboxSetup,
+                      ),
+                    ),
+                    onHealthConnect: () => onOpenDetail?.call(
+                      TrackerDetailTarget.view(
+                        TrackerDetailView.healthConnectSetup,
+                      ),
+                    ),
+                    onManual: () => _openSession(
+                      context,
+                      ref,
+                      overrideType: FitnessActivityType.freeWorkout,
+                    ),
                   ),
                 ],
               ),

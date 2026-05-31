@@ -29,7 +29,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   String openTrackerDetail(TrackerDetailView detail) {
     ref.read(appNavigationProvider.notifier).goToTracker();
-    ref.read(trackerDetailViewRequestProvider.notifier).state = detail;
+    ref.read(trackerDetailViewRequestProvider.notifier).state =
+        TrackerDetailTarget.view(detail);
     return '/app?tab=2';
   }
 

@@ -25,15 +25,16 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
 
-    _pulse = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _pulse = Tween<double>(
+      begin: 0.85,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     // Simple automatic navigation check:
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // TODO: Connect real Firebase Auth check later:
+      // Backend pass: connect Firebase Auth state check here.
       // FirebaseAuth.instance.authStateChanges().first.then((user) { ... });
-      
+
       // Simulate checking mock session/state briefly for splash feeling
       Future.delayed(const Duration(milliseconds: 1200), () {
         if (mounted) {
@@ -75,10 +76,7 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
               const Spacer(flex: 2),
 
               // Pulsing glass logo
-              ScaleTransition(
-                scale: _pulse,
-                child: const GlassLogo(),
-              ),
+              ScaleTransition(scale: _pulse, child: const GlassLogo()),
               const SizedBox(height: 28),
 
               // App name
@@ -140,26 +138,31 @@ class _LoadingDots extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(3, (i) {
         final delay = i * 0.2;
-        final animation = TweenSequence<double>([
-          TweenSequenceItem(
-            tween: Tween<double>(begin: 0.25, end: 1.0)
-                .chain(CurveTween(curve: Curves.easeIn)),
-            weight: 50,
-          ),
-          TweenSequenceItem(
-            tween: Tween<double>(begin: 1.0, end: 0.25)
-                .chain(CurveTween(curve: Curves.easeOut)),
-            weight: 50,
-          ),
-        ]).animate(
-          CurvedAnimation(
-            parent: controller,
-            curve: Interval(
-              delay.clamp(0.0, 0.8),
-              (delay + 0.6).clamp(0.0, 1.0),
-            ),
-          ),
-        );
+        final animation =
+            TweenSequence<double>([
+              TweenSequenceItem(
+                tween: Tween<double>(
+                  begin: 0.25,
+                  end: 1.0,
+                ).chain(CurveTween(curve: Curves.easeIn)),
+                weight: 50,
+              ),
+              TweenSequenceItem(
+                tween: Tween<double>(
+                  begin: 1.0,
+                  end: 0.25,
+                ).chain(CurveTween(curve: Curves.easeOut)),
+                weight: 50,
+              ),
+            ]).animate(
+              CurvedAnimation(
+                parent: controller,
+                curve: Interval(
+                  delay.clamp(0.0, 0.8),
+                  (delay + 0.6).clamp(0.0, 1.0),
+                ),
+              ),
+            );
 
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 5),

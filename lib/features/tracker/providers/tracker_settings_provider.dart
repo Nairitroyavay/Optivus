@@ -20,9 +20,18 @@ class TrackerSettingsState {
       'Screen Time': true,
       'Fitness Center': true,
       'Hydration': true,
-      'Nutrition later': false,
-      'Sleep later': false,
-      'Smoking later': false,
+      'Focus Timer': false,
+      'Nutrition': false,
+      'Sleep': false,
+      'Smoking': false,
+      'Alcohol': false,
+      'Junk Food': false,
+      'Reading': false,
+      'Language Learning': false,
+      'Skill Practice': false,
+      'Skin Care': false,
+      'Custom Bad Habit': false,
+      'Custom': false,
     };
     return const TrackerSettingsState(
       activeTrackers: trackers,
@@ -62,6 +71,15 @@ class TrackerSettingsNotifier extends StateNotifier<TrackerSettingsState> {
         updated[tracker] == true && !state.trackerOrder.contains(tracker)
         ? [...state.trackerOrder, tracker]
         : state.trackerOrder;
+    state = state.copyWith(activeTrackers: updated, trackerOrder: order);
+  }
+
+  void activateTracker(String tracker) {
+    final updated = Map<String, bool>.from(state.activeTrackers);
+    updated[tracker] = true;
+    final order = state.trackerOrder.contains(tracker)
+        ? state.trackerOrder
+        : [...state.trackerOrder, tracker];
     state = state.copyWith(activeTrackers: updated, trackerOrder: order);
   }
 

@@ -8,9 +8,9 @@ import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/profile/providers/profile_navigation_provider.dart';
 import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
 import 'package:optivus/features/profile/providers/profile_mock_data.dart';
-import 'package:optivus/features/profile/screens/profile_control_screens.dart';
-import 'package:optivus/features/profile/screens/placeholder_sheets.dart'
+import 'package:optivus/features/profile/screens/logout_dialog.dart'
     show showLogoutDialog;
+import 'package:optivus/features/profile/screens/profile_control_screens.dart';
 import 'package:optivus/features/profile/widgets/profile_components.dart';
 import 'package:optivus/features/profile/widgets/profile_header_card.dart';
 import 'package:optivus/features/profile/widgets/profile_setting_group.dart';
