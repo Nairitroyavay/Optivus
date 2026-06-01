@@ -263,7 +263,7 @@ class MoneyQuickActionRow extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         LiquidPrimaryButton(
-          label: showUpiPrimary ? 'Save via UPI mock' : 'Confirm manual save',
+          label: showUpiPrimary ? 'Save via UPI' : 'Confirm manual save',
           icon: showUpiPrimary ? Icons.payment_rounded : Icons.savings_outlined,
           backgroundColor: OptivusColors.trackerAccent,
           foregroundColor: OptivusColors.ink,
@@ -486,7 +486,7 @@ class MoneySourcesSummary extends ConsumerWidget {
           if (region.paymentRegion == PaymentRegion.indiaUpi || upiMock > 0)
             _SourceRow(
               label: region.paymentRegion == PaymentRegion.indiaUpi
-                  ? 'UPI mock saving'
+                  ? 'UPI saving'
                   : 'Local payment app saving',
               amount: upiMock,
               color: OptivusColors.trackerAccent,
@@ -732,9 +732,7 @@ class _HistoryTabContentState extends ConsumerState<HistoryTabContent> {
       _HistoryFilter.skipped => 'Skipped',
       _HistoryFilter.manual => 'Manual',
       _HistoryFilter.upiMock =>
-        region.paymentRegion == PaymentRegion.indiaUpi
-            ? 'UPI mock'
-            : 'Payment app',
+        region.paymentRegion == PaymentRegion.indiaUpi ? 'UPI' : 'Payment app',
       _HistoryFilter.badHabit => 'Bad habit',
     };
   }
@@ -831,12 +829,6 @@ class BadHabitTabContent extends ConsumerWidget {
                         ref,
                         convertEntryId: entry.id,
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    LiquidOutlineButton(
-                      label: 'Keep as potential',
-                      borderColor: OptivusColors.purpleAccent,
-                      onPressed: () {},
                     ),
                   ],
                 ),
@@ -1210,7 +1202,7 @@ class SettingsTabContent extends ConsumerWidget {
           ),
           _SettingsRow(
             title: 'Export savings data',
-            value: 'Mock',
+            value: 'Local preview',
             onTap: () => showMoneySettingSheet(
               context,
               ref,

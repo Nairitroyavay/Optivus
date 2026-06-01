@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
+import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/tracker_models.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 class TrackerHistoryScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
@@ -21,7 +24,8 @@ class _TrackerHistoryScreenState extends ConsumerState<TrackerHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final entries = _buildEntries(ref.watch(mockTrackerProvider));
+    final region = ref.watch(regionSettingsProvider);
+    final entries = _buildEntries(ref.watch(mockTrackerProvider), region);
     final visible = _filter == 'All'
         ? entries
         : entries.where((entry) => entry.category == _filter).toList();
@@ -29,7 +33,7 @@ class _TrackerHistoryScreenState extends ConsumerState<TrackerHistoryScreen> {
     return LiquidDetailScaffold(
       eyebrow: 'Tracker',
       title: 'Tracker History',
-      subtitle: 'All sessions, logs, summaries, and check-ins from mock state.',
+      subtitle: 'All local sessions, logs, summaries, and check-ins.',
       accentColor: OptivusColors.trackerAccent,
       onBack: widget.onBack,
       children: [
@@ -158,7 +162,10 @@ class _TrackerHistoryScreenState extends ConsumerState<TrackerHistoryScreen> {
     return DateTime.now().difference(entry.occurredAt).inDays < 7;
   }
 
-  List<TrackerHistoryEntry> _buildEntries(MockTrackerState state) {
+  List<TrackerHistoryEntry> _buildEntries(
+    MockTrackerState state,
+    RegionSettings region,
+  ) {
     final now = DateTime.now();
     final entries = <TrackerHistoryEntry>[
       TrackerHistoryEntry(
@@ -226,7 +233,7 @@ class _TrackerHistoryScreenState extends ConsumerState<TrackerHistoryScreen> {
           title: entry.isConfirmed ? 'Money saving entry' : 'Potential saving',
           subtitle: entry.description,
           occurredAt: entry.createdAt,
-          valueLabel: 'Rs ${entry.amount.toStringAsFixed(0)}',
+          valueLabel: formatMoney(entry.amount, region),
           completed: entry.isConfirmed,
         ),
       ),

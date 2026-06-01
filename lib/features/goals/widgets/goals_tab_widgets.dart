@@ -271,7 +271,9 @@ class GoalsHeader extends ConsumerWidget {
 }
 
 class GoalsEmptyIdentityCard extends StatelessWidget {
-  const GoalsEmptyIdentityCard({super.key});
+  final VoidCallback onAddGoal;
+
+  const GoalsEmptyIdentityCard({super.key, required this.onAddGoal});
 
   @override
   Widget build(BuildContext context) {
@@ -308,7 +310,7 @@ class GoalsEmptyIdentityCard extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           InkWell(
-            onTap: () {},
+            onTap: onAddGoal,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
@@ -340,8 +342,17 @@ class GoalsEmptyIdentityCard extends StatelessWidget {
 
 class TodayIdentityFocusCard extends StatelessWidget {
   final GoalModel primaryGoal;
+  final VoidCallback onViewRoutine;
+  final VoidCallback onAskCoach;
+  final VoidCallback onSwitchGoal;
 
-  const TodayIdentityFocusCard({super.key, required this.primaryGoal});
+  const TodayIdentityFocusCard({
+    super.key,
+    required this.primaryGoal,
+    required this.onViewRoutine,
+    required this.onAskCoach,
+    required this.onSwitchGoal,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -465,7 +476,7 @@ class TodayIdentityFocusCard extends StatelessWidget {
             children: [
               Expanded(
                 child: InkWell(
-                  onTap: () {},
+                  onTap: onViewRoutine,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
@@ -487,7 +498,7 @@ class TodayIdentityFocusCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: InkWell(
-                  onTap: () {},
+                  onTap: onAskCoach,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
@@ -520,7 +531,7 @@ class TodayIdentityFocusCard extends StatelessWidget {
                     Icons.swap_horiz_outlined,
                     color: OptivusColors.ink,
                   ),
-                  onPressed: () {},
+                  onPressed: onSwitchGoal,
                 ),
               ),
             ],

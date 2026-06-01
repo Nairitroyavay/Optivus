@@ -74,7 +74,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
           child: OnboardingSectionTitle(
             title: 'Notifications',
             subtitle:
-                'Mock reminder preferences only. No permission dialog is requested here.',
+                'Reminder preferences are saved locally here. No system permission dialog is requested during onboarding.',
           ),
         ),
         Expanded(
@@ -298,7 +298,22 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                           children: [
                             Expanded(
                               child: TextButton(
-                                onPressed: () {},
+                                onPressed: () {
+                                  ref
+                                      .read(mockOnboardingProvider.notifier)
+                                      .updateDraft(
+                                        (draft) => draft.copyWith(
+                                          notifications: draft.notifications
+                                              .copyWith(
+                                                osPermissionGranted: false,
+                                              ),
+                                          clearFinalPreview: true,
+                                        ),
+                                      );
+                                  ref
+                                      .read(mockOnboardingProvider.notifier)
+                                      .setStepDirty(10, true);
+                                },
                                 child: const Text(
                                   'Don\'t Allow',
                                   style: TextStyle(
@@ -352,7 +367,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                         SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Mock permission granted. Real OS permission will be requested in the app shell.',
+                            'Notification preference recorded. Real OS permission will be requested in the app shell.',
                             style: TextStyle(
                               fontSize: 12,
                               color: OptivusColors.textSecondary,

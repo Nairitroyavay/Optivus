@@ -71,18 +71,21 @@ class UsageAccessSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.settings_applications_outlined,
               title: 'Open Android Usage Access Settings',
-              subtitle: 'Native permission connects in backend/native pass.',
+              subtitle: 'Native settings intent connects in the Android pass.',
               accentColor: OptivusColors.roseAccent,
-              onTap: () {},
+              onTap: () => ref
+                  .read(profileSettingsProvider.notifier)
+                  .previewPermissionRecheck(ProfilePermissionType.usageAccess),
             ),
             LiquidActionRow(
               icon: Icons.refresh_rounded,
               title: 'I enabled it / recheck',
-              subtitle: 'Mock live check toggles this permission state.',
+              subtitle:
+                  'Records a local last-known status until native check is wired.',
               accentColor: OptivusColors.trackerAccent,
               onTap: () => ref
                   .read(profileSettingsProvider.notifier)
-                  .togglePermission(ProfilePermissionType.usageAccess),
+                  .previewPermissionRecheck(ProfilePermissionType.usageAccess),
             ),
           ],
         ),

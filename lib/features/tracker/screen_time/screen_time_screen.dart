@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 
 import 'screen_time_mock_data.dart';
@@ -16,14 +17,14 @@ class ScreenTimeScreen extends StatefulWidget {
 
 class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
   String _activePeriod = 'Today';
-  final bool _isUsageAccessConnected = true; // State B by default
+  final bool _isUsageAccessConnected = false;
 
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final bottomReserve = widget.onBack == null
         ? media.padding.bottom + 48.0
-        : 76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
+        : liquidTabBarReserve(context);
 
     final content = Scaffold(
       backgroundColor: Colors.transparent,

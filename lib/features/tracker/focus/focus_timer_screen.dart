@@ -185,7 +185,7 @@ class _FocusTimerScreenState extends ConsumerState<FocusTimerScreen> {
           title: 'Distraction risk',
           children: [
             Text(
-              'High-risk app usage today: ${riskMinutes}m. Usage Access can replace this mock summary in the native pass.',
+              'High-risk app usage today: ${riskMinutes}m. Usage Access can replace this local summary in the native pass.',
               style: const TextStyle(
                 fontSize: 13,
                 height: 1.4,

@@ -1164,7 +1164,7 @@ class _MeditationMusicFilterState extends State<MeditationMusicFilter>
                   builder: (context, overlaySetState) {
                     return GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () {},
+                      onTap: _keepDropdownOpen,
                       child: ScaleTransition(
                         scale: _fade,
                         alignment: Alignment.topRight,
@@ -1184,6 +1184,8 @@ class _MeditationMusicFilterState extends State<MeditationMusicFilter>
     Overlay.of(context).insert(overlay);
     _anim.forward();
   }
+
+  void _keepDropdownOpen() {}
 
   void _closeDropdown({bool immediate = false}) {
     final overlay = _overlay;

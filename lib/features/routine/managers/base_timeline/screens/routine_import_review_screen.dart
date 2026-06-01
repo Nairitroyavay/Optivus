@@ -47,7 +47,7 @@ class _RoutineImportReviewScreenState
       eyebrow: 'Routine import',
       title: '${_sourceLabel(widget.source)} Review',
       subtitle:
-          'Review parsed blocks before saving to Base Timeline. AI/photo parsing is mocked for this frontend pass.',
+          'Review parsed blocks before saving to Base Timeline. AI/photo parsing is represented as a local preview in this frontend pass.',
       accentColor: OptivusColors.routineAccent,
       onBack: widget.onBack,
       children: [
@@ -502,12 +502,12 @@ String _sourceLabel(RoutineImportSource source) {
 String _sourceSummary(RoutineImportSource source) {
   return switch (source) {
     RoutineImportSource.classes =>
-      'Mock parsed from class timetable text/photo import. Review hard lecture/lab blocks before saving.',
+      'Parsed preview from class timetable text/photo import. Review hard lecture/lab blocks before saving.',
     RoutineImportSource.work =>
-      'Mock parsed from job/work/business schedule import. Review fixed and flexible blocks.',
+      'Parsed preview from job/work/business schedule import. Review fixed and flexible blocks.',
     RoutineImportSource.eating =>
-      'Mock parsed from meal-plan/eating sheet import. Review meal windows and missing dish info.',
+      'Parsed preview from meal-plan/eating sheet import. Review meal windows and missing dish info.',
     RoutineImportSource.skinCare =>
-      'Mock parsed from skin care routine import. Review steps, product timing, and repeat days.',
+      'Parsed preview from skin care routine import. Review steps, product timing, and repeat days.',
   };
 }

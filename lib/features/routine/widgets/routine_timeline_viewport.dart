@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
@@ -83,7 +84,7 @@ class _RoutineTimelineViewportState
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom + 72 + 60;
+    final bottomPadding = liquidTabBarReserve(context) + 24;
     final timelineHeight = widget.layout.totalHeight;
     final itemLayouts = _buildItemLayouts();
 

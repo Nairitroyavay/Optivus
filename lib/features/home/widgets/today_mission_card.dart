@@ -91,7 +91,7 @@ class _TodayMissionCardState extends State<TodayMissionCard>
     final summary = widget.summary;
     final totalTasks = summary.actionsTotal;
     final completedTasks = summary.actionsDone;
-    // Fallback to a mock planned minutes if not available in summary directly
+    // Fallback to planned focus minutes if not available in summary directly.
     final completedMinutes = summary.focusMinutes;
     final progress = summary.percentage;
 

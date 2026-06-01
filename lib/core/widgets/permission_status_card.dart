@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 import 'package:optivus/core/theme/optivus_colors.dart';
 
-/// Mock permission card with connect/disconnect toggle.
+/// Permission card with local preview connect/disconnect toggle.
 /// Shows status badge with colored indicator.
 class PermissionStatusCard extends StatelessWidget {
   final String title;
   final String description;
   final IconData icon;
-  final String status; // 'Not connected', 'Mock connected', 'Coming later'
+  final String status; // 'Not connected', 'Preview connected', 'Coming later'
   final VoidCallback? onTap;
 
   const PermissionStatusCard({
@@ -20,7 +20,7 @@ class PermissionStatusCard extends StatelessWidget {
     this.onTap,
   });
 
-  bool get _isConnected => status == 'Mock connected';
+  bool get _isConnected => status == 'Preview connected';
   bool get _isComingLater => status == 'Coming later';
 
   Color get _statusColor {
