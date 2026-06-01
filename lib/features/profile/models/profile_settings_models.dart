@@ -67,10 +67,10 @@ extension ProfilePermissionTypeLabel on ProfilePermissionType {
       ProfilePermissionType.notifications =>
         'Open Android notification settings',
       ProfilePermissionType.usageAccess => 'Open Android Usage Access settings',
-      ProfilePermissionType.location => 'Allow Location / Open Settings',
-      ProfilePermissionType.healthConnect => 'Connect Health Connect',
-      ProfilePermissionType.cameraPhotos => 'Allow Camera / Photos',
-      ProfilePermissionType.microphone => 'Allow Microphone',
+      ProfilePermissionType.location => 'Open Android location settings',
+      ProfilePermissionType.healthConnect => 'Open Health Connect settings',
+      ProfilePermissionType.cameraPhotos => 'Open Android media settings',
+      ProfilePermissionType.microphone => 'Open Android microphone settings',
     };
   }
 }
@@ -213,7 +213,7 @@ class NotificationSettingsModel {
     this.quietAfter11 = true,
     this.quietDuringHardBlocks = true,
     this.quietDuringSleep = true,
-    this.permissionStatus = ProfileConnectionStatus.connected,
+    this.permissionStatus = ProfileConnectionStatus.notConnected,
   });
 
   factory NotificationSettingsModel.defaults() {
@@ -260,7 +260,6 @@ class UserPreferences {
   final String bottomTabLayout;
   final String timelineDisplay;
   final String coachVoice;
-  final String language;
 
   const UserPreferences({
     this.haptics = true,
@@ -270,7 +269,6 @@ class UserPreferences {
     this.bottomTabLayout = 'Icons',
     this.timelineDisplay = 'Timeline',
     this.coachVoice = 'Text first',
-    this.language = 'English',
   });
 
   UserPreferences copyWith({
@@ -281,7 +279,6 @@ class UserPreferences {
     String? bottomTabLayout,
     String? timelineDisplay,
     String? coachVoice,
-    String? language,
   }) {
     return UserPreferences(
       haptics: haptics ?? this.haptics,
@@ -291,7 +288,6 @@ class UserPreferences {
       bottomTabLayout: bottomTabLayout ?? this.bottomTabLayout,
       timelineDisplay: timelineDisplay ?? this.timelineDisplay,
       coachVoice: coachVoice ?? this.coachVoice,
-      language: language ?? this.language,
     );
   }
 }

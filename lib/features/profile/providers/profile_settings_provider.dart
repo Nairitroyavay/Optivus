@@ -37,33 +37,39 @@ class ProfileSettingsState {
       permissions: const [
         PermissionStatusModel(
           type: ProfilePermissionType.notifications,
-          status: ProfileConnectionStatus.connected,
-          lastChecked: 'Today',
+          status: ProfileConnectionStatus.notConnected,
+          lastChecked: 'Native check pending',
+          liveCheckCapable: false,
         ),
         PermissionStatusModel(
           type: ProfilePermissionType.usageAccess,
           status: ProfileConnectionStatus.notConnected,
-          lastChecked: 'Not checked',
+          lastChecked: 'Native check pending',
+          liveCheckCapable: false,
         ),
         PermissionStatusModel(
           type: ProfilePermissionType.location,
-          status: ProfileConnectionStatus.connected,
-          lastChecked: 'Today',
+          status: ProfileConnectionStatus.notConnected,
+          lastChecked: 'Native check pending',
+          liveCheckCapable: false,
         ),
         PermissionStatusModel(
           type: ProfilePermissionType.healthConnect,
           status: ProfileConnectionStatus.notConnected,
-          lastChecked: 'Not checked',
+          lastChecked: 'Native check pending',
+          liveCheckCapable: false,
         ),
         PermissionStatusModel(
           type: ProfilePermissionType.cameraPhotos,
           status: ProfileConnectionStatus.notConnected,
-          lastChecked: 'Not checked',
+          lastChecked: 'Native check pending',
+          liveCheckCapable: false,
         ),
         PermissionStatusModel(
           type: ProfilePermissionType.microphone,
           status: ProfileConnectionStatus.notConnected,
-          lastChecked: 'Not checked',
+          lastChecked: 'Native check pending',
+          liveCheckCapable: false,
         ),
       ],
       services: const [
@@ -95,10 +101,7 @@ class ProfileSettingsState {
       ],
       deletionRequest: const DeletionRequestModel(),
       selectedDeleteScopes: const <String>{},
-      archivedIdentities: const [
-        'Focused Student with stable study systems',
-        'Early Fitness Reset identity',
-      ],
+      archivedIdentities: const [],
       bugReports: const [],
     );
   }
@@ -176,16 +179,14 @@ class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
     );
   }
 
-  void togglePermission(ProfilePermissionType type) {
+  void previewPermissionRecheck(ProfilePermissionType type) {
     state = state.copyWith(
       permissions: [
         for (final permission in state.permissions)
           if (permission.type == type)
             permission.copyWith(
-              status: permission.status == ProfileConnectionStatus.connected
-                  ? ProfileConnectionStatus.notConnected
-                  : ProfileConnectionStatus.connected,
-              lastChecked: 'Just now',
+              status: ProfileConnectionStatus.notConnected,
+              lastChecked: _permissionPreviewResult(type),
             )
           else
             permission,
@@ -193,12 +194,19 @@ class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
     );
   }
 
+  void togglePermission(ProfilePermissionType type) {
+    previewPermissionRecheck(type);
+  }
+
   void recheckService(ConnectedServiceType type) {
     state = state.copyWith(
       services: [
         for (final service in state.services)
           if (service.type == type)
-            service.copyWith(lastChecked: 'Just now')
+            service.copyWith(
+              status: _servicePreviewStatus(type),
+              lastChecked: _servicePreviewResult(type),
+            )
           else
             service,
       ],
@@ -281,3 +289,44 @@ final profileSettingsProvider =
     StateNotifierProvider<ProfileSettingsNotifier, ProfileSettingsState>((ref) {
       return ProfileSettingsNotifier();
     });
+
+String _permissionPreviewResult(ProfilePermissionType type) {
+  return switch (type) {
+    ProfilePermissionType.notifications =>
+      'Native Android notification check pending',
+    ProfilePermissionType.usageAccess => 'Android Usage Access check pending',
+    ProfilePermissionType.location =>
+      'Android location permission check pending',
+    ProfilePermissionType.healthConnect =>
+      'Native Health Connect permission check pending',
+    ProfilePermissionType.cameraPhotos =>
+      'Android media permission check pending',
+    ProfilePermissionType.microphone =>
+      'Android microphone permission check pending',
+  };
+}
+
+ProfileConnectionStatus _servicePreviewStatus(ConnectedServiceType type) {
+  return switch (type) {
+    ConnectedServiceType.cloudflareR2 => ProfileConnectionStatus.notConfigured,
+    ConnectedServiceType.mapbox => ProfileConnectionStatus.notConfigured,
+    ConnectedServiceType.cloudflareWorkers =>
+      ProfileConnectionStatus.notConfigured,
+    ConnectedServiceType.healthConnect => ProfileConnectionStatus.notConnected,
+    ConnectedServiceType.androidUsageAccess =>
+      ProfileConnectionStatus.notConnected,
+  };
+}
+
+String _servicePreviewResult(ConnectedServiceType type) {
+  return switch (type) {
+    ConnectedServiceType.cloudflareR2 => 'R2 upload config not added yet',
+    ConnectedServiceType.mapbox =>
+      'Mapbox token/style config not connected yet',
+    ConnectedServiceType.cloudflareWorkers =>
+      'Worker endpoint not configured yet',
+    ConnectedServiceType.healthConnect => 'Native Health Connect pass pending',
+    ConnectedServiceType.androidUsageAccess =>
+      'Android usage access check pending',
+  };
+}

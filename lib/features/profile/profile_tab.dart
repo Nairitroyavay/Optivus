@@ -11,12 +11,13 @@ import 'package:optivus/features/profile/screens/logout_dialog.dart'
     show showLogoutDialog;
 import 'package:optivus/features/profile/screens/profile_control_screens.dart';
 import 'package:optivus/features/profile/screens/region_localization_screen.dart';
+import 'package:optivus/features/profile/utils/profile_display_name.dart';
 import 'package:optivus/features/profile/widgets/profile_header_card.dart';
 import 'package:optivus/features/profile/widgets/profile_setting_group.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/user_profile.dart';
-import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/profile_frontend_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 
@@ -141,19 +142,21 @@ class _ProfileMainScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(mockUserProfileProvider);
+    final profile = ref.watch(currentUserProfileProvider);
     final settings = ref.watch(profileSettingsProvider);
     final auth = ref.watch(authProvider);
     final region = ref.watch(regionSettingsProvider);
-    final routineItems = ref.watch(mockRoutineProvider);
+    final routineItems = ref.watch(currentRoutineItemsProvider);
     final bottomReserve = liquidTabBarReserve(context) + 16;
-    final displayName = settings.profile.name.trim().isNotEmpty
-        ? settings.profile.name.trim()
-        : profile.displayName;
+    final accountEmail = _accountEmail(auth.user?.email, profile.email);
+    final displayName = resolveSafeProfileDisplayName(
+      profileName: settings.profile.name,
+      authDisplayName: auth.user?.displayName ?? profile.displayName,
+      email: accountEmail,
+    );
     final usernameLabel = settings.profile.username.trim().isEmpty
         ? null
         : '@${settings.profile.username.trim()}';
-    final emailLabel = _accountEmail(auth.user?.email, profile.email);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -238,7 +241,7 @@ class _ProfileMainScreen extends ConsumerWidget {
                       profile: profile,
                       baseTimelineReady: routineItems.isNotEmpty,
                     ),
-                    _buildAccountGroup(settings, emailLabel),
+                    _buildAccountGroup(settings, accountEmail),
                     _buildPermissionsGroup(settings),
                     _buildServicesGroup(settings),
                     _buildPreferencesGroup(settings, region),

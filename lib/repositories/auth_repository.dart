@@ -60,11 +60,10 @@ class FakeAuthRepository implements AuthRepository {
         displayName: 'Dev Test',
       );
     } else {
-      // Normal fake sign in
       _currentUser = AuthUser(
         uid: 'fake-uid-${DateTime.now().millisecondsSinceEpoch}',
         email: normalizedEmail,
-        displayName: normalizedEmail.split('@')[0],
+        displayName: null,
       );
     }
 

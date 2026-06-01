@@ -171,6 +171,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
+  void markOnboardingIncomplete(AuthUser user) {
+    state = state.copyWith(
+      user: user,
+      status: AuthFlowStatus.signedInOnboardingIncomplete,
+      clearError: true,
+    );
+  }
+
   static AuthFlowStatus _statusFor(AuthUser? user, bool onboardingCompleted) {
     if (user == null) return AuthFlowStatus.signedOut;
     return onboardingCompleted

@@ -196,13 +196,13 @@ class RegionLocalizationScreen extends ConsumerWidget {
             _SummaryRow(
               icon: Icons.account_balance_wallet_outlined,
               title: 'Payment options',
-              value: _paymentModeLabel(settings.paymentRegion),
+              value: _paymentModeLabel(_validPaymentRegion(settings)),
             ),
             const SizedBox(height: 10),
             _SegmentRow<PaymentRegion>(
               label: 'Payment mode',
               values: _paymentModesFor(settings),
-              selected: settings.paymentRegion,
+              selected: _validPaymentRegion(settings),
               labelFor: _paymentModeLabel,
               onSelected: (value) =>
                   notifier.save(settings.copyWith(paymentRegion: value)),
@@ -233,6 +233,13 @@ List<PaymentRegion> _paymentModesFor(RegionSettings settings) {
     ];
   }
   return const [PaymentRegion.manualOnly, PaymentRegion.global];
+}
+
+PaymentRegion _validPaymentRegion(RegionSettings settings) {
+  final values = _paymentModesFor(settings);
+  return values.contains(settings.paymentRegion)
+      ? settings.paymentRegion
+      : values.first;
 }
 
 String _paymentModeLabel(PaymentRegion value) {
@@ -380,6 +387,10 @@ class _SegmentRow<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveSelected = values.contains(selected)
+        ? selected
+        : values.first;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -399,7 +410,7 @@ class _SegmentRow<T> extends StatelessWidget {
               .map(
                 (value) => _PresetChip(
                   label: labelFor(value),
-                  selected: selected == value,
+                  selected: effectiveSelected == value,
                   onTap: () => onSelected(value),
                 ),
               )

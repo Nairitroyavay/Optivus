@@ -134,36 +134,52 @@ class ProfileSettingsStateSeed {
   static const permissions = [
     PermissionStatusModel(
       type: ProfilePermissionType.notifications,
-      status: ProfileConnectionStatus.connected,
-      lastChecked: 'Today',
+      status: ProfileConnectionStatus.notConnected,
+      lastChecked: 'Native check pending',
+      liveCheckCapable: false,
     ),
     PermissionStatusModel(
       type: ProfilePermissionType.usageAccess,
       status: ProfileConnectionStatus.notConnected,
-      lastChecked: 'Not checked',
+      lastChecked: 'Native check pending',
+      liveCheckCapable: false,
     ),
     PermissionStatusModel(
       type: ProfilePermissionType.location,
-      status: ProfileConnectionStatus.connected,
-      lastChecked: 'Today',
+      status: ProfileConnectionStatus.notConnected,
+      lastChecked: 'Native check pending',
+      liveCheckCapable: false,
     ),
     PermissionStatusModel(
       type: ProfilePermissionType.healthConnect,
       status: ProfileConnectionStatus.notConnected,
-      lastChecked: 'Not checked',
+      lastChecked: 'Native check pending',
+      liveCheckCapable: false,
+    ),
+    PermissionStatusModel(
+      type: ProfilePermissionType.cameraPhotos,
+      status: ProfileConnectionStatus.notConnected,
+      lastChecked: 'Native check pending',
+      liveCheckCapable: false,
+    ),
+    PermissionStatusModel(
+      type: ProfilePermissionType.microphone,
+      status: ProfileConnectionStatus.notConnected,
+      lastChecked: 'Native check pending',
+      liveCheckCapable: false,
     ),
   ];
 
   static const services = [
     ConnectedServiceStatusModel(
       type: ConnectedServiceType.cloudflareR2,
-      status: ProfileConnectionStatus.connected,
-      lastChecked: 'Today',
+      status: ProfileConnectionStatus.notConfigured,
+      lastChecked: 'Not configured',
     ),
     ConnectedServiceStatusModel(
       type: ConnectedServiceType.mapbox,
-      status: ProfileConnectionStatus.connected,
-      lastChecked: 'Today',
+      status: ProfileConnectionStatus.notConfigured,
+      lastChecked: 'Not configured',
     ),
     ConnectedServiceStatusModel(
       type: ConnectedServiceType.healthConnect,
@@ -174,6 +190,11 @@ class ProfileSettingsStateSeed {
       type: ConnectedServiceType.androidUsageAccess,
       status: ProfileConnectionStatus.notConnected,
       lastChecked: 'Not checked',
+    ),
+    ConnectedServiceStatusModel(
+      type: ConnectedServiceType.cloudflareWorkers,
+      status: ProfileConnectionStatus.notConfigured,
+      lastChecked: 'Not configured',
     ),
   ];
 }

@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'home_glass_widgets.dart';
-import 'sheets/mission_detail_sheet.dart';
 
 class TodayMissionCard extends StatefulWidget {
   final HomeMissionSummary summary;
+  final VoidCallback? onTap;
 
-  const TodayMissionCard({super.key, required this.summary});
+  const TodayMissionCard({super.key, required this.summary, this.onTap});
 
   @override
   State<TodayMissionCard> createState() => _TodayMissionCardState();
@@ -43,36 +43,45 @@ class _TodayMissionCardState extends State<TodayMissionCard>
   }
 
   Widget _statPill(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white, width: 1.2),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: OptivusColors.textSecondary.withValues(alpha: 0.9),
-              letterSpacing: 0.8,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 68, maxWidth: 86),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white, width: 1.2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.textSecondary.withValues(alpha: 0.9),
+                letterSpacing: 0.8,
+              ),
             ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.textPrimary,
-              letterSpacing: -0.5,
+            const SizedBox(height: 3),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -87,9 +96,7 @@ class _TodayMissionCardState extends State<TodayMissionCard>
     final progress = summary.percentage;
 
     return GestureDetector(
-      onTap: () {
-        MissionDetailSheet.show(context);
-      },
+      onTap: widget.onTap,
       child: HomeGlassCard(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
         child: Column(
@@ -142,9 +149,10 @@ class _TodayMissionCardState extends State<TodayMissionCard>
                 ),
               ),
             const SizedBox(height: 14),
-            // Stat pills
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 _statPill('Actions', '$completedTasks/$totalTasks'),
                 _statPill('Focus', '${completedMinutes}m'),

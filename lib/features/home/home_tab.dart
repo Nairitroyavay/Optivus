@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
+import 'package:optivus/features/home/providers/home_navigation_provider.dart';
+import 'package:optivus/features/home/screens/home_mission_detail_screen.dart';
 
 import 'package:optivus/app/app_navigation_controller.dart';
 
@@ -25,13 +29,15 @@ class HomeTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // We get the user name from the existing mock profile or fall back
-    final userProfile = ref.watch(mockUserProfileProvider);
-    final userName = userProfile.displayName.isNotEmpty
-        ? userProfile.displayName
-        : 'Nairit';
+    final detailTarget = ref.watch(homeDetailViewRequestProvider);
+    final profile = ref.watch(mockUserProfileProvider);
+    final auth = ref.watch(authProvider);
+    final userName = _safeHomeDisplayName(
+      profileName: profile.displayName,
+      authDisplayName: auth.user?.displayName,
+      email: auth.user?.email ?? profile.email,
+    );
 
-    // We get all home dashboard state from our new provider
     final dashboardState = ref.watch(homeDashboardProvider);
     final trackerState = ref.watch(mockTrackerProvider);
     final region = ref.watch(regionSettingsProvider);
@@ -64,6 +70,18 @@ class HomeTab extends ConsumerWidget {
       badHabitsAvoided: dashboardState.missionSummary.badHabitsAvoided,
     );
 
+    if (detailTarget.view == HomeDetailView.missionDetail) {
+      return HomeMissionDetailScreen(
+        summary: missionSummary,
+        onBack: () {
+          ref.read(homeDetailViewRequestProvider.notifier).state =
+              const HomeDetailTarget.none();
+        },
+      );
+    }
+
+    final bottomReserve = liquidTabBarReserve(context) + 8;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
@@ -78,7 +96,7 @@ class HomeTab extends ConsumerWidget {
             Expanded(
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 180),
+                padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -92,7 +110,13 @@ class HomeTab extends ConsumerWidget {
                       actionState: dashboardState.nowNextAction,
                     ),
                     const SizedBox(height: 16),
-                    TodayMissionCard(summary: missionSummary),
+                    TodayMissionCard(
+                      summary: missionSummary,
+                      onTap: () {
+                        ref.read(homeDetailViewRequestProvider.notifier).state =
+                            const HomeDetailTarget.mission();
+                      },
+                    ),
                     const SizedBox(height: 16),
                     LifeOsSnapshot(pillars: dashboardState.lifeOsSnapshot),
                     const SizedBox(height: 16),
@@ -118,6 +142,49 @@ class HomeTab extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _safeHomeDisplayName({
+  required String? profileName,
+  required String? authDisplayName,
+  required String? email,
+}) {
+  String clean(String? value) => (value ?? '').trim();
+
+  final emailValue = clean(email).toLowerCase();
+  final emailLocalPart = emailValue.contains('@')
+      ? emailValue.split('@').first
+      : '';
+
+  bool isEmailLike(String value) {
+    final lower = value.toLowerCase();
+    final hasWhitespace = RegExp(r'\s+').hasMatch(value);
+    return lower.contains('@') ||
+        lower.contains('.com') ||
+        lower.contains('.net') ||
+        lower.contains('.org') ||
+        (emailLocalPart.isNotEmpty && lower == emailLocalPart) ||
+        (value.length > 24 && !hasWhitespace);
+  }
+
+  final candidates = [clean(profileName), clean(authDisplayName)];
+
+  for (final candidate in candidates) {
+    if (candidate.isEmpty) continue;
+    if (isEmailLike(candidate)) continue;
+
+    final firstPart = candidate.split(RegExp(r'\s+')).first.trim();
+    if (firstPart.isNotEmpty && firstPart.length <= 18) {
+      return firstPart;
+    }
+
+    return candidate.length > 18
+        ? '${candidate.substring(0, 18)}...'
+        : candidate;
+  }
+
+  if (emailValue == 'test@optivus.dev') return 'Nairit';
+  return 'there';
 }
 
 double _confirmedMoneySavedToday(MockTrackerState state) {

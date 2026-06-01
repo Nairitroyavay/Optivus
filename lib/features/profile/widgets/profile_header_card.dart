@@ -19,6 +19,10 @@ class ProfileHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final safeUsername = usernameLabel?.trim().isNotEmpty == true
+        ? usernameLabel!.trim()
+        : 'Set username';
+
     return LiquidGlassPanel(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -125,10 +129,7 @@ class ProfileHeaderCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      usernameLabel ??
-                          (profile.email.isNotEmpty
-                              ? profile.email
-                              : 'Signed in'),
+                      safeUsername,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

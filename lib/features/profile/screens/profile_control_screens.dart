@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
@@ -8,11 +9,13 @@ import 'package:optivus/features/coach/providers/coach_navigation_provider.dart'
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/profile/providers/profile_navigation_provider.dart';
 import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
-import 'package:optivus/features/profile/providers/profile_mock_data.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
+import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
+import 'package:optivus/models/goal_models.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/user_profile.dart';
-import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/profile_frontend_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 
 typedef OpenProfileDetail = void Function(ProfileDetailTarget target);
@@ -53,7 +56,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(profileSettingsProvider).profile;
-    final identity = ref.watch(mockIdentityStatementProvider);
+    final goals = ref.watch(currentGoalsProvider);
+    final identity = _identityStatementLabel(goals);
 
     return LiquidDetailScaffold(
       eyebrow: 'Profile',
@@ -192,12 +196,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 .read(profileSettingsProvider.notifier)
                 .updateProfile(
                   settings.copyWith(
-                    name: _name.text.trim().isEmpty
-                        ? settings.name
-                        : _name.text.trim(),
-                    username: _username.text.trim().isEmpty
-                        ? settings.username
-                        : _username.text.trim(),
+                    name: _name.text.trim(),
+                    username: _username.text.trim().replaceFirst('@', ''),
                     bio: _bio.text.trim(),
                   ),
                 );
@@ -221,7 +221,17 @@ class SystemSetupScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(mockUserProfileProvider);
+    final profile = ref.watch(currentUserProfileProvider);
+    final onboarding = ref.watch(currentOnboardingStateProvider);
+    final routineItems = ref.watch(currentRoutineItemsProvider);
+    final activeGoals = ref
+        .watch(currentGoalsProvider)
+        .where((goal) => !goal.isArchived && !goal.isPaused)
+        .length;
+    final coachPrefs = ref.watch(currentCoachPreferencesProvider);
+    final notificationSettings = ref
+        .watch(profileSettingsProvider)
+        .notifications;
     final region = ref.watch(regionSettingsProvider);
 
     return LiquidDetailScaffold(
@@ -238,29 +248,33 @@ class SystemSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.work_outline,
               title: 'Life Role & Lifestyle',
-              subtitle: _profileRoleLabel(profile),
+              subtitle: _profileRoleLabel(profile, onboarding.draft),
               accentColor: OptivusColors.info,
-              onTap: () => _showSetupReview(
+              onTap: () => _showReviewOnlySheet(
                 context,
                 'Life Role & Lifestyle',
-                'Review role, work mode, exercise level, stress, sleep quality, and water intake. A later backend pass can reopen the exact onboarding step.',
+                'Review your current setup. Full editing will connect through onboarding edit mode.',
+                details: _lifeRoleReview(profile, onboarding.draft),
               ),
             ),
             LiquidActionRow(
               icon: Icons.monitor_weight_outlined,
               title: 'Body Basics',
-              subtitle: _bodyBasicsLabel(profile, region),
+              subtitle: _bodyBasicsLabel(profile, onboarding.draft, region),
               accentColor: OptivusColors.roseAccent,
-              onTap: () => _showSetupReview(
+              onTap: () => _showReviewOnlySheet(
                 context,
                 'Body Basics',
-                'Body basics power calories, protein, fitness setup, and coach context. Past estimates are kept historically stable.',
+                'Review your body baseline. Full editing will connect through onboarding edit mode.',
+                details: _bodyBasicsReview(profile, onboarding.draft, region),
               ),
             ),
             LiquidActionRow(
               icon: Icons.schedule_rounded,
               title: 'Base Timeline',
-              subtitle: 'Classes, work, eating, fixed, and skin care blocks.',
+              subtitle: routineItems.isEmpty
+                  ? 'Base timeline not set'
+                  : '${routineItems.length} routine blocks ready',
               accentColor: OptivusColors.routineAccent,
               onTap: () {
                 ref.read(appNavigationProvider.notifier).goToRoutine();
@@ -274,7 +288,7 @@ class SystemSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.restaurant_rounded,
               title: 'Eating Setup',
-              subtitle: 'Open Routine eating timeline setup.',
+              subtitle: _eatingSetupLabel(onboarding.draft),
               accentColor: OptivusColors.roseAccent,
               onTap: () {
                 ref.read(appNavigationProvider.notifier).goToRoutine();
@@ -293,14 +307,20 @@ class SystemSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.flag_outlined,
               title: 'Goals Setup',
-              subtitle: 'Goals owns identity logic and active proof load.',
+              subtitle: activeGoals == 0
+                  ? 'No active goals'
+                  : '$activeGoals active ${activeGoals == 1 ? 'goal' : 'goals'}',
               accentColor: OptivusColors.goalsAccent,
-              onTap: () => ref.read(appNavigationProvider.notifier).goToGoals(),
+              onTap: () {
+                ref.read(appNavigationProvider.notifier).goToGoals();
+                ref.read(goalsDetailViewRequestProvider.notifier).state =
+                    const GoalsDetailTarget(view: GoalsDetailView.goalSettings);
+              },
             ),
             LiquidActionRow(
               icon: Icons.psychology_outlined,
               title: 'Coach Setup',
-              subtitle: 'Open Coach Settings inside Coach tab.',
+              subtitle: '${coachPrefs.name} · ${coachPrefs.style}',
               accentColor: OptivusColors.coachAccent,
               onTap: () {
                 ref.read(appNavigationProvider.notifier).goToCoach();
@@ -311,7 +331,8 @@ class SystemSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.notifications_active_outlined,
               title: 'Notifications',
-              subtitle: 'Reminder types, intensity, quiet hours.',
+              subtitle:
+                  '${notificationSettings.intensity} intensity · Android status is last known',
               accentColor: _profileAccent,
               onTap: () => onOpenProfileDetail(
                 const ProfileDetailTarget(
@@ -413,7 +434,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
               icon: Icons.android_rounded,
               title: settings.permissionStatus.label,
               subtitle:
-                  'If missing, use the Android settings action when native wiring is added.',
+                  'Last known status. Live Android notification checks connect in the native pass.',
               accentColor:
                   settings.permissionStatus == ProfileConnectionStatus.connected
                   ? OptivusColors.success
@@ -422,7 +443,7 @@ class NotificationSettingsScreen extends ConsumerWidget {
             _SmallActionButton(
               label: 'Open Android Settings',
               color: _profileAccent,
-              onTap: () => _showSetupReview(
+              onTap: () => _showReviewOnlySheet(
                 context,
                 'Android Settings',
                 'Native Android notification settings intent will connect here.',
@@ -524,8 +545,18 @@ class PermissionDetailScreen extends ConsumerWidget {
               icon: _permissionIcon(permissionType),
               title: permission.status.label,
               subtitle:
-                  'Android live check connects in the native pass · last checked ${permission.lastChecked}',
+                  '${permission.sourceOfTruth} · ${permission.lastChecked}',
               accentColor: _statusColor(permission.status),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Live Android permission check connects in the native pass.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -547,14 +578,25 @@ class PermissionDetailScreen extends ConsumerWidget {
           title: 'Action',
           children: [
             LiquidActionRow(
-              icon: Icons.open_in_new_rounded,
+              icon: Icons.refresh_rounded,
               title: 'Preview recheck',
               subtitle:
-                  '${permissionType.primaryAction}. This updates the frontend status preview until native Android permission wiring is connected.',
+                  'Keeps the status honest until native permission wiring is connected.',
               accentColor: _profileAccent,
               onTap: () => ref
                   .read(profileSettingsProvider.notifier)
-                  .togglePermission(permissionType),
+                  .previewPermissionRecheck(permissionType),
+            ),
+            LiquidActionRow(
+              icon: Icons.open_in_new_rounded,
+              title: permissionType.primaryAction,
+              subtitle: 'Native settings intent connects in the Android pass.',
+              accentColor: _profileAccent,
+              onTap: () => _showReviewOnlySheet(
+                context,
+                permissionType.primaryAction,
+                'This will open the correct Android settings screen after native platform wiring is added.',
+              ),
             ),
           ],
         ),
@@ -650,9 +692,16 @@ class ConnectedServiceDetailScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: _serviceIcon(serviceType),
               title: service.status.label,
-              subtitle:
-                  'Last checked ${service.lastChecked}${service.selectedStyle == null ? '' : ' · ${service.selectedStyle}'}',
+              subtitle: _serviceStatusDetail(service),
               accentColor: _statusColor(service.status),
+              onTap: () => ref
+                  .read(profileSettingsProvider.notifier)
+                  .recheckService(serviceType),
+            ),
+            const SizedBox(height: 10),
+            _SmallActionButton(
+              label: 'Preview recheck',
+              color: _profileAccent,
               onTap: () => ref
                   .read(profileSettingsProvider.notifier)
                   .recheckService(serviceType),
@@ -1745,29 +1794,140 @@ IconData _serviceIcon(ConnectedServiceType type) {
   };
 }
 
-String _profileRoleLabel(UserProfile profile) {
+String _serviceStatusDetail(ConnectedServiceStatusModel service) {
+  final style = service.selectedStyle == null
+      ? ''
+      : ' · ${service.selectedStyle}';
+  if (service.lastChecked == 'Not checked' ||
+      service.lastChecked == 'Not configured') {
+    return 'Last known status: ${service.lastChecked}$style';
+  }
+  return '${service.status.label}: ${service.lastChecked}$style';
+}
+
+String _identityStatementLabel(List<GoalModel> goals) {
+  final activeGoals = goals.where((goal) => !goal.isArchived && !goal.isPaused);
+  if (activeGoals.isEmpty) {
+    return 'No active identity goal yet.';
+  }
+  final titles = activeGoals
+      .map((goal) => goal.identityTitle.trim())
+      .where((title) => title.isNotEmpty)
+      .take(3)
+      .toList(growable: false);
+  return titles.isEmpty ? 'No active identity goal yet.' : titles.join(' · ');
+}
+
+String _profileRoleLabel(UserProfile profile, OnboardingDraft draft) {
   final parts = <String>[
-    if (profile.lifeRole.trim().isNotEmpty) profile.lifeRole.trim(),
+    if (profile.lifeRole.trim().isNotEmpty)
+      _lifeRoleName(profile.lifeRole.trim()),
     if (profile.workingExtra?.trim().isNotEmpty == true)
       profile.workingExtra!.trim(),
     if (profile.businessMode?.trim().isNotEmpty == true)
       profile.businessMode!.trim(),
   ];
+  if (parts.isEmpty) {
+    parts.addAll([
+      if (draft.lifeRole.lifeRole?.trim().isNotEmpty == true)
+        _lifeRoleName(draft.lifeRole.lifeRole!),
+      if (draft.lifeRole.workType?.trim().isNotEmpty == true)
+        draft.lifeRole.workType!.trim(),
+      if (draft.lifeRole.businessMode?.trim().isNotEmpty == true)
+        draft.lifeRole.businessMode!.trim(),
+    ]);
+  }
   return parts.isEmpty ? 'Not completed' : parts.join(' + ');
 }
 
-String _bodyBasicsLabel(UserProfile profile, RegionSettings region) {
-  if (profile.weight <= 0 || profile.height <= 0) return 'Not completed';
+String _bodyBasicsLabel(
+  UserProfile profile,
+  OnboardingDraft draft,
+  RegionSettings region,
+) {
+  final weightKg = profile.weight > 0
+      ? profile.weight
+      : (draft.bodyBasics.weightKg ?? 0);
+  final heightCm = profile.height > 0
+      ? profile.height
+      : (draft.bodyBasics.heightCm ?? 0);
+  if (weightKg <= 0 || heightCm <= 0) return 'Not completed';
 
   final weight = switch (region.weightUnit) {
-    WeightUnit.lb => '${(profile.weight * 2.20462).round()} lb',
-    WeightUnit.kg => '${profile.weight.round()} kg',
+    WeightUnit.lb => '${(weightKg * 2.20462).round()} lb',
+    WeightUnit.kg => '${weightKg.round()} kg',
   };
   final height = switch (region.heightUnit) {
-    HeightUnit.ftIn => _cmToFeetInches(profile.height),
-    HeightUnit.cm => '${profile.height.round()} cm',
+    HeightUnit.ftIn => _cmToFeetInches(heightCm),
+    HeightUnit.cm => '${heightCm.round()} cm',
   };
   return '$weight · $height';
+}
+
+String _lifeRoleReview(UserProfile profile, OnboardingDraft draft) {
+  final role = _profileRoleLabel(profile, draft);
+  final details = [
+    if (profile.exerciseLevel.trim().isNotEmpty)
+      'Exercise: ${profile.exerciseLevel.trim()}'
+    else if (draft.lifeRole.exerciseLevel?.trim().isNotEmpty == true)
+      'Exercise: ${draft.lifeRole.exerciseLevel!.trim()}',
+    if (profile.stressLevel.trim().isNotEmpty)
+      'Stress: ${profile.stressLevel.trim()}'
+    else if (draft.lifeRole.stressLevel?.trim().isNotEmpty == true)
+      'Stress: ${draft.lifeRole.stressLevel!.trim()}',
+    if (profile.sleepQuality.trim().isNotEmpty)
+      'Sleep: ${profile.sleepQuality.trim()}'
+    else if (draft.lifeRole.sleepQuality?.trim().isNotEmpty == true)
+      'Sleep: ${draft.lifeRole.sleepQuality!.trim()}',
+    if (profile.waterIntake.trim().isNotEmpty)
+      'Water: ${profile.waterIntake.trim()}'
+    else if (draft.lifeRole.waterIntake?.trim().isNotEmpty == true)
+      'Water: ${draft.lifeRole.waterIntake!.trim()}',
+  ];
+  if (role == 'Not completed' && details.isEmpty) return 'Not completed';
+  return [role, ...details].join('\n');
+}
+
+String _bodyBasicsReview(
+  UserProfile profile,
+  OnboardingDraft draft,
+  RegionSettings region,
+) {
+  final summary = _bodyBasicsLabel(profile, draft, region);
+  final age = profile.ageRange.trim().isNotEmpty
+      ? profile.ageRange.trim()
+      : draft.bodyBasics.ageRange;
+  final gender = profile.gender.trim().isNotEmpty
+      ? profile.gender.trim()
+      : draft.bodyBasics.gender;
+  final details = [
+    if (age?.trim().isNotEmpty == true) 'Age range: ${age!.trim()}',
+    if (gender?.trim().isNotEmpty == true) 'Gender: ${gender!.trim()}',
+  ];
+  if (summary == 'Not completed' && details.isEmpty) return 'Not completed';
+  return [summary, ...details].join('\n');
+}
+
+String _eatingSetupLabel(OnboardingDraft draft) {
+  final timeline = draft.baseTimeline;
+  if (timeline.eatingMode?.trim().isNotEmpty == true) {
+    return [
+      timeline.eatingMode!.trim(),
+      if (timeline.mealsPerDay != null) '${timeline.mealsPerDay} meals/day',
+    ].join(' · ');
+  }
+  return 'Open Routine eating timeline setup';
+}
+
+String _lifeRoleName(String key) {
+  return switch (key) {
+    LifeRoleDraft.studentKey => 'Student',
+    LifeRoleDraft.workingKey => 'Working',
+    LifeRoleDraft.studentWorkingKey => 'Student + Working',
+    LifeRoleDraft.businessKey => 'Business',
+    LifeRoleDraft.notStudentNotWorkingKey => 'Not student / not working',
+    _ => key,
+  };
 }
 
 String _cmToFeetInches(double centimeters) {
@@ -1792,7 +1952,29 @@ String _languageName(String code) {
   };
 }
 
-void _showSetupReview(BuildContext context, String title, String body) {
+void _showReviewOnlySheet(
+  BuildContext context,
+  String title,
+  String body, {
+  String? details,
+}) {
+  final detailText = details?.trim();
+  _showSetupReview(
+    context,
+    title,
+    detailText == null || detailText.isEmpty
+        ? 'Review only.\n\n$body'
+        : 'Review only.\n\n$body\n\nCurrent setup:\n$detailText',
+    primaryLabel: 'Close',
+  );
+}
+
+void _showSetupReview(
+  BuildContext context,
+  String title,
+  String body, {
+  String primaryLabel = 'Done',
+}) {
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
@@ -1849,7 +2031,7 @@ void _showSetupReview(BuildContext context, String title, String body) {
                     borderRadius: BorderRadius.circular(16),
                   ),
                 ),
-                child: const Text('Done'),
+                child: Text(primaryLabel),
               ),
             ],
           ),
@@ -1862,36 +2044,29 @@ void _showSetupReview(BuildContext context, String title, String body) {
 void _showResetSetupDialog(BuildContext context, WidgetRef ref) {
   showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: const Text('Re-run setup?'),
       content: const Text(
-        'This local setup flow preserves history and only affects future setup defaults.',
+        'Future setup will be rebuilt from onboarding. Past routine, goal, tracker, coach, and money history stays intact. Generated systems may refresh after setup. This resets the frontend setup draft and sends you to onboarding.',
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('Cancel'),
         ),
         ElevatedButton(
           onPressed: () {
-            final profile = ref.read(mockUserProfileProvider);
-            ref
-                .read(mockUserProfileProvider.notifier)
-                .updateProfile(
-                  profile.copyWith(
-                    onboardingCompleted: false,
-                    onboardingStep: 0,
-                  ),
-                );
-            Navigator.of(context).pop();
+            prepareProfileSetupRerun(ref);
+            Navigator.of(dialogContext).pop();
+            if (context.mounted) context.go('/onboarding');
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: OptivusColors.danger,
             foregroundColor: Colors.white,
           ),
-          child: const Text('Confirm'),
+          child: const Text('Re-run setup'),
         ),
       ],
     ),

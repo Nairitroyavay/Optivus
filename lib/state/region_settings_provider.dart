@@ -13,7 +13,9 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
   }
 
   Future<void> save(RegionSettings settings) async {
-    final updated = settings.copyWith(updatedAt: DateTime.now());
+    final updated = _guardPaymentRegion(
+      settings,
+    ).copyWith(updatedAt: DateTime.now());
     state = updated;
     await _repository.saveRegionSettings(updated);
   }
@@ -29,6 +31,18 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
       _ => RegionSettings.other(userId: userId),
     };
     await save(preset.copyWith(createdAt: state.createdAt));
+  }
+
+  RegionSettings _guardPaymentRegion(RegionSettings settings) {
+    final available = settings.countryCode == 'IN'
+        ? const [
+            PaymentRegion.manualOnly,
+            PaymentRegion.indiaUpi,
+            PaymentRegion.global,
+          ]
+        : const [PaymentRegion.manualOnly, PaymentRegion.global];
+    if (available.contains(settings.paymentRegion)) return settings;
+    return settings.copyWith(paymentRegion: available.first);
   }
 }
 
