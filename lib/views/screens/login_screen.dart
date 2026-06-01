@@ -10,6 +10,7 @@ import 'package:optivus/widgets/liquid_glass_panel.dart';
 // import 'package:optivus/services/auth_service.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/core/utils/auth_error_mapper.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLOUR TOKENS
@@ -103,7 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorMsg = error.toString();
+        _errorMsg = friendlyAuthError(error);
       });
     } finally {
       if (mounted) {
@@ -141,9 +142,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     });
 
     try {
-      // Backend pass: connect Firebase Auth password reset here.
-      // await _authRepository.sendPasswordResetEmail(email);
-      await Future.delayed(const Duration(milliseconds: 1000));
+      await ref.read(authProvider.notifier).sendPasswordResetEmail(email);
 
       if (!mounted) return;
       setState(() {
@@ -160,11 +159,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       );
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() {
         _resetLoading = false;
-        _errorMsg = 'Failed to send reset email. Try again.';
+        _errorMsg = friendlyAuthError(error);
       });
     }
   }

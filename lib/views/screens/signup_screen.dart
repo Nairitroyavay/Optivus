@@ -9,6 +9,8 @@ import 'package:optivus/widgets/liquid_glass_panel.dart';
 // import 'package:optivus/services/auth_service.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/utils/password_policy.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLOUR TOKENS
@@ -20,37 +22,6 @@ const _kGreen = Color(0xFF22C55E);
 const _kRed = Color(0xFFEF4444);
 const _kCream = Color(0xFFF6E6B4);
 const _kBg = Color(0xFFFCF8EE);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PASSWORD RULE MODEL
-// ─────────────────────────────────────────────────────────────────────────────
-class _Rule {
-  final String label;
-  final bool Function(String) check;
-  const _Rule({required this.label, required this.check});
-}
-
-final _passwordRules = [
-  _Rule(label: 'At least 8 characters', check: (p) => p.length >= 8),
-  _Rule(
-    label: 'Starts with a capital letter',
-    check: (p) =>
-        p.isNotEmpty &&
-        p[0] == p[0].toUpperCase() &&
-        p[0].contains(RegExp(r'[A-Z]')),
-  ),
-  _Rule(
-    label: 'Contains a number (0–9)',
-    check: (p) => p.contains(RegExp(r'[0-9]')),
-  ),
-  _Rule(
-    label: 'Contains a special character (!@#\$%^&*)',
-    check: (p) => p.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>_\-+=\[\]\\\/~`]')),
-  ),
-];
-
-bool _isPasswordValid(String password) =>
-    _passwordRules.every((r) => r.check(password));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SIGNUP SCREEN
@@ -139,7 +110,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
       return 'Please enter a valid email address.';
     }
     if (pass.isEmpty) return 'Please enter a password.';
-    if (!_isPasswordValid(pass)) {
+    if (!isOptivusPasswordValid(pass)) {
       return 'Password does not meet all requirements below.';
     }
     if (confirm != pass) return 'Passwords do not match.';
@@ -176,7 +147,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorMsg = error.toString();
+        _errorMsg = friendlyAuthError(error);
       });
     } finally {
       if (mounted) {
@@ -522,7 +493,7 @@ class _PasswordRulesPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              ..._passwordRules.map((rule) {
+              ...optivusPasswordRules.map((rule) {
                 final passed = rule.check(password);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 7),

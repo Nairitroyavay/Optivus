@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function emailVerified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    function verifiedOwner(uid) {
+      return isOwner(uid) && emailVerified();
+    }
+
+    match /users/{uid}/{document=**} {
+      allow read, write: if verifiedOwner(uid);
+    }
+  }
+}

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../views/screens/welcome_screen.dart';
 import '../../views/screens/login_screen.dart';
 import '../../views/screens/signup_screen.dart';
+import '../../views/screens/verify_email_screen.dart';
 import '../../views/screens/loading_screen.dart';
 import '../../views/screens/app_shell.dart';
 import '../../features/onboarding/onboarding_flow.dart';
@@ -76,18 +77,27 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final authState = ref.read(authProvider);
 
-      final isAuthRoute =
+      final isSignedOutRoute =
           state.uri.path == '/login' ||
           state.uri.path == '/signup' ||
           state.uri.path == '/' ||
           state.uri.path == '/loading';
+      final isVerifyRoute = state.uri.path == '/verify-email';
 
       // Still loading (auth check not complete / mock delay)
       if (authState.isLoading) return null;
 
       // 1. Not signed in -> restricted to auth routes
       if (!authState.isLoggedIn) {
-        return isAuthRoute ? null : '/';
+        return isSignedOutRoute ? null : '/';
+      }
+
+      if (authState.emailUnverified) {
+        return isVerifyRoute ? null : '/verify-email';
+      }
+
+      if (isVerifyRoute) {
+        return authState.onboardingComplete ? '/app?tab=0' : '/onboarding';
       }
 
       // 2. Signed in but onboarding not complete -> restricted to onboarding
@@ -100,7 +110,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // 3. Signed in & onboarding complete -> redirect away from auth/onboarding
-      if (isAuthRoute || state.uri.path == '/onboarding') {
+      if (isSignedOutRoute || state.uri.path == '/onboarding') {
         return '/app?tab=0';
       }
 
@@ -116,6 +126,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/signup',
         builder: (context, state) => const SignupScreen(),
+      ),
+      GoRoute(
+        path: '/verify-email',
+        builder: (context, state) => const VerifyEmailScreen(),
       ),
       GoRoute(
         path: '/onboarding',

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class UserProfile {
   final String uid;
   final String email;
@@ -108,17 +110,42 @@ class UserProfile {
     };
   }
 
+  Map<String, dynamic> toFirestoreMap() {
+    return {
+      'uid': uid,
+      'email': email,
+      'displayName': displayName,
+      if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
+      if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+      'onboardingCompleted': onboardingCompleted,
+      'onboardingStep': onboardingStep,
+      'lifeRole': lifeRole,
+      'workingExtra': workingExtra,
+      'businessMode': businessMode,
+      'exerciseLevel': exerciseLevel,
+      'waterIntake': waterIntake,
+      'stressLevel': stressLevel,
+      'sleepQuality': sleepQuality,
+      'ageRange': ageRange,
+      'height': height,
+      'weight': weight,
+      'gender': gender,
+      'bmiEstimate': bmiEstimate,
+      'calorieEstimate': calorieEstimate,
+      'proteinEstimate': proteinEstimate,
+      'coachName': coachName,
+      'coachStyle': coachStyle,
+      'slipUpStyle': slipUpStyle,
+    };
+  }
+
   factory UserProfile.fromMap(Map<String, dynamic> map) {
     return UserProfile(
       uid: map['uid'] as String? ?? '',
       email: map['email'] as String? ?? '',
       displayName: map['displayName'] as String? ?? '',
-      createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'])
-          : null,
-      updatedAt: map['updatedAt'] != null
-          ? DateTime.tryParse(map['updatedAt'])
-          : null,
+      createdAt: _dateTimeFromMapValue(map['createdAt']),
+      updatedAt: _dateTimeFromMapValue(map['updatedAt']),
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
       onboardingStep: map['onboardingStep'] as int? ?? 0,
       lifeRole: map['lifeRole'] as String? ?? '',
@@ -139,6 +166,10 @@ class UserProfile {
       coachStyle: map['coachStyle'] as String? ?? '',
       slipUpStyle: map['slipUpStyle'] as String? ?? '',
     );
+  }
+
+  factory UserProfile.fromFirestoreMap(Map<String, dynamic> map) {
+    return UserProfile.fromMap(map);
   }
 
   UserProfile copyWith({
@@ -194,4 +225,12 @@ class UserProfile {
       slipUpStyle: slipUpStyle ?? this.slipUpStyle,
     );
   }
+}
+
+DateTime? _dateTimeFromMapValue(Object? value) {
+  if (value == null) return null;
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  return null;
 }

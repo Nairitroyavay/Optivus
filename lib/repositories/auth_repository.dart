@@ -7,17 +7,33 @@ class AuthUser {
   final String uid;
   final String? email;
   final String? displayName;
+  final bool emailVerified;
+  final bool isAnonymous;
+  final String providerId;
 
-  const AuthUser({required this.uid, this.email, this.displayName});
+  const AuthUser({
+    required this.uid,
+    this.email,
+    this.displayName,
+    this.emailVerified = false,
+    this.isAnonymous = false,
+    this.providerId = 'password',
+  });
 }
 
 /// Abstract repository interface for authentication.
 abstract class AuthRepository {
   Stream<AuthUser?> get authStateChanges;
 
+  AuthUser? get currentUser;
+
   Future<AuthUser> signIn(String email, String password);
 
   Future<AuthUser> signUp(String email, String password, {String? name});
+
+  Future<void> sendEmailVerification();
+
+  Future<AuthUser?> reloadCurrentUser();
 
   Future<void> sendPasswordResetEmail(String email);
 
@@ -25,10 +41,17 @@ abstract class AuthRepository {
 }
 
 AuthUser _authUserFromFirebase(firebase_auth.User user) {
+  final providerId = user.providerData.isNotEmpty
+      ? user.providerData.first.providerId
+      : 'password';
+
   return AuthUser(
     uid: user.uid,
     email: user.email,
     displayName: user.displayName,
+    emailVerified: user.emailVerified,
+    isAnonymous: user.isAnonymous,
+    providerId: providerId,
   );
 }
 
@@ -37,6 +60,7 @@ AuthUser _authUserFromFirebase(firebase_auth.User user) {
 class FakeAuthRepository implements AuthRepository {
   final _authStateController = StreamController<AuthUser?>.broadcast();
   AuthUser? _currentUser;
+  bool _verificationEmailSent = false;
 
   FakeAuthRepository() {
     // Start signed out.
@@ -45,6 +69,9 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Stream<AuthUser?> get authStateChanges => _authStateController.stream;
+
+  @override
+  AuthUser? get currentUser => _currentUser;
 
   @override
   Future<AuthUser> signIn(String email, String password) async {
@@ -58,12 +85,14 @@ class FakeAuthRepository implements AuthRepository {
         uid: 'dev-user-12345',
         email: normalizedEmail,
         displayName: 'Dev Test',
+        emailVerified: true,
       );
     } else {
       _currentUser = AuthUser(
         uid: 'fake-uid-${DateTime.now().millisecondsSinceEpoch}',
         email: normalizedEmail,
         displayName: null,
+        emailVerified: true,
       );
     }
 
@@ -85,10 +114,36 @@ class FakeAuthRepository implements AuthRepository {
       uid: 'fake-uid-${DateTime.now().millisecondsSinceEpoch}',
       email: normalizedEmail,
       displayName: name?.trim(),
+      emailVerified: false,
     );
 
     _authStateController.add(_currentUser);
     return _currentUser!;
+  }
+
+  @override
+  Future<void> sendEmailVerification() async {
+    await Future.delayed(const Duration(milliseconds: 250));
+    _verificationEmailSent = true;
+  }
+
+  @override
+  Future<AuthUser?> reloadCurrentUser() async {
+    await Future.delayed(const Duration(milliseconds: 250));
+    final user = _currentUser;
+    if (user == null) return null;
+    if (_verificationEmailSent && !user.emailVerified) {
+      _currentUser = AuthUser(
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        emailVerified: true,
+        isAnonymous: user.isAnonymous,
+        providerId: user.providerId,
+      );
+      _authStateController.add(_currentUser);
+    }
+    return _currentUser;
   }
 
   @override
@@ -101,6 +156,7 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> signOut() async {
     await Future.delayed(const Duration(milliseconds: 500));
     _currentUser = null;
+    _verificationEmailSent = false;
     _authStateController.add(null);
   }
 }
@@ -110,6 +166,12 @@ class FirebaseAuthRepository implements AuthRepository {
 
   FirebaseAuthRepository({firebase_auth.FirebaseAuth? auth})
     : _auth = auth ?? firebase_auth.FirebaseAuth.instance;
+
+  @override
+  AuthUser? get currentUser {
+    final user = _auth.currentUser;
+    return user == null ? null : _authUserFromFirebase(user);
+  }
 
   @override
   Stream<AuthUser?> get authStateChanges {
@@ -157,6 +219,27 @@ class FirebaseAuthRepository implements AuthRepository {
           : _authUserFromFirebase(refreshed);
     }
     return _authUserFromFirebase(user);
+  }
+
+  @override
+  Future<void> sendEmailVerification() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw firebase_auth.FirebaseAuthException(
+        code: 'missing-user',
+        message: 'No signed-in user for email verification.',
+      );
+    }
+    await user.sendEmailVerification();
+  }
+
+  @override
+  Future<AuthUser?> reloadCurrentUser() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    await user.reload();
+    final refreshed = _auth.currentUser;
+    return refreshed == null ? null : _authUserFromFirebase(refreshed);
   }
 
   @override

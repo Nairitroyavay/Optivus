@@ -1,8 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/repositories/firestore_paths.dart';
 
 abstract class RegionSettingsRepository {
-  Future<RegionSettings> fetchRegionSettings(String userId);
+  Future<RegionSettings?> fetchRegionSettings(String userId);
   Future<void> saveRegionSettings(RegionSettings settings);
 }
 
@@ -10,7 +13,7 @@ class FakeRegionSettingsRepository implements RegionSettingsRepository {
   final Map<String, RegionSettings> _settingsByUserId = {};
 
   @override
-  Future<RegionSettings> fetchRegionSettings(String userId) async {
+  Future<RegionSettings?> fetchRegionSettings(String userId) async {
     return _settingsByUserId[userId] ?? RegionSettings.defaultForUser(userId);
   }
 
@@ -20,8 +23,34 @@ class FakeRegionSettingsRepository implements RegionSettingsRepository {
   }
 }
 
+class FirestoreRegionSettingsRepository implements RegionSettingsRepository {
+  final FirebaseFirestore _firestore;
+
+  FirestoreRegionSettingsRepository({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  @override
+  Future<RegionSettings?> fetchRegionSettings(String userId) async {
+    final doc = await _firestore
+        .doc(FirestoreUserPaths.regionSettings(userId))
+        .get();
+    final data = doc.data();
+    return data == null ? null : RegionSettings.fromFirestoreMap(data);
+  }
+
+  @override
+  Future<void> saveRegionSettings(RegionSettings settings) {
+    return _firestore
+        .doc(FirestoreUserPaths.regionSettings(settings.userId))
+        .set(settings.toFirestoreMap(), SetOptions(merge: true));
+  }
+}
+
 final regionSettingsRepositoryProvider = Provider<RegionSettingsRepository>((
   ref,
 ) {
+  if (OptivusBackendConfig.useFirebase) {
+    return FirestoreRegionSettingsRepository();
+  }
   return FakeRegionSettingsRepository();
 });

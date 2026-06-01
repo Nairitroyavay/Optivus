@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
+import 'package:optivus/repositories/app_preferences_repository.dart';
+import 'package:optivus/repositories/profile_repository.dart';
+import 'package:optivus/state/app_state.dart';
 
 class ProfileSettingsState {
   final UserProfileSettings profile;
@@ -139,16 +142,39 @@ class ProfileSettingsState {
 }
 
 class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
-  ProfileSettingsNotifier() : super(ProfileSettingsState.defaults());
+  final Ref _ref;
+  final ProfileRepository _profileRepository;
+  final AppPreferencesRepository _appPreferencesRepository;
 
-  void updateProfile(UserProfileSettings profile) {
+  ProfileSettingsNotifier(
+    this._ref,
+    this._profileRepository,
+    this._appPreferencesRepository,
+  ) : super(ProfileSettingsState.defaults());
+
+  String get _currentUid => _ref.read(mockUserProfileProvider).uid;
+
+  void loadProfileSettings(UserProfileSettings profile) {
     state = state.copyWith(profile: profile);
   }
 
-  void setProfilePhotoState(String photoState) {
-    state = state.copyWith(
-      profile: state.profile.copyWith(photoState: photoState),
-    );
+  void loadPreferences(UserPreferences preferences) {
+    state = state.copyWith(preferences: preferences);
+  }
+
+  void resetForSignedOut() {
+    state = ProfileSettingsState.defaults();
+  }
+
+  Future<void> updateProfile(UserProfileSettings profile) async {
+    state = state.copyWith(profile: profile);
+    final uid = _currentUid;
+    if (uid.isEmpty) return;
+    await _profileRepository.saveProfileSettings(uid, profile);
+  }
+
+  Future<void> setProfilePhotoState(String photoState) {
+    return updateProfile(state.profile.copyWith(photoState: photoState));
   }
 
   void toggleReminderType(String label) {
@@ -213,8 +239,11 @@ class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
     );
   }
 
-  void updatePreferences(UserPreferences preferences) {
+  Future<void> updatePreferences(UserPreferences preferences) async {
     state = state.copyWith(preferences: preferences);
+    final uid = _currentUid;
+    if (uid.isEmpty) return;
+    await _appPreferencesRepository.saveAppPreferences(uid, preferences);
   }
 
   void updatePrivacy(PrivacySettings privacy) {
@@ -287,7 +316,11 @@ class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
 
 final profileSettingsProvider =
     StateNotifierProvider<ProfileSettingsNotifier, ProfileSettingsState>((ref) {
-      return ProfileSettingsNotifier();
+      return ProfileSettingsNotifier(
+        ref,
+        ref.watch(profileRepositoryProvider),
+        ref.watch(appPreferencesRepositoryProvider),
+      );
     });
 
 String _permissionPreviewResult(ProfilePermissionType type) {

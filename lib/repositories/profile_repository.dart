@@ -1,6 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/models/user_profile.dart';
+import 'package:optivus/repositories/firestore_paths.dart';
 
 abstract class ProfileRepository {
   Future<UserProfile?> fetchUserProfile(String uid);
@@ -51,6 +54,53 @@ class FakeProfileRepository implements ProfileRepository {
     UserProfileSettings settings,
   ) async {
     _settings[uid] = settings;
+  }
+}
+
+class FirestoreProfileRepository implements ProfileRepository {
+  final FirebaseFirestore _firestore;
+
+  FirestoreProfileRepository({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  @override
+  Future<UserProfile?> fetchUserProfile(String uid) async {
+    final doc = await _firestore.doc(FirestoreUserPaths.profile(uid)).get();
+    final data = doc.data();
+    return data == null ? null : UserProfile.fromFirestoreMap(data);
+  }
+
+  @override
+  Future<UserProfileSettings> fetchProfileSettings(String uid) async {
+    final doc = await _firestore.doc(FirestoreUserPaths.profile(uid)).get();
+    final data = doc.data();
+    if (data == null) return const UserProfileSettings();
+    return UserProfileSettings.fromFirestoreMap(data);
+  }
+
+  @override
+  Future<void> saveUserProfile(UserProfile profile) {
+    return _firestore
+        .doc(FirestoreUserPaths.profile(profile.uid))
+        .set(profile.toFirestoreMap(), SetOptions(merge: true));
+  }
+
+  @override
+  Future<void> saveProfileSettings(
+    String uid,
+    UserProfileSettings settings,
+  ) {
+    final data = <String, Object?>{
+      ...settings.toFirestoreMap(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    };
+    final trimmedName = settings.name.trim();
+    if (trimmedName.isNotEmpty) {
+      data['displayName'] = trimmedName;
+    }
+    return _firestore
+        .doc(FirestoreUserPaths.profile(uid))
+        .set(data, SetOptions(merge: true));
   }
 }
 
@@ -200,6 +250,9 @@ class ProfileSettingsStateSeed {
 }
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
+  if (OptivusBackendConfig.useFirebase) {
+    return FirestoreProfileRepository();
+  }
   return FakeProfileRepository();
 });
 

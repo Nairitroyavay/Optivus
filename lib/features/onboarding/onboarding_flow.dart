@@ -214,7 +214,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     final authUser = ref.read(authProvider).user;
     if (authUser != null) {
-      ref.read(authProvider.notifier).markOnboardingComplete(authUser);
+      await ref.read(authProvider.notifier).markOnboardingComplete(authUser);
     }
 
     if (mounted) {

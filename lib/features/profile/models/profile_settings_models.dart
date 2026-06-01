@@ -197,6 +197,32 @@ class UserProfileSettings {
       photoState: photoState ?? this.photoState,
     );
   }
+
+  Map<String, Object?> toMap() {
+    return {
+      'name': name,
+      'username': username,
+      'bio': bio,
+      'customIdentityDisplay': customIdentityDisplay,
+      'photoState': photoState,
+    };
+  }
+
+  Map<String, Object?> toFirestoreMap() => toMap();
+
+  factory UserProfileSettings.fromMap(Map<String, dynamic> map) {
+    return UserProfileSettings(
+      name: map['name'] as String? ?? '',
+      username: map['username'] as String? ?? '',
+      bio: map['bio'] as String? ?? '',
+      customIdentityDisplay: map['customIdentityDisplay'] as bool? ?? false,
+      photoState: map['photoState'] as String? ?? 'No photo uploaded',
+    );
+  }
+
+  factory UserProfileSettings.fromFirestoreMap(Map<String, dynamic> map) {
+    return UserProfileSettings.fromMap(map);
+  }
 }
 
 class NotificationSettingsModel {
@@ -289,6 +315,36 @@ class UserPreferences {
       timelineDisplay: timelineDisplay ?? this.timelineDisplay,
       coachVoice: coachVoice ?? this.coachVoice,
     );
+  }
+
+  Map<String, Object?> toMap() {
+    return {
+      'haptics': haptics,
+      'autoCorrect': autoCorrect,
+      'themeMode': themeMode,
+      'accentColor': accentColor,
+      'bottomTabLayout': bottomTabLayout,
+      'timelineDisplay': timelineDisplay,
+      'coachVoice': coachVoice,
+    };
+  }
+
+  Map<String, Object?> toFirestoreMap() => toMap();
+
+  factory UserPreferences.fromMap(Map<String, dynamic> map) {
+    return UserPreferences(
+      haptics: map['haptics'] as bool? ?? true,
+      autoCorrect: map['autoCorrect'] as bool? ?? true,
+      themeMode: map['themeMode'] as String? ?? 'System',
+      accentColor: map['accentColor'] as String? ?? 'Yellow',
+      bottomTabLayout: map['bottomTabLayout'] as String? ?? 'Icons',
+      timelineDisplay: map['timelineDisplay'] as String? ?? 'Timeline',
+      coachVoice: map['coachVoice'] as String? ?? 'Text first',
+    );
+  }
+
+  factory UserPreferences.fromFirestoreMap(Map<String, dynamic> map) {
+    return UserPreferences.fromMap(map);
   }
 }
 

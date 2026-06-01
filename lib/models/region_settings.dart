@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum MeasurementSystem { metric, imperial, mixed }
 
 enum HeightUnit { cm, ftIn }
@@ -280,6 +282,114 @@ class RegionSettings {
       'updatedAt': updatedAt.toIso8601String(),
     };
   }
+
+  Map<String, Object?> toFirestoreMap() {
+    return {
+      'userId': userId,
+      'countryCode': countryCode,
+      'countryName': countryName,
+      'timezone': timezone,
+      'languageCode': languageCode,
+      'currencyCode': currencyCode,
+      'currencySymbol': currencySymbol,
+      'measurementSystem': measurementSystem.name,
+      'heightUnit': heightUnit.name,
+      'weightUnit': weightUnit.name,
+      'distanceUnit': distanceUnit.name,
+      'temperatureUnit': temperatureUnit.name,
+      'timeFormat': timeFormat.name,
+      'dateFormat': dateFormat,
+      'weekStartDay': weekStartDay.name,
+      'foodVocabularyMode': foodVocabularyMode.name,
+      'paymentRegion': paymentRegion.name,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': Timestamp.fromDate(updatedAt),
+    };
+  }
+
+  factory RegionSettings.fromMap(Map<String, dynamic> map) {
+    final userId = map['userId'] as String? ?? '';
+    final defaults = RegionSettings.defaultForUser(userId);
+    return RegionSettings(
+      userId: userId,
+      countryCode: map['countryCode'] as String? ?? defaults.countryCode,
+      countryName: map['countryName'] as String? ?? defaults.countryName,
+      timezone: map['timezone'] as String? ?? defaults.timezone,
+      languageCode: map['languageCode'] as String? ?? defaults.languageCode,
+      currencyCode: map['currencyCode'] as String? ?? defaults.currencyCode,
+      currencySymbol:
+          map['currencySymbol'] as String? ?? defaults.currencySymbol,
+      measurementSystem: _enumByName(
+        MeasurementSystem.values,
+        map['measurementSystem'],
+        defaults.measurementSystem,
+      ),
+      heightUnit: _enumByName(
+        HeightUnit.values,
+        map['heightUnit'],
+        defaults.heightUnit,
+      ),
+      weightUnit: _enumByName(
+        WeightUnit.values,
+        map['weightUnit'],
+        defaults.weightUnit,
+      ),
+      distanceUnit: _enumByName(
+        DistanceUnit.values,
+        map['distanceUnit'],
+        defaults.distanceUnit,
+      ),
+      temperatureUnit: _enumByName(
+        TemperatureUnit.values,
+        map['temperatureUnit'],
+        defaults.temperatureUnit,
+      ),
+      timeFormat: _enumByName(
+        TimeFormatPreference.values,
+        map['timeFormat'],
+        defaults.timeFormat,
+      ),
+      dateFormat: map['dateFormat'] as String? ?? defaults.dateFormat,
+      weekStartDay: _enumByName(
+        WeekStartDay.values,
+        map['weekStartDay'],
+        defaults.weekStartDay,
+      ),
+      foodVocabularyMode: _enumByName(
+        FoodVocabularyMode.values,
+        map['foodVocabularyMode'],
+        defaults.foodVocabularyMode,
+      ),
+      paymentRegion: _enumByName(
+        PaymentRegion.values,
+        map['paymentRegion'],
+        defaults.paymentRegion,
+      ),
+      createdAt: _dateTimeFromMapValue(map['createdAt']) ?? defaults.createdAt,
+      updatedAt: _dateTimeFromMapValue(map['updatedAt']) ?? defaults.updatedAt,
+    );
+  }
+
+  factory RegionSettings.fromFirestoreMap(Map<String, dynamic> map) {
+    return RegionSettings.fromMap(map);
+  }
+}
+
+T _enumByName<T extends Enum>(List<T> values, Object? value, T fallback) {
+  if (value is String) {
+    for (final item in values) {
+      if (item.name == value) return item;
+    }
+  }
+  return fallback;
+}
+
+DateTime? _dateTimeFromMapValue(Object? value) {
+  if (value == null) return null;
+  if (value is Timestamp) return value.toDate();
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  return null;
 }
 
 extension RegionSettingsLabels on RegionSettings {

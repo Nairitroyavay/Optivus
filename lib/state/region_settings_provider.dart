@@ -9,7 +9,13 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
     : super(RegionSettings.defaultForUser('mock-user-123'));
 
   Future<void> loadForUser(String userId) async {
-    state = await _repository.fetchRegionSettings(userId);
+    state =
+        await _repository.fetchRegionSettings(userId) ??
+        RegionSettings.defaultForUser(userId);
+  }
+
+  void loadSettings(RegionSettings settings) {
+    state = settings;
   }
 
   Future<void> save(RegionSettings settings) async {
