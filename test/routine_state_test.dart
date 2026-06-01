@@ -128,12 +128,17 @@ void main() {
 
       controller.startTrackerTask(item);
 
-      final intent = container.read(routineNotifierProvider).activeTrackerLaunchIntent;
+      final intent = container
+          .read(routineNotifierProvider)
+          .activeTrackerLaunchIntent;
       expect(intent, isNotNull);
       expect(intent!.routineTaskId, 'tracker-task');
       expect(intent.trackerType, TrackerType.meditation);
 
-      final updated = container.read(routineNotifierProvider).items.firstWhere((e) => e.id == 'tracker-task');
+      final updated = container
+          .read(routineNotifierProvider)
+          .items
+          .firstWhere((e) => e.id == 'tracker-task');
       expect(updated.status, RoutineStatus.inTracker);
     });
 
@@ -152,11 +157,16 @@ void main() {
 
       controller.completeTrackerSession('tracker-task');
 
-      final updated = container.read(routineNotifierProvider).items.firstWhere((e) => e.id == 'tracker-task');
+      final updated = container
+          .read(routineNotifierProvider)
+          .items
+          .firstWhere((e) => e.id == 'tracker-task');
       expect(updated.status, RoutineStatus.completed);
       expect(updated.isCompleted, isTrue);
-      
-      final intent = container.read(routineNotifierProvider).activeTrackerLaunchIntent;
+
+      final intent = container
+          .read(routineNotifierProvider)
+          .activeTrackerLaunchIntent;
       expect(intent, isNull);
     });
 
@@ -174,7 +184,10 @@ void main() {
 
       controller.alreadySaved('money-task');
 
-      final updated = container.read(routineNotifierProvider).items.firstWhere((e) => e.id == 'money-task');
+      final updated = container
+          .read(routineNotifierProvider)
+          .items
+          .firstWhere((e) => e.id == 'money-task');
       expect(updated.status, RoutineStatus.completed);
       expect(updated.isCompleted, isTrue);
     });

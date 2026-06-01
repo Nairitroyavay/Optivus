@@ -14,7 +14,12 @@ class FocusControlSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildAppRow(String name, String time, String status, Color statusColor) {
+  Widget _buildAppRow(
+    String name,
+    String time,
+    String status,
+    Color statusColor,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
@@ -26,7 +31,11 @@ class FocusControlSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
             ),
-            child: const Icon(Icons.app_shortcut, size: 20, color: OptivusColors.textSecondary),
+            child: const Icon(
+              Icons.app_shortcut,
+              size: 20,
+              color: OptivusColors.textSecondary,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -100,7 +109,11 @@ class FocusControlSheet extends StatelessWidget {
               ),
               const Row(
                 children: [
-                  Icon(Icons.shield, color: OptivusColors.coachAccent, size: 28),
+                  Icon(
+                    Icons.shield,
+                    color: OptivusColors.coachAccent,
+                    size: 28,
+                  ),
                   SizedBox(width: 12),
                   Text(
                     'Focus Control',
@@ -142,8 +155,18 @@ class FocusControlSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _buildAppRow('Instagram', '3h 20m today', 'High risk', Colors.redAccent),
-                    _buildAppRow('YouTube Shorts', '1h 10m today', 'High risk', Colors.redAccent),
+                    _buildAppRow(
+                      'Instagram',
+                      '3h 20m today',
+                      'High risk',
+                      Colors.redAccent,
+                    ),
+                    _buildAppRow(
+                      'YouTube Shorts',
+                      '1h 10m today',
+                      'High risk',
+                      Colors.redAccent,
+                    ),
                   ],
                 ),
               ),

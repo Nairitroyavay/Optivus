@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/features/tracker/bad_habits/bad_habit_tracker_screen.dart';
 import 'package:optivus/features/tracker/focus/focus_timer_screen.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
@@ -8,6 +9,7 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/tracker/fitness/fitness_center_screen.dart';
 import 'package:optivus/features/tracker/hydration/hydration_tracker_screen.dart';
 import 'package:optivus/features/tracker/meditation/meditation_tracker_screen.dart';
+import 'package:optivus/features/tracker/money/global_money_setup_screen.dart';
 import 'package:optivus/features/tracker/money/money_system_screen.dart';
 import 'package:optivus/features/tracker/money/money_system_widgets.dart';
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
@@ -23,7 +25,9 @@ import 'package:optivus/features/tracker/nutrition/nutrition_tracker_screen.dart
 import 'package:optivus/features/tracker/screen_time/screen_time_screen.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/money_models.dart';
+import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 class TrackerTab extends ConsumerStatefulWidget {
   const TrackerTab({super.key});
@@ -73,8 +77,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
           if (_activeDetailView != TrackerDetailView.fitness) {
             _openView(TrackerDetailView.fitness);
           }
-        } else if (intent != null &&
-            intent.trackerType == TrackerType.focus) {
+        } else if (intent != null && intent.trackerType == TrackerType.focus) {
           if (_activeDetailView != TrackerDetailView.focusTimer) {
             _openView(TrackerDetailView.focusTimer);
           }
@@ -102,7 +105,8 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
     final bottomReserve =
         76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
     final trackerState = ref.watch(mockTrackerProvider);
-    final snapshot = _TrackerUiSnapshot.fromState(trackerState);
+    final region = ref.watch(regionSettingsProvider);
+    final snapshot = _TrackerUiSnapshot.fromState(trackerState, region);
 
     return PopScope(
       canPop: _activeDetailView == TrackerDetailView.none,
@@ -169,6 +173,9 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
             ),
             TrackerDetailView.sleep => SleepTrackerScreen(onBack: _closeDetail),
             TrackerDetailView.nutrition => NutritionTrackerScreen(
+              onBack: _closeDetail,
+            ),
+            TrackerDetailView.globalMoneySetup => GlobalMoneySetupScreen(
               onBack: _closeDetail,
             ),
             TrackerDetailView.none => Column(
@@ -1068,6 +1075,7 @@ class _TrackerUiSnapshot {
   final int meditationStreakDays;
   final double nextMoneyLevel;
   final List<SavingEntry> savingsEntries;
+  final RegionSettings regionSettings;
 
   const _TrackerUiSnapshot({
     required this.hydrationMl,
@@ -1091,9 +1099,13 @@ class _TrackerUiSnapshot {
     required this.meditationStreakDays,
     required this.nextMoneyLevel,
     required this.savingsEntries,
+    required this.regionSettings,
   });
 
-  factory _TrackerUiSnapshot.fromState(MockTrackerState state) {
+  factory _TrackerUiSnapshot.fromState(
+    MockTrackerState state,
+    RegionSettings regionSettings,
+  ) {
     final hydrationMl = state.hydrationLogs.isEmpty
         ? 1200
         : state.hydrationLogs.fold<int>(
@@ -1200,21 +1212,22 @@ class _TrackerUiSnapshot {
       meditationStreakDays: meditationMinutes >= 5 ? 5 : 1,
       nextMoneyLevel: state.moneyGoal.nextLevelAmount,
       savingsEntries: state.savingsEntries,
+      regionSettings: regionSettings,
     );
   }
 
   String get hydrationLabel => _formatLiters(hydrationMl);
   String get screenTimeLabel => _formatMinutes(totalScreenMinutes);
-  String get todaySavedLabel => _formatRupees(todaySaved);
-  String get confirmedSavedLabel => _formatRupees(confirmedSaved);
-  String get potentialSavedLabel => _formatRupees(potentialSaved);
+  String get todaySavedLabel => formatMoney(todaySaved, regionSettings);
+  String get confirmedSavedLabel => formatMoney(confirmedSaved, regionSettings);
+  String get potentialSavedLabel => formatMoney(potentialSaved, regionSettings);
   String get weeklyDistanceLabel => _formatDistance(weeklyDistanceKm);
   String get longestDistanceLabel => _formatDistance(longestDistanceKm);
   String get bestPaceLabel => _formatPace(bestPaceMinutesPerKm);
   String get activeMinutesLabel => '${activeMinutesThisWeek}m';
   int get weeklyGoalProgressPercent =>
       ((weeklyDistanceKm / 15).clamp(0.0, 1.0) * 100).round();
-  String get nextMoneyLevelLabel => _formatRupees(nextMoneyLevel);
+  String get nextMoneyLevelLabel => formatMoney(nextMoneyLevel, regionSettings);
 
   List<double> moneyValuesForPeriod(_TrackerPeriodData period) {
     if (savingsEntries.isEmpty) return period.moneyValues;
@@ -1793,12 +1806,6 @@ String _formatMinutes(int minutes) {
   if (hours <= 0) return '${remaining}m';
   if (remaining == 0) return '${hours}h';
   return '${hours}h ${remaining}m';
-}
-
-String _formatRupees(double amount) {
-  final rounded = amount.roundToDouble();
-  if (amount == rounded) return '₹${rounded.toInt()}';
-  return '₹${amount.toStringAsFixed(1)}';
 }
 
 String _formatDistance(double distanceKm) {

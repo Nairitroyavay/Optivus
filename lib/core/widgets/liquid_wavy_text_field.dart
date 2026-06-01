@@ -81,8 +81,7 @@ class _LiquidWavyTextFieldState extends State<LiquidWavyTextField>
                         fontSize: 13,
                       ),
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
@@ -120,7 +119,9 @@ class _WavyClipper extends CustomClipper<Path> {
     // Top wavy edge
     path.moveTo(0, waveAmplitude);
     for (double x = 0; x <= size.width; x++) {
-      final y = waveAmplitude * sin((x / size.width) * waveFrequency * 2 * pi + phase);
+      final y =
+          waveAmplitude *
+          sin((x / size.width) * waveFrequency * 2 * pi + phase);
       path.lineTo(x, y + waveAmplitude);
     }
 
@@ -135,4 +136,3 @@ class _WavyClipper extends CustomClipper<Path> {
   @override
   bool shouldReclip(_WavyClipper oldClipper) => true;
 }
-

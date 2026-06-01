@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/widgets/home_glass_widgets.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 
 class ComingUpItemSheet extends ConsumerWidget {
   final String title;
-  
+
   const ComingUpItemSheet({super.key, required this.title});
 
   static void show(BuildContext context, String title) {
@@ -25,7 +26,7 @@ class ComingUpItemSheet extends ConsumerWidget {
     String? extraText;
     String? buttonText;
     VoidCallback? onButtonTap;
-    
+
     if (title == 'Class') {
       time = '9:00 AM - 5:00 PM';
       subtitle = 'Hard block';
@@ -38,13 +39,15 @@ class ComingUpItemSheet extends ConsumerWidget {
         Navigator.pop(context);
         ref.read(appNavigationProvider.notifier).goToTracker();
       };
-    } else if (title == 'Save ₹10') {
+    } else if (title == 'Tiny money save') {
       time = '9:45 PM';
       subtitle = 'Money System';
       buttonText = 'Save Now';
       onButtonTap = () {
         Navigator.pop(context);
-        // Could update local demo state here or go to Tracker
+        ref.read(appNavigationProvider.notifier).goToTracker();
+        ref.read(trackerDetailViewRequestProvider.notifier).state =
+            TrackerDetailTarget.view(TrackerDetailView.money);
       };
     } else {
       time = 'Scheduled time';
@@ -125,7 +128,9 @@ class ComingUpItemSheet extends ConsumerWidget {
                 HomeActionPill(
                   label: buttonText,
                   selected: true,
-                  accent: title == 'Save ₹10' ? OptivusColors.brandAccent : OptivusColors.trackerAccent,
+                  accent: title == 'Tiny money save'
+                      ? OptivusColors.brandAccent
+                      : OptivusColors.trackerAccent,
                   onTap: onButtonTap ?? () {},
                 ),
                 const SizedBox(height: 8),

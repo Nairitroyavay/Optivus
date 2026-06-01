@@ -52,10 +52,12 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       'English',
       'Hindi',
       'Bengali',
-      'German',
       'Japanese',
+      'German',
       'Spanish',
       'French',
+      'Korean',
+      'Chinese',
       'Custom',
     ]),
   ];

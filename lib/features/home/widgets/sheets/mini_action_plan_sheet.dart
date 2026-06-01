@@ -25,7 +25,12 @@ class MiniActionPlanSheet extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            16,
+            24,
+            MediaQuery.of(context).viewInsets.bottom + 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

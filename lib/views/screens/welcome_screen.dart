@@ -47,7 +47,7 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Yellow divider line
                       Container(
                         width: 40,
@@ -79,10 +79,14 @@ class WelcomeScreen extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF4F9FC).withValues(alpha: 0.35), // Glass background with #F4F9FC tint
+                              color: const Color(0xFFF4F9FC).withValues(
+                                alpha: 0.35,
+                              ), // Glass background with #F4F9FC tint
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.8), // Shiny edge
+                                color: Colors.white.withValues(
+                                  alpha: 0.8,
+                                ), // Shiny edge
                                 width: 1.5,
                               ),
                               boxShadow: [
@@ -99,52 +103,82 @@ class WelcomeScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
-                        child: Row(
-                          children: [
-                            const AnimatedBotAvatar(),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'AI-Powered Coach',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 15,
-                                      color: Color(0xFF0F111A),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final compact = constraints.maxWidth < 220;
+                                final textBlock = Column(
+                                  crossAxisAlignment: compact
+                                      ? CrossAxisAlignment.center
+                                      : CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'AI-Powered Coach',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: Color(0xFF0F111A),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Optimizing your daily workflow',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade600,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Optimizing your daily workflow',
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: compact
+                                          ? TextAlign.center
+                                          : TextAlign.start,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600,
+                                      ),
                                     ),
+                                  ],
+                                );
+                                final check = Container(
+                                  width: 24,
+                                  height: 24,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade200,
+                                    shape: BoxShape.circle,
                                   ),
-                                ],
-                              ),
+                                  child: Icon(
+                                    Icons.check,
+                                    size: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                );
+
+                                if (compact) {
+                                  return Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const AnimatedBotAvatar(),
+                                      const SizedBox(height: 10),
+                                      textBlock,
+                                      const SizedBox(height: 10),
+                                      check,
+                                    ],
+                                  );
+                                }
+
+                                return Row(
+                                  children: [
+                                    const AnimatedBotAvatar(),
+                                    const SizedBox(width: 16),
+                                    Expanded(child: textBlock),
+                                    const SizedBox(width: 10),
+                                    check,
+                                  ],
+                                );
+                              },
                             ),
-                            Container(
-                              width: 24,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.check,
-                                size: 16,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),
@@ -165,8 +199,11 @@ class WelcomeScreen extends StatelessWidget {
               // Log In Text
               Padding(
                 padding: const EdgeInsets.only(bottom: 24.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
                     Text(
                       "Already have an account?",
@@ -176,13 +213,14 @@ class WelcomeScreen extends StatelessWidget {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () {
                         context.go('/login');
                       },
                       child: Container(
-                        padding: const EdgeInsets.only(bottom: 2), // space for underline
+                        padding: const EdgeInsets.only(
+                          bottom: 2,
+                        ), // space for underline
                         decoration: const BoxDecoration(
                           border: Border(
                             bottom: BorderSide(

@@ -13,13 +13,16 @@ class MindTimelineCard extends ConsumerWidget {
   const MindTimelineCard({super.key});
 
   String _formatTime(DateTime time) {
-    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+    final hour = time.hour > 12
+        ? time.hour - 12
+        : (time.hour == 0 ? 12 : time.hour);
     final min = time.minute.toString().padLeft(2, '0');
     final ampm = time.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$min $ampm';
   }
 
-  String _capitalize(String s) => s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '';
+  String _capitalize(String s) =>
+      s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -76,7 +79,11 @@ class MindTimelineCard extends ConsumerWidget {
           ] else ...[
             Row(
               children: [
-                const Icon(Icons.access_time, size: 12, color: OptivusColors.textSecondary),
+                const Icon(
+                  Icons.access_time,
+                  size: 12,
+                  color: OptivusColors.textSecondary,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   _formatTime(latestNote!.createdAt),
@@ -102,9 +109,14 @@ class MindTimelineCard extends ConsumerWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: OptivusColors.coachAccent.withValues(alpha: 0.1),
+                          color: OptivusColors.coachAccent.withValues(
+                            alpha: 0.1,
+                          ),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -118,11 +130,14 @@ class MindTimelineCard extends ConsumerWidget {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: latestNote.intensity == MindNoteIntensity.high 
-                            ? Colors.red.withValues(alpha: 0.1) 
-                            : OptivusColors.homeAccent.withValues(alpha: 0.1),
+                          color: latestNote.intensity == MindNoteIntensity.high
+                              ? Colors.red.withValues(alpha: 0.1)
+                              : OptivusColors.homeAccent.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -130,9 +145,10 @@ class MindTimelineCard extends ConsumerWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
-                            color: latestNote.intensity == MindNoteIntensity.high 
-                              ? Colors.red 
-                              : OptivusColors.homeAccent,
+                            color:
+                                latestNote.intensity == MindNoteIntensity.high
+                                ? Colors.red
+                                : OptivusColors.homeAccent,
                           ),
                         ),
                       ),

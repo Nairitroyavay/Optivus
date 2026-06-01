@@ -211,126 +211,130 @@ class _LiquidGlassOnboardingIndicatorState
                       ),
                     ),
                   ),
-            Positioned(
-              left: pillLeft,
-              top: pillTopLocal,
-              width: pillWidth,
-              height: _pillH,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(_pillH / 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.15),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                    BoxShadow(
-                      color: OptivusColors.success.withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(_pillH / 2),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(_pillH / 2),
-                        border: Border.all(
-                          color: Colors.transparent,
-                          width: 0.0,
+                Positioned(
+                  left: pillLeft,
+                  top: pillTopLocal,
+                  width: pillWidth,
+                  height: _pillH,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(_pillH / 2),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
                         ),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.white.withValues(alpha: 0.25),
-                            Colors.white.withValues(alpha: 0.0),
-                            Colors.black.withValues(alpha: 0.05),
-                          ],
+                        BoxShadow(
+                          color: OptivusColors.success.withValues(alpha: 0.4),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
                         ),
-                      ),
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          // Inner liquid color blob
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                  colors: [
-                                    OptivusColors.aquaAccent.withValues(alpha: 0.75),
-                                    OptivusColors.success.withValues(alpha: 0.75),
-                                  ],
-                                ),
-                              ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(_pillH / 2),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(_pillH / 2),
+                            border: Border.all(
+                              color: Colors.transparent,
+                              width: 0.0,
+                            ),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.white.withValues(alpha: 0.25),
+                                Colors.white.withValues(alpha: 0.0),
+                                Colors.black.withValues(alpha: 0.05),
+                              ],
                             ),
                           ),
-                          // White top inner glow (3D curve)
-                          Positioned.fill(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.white.withValues(alpha: 0.65),
-                                    Colors.transparent,
-                                  ],
-                                  stops: const [0.0, 0.5],
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              // Inner liquid color blob
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                      colors: [
+                                        OptivusColors.aquaAccent.withValues(
+                                          alpha: 0.75,
+                                        ),
+                                        OptivusColors.success.withValues(
+                                          alpha: 0.75,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-                          // Top glossy highlight
-                          Positioned(
-                            top: 1,
-                            left: 6,
-                            right: 6,
-                            height: 3.5,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(2),
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.white.withValues(alpha: 0.8),
-                                    Colors.white.withValues(alpha: 0.0),
-                                  ],
+                              // White top inner glow (3D curve)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.white.withValues(alpha: 0.65),
+                                        Colors.transparent,
+                                      ],
+                                      stops: const [0.0, 0.5],
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              // Top glossy highlight
+                              Positioned(
+                                top: 1,
+                                left: 6,
+                                right: 6,
+                                height: 3.5,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(2),
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      colors: [
+                                        Colors.white.withValues(alpha: 0.8),
+                                        Colors.white.withValues(alpha: 0.0),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+                for (int i = 0; i < widget.count; i++)
+                  Positioned(
+                    left: _cx(i) - _step / 2,
+                    top: 0,
+                    width: _step,
+                    height: _trackH,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onDotTap?.call(i),
+                    ),
+                  ),
+              ],
             ),
-            for (int i = 0; i < widget.count; i++)
-              Positioned(
-                left: _cx(i) - _step / 2,
-                top: 0,
-                width: _step,
-                height: _trackH,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => widget.onDotTap?.call(i),
-                ),
-              ),
-          ],
+          ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 }
 

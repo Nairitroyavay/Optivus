@@ -5,8 +5,10 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
+import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/tracker_models.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 class NutritionTrackerScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
@@ -36,6 +38,7 @@ class _NutritionTrackerScreenState
   @override
   Widget build(BuildContext context) {
     final logs = ref.watch(mockTrackerProvider).nutritionLogs;
+    final region = ref.watch(regionSettingsProvider);
     final doneCount = logs.where((log) => log.done).length;
     final calories = logs.fold<double>(
       0,
@@ -91,7 +94,7 @@ class _NutritionTrackerScreenState
                     color: OptivusColors.success,
                   ),
                   LiquidPill(
-                    label: _source.name,
+                    label: _sourceLabel(_source, region),
                     color: OptivusColors.trackerAccent,
                   ),
                 ],
@@ -110,7 +113,7 @@ class _NutritionTrackerScreenState
                 return GestureDetector(
                   onTap: () => setState(() => _source = source),
                   child: LiquidPill(
-                    label: source.name,
+                    label: _sourceLabel(source, region),
                     color: OptivusColors.trackerAccent,
                     filled: _source == source,
                   ),
@@ -119,7 +122,7 @@ class _NutritionTrackerScreenState
             ),
             const SizedBox(height: 12),
             Text(
-              _sourceHelp,
+              _sourceHelp(region),
               style: const TextStyle(
                 fontSize: 12,
                 height: 1.35,
@@ -222,16 +225,51 @@ class _NutritionTrackerScreenState
     );
   }
 
-  String get _sourceHelp {
+  String _sourceHelp(RegionSettings region) {
     return switch (_source) {
       MealSource.home =>
         'Home eating shows time and done state by default. Estimates stay optional.',
       MealSource.hostel || MealSource.pg || MealSource.mess =>
-        'Mess or hostel mode is ready to show dishes from an imported mess sheet when available.',
+        region.foodVocabularyMode == FoodVocabularyMode.india
+            ? 'Hostel, PG, and mess modes can show dishes from an imported mess sheet when available.'
+            : 'Dorm, cafeteria, and dining hall modes can show imported meal-plan dishes when available.',
       MealSource.flat =>
-        'Flat/staying-alone mode can show AI meal plan estimates in the backend pass.',
+        region.foodVocabularyMode == FoodVocabularyMode.india
+            ? 'Flat or staying-alone mode can show AI meal plan estimates in the backend pass.'
+            : 'Shared apartment or studio mode can show meal plan estimates in the backend pass.',
       MealSource.mixed =>
         'Mixed mode keeps source per meal so backend can preserve context.',
+    };
+  }
+
+  String _sourceLabel(MealSource source, RegionSettings region) {
+    if (region.foodVocabularyMode == FoodVocabularyMode.india) {
+      return switch (source) {
+        MealSource.home => 'Home',
+        MealSource.hostel => 'Hostel',
+        MealSource.pg => 'PG',
+        MealSource.mess => 'Mess',
+        MealSource.flat => 'Flat / rented room',
+        MealSource.mixed => 'Mixed',
+      };
+    }
+    if (region.foodVocabularyMode == FoodVocabularyMode.japan) {
+      return switch (source) {
+        MealSource.home => 'Home',
+        MealSource.hostel => 'Dorm',
+        MealSource.pg => 'Apartment',
+        MealSource.mess => 'Cafeteria',
+        MealSource.flat => 'Convenience store / outside',
+        MealSource.mixed => 'Mixed',
+      };
+    }
+    return switch (source) {
+      MealSource.home => 'Home',
+      MealSource.hostel => 'Dorm / Hostel',
+      MealSource.pg => 'Shared apartment',
+      MealSource.mess => 'Cafeteria / Dining hall',
+      MealSource.flat => 'Alone / Studio',
+      MealSource.mixed => 'Mixed',
     };
   }
 

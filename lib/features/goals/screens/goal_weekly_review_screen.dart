@@ -60,7 +60,7 @@ void showGoalWeeklyReviewScreen(BuildContext context, WidgetRef ref) {
             _buildReflectionBullet('Habit Consistency Index: 92% (Excellent)'),
             _buildReflectionBullet('Completed Gym Proof: 5 / 7 Days'),
             _buildReflectionBullet(
-              'Skipped Bad Habit multi-spends: Saved ₹240 this week!',
+              'Skipped bad-habit impulse spends: money protected this week.',
             ),
             const SizedBox(height: 20),
             ElevatedButton(

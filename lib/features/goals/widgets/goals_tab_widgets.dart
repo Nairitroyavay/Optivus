@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -195,11 +196,11 @@ class GoalsHeaderButton extends StatelessWidget {
 
 // --- Specific Widgets ---
 
-class GoalsHeader extends StatelessWidget {
+class GoalsHeader extends ConsumerWidget {
   const GoalsHeader({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -238,29 +239,29 @@ class GoalsHeader extends StatelessWidget {
           children: [
             GoalsHeaderButton(
               icon: Icons.add,
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Add Identity Goal')),
-                );
-              },
+              onTap: () =>
+                  ref.read(goalsDetailViewRequestProvider.notifier).state =
+                      const GoalsDetailTarget(view: GoalsDetailView.addGoal),
             ),
             const SizedBox(width: 8),
             GoalsHeaderButton(
               icon: Icons.assignment_outlined,
-              onTap: () {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('Weekly Review')));
-              },
+              onTap: () =>
+                  ref
+                      .read(goalsDetailViewRequestProvider.notifier)
+                      .state = const GoalsDetailTarget(
+                    view: GoalsDetailView.weeklyReview,
+                  ),
             ),
             const SizedBox(width: 8),
             GoalsHeaderButton(
               icon: Icons.settings_outlined,
-              onTap: () {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('Goal Settings')));
-              },
+              onTap: () =>
+                  ref
+                      .read(goalsDetailViewRequestProvider.notifier)
+                      .state = const GoalsDetailTarget(
+                    view: GoalsDetailView.goalSettings,
+                  ),
             ),
           ],
         ),

@@ -238,16 +238,28 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       OptivusColors.brandAccent,
     ).withSaturation((0.2 + 0.8 * minPercent).clamp(0.0, 1.0)).toColor();
 
-    final showSpend = habit.name == 'Cigarettes' ||
+    final showSpend =
+        habit.name == 'Cigarettes' ||
         habit.name == 'Alcohol' ||
         habit.name == 'Junk Food' ||
-        !['Cigarettes', 'Alcohol', 'Junk Food', 'Doom Scrolling', 'Procrastination']
-            .contains(habit.name);
+        ![
+          'Cigarettes',
+          'Alcohol',
+          'Junk Food',
+          'Doom Scrolling',
+          'Procrastination',
+        ].contains(habit.name);
 
-    final showMinutes = habit.name == 'Doom Scrolling' ||
+    final showMinutes =
+        habit.name == 'Doom Scrolling' ||
         habit.name == 'Procrastination' ||
-        !['Cigarettes', 'Alcohol', 'Junk Food', 'Doom Scrolling', 'Procrastination']
-            .contains(habit.name);
+        ![
+          'Cigarettes',
+          'Alcohol',
+          'Junk Food',
+          'Doom Scrolling',
+          'Procrastination',
+        ].contains(habit.name);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

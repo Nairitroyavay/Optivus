@@ -37,15 +37,11 @@ class OptivusGradients {
       tabGradient(OptivusColors.onboardingTop);
 
   static LinearGradient get auth => const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          OptivusColors.onboardingTop,
-          Colors.white,
-          Colors.white,
-        ],
-        stops: [0.0, 0.6, 1.0],
-      );
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [OptivusColors.onboardingTop, Colors.white, Colors.white],
+    stops: [0.0, 0.6, 1.0],
+  );
 
   /// Get gradient by tab index (matches AppShell tab order)
   static LinearGradient forTab(int index) {

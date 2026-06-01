@@ -15,7 +15,15 @@ class OnboardingStep8 extends ConsumerStatefulWidget {
 
 class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
   final _customCtrl = TextEditingController();
-  static const coaches = ['Dad', 'Maa', 'Sensei', 'Coach', 'Custom'];
+  static const coaches = [
+    'Coach',
+    'Mentor',
+    'Sensei',
+    'Friend',
+    'Mom / Maa',
+    'Dad',
+    'Custom',
+  ];
   static const styles = [
     ('supportive', 'Supportive'),
     ('tough_love', 'Tough Love'),

@@ -39,24 +39,28 @@ class LiquidInput extends StatelessWidget {
       keyboardType: keyboardType,
       maxLines: maxLines,
       onChanged: onChanged,
-      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+      style: Theme.of(
+        context,
+      ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         hintText: hintText,
         labelText: labelText,
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.9),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
         prefixIcon: prefixIcon != null
             ? Icon(prefixIcon, color: OptivusColors.textSecondary)
             : null,
         suffix: suffix,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide:
-              const BorderSide(color: OptivusColors.borderSoft, width: 1.5),
+          borderSide: const BorderSide(
+            color: OptivusColors.borderSoft,
+            width: 1.5,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -64,8 +68,7 @@ class LiquidInput extends StatelessWidget {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide:
-              const BorderSide(color: OptivusColors.danger, width: 1.5),
+          borderSide: const BorderSide(color: OptivusColors.danger, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -103,16 +106,10 @@ class LiquidInputCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
             if (subtitle != null) ...[
               const SizedBox(height: 6),
-              Text(
-                subtitle!,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium),
             ],
             const SizedBox(height: 20),
             child,

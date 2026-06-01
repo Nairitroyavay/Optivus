@@ -3,14 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/tracker/fitness/fitness_activity_finish_screen.dart';
 import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart';
 import 'package:optivus/features/tracker/fitness/widgets/fitness_center_widgets.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/models/tracker_models.dart';
 
 class FitnessActivitySessionScreen extends ConsumerStatefulWidget {
-  const FitnessActivitySessionScreen({super.key});
+  final VoidCallback? onBack;
+  final ValueChanged<FitnessActivity>? onFinished;
+
+  const FitnessActivitySessionScreen({super.key, this.onBack, this.onFinished});
 
   @override
   ConsumerState<FitnessActivitySessionScreen> createState() =>
@@ -69,15 +71,19 @@ class _FitnessActivitySessionScreenState
               : 3,
         );
     if (completed == null || !mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => FitnessActivityFinishScreen(activity: completed),
-      ),
-    );
+    if (widget.onFinished != null) {
+      widget.onFinished!(completed);
+      return;
+    }
+    Navigator.of(context).maybePop();
   }
 
   void _discard() {
     ref.read(fitnessCenterProvider.notifier).discardActiveActivity();
+    if (widget.onBack != null) {
+      widget.onBack!();
+      return;
+    }
     Navigator.of(context).maybePop();
   }
 
@@ -152,7 +158,8 @@ class _FitnessActivitySessionScreenState
                     title: active.activityType.label,
                     subtitle: 'Outdoor route tracking',
                     accent: accent,
-                    onBack: () => Navigator.of(context).maybePop(),
+                    onBack:
+                        widget.onBack ?? () => Navigator.of(context).maybePop(),
                   ),
                   const SizedBox(height: 14),
                   _OutdoorStatsPanel(
@@ -234,7 +241,8 @@ class _FitnessActivitySessionScreenState
                   title: active.title ?? active.activityType.label,
                   subtitle: 'Indoor timer mode',
                   accent: accent,
-                  onBack: () => Navigator.of(context).maybePop(),
+                  onBack:
+                      widget.onBack ?? () => Navigator.of(context).maybePop(),
                 ),
                 const SizedBox(height: 20),
                 TrackerGlassCard(

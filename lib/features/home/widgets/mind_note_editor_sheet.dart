@@ -219,12 +219,7 @@ class _MindNoteEditorSheetState extends ConsumerState<MindNoteEditorSheet> {
                   child: HomeActionPill(
                     label: 'Return to Focus',
                     compact: true,
-                    onTap: () {
-                      _saveNote(sendToCoach: false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Returning to focus...')),
-                      );
-                    },
+                    onTap: () => _saveNote(sendToCoach: false),
                   ),
                 ),
               ],

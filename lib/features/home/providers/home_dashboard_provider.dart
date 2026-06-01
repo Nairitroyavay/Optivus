@@ -85,7 +85,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
           id: 'money_saved',
           title: 'Money Saved',
           icon: '💰',
-          options: ['₹10', '₹20', 'Custom'],
+          options: ['Tiny save', 'Daily target', 'Custom'],
         ),
       ],
       autoInsights: [
@@ -111,7 +111,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         TrackerPreview(
           id: 'money',
           title: 'Money System',
-          subtitle: '₹0 saved today',
+          subtitle: 'No saving logged today',
           buttonText: 'Open',
         ),
         TrackerPreview(
@@ -166,7 +166,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
         ComingUpItem(
           time: '9:45',
           amPm: 'PM',
-          title: 'Save ₹10',
+          title: 'Tiny money save',
           icon: Icons.savings_outlined,
           iconColor: Color(0xFF4A3B3D),
           iconBgColor: Color(0xFFF1EBEB),
@@ -220,7 +220,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
           currentType: NowActionType.workBlock,
           currentTitle: 'Work',
           currentSubtitle: '10:00 AM - 6:00 PM • Hard block',
-          nextActionTitle: 'Save ₹10 at 8:30 PM',
+          nextActionTitle: 'Confirm saving at 8:30 PM',
         );
         break;
       case NowActionType.freeTime:

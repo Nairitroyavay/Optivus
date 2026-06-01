@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/core/widgets/liquid_bottom_sheet.dart';
 import 'package:optivus/core/widgets/liquid_buttons.dart';
 import 'package:optivus/models/money_models.dart';
+import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 enum MoneySettingKind {
   dailyTarget,
@@ -83,7 +86,9 @@ void showSkipTodayFlow(
   );
 }
 
-void showMoneyInfoSheet(BuildContext context) {
+void showMoneyInfoSheet(BuildContext context, WidgetRef ref) {
+  final region = ref.read(regionSettingsProvider);
+  final isIndiaUpi = region.paymentRegion == PaymentRegion.indiaUpi;
   showLiquidBottomSheet(
     context,
     backgroundColor: OptivusColors.trackerBottom,
@@ -92,26 +97,29 @@ void showMoneyInfoSheet(BuildContext context) {
       subtitle: 'Discipline tracking only',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: const [
-          _InfoRow(
+        children: [
+          const _InfoRow(
             icon: Icons.account_balance_wallet_outlined,
             title: 'Optivus never holds money',
             body:
                 'Your cash, bank balance, and savings accounts stay outside Optivus.',
           ),
-          _InfoRow(
+          const _InfoRow(
             icon: Icons.verified_user_outlined,
-            title: 'Proof is local and frontend-only',
+            title: 'Proof is local in this build',
             body:
-                'This screen records saving discipline, streaks, and progress in mock Riverpod state.',
+                'This screen records saving discipline, streaks, and progress in local app state.',
           ),
           _InfoRow(
             icon: Icons.payments_outlined,
-            title: 'UPI is a mock flow',
-            body:
-                'No real UPI app opens and no transfer is made inside Optivus.',
+            title: isIndiaUpi
+                ? 'UPI stays outside Optivus'
+                : 'Local payment app flow is manual',
+            body: isIndiaUpi
+                ? 'No real UPI app opens and no transfer is made inside Optivus.'
+                : 'Use your own bank, cash, or local payment app. Optivus only records the proof.',
           ),
-          _InfoRow(
+          const _InfoRow(
             icon: Icons.auto_graph_rounded,
             title: 'Future-ready',
             body:
@@ -147,7 +155,7 @@ void showResetMoneyConfirmationSheet(BuildContext context, WidgetRef ref) {
         children: [
           const _SoftNotice(
             text:
-                'This only resets frontend mock data in Optivus. It does not affect any bank, cash, UPI, or external account.',
+                'This only resets frontend mock data in Optivus. It does not affect any bank, cash, local payment app, or external account.',
             accent: OptivusColors.roseAccent,
           ),
           const SizedBox(height: 18),
@@ -203,10 +211,14 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
   void initState() {
     super.initState();
     final trackerState = widget.ref.read(mockTrackerProvider);
+    final region = widget.ref.read(regionSettingsProvider);
     final goal = trackerState.moneyGoal;
     final convertEntry = _convertEntry(trackerState);
     _selectedAmount = convertEntry?.amount ?? goal.currentLevelAmount;
     _selectedDestination = goal.destinationLabel;
+    _selectedApp = region.paymentRegion == PaymentRegion.indiaUpi
+        ? 'Google Pay'
+        : 'Manual confirmation';
   }
 
   @override
@@ -226,7 +238,11 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
 
   double? get _amount {
     if (!_useCustomAmount) return _selectedAmount;
-    final normalized = _customController.text.trim().replaceAll('₹', '');
+    final region = ref.read(regionSettingsProvider);
+    final normalized = _customController.text.trim().replaceAll(
+      region.currencySymbol,
+      '',
+    );
     final parsed = double.tryParse(normalized);
     if (parsed == null || parsed <= 0) return null;
     return parsed;
@@ -235,8 +251,10 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final goal = state.moneyGoal;
     final convertEntry = _convertEntry(state);
+    final isIndiaUpi = region.paymentRegion == PaymentRegion.indiaUpi;
     final amountOptions = <double>{
       if (convertEntry != null) convertEntry.amount,
       goal.tinySaveAmount,
@@ -249,12 +267,14 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
       goal.destinationLabel,
       'Second account',
       'Family account',
-      'Custom UPI ID',
+      if (isIndiaUpi) 'Custom UPI ID' else 'Savings app',
     }.toList();
 
     return _SheetScaffold(
       title: convertEntry == null
-          ? 'Save via UPI mock'
+          ? isIndiaUpi
+                ? 'Save via UPI mock'
+                : 'Save with local method'
           : 'Convert potential saving',
       subtitle: 'Frontend mock only. No payment is made inside Optivus.',
       child: Column(
@@ -279,7 +299,7 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
               controller: _customController,
               hint: 'Enter custom amount',
               keyboardType: TextInputType.number,
-              prefixText: '₹ ',
+              prefixText: '${region.currencySymbol} ',
               onChanged: (_) => setState(() {}),
             ),
           ],
@@ -293,29 +313,48 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
               onTap: () => setState(() => _selectedDestination = label),
             ),
           ),
-          const SizedBox(height: 18),
-          const _SectionLabel('UPI app choice'),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: ['Google Pay', 'PhonePe', 'Paytm', 'BHIM']
-                .map(
-                  (app) => _LiquidChoiceChip(
-                    label: app,
-                    selected: _selectedApp == app,
-                    onTap: () => setState(() => _selectedApp = app),
-                  ),
-                )
-                .toList(growable: false),
-          ),
+          if (isIndiaUpi) ...[
+            const SizedBox(height: 18),
+            const _SectionLabel('UPI app choice'),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: ['Google Pay', 'PhonePe', 'Paytm', 'BHIM']
+                  .map(
+                    (app) => _LiquidChoiceChip(
+                      label: app,
+                      selected: _selectedApp == app,
+                      onTap: () => setState(() => _selectedApp = app),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ] else ...[
+            const SizedBox(height: 18),
+            const _SectionLabel('Saving method'),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: ['Manual confirmation', 'Cash', 'Bank transfer']
+                  .map(
+                    (app) => _LiquidChoiceChip(
+                      label: app,
+                      selected: _selectedApp == app,
+                      onTap: () => setState(() => _selectedApp = app),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+          ],
           const SizedBox(height: 18),
           const _SoftNotice(
-            text: 'Frontend mock only. No payment is made inside Optivus.',
+            text:
+                'Optivus does not hold money. You save using your own bank, cash, or local payment app.',
             accent: OptivusColors.trackerAccent,
           ),
           const SizedBox(height: 22),
           LiquidPrimaryButton(
-            label: 'Mark UPI transfer done',
+            label: isIndiaUpi ? 'Mark UPI transfer done' : 'Mark saving done',
             icon: Icons.check_circle_outline_rounded,
             backgroundColor: OptivusColors.trackerAccent,
             foregroundColor: OptivusColors.ink,
@@ -324,21 +363,28 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
                 : () {
                     final navigator = Navigator.of(context);
                     final notifier = ref.read(mockTrackerProvider.notifier);
+                    final method = isIndiaUpi
+                        ? MoneySaveMethod.upiMock
+                        : _methodFromLabel(_selectedApp);
                     if (convertEntry != null) {
                       notifier.convertPotentialToConfirmed(
                         convertEntry.id,
-                        method: MoneySaveMethod.upiMock,
+                        method: method,
                       );
                     } else {
                       notifier.saveMoneyToday(
                         amount: _amount!,
-                        method: MoneySaveMethod.upiMock,
-                        source: widget.source,
+                        method: method,
+                        source: isIndiaUpi
+                            ? widget.source
+                            : MoneyEntrySource.manual,
                         routineTaskId: widget.routineTaskId,
                         description:
                             widget.source == MoneyEntrySource.routineTask
                             ? 'Routine Money System task'
-                            : 'UPI mock transfer marked done',
+                            : isIndiaUpi
+                            ? 'UPI mock transfer marked done'
+                            : 'Manual saving confirmed',
                       );
                     }
                     widget.onSaved?.call();
@@ -378,8 +424,13 @@ class _AlreadySavedSheetState extends ConsumerState<_AlreadySavedSheet> {
   void initState() {
     super.initState();
     final goal = widget.ref.read(mockTrackerProvider).moneyGoal;
+    final region = widget.ref.read(regionSettingsProvider);
     _selectedAmount = goal.currentLevelAmount;
-    _selectedMethod = goal.defaultMethod;
+    _selectedMethod =
+        goal.defaultMethod == MoneySaveMethod.upiMock &&
+            region.paymentRegion != PaymentRegion.indiaUpi
+        ? MoneySaveMethod.cash
+        : goal.defaultMethod;
   }
 
   @override
@@ -390,8 +441,9 @@ class _AlreadySavedSheetState extends ConsumerState<_AlreadySavedSheet> {
 
   double? get _amount {
     if (!_useCustomAmount) return _selectedAmount;
+    final region = ref.read(regionSettingsProvider);
     final parsed = double.tryParse(
-      _customController.text.trim().replaceAll('₹', ''),
+      _customController.text.trim().replaceAll(region.currencySymbol, ''),
     );
     if (parsed == null || parsed <= 0) return null;
     return parsed;
@@ -400,6 +452,7 @@ class _AlreadySavedSheetState extends ConsumerState<_AlreadySavedSheet> {
   @override
   Widget build(BuildContext context) {
     final goal = ref.watch(mockTrackerProvider).moneyGoal;
+    final region = ref.watch(regionSettingsProvider);
     final amountOptions = <double>{
       goal.tinySaveAmount,
       goal.currentLevelAmount,
@@ -436,7 +489,7 @@ class _AlreadySavedSheetState extends ConsumerState<_AlreadySavedSheet> {
               controller: _customController,
               hint: 'Enter saved amount',
               keyboardType: TextInputType.number,
-              prefixText: '₹ ',
+              prefixText: '${region.currencySymbol} ',
               onChanged: (_) => setState(() {}),
             ),
           ],
@@ -446,10 +499,15 @@ class _AlreadySavedSheetState extends ConsumerState<_AlreadySavedSheet> {
             spacing: 10,
             runSpacing: 10,
             children: MoneySaveMethod.values
-                .where((method) => method != MoneySaveMethod.none)
+                .where(
+                  (method) =>
+                      method != MoneySaveMethod.none &&
+                      (region.paymentRegion == PaymentRegion.indiaUpi ||
+                          method != MoneySaveMethod.upiMock),
+                )
                 .map(
                   (method) => _LiquidChoiceChip(
-                    label: moneySaveMethodLabel(method),
+                    label: moneySaveMethodLabel(method, region),
                     selected: _selectedMethod == method,
                     onTap: () => setState(() => _selectedMethod = method),
                   ),
@@ -496,6 +554,7 @@ class _TinySaveSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goal = ref.watch(mockTrackerProvider).moneyGoal;
+    final region = ref.watch(regionSettingsProvider);
     return _SheetScaffold(
       title: 'Tiny save',
       subtitle: 'Keep the finance identity alive with the smallest real proof.',
@@ -504,7 +563,7 @@ class _TinySaveSheet extends ConsumerWidget {
         children: [
           _SoftNotice(
             text:
-                'Save ₹${goal.tinySaveAmount.toInt()} outside Optivus, then mark the proof here.',
+                'Save ${formatMoney(goal.tinySaveAmount, region)} outside Optivus, then mark the proof here.',
             accent: OptivusColors.mintAccent,
           ),
           const SizedBox(height: 18),
@@ -647,12 +706,13 @@ class _MoneySettingSheetState extends State<_MoneySettingSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final region = widget.ref.read(regionSettingsProvider);
     return switch (widget.kind) {
       MoneySettingKind.dailyTarget => _numberSetting(
         context,
         title: 'Daily target amount',
         subtitle: 'Set the regular daily finance proof.',
-        prefixText: '₹ ',
+        prefixText: '${region.currencySymbol} ',
         onSave: (value) => widget.ref
             .read(mockTrackerProvider.notifier)
             .updateMoneySettings(dailyTarget: value),
@@ -661,7 +721,7 @@ class _MoneySettingSheetState extends State<_MoneySettingSheet> {
         context,
         title: 'Tiny save amount',
         subtitle: 'Smallest fallback amount that still counts as proof.',
-        prefixText: '₹ ',
+        prefixText: '${region.currencySymbol} ',
         onSave: (value) => widget.ref
             .read(mockTrackerProvider.notifier)
             .updateMoneySettings(tinySaveAmount: value),
@@ -766,6 +826,7 @@ class _MoneySettingSheetState extends State<_MoneySettingSheet> {
   }
 
   Widget _methodSetting(BuildContext context) {
+    final region = widget.ref.read(regionSettingsProvider);
     return _SheetScaffold(
       title: 'Default method',
       subtitle: 'Used by tiny saves and routine money proof.',
@@ -776,10 +837,15 @@ class _MoneySettingSheetState extends State<_MoneySettingSheet> {
             spacing: 10,
             runSpacing: 10,
             children: MoneySaveMethod.values
-                .where((method) => method != MoneySaveMethod.none)
+                .where(
+                  (method) =>
+                      method != MoneySaveMethod.none &&
+                      (region.paymentRegion == PaymentRegion.indiaUpi ||
+                          method != MoneySaveMethod.upiMock),
+                )
                 .map(
                   (method) => _LiquidChoiceChip(
-                    label: moneySaveMethodLabel(method),
+                    label: moneySaveMethodLabel(method, region),
                     selected: _method == method,
                     onTap: () => setState(() => _method = method),
                   ),
@@ -1064,7 +1130,7 @@ class _SoftNotice extends StatelessWidget {
   }
 }
 
-class _AmountChoices extends StatelessWidget {
+class _AmountChoices extends ConsumerWidget {
   final List<double> amounts;
   final double selectedAmount;
   final bool useCustom;
@@ -1080,14 +1146,15 @@ class _AmountChoices extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final region = ref.watch(regionSettingsProvider);
     return Wrap(
       spacing: 10,
       runSpacing: 10,
       children: [
         ...amounts.map(
           (amount) => _LiquidChoiceChip(
-            label: '₹${amount.toInt()}',
+            label: formatMoney(amount, region),
             selected: !useCustom && selectedAmount == amount,
             onTap: () => onSelected(amount),
           ),
@@ -1292,9 +1359,27 @@ class _MoneyTextField extends StatelessWidget {
   }
 }
 
-String moneySaveMethodLabel(MoneySaveMethod method) {
+MoneySaveMethod _methodFromLabel(String label) {
+  return switch (label) {
+    'Cash' => MoneySaveMethod.cash,
+    'Bank transfer' => MoneySaveMethod.bankTransfer,
+    'Second account' => MoneySaveMethod.secondAccount,
+    'Family account' => MoneySaveMethod.familyAccount,
+    'UPI' ||
+    'Google Pay' ||
+    'PhonePe' ||
+    'Paytm' ||
+    'BHIM' => MoneySaveMethod.upiMock,
+    _ => MoneySaveMethod.custom,
+  };
+}
+
+String moneySaveMethodLabel(MoneySaveMethod method, [RegionSettings? region]) {
   return switch (method) {
-    MoneySaveMethod.upiMock => 'UPI mock',
+    MoneySaveMethod.upiMock =>
+      region?.paymentRegion == PaymentRegion.indiaUpi
+          ? 'UPI mock'
+          : 'Payment app',
     MoneySaveMethod.cash => 'Cash',
     MoneySaveMethod.bankTransfer => 'Bank transfer',
     MoneySaveMethod.secondAccount => 'Second account',
@@ -1304,11 +1389,17 @@ String moneySaveMethodLabel(MoneySaveMethod method) {
   };
 }
 
-String moneyEntrySourceLabel(MoneyEntrySource source) {
+String moneyEntrySourceLabel(
+  MoneyEntrySource source, [
+  RegionSettings? region,
+]) {
   return switch (source) {
     MoneyEntrySource.dailyTarget => 'Daily target',
     MoneyEntrySource.manual => 'Manual',
-    MoneyEntrySource.upiMock => 'UPI mock',
+    MoneyEntrySource.upiMock =>
+      region?.paymentRegion == PaymentRegion.indiaUpi
+          ? 'UPI mock'
+          : 'Payment app',
     MoneyEntrySource.badHabitAvoided => 'Bad habit avoided',
     MoneyEntrySource.badHabitConverted => 'Bad habit converted',
     MoneyEntrySource.routineTask => 'Routine task',

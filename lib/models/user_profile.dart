@@ -2,7 +2,7 @@ class UserProfile {
   final String uid;
   final String email;
   final String displayName;
-  
+
   // Timestamps
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -12,9 +12,9 @@ class UserProfile {
   final int onboardingStep;
 
   // Lifestyle Role
-  final String lifeRole; 
-  final String? workingExtra; 
-  final String? businessMode; 
+  final String lifeRole;
+  final String? workingExtra;
+  final String? businessMode;
 
   // Lifestyle Attributes
   final String exerciseLevel;
@@ -24,8 +24,8 @@ class UserProfile {
 
   // Body Basics
   final String ageRange;
-  final double height; 
-  final double weight; 
+  final double height;
+  final double weight;
   final String gender;
 
   // Estimates
@@ -65,7 +65,11 @@ class UserProfile {
     this.slipUpStyle = '',
   });
 
-  factory UserProfile.empty({required String uid, String email = '', String displayName = ''}) {
+  factory UserProfile.empty({
+    required String uid,
+    String email = '',
+    String displayName = '',
+  }) {
     return UserProfile(
       uid: uid,
       email: email,
@@ -109,8 +113,12 @@ class UserProfile {
       uid: map['uid'] as String? ?? '',
       email: map['email'] as String? ?? '',
       displayName: map['displayName'] as String? ?? '',
-      createdAt: map['createdAt'] != null ? DateTime.tryParse(map['createdAt']) : null,
-      updatedAt: map['updatedAt'] != null ? DateTime.tryParse(map['updatedAt']) : null,
+      createdAt: map['createdAt'] != null
+          ? DateTime.tryParse(map['createdAt'])
+          : null,
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.tryParse(map['updatedAt'])
+          : null,
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
       onboardingStep: map['onboardingStep'] as int? ?? 0,
       lifeRole: map['lifeRole'] as String? ?? '',

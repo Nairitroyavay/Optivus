@@ -689,8 +689,13 @@ class ConnectedServiceDetailScreen extends ConsumerWidget {
 
 class AppPreferencesScreen extends ConsumerWidget {
   final VoidCallback onBack;
+  final OpenProfileDetail? onOpenProfileDetail;
 
-  const AppPreferencesScreen({super.key, required this.onBack});
+  const AppPreferencesScreen({
+    super.key,
+    required this.onBack,
+    this.onOpenProfileDetail,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -723,6 +728,23 @@ class AppPreferencesScreen extends ConsumerWidget {
               color: _profileAccent,
               onChanged: (v) =>
                   notifier.updatePreferences(prefs.copyWith(autoCorrect: v)),
+            ),
+            LiquidActionRow(
+              icon: Icons.public_rounded,
+              title: 'Region & Localization',
+              subtitle: 'Currency, units, date format, food vocabulary.',
+              accentColor: _profileAccent,
+              onTap: () {
+                final target = const ProfileDetailTarget(
+                  view: ProfileDetailView.regionLocalization,
+                );
+                if (onOpenProfileDetail != null) {
+                  onOpenProfileDetail!(target);
+                } else {
+                  ref.read(profileDetailViewRequestProvider.notifier).state =
+                      target;
+                }
+              },
             ),
           ],
         ),
@@ -782,7 +804,18 @@ class AppPreferencesScreen extends ConsumerWidget {
             const SizedBox(height: 14),
             _LabeledSegment(
               label: 'Language',
-              options: const ['English', 'Hindi later', 'Bengali later'],
+              options: const [
+                'English',
+                'Hindi',
+                'Bengali',
+                'Japanese',
+                'German',
+                'Spanish',
+                'French',
+                'Korean',
+                'Chinese',
+                'Custom',
+              ],
               selected: prefs.language,
               onSelected: (v) =>
                   notifier.updatePreferences(prefs.copyWith(language: v)),

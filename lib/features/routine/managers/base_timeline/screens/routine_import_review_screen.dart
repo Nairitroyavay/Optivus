@@ -444,7 +444,7 @@ List<RoutineItem> _mockBlocks(RoutineImportSource source) {
     RoutineImportSource.eating => [
       RoutineItem(
         id: 'import-eating-$now-1',
-        title: 'Mess Lunch',
+        title: 'Meal Plan Lunch',
         startMinute: 13 * 60,
         endMinute: 13 * 60 + 30,
         blockType: RoutineBlockType.softBlock,
@@ -455,7 +455,7 @@ List<RoutineItem> _mockBlocks(RoutineImportSource source) {
       ),
       RoutineItem(
         id: 'import-eating-$now-2',
-        title: 'Mess Dinner',
+        title: 'Meal Plan Dinner',
         startMinute: 21 * 60,
         endMinute: 21 * 60 + 30,
         blockType: RoutineBlockType.softBlock,
@@ -506,7 +506,7 @@ String _sourceSummary(RoutineImportSource source) {
     RoutineImportSource.work =>
       'Mock parsed from job/work/business schedule import. Review fixed and flexible blocks.',
     RoutineImportSource.eating =>
-      'Mock parsed from mess/eating sheet import. Review meal windows and missing dish info.',
+      'Mock parsed from meal-plan/eating sheet import. Review meal windows and missing dish info.',
     RoutineImportSource.skinCare =>
       'Mock parsed from skin care routine import. Review steps, product timing, and repeat days.',
   };

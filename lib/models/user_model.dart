@@ -29,11 +29,11 @@ class NotificationSettings {
   }
 
   Map<String, dynamic> toMap() => {
-        'dailyBrief': dailyBrief,
-        'streakAlerts': streakAlerts,
-        'coachNudges': coachNudges,
-        'weeklyReview': weeklyReview,
-      };
+    'dailyBrief': dailyBrief,
+    'streakAlerts': streakAlerts,
+    'coachNudges': coachNudges,
+    'weeklyReview': weeklyReview,
+  };
 
   NotificationSettings copyWith({
     bool? dailyBrief,
@@ -82,14 +82,14 @@ class BodyBasics {
   }
 
   Map<String, dynamic> toMap() => {
-        'ageRange': ageRange,
-        'heightCm': heightCm,
-        'weightKg': weightKg,
-        'gender': gender,
-        'wakeTime': wakeTime,
-        'sleepTime': sleepTime,
-        'timezone': timezone,
-      };
+    'ageRange': ageRange,
+    'heightCm': heightCm,
+    'weightKg': weightKg,
+    'gender': gender,
+    'wakeTime': wakeTime,
+    'sleepTime': sleepTime,
+    'timezone': timezone,
+  };
 
   BodyBasics copyWith({
     String? ageRange,
@@ -154,13 +154,13 @@ class LifestyleProfile {
   }
 
   Map<String, dynamic> toMap() => {
-        'schoolWorkType': schoolWorkType,
-        'exerciseLevel': exerciseLevel,
-        'waterIntake': waterIntake,
-        'dietPreference': dietPreference,
-        'stressLevel': stressLevel,
-        'sleepQuality': sleepQuality,
-      };
+    'schoolWorkType': schoolWorkType,
+    'exerciseLevel': exerciseLevel,
+    'waterIntake': waterIntake,
+    'dietPreference': dietPreference,
+    'stressLevel': stressLevel,
+    'sleepQuality': sleepQuality,
+  };
 
   LifestyleProfile copyWith({
     String? schoolWorkType,
@@ -196,7 +196,8 @@ class SensitiveContext {
 
   factory SensitiveContext.fromMap(Map<String, dynamic> map) {
     return SensitiveContext(
-      eatingDisorderFlag: map['eatingDisorderFlag'] as bool? ??
+      eatingDisorderFlag:
+          map['eatingDisorderFlag'] as bool? ??
           map['eatingDisorderHistory'] as bool?,
       crisisSelfHarmFlag: map['crisisSelfHarmFlag'] as bool?,
       medicalDisclaimerAcknowledged:
@@ -206,12 +207,12 @@ class SensitiveContext {
   }
 
   Map<String, dynamic> toMap() => {
-        'eatingDisorderFlag': eatingDisorderFlag,
-        'eatingDisorderHistory': eatingDisorderFlag,
-        'crisisSelfHarmFlag': crisisSelfHarmFlag,
-        'medicalDisclaimerAcknowledged': medicalDisclaimerAcknowledged,
-        'coachBoundaryPreference': coachBoundaryPreference,
-      };
+    'eatingDisorderFlag': eatingDisorderFlag,
+    'eatingDisorderHistory': eatingDisorderFlag,
+    'crisisSelfHarmFlag': crisisSelfHarmFlag,
+    'medicalDisclaimerAcknowledged': medicalDisclaimerAcknowledged,
+    'coachBoundaryPreference': coachBoundaryPreference,
+  };
 
   SensitiveContext copyWith({
     bool? eatingDisorderFlag,
@@ -256,20 +257,22 @@ class AboutYouProfile {
           : const BodyBasics(),
       lifestyle: map['lifestyle'] is Map
           ? LifestyleProfile.fromMap(
-              Map<String, dynamic>.from(map['lifestyle']))
+              Map<String, dynamic>.from(map['lifestyle']),
+            )
           : const LifestyleProfile(),
       sensitiveContext: map['sensitiveContext'] is Map
           ? SensitiveContext.fromMap(
-              Map<String, dynamic>.from(map['sensitiveContext']))
+              Map<String, dynamic>.from(map['sensitiveContext']),
+            )
           : const SensitiveContext(),
     );
   }
 
   Map<String, dynamic> toMap() => {
-        'bodyBasics': bodyBasics.toMap(),
-        'lifestyle': lifestyle.toMap(),
-        'sensitiveContext': sensitiveContext.toMap(),
-      };
+    'bodyBasics': bodyBasics.toMap(),
+    'lifestyle': lifestyle.toMap(),
+    'sensitiveContext': sensitiveContext.toMap(),
+  };
 
   AboutYouProfile copyWith({
     BodyBasics? bodyBasics,
@@ -351,7 +354,8 @@ class UserModel {
       accountabilityMode: data['accountabilityMode'] as String?,
       notificationSettings: data['notificationSettings'] is Map
           ? NotificationSettings.fromMap(
-              Map<String, dynamic>.from(data['notificationSettings'] as Map))
+              Map<String, dynamic>.from(data['notificationSettings'] as Map),
+            )
           : const NotificationSettings(),
     );
   }
@@ -373,7 +377,8 @@ class UserModel {
       accountabilityMode: map['accountabilityMode'] as String?,
       notificationSettings: map['notificationSettings'] is Map
           ? NotificationSettings.fromMap(
-              Map<String, dynamic>.from(map['notificationSettings'] as Map))
+              Map<String, dynamic>.from(map['notificationSettings'] as Map),
+            )
           : const NotificationSettings(),
     );
   }
@@ -420,8 +425,7 @@ class UserModel {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       schemaVersion: schemaVersion,
-      onboardingCompleted:
-          onboardingCompleted ?? this.onboardingCompleted,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       lastDayClosed: lastDayClosed ?? this.lastDayClosed,
       coachName: coachName ?? this.coachName,

@@ -33,10 +33,7 @@ class GraphPerformanceCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.white,
-          width: 1.5,
-        ),
+        border: Border.all(color: Colors.white, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.03),
@@ -75,7 +72,10 @@ class GraphPerformanceCard extends StatelessWidget {
               ),
               if (values.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
@@ -108,7 +108,9 @@ class GraphPerformanceCard extends StatelessWidget {
                           Expanded(
                             child: LayoutBuilder(
                               builder: (context, constraints) {
-                                final double barHeight = (values[i] / scaleMax) * constraints.maxHeight;
+                                final double barHeight =
+                                    (values[i] / scaleMax) *
+                                    constraints.maxHeight;
                                 return Stack(
                                   alignment: Alignment.bottomCenter,
                                   children: [
@@ -117,16 +119,22 @@ class GraphPerformanceCard extends StatelessWidget {
                                       width: 12,
                                       height: constraints.maxHeight,
                                       decoration: BoxDecoration(
-                                        color: OptivusColors.borderSoft.withValues(alpha: 0.5),
+                                        color: OptivusColors.borderSoft
+                                            .withValues(alpha: 0.5),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                     ),
                                     // Active colored bar
                                     AnimatedContainer(
-                                      duration: const Duration(milliseconds: 500),
+                                      duration: const Duration(
+                                        milliseconds: 500,
+                                      ),
                                       curve: Curves.easeOutCubic,
                                       width: 12,
-                                      height: barHeight.clamp(4.0, constraints.maxHeight),
+                                      height: barHeight.clamp(
+                                        4.0,
+                                        constraints.maxHeight,
+                                      ),
                                       decoration: BoxDecoration(
                                         gradient: LinearGradient(
                                           colors: [
@@ -139,10 +147,12 @@ class GraphPerformanceCard extends StatelessWidget {
                                         borderRadius: BorderRadius.circular(6),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: accentColor.withValues(alpha: 0.25),
+                                            color: accentColor.withValues(
+                                              alpha: 0.25,
+                                            ),
                                             blurRadius: 4,
                                             offset: const Offset(0, 2),
-                                          )
+                                          ),
                                         ],
                                       ),
                                     ),

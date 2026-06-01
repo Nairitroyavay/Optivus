@@ -130,39 +130,44 @@ class _OnboardingStep7State extends ConsumerState<OnboardingStep7> {
                         _syncDraft();
                       },
                       expandedContent: goal.selected
-                          ? Consumer(builder: (context, ref, _) {
-                              final skipped = ref
-                                  .watch(mockOnboardingProvider)
-                                  .draft
-                                  .skippedDuplicateSystemKeys();
-                              final isDuplicate = goal.systemKeys
-                                  .any((key) => skipped.contains(key));
-                              return Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  OnboardingChip(
-                                    label: 'Mapped system',
-                                    selected: true,
-                                  ),
-                                  if (isDuplicate)
-                                    const OnboardingChip(
-                                      label: 'Duplicate prevention active',
+                          ? Consumer(
+                              builder: (context, ref, _) {
+                                final skipped = ref
+                                    .watch(mockOnboardingProvider)
+                                    .draft
+                                    .skippedDuplicateSystemKeys();
+                                final isDuplicate = goal.systemKeys.any(
+                                  (key) => skipped.contains(key),
+                                );
+                                return Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    OnboardingChip(
+                                      label: 'Mapped system',
                                       selected: true,
-                                      accent: OptivusColors.aquaAccent,
                                     ),
-                                  ...goal.systemKeys.take(2).map(
-                                        (key) => OnboardingChip(
-                                          label: identitySystemTitle(key),
-                                          selected: true,
-                                          accent: skipped.contains(key)
-                                              ? OptivusColors.textSecondary
-                                              : OptivusColors.success,
-                                        ),
+                                    if (isDuplicate)
+                                      const OnboardingChip(
+                                        label: 'Duplicate prevention active',
+                                        selected: true,
+                                        accent: OptivusColors.aquaAccent,
                                       ),
-                                ],
-                              );
-                            })
+                                    ...goal.systemKeys
+                                        .take(2)
+                                        .map(
+                                          (key) => OnboardingChip(
+                                            label: identitySystemTitle(key),
+                                            selected: true,
+                                            accent: skipped.contains(key)
+                                                ? OptivusColors.textSecondary
+                                                : OptivusColors.success,
+                                          ),
+                                        ),
+                                  ],
+                                );
+                              },
+                            )
                           : null,
                     ),
                   );

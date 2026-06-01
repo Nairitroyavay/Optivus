@@ -6,11 +6,7 @@ class ConflictBanner extends StatelessWidget {
   final int conflictCount;
   final VoidCallback? onTap;
 
-  const ConflictBanner({
-    super.key,
-    required this.conflictCount,
-    this.onTap,
-  });
+  const ConflictBanner({super.key, required this.conflictCount, this.onTap});
 
   @override
   Widget build(BuildContext context) {

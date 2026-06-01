@@ -1,8 +1,4 @@
-enum PermissionConnectionState {
-  notConnected,
-  mockConnected,
-  comingLater
-}
+enum PermissionConnectionState { notConnected, mockConnected, comingLater }
 
 class PermissionStatus {
   final PermissionConnectionState notifications;

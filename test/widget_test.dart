@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/widgets/app_button.dart';
 
 void main() {
-  testWidgets('AppButton renders text and triggers onPressed', (WidgetTester tester) async {
+  testWidgets('AppButton renders text and triggers onPressed', (
+    WidgetTester tester,
+  ) async {
     bool pressed = false;
 
     // Build the AppButton.

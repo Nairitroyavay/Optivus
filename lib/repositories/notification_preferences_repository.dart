@@ -7,7 +7,8 @@ abstract class NotificationPreferencesRepository {
   Future<void> savePreferences(String uid, NotificationPreferences prefs);
 }
 
-class FakeNotificationPreferencesRepository implements NotificationPreferencesRepository {
+class FakeNotificationPreferencesRepository
+    implements NotificationPreferencesRepository {
   final Map<String, NotificationPreferences> _prefs = {};
 
   @override
@@ -17,12 +18,16 @@ class FakeNotificationPreferencesRepository implements NotificationPreferencesRe
   }
 
   @override
-  Future<void> savePreferences(String uid, NotificationPreferences prefs) async {
+  Future<void> savePreferences(
+    String uid,
+    NotificationPreferences prefs,
+  ) async {
     await Future.delayed(const Duration(milliseconds: 300));
     _prefs[uid] = prefs;
   }
 }
 
-final notificationPreferencesRepositoryProvider = Provider<NotificationPreferencesRepository>((ref) {
-  return FakeNotificationPreferencesRepository();
-});
+final notificationPreferencesRepositoryProvider =
+    Provider<NotificationPreferencesRepository>((ref) {
+      return FakeNotificationPreferencesRepository();
+    });

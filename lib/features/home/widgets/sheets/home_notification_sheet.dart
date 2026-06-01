@@ -14,7 +14,12 @@ class HomeNotificationSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildNotificationItem(IconData icon, String text, Color accent, {bool isNew = false}) {
+  Widget _buildNotificationItem(
+    IconData icon,
+    String text,
+    Color accent, {
+    bool isNew = false,
+  }) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -69,7 +74,9 @@ class HomeNotificationSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF2F4F7).withValues(alpha: 0.95), // Slight off-white to match app shell
+        color: const Color(
+          0xFFF2F4F7,
+        ).withValues(alpha: 0.95), // Slight off-white to match app shell
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
         border: Border.all(color: Colors.white, width: 2),
       ),
@@ -120,7 +127,7 @@ class HomeNotificationSheet extends StatelessWidget {
               ),
               _buildNotificationItem(
                 Icons.savings_outlined,
-                'Save ₹10 today',
+                'Tiny money save today',
                 Colors.amber.shade600,
               ),
               _buildNotificationItem(

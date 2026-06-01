@@ -5,7 +5,7 @@ enum RoutineBlockType {
   flexibleTask, // Movable habits: Reading, Language, Study
   trackerTask, // Timed tracker items: Workout, Meditation, Focus session
   checkIn, // Manual loggers: Smoking check, alcohol avoid, Hydration logs
-  moneyTask, // UPI target save ₹10 task
+  moneyTask, // Region-aware tiny saving task
 }
 
 // ── Category ────────────────────────────────────────────────

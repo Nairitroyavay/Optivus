@@ -28,10 +28,10 @@ class LiquidSectionHeader extends StatelessWidget {
           Text(
             title.toUpperCase(),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.2,
-                  color: OptivusColors.textSecondary,
-                ),
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.2,
+              color: OptivusColors.textSecondary,
+            ),
           ),
           if (actionText != null)
             GestureDetector(

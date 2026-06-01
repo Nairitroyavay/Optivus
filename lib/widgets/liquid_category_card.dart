@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -41,12 +40,14 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
       vsync: this,
       duration: const Duration(milliseconds: 520),
     );
-    _rippleScale = Tween<double>(begin: 0.6, end: 1.55).animate(
-      CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOutCubic),
-    );
-    _rippleOpacity = Tween<double>(begin: 0.55, end: 0.0).animate(
-      CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOutCubic),
-    );
+    _rippleScale = Tween<double>(
+      begin: 0.6,
+      end: 1.55,
+    ).animate(CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOutCubic));
+    _rippleOpacity = Tween<double>(
+      begin: 0.55,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOutCubic));
   }
 
   @override
@@ -65,7 +66,8 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
   Widget _glassOrb(Color c) {
     const double s = 36.0;
     return Container(
-      width: s, height: s,
+      width: s,
+      height: s,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         // Radial: light translucent centre → lavender → cooler rim
@@ -73,16 +75,24 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
           center: Alignment(0.0, 0.15),
           radius: 0.88,
           colors: [
-            Color(0xCCEEEFF8),  // translucent light lavender centre
-            Color(0xFFD8DAE8),  // mid lavender
-            Color(0xFFC4C7D8),  // slightly darker rim
+            Color(0xCCEEEFF8), // translucent light lavender centre
+            Color(0xFFD8DAE8), // mid lavender
+            Color(0xFFC4C7D8), // slightly darker rim
           ],
           stops: [0.0, 0.58, 1.0],
         ),
         border: Border.all(color: const Color(0xFFD0D3E4), width: 2.0),
         boxShadow: const [
-          BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 4)),
-          BoxShadow(color: Color(0xCCFFFFFF), blurRadius: 6, offset: Offset(-2, -3)),
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+          BoxShadow(
+            color: Color(0xCCFFFFFF),
+            blurRadius: 6,
+            offset: Offset(-2, -3),
+          ),
         ],
       ),
       child: ClipOval(
@@ -91,7 +101,9 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
           children: [
             // Large top-half bright highlight — the key liquid glass effect
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 height: s * 0.50,
                 decoration: const BoxDecoration(
@@ -105,20 +117,27 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
             ),
             // Small crescent at top-left
             Positioned(
-              top: 5, left: 6,
+              top: 5,
+              left: 6,
               child: Container(
-                width: 16, height: 9,
+                width: 16,
+                height: 9,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(7),
                   gradient: const LinearGradient(
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                     colors: [Color(0xDDFFFFFF), Color(0x00FFFFFF)],
                   ),
                 ),
               ),
             ),
             // Icon
-            Icon(widget.icon, size: 18, color: const Color(0xFF4A4D68).withValues(alpha: 0.80)),
+            Icon(
+              widget.icon,
+              size: 18,
+              color: const Color(0xFF4A4D68).withValues(alpha: 0.80),
+            ),
           ],
         ),
       ),
@@ -128,10 +147,11 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
   // ── Liquid colour orb — selected (vivid liquid drop) ───────────────────────
   Widget _colorOrb(Color c) {
     const double s = 36.0;
-    final rim   = _darken(c, 0.10);
+    final rim = _darken(c, 0.10);
     final light = _lighten(c, 0.30);
     return Container(
-      width: s, height: s,
+      width: s,
+      height: s,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         // Radial: translucent tint centre → full colour → dark rim
@@ -139,20 +159,33 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
           center: const Alignment(0.0, 0.15),
           radius: 0.90,
           colors: [
-            light.withValues(alpha: 0.60),  // glassy centre
-            c.withValues(alpha: 0.92),       // full colour mid
-            rim,                             // dark rim
+            light.withValues(alpha: 0.60), // glassy centre
+            c.withValues(alpha: 0.92), // full colour mid
+            rim, // dark rim
           ],
           stops: const [0.0, 0.60, 1.0],
         ),
         border: Border.all(color: rim.withValues(alpha: 0.75), width: 2.2),
         boxShadow: [
           // Coloured outer glow
-          BoxShadow(color: c.withValues(alpha: 0.45), blurRadius: 22, offset: const Offset(0, 6), spreadRadius: -2),
+          BoxShadow(
+            color: c.withValues(alpha: 0.45),
+            blurRadius: 22,
+            offset: const Offset(0, 6),
+            spreadRadius: -2,
+          ),
           // Lift shadow
-          BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
           // Top inner-light
-          BoxShadow(color: Colors.white.withValues(alpha: 0.70), blurRadius: 5, offset: const Offset(-2, -3)),
+          BoxShadow(
+            color: Colors.white.withValues(alpha: 0.70),
+            blurRadius: 5,
+            offset: const Offset(-2, -3),
+          ),
         ],
       ),
       child: ClipOval(
@@ -161,7 +194,9 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
           children: [
             // ── LARGE top-half bright highlight — makes it look like a liquid drop
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 height: s * 0.52,
                 decoration: const BoxDecoration(
@@ -175,37 +210,46 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
             ),
             // Small tight crescent at top-left (specular)
             Positioned(
-              top: 5, left: 6,
+              top: 5,
+              left: 6,
               child: Container(
-                width: 16, height: 9,
+                width: 16,
+                height: 9,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(7),
                   gradient: const LinearGradient(
-                    begin: Alignment.topLeft, end: Alignment.bottomRight,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                     colors: [Color(0xEEFFFFFF), Color(0x00FFFFFF)],
                   ),
                 ),
               ),
             ),
             // Icon — white with colour shadow
-            Icon(widget.icon, size: 18, color: Colors.white,
-              shadows: [Shadow(color: rim.withValues(alpha: 0.55), blurRadius: 5)]),
+            Icon(
+              widget.icon,
+              size: 18,
+              color: Colors.white,
+              shadows: [
+                Shadow(color: rim.withValues(alpha: 0.55), blurRadius: 5),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-
   // ── Combined orb: AnimatedOpacity crossfade between the two layers ─────────
   // WHY not AnimatedContainer? .lerp() cannot interpolate between gradients
   // with different stop counts (3 vs 4 stops) — it snaps visually.
   Widget _buildOrb() {
-    final c   = widget.primaryColor;
+    final c = widget.primaryColor;
     final sel = widget.isSelected;
 
     return SizedBox(
-      width: 50, height: 50,
+      width: 50,
+      height: 50,
       child: Stack(
         clipBehavior: Clip.none,
         alignment: Alignment.center,
@@ -218,10 +262,14 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
               child: Transform.scale(
                 scale: _rippleScale.value,
                 child: Container(
-                  width: 42, height: 42,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: c.withValues(alpha: 0.48), width: 1.5),
+                    border: Border.all(
+                      color: c.withValues(alpha: 0.48),
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -246,17 +294,26 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
 
           // Checkmark springs in with elasticOut
           Positioned(
-            top: 4, right: 4,
+            top: 4,
+            right: 4,
             child: AnimatedScale(
               scale: sel ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 320),
               curve: Curves.elasticOut,
               child: Container(
-                width: 16, height: 16,
+                width: 16,
+                height: 16,
                 decoration: BoxDecoration(
-                  color: c, shape: BoxShape.circle,
+                  color: c,
+                  shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 1.5),
-                  boxShadow: [BoxShadow(color: c.withValues(alpha: 0.45), blurRadius: 8, offset: const Offset(0, 2))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: c.withValues(alpha: 0.45),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: const Icon(Icons.check, color: Colors.white, size: 9),
               ),
@@ -267,7 +324,6 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final c = widget.primaryColor;
@@ -276,95 +332,92 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
     return GestureDetector(
       onTap: _handleTap,
       child: CustomPaint(
-          painter: _FolderBorderPainter(isSelected: sel, primaryColor: c),
-          child: ClipPath(
-            clipper: _FolderClipper(),
-            // ── NO BackdropFilter here — nesting it inside an outer
-            // BackdropFilter (the LiquidGlassCard) causes visual artifacts
-            // at the clip edges. The outer card already provides the blur.
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 380),
-              curve: Curves.easeOutCubic,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  // High-opacity white so cards clearly stand out from the
-                  // big glass card's gray tint (0xC8E8E8ED)
-                  colors: [
-                    Colors.white.withValues(alpha: sel ? 0.96 : 0.88),
-                    const Color(0xFFF3F4F8).withValues(alpha: sel ? 0.80 : 0.72),
-                    const Color(0xFFE8EAF0).withValues(alpha: sel ? 0.65 : 0.55),
-                  ],
-                  stops: const [0.0, 0.55, 1.0],
-                ),
+        painter: _FolderBorderPainter(isSelected: sel, primaryColor: c),
+        child: ClipPath(
+          clipper: _FolderClipper(),
+          // ── NO BackdropFilter here — nesting it inside an outer
+          // BackdropFilter (the LiquidGlassCard) causes visual artifacts
+          // at the clip edges. The outer card already provides the blur.
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 380),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                // High-opacity white so cards clearly stand out from the
+                // big glass card's gray tint (0xC8E8E8ED)
+                colors: [
+                  Colors.white.withValues(alpha: sel ? 0.96 : 0.88),
+                  const Color(0xFFF3F4F8).withValues(alpha: sel ? 0.80 : 0.72),
+                  const Color(0xFFE8EAF0).withValues(alpha: sel ? 0.65 : 0.55),
+                ],
+                stops: const [0.0, 0.55, 1.0],
               ),
-              child: Stack(
-                clipBehavior: Clip.hardEdge,
-                children: [
-                  // Top-left sheen overlay
-                  Positioned.fill(
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 350),
-                      opacity: sel ? 1.0 : 0.5,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Colors.white.withValues(alpha: sel ? 0.44 : 0.26),
-                              Colors.white.withValues(alpha: 0.0),
-                              const Color(0xFFCCD0DC).withValues(alpha: 0.05),
-                            ],
-                            stops: const [0.0, 0.45, 1.0],
-                          ),
+            ),
+            child: Stack(
+              clipBehavior: Clip.hardEdge,
+              children: [
+                // Top-left sheen overlay
+                Positioned.fill(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 350),
+                    opacity: sel ? 1.0 : 0.5,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.white.withValues(alpha: sel ? 0.44 : 0.26),
+                            Colors.white.withValues(alpha: 0.0),
+                            const Color(0xFFCCD0DC).withValues(alpha: 0.05),
+                          ],
+                          stops: const [0.0, 0.45, 1.0],
                         ),
                       ),
                     ),
                   ),
+                ),
 
-                  // Decorative droplets
-                  if (widget.customDroplets != null) ...widget.customDroplets!,
+                // Decorative droplets
+                if (widget.customDroplets != null) ...widget.customDroplets!,
 
-                  // Content
-                  Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 4),
+                // Content
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 4),
 
-                        // Icon orb — single widget, transitions in-place
-                        _buildOrb(),
+                      // Icon orb — single widget, transitions in-place
+                      _buildOrb(),
 
-                        const SizedBox(height: 4),
+                      const SizedBox(height: 4),
 
-                        // Title
-                        AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 300),
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            color: sel ? c : const Color(0xFF1A2035),
-                            letterSpacing: -0.3,
-                            height: 1.1,
-                          ),
-                          child: Text(
-                            widget.title,
-                            textAlign: TextAlign.center,
-                          ),
+                      // Title
+                      AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 300),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: sel ? c : const Color(0xFF1A2035),
+                          letterSpacing: -0.3,
+                          height: 1.1,
                         ),
+                        child: Text(widget.title, textAlign: TextAlign.center),
+                      ),
 
-                        const SizedBox(height: 2),
-                      ],
-                    ),
+                      const SizedBox(height: 2),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
+      ),
     );
   }
 }
@@ -372,16 +425,12 @@ class _LiquidCategoryCardState extends State<LiquidCategoryCard>
 // ── Colour helpers ────────────────────────────────────────────────────────────
 Color _lighten(Color c, double amount) {
   final hsl = HSLColor.fromColor(c);
-  return hsl
-      .withLightness((hsl.lightness + amount).clamp(0.0, 1.0))
-      .toColor();
+  return hsl.withLightness((hsl.lightness + amount).clamp(0.0, 1.0)).toColor();
 }
 
 Color _darken(Color c, double amount) {
   final hsl = HSLColor.fromColor(c);
-  return hsl
-      .withLightness((hsl.lightness - amount).clamp(0.0, 1.0))
-      .toColor();
+  return hsl.withLightness((hsl.lightness - amount).clamp(0.0, 1.0)).toColor();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -442,10 +491,10 @@ class LiquidDroplet extends StatelessWidget {
 
 // ── Folder Shape — tab on TOP-RIGHT, fully within widget bounds ──────────────
 Path _getFolderTabPath(Size size) {
-  const double r       = 18.0;  // body corner radius
-  const double tabH    = 10.0;  // tab height (top portion of widget)
-  const double tabW    = 50.0;  // tab width
-  const double kCurve  = 13.0;  // tab-entry transition curve
+  const double r = 18.0; // body corner radius
+  const double tabH = 10.0; // tab height (top portion of widget)
+  const double tabW = 50.0; // tab width
+  const double kCurve = 13.0; // tab-entry transition curve
 
   // Layout:
   //   y = 0          → tab top edge
@@ -472,9 +521,12 @@ Path _getFolderTabPath(Size size) {
   path.lineTo(size.width - tabW, 0);
   // ── Tab left side curves from y=0 down to body top (y=tabH)
   path.cubicTo(
-    size.width - tabW - kCurve * 0.5, 0,
-    size.width - tabW - kCurve * 0.5, tabH,
-    size.width - tabW - kCurve,       tabH,
+    size.width - tabW - kCurve * 0.5,
+    0,
+    size.width - tabW - kCurve * 0.5,
+    tabH,
+    size.width - tabW - kCurve,
+    tabH,
   );
   // ── Body top ← (going left at y=tabH)
   path.lineTo(r, tabH);

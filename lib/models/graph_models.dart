@@ -2,10 +2,7 @@ class GraphPoint {
   final String label;
   final double value;
 
-  const GraphPoint({
-    required this.label,
-    required this.value,
-  });
+  const GraphPoint({required this.label, required this.value});
 }
 
 class GraphSeries {

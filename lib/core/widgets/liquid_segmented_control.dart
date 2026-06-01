@@ -37,8 +37,10 @@ class LiquidSegmentedControl extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 curve: Curves.easeInOut,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected ? accent : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
@@ -49,7 +51,9 @@ class LiquidSegmentedControl extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : OptivusColors.textPrimary,
+                    color: isSelected
+                        ? Colors.white
+                        : OptivusColors.textPrimary,
                   ),
                 ),
               ),

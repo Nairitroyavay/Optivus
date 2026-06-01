@@ -35,6 +35,33 @@ abstract class UpiIntentService {
   Future<void> openSavingIntent({required double amount, required String note});
 }
 
+class LocaleDeviceSnapshot {
+  final String countryCode;
+  final String languageCode;
+
+  const LocaleDeviceSnapshot({
+    required this.countryCode,
+    required this.languageCode,
+  });
+}
+
+abstract class LocaleDeviceService {
+  Future<LocaleDeviceSnapshot> fetchLocale();
+}
+
+abstract class TimezoneService {
+  Future<String> fetchTimezone();
+}
+
+abstract class CurrencyRegionService {
+  Future<String> suggestedCurrencyCode(String countryCode);
+}
+
+abstract class PaymentCapabilityService {
+  Future<bool> canUseUpi(String countryCode);
+  Future<List<String>> availablePaymentLabels(String countryCode);
+}
+
 class FakeUsageAccessService implements UsageAccessService {
   @override
   Future<Map<String, int>> fetchDailyUsageMinutes() async => const {};
@@ -121,5 +148,45 @@ class FakeUpiIntentService implements UpiIntentService {
     required String note,
   }) async {
     // Future native plan: url_launcher or Android UPI intent channel.
+  }
+}
+
+class FakeLocaleDeviceService implements LocaleDeviceService {
+  @override
+  Future<LocaleDeviceSnapshot> fetchLocale() async {
+    return const LocaleDeviceSnapshot(countryCode: 'US', languageCode: 'en');
+  }
+}
+
+class FakeTimezoneService implements TimezoneService {
+  @override
+  Future<String> fetchTimezone() async => 'America/New_York';
+}
+
+class FakeCurrencyRegionService implements CurrencyRegionService {
+  @override
+  Future<String> suggestedCurrencyCode(String countryCode) async {
+    return switch (countryCode.toUpperCase()) {
+      'IN' => 'INR',
+      'JP' => 'JPY',
+      'GB' => 'GBP',
+      'EU' => 'EUR',
+      _ => 'USD',
+    };
+  }
+}
+
+class FakePaymentCapabilityService implements PaymentCapabilityService {
+  @override
+  Future<bool> canUseUpi(String countryCode) async {
+    return countryCode.toUpperCase() == 'IN';
+  }
+
+  @override
+  Future<List<String>> availablePaymentLabels(String countryCode) async {
+    if (await canUseUpi(countryCode)) {
+      return const ['Manual confirmation', 'Cash', 'Bank transfer', 'UPI'];
+    }
+    return const ['Manual confirmation', 'Cash', 'Bank transfer'];
   }
 }

@@ -43,7 +43,10 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+              colors: [
+                OptivusColors.routineSheetTop,
+                OptivusColors.routineSheetBottom,
+              ],
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),

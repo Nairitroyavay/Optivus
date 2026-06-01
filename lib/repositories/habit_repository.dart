@@ -20,7 +20,10 @@ class FakeHabitRepository implements HabitRepository {
   }
 
   @override
-  Future<void> saveGoodHabits(String uid, List<GoodHabitTemplateBundle> habits) async {
+  Future<void> saveGoodHabits(
+    String uid,
+    List<GoodHabitTemplateBundle> habits,
+  ) async {
     await Future.delayed(const Duration(milliseconds: 300));
     _goodHabits[uid] = habits;
   }
@@ -32,7 +35,10 @@ class FakeHabitRepository implements HabitRepository {
   }
 
   @override
-  Future<void> saveBadHabits(String uid, List<BadHabitCheckInBundle> habits) async {
+  Future<void> saveBadHabits(
+    String uid,
+    List<BadHabitCheckInBundle> habits,
+  ) async {
     await Future.delayed(const Duration(milliseconds: 300));
     _badHabits[uid] = habits;
   }

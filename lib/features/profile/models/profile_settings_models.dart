@@ -43,7 +43,7 @@ extension ProfilePermissionTypeLabel on ProfilePermissionType {
       ProfilePermissionType.healthConnect =>
         'Needed for steps, sleep, calories, workouts, and heart rate.',
       ProfilePermissionType.cameraPhotos =>
-        'Needed for profile photos, timetable uploads, mess sheets, and skin care photos.',
+        'Needed for profile photos, timetable uploads, meal-plan sheets, and skin care photos.',
       ProfilePermissionType.microphone => 'Needed for Coach voice input.',
     };
   }
@@ -126,7 +126,7 @@ extension ConnectedServiceTypeLabel on ConnectedServiceType {
   String get powers {
     return switch (this) {
       ConnectedServiceType.cloudflareR2 =>
-        'Profile photos, timetable uploads, mess sheets, skin care photos, and future exported files.',
+        'Profile photos, timetable uploads, meal-plan sheets, skin care photos, and future exported files.',
       ConnectedServiceType.mapbox =>
         'Walk/Run maps, route tracking, and map style selection.',
       ConnectedServiceType.healthConnect =>

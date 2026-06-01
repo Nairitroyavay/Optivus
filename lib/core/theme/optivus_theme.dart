@@ -7,7 +7,7 @@ class OptivusTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: Colors.transparent,
-      
+
       // Seed color for material widgets
       colorScheme: ColorScheme.fromSeed(
         seedColor: OptivusColors.brandAccent,

@@ -11,6 +11,7 @@ import 'package:optivus/features/profile/providers/profile_mock_data.dart';
 import 'package:optivus/features/profile/screens/logout_dialog.dart'
     show showLogoutDialog;
 import 'package:optivus/features/profile/screens/profile_control_screens.dart';
+import 'package:optivus/features/profile/screens/region_localization_screen.dart';
 import 'package:optivus/features/profile/widgets/profile_components.dart';
 import 'package:optivus/features/profile/widgets/profile_header_card.dart';
 import 'package:optivus/features/profile/widgets/profile_setting_group.dart';
@@ -101,6 +102,7 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
       ),
       ProfileDetailView.appPreferences => AppPreferencesScreen(
         onBack: _closeDetail,
+        onOpenProfileDetail: _openDetail,
       ),
       ProfileDetailView.privacySecurity => PrivacySecurityScreen(
         onBack: _closeDetail,
@@ -123,6 +125,9 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
       ProfileDetailView.reportBug => ReportBugScreen(onBack: _closeDetail),
       ProfileDetailView.helpCenter => HelpCenterScreen(onBack: _closeDetail),
       ProfileDetailView.aboutVersion => AboutVersionScreen(
+        onBack: _closeDetail,
+      ),
+      ProfileDetailView.regionLocalization => RegionLocalizationScreen(
         onBack: _closeDetail,
       ),
       ProfileDetailView.none => _ProfileMainScreen(onOpenDetail: _openDetail),

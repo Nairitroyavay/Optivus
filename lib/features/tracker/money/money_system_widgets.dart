@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/core/widgets/liquid_buttons.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/models/money_models.dart';
+import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 String moneyDateKey(DateTime date) {
   return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
-
-String formatMoney(double amount) => '₹${amount.toInt()}';
 
 bool isTinySavingEntry(SavingEntry entry, MoneyGoal goal) {
   return entry.isConfirmed &&
@@ -60,6 +62,7 @@ class MoneyHeroTargetCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final goal = state.moneyGoal;
     final status = todayMoneyStatusLabel(state);
     final statusColor = moneyStatusColor(status);
@@ -89,7 +92,7 @@ class MoneyHeroTargetCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      formatMoney(goal.dailyTarget),
+                      formatMoney(goal.dailyTarget, region),
                       style: const TextStyle(
                         fontSize: 56,
                         fontWeight: FontWeight.w900,
@@ -111,12 +114,12 @@ class MoneyHeroTargetCard extends ConsumerWidget {
               final cards = [
                 _HeroStat(
                   label: 'Confirmed',
-                  value: formatMoney(goal.totalConfirmedSaved),
+                  value: formatMoney(goal.totalConfirmedSaved, region),
                   color: OptivusColors.mintAccent,
                 ),
                 _HeroStat(
                   label: 'Potential',
-                  value: formatMoney(goal.totalPotentialSaved),
+                  value: formatMoney(goal.totalPotentialSaved, region),
                   color: OptivusColors.purpleAccent,
                 ),
                 _HeroStat(
@@ -169,6 +172,7 @@ class TodayFinanceProofCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goal = ref.watch(mockTrackerProvider).moneyGoal;
+    final region = ref.watch(regionSettingsProvider);
     return TrackerGlassCard(
       radius: 28,
       padding: const EdgeInsets.all(20),
@@ -224,7 +228,7 @@ class TodayFinanceProofCard extends ConsumerWidget {
           ),
           const SizedBox(height: 18),
           Text(
-            'Target ${formatMoney(goal.dailyTarget)} • Tiny ${formatMoney(goal.tinySaveAmount)}',
+            'Target ${formatMoney(goal.dailyTarget, region)} • Tiny ${formatMoney(goal.tinySaveAmount, region)}',
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
@@ -253,30 +257,42 @@ class MoneyQuickActionRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final region = ref.watch(regionSettingsProvider);
+    final showUpiPrimary = region.paymentRegion == PaymentRegion.indiaUpi;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         LiquidPrimaryButton(
-          label: 'Save via UPI mock',
-          icon: Icons.payment_rounded,
+          label: showUpiPrimary ? 'Save via UPI mock' : 'Confirm manual save',
+          icon: showUpiPrimary ? Icons.payment_rounded : Icons.savings_outlined,
           backgroundColor: OptivusColors.trackerAccent,
           foregroundColor: OptivusColors.ink,
-          onPressed: () => showSaveViaUpiFlow(
-            context,
-            ref,
-            source: routineTaskId == null
-                ? MoneyEntrySource.upiMock
-                : MoneyEntrySource.routineTask,
-            routineTaskId: routineTaskId,
-            onSaved: onSaved,
-          ),
+          onPressed: () => showUpiPrimary
+              ? showSaveViaUpiFlow(
+                  context,
+                  ref,
+                  source: routineTaskId == null
+                      ? MoneyEntrySource.upiMock
+                      : MoneyEntrySource.routineTask,
+                  routineTaskId: routineTaskId,
+                  onSaved: onSaved,
+                )
+              : showIAlreadySavedFlow(
+                  context,
+                  ref,
+                  source: routineTaskId == null
+                      ? MoneyEntrySource.manual
+                      : MoneyEntrySource.routineTask,
+                  routineTaskId: routineTaskId,
+                  onSaved: onSaved,
+                ),
         ),
         const SizedBox(height: 10),
         Row(
           children: [
             Expanded(
               child: LiquidOutlineButton(
-                label: 'I already saved',
+                label: showUpiPrimary ? 'I already saved' : 'Cash / bank saved',
                 icon: Icons.check_rounded,
                 borderColor: OptivusColors.mintAccent,
                 onPressed: () => showIAlreadySavedFlow(
@@ -325,6 +341,7 @@ class WeeklySavingStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final now = DateTime.now();
     final monday = DateTime(
       now.year,
@@ -364,9 +381,9 @@ class WeeklySavingStrip extends ConsumerWidget {
                   ? OptivusColors.trackerAccent
                   : OptivusColors.sub;
               final amountLabel = confirmed > 0
-                  ? formatMoney(confirmed)
+                  ? formatMoney(confirmed, region)
                   : potential > 0
-                  ? formatMoney(potential)
+                  ? formatMoney(potential, region)
                   : skipped
                   ? 'Missed'
                   : '-';
@@ -424,6 +441,7 @@ class MoneySourcesSummary extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     double manual = 0;
     double upiMock = 0;
     double converted = 0;
@@ -465,11 +483,14 @@ class MoneySourcesSummary extends ConsumerWidget {
             amount: manual,
             color: OptivusColors.trackerAccent,
           ),
-          _SourceRow(
-            label: 'UPI mock saving',
-            amount: upiMock,
-            color: OptivusColors.trackerAccent,
-          ),
+          if (region.paymentRegion == PaymentRegion.indiaUpi || upiMock > 0)
+            _SourceRow(
+              label: region.paymentRegion == PaymentRegion.indiaUpi
+                  ? 'UPI mock saving'
+                  : 'Local payment app saving',
+              amount: upiMock,
+              color: OptivusColors.trackerAccent,
+            ),
           _SourceRow(
             label: 'Bad-habit money converted',
             amount: converted,
@@ -490,13 +511,13 @@ class MoneySourcesSummary extends ConsumerWidget {
           const SizedBox(height: 12),
           _TotalRow(
             label: 'Confirmed saved total',
-            value: formatMoney(state.moneyGoal.totalConfirmedSaved),
+            value: formatMoney(state.moneyGoal.totalConfirmedSaved, region),
             color: OptivusColors.mintAccent,
           ),
           const SizedBox(height: 8),
           _TotalRow(
             label: 'Potential saved total',
-            value: formatMoney(state.moneyGoal.totalPotentialSaved),
+            value: formatMoney(state.moneyGoal.totalPotentialSaved, region),
             color: OptivusColors.purpleAccent,
           ),
         ],
@@ -511,6 +532,7 @@ class TodayTabContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final goal = state.moneyGoal;
     final entries = moneyEntriesForToday(state);
     final status = todayMoneyStatusLabel(state);
@@ -534,7 +556,7 @@ class TodayTabContent extends ConsumerWidget {
                   const Spacer(),
                   Text(
                     confirmedAmount > 0
-                        ? '${formatMoney(confirmedAmount)} today'
+                        ? '${formatMoney(confirmedAmount, region)} today'
                         : 'No confirmed save yet',
                     style: const TextStyle(
                       fontSize: 12,
@@ -560,7 +582,7 @@ class TodayTabContent extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '${goal.reminderTimeLabel} reminder • ${formatMoney(goal.tinySaveAmount)} tiny save available',
+                '${goal.reminderTimeLabel} reminder • ${formatMoney(goal.tinySaveAmount, region)} tiny save available',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -647,6 +669,7 @@ class _HistoryTabContentState extends ConsumerState<HistoryTabContent> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final entries =
         state.savingsEntries.where(_matchesFilter).toList(growable: false)
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -663,7 +686,7 @@ class _HistoryTabContentState extends ConsumerState<HistoryTabContent> {
                   (filter) => Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: _LiquidFilterChip(
-                      label: _filterLabel(filter),
+                      label: _filterLabel(filter, region),
                       selected: _filter == filter,
                       onTap: () => setState(() => _filter = filter),
                     ),
@@ -701,14 +724,17 @@ class _HistoryTabContentState extends ConsumerState<HistoryTabContent> {
     };
   }
 
-  String _filterLabel(_HistoryFilter filter) {
+  String _filterLabel(_HistoryFilter filter, RegionSettings region) {
     return switch (filter) {
       _HistoryFilter.all => 'All',
       _HistoryFilter.confirmed => 'Confirmed',
       _HistoryFilter.potential => 'Potential',
       _HistoryFilter.skipped => 'Skipped',
       _HistoryFilter.manual => 'Manual',
-      _HistoryFilter.upiMock => 'UPI mock',
+      _HistoryFilter.upiMock =>
+        region.paymentRegion == PaymentRegion.indiaUpi
+            ? 'UPI mock'
+            : 'Payment app',
       _HistoryFilter.badHabit => 'Bad habit',
     };
   }
@@ -720,6 +746,7 @@ class BadHabitTabContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final potentialEntries =
         state.savingsEntries
             .where(
@@ -753,7 +780,7 @@ class BadHabitTabContent extends ConsumerWidget {
               const SizedBox(height: 16),
               _TotalRow(
                 label: 'Potential avoided',
-                value: formatMoney(state.moneyGoal.totalPotentialSaved),
+                value: formatMoney(state.moneyGoal.totalPotentialSaved, region),
                 color: OptivusColors.purpleAccent,
               ),
             ],
@@ -786,7 +813,7 @@ class BadHabitTabContent extends ConsumerWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${formatMoney(entry.amount)} potential • ${entry.dateKey}',
+                      '${formatMoney(entry.amount, region)} potential • ${entry.dateKey}',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -835,6 +862,7 @@ class _GoalsTabContentState extends ConsumerState<GoalsTabContent> {
   @override
   Widget build(BuildContext context) {
     final goal = ref.watch(mockTrackerProvider).moneyGoal;
+    final region = ref.watch(regionSettingsProvider);
     final progress = levelProgress(goal);
     final canLevelUp =
         goal.successfulDaysAtCurrentLevel >= goal.levelUpAfterDays &&
@@ -919,7 +947,8 @@ class _GoalsTabContentState extends ConsumerState<GoalsTabContent> {
               if (canLevelUp) ...[
                 const SizedBox(height: 16),
                 LiquidPrimaryButton(
-                  label: 'Level up to ${formatMoney(goal.nextLevelAmount)}/day',
+                  label:
+                      'Level up to ${formatMoney(goal.nextLevelAmount, region)}/day',
                   icon: Icons.arrow_upward_rounded,
                   backgroundColor: OptivusColors.trackerAccent,
                   foregroundColor: OptivusColors.ink,
@@ -930,7 +959,8 @@ class _GoalsTabContentState extends ConsumerState<GoalsTabContent> {
                 ),
                 const SizedBox(height: 10),
                 LiquidOutlineButton(
-                  label: 'Stay at ${formatMoney(goal.currentLevelAmount)}/day',
+                  label:
+                      'Stay at ${formatMoney(goal.currentLevelAmount, region)}/day',
                   borderColor: OptivusColors.trackerAccent,
                   onPressed: () =>
                       setState(() => _levelSuggestionDismissed = true),
@@ -966,6 +996,7 @@ class InsightsTabContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final goal = state.moneyGoal;
     final now = DateTime.now();
     final weekStart = DateTime(
@@ -1007,7 +1038,7 @@ class InsightsTabContent extends ConsumerWidget {
     final cards = [
       _InsightMetric(
         'Saved this week',
-        formatMoney(savedThisWeek),
+        formatMoney(savedThisWeek, region),
         OptivusColors.mintAccent,
       ),
       _InsightMetric(
@@ -1022,22 +1053,22 @@ class InsightsTabContent extends ConsumerWidget {
       ),
       _InsightMetric(
         'Confirmed total',
-        formatMoney(goal.totalConfirmedSaved),
+        formatMoney(goal.totalConfirmedSaved, region),
         OptivusColors.mintAccent,
       ),
       _InsightMetric(
         'Potential total',
-        formatMoney(goal.totalPotentialSaved),
+        formatMoney(goal.totalPotentialSaved, region),
         OptivusColors.purpleAccent,
       ),
       _InsightMetric(
         'Bad-habit converted',
-        formatMoney(convertedTotal),
+        formatMoney(convertedTotal, region),
         OptivusColors.trackerAccent,
       ),
       _InsightMetric(
         'Average daily',
-        formatMoney(averageDaily),
+        formatMoney(averageDaily, region),
         OptivusColors.trackerAccent,
       ),
     ];
@@ -1077,7 +1108,7 @@ class InsightsTabContent extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Your money discipline is becoming automatic. Keep ${formatMoney(goal.currentLevelAmount)}/day until it feels easy.',
+                  'Your money discipline is becoming automatic. Keep ${formatMoney(goal.currentLevelAmount, region)}/day until it feels easy.',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -1100,14 +1131,23 @@ class SettingsTabContent extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goal = ref.watch(mockTrackerProvider).moneyGoal;
+    final region = ref.watch(regionSettingsProvider);
     return TrackerGlassCard(
       radius: 24,
       padding: const EdgeInsets.all(8),
       child: Column(
         children: [
           _SettingsRow(
+            title: 'Global money setup',
+            value: '${region.currencyCode} • ${region.paymentRegionLabel}',
+            onTap: () {
+              ref.read(trackerDetailViewRequestProvider.notifier).state =
+                  TrackerDetailTarget.view(TrackerDetailView.globalMoneySetup);
+            },
+          ),
+          _SettingsRow(
             title: 'Daily target amount',
-            value: formatMoney(goal.currentLevelAmount),
+            value: formatMoney(goal.currentLevelAmount, region),
             onTap: () => showMoneySettingSheet(
               context,
               ref,
@@ -1116,7 +1156,7 @@ class SettingsTabContent extends ConsumerWidget {
           ),
           _SettingsRow(
             title: 'Tiny save amount',
-            value: formatMoney(goal.tinySaveAmount),
+            value: formatMoney(goal.tinySaveAmount, region),
             onTap: () => showMoneySettingSheet(
               context,
               ref,
@@ -1134,7 +1174,7 @@ class SettingsTabContent extends ConsumerWidget {
           ),
           _SettingsRow(
             title: 'Default method',
-            value: moneySaveMethodLabel(goal.defaultMethod),
+            value: moneySaveMethodLabel(goal.defaultMethod, region),
             onTap: () => showMoneySettingSheet(
               context,
               ref,
@@ -1238,7 +1278,7 @@ class _HeroStat extends StatelessWidget {
   }
 }
 
-class _LevelProgressPanel extends StatelessWidget {
+class _LevelProgressPanel extends ConsumerWidget {
   final double currentLevel;
   final double nextLevel;
   final double progress;
@@ -1254,7 +1294,8 @@ class _LevelProgressPanel extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final region = ref.watch(regionSettingsProvider);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1271,7 +1312,7 @@ class _LevelProgressPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Current level: ${formatMoney(currentLevel)}/day',
+                  'Current level: ${formatMoney(currentLevel, region)}/day',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
@@ -1280,7 +1321,7 @@ class _LevelProgressPanel extends StatelessWidget {
                 ),
               ),
               Text(
-                'Next ${formatMoney(nextLevel)}',
+                'Next ${formatMoney(nextLevel, region)}',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
@@ -1344,7 +1385,7 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-class _SourceRow extends StatelessWidget {
+class _SourceRow extends ConsumerWidget {
   final String label;
   final double amount;
   final Color color;
@@ -1356,7 +1397,8 @@ class _SourceRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final region = ref.watch(regionSettingsProvider);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -1378,7 +1420,7 @@ class _SourceRow extends StatelessWidget {
             ),
           ),
           Text(
-            formatMoney(amount),
+            formatMoney(amount, region),
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w900,
@@ -1429,19 +1471,20 @@ class _TotalRow extends StatelessWidget {
   }
 }
 
-class _EntryRow extends StatelessWidget {
+class _EntryRow extends ConsumerWidget {
   final SavingEntry entry;
 
   const _EntryRow({required this.entry});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final region = ref.watch(regionSettingsProvider);
     final color = entry.isConfirmed
         ? OptivusColors.mintAccent
         : entry.isPotential
         ? OptivusColors.purpleAccent
         : OptivusColors.roseAccent;
-    final amount = entry.isSkipped ? '—' : formatMoney(entry.amount);
+    final amount = entry.isSkipped ? '—' : formatMoney(entry.amount, region);
     final detail = entry.reason?.isNotEmpty == true
         ? entry.reason!
         : entry.note?.isNotEmpty == true
@@ -1508,7 +1551,7 @@ class _EntryRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${entry.dateKey} • ${moneyEntryStatusLabel(entry.status)} • ${moneyEntrySourceLabel(entry.source)} • ${moneySaveMethodLabel(entry.method)}',
+                  '${entry.dateKey} • ${moneyEntryStatusLabel(entry.status)} • ${moneyEntrySourceLabel(entry.source, region)} • ${moneySaveMethodLabel(entry.method, region)}',
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,

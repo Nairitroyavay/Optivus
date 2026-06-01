@@ -13,6 +13,7 @@ class HomeMissionSummary {
   final int actionsTotal;
   final int focusMinutes;
   final int moneySaved;
+  final String moneySavedLabel;
   final int badHabitsAvoided;
 
   const HomeMissionSummary({
@@ -21,6 +22,7 @@ class HomeMissionSummary {
     this.actionsTotal = 0,
     this.focusMinutes = 0,
     this.moneySaved = 0,
+    this.moneySavedLabel = '',
     this.badHabitsAvoided = 0,
   });
 }

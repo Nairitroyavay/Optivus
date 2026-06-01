@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 
@@ -32,14 +34,15 @@ class HomeTab extends ConsumerWidget {
     // We get all home dashboard state from our new provider
     final dashboardState = ref.watch(homeDashboardProvider);
     final trackerState = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final todayMoneySaved = _confirmedMoneySavedToday(trackerState);
     final moneyGoal = trackerState.moneyGoal;
     final checkIns = dashboardState.checkIns
         .map((item) {
           if (item.id != 'money_saved') return item;
           final options = <String>{
-            '₹${moneyGoal.tinySaveAmount.toInt()}',
-            '₹${moneyGoal.dailyTarget.toInt()}',
+            formatMoney(moneyGoal.tinySaveAmount, region),
+            formatMoney(moneyGoal.dailyTarget, region),
             'Custom',
           }.toList();
           return CheckInItem(
@@ -57,6 +60,7 @@ class HomeTab extends ConsumerWidget {
       actionsTotal: dashboardState.missionSummary.actionsTotal,
       focusMinutes: dashboardState.missionSummary.focusMinutes,
       moneySaved: todayMoneySaved.toInt(),
+      moneySavedLabel: formatMoney(todayMoneySaved, region),
       badHabitsAvoided: dashboardState.missionSummary.badHabitsAvoided,
     );
 

@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 class BaseTimelineStep extends ConsumerStatefulWidget {
   const BaseTimelineStep({super.key});
@@ -2240,6 +2242,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     final dayMeals = meals
         .where((item) => item.repeatDays.contains(_day + 1))
         .toList();
+    final region = ref.watch(regionSettingsProvider);
     return OnboardingScrollView(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 34),
       child: Column(
@@ -2268,43 +2271,34 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children:
-                  const [
-                        _TimelineOption('home', 'Home'),
-                        _TimelineOption('hostel', 'Hostel'),
-                        _TimelineOption('pg', 'PG'),
-                        _TimelineOption('flat', 'Flat'),
-                        _TimelineOption('mess', 'Mess'),
-                        _TimelineOption('staying_alone', 'Staying alone'),
-                        _TimelineOption('mixed', 'Mixed'),
-                      ]
-                      .map(
-                        (mode) => OnboardingChip(
-                          label: mode.label,
-                          selected: _eatingMode == mode.key,
-                          onTap: () {
-                            setState(() => _eatingMode = mode.key);
-                            ref
-                                .read(mockOnboardingProvider.notifier)
-                                .updateDraft(
-                                  (draft) => draft.copyWith(
-                                    baseTimeline: draft.baseTimeline.copyWith(
-                                      eatingMode: mode.key,
-                                      clearMealPlanning:
-                                          mode.key != 'flat' &&
-                                          mode.key != 'staying_alone',
-                                    ),
-                                    clearFinalPreview: true,
-                                  ),
-                                );
-                            ref
-                                .read(mockOnboardingProvider.notifier)
-                                .setStepDirty(4, true);
-                          },
-                          accent: OptivusColors.success,
-                        ),
-                      )
-                      .toList(),
+              children: _eatingModeOptions(region)
+                  .map(
+                    (mode) => OnboardingChip(
+                      label: mode.label,
+                      selected: _eatingMode == mode.key,
+                      onTap: () {
+                        setState(() => _eatingMode = mode.key);
+                        ref
+                            .read(mockOnboardingProvider.notifier)
+                            .updateDraft(
+                              (draft) => draft.copyWith(
+                                baseTimeline: draft.baseTimeline.copyWith(
+                                  eatingMode: mode.key,
+                                  clearMealPlanning:
+                                      mode.key != 'flat' &&
+                                      mode.key != 'staying_alone',
+                                ),
+                                clearFinalPreview: true,
+                              ),
+                            );
+                        ref
+                            .read(mockOnboardingProvider.notifier)
+                            .setStepDirty(4, true);
+                      },
+                      accent: OptivusColors.success,
+                    ),
+                  )
+                  .toList(),
             ),
           ),
           if (_eatingMode == 'flat' || _eatingMode == 'staying_alone') ...[
@@ -2338,7 +2332,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 _eatingMode == 'hostel' ||
                     _eatingMode == 'pg' ||
                     _eatingMode == 'mess'
-                ? 'Mess menu item or meal slot'
+                ? _eatingHint(region)
                 : 'Breakfast, lunch, dinner, or snack',
             controller: _mealCtrl,
             onAdd: () => _addRoutine(
@@ -2939,6 +2933,45 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       ref.read(mockOnboardingProvider).draft.baseTimeline.blocks,
     );
     if (block != null) _editItem(_routineFromBlock(block));
+  }
+
+  List<_TimelineOption> _eatingModeOptions(RegionSettings region) {
+    if (region.foodVocabularyMode == FoodVocabularyMode.india) {
+      return const [
+        _TimelineOption('home', 'Home'),
+        _TimelineOption('hostel', 'Hostel'),
+        _TimelineOption('pg', 'PG'),
+        _TimelineOption('flat', 'Flat / rented room'),
+        _TimelineOption('mess', 'Mess'),
+        _TimelineOption('staying_alone', 'Staying alone'),
+        _TimelineOption('mixed', 'Mixed'),
+      ];
+    }
+    if (region.foodVocabularyMode == FoodVocabularyMode.japan) {
+      return const [
+        _TimelineOption('home', 'Home'),
+        _TimelineOption('hostel', 'Dorm'),
+        _TimelineOption('flat', 'Apartment'),
+        _TimelineOption('mess', 'Cafeteria'),
+        _TimelineOption('pg', 'Convenience store / outside food'),
+        _TimelineOption('mixed', 'Mixed'),
+      ];
+    }
+    return const [
+      _TimelineOption('home', 'Home'),
+      _TimelineOption('hostel', 'Dorm / Hostel'),
+      _TimelineOption('pg', 'Shared apartment'),
+      _TimelineOption('flat', 'Alone / Studio'),
+      _TimelineOption('mess', 'Cafeteria / Dining hall'),
+      _TimelineOption('staying_alone', 'Meal plan'),
+      _TimelineOption('mixed', 'Mixed'),
+    ];
+  }
+
+  String _eatingHint(RegionSettings region) {
+    return region.foodVocabularyMode == FoodVocabularyMode.india
+        ? 'Mess menu item or meal slot'
+        : 'Dining hall, meal plan, or cafeteria item';
   }
 
   void _markBlockSoft(String id) {

@@ -3,7 +3,11 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/widgets/home_glass_widgets.dart';
 
 class DemoSheet {
-  static void show(BuildContext context, {required String title, required String message}) {
+  static void show(
+    BuildContext context, {
+    required String title,
+    required String message,
+  }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

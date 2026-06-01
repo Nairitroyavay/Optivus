@@ -17,23 +17,33 @@ class _RoutineFilterSheetBody extends ConsumerStatefulWidget {
   const _RoutineFilterSheetBody({required this.parentRef});
 
   @override
-  ConsumerState<_RoutineFilterSheetBody> createState() => _RoutineFilterSheetBodyState();
+  ConsumerState<_RoutineFilterSheetBody> createState() =>
+      _RoutineFilterSheetBodyState();
 }
 
-class _RoutineFilterSheetBodyState extends ConsumerState<_RoutineFilterSheetBody> {
+class _RoutineFilterSheetBodyState
+    extends ConsumerState<_RoutineFilterSheetBody> {
   late String _selectedView;
   late String _selectedCategory;
 
   @override
   void initState() {
     super.initState();
-    _selectedView = widget.parentRef.read(routineNotifierProvider).selectedPrimaryFilter;
-    _selectedCategory = widget.parentRef.read(routineNotifierProvider).selectedCategoryFilter;
+    _selectedView = widget.parentRef
+        .read(routineNotifierProvider)
+        .selectedPrimaryFilter;
+    _selectedCategory = widget.parentRef
+        .read(routineNotifierProvider)
+        .selectedCategoryFilter;
   }
 
   void _apply() {
-    widget.parentRef.read(routineNotifierProvider.notifier).setPrimaryFilter(_selectedView);
-    widget.parentRef.read(routineNotifierProvider.notifier).setCategoryFilter(_selectedCategory);
+    widget.parentRef
+        .read(routineNotifierProvider.notifier)
+        .setPrimaryFilter(_selectedView);
+    widget.parentRef
+        .read(routineNotifierProvider.notifier)
+        .setCategoryFilter(_selectedCategory);
     Navigator.of(context).pop();
   }
 
@@ -56,7 +66,10 @@ class _RoutineFilterSheetBodyState extends ConsumerState<_RoutineFilterSheetBody
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+              colors: [
+                OptivusColors.routineSheetTop,
+                OptivusColors.routineSheetBottom,
+              ],
             ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(28),
@@ -94,7 +107,10 @@ class _RoutineFilterSheetBodyState extends ConsumerState<_RoutineFilterSheetBody
                           ),
                           child: const Text(
                             'Clear',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                         const Text(
@@ -115,7 +131,10 @@ class _RoutineFilterSheetBodyState extends ConsumerState<_RoutineFilterSheetBody
                           ),
                           child: const Text(
                             'Apply',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
@@ -166,10 +185,14 @@ class _RoutineFilterSheetBodyState extends ConsumerState<_RoutineFilterSheetBody
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: isSelected ? OptivusColors.routineAccent : Colors.white.withValues(alpha: 0.5),
+              color: isSelected
+                  ? OptivusColors.routineAccent
+                  : Colors.white.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? OptivusColors.routineAccent : Colors.white.withValues(alpha: 0.7),
+                color: isSelected
+                    ? OptivusColors.routineAccent
+                    : Colors.white.withValues(alpha: 0.7),
                 width: 1,
               ),
             ),

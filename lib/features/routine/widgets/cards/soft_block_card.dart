@@ -178,8 +178,9 @@ class SoftBlockCard extends ConsumerWidget {
                 label: 'Done',
                 color: color,
                 icon: Icons.check_rounded,
-                onTap: () =>
-                    ref.read(routineNotifierProvider.notifier).markCompleted(item.id),
+                onTap: () => ref
+                    .read(routineNotifierProvider.notifier)
+                    .markCompleted(item.id),
               ),
               if (isEating && item.dishes != null)
                 CardActionButton(

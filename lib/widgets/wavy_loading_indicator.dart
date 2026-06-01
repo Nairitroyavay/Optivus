@@ -15,11 +15,7 @@ class WavyLoadingIndicator extends StatefulWidget {
   final double size;
   final Future<void>? operation;
 
-  const WavyLoadingIndicator({
-    super.key,
-    this.size = 40,
-    this.operation,
-  });
+  const WavyLoadingIndicator({super.key, this.size = 40, this.operation});
 
   @override
   State<WavyLoadingIndicator> createState() => _WavyLoadingIndicatorState();
@@ -34,8 +30,8 @@ class _WavyLoadingIndicatorState extends State<WavyLoadingIndicator>
 
   // ── Phase 2: success ────────────────────────────────────────────────────
   late final AnimationController _successCtrl;
-  late final Animation<double> _arcOpacity;  // 1 → 0
-  late final Animation<double> _checkScale;  // 0 → 1, easeOutBack
+  late final Animation<double> _arcOpacity; // 1 → 0
+  late final Animation<double> _checkScale; // 0 → 1, easeOutBack
 
   bool _success = false;
 
@@ -49,18 +45,24 @@ class _WavyLoadingIndicatorState extends State<WavyLoadingIndicator>
       duration: const Duration(milliseconds: 1800),
     )..repeat();
 
-    _startAngle = Tween<double>(begin: -math.pi / 2, end: 3 * math.pi / 2)
-        .animate(_spinCtrl); // full 360° rotation
+    _startAngle = Tween<double>(
+      begin: -math.pi / 2,
+      end: 3 * math.pi / 2,
+    ).animate(_spinCtrl); // full 360° rotation
 
     _sweepAngle = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 0.4 * math.pi, end: 1.6 * math.pi)
-            .chain(CurveTween(curve: Curves.easeInOutSine)),
+        tween: Tween<double>(
+          begin: 0.4 * math.pi,
+          end: 1.6 * math.pi,
+        ).chain(CurveTween(curve: Curves.easeInOutSine)),
         weight: 50,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.6 * math.pi, end: 0.4 * math.pi)
-            .chain(CurveTween(curve: Curves.easeInOutSine)),
+        tween: Tween<double>(
+          begin: 1.6 * math.pi,
+          end: 0.4 * math.pi,
+        ).chain(CurveTween(curve: Curves.easeInOutSine)),
         weight: 50,
       ),
     ]).animate(_spinCtrl);
@@ -86,9 +88,11 @@ class _WavyLoadingIndicatorState extends State<WavyLoadingIndicator>
     );
 
     if (widget.operation != null) {
-      widget.operation!.then((_) {
-        if (mounted) _triggerSuccess();
-      }).catchError((_) {});
+      widget.operation!
+          .then((_) {
+            if (mounted) _triggerSuccess();
+          })
+          .catchError((_) {});
     }
   }
 
@@ -211,7 +215,7 @@ class _WavyArcPainter extends CustomPainter {
 
     // Wave parameters – scale with size so they look identical at any size.
     final amplitude = baseRadius * 0.14; // ≈14 % of radius
-    const frequency = 9.0;              // nine sine cycles around the full circle
+    const frequency = 9.0; // nine sine cycles around the full circle
 
     // Enough steps so each segment is sub-pixel → perfectly smooth curve.
     final steps = (sweepAngle / (2 * math.pi) * 600).round().clamp(60, 600);

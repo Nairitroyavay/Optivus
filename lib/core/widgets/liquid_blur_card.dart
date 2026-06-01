@@ -72,7 +72,8 @@ class LiquidBlurCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: backgroundColor ?? Colors.white.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(borderRadius),
-            border: border ??
+            border:
+                border ??
                 Border.all(
                   color: Colors.white.withValues(alpha: 0.8),
                   width: 1.5,
@@ -80,10 +81,7 @@ class LiquidBlurCard extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              Padding(
-                padding: padding,
-                child: child,
-              ),
+              Padding(padding: padding, child: child),
               if (showScrews) ...[
                 Positioned(top: 12, left: 12, child: _buildScrew()),
                 Positioned(top: 12, right: 12, child: _buildScrew()),

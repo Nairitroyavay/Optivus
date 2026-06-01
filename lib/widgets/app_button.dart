@@ -9,11 +9,7 @@ class AppButton extends StatefulWidget {
   final VoidCallback onPressed;
   final String text;
 
-  const AppButton({
-    super.key,
-    required this.onPressed,
-    required this.text,
-  });
+  const AppButton({super.key, required this.onPressed, required this.text});
 
   @override
   State<AppButton> createState() => _AppButtonState();
@@ -40,9 +36,11 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
         final delta = (elapsed - _lastElapsed!).inMicroseconds / 1000000.0;
         _timeNotifier.value += delta * _timeMultiplier;
         final targetStrength = _isInteracting ? 1.0 : 0.0;
-        _interactionStrength += (targetStrength - _interactionStrength) * 8.0 * delta;
+        _interactionStrength +=
+            (targetStrength - _interactionStrength) * 8.0 * delta;
         if (_interactionStrength > 0.01) {
-          _smoothedPointer += (_pointerPosition - _smoothedPointer) * 12.0 * delta;
+          _smoothedPointer +=
+              (_pointerPosition - _smoothedPointer) * 12.0 * delta;
         }
       }
       _lastElapsed = elapsed;
@@ -114,9 +112,11 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
       builder: (context, time, _) {
         final speedTime = time * 0.4;
         final double baseX =
-            (sin(speedTime * freqX + phaseX) + 1) / 2 * (400 - size * 0.5) - (size * 0.25);
+            (sin(speedTime * freqX + phaseX) + 1) / 2 * (400 - size * 0.5) -
+            (size * 0.25);
         final double baseY =
-            (cos(speedTime * freqY + phaseY) + 1) / 2 * (100 - size * 0.5) - (size * 0.25);
+            (cos(speedTime * freqY + phaseY) + 1) / 2 * (100 - size * 0.5) -
+            (size * 0.25);
         final double attractionRadius = size * 0.4;
         final double targetX =
             _smoothedPointer.dx + (cos(phaseX) * attractionRadius) - (size / 2);
@@ -162,11 +162,12 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
               child: AnimatedBuilder(
                 animation: _hoverController,
                 builder: (context, _) {
-                  final scaleVal = Tween<double>(begin: 1.0, end: 0.96).transform(
-                    Curves.easeOutQuad.transform(_hoverController.value),
-                  );
+                  final scaleVal = Tween<double>(begin: 1.0, end: 0.96)
+                      .transform(
+                        Curves.easeOutQuad.transform(_hoverController.value),
+                      );
                   return Transform.scale(
-                     scale: scaleVal,
+                    scale: scaleVal,
                     child: Stack(
                       children: [
                         // ── Outer glass rim — visible against white background ─
@@ -175,7 +176,8 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
                           padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(33),
-                            color: Colors.transparent, // Fix: transparent background eliminates the rectangular grey-blue border visual bug
+                            color: Colors
+                                .transparent, // Fix: transparent background eliminates the rectangular grey-blue border visual bug
                             boxShadow: [
                               // Soft black shadow (10% opacity)
                               BoxShadow(
@@ -186,127 +188,192 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
                               ),
                               // Accent glow (15% opacity)
                               BoxShadow(
-                                color: const Color(0xFF92E0FF).withValues(alpha: 0.15),
+                                color: const Color(
+                                  0xFF92E0FF,
+                                ).withValues(alpha: 0.15),
                                 blurRadius: 15,
                                 spreadRadius: 0,
                                 offset: const Offset(0, 2),
                               ),
                             ],
                           ),
-                      // ── Inner liquid surface ───────────────────────────
-                      child: Container(
-                        height: 60,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(30),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // 1. Very light translucent base — lets
-                              //    background show through for the glass feel
-                              Container(color: Colors.white.withValues(alpha: 0.40)),
-
-                              // 2. Liquid blobs: mostly original soft pastels +
-                              //    a large white blob for airiness, two vivid
-                              //    accents for colour pop — all at low opacity
-                              //    so the blend stays transparent.
-                              ImageFiltered(
-                                imageFilter: ImageFilter.blur(sigmaX: 40.0, sigmaY: 40.0),
-                                child: SizedBox(
-                                  width: 400,
-                                  height: 100,
-                                  child: Stack(
-                                    children: [
-                                      // White — large, drifts around, keeps
-                                      // the liquid feeling bright & airy
-                                      _buildBlob(size: 200, color: Colors.white.withValues(alpha: 0.90),              freqX: 1.29, freqY: 0.73, phaseX: 3 * pi / 2, phaseY: pi),
-                                      // Original pastel peach
-                                      _buildBlob(size: 160, color: const Color(0xFFFFC6BA).withValues(alpha: 0.75),   freqX: 1.13, freqY: 0.54, phaseX: 0,           phaseY: 0),
-                                      // Original pale sky-blue
-                                      _buildBlob(size: 170, color: const Color(0xFF92E0FF).withValues(alpha: 0.70),   freqX: 0.67, freqY: 0.92, phaseX: pi,           phaseY: pi / 1.5),
-                                      // Original soft mint
-                                      _buildBlob(size: 155, color: const Color(0xFFC2E5DC).withValues(alpha: 0.70),   freqX: 0.77, freqY: 1.51, phaseX: pi / 4,       phaseY: 3 * pi / 2),
-                                      // Vivid accent — coral (low opacity)
-                                      _buildBlob(size: 120, color: const Color(0xFFFF3C5F).withValues(alpha: 0.45),   freqX: 0.81, freqY: 1.25, phaseX: pi / 2,       phaseY: pi / 3),
-                                      // Vivid accent — cyan (low opacity)
-                                      _buildBlob(size: 140, color: const Color(0xFF00D4FF).withValues(alpha: 0.45),   freqX: 0.53, freqY: 0.61, phaseX: 5 * pi / 3,   phaseY: pi / 4),
-                                    ],
+                          // ── Inner liquid surface ───────────────────────────
+                          child: Container(
+                            height: 60,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(30),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  // 1. Very light translucent base — lets
+                                  //    background show through for the glass feel
+                                  Container(
+                                    color: Colors.white.withValues(alpha: 0.40),
                                   ),
-                                ),
-                              ),
 
-                              // 3a. Cylinder TOP highlight — convex sheen
-                              Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(30),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    stops: const [0.0, 0.18, 0.42, 1.0],
-                                    colors: [
-                                      Colors.white.withValues(alpha: 0.82),
-                                      Colors.white.withValues(alpha: 0.45),
-                                      Colors.white.withValues(alpha: 0.0),
-                                      Colors.white.withValues(alpha: 0.0),
-                                    ],
+                                  // 2. Liquid blobs: mostly original soft pastels +
+                                  //    a large white blob for airiness, two vivid
+                                  //    accents for colour pop — all at low opacity
+                                  //    so the blend stays transparent.
+                                  ImageFiltered(
+                                    imageFilter: ImageFilter.blur(
+                                      sigmaX: 40.0,
+                                      sigmaY: 40.0,
+                                    ),
+                                    child: SizedBox(
+                                      width: 400,
+                                      height: 100,
+                                      child: Stack(
+                                        children: [
+                                          // White — large, drifts around, keeps
+                                          // the liquid feeling bright & airy
+                                          _buildBlob(
+                                            size: 200,
+                                            color: Colors.white.withValues(
+                                              alpha: 0.90,
+                                            ),
+                                            freqX: 1.29,
+                                            freqY: 0.73,
+                                            phaseX: 3 * pi / 2,
+                                            phaseY: pi,
+                                          ),
+                                          // Original pastel peach
+                                          _buildBlob(
+                                            size: 160,
+                                            color: const Color(
+                                              0xFFFFC6BA,
+                                            ).withValues(alpha: 0.75),
+                                            freqX: 1.13,
+                                            freqY: 0.54,
+                                            phaseX: 0,
+                                            phaseY: 0,
+                                          ),
+                                          // Original pale sky-blue
+                                          _buildBlob(
+                                            size: 170,
+                                            color: const Color(
+                                              0xFF92E0FF,
+                                            ).withValues(alpha: 0.70),
+                                            freqX: 0.67,
+                                            freqY: 0.92,
+                                            phaseX: pi,
+                                            phaseY: pi / 1.5,
+                                          ),
+                                          // Original soft mint
+                                          _buildBlob(
+                                            size: 155,
+                                            color: const Color(
+                                              0xFFC2E5DC,
+                                            ).withValues(alpha: 0.70),
+                                            freqX: 0.77,
+                                            freqY: 1.51,
+                                            phaseX: pi / 4,
+                                            phaseY: 3 * pi / 2,
+                                          ),
+                                          // Vivid accent — coral (low opacity)
+                                          _buildBlob(
+                                            size: 120,
+                                            color: const Color(
+                                              0xFFFF3C5F,
+                                            ).withValues(alpha: 0.45),
+                                            freqX: 0.81,
+                                            freqY: 1.25,
+                                            phaseX: pi / 2,
+                                            phaseY: pi / 3,
+                                          ),
+                                          // Vivid accent — cyan (low opacity)
+                                          _buildBlob(
+                                            size: 140,
+                                            color: const Color(
+                                              0xFF00D4FF,
+                                            ).withValues(alpha: 0.45),
+                                            freqX: 0.53,
+                                            freqY: 0.61,
+                                            phaseX: 5 * pi / 3,
+                                            phaseY: pi / 4,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
 
-                              // 3b. Crisp glass rim border
-                              Container(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(30),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.75),
-                                    width: 1.5,
+                                  // 3a. Cylinder TOP highlight — convex sheen
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(30),
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        stops: const [0.0, 0.18, 0.42, 1.0],
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0.82),
+                                          Colors.white.withValues(alpha: 0.45),
+                                          Colors.white.withValues(alpha: 0.0),
+                                          Colors.white.withValues(alpha: 0.0),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
 
-                              // 4. Label
-                              Text(
-                                widget.text,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF0F111A),
-                                  letterSpacing: 0.5,
-                                ),
+                                  // 3b. Crisp glass rim border
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(30),
+                                      border: Border.all(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.75,
+                                        ),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+
+                                  // 4. Label
+                                  Text(
+                                    widget.text,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF0F111A),
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                    ), // End of inner liquid container
-                    // Foreground gradient border
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _GradientBorderPainter(
-                            radius: 33,
-                            strokeWidth: 1.4,
-                            gradient: const SweepGradient(
-                              colors: [
-                                Color(0xFFFF6B6B), // Home
-                                Color(0xFFA3FF91), // Routine
-                                Color(0xFF78FDFF), // Tracker
-                                Color(0xFFC084FC), // Coach
-                                Color(0xFFFF8CC2), // Goals
-                                Color(0xFFFFB830), // Profile
-                                Color(0xFFFF6B6B), // Wrap around to first color
-                              ],
+                        ), // End of inner liquid container
+                        // Foreground gradient border
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              painter: _GradientBorderPainter(
+                                radius: 33,
+                                strokeWidth: 1.4,
+                                gradient: const SweepGradient(
+                                  colors: [
+                                    Color(0xFFFF6B6B), // Home
+                                    Color(0xFFA3FF91), // Routine
+                                    Color(0xFF78FDFF), // Tracker
+                                    Color(0xFFC084FC), // Coach
+                                    Color(0xFFFF8CC2), // Goals
+                                    Color(0xFFFFB830), // Profile
+                                    Color(
+                                      0xFFFF6B6B,
+                                    ), // Wrap around to first color
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            },
+                  );
+                },
               ),
             ),
           ),

@@ -315,7 +315,10 @@ class OnboardingDraft {
 
     final baseItems = baseTimeline.blocks
         .where((block) => !block.needsTimeConfirmation)
-        .where((block) => !(baseTimeline.skinCareSkipped && block.section == 'skin_care'))
+        .where(
+          (block) =>
+              !(baseTimeline.skinCareSkipped && block.section == 'skin_care'),
+        )
         .map(FinalTimelineItem.fromTimelineBlock)
         .toList();
     final occupiedItems = <FinalTimelineItem>[...baseItems];

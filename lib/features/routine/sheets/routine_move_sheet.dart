@@ -63,7 +63,10 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+              colors: [
+                OptivusColors.routineSheetTop,
+                OptivusColors.routineSheetBottom,
+              ],
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
@@ -135,8 +138,9 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
               const SizedBox(height: 10),
               SwitchListTile.adaptive(
                 value: precisionMode,
-                onChanged: (value) =>
-                    ref.read(routineNotifierProvider.notifier).togglePrecisionMode(value),
+                onChanged: (value) => ref
+                    .read(routineNotifierProvider.notifier)
+                    .togglePrecisionMode(value),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 activeTrackColor: OptivusColors.routineAccent,

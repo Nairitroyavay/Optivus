@@ -109,7 +109,10 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+              colors: [
+                OptivusColors.routineSheetTop,
+                OptivusColors.routineSheetBottom,
+              ],
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
@@ -392,7 +395,13 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
               child: _stringTile(
                 label: 'Best time',
                 value: _bestTime,
-                values: const ['Morning', 'Afternoon', 'Evening', 'Night', 'Anytime'],
+                values: const [
+                  'Morning',
+                  'Afternoon',
+                  'Evening',
+                  'Night',
+                  'Anytime',
+                ],
                 onChanged: (value) => setState(() => _bestTime = value),
               ),
             ),
@@ -426,7 +435,13 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
               child: _stringTile(
                 label: 'Best time',
                 value: _bestTime,
-                values: const ['Morning', 'Afternoon', 'Evening', 'Night', 'Anytime'],
+                values: const [
+                  'Morning',
+                  'Afternoon',
+                  'Evening',
+                  'Night',
+                  'Anytime',
+                ],
                 onChanged: (value) => setState(() => _bestTime = value),
               ),
             ),
@@ -743,32 +758,34 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                 spacing: 12,
                 runSpacing: 12,
                 alignment: WrapAlignment.center,
-                children: [
-                  5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480,
-                ].map((mins) {
-                  return ActionChip(
-                    label: Text(
-                      TimelineUtils.formatDuration(mins),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: _durationMinutes == mins
-                            ? OptivusColors.routineAccent
-                            : OptivusColors.textPrimary,
-                      ),
-                    ),
-                    backgroundColor: _durationMinutes == mins
-                        ? OptivusColors.routineAccent.withValues(alpha: 0.15)
-                        : Colors.grey.shade100,
-                    side: BorderSide.none,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    onPressed: () {
-                      setState(() => _durationMinutes = mins);
-                      Navigator.of(ctx).pop();
-                    },
-                  );
-                }).toList(),
+                children: [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480]
+                    .map((mins) {
+                      return ActionChip(
+                        label: Text(
+                          TimelineUtils.formatDuration(mins),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: _durationMinutes == mins
+                                ? OptivusColors.routineAccent
+                                : OptivusColors.textPrimary,
+                          ),
+                        ),
+                        backgroundColor: _durationMinutes == mins
+                            ? OptivusColors.routineAccent.withValues(
+                                alpha: 0.15,
+                              )
+                            : Colors.grey.shade100,
+                        side: BorderSide.none,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        onPressed: () {
+                          setState(() => _durationMinutes = mins);
+                          Navigator.of(ctx).pop();
+                        },
+                      );
+                    })
+                    .toList(),
               ),
             ],
           ),
@@ -849,11 +866,13 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     final start = _startMinute;
     final endRaw = start + _durationMinutes;
     final crossesMidnight = endRaw > 1440;
-    final end = crossesMidnight ? (endRaw - 1440).clamp(0, 1440).toInt() : endRaw.clamp(1, 1440).toInt();
-    
-    final endDate = crossesMidnight && _repeatDays.isEmpty 
-          ? TimelineUtils.dateOnly(_date).add(const Duration(days: 1)) 
-          : null;
+    final end = crossesMidnight
+        ? (endRaw - 1440).clamp(0, 1440).toInt()
+        : endRaw.clamp(1, 1440).toInt();
+
+    final endDate = crossesMidnight && _repeatDays.isEmpty
+        ? TimelineUtils.dateOnly(_date).add(const Duration(days: 1))
+        : null;
 
     final subtasks = _lines(_subtasksController.text);
     final steps = _lines(_stepsController.text);
@@ -943,8 +962,11 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     final conflicts = _conflictPreview();
     final blocking = conflicts.where((conflict) => conflict.blocking).toList();
     if (blocking.isNotEmpty) {
-      final isFlexibleOrTracker = _blockTypeForMode(_mode ?? 'flexible') == RoutineBlockType.flexibleTask ||
-          _blockTypeForMode(_mode ?? 'flexible') == RoutineBlockType.trackerTask;
+      final isFlexibleOrTracker =
+          _blockTypeForMode(_mode ?? 'flexible') ==
+              RoutineBlockType.flexibleTask ||
+          _blockTypeForMode(_mode ?? 'flexible') ==
+              RoutineBlockType.trackerTask;
       if (isFlexibleOrTracker) {
         return 'Tasks cannot be saved into a hard block. Move it or make a tiny version.';
       }
@@ -979,7 +1001,9 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
         _durationMinutes = 5;
         _category = RoutineCategory.finance;
         _trackerType = TrackerType.money;
-        if (_titleController.text.isEmpty) _titleController.text = 'Save ₹10';
+        if (_titleController.text.isEmpty) {
+          _titleController.text = 'Tiny money save';
+        }
         break;
       default:
         _durationMinutes = 30;
@@ -1043,7 +1067,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       'habit' => 'e.g., Reading, Journaling',
       'tracker' => 'e.g., Meditation, Workout',
       'checkin' => 'e.g., Smoking',
-      'money' => 'e.g., Save ₹10',
+      'money' => 'e.g., Tiny money save',
       _ => 'e.g., Morning Study',
     };
   }

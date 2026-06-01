@@ -23,10 +23,12 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
       final body = ref.read(mockOnboardingProvider).draft.bodyBasics;
       if (body.heightCm == null || body.weightKg == null) {
         _updateBody(
-          body.copyWith(
-            heightCm: body.heightCm ?? 170.0,
-            weightKg: body.weightKg ?? 70.0,
-          ).withEstimates(),
+          body
+              .copyWith(
+                heightCm: body.heightCm ?? 170.0,
+                weightKg: body.weightKg ?? 70.0,
+              )
+              .withEstimates(),
         );
       }
     });

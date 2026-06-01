@@ -62,8 +62,9 @@ class _LiquidBlobButtonState extends State<LiquidBlobButton>
         widget.enabled && widget.onPressed != null && !widget.isLoading;
     final double capsuleH = widget.height * 0.54;
     final double capsuleInset = math.max(26.0, widget.height * 0.34);
-    final double labelSize =
-        (widget.height * 0.15).clamp(20.0, 32.0).toDouble();
+    final double labelSize = (widget.height * 0.15)
+        .clamp(20.0, 32.0)
+        .toDouble();
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -93,13 +94,17 @@ class _LiquidBlobButtonState extends State<LiquidBlobButton>
                     boxShadow: active
                         ? [
                             BoxShadow(
-                              color: const Color(0xFF22DDE8).withValues(alpha: 0.25),
+                              color: const Color(
+                                0xFF22DDE8,
+                              ).withValues(alpha: 0.25),
                               blurRadius: 40,
                               spreadRadius: 2,
                               offset: const Offset(-20, 10),
                             ),
                             BoxShadow(
-                              color: const Color(0xFFFF1493).withValues(alpha: 0.25),
+                              color: const Color(
+                                0xFFFF1493,
+                              ).withValues(alpha: 0.25),
                               blurRadius: 40,
                               spreadRadius: 2,
                               offset: const Offset(20, 10),
@@ -199,7 +204,10 @@ class _LiquidBlobButtonState extends State<LiquidBlobButton>
                             width: 60,
                             height: 40,
                             child: ImageFiltered(
-                              imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                              imageFilter: ImageFilter.blur(
+                                sigmaX: 12,
+                                sigmaY: 12,
+                              ),
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.white.withValues(alpha: 0.2),
@@ -216,15 +224,13 @@ class _LiquidBlobButtonState extends State<LiquidBlobButton>
                                     height: 24,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.5,
-                                      valueColor:
-                                          AlwaysStoppedAnimation<Color>(
+                                      valueColor: AlwaysStoppedAnimation<Color>(
                                         OptivusColors.textPrimary,
                                       ),
                                     ),
                                   )
                                 : Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       if (widget.icon != null) ...[
@@ -303,7 +309,9 @@ class _SoftLiquidBlobPainter extends CustomPainter {
       for (int i = 1; i <= arcPoints; i++) {
         double progress = i / arcPoints;
         double angle = -math.pi / 2 + math.pi * progress;
-        basePoints.add(Offset(cxRight + r * math.cos(angle), cy + r * math.sin(angle)));
+        basePoints.add(
+          Offset(cxRight + r * math.cos(angle), cy + r * math.sin(angle)),
+        );
       }
       // Bottom edge (right to left)
       for (int i = 1; i <= edgePoints; i++) {
@@ -314,7 +322,9 @@ class _SoftLiquidBlobPainter extends CustomPainter {
       for (int i = 1; i < arcPoints; i++) {
         double progress = i / arcPoints;
         double angle = math.pi / 2 + math.pi * progress;
-        basePoints.add(Offset(cxLeft + r * math.cos(angle), cy + r * math.sin(angle)));
+        basePoints.add(
+          Offset(cxLeft + r * math.cos(angle), cy + r * math.sin(angle)),
+        );
       }
 
       final path = Path();
@@ -377,16 +387,16 @@ class _SoftLiquidBlobPainter extends CustomPainter {
     canvas.clipPath(mainPath);
 
     // Vibrant, fully opaque base
-    canvas.drawRect(
-      Rect.fromLTRB(0, 0, w, h),
-      Paint()..shader = baseGradient,
-    );
+    canvas.drawRect(Rect.fromLTRB(0, 0, w, h), Paint()..shader = baseGradient);
 
     // 3. Moving Color Masses (Vibrant)
     final t2 = time * 0.8;
     // Cyan swirl
     canvas.drawCircle(
-      Offset(w * 0.2 + math.cos(t2 * 0.7) * 20, h * 0.4 + math.sin(t2 * 1.1) * 15),
+      Offset(
+        w * 0.2 + math.cos(t2 * 0.7) * 20,
+        h * 0.4 + math.sin(t2 * 1.1) * 15,
+      ),
       h * 0.8,
       Paint()
         ..color = const Color(0xFF5DE2FF).withValues(alpha: 0.95)
@@ -394,7 +404,10 @@ class _SoftLiquidBlobPainter extends CustomPainter {
     );
     // Deep Violet center
     canvas.drawCircle(
-      Offset(w * 0.5 + math.sin(t2 * 0.9) * 20, h * 0.6 + math.cos(t2 * 0.8) * 15),
+      Offset(
+        w * 0.5 + math.sin(t2 * 0.9) * 20,
+        h * 0.6 + math.cos(t2 * 0.8) * 15,
+      ),
       h * 1.2,
       Paint()
         ..color = const Color(0xFF6C73FF).withValues(alpha: 0.9)
@@ -402,7 +415,10 @@ class _SoftLiquidBlobPainter extends CustomPainter {
     );
     // Hot Pink right
     canvas.drawCircle(
-      Offset(w * 0.8 + math.cos(t2 * 1.1) * 15, h * 0.5 + math.sin(t2 * 0.7) * 20),
+      Offset(
+        w * 0.8 + math.cos(t2 * 1.1) * 15,
+        h * 0.5 + math.sin(t2 * 0.7) * 20,
+      ),
       h * 0.9,
       Paint()
         ..color = const Color(0xFFFF1493).withValues(alpha: 0.95)
@@ -437,10 +453,7 @@ class _SoftLiquidBlobPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Colors.white.withValues(alpha: 0.85),
-            Colors.transparent,
-          ],
+          colors: [Colors.white.withValues(alpha: 0.85), Colors.transparent],
           stops: const [0.0, 0.5],
         ).createShader(Rect.fromLTRB(0, 0, w, h))
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),

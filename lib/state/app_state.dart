@@ -670,7 +670,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
 
   void convertPotentialToConfirmed(
     String entryId, {
-    MoneySaveMethod method = MoneySaveMethod.upiMock,
+    MoneySaveMethod method = MoneySaveMethod.custom,
   }) {
     SavingEntry? target;
     for (final entry in state.savingsEntries) {

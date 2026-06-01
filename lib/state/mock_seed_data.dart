@@ -154,7 +154,7 @@ class MockSeedData {
     ),
     RoutineItem(
       id: 'routine-save-money',
-      title: 'Save ₹10',
+      title: 'Tiny money save',
       startMinute: 1305, // 9:45 PM
       endMinute: 1310, // 9:50 PM
       blockType: RoutineBlockType.moneyTask,
@@ -362,7 +362,7 @@ class MockSeedData {
         description: 'Avoided vending machine soda',
         status: MoneyEntryStatus.confirmed,
         source: MoneyEntrySource.badHabitConverted,
-        method: MoneySaveMethod.upiMock,
+        method: MoneySaveMethod.custom,
       ),
       SavingEntry(
         id: 's-2',
@@ -389,10 +389,10 @@ class MockSeedData {
         amount: 10.0,
         createdAt: yesterday,
         dateKey: _dateKey(yesterday),
-        description: 'Walked instead of booking auto rickshaw',
+        description: 'Walked instead of booking a ride',
         status: MoneyEntryStatus.confirmed,
-        source: MoneyEntrySource.upiMock,
-        method: MoneySaveMethod.upiMock,
+        source: MoneyEntrySource.manual,
+        method: MoneySaveMethod.custom,
       ),
       SavingEntry(
         id: 's-5',

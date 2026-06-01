@@ -18,9 +18,7 @@ class LiquidGlassPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final double radius = 24.0;
     return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius),
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(radius)),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
         child: BackdropFilter(
@@ -67,10 +65,7 @@ class LiquidGlassPanel extends StatelessWidget {
                   ),
                 ),
                 if (hasScrews) ..._buildScrews(),
-                Padding(
-                  padding: padding,
-                  child: child,
-                ),
+                Padding(padding: padding, child: child),
               ],
             ),
           ),
@@ -90,7 +85,12 @@ class LiquidGlassPanel extends StatelessWidget {
     ];
   }
 
-  Widget _buildScrew({double? top, double? left, double? right, double? bottom}) {
+  Widget _buildScrew({
+    double? top,
+    double? left,
+    double? right,
+    double? bottom,
+  }) {
     return Positioned(
       top: top,
       left: left,
@@ -127,4 +127,3 @@ class LiquidGlassPanel extends StatelessWidget {
     );
   }
 }
-

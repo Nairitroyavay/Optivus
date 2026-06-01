@@ -6,8 +6,13 @@ import 'package:optivus/models/tracker_models.dart';
 
 class FitnessActivityDetailScreen extends StatelessWidget {
   final FitnessActivity activity;
+  final VoidCallback? onBack;
 
-  const FitnessActivityDetailScreen({super.key, required this.activity});
+  const FitnessActivityDetailScreen({
+    super.key,
+    required this.activity,
+    this.onBack,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +40,7 @@ class FitnessActivityDetailScreen extends StatelessWidget {
                     children: [
                       TrackerHeaderButton(
                         icon: Icons.arrow_back_ios_new_rounded,
-                        onTap: () => Navigator.of(context).maybePop(),
+                        onTap: onBack ?? () => Navigator.of(context).maybePop(),
                       ),
                       const SizedBox(width: 12),
                       Expanded(

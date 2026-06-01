@@ -8,8 +8,15 @@ import 'package:optivus/models/tracker_models.dart';
 
 class FitnessActivityFinishScreen extends StatelessWidget {
   final FitnessActivity activity;
+  final VoidCallback? onBack;
+  final ValueChanged<FitnessActivity>? onViewDetails;
 
-  const FitnessActivityFinishScreen({super.key, required this.activity});
+  const FitnessActivityFinishScreen({
+    super.key,
+    required this.activity,
+    this.onBack,
+    this.onViewDetails,
+  });
 
   void _showActionSheet(
     BuildContext context, {
@@ -19,6 +26,7 @@ class FitnessActivityFinishScreen extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
         margin: const EdgeInsets.all(16),
         padding: EdgeInsets.fromLTRB(
@@ -155,10 +163,19 @@ class FitnessActivityFinishScreen extends StatelessWidget {
                         icon: Icons.analytics_rounded,
                         color: accent,
                         onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => FitnessActivityDetailScreen(
+                          if (onViewDetails != null) {
+                            onViewDetails!(activity);
+                            return;
+                          }
+                          showModalBottomSheet<void>(
+                            context: context,
+                            backgroundColor: Colors.transparent,
+                            isScrollControlled: true,
+                            builder: (context) => SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.9,
+                              child: FitnessActivityDetailScreen(
                                 activity: activity,
+                                onBack: () => Navigator.of(context).pop(),
                               ),
                             ),
                           );
@@ -200,7 +217,7 @@ class FitnessActivityFinishScreen extends StatelessWidget {
                       child: FitnessOutlineButton(
                         label: 'Done',
                         icon: Icons.done_rounded,
-                        onTap: () => Navigator.of(context).pop(),
+                        onTap: onBack ?? () => Navigator.of(context).pop(),
                       ),
                     ),
                   ],

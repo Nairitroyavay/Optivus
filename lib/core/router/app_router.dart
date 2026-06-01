@@ -12,6 +12,10 @@ import '../../state/auth_state.dart';
 import '../../state/app_state.dart';
 import '../../app/app_navigation_controller.dart';
 import '../../features/tracker/providers/tracker_navigation_provider.dart';
+import '../../features/profile/providers/profile_navigation_provider.dart';
+import '../../features/routine/providers/routine_navigation_provider.dart';
+import '../../features/coach/providers/coach_navigation_provider.dart';
+import '../../features/goals/providers/goals_navigation_provider.dart';
 
 class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -32,6 +36,31 @@ final routerProvider = Provider<GoRouter>((ref) {
     ref.read(trackerDetailViewRequestProvider.notifier).state =
         TrackerDetailTarget.view(detail);
     return '/app?tab=2';
+  }
+
+  String openProfileDetail(ProfileDetailView detail) {
+    ref.read(appNavigationProvider.notifier).goToProfile();
+    ref.read(profileDetailViewRequestProvider.notifier).state =
+        ProfileDetailTarget(view: detail);
+    return '/app?tab=5';
+  }
+
+  String openRoutineDetail(RoutineDetailTarget target) {
+    ref.read(appNavigationProvider.notifier).goToRoutine();
+    ref.read(routineDetailViewRequestProvider.notifier).state = target;
+    return '/app?tab=1';
+  }
+
+  String openCoachDetail(CoachDetailView detail) {
+    ref.read(appNavigationProvider.notifier).goToCoach();
+    ref.read(coachDetailViewRequestProvider.notifier).state = detail;
+    return '/app?tab=3';
+  }
+
+  String openGoalsDetail(GoalsDetailTarget target) {
+    ref.read(appNavigationProvider.notifier).goToGoals();
+    ref.read(goalsDetailViewRequestProvider.notifier).state = target;
+    return '/app?tab=4';
   }
 
   return GoRouter(
@@ -119,6 +148,253 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/tracker/hydration',
         redirect: (context, state) =>
             openTrackerDetail(TrackerDetailView.hydration),
+      ),
+      GoRoute(
+        path: '/tracker/settings',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.trackerSettings),
+      ),
+      GoRoute(
+        path: '/tracker/activation',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.trackerActivation),
+      ),
+      GoRoute(
+        path: '/tracker/history',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.trackerHistory),
+      ),
+      GoRoute(
+        path: '/tracker/focus',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.focusTimer),
+      ),
+      GoRoute(
+        path: '/tracker/bad-habit',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.badHabit),
+      ),
+      GoRoute(
+        path: '/tracker/sleep',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.sleep),
+      ),
+      GoRoute(
+        path: '/tracker/nutrition',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.nutrition),
+      ),
+      GoRoute(
+        path: '/tracker/global-money-setup',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.globalMoneySetup),
+      ),
+      GoRoute(
+        path: '/tracker/usage-access',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.usageAccessSetup),
+      ),
+      GoRoute(
+        path: '/tracker/health-connect',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.healthConnectSetup),
+      ),
+      GoRoute(
+        path: '/tracker/location-mapbox',
+        redirect: (context, state) =>
+            openTrackerDetail(TrackerDetailView.locationMapboxSetup),
+      ),
+      GoRoute(
+        path: '/profile/edit',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.editProfile),
+      ),
+      GoRoute(
+        path: '/profile/system-setup',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.systemSetup),
+      ),
+      GoRoute(
+        path: '/profile/notifications',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.notificationSettings),
+      ),
+      GoRoute(
+        path: '/profile/permissions',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.permissionsDataSources),
+      ),
+      GoRoute(
+        path: '/profile/connected-services',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.connectedServices),
+      ),
+      GoRoute(
+        path: '/profile/preferences',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.appPreferences),
+      ),
+      GoRoute(
+        path: '/profile/region',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.regionLocalization),
+      ),
+      GoRoute(
+        path: '/profile/privacy',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.privacySecurity),
+      ),
+      GoRoute(
+        path: '/profile/data-control',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.dataControl),
+      ),
+      GoRoute(
+        path: '/profile/export',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.exportData),
+      ),
+      GoRoute(
+        path: '/profile/delete-selected-data',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.deleteSelectedData),
+      ),
+      GoRoute(
+        path: '/profile/delete-account',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.deleteAccountRequest),
+      ),
+      GoRoute(
+        path: '/profile/archived-identities',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.archivedIdentities),
+      ),
+      GoRoute(
+        path: '/profile/report-bug',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.reportBug),
+      ),
+      GoRoute(
+        path: '/profile/help',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.helpCenter),
+      ),
+      GoRoute(
+        path: '/profile/about',
+        redirect: (context, state) =>
+            openProfileDetail(ProfileDetailView.aboutVersion),
+      ),
+      GoRoute(
+        path: '/routine/base-timeline',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(
+            view: RoutineDetailView.baseTimelineManager,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/classes',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.classesSetup),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/work',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.workSetup),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/eating',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.eatingSetup),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/fixed',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.fixedSetup),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/skin-care',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.skinCareSetup),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/import-review',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.importReview),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/settings',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.routineSettings),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/habit-systems',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.habitSystems),
+        ),
+      ),
+      GoRoute(
+        path: '/routine/history',
+        redirect: (context, state) => openRoutineDetail(
+          const RoutineDetailTarget(view: RoutineDetailView.routineHistory),
+        ),
+      ),
+      GoRoute(
+        path: '/coach/history',
+        redirect: (context, state) =>
+            openCoachDetail(CoachDetailView.sessionHistory),
+      ),
+      GoRoute(
+        path: '/coach/settings',
+        redirect: (context, state) =>
+            openCoachDetail(CoachDetailView.coachSettings),
+      ),
+      GoRoute(
+        path: '/coach/new-session',
+        redirect: (context, state) =>
+            openCoachDetail(CoachDetailView.newSession),
+      ),
+      GoRoute(
+        path: '/coach/privacy-data',
+        redirect: (context, state) =>
+            openCoachDetail(CoachDetailView.privacyData),
+      ),
+      GoRoute(
+        path: '/goals/add',
+        redirect: (context, state) => openGoalsDetail(
+          const GoalsDetailTarget(view: GoalsDetailView.addGoal),
+        ),
+      ),
+      GoRoute(
+        path: '/goals/detail',
+        redirect: (context, state) => openGoalsDetail(
+          const GoalsDetailTarget(view: GoalsDetailView.goalDetail),
+        ),
+      ),
+      GoRoute(
+        path: '/goals/weekly-review',
+        redirect: (context, state) => openGoalsDetail(
+          const GoalsDetailTarget(view: GoalsDetailView.weeklyReview),
+        ),
+      ),
+      GoRoute(
+        path: '/goals/archived',
+        redirect: (context, state) => openGoalsDetail(
+          const GoalsDetailTarget(view: GoalsDetailView.archivedGoals),
+        ),
+      ),
+      GoRoute(
+        path: '/goals/settings',
+        redirect: (context, state) => openGoalsDetail(
+          const GoalsDetailTarget(view: GoalsDetailView.goalSettings),
+        ),
       ),
     ],
   );

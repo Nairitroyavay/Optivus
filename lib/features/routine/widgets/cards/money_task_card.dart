@@ -8,8 +8,10 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_base.dart';
 import 'package:optivus/features/routine/widgets/cards/routine_card_factory.dart';
+import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
-/// Card for money system tasks: Save ₹10 via UPI, etc.
+/// Card for region-aware money system tasks.
 class MoneyTaskCard extends ConsumerWidget {
   final RoutineItem item;
   final bool isNow;
@@ -27,6 +29,10 @@ class MoneyTaskCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final color = RoutineCardFactory.colorForType(RoutineBlockType.moneyTask);
+    final region = ref.watch(regionSettingsProvider);
+    final primaryLabel = region.paymentRegion == PaymentRegion.indiaUpi
+        ? 'Save via UPI'
+        : 'Confirm saved';
 
     return RoutineCardBase(
       railColor: color,
@@ -108,7 +114,7 @@ class MoneyTaskCard extends ConsumerWidget {
             runSpacing: 4,
             children: [
               CardActionButton(
-                label: 'Save via UPI',
+                label: primaryLabel,
                 color: color,
                 icon: Icons.payment,
                 onTap: () => showSaveViaUpiFlow(

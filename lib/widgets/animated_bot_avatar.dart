@@ -32,7 +32,10 @@ class AnimatedBotAvatar extends StatelessWidget {
           ],
           stops: const [0.0, 0.60, 1.0],
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.5,
+        ),
         boxShadow: [
           // Bouncy coloured underglow
           BoxShadow(
@@ -61,7 +64,9 @@ class AnimatedBotAvatar extends StatelessWidget {
           children: [
             // Huge top-half shiny reflection
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 height: 24,
                 decoration: const BoxDecoration(
@@ -75,9 +80,11 @@ class AnimatedBotAvatar extends StatelessWidget {
             ),
             // Tiny intense specular crescent highlight
             Positioned(
-              top: 4, left: 8,
+              top: 4,
+              left: 8,
               child: Container(
-                width: 14, height: 8,
+                width: 14,
+                height: 8,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(7),
                   gradient: const LinearGradient(
@@ -89,30 +96,26 @@ class AnimatedBotAvatar extends StatelessWidget {
               ),
             ),
             // The same bouncy animated bot
-            _AnimatedBotIcon(
-              baseColor: baseColor,
-              iconColor: iconColor,
-            ),
+            _AnimatedBotIcon(baseColor: baseColor, iconColor: iconColor),
           ],
         ),
       ),
     );
   }
 }
+
 class _AnimatedBotIcon extends StatefulWidget {
   final Color baseColor;
   final Color iconColor;
-  
-  const _AnimatedBotIcon({
-    required this.baseColor,
-    required this.iconColor,
-  });
+
+  const _AnimatedBotIcon({required this.baseColor, required this.iconColor});
 
   @override
   State<_AnimatedBotIcon> createState() => _AnimatedBotIconState();
 }
 
-class _AnimatedBotIconState extends State<_AnimatedBotIcon> with SingleTickerProviderStateMixin {
+class _AnimatedBotIconState extends State<_AnimatedBotIcon>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _bounceAnimation;
   late Animation<double> _moodAnimation;
@@ -125,13 +128,10 @@ class _AnimatedBotIconState extends State<_AnimatedBotIcon> with SingleTickerPro
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     // Bouncing up and down as it gets happy/sad
     _bounceAnimation = Tween<double>(begin: 0, end: -4).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOutSine,
-      ),
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
     );
 
     // 0.0 (sad) to 1.0 (happy)
@@ -178,7 +178,8 @@ class _RobotPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = iconColor // Bot gold/yellow color
+      ..color =
+          iconColor // Bot gold/yellow color
       ..style = PaintingStyle.fill;
 
     final center = Offset(size.width / 2, size.height / 2);
@@ -187,46 +188,83 @@ class _RobotPainter extends CustomPainter {
     final headWidth = size.width * 0.75;
     final headHeight = size.height * 0.65;
     final headCenter = center + Offset(0, size.height * 0.05);
-    final headRect = Rect.fromCenter(center: headCenter, width: headWidth, height: headHeight);
-    canvas.drawRRect(RRect.fromRectAndRadius(headRect, Radius.circular(size.width * 0.12)), paint);
+    final headRect = Rect.fromCenter(
+      center: headCenter,
+      width: headWidth,
+      height: headHeight,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(headRect, Radius.circular(size.width * 0.12)),
+      paint,
+    );
 
     // Ears
     final earWidth = size.width * 0.15;
     final earHeight = size.height * 0.28;
-    final leftEarRect = Rect.fromCenter(center: Offset(headRect.left - earWidth / 2 + 1, headCenter.dy), width: earWidth, height: earHeight);
-    final rightEarRect = Rect.fromCenter(center: Offset(headRect.right + earWidth / 2 - 1, headCenter.dy), width: earWidth, height: earHeight);
-    canvas.drawRRect(RRect.fromRectAndRadius(leftEarRect, Radius.circular(earWidth / 2)), paint);
-    canvas.drawRRect(RRect.fromRectAndRadius(rightEarRect, Radius.circular(earWidth / 2)), paint);
+    final leftEarRect = Rect.fromCenter(
+      center: Offset(headRect.left - earWidth / 2 + 1, headCenter.dy),
+      width: earWidth,
+      height: earHeight,
+    );
+    final rightEarRect = Rect.fromCenter(
+      center: Offset(headRect.right + earWidth / 2 - 1, headCenter.dy),
+      width: earWidth,
+      height: earHeight,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(leftEarRect, Radius.circular(earWidth / 2)),
+      paint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rightEarRect, Radius.circular(earWidth / 2)),
+      paint,
+    );
 
     // Top parts (like gears/nodes)
     final nodeWidth = size.width * 0.16;
     final nodeHeight = size.height * 0.15;
     final nodeSpacing = size.width * 0.22;
     final nodeY = headRect.top - nodeHeight / 2 + 2;
-    
+
     for (int i = -1; i <= 1; i++) {
-       final nodeRect = Rect.fromCenter(
-         center: Offset(headCenter.dx + (i * nodeSpacing), nodeY), 
-         width: nodeWidth, 
-         height: nodeHeight
-       );
-       canvas.drawRRect(RRect.fromRectAndRadius(nodeRect, Radius.circular(nodeWidth * 0.3)), paint);
+      final nodeRect = Rect.fromCenter(
+        center: Offset(headCenter.dx + (i * nodeSpacing), nodeY),
+        width: nodeWidth,
+        height: nodeHeight,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(nodeRect, Radius.circular(nodeWidth * 0.3)),
+        paint,
+      );
     }
 
     // Cutout Paint for eyes and mouth
     final cutoutPaint = Paint()
-      ..color = baseColor // Circle background color to look like cutouts
+      ..color =
+          baseColor // Circle background color to look like cutouts
       ..style = PaintingStyle.fill;
-    
+
     // Eyes
     final eyeRadius = size.width * 0.08;
     // Eyes move slightly based on mood
-    final eyeYOffset = lerpDouble(size.height * 0.02, -size.height * 0.02, animationValue)!;
+    final eyeYOffset = lerpDouble(
+      size.height * 0.02,
+      -size.height * 0.02,
+      animationValue,
+    )!;
     final eyeY = headCenter.dy - size.height * 0.1 + eyeYOffset;
     final eyeSpacing = size.width * 0.18;
-    
-    canvas.drawCircle(Offset(headCenter.dx - eyeSpacing, eyeY), eyeRadius, cutoutPaint);
-    canvas.drawCircle(Offset(headCenter.dx + eyeSpacing, eyeY), eyeRadius, cutoutPaint);
+
+    canvas.drawCircle(
+      Offset(headCenter.dx - eyeSpacing, eyeY),
+      eyeRadius,
+      cutoutPaint,
+    );
+    canvas.drawCircle(
+      Offset(headCenter.dx + eyeSpacing, eyeY),
+      eyeRadius,
+      cutoutPaint,
+    );
 
     // Mouth
     final mouthPaint = Paint()
@@ -237,18 +275,24 @@ class _RobotPainter extends CustomPainter {
 
     final mouthY = headCenter.dy + size.height * 0.12;
     final mouthWidth = size.width * 0.28;
-    
+
     final path = Path();
     path.moveTo(headCenter.dx - mouthWidth / 2, mouthY);
-    
+
     // Control point Y offset: negative for sad (up), positive for happy (down)
-    final controlDy = lerpDouble(-size.height * 0.12, size.height * 0.15, animationValue)!;
-    
+    final controlDy = lerpDouble(
+      -size.height * 0.12,
+      size.height * 0.15,
+      animationValue,
+    )!;
+
     path.quadraticBezierTo(
-      headCenter.dx, mouthY + controlDy, 
-      headCenter.dx + mouthWidth / 2, mouthY
+      headCenter.dx,
+      mouthY + controlDy,
+      headCenter.dx + mouthWidth / 2,
+      mouthY,
     );
-    
+
     canvas.drawPath(path, mouthPaint);
   }
 

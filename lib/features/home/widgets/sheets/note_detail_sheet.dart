@@ -18,13 +18,16 @@ class NoteDetailSheet extends StatelessWidget {
   }
 
   String _formatTime(DateTime time) {
-    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+    final hour = time.hour > 12
+        ? time.hour - 12
+        : (time.hour == 0 ? 12 : time.hour);
     final min = time.minute.toString().padLeft(2, '0');
     final ampm = time.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$min $ampm';
   }
 
-  String _capitalize(String s) => s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '';
+  String _capitalize(String s) =>
+      s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '';
 
   @override
   Widget build(BuildContext context) {

@@ -78,33 +78,34 @@ class LifeOsSnapshot extends StatelessWidget {
         PillarDetailSheet.show(context, progress.pillar);
       },
       child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20), // pill shape
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _getPillarColor(progress.pillar),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20), // pill shape
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _getPillarColor(progress.pillar),
+              ),
             ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '${_formatPillarName(progress.pillar)} (${progress.current}/${progress.target})',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF333333),
+            const SizedBox(width: 6),
+            Text(
+              '${_formatPillarName(progress.pillar)} (${progress.current}/${progress.target})',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF333333),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 }

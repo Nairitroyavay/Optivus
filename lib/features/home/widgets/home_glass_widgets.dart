@@ -34,7 +34,9 @@ class HomeGlassCard extends StatelessWidget {
             decoration: BoxDecoration(
               color:
                   tint ??
-                  OptivusColors.homeCardTint.withValues(alpha: selected ? 0.35 : 0.15),
+                  OptivusColors.homeCardTint.withValues(
+                    alpha: selected ? 0.35 : 0.15,
+                  ),
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
                 color: Colors.white.withValues(alpha: selected ? 0.95 : 0.65),
@@ -83,9 +85,7 @@ class HomeGlassCard extends StatelessWidget {
                       imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF36F78).withValues(
-                            alpha: 0.2,
-                          ),
+                          color: const Color(0xFFF36F78).withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -995,7 +995,9 @@ class _HomeLiquidSliderState extends State<HomeLiquidSlider> {
                         child: Container(
                           height: 6,
                           decoration: BoxDecoration(
-                            color: const Color(0xFFFFF1F1).withValues(alpha: 0.4),
+                            color: const Color(
+                              0xFFFFF1F1,
+                            ).withValues(alpha: 0.4),
                             borderRadius: BorderRadius.circular(3),
                             border: Border.all(
                               color: Colors.white.withValues(alpha: 0.6),

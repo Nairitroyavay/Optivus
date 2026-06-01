@@ -35,7 +35,7 @@ class _MoneySystemScreenState extends ConsumerState<MoneySystemScreen> {
       tabs: _tabs,
       embedded: embedded,
       onBack: widget.onBack ?? () => Navigator.of(context).pop(),
-      onInfo: () => showMoneyInfoSheet(context),
+      onInfo: () => showMoneyInfoSheet(context, ref),
       onTabSelected: (index) => setState(() => _selectedTabIndex = index),
       tabContent: _buildTabContent(),
     );

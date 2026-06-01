@@ -44,7 +44,7 @@ class FakeCloudflareWorkerClient implements CloudflareWorkerClient {
     // Future dependency plan: use http or dio to call the configured Worker.
     return const CloudflareWorkerResponse(
       statusCode: 200,
-      body: {'mode': 'frontend-preview'},
+      body: {'mode': 'fake-worker'},
     );
   }
 }
@@ -57,7 +57,7 @@ class FakeR2UploadClient implements R2UploadClient {
     required String contentType,
   }) async {
     // Future dependency plan: Worker returns a short-lived R2 presigned URL.
-    return 'r2://frontend-preview/$uid/$objectKey';
+    return 'r2://fake-r2/$uid/$objectKey';
   }
 
   @override

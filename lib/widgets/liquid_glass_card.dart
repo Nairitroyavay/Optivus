@@ -29,13 +29,18 @@ class LiquidGlassCard extends StatelessWidget {
             // BackdropFilter.blur is the only 100%-proven API for this in Flutter.
             // CupertinoPopupSurface uses the same underneath for its iOS material surface.
             ClipPath(
-              clipper: _FolderClipper(cornerRadius: cornerRadius, tabDrop: tabDrop),
+              clipper: _FolderClipper(
+                cornerRadius: cornerRadius,
+                tabDrop: tabDrop,
+              ),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
                 child: Container(
                   decoration: const BoxDecoration(
                     // #E8E8ED is Apple's iOS system grouped background gray
-                    color: Color(0xC8E8E8ED), // ~78% opacity matches iOS material
+                    color: Color(
+                      0xC8E8E8ED,
+                    ), // ~78% opacity matches iOS material
                   ),
                 ),
               ),
@@ -43,7 +48,10 @@ class LiquidGlassCard extends StatelessWidget {
 
             // ── 2. Top-left white sheen (gives glassy depth) ───────────
             ClipPath(
-              clipper: _FolderClipper(cornerRadius: cornerRadius, tabDrop: tabDrop),
+              clipper: _FolderClipper(
+                cornerRadius: cornerRadius,
+                tabDrop: tabDrop,
+              ),
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -59,20 +67,24 @@ class LiquidGlassCard extends StatelessWidget {
               ),
             ),
 
-
             // ── 3. Border + drop shadow via CustomPainter ──────────────
             CustomPaint(
               size: Size(width, height),
-              painter: _FolderGlassPainter(cornerRadius: cornerRadius, tabDrop: tabDrop),
+              painter: _FolderGlassPainter(
+                cornerRadius: cornerRadius,
+                tabDrop: tabDrop,
+              ),
             ),
 
             // ── 4. Content — ClipPath ensures scrollable children
             //    don't paint outside the glass card shape
             ClipPath(
-              clipper: _FolderClipper(cornerRadius: cornerRadius, tabDrop: tabDrop),
+              clipper: _FolderClipper(
+                cornerRadius: cornerRadius,
+                tabDrop: tabDrop,
+              ),
               child: child ?? _buildDefaultContent(context),
             ),
-
           ],
         ),
       ),
@@ -83,65 +95,84 @@ class LiquidGlassCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Top left droplets area
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Little clear drops (just visual accents)
-                      _buildClearDrop(context, 8, 8, Colors.white.withValues(alpha: 0.4)),
-                      const SizedBox(width: 20),
-                      _buildClearDrop(context, 10, 10, Colors.white.withValues(alpha: 0.4)),
-                      const SizedBox(width: 4),
-                      _buildClearDrop(context, 14, 14, Colors.white.withValues(alpha: 0.4)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const SizedBox(width: 4),
-                      // Pink droplet
-                      _buildColoredDrop(
-                        const Color(0xFFF06292), // Pink
-                        const Color(0xFFE91E63),
-                        shadow: const Color(0x4DE91E63),
-                      ),
-                      const SizedBox(width: 12),
-                      // Blue droplet
-                      _buildColoredDrop(
-                        const Color(0xFF64B5F6), // Blue
-                        const Color(0xFF2196F3),
-                        shadow: const Color(0x4D2196F3),
-                      ),
-                    ],
-                  ),
-                  
-                  const Spacer(),
-                  // Text Area
-                  const Text(
-                    'Liquid glass\nUI kidd kit',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF1E242C), // Dark slate/charcoal
-                      height: 1.15,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  
-                  const Spacer(),
-                  // The Button
-                  _buildUpgradeButton(),
-                  const SizedBox(height: 12),
-                ],
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Top left droplets area
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Little clear drops (just visual accents)
+              _buildClearDrop(
+                context,
+                8,
+                8,
+                Colors.white.withValues(alpha: 0.4),
               ),
+              const SizedBox(width: 20),
+              _buildClearDrop(
+                context,
+                10,
+                10,
+                Colors.white.withValues(alpha: 0.4),
+              ),
+              const SizedBox(width: 4),
+              _buildClearDrop(
+                context,
+                14,
+                14,
+                Colors.white.withValues(alpha: 0.4),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const SizedBox(width: 4),
+              // Pink droplet
+              _buildColoredDrop(
+                const Color(0xFFF06292), // Pink
+                const Color(0xFFE91E63),
+                shadow: const Color(0x4DE91E63),
+              ),
+              const SizedBox(width: 12),
+              // Blue droplet
+              _buildColoredDrop(
+                const Color(0xFF64B5F6), // Blue
+                const Color(0xFF2196F3),
+                shadow: const Color(0x4D2196F3),
+              ),
+            ],
+          ),
+
+          const Spacer(),
+          // Text Area
+          const Text(
+            'Liquid glass\nUI kidd kit',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF1E242C), // Dark slate/charcoal
+              height: 1.15,
+              letterSpacing: -0.5,
+            ),
+          ),
+
+          const Spacer(),
+          // The Button
+          _buildUpgradeButton(),
+          const SizedBox(height: 12),
+        ],
+      ),
     );
   }
 
   // Build the colorful 3D droplets
-  Widget _buildColoredDrop(Color lightColor, Color darkColor, {required Color shadow}) {
+  Widget _buildColoredDrop(
+    Color lightColor,
+    Color darkColor, {
+    required Color shadow,
+  }) {
     return Container(
       width: 26,
       height: 26,
@@ -159,11 +190,7 @@ class LiquidGlassCard extends StatelessWidget {
         ),
         boxShadow: [
           // Colored contact shadow
-          BoxShadow(
-            color: shadow,
-            offset: const Offset(4, 8),
-            blurRadius: 10,
-          ),
+          BoxShadow(color: shadow, offset: const Offset(4, 8), blurRadius: 10),
           // Inner glow
           BoxShadow(
             color: Colors.white.withValues(alpha: 0.8),
@@ -176,7 +203,12 @@ class LiquidGlassCard extends StatelessWidget {
   }
 
   // Build the clear water droplets
-  Widget _buildClearDrop(BuildContext context, double w, double h, Color baseColor) {
+  Widget _buildClearDrop(
+    BuildContext context,
+    double w,
+    double h,
+    Color baseColor,
+  ) {
     return Container(
       width: w,
       height: h,
@@ -268,11 +300,7 @@ Path _getFolderShape(Size size, double r, double tabDrop) {
   // Top tab flat part
   path.lineTo(tabWidth - 25, 0);
   // S-curve down to the lower top edge
-  path.cubicTo(
-    tabWidth + 5, 0,
-    tabWidth + 5, tabDrop,
-    tabWidth + 35, tabDrop,
-  );
+  path.cubicTo(tabWidth + 5, 0, tabWidth + 5, tabDrop, tabWidth + 35, tabDrop);
   // Lower top edge
   path.lineTo(size.width - r, tabDrop);
   // Top-right corner

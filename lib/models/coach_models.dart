@@ -9,7 +9,7 @@ enum CoachSessionType {
   goalReview,
   trackerInsight,
   mindNoteDiscussion,
-  generalChat
+  generalChat,
 }
 
 enum CoachResponseBlockType {
@@ -19,7 +19,7 @@ enum CoachResponseBlockType {
   trackerActionCard,
   goalProofCard,
   recoveryCard,
-  mindNoteCard
+  mindNoteCard,
 }
 
 class CoachResponseBlock {
@@ -129,7 +129,8 @@ class CoachPreferences {
       allowTrackerContext: allowTrackerContext ?? this.allowTrackerContext,
       allowGoalsContext: allowGoalsContext ?? this.allowGoalsContext,
       allowProfileContext: allowProfileContext ?? this.allowProfileContext,
-      shareSelectedNotesOnly: shareSelectedNotesOnly ?? this.shareSelectedNotesOnly,
+      shareSelectedNotesOnly:
+          shareSelectedNotesOnly ?? this.shareSelectedNotesOnly,
     );
   }
 }

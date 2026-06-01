@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/tracker/fitness/fitness_activity_detail_screen.dart';
+import 'package:optivus/features/tracker/fitness/fitness_activity_finish_screen.dart';
 import 'package:optivus/features/tracker/fitness/fitness_activity_session_screen.dart';
 import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart';
 import 'package:optivus/features/tracker/fitness/widgets/fitness_center_widgets.dart';
@@ -9,11 +10,29 @@ import 'package:optivus/features/tracker/providers/tracker_navigation_provider.d
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
 import 'package:optivus/models/tracker_models.dart';
 
-class FitnessCenterScreen extends ConsumerWidget {
+enum _FitnessInlineSurface { center, session, finish, detail }
+
+class FitnessCenterScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
   final ValueChanged<TrackerDetailTarget>? onOpenDetail;
 
   const FitnessCenterScreen({super.key, this.onBack, this.onOpenDetail});
+
+  @override
+  ConsumerState<FitnessCenterScreen> createState() =>
+      _FitnessCenterScreenState();
+}
+
+class _FitnessCenterScreenState extends ConsumerState<FitnessCenterScreen> {
+  _FitnessInlineSurface _surface = _FitnessInlineSurface.center;
+  FitnessActivity? _selectedActivity;
+
+  void _showCenter() {
+    setState(() {
+      _surface = _FitnessInlineSurface.center;
+      _selectedActivity = null;
+    });
+  }
 
   void _showFitnessPanel(
     BuildContext context, {
@@ -24,6 +43,7 @@ class FitnessCenterScreen extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
         margin: const EdgeInsets.all(16),
         padding: EdgeInsets.fromLTRB(
@@ -74,13 +94,57 @@ class FitnessCenterScreen extends ConsumerWidget {
     ref
         .read(fitnessCenterProvider.notifier)
         .startSelectedActivity(overrideType: overrideType);
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const FitnessActivitySessionScreen()),
-    );
+    setState(() => _surface = _FitnessInlineSurface.session);
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    if (_surface == _FitnessInlineSurface.session) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _showCenter();
+        },
+        child: FitnessActivitySessionScreen(
+          onBack: _showCenter,
+          onFinished: (activity) => setState(() {
+            _selectedActivity = activity;
+            _surface = _FitnessInlineSurface.finish;
+          }),
+        ),
+      );
+    }
+    if (_surface == _FitnessInlineSurface.finish && _selectedActivity != null) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _showCenter();
+        },
+        child: FitnessActivityFinishScreen(
+          activity: _selectedActivity!,
+          onBack: _showCenter,
+          onViewDetails: (activity) => setState(() {
+            _selectedActivity = activity;
+            _surface = _FitnessInlineSurface.detail;
+          }),
+        ),
+      );
+    }
+    if (_surface == _FitnessInlineSurface.detail && _selectedActivity != null) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) {
+            setState(() => _surface = _FitnessInlineSurface.finish);
+          }
+        },
+        child: FitnessActivityDetailScreen(
+          activity: _selectedActivity!,
+          onBack: () => setState(() => _surface = _FitnessInlineSurface.finish),
+        ),
+      );
+    }
+
     final media = MediaQuery.of(context);
     final bottomReserve =
         76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
@@ -94,14 +158,14 @@ class FitnessCenterScreen extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: _FitnessHeader(
-              onBack: onBack,
+              onBack: widget.onBack,
               onSettings: () => _showFitnessPanel(
                 context,
                 title: 'Fitness settings',
                 message:
                     'Weekly distance, active minutes, map style, and activity source settings are editable in local mock state.',
               ),
-              onHistory: () => onOpenDetail?.call(
+              onHistory: () => widget.onOpenDetail?.call(
                 TrackerDetailTarget.view(TrackerDetailView.trackerHistory),
               ),
             ),
@@ -147,12 +211,10 @@ class FitnessCenterScreen extends ConsumerWidget {
                     (activity) => RecentActivityCard(
                       activity: activity,
                       onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                FitnessActivityDetailScreen(activity: activity),
-                          ),
-                        );
+                        setState(() {
+                          _selectedActivity = activity;
+                          _surface = _FitnessInlineSurface.detail;
+                        });
                       },
                     ),
                   ),
@@ -178,12 +240,12 @@ class FitnessCenterScreen extends ConsumerWidget {
                   FitnessInsightsCard(insights: state.insights),
                   const SizedBox(height: 24),
                   FitnessDataSourcesCard(
-                    onLocation: () => onOpenDetail?.call(
+                    onLocation: () => widget.onOpenDetail?.call(
                       TrackerDetailTarget.view(
                         TrackerDetailView.locationMapboxSetup,
                       ),
                     ),
-                    onHealthConnect: () => onOpenDetail?.call(
+                    onHealthConnect: () => widget.onOpenDetail?.call(
                       TrackerDetailTarget.view(
                         TrackerDetailView.healthConnectSetup,
                       ),

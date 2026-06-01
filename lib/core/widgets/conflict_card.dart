@@ -35,8 +35,11 @@ class ConflictCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded,
-                  size: 22, color: OptivusColors.danger),
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 22,
+                color: OptivusColors.danger,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -71,7 +74,9 @@ class ConflictCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(10),

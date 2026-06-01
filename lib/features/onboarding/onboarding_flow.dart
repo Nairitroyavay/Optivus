@@ -103,7 +103,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
       return true;
     } catch (e) {
-      ref.read(mockOnboardingProvider.notifier).setValidationMessage(e.toString());
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(e.toString());
       return false;
     } finally {
       ref.read(mockOnboardingProvider.notifier).setStepLoading(step, false);
@@ -143,7 +145,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         curve: Curves.easeInOut,
       );
     } catch (e) {
-      ref.read(mockOnboardingProvider.notifier).setValidationMessage(e.toString());
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(e.toString());
     } finally {
       if (mounted) setState(() => _isNavigating = false);
     }
@@ -199,12 +203,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     ref.read(mockOnboardingProvider.notifier).completeOnboarding(uid: uid);
 
     // Initialize the coach tab with a starter session so it doesn't crash empty
-    ref.read(mockCoachProvider.notifier).createNewSession(
-      'Onboarding Review',
-      CoachSessionType.generalChat,
-      bundle.coachPreferences.name,
-      bundle.coachPreferences.style,
-    );
+    ref
+        .read(mockCoachProvider.notifier)
+        .createNewSession(
+          'Onboarding Review',
+          CoachSessionType.generalChat,
+          bundle.coachPreferences.name,
+          bundle.coachPreferences.style,
+        );
 
     final authUser = ref.read(authProvider).user;
     if (authUser != null) {

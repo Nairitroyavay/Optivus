@@ -62,7 +62,12 @@ class MoveLaterSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildOption(BuildContext context, WidgetRef ref, String title, IconData icon) {
+  Widget _buildOption(
+    BuildContext context,
+    WidgetRef ref,
+    String title,
+    IconData icon,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(

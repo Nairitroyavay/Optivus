@@ -48,7 +48,7 @@ class TodayPlanCard extends StatelessWidget {
           _buildTimelineItem('7:40 AM', 'Meditation'),
           _buildTimelineItem('9:00 AM', 'Class'),
           _buildTimelineItem('6:30 PM', 'Gym'),
-          _buildTimelineItem('9:45 PM', 'Save ₹10'),
+          _buildTimelineItem('9:45 PM', 'Tiny money save'),
           _buildTimelineItem('10:15 PM', 'Reading'),
           const SizedBox(height: 12),
           Container(

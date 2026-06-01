@@ -21,5 +21,5 @@ class AppNavigationController extends StateNotifier<int> {
 
 final appNavigationProvider =
     StateNotifierProvider<AppNavigationController, int>((ref) {
-  return AppNavigationController();
-});
+      return AppNavigationController();
+    });

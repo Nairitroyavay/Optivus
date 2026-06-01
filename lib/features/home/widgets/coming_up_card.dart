@@ -32,7 +32,8 @@ class ComingUpCard extends ConsumerWidget {
                 ),
               ),
               GestureDetector(
-                onTap: () => ref.read(appNavigationProvider.notifier).goToRoutine(),
+                onTap: () =>
+                    ref.read(appNavigationProvider.notifier).goToRoutine(),
                 child: Row(
                   children: [
                     const Text(
@@ -44,7 +45,11 @@ class ComingUpCard extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.arrow_forward, size: 16, color: Color(0xFF7D5B21)),
+                    const Icon(
+                      Icons.arrow_forward,
+                      size: 16,
+                      color: Color(0xFF7D5B21),
+                    ),
                   ],
                 ),
               ),
@@ -61,7 +66,12 @@ class ComingUpCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildItemRow(BuildContext context, ComingUpItem item, bool isFirst, bool isLast) {
+  Widget _buildItemRow(
+    BuildContext context,
+    ComingUpItem item,
+    bool isFirst,
+    bool isLast,
+  ) {
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -109,7 +119,9 @@ class ComingUpCard extends ConsumerWidget {
                   height: item.isNext ? 18 : 8,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: item.isNext ? const Color(0xFFE6AE24) : const Color(0xFFD1CDC7),
+                    color: item.isNext
+                        ? const Color(0xFFE6AE24)
+                        : const Color(0xFFD1CDC7),
                     border: item.isNext
                         ? Border.all(color: const Color(0xFFF8EBD8), width: 4)
                         : null,
@@ -128,7 +140,10 @@ class ComingUpCard extends ConsumerWidget {
                   ComingUpItemSheet.show(context, item.title);
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: item.isNext ? Colors.white : const Color(0xFFFCF8F9),
                     borderRadius: BorderRadius.circular(16),
@@ -138,64 +153,67 @@ class ComingUpCard extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: item.iconBgColor,
-                        borderRadius: BorderRadius.circular(12),
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: item.iconBgColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(item.icon, color: item.iconColor, size: 22),
                       ),
-                      child: Icon(item.icon, color: item.iconColor, size: 22),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            item.title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF2D2D2D),
-                            ),
-                          ),
-                          if (item.badgeText != null) ...[
-                            const SizedBox(height: 2),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(8),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.title,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF2D2D2D),
                               ),
-                              child: Text(
-                                item.badgeText!,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF5A5A5A),
+                            ),
+                            if (item.badgeText != null) ...[
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  item.badgeText!,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF5A5A5A),
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ),
-                    if (item.isNext)
-                      const Text(
-                        'NEXT',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                          color: Color(0xFF8B6C23),
                         ),
                       ),
-                  ],
+                      if (item.isNext)
+                        const Text(
+                          'NEXT',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: Color(0xFF8B6C23),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
           ),
         ],
       ),

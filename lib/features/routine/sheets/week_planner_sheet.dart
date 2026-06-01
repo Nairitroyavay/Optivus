@@ -36,7 +36,10 @@ class _WeekPlannerSheet extends ConsumerWidget {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [OptivusColors.routineSheetTop, OptivusColors.routineSheetBottom],
+              colors: [
+                OptivusColors.routineSheetTop,
+                OptivusColors.routineSheetBottom,
+              ],
             ),
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
@@ -114,7 +117,9 @@ class _WeekPlannerSheet extends ConsumerWidget {
                   freeMinutes: freeMinutes,
                   conflicts: conflicts.length,
                   onTap: () {
-                    ref.read(routineNotifierProvider.notifier).updateSelectedDay(day);
+                    ref
+                        .read(routineNotifierProvider.notifier)
+                        .updateSelectedDay(day);
                     Navigator.of(context).pop();
                   },
                 );

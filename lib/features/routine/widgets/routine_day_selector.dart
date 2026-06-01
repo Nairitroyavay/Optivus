@@ -35,7 +35,9 @@ class RoutineDaySelector extends ConsumerWidget {
 
                   return InkWell(
                     onTap: () {
-                      ref.read(routineNotifierProvider.notifier).updateSelectedDay(day);
+                      ref
+                          .read(routineNotifierProvider.notifier)
+                          .updateSelectedDay(day);
                     },
                     borderRadius: BorderRadius.circular(10),
                     child: AnimatedContainer(

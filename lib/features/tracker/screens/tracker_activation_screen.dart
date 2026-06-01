@@ -4,6 +4,8 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/features/tracker/providers/tracker_settings_provider.dart';
+import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 class TrackerActivationScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
@@ -34,7 +36,10 @@ class _TrackerActivationScreenState
   @override
   void initState() {
     super.initState();
-    final config = _TrackerActivationConfig.forType(widget.trackerType);
+    final config = _TrackerActivationConfig.forType(
+      widget.trackerType,
+      ref.read(regionSettingsProvider),
+    );
     _dailyCost = TextEditingController(text: config.defaultDailyCost);
     _checkInTime = TextEditingController(text: config.defaultCheckInTime);
     _primaryChoice = config.primaryOptions.first;
@@ -50,7 +55,10 @@ class _TrackerActivationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final config = _TrackerActivationConfig.forType(widget.trackerType);
+    final config = _TrackerActivationConfig.forType(
+      widget.trackerType,
+      ref.watch(regionSettingsProvider),
+    );
 
     return LiquidDetailScaffold(
       eyebrow: 'Tracker setup',
@@ -191,7 +199,10 @@ class _TrackerActivationConfig {
     required this.detailTarget,
   });
 
-  static _TrackerActivationConfig forType(String rawType) {
+  static _TrackerActivationConfig forType(
+    String rawType,
+    RegionSettings region,
+  ) {
     final type = rawType.toLowerCase();
     if (type.contains('smoking')) {
       return _badHabit('Smoking', 'No. of cigarettes / cravings / money saved');
@@ -232,9 +243,10 @@ class _TrackerActivationConfig {
         whyItHelps:
             'Nutrition connects onboarding body basics, Routine eating blocks, and weekly Body consistency.',
         requiredData: 'Meal source and meal done state.',
-        optionalPermissions: 'Mess sheet upload and AI meal plan later.',
+        optionalPermissions:
+            'Meal-plan import and AI meal suggestions can connect later.',
         primaryQuestion: 'Eating source',
-        primaryOptions: const ['Home', 'Hostel', 'PG', 'Mess', 'Flat', 'Mixed'],
+        primaryOptions: _nutritionSourceOptions(region),
         secondaryQuestion: 'Default tracking',
         secondaryOptions: const [
           'Done only',
@@ -285,6 +297,40 @@ class _TrackerActivationConfig {
       rawType.trim().isEmpty ? 'Custom' : rawType,
       'Custom tracker logs.',
     );
+  }
+
+  static List<String> _nutritionSourceOptions(RegionSettings region) {
+    if (region.foodVocabularyMode == FoodVocabularyMode.india) {
+      return const [
+        'Home',
+        'Hostel',
+        'PG',
+        'Flat / rented room',
+        'Mess',
+        'Staying alone',
+        'Mixed',
+      ];
+    }
+    if (region.foodVocabularyMode == FoodVocabularyMode.japan) {
+      return const [
+        'Home',
+        'Dorm',
+        'Apartment',
+        'Cafeteria',
+        'Convenience store / outside food',
+        'Mixed',
+      ];
+    }
+    return const [
+      'Home',
+      'Dorm / Hostel',
+      'Shared apartment',
+      'Alone / Studio',
+      'Cafeteria / Dining hall',
+      'Meal plan',
+      'Outside food / Restaurant',
+      'Mixed',
+    ];
   }
 
   static _TrackerActivationConfig _badHabit(String title, String measures) {

@@ -77,14 +77,25 @@ class RoutineHeader extends ConsumerWidget {
     final now = DateTime.now();
     final isToday =
         date.year == now.year && date.month == now.month && date.day == now.day;
-    final isTomorrow = date.year == now.year &&
+    final isTomorrow =
+        date.year == now.year &&
         date.month == now.month &&
         date.day == now.day + 1;
 
     const daysStr = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
     const mos = [
-      'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-      'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+      'JAN',
+      'FEB',
+      'MAR',
+      'APR',
+      'MAY',
+      'JUN',
+      'JUL',
+      'AUG',
+      'SEP',
+      'OCT',
+      'NOV',
+      'DEC',
     ];
 
     final dayStr = daysStr[date.weekday - 1];

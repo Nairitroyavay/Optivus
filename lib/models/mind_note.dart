@@ -7,14 +7,10 @@ enum MindNoteType {
   regret,
   decision,
   existential,
-  random
+  random,
 }
 
-enum MindNoteIntensity {
-  low,
-  medium,
-  high
-}
+enum MindNoteIntensity { low, medium, high }
 
 class MindNote {
   final String id;

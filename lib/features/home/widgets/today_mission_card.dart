@@ -93,68 +93,74 @@ class _TodayMissionCardState extends State<TodayMissionCard>
       child: HomeGlassCard(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
         child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Today's Mission",
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                _GlassOrb(
+                  size: 34,
+                  colors: [const Color(0xFFD0D8E8), const Color(0xFFB0B8CC)],
+                  child: const Icon(
+                    Icons.track_changes_outlined,
+                    size: 16,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            AnimatedBuilder(
+              animation: _ringAnim,
+              builder: (context, child) => _MissionRing(
+                progress: progress * _ringAnim.value,
+                isLoading: false,
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (totalTasks == 0)
               const Text(
-                "Today's Mission",
+                'No mission tasks scheduled yet',
                 style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: OptivusColors.textPrimary,
+                  fontSize: 13,
+                  color: OptivusColors.textSecondary,
+                ),
+              )
+            else
+              const Text(
+                'Identity-weighted progress',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: OptivusColors.textSecondary,
                 ),
               ),
-              _GlassOrb(
-                size: 34,
-                colors: [const Color(0xFFD0D8E8), const Color(0xFFB0B8CC)],
-                child: const Icon(
-                  Icons.track_changes_outlined,
-                  size: 16,
-                  color: OptivusColors.textPrimary,
+            const SizedBox(height: 14),
+            // Stat pills
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _statPill('Actions', '$completedTasks/$totalTasks'),
+                _statPill('Focus', '${completedMinutes}m'),
+                _statPill(
+                  'Saved',
+                  summary.moneySavedLabel.isEmpty
+                      ? '${summary.moneySaved}'
+                      : summary.moneySavedLabel,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          AnimatedBuilder(
-            animation: _ringAnim,
-            builder: (context, child) => _MissionRing(
-              progress: progress * _ringAnim.value,
-              isLoading: false,
+                _statPill('Avoided', '${summary.badHabitsAvoided}'),
+              ],
             ),
-          ),
-          const SizedBox(height: 20),
-          if (totalTasks == 0)
-            const Text(
-              'No mission tasks scheduled yet',
-              style: TextStyle(
-                fontSize: 13,
-                color: OptivusColors.textSecondary,
-              ),
-            )
-          else
-            const Text(
-              'Identity-weighted progress',
-              style: TextStyle(
-                fontSize: 13,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-          const SizedBox(height: 14),
-          // Stat pills
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _statPill('Actions', '$completedTasks/$totalTasks'),
-              _statPill('Focus', '${completedMinutes}m'),
-              _statPill('Saved', '₹${summary.moneySaved}'),
-              _statPill('Avoided', '${summary.badHabitsAvoided}'),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 

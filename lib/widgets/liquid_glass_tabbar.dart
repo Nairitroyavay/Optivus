@@ -62,7 +62,8 @@ class _LiquidGlassTabBarState extends State<LiquidGlassTabBar>
     _snapController.addListener(() {
       setState(() {
         _pillPosition =
-            _snapFrom + (_snapAnimation.value * (widget.currentIndex - _snapFrom));
+            _snapFrom +
+            (_snapAnimation.value * (widget.currentIndex - _snapFrom));
       });
     });
   }
@@ -90,8 +91,10 @@ class _LiquidGlassTabBarState extends State<LiquidGlassTabBar>
   }
 
   void _onPanUpdate(DragUpdateDetails details, double tabSlotWidth) {
-    final double rawIndex =
-        (details.localPosition.dx / tabSlotWidth).clamp(0.0, _tabCount - 1.0);
+    final double rawIndex = (details.localPosition.dx / tabSlotWidth).clamp(
+      0.0,
+      _tabCount - 1.0,
+    );
 
     setState(() {
       _pillPosition = rawIndex;
@@ -175,7 +178,8 @@ class _LiquidGlassTabBarState extends State<LiquidGlassTabBar>
                       Row(
                         children: List.generate(_tabCount, (index) {
                           final bool isSelected =
-                              index == _pillPosition.round().clamp(0, _tabCount - 1);
+                              index ==
+                              _pillPosition.round().clamp(0, _tabCount - 1);
                           return GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () => _onTap(index),
@@ -229,11 +233,8 @@ class _LiquidGlassTabBarState extends State<LiquidGlassTabBar>
 
     // Fractional part drives the stretch (peaks at .5 between tabs)
     final double frac = _pillPosition - _pillPosition.floor();
-    final double stretch = (frac < 0.5
-            ? frac * 2
-            : (1 - frac) * 2)
-        .clamp(0.0, 1.0) *
-        maxStretch;
+    final double stretch =
+        (frac < 0.5 ? frac * 2 : (1 - frac) * 2).clamp(0.0, 1.0) * maxStretch;
 
     final double pillWidth = pillBase + (_isDragging ? stretch : 0);
     final double centerX = _pillPosition * tabSlotWidth + tabSlotWidth / 2;
@@ -371,7 +372,11 @@ class _AiBotPainter extends CustomPainter {
     // Inner square pupil (rounded)
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(w * 0.34, h * 0.39), width: w * 0.1, height: w * 0.1),
+        Rect.fromCenter(
+          center: Offset(w * 0.34, h * 0.39),
+          width: w * 0.1,
+          height: w * 0.1,
+        ),
         Radius.circular(w * 0.025),
       ),
       pupilPaint,
@@ -381,7 +386,11 @@ class _AiBotPainter extends CustomPainter {
     canvas.drawCircle(Offset(w * 0.66, h * 0.38), w * 0.13, eyeWhite);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(w * 0.66, h * 0.39), width: w * 0.1, height: w * 0.1),
+        Rect.fromCenter(
+          center: Offset(w * 0.66, h * 0.39),
+          width: w * 0.1,
+          height: w * 0.1,
+        ),
         Radius.circular(w * 0.025),
       ),
       pupilPaint,

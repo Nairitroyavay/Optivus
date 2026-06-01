@@ -6,6 +6,7 @@ import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 import 'home_glass_widgets.dart';
 
 class TodayCheckInCard extends ConsumerWidget {
@@ -42,6 +43,7 @@ class TodayCheckInCard extends ConsumerWidget {
     WidgetRef ref,
     CheckInItem item,
   ) {
+    final region = ref.watch(regionSettingsProvider);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: Column(
@@ -92,7 +94,9 @@ class TodayCheckInCard extends ConsumerWidget {
                       );
                       return;
                     }
-                    final amount = double.tryParse(option.replaceAll('₹', ''));
+                    final amount = double.tryParse(
+                      option.replaceAll(region.currencySymbol, ''),
+                    );
                     if (amount != null && amount > 0) {
                       final goal = ref.read(mockTrackerProvider).moneyGoal;
                       ref

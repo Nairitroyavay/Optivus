@@ -195,10 +195,7 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
           }).toList(),
         ),
         const SizedBox(height: 24),
-        HomeActionPill(
-          label: 'Back',
-          onTap: _prevStep,
-        ),
+        HomeActionPill(label: 'Back', onTap: _prevStep),
       ],
     );
   }
@@ -251,10 +248,7 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
         Row(
           children: [
             Expanded(
-              child: HomeActionPill(
-                label: 'Back',
-                onTap: _prevStep,
-              ),
+              child: HomeActionPill(label: 'Back', onTap: _prevStep),
             ),
             const SizedBox(width: 8),
             Expanded(

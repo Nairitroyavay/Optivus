@@ -1,8 +1,4 @@
-enum MoneyEntryStatus {
-  confirmed,
-  potential,
-  skipped,
-}
+enum MoneyEntryStatus { confirmed, potential, skipped }
 
 enum MoneyEntrySource {
   dailyTarget,
@@ -120,7 +116,7 @@ class MoneyGoal {
     this.nextLevelAmount = 25.0,
     this.levelUpAfterDays = 5,
     this.destinationLabel = 'My Second Bank',
-    this.defaultMethod = MoneySaveMethod.upiMock,
+    this.defaultMethod = MoneySaveMethod.custom,
     this.reminderTimeLabel = '8:00 PM',
     this.manualConfirmationAllowed = true,
   });
@@ -152,14 +148,16 @@ class MoneyGoal {
       streakDays: streakDays ?? this.streakDays,
       bestStreakDays: bestStreakDays ?? this.bestStreakDays,
       streakLevel: streakLevel ?? this.streakLevel,
-      successfulDaysAtCurrentLevel: successfulDaysAtCurrentLevel ?? this.successfulDaysAtCurrentLevel,
+      successfulDaysAtCurrentLevel:
+          successfulDaysAtCurrentLevel ?? this.successfulDaysAtCurrentLevel,
       currentLevelAmount: currentLevelAmount ?? this.currentLevelAmount,
       nextLevelAmount: nextLevelAmount ?? this.nextLevelAmount,
       levelUpAfterDays: levelUpAfterDays ?? this.levelUpAfterDays,
       destinationLabel: destinationLabel ?? this.destinationLabel,
       defaultMethod: defaultMethod ?? this.defaultMethod,
       reminderTimeLabel: reminderTimeLabel ?? this.reminderTimeLabel,
-      manualConfirmationAllowed: manualConfirmationAllowed ?? this.manualConfirmationAllowed,
+      manualConfirmationAllowed:
+          manualConfirmationAllowed ?? this.manualConfirmationAllowed,
     );
   }
 }

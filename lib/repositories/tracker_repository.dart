@@ -32,6 +32,11 @@ abstract class NutritionRepository {
   Future<void> saveNutritionLog(String uid, NutritionLog log);
 }
 
+abstract class FitnessRepository {
+  Future<List<FitnessActivity>> fetchFitnessActivities(String uid);
+  Future<void> saveFitnessActivity(String uid, FitnessActivity activity);
+}
+
 class FakeTrackerRepository implements TrackerRepository {
   final Map<String, List<TrackerSession>> _sessions = {};
 
@@ -131,6 +136,23 @@ class FakeNutritionRepository implements NutritionRepository {
   }
 }
 
+class FakeFitnessRepository implements FitnessRepository {
+  final Map<String, List<FitnessActivity>> _activities = {};
+
+  @override
+  Future<List<FitnessActivity>> fetchFitnessActivities(String uid) async {
+    return _activities[uid] ?? const [];
+  }
+
+  @override
+  Future<void> saveFitnessActivity(String uid, FitnessActivity activity) async {
+    final current = [...await fetchFitnessActivities(uid)];
+    current.removeWhere((item) => item.id == activity.id);
+    current.add(activity);
+    _activities[uid] = current;
+  }
+}
+
 abstract class MoneyRepository {
   Future<MoneyGoal> fetchMoneyGoal(String uid);
   Future<void> saveMoneyGoal(String uid, MoneyGoal goal);
@@ -190,6 +212,10 @@ final sleepRepositoryProvider = Provider<SleepRepository>((ref) {
 
 final nutritionRepositoryProvider = Provider<NutritionRepository>((ref) {
   return FakeNutritionRepository();
+});
+
+final fitnessRepositoryProvider = Provider<FitnessRepository>((ref) {
+  return FakeFitnessRepository();
 });
 
 final moneyRepositoryProvider = Provider<MoneyRepository>((ref) {

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/features/tracker/money/money_system_widgets.dart';
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 import 'home_glass_widgets.dart';
 
 class TrackerPreviewSection extends ConsumerWidget {
@@ -50,12 +52,13 @@ class TrackerPreviewSection extends ConsumerWidget {
     TrackerPreview preview,
   ) {
     final trackerState = ref.watch(mockTrackerProvider);
+    final region = ref.watch(regionSettingsProvider);
     final todayKey = moneyDateKey(DateTime.now());
     final todaySaved = trackerState.savingsEntries
         .where((entry) => entry.dateKey == todayKey && entry.isConfirmed)
         .fold(0.0, (sum, entry) => sum + entry.amount);
     final effectiveSubtitle = preview.id == 'money'
-        ? '${formatMoney(todaySaved)} saved today'
+        ? '${formatMoney(todaySaved, region)} saved today'
         : preview.subtitle;
     final effectiveButton = preview.id == 'money' ? 'Open' : preview.buttonText;
 

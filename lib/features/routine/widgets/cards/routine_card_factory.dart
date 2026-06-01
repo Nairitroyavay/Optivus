@@ -20,18 +20,42 @@ class RoutineCardFactory {
     VoidCallback? onTap,
   }) {
     return switch (item.blockType) {
-      RoutineBlockType.hardBlock =>
-        HardBlockCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
-      RoutineBlockType.softBlock =>
-        SoftBlockCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
-      RoutineBlockType.flexibleTask =>
-        FlexibleTaskCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
-      RoutineBlockType.trackerTask =>
-        TrackerTaskCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
-      RoutineBlockType.checkIn =>
-        CheckInCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
-      RoutineBlockType.moneyTask =>
-        MoneyTaskCard(item: item, isNow: isNow, railHeight: railHeight, onTap: onTap),
+      RoutineBlockType.hardBlock => HardBlockCard(
+        item: item,
+        isNow: isNow,
+        railHeight: railHeight,
+        onTap: onTap,
+      ),
+      RoutineBlockType.softBlock => SoftBlockCard(
+        item: item,
+        isNow: isNow,
+        railHeight: railHeight,
+        onTap: onTap,
+      ),
+      RoutineBlockType.flexibleTask => FlexibleTaskCard(
+        item: item,
+        isNow: isNow,
+        railHeight: railHeight,
+        onTap: onTap,
+      ),
+      RoutineBlockType.trackerTask => TrackerTaskCard(
+        item: item,
+        isNow: isNow,
+        railHeight: railHeight,
+        onTap: onTap,
+      ),
+      RoutineBlockType.checkIn => CheckInCard(
+        item: item,
+        isNow: isNow,
+        railHeight: railHeight,
+        onTap: onTap,
+      ),
+      RoutineBlockType.moneyTask => MoneyTaskCard(
+        item: item,
+        isNow: isNow,
+        railHeight: railHeight,
+        onTap: onTap,
+      ),
     };
   }
 

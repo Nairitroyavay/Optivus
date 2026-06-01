@@ -78,20 +78,28 @@ class MindNotebookSheet extends ConsumerWidget {
                         itemBuilder: (context, index) {
                           final note = notes[index];
                           final isFirst = index == 0;
-                          final previousNote = isFirst ? null : notes[index - 1];
-                          
+                          final previousNote = isFirst
+                              ? null
+                              : notes[index - 1];
+
                           final currentDay = note.createdAt.day;
                           final previousDay = previousNote?.createdAt.day;
-                          final showHeader = isFirst || currentDay != previousDay;
+                          final showHeader =
+                              isFirst || currentDay != previousDay;
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               if (showHeader)
                                 Padding(
-                                  padding: EdgeInsets.only(bottom: 12, top: index == 0 ? 0 : 16),
+                                  padding: EdgeInsets.only(
+                                    bottom: 12,
+                                    top: index == 0 ? 0 : 16,
+                                  ),
                                   child: Text(
-                                    currentDay == DateTime.now().day ? 'Today' : 'Earlier',
+                                    currentDay == DateTime.now().day
+                                        ? 'Today'
+                                        : 'Earlier',
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w900,
@@ -112,12 +120,17 @@ class MindNotebookSheet extends ConsumerWidget {
     );
   }
 
-  Widget _buildNoteCard(BuildContext context, WidgetRef ref, HomeMindNote note) {
+  Widget _buildNoteCard(
+    BuildContext context,
+    WidgetRef ref,
+    HomeMindNote note,
+  ) {
     final h = note.createdAt.hour;
     final m = note.createdAt.minute;
     final period = h >= 12 ? 'PM' : 'AM';
     final displayHour = h == 0 ? 12 : (h > 12 ? h - 12 : h);
-    final timeStr = '${displayHour.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $period';
+    final timeStr =
+        '${displayHour.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $period';
     final isShared = note.visibility == MindNoteVisibility.sharedWithCoach;
 
     return Container(
@@ -178,7 +191,9 @@ class MindNotebookSheet extends ConsumerWidget {
                 icon: isShared ? Icons.check : Icons.send,
                 compact: true,
                 selected: isShared ? false : true,
-                accent: isShared ? OptivusColors.success : OptivusColors.homeAccent,
+                accent: isShared
+                    ? OptivusColors.success
+                    : OptivusColors.homeAccent,
                 onTap: () {
                   ref
                       .read(homeMindNoteProvider.notifier)

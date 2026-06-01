@@ -229,7 +229,15 @@ class BaseTimelineManagerScreen extends ConsumerWidget {
       onOpenDetail!(target);
       return;
     }
-    Navigator.push(context, MaterialPageRoute(builder: (_) => fallback));
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.9,
+        child: fallback,
+      ),
+    );
   }
 
   String _previewItem(RoutineItem item) {
@@ -247,7 +255,7 @@ class _ImportReviewGrid extends StatelessWidget {
     final items = const [
       (RoutineImportSource.classes, 'Classes AI text/photo/manual import'),
       (RoutineImportSource.work, 'Job / Work / Business schedule import'),
-      (RoutineImportSource.eating, 'Eating / mess sheet import'),
+      (RoutineImportSource.eating, 'Eating / meal-plan import'),
       (RoutineImportSource.skinCare, 'Skin care product/routine import'),
     ];
     return Column(

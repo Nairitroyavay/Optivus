@@ -20,6 +20,7 @@ enum ProfileDetailView {
   reportBug,
   helpCenter,
   aboutVersion,
+  regionLocalization,
 }
 
 class ProfileDetailTarget {

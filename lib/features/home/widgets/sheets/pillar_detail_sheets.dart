@@ -19,13 +19,20 @@ class PillarDetailSheet extends StatelessWidget {
 
   String _getPillarName() {
     switch (pillar) {
-      case LifePillar.body: return 'Body';
-      case LifePillar.mind: return 'Mind';
-      case LifePillar.workStudy: return 'Work / Study';
-      case LifePillar.finance: return 'Finance';
-      case LifePillar.focus: return 'Focus';
-      case LifePillar.growth: return 'Growth';
-      case LifePillar.skill: return 'Skill';
+      case LifePillar.body:
+        return 'Body';
+      case LifePillar.mind:
+        return 'Mind';
+      case LifePillar.workStudy:
+        return 'Work / Study';
+      case LifePillar.finance:
+        return 'Finance';
+      case LifePillar.focus:
+        return 'Focus';
+      case LifePillar.growth:
+        return 'Growth';
+      case LifePillar.skill:
+        return 'Skill';
     }
   }
 
@@ -34,44 +41,114 @@ class PillarDetailSheet extends StatelessWidget {
       case LifePillar.body:
         return [
           _buildTaskRow('Water', '500/2500ml', Icons.water_drop, Colors.blue),
-          _buildTaskRow('Workout', 'Pending', Icons.fitness_center, OptivusColors.textSecondary),
-          _buildTaskRow('Protein meal', 'Done', Icons.restaurant, OptivusColors.routineAccent),
+          _buildTaskRow(
+            'Workout',
+            'Pending',
+            Icons.fitness_center,
+            OptivusColors.textSecondary,
+          ),
+          _buildTaskRow(
+            'Protein meal',
+            'Done',
+            Icons.restaurant,
+            OptivusColors.routineAccent,
+          ),
         ];
       case LifePillar.mind:
         return [
-          _buildTaskRow('Meditation', 'Pending', Icons.self_improvement, OptivusColors.textSecondary),
+          _buildTaskRow(
+            'Meditation',
+            'Pending',
+            Icons.self_improvement,
+            OptivusColors.textSecondary,
+          ),
           _buildTaskRow('Stress', 'Medium', Icons.warning_amber, Colors.orange),
-          _buildTaskRow('Mind note', '3 captured', Icons.edit_note, OptivusColors.homeAccent),
+          _buildTaskRow(
+            'Mind note',
+            '3 captured',
+            Icons.edit_note,
+            OptivusColors.homeAccent,
+          ),
         ];
       case LifePillar.workStudy:
         return [
-          _buildTaskRow('Class', '9 AM - 5 PM', Icons.school, OptivusColors.routineAccent),
-          _buildTaskRow('DSA practice', 'Pending', Icons.code, OptivusColors.textSecondary),
+          _buildTaskRow(
+            'Class',
+            '9 AM - 5 PM',
+            Icons.school,
+            OptivusColors.routineAccent,
+          ),
+          _buildTaskRow(
+            'DSA practice',
+            'Pending',
+            Icons.code,
+            OptivusColors.textSecondary,
+          ),
         ];
       case LifePillar.skill:
         return [
-          _buildTaskRow('Coding', 'Pending', Icons.computer, OptivusColors.textSecondary),
-          _buildTaskRow('Editing practice', 'Not planned', Icons.videocam, OptivusColors.textSecondary.withValues(alpha: 0.5)),
+          _buildTaskRow(
+            'Coding',
+            'Pending',
+            Icons.computer,
+            OptivusColors.textSecondary,
+          ),
+          _buildTaskRow(
+            'Editing practice',
+            'Not planned',
+            Icons.videocam,
+            OptivusColors.textSecondary.withValues(alpha: 0.5),
+          ),
         ];
       case LifePillar.finance:
         return [
-          _buildTaskRow('Save ₹10', 'Done', Icons.savings, Colors.amber),
-          _buildTaskRow('Bad-habit money saved', '₹0', Icons.money_off, OptivusColors.textSecondary),
+          _buildTaskRow('Tiny money save', 'Done', Icons.savings, Colors.amber),
+          _buildTaskRow(
+            'Bad-habit money saved',
+            'None yet',
+            Icons.money_off,
+            OptivusColors.textSecondary,
+          ),
         ];
       case LifePillar.focus:
         return [
-          _buildTaskRow('Instagram risk', 'High', Icons.phonelink_ring, Colors.redAccent),
-          _buildTaskRow('Deep work', 'Pending', Icons.timer, OptivusColors.textSecondary),
+          _buildTaskRow(
+            'Instagram risk',
+            'High',
+            Icons.phonelink_ring,
+            Colors.redAccent,
+          ),
+          _buildTaskRow(
+            'Deep work',
+            'Pending',
+            Icons.timer,
+            OptivusColors.textSecondary,
+          ),
         ];
       case LifePillar.growth:
         return [
-          _buildTaskRow('Reading', 'Pending', Icons.menu_book, OptivusColors.textSecondary),
-          _buildTaskRow('Identity proof', 'Pending', Icons.verified, OptivusColors.textSecondary),
+          _buildTaskRow(
+            'Reading',
+            'Pending',
+            Icons.menu_book,
+            OptivusColors.textSecondary,
+          ),
+          _buildTaskRow(
+            'Identity proof',
+            'Pending',
+            Icons.verified,
+            OptivusColors.textSecondary,
+          ),
         ];
     }
   }
 
-  Widget _buildTaskRow(String title, String status, IconData icon, Color color) {
+  Widget _buildTaskRow(
+    String title,
+    String status,
+    IconData icon,
+    Color color,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -151,9 +228,7 @@ class PillarDetailSheet extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.white),
                 ),
-                child: Column(
-                  children: _getPillarContent(),
-                ),
+                child: Column(children: _getPillarContent()),
               ),
               const SizedBox(height: 24),
               HomeActionPill(

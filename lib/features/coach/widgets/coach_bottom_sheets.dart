@@ -272,12 +272,6 @@ class CoachBottomSheets {
       ),
       onTap: () {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$label tapped'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
       },
     );
   }

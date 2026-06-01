@@ -14,7 +14,8 @@ class RoutineTitleFilterRow extends ConsumerStatefulWidget {
   const RoutineTitleFilterRow({super.key});
 
   @override
-  ConsumerState<RoutineTitleFilterRow> createState() => _RoutineTitleFilterRowState();
+  ConsumerState<RoutineTitleFilterRow> createState() =>
+      _RoutineTitleFilterRowState();
 }
 
 class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
@@ -91,18 +92,20 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
     final categoryFilter = state.selectedCategoryFilter;
 
     final List<Widget> rows = [];
-    
+
     // View section header
     rows.add(_buildSectionHeader('View'));
     for (int i = 0; i < primaryFilters.length; i++) {
       final f = primaryFilters[i];
-      rows.add(_buildOptionRow(
-        f: f,
-        isSelected: filter == f.key,
-        onTap: () {
-          ref.read(routineNotifierProvider.notifier).setPrimaryFilter(f.key);
-        },
-      ));
+      rows.add(
+        _buildOptionRow(
+          f: f,
+          isSelected: filter == f.key,
+          onTap: () {
+            ref.read(routineNotifierProvider.notifier).setPrimaryFilter(f.key);
+          },
+        ),
+      );
     }
 
     // Category section header
@@ -111,13 +114,15 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
     rows.add(_buildSectionHeader('Category'));
     for (int i = 0; i < categoryFilters.length; i++) {
       final f = categoryFilters[i];
-      rows.add(_buildOptionRow(
-        f: f,
-        isSelected: categoryFilter == f.key,
-        onTap: () {
-          ref.read(routineNotifierProvider.notifier).setCategoryFilter(f.key);
-        },
-      ));
+      rows.add(
+        _buildOptionRow(
+          f: f,
+          isSelected: categoryFilter == f.key,
+          onTap: () {
+            ref.read(routineNotifierProvider.notifier).setCategoryFilter(f.key);
+          },
+        ),
+      );
     }
 
     return Material(
@@ -224,13 +229,18 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
-        color: isSelected ? Colors.white.withValues(alpha: 0.18) : Colors.transparent,
+        color: isSelected
+            ? Colors.white.withValues(alpha: 0.18)
+            : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         child: Row(
           children: [
             Text(
               f.emoji,
-              style: const TextStyle(fontSize: 15, decoration: TextDecoration.none),
+              style: const TextStyle(
+                fontSize: 15,
+                decoration: TextDecoration.none,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -239,7 +249,9 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: OptivusColors.ink.withValues(alpha: isSelected ? 1.0 : 0.80),
+                  color: OptivusColors.ink.withValues(
+                    alpha: isSelected ? 1.0 : 0.80,
+                  ),
                   letterSpacing: -0.1,
                   height: 1.2,
                   decoration: TextDecoration.none,
@@ -266,16 +278,20 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
 
     final activeFilters = <RoutineFilterOption>[];
     if (filter != 'all') {
-      activeFilters.add(primaryFilters.firstWhere(
-        (f) => f.key == filter,
-        orElse: () => primaryFilters.first,
-      ));
+      activeFilters.add(
+        primaryFilters.firstWhere(
+          (f) => f.key == filter,
+          orElse: () => primaryFilters.first,
+        ),
+      );
     }
     if (categoryFilter != 'all') {
-      activeFilters.add(categoryFilters.firstWhere(
-        (f) => f.key == categoryFilter,
-        orElse: () => categoryFilters.first,
-      ));
+      activeFilters.add(
+        categoryFilters.firstWhere(
+          (f) => f.key == categoryFilter,
+          orElse: () => categoryFilters.first,
+        ),
+      );
     }
 
     String pillLabel = 'Filter';
@@ -336,11 +352,9 @@ class _RoutineTitleFilterRowState extends ConsumerState<RoutineTitleFilterRow>
           CompositedTransformTarget(
             link: _link,
             child: GestureDetector(
-              onTap: () => _overlay == null ? _openDropdown() : _closeDropdown(),
-              child: _RoutineGlassPill(
-                label: pillLabel,
-                width: _widgetWidth,
-              ),
+              onTap: () =>
+                  _overlay == null ? _openDropdown() : _closeDropdown(),
+              child: _RoutineGlassPill(label: pillLabel, width: _widgetWidth),
             ),
           ),
         ],

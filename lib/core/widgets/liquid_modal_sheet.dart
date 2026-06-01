@@ -26,11 +26,7 @@ class LiquidModalSheet extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           stops: const [0.0, 0.7, 1.0],
-          colors: [
-            topColor,
-            const Color(0xFFFFFFFF),
-            const Color(0xFFFFFFFF),
-          ],
+          colors: [topColor, const Color(0xFFFFFFFF), const Color(0xFFFFFFFF)],
         ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(30),
@@ -64,8 +60,8 @@ class LiquidModalSheet extends StatelessWidget {
                   Text(
                     title!,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   if (onClose != null)
                     IconButton(

@@ -80,8 +80,10 @@ class PermissionStatusCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 // Status badge
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: _isConnected ? OptivusColors.success : Colors.white,
                     border: Border.all(
@@ -92,7 +94,9 @@ class PermissionStatusCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    _isConnected ? 'Connected' : (_isComingLater ? 'Later' : 'Connect'),
+                    _isConnected
+                        ? 'Connected'
+                        : (_isComingLater ? 'Later' : 'Connect'),
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,

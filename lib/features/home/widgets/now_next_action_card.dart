@@ -45,21 +45,34 @@ class NowNextActionCard extends ConsumerWidget {
                   children: [
                     GestureDetector(
                       onTap: () {
-                        ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                        ref
+                            .read(homeDashboardProvider.notifier)
+                            .cycleNowNextState();
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: isMissed ? OptivusColors.danger.withValues(alpha: 0.1) : pillBgColor,
+                          color: isMissed
+                              ? OptivusColors.danger.withValues(alpha: 0.1)
+                              : pillBgColor,
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: isMissed ? OptivusColors.danger.withValues(alpha: 0.3) : pillBorderColor),
+                          border: Border.all(
+                            color: isMissed
+                                ? OptivusColors.danger.withValues(alpha: 0.3)
+                                : pillBorderColor,
+                          ),
                         ),
                         child: Text(
                           isMissed ? 'MISSED' : 'NOW',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
-                            color: isMissed ? OptivusColors.danger : pillTextColor,
+                            color: isMissed
+                                ? OptivusColors.danger
+                                : pillTextColor,
                             letterSpacing: 2.0,
                           ),
                         ),
@@ -92,12 +105,18 @@ class NowNextActionCard extends ConsumerWidget {
                 Container(
                   margin: const EdgeInsets.only(top: 8),
                   child: HomeActionPill(
-                    label: actionState!.currentType == NowActionType.freeTime ? 'Start 10 min' : 'Start',
+                    label: actionState!.currentType == NowActionType.freeTime
+                        ? 'Start 10 min'
+                        : 'Start',
                     compact: true,
                     selected: true,
                     onTap: () {
                       if (actionState!.currentType == NowActionType.freeTime) {
-                        DemoSheet.show(context, title: "Focus Started", message: "10 minute deep focus block initiated.");
+                        DemoSheet.show(
+                          context,
+                          title: "Focus Started",
+                          message: "10 minute deep focus block initiated.",
+                        );
                       } else {
                         ref.read(appNavigationProvider.notifier).goToTracker();
                       }
@@ -116,8 +135,14 @@ class NowNextActionCard extends ConsumerWidget {
                     compact: true,
                     selected: true,
                     onTap: () {
-                      DemoSheet.show(context, title: "Tiny Version", message: "Task downgraded to a 2-minute tiny version.");
-                      ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                      DemoSheet.show(
+                        context,
+                        title: "Tiny Version",
+                        message: "Task downgraded to a 2-minute tiny version.",
+                      );
+                      ref
+                          .read(homeDashboardProvider.notifier)
+                          .cycleNowNextState();
                     },
                   ),
                 ),
@@ -134,8 +159,15 @@ class NowNextActionCard extends ConsumerWidget {
                   label: 'Skip',
                   compact: true,
                   onTap: () {
-                    DemoSheet.show(context, title: "Skipped", message: "Task skipped. It's okay, you'll get it next time.");
-                    ref.read(homeDashboardProvider.notifier).cycleNowNextState();
+                    DemoSheet.show(
+                      context,
+                      title: "Skipped",
+                      message:
+                          "Task skipped. It's okay, you'll get it next time.",
+                    );
+                    ref
+                        .read(homeDashboardProvider.notifier)
+                        .cycleNowNextState();
                   },
                 ),
               ],

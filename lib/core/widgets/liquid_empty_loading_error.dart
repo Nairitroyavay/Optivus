@@ -105,8 +105,9 @@ class LiquidLoadingState extends StatelessWidget {
               height: 36,
               child: CircularProgressIndicator(
                 strokeWidth: 3,
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(OptivusColors.brandAccent),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  OptivusColors.brandAccent,
+                ),
               ),
             ),
             if (message != null) ...[
@@ -158,8 +159,11 @@ class LiquidErrorState extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: OptivusColors.danger.withValues(alpha: 0.1),
               ),
-              child: const Icon(Icons.error_outline,
-                  size: 28, color: OptivusColors.danger),
+              child: const Icon(
+                Icons.error_outline,
+                size: 28,
+                color: OptivusColors.danger,
+              ),
             ),
             const SizedBox(height: 16),
             Text(

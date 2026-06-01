@@ -64,7 +64,9 @@ class FolderShapeCard extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: 22,
-                  color: isSelected ? Colors.white : OptivusColors.textSecondary,
+                  color: isSelected
+                      ? Colors.white
+                      : OptivusColors.textSecondary,
                 ),
               ),
               const SizedBox(width: 14),

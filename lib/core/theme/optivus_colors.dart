@@ -83,11 +83,19 @@ class OptivusColors {
   static const Color routinePrismPink = Color(0xFFF472B6);
 
   // ── Category accent colours (old liquid_ui palette) ────────────────────
-  static const Color mintAccent = Color(0xFF60D4A0);   // OptivusColors.mintAccent — skin care
-  static const Color blueAccent = Color(0xFF60B8FF);   // OptivusColors.blueAccent — classes
-  static const Color roseAccent = Color(0xFFFF9560);   // OptivusColors.roseAccent — eating/time
-  static const Color purpleAccent = Color(0xFF9B8FFF); // OptivusColors.purpleAccent — AI/fixed
-  static const Color tealAccent = Color(0xFF14B8A6);   // supplements
+  static const Color mintAccent = Color(
+    0xFF60D4A0,
+  ); // OptivusColors.mintAccent — skin care
+  static const Color blueAccent = Color(
+    0xFF60B8FF,
+  ); // OptivusColors.blueAccent — classes
+  static const Color roseAccent = Color(
+    0xFFFF9560,
+  ); // OptivusColors.roseAccent — eating/time
+  static const Color purpleAccent = Color(
+    0xFF9B8FFF,
+  ); // OptivusColors.purpleAccent — AI/fixed
+  static const Color tealAccent = Color(0xFF14B8A6); // supplements
 
   // ── Block-type rail colours ────────────────────────────────────────────
   static const Color blockHard = Color(0xFF8B5CF6);

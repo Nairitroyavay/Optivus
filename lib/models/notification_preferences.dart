@@ -1,8 +1,4 @@
-enum NotificationIntensity {
-  low,
-  medium,
-  high
-}
+enum NotificationIntensity { low, medium, high }
 
 class NotificationPreferences {
   final bool morningStart;

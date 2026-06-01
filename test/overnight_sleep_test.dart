@@ -70,8 +70,7 @@ void main() {
       final items = RoutineMaterializer.itemsForDay([sleep], may29);
 
       // Should include continuation (yesterday's overnight item reaching into today)
-      final continuations =
-          items.where((item) => item.isContinuation).toList();
+      final continuations = items.where((item) => item.isContinuation).toList();
       expect(continuations, hasLength(1));
       expect(continuations.first.startMinute, 0);
       expect(continuations.first.endMinute, 450);
@@ -92,8 +91,7 @@ void main() {
       // We need date=28 May and previous=28 May to match.
       // Actually for may29, previous = may28, and item.date = may28, so
       // _startsOnDay(item, may28) = true via DateUtils.isSameDay.
-      final continuations =
-          items.where((item) => item.isContinuation).toList();
+      final continuations = items.where((item) => item.isContinuation).toList();
       expect(continuations, hasLength(1));
     });
   });
@@ -240,8 +238,16 @@ void main() {
 
       // Even if both somehow end up in the same list (unlikely since day filtered),
       // they don't overlap in minute time (1350-1890 vs 0-450)
-      final conflicts = RoutineConflictEngine.detect([sleepStart, sleepContinuation], day: DateTime(2026, 5, 29));
-      expect(conflicts.where((c) => c.type == RoutineConflictType.sleepConflict).isEmpty, isTrue);
+      final conflicts = RoutineConflictEngine.detect([
+        sleepStart,
+        sleepContinuation,
+      ], day: DateTime(2026, 5, 29));
+      expect(
+        conflicts
+            .where((c) => c.type == RoutineConflictType.sleepConflict)
+            .isEmpty,
+        isTrue,
+      );
     });
 
     test('base_timeline filter includes continuation sleep items', () {
@@ -253,10 +259,10 @@ void main() {
         endsNextDay: false,
         isContinuation: true,
       );
-      
+
       final filtered = RoutineFilters.applyCategory([sleepContinuation], 'all');
       final baseTimeline = TimelineUtils.filterItems(filtered, 'base_timeline');
-      
+
       expect(baseTimeline, hasLength(1));
       expect(baseTimeline.first.id, sleepContinuation.id);
     });

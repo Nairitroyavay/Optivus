@@ -29,9 +29,7 @@ class LiquidSettingsRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: const BoxDecoration(
-          color: Colors.transparent,
-        ),
+        decoration: const BoxDecoration(color: Colors.transparent),
         child: Row(
           children: [
             // Icon circle
@@ -40,8 +38,9 @@ class LiquidSettingsRow extends StatelessWidget {
               height: 40,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: (iconColor ?? OptivusColors.brandAccent)
-                    .withValues(alpha: 0.12),
+                color: (iconColor ?? OptivusColors.brandAccent).withValues(
+                  alpha: 0.12,
+                ),
               ),
               child: Icon(
                 icon,
