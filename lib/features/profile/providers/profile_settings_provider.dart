@@ -69,14 +69,13 @@ class ProfileSettingsState {
       services: const [
         ConnectedServiceStatusModel(
           type: ConnectedServiceType.cloudflareR2,
-          status: ProfileConnectionStatus.connected,
-          lastChecked: 'Today',
+          status: ProfileConnectionStatus.notConfigured,
+          lastChecked: 'Not configured',
         ),
         ConnectedServiceStatusModel(
           type: ConnectedServiceType.mapbox,
-          status: ProfileConnectionStatus.connected,
-          lastChecked: 'Today',
-          selectedStyle: 'Optivus route style',
+          status: ProfileConnectionStatus.notConfigured,
+          lastChecked: 'Not configured',
         ),
         ConnectedServiceStatusModel(
           type: ConnectedServiceType.healthConnect,
@@ -90,8 +89,8 @@ class ProfileSettingsState {
         ),
         ConnectedServiceStatusModel(
           type: ConnectedServiceType.cloudflareWorkers,
-          status: ProfileConnectionStatus.connected,
-          lastChecked: 'Today',
+          status: ProfileConnectionStatus.notConfigured,
+          lastChecked: 'Not configured',
         ),
       ],
       deletionRequest: const DeletionRequestModel(),

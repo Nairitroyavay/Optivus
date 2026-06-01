@@ -29,7 +29,7 @@ class LiquidDetailScaffold extends StatelessWidget {
     required this.onBack,
     required this.children,
     this.trailing,
-    this.padding = const EdgeInsets.fromLTRB(20, 14, 20, 0),
+    this.padding = const EdgeInsets.fromLTRB(20, 26, 20, 0),
     this.includeBottomReserve = true,
   });
 
@@ -142,7 +142,15 @@ class LiquidDetailHeader extends StatelessWidget {
             ],
           ),
         ),
-        if (trailing != null) ...[const SizedBox(width: 12), trailing!],
+        if (trailing != null) ...[
+          const SizedBox(width: 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.28,
+            ),
+            child: trailing!,
+          ),
+        ],
       ],
     );
   }
@@ -311,9 +319,17 @@ class LiquidActionRow extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 10),
+            if (trailing != null || onTap != null) const SizedBox(width: 10),
             if (trailing != null)
-              Flexible(child: trailing!)
+              Flexible(
+                flex: 0,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.42,
+                  ),
+                  child: trailing!,
+                ),
+              )
             else if (onTap != null)
               const Icon(
                 Icons.chevron_right_rounded,
@@ -341,6 +357,7 @@ class LiquidPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 150),
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
       decoration: BoxDecoration(
         color: filled ? color : color.withValues(alpha: 0.13),
@@ -349,6 +366,8 @@ class LiquidPill extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w900,

@@ -82,7 +82,15 @@ class LiquidSettingsRow extends StatelessWidget {
             // Trailing widget
             if (trailing != null) ...[
               const SizedBox(width: 10),
-              Flexible(child: trailing!),
+              Flexible(
+                flex: 0,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.4,
+                  ),
+                  child: trailing!,
+                ),
+              ),
             ],
             if (trailing == null && onTap != null)
               const Icon(

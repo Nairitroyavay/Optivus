@@ -7,9 +7,15 @@ import 'package:optivus/features/profile/widgets/profile_status_chip.dart';
 
 class ProfileHeaderCard extends StatelessWidget {
   final UserProfile profile;
+  final String? usernameLabel;
   final VoidCallback? onEditTap;
 
-  const ProfileHeaderCard({super.key, required this.profile, this.onEditTap});
+  const ProfileHeaderCard({
+    super.key,
+    required this.profile,
+    this.usernameLabel,
+    this.onEditTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -107,7 +113,7 @@ class ProfileHeaderCard extends StatelessWidget {
                     Text(
                       profile.displayName.isNotEmpty
                           ? profile.displayName
-                          : 'Nairit Roy',
+                          : 'Profile',
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
@@ -118,9 +124,14 @@ class ProfileHeaderCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    const Text(
-                      '@nairitgpt',
-                      style: TextStyle(
+                    Text(
+                      usernameLabel ??
+                          (profile.email.isNotEmpty
+                              ? profile.email
+                              : 'Signed in'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                         color: OptivusColors.textSecondary,
@@ -129,14 +140,19 @@ class ProfileHeaderCard extends StatelessWidget {
                     const SizedBox(height: 12),
                     const Row(
                       children: [
-                        Text(
-                          'Life OS Status: ',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: OptivusColors.textMuted,
+                        Flexible(
+                          child: Text(
+                            'Life OS Status: ',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: OptivusColors.textMuted,
+                            ),
                           ),
                         ),
+                        SizedBox(width: 4),
                         ProfileStatusChip(
                           label: 'Active',
                           type: ProfileStatusType.success,

@@ -1,3 +1,4 @@
+// Legacy Profile sheet. Active data controls live in DataControlScreen.
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';

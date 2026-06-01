@@ -1,3 +1,4 @@
+// Legacy Profile sheet. Active notification controls live in NotificationSettingsScreen.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';

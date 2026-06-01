@@ -10,7 +10,10 @@ import 'package:optivus/features/profile/providers/profile_navigation_provider.d
 import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
 import 'package:optivus/features/profile/providers/profile_mock_data.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
+import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 typedef OpenProfileDetail = void Function(ProfileDetailTarget target);
 
@@ -219,6 +222,7 @@ class SystemSetupScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(mockUserProfileProvider);
+    final region = ref.watch(regionSettingsProvider);
 
     return LiquidDetailScaffold(
       eyebrow: 'Setup',
@@ -234,9 +238,7 @@ class SystemSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.work_outline,
               title: 'Life Role & Lifestyle',
-              subtitle: profile.lifeRole.isEmpty
-                  ? 'Student + Working · setup shortcut'
-                  : profile.lifeRole,
+              subtitle: _profileRoleLabel(profile),
               accentColor: OptivusColors.info,
               onTap: () => _showSetupReview(
                 context,
@@ -247,9 +249,7 @@ class SystemSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.monitor_weight_outlined,
               title: 'Body Basics',
-              subtitle: profile.weight > 0
-                  ? '${profile.weight.toStringAsFixed(0)} kg · ${profile.height.toStringAsFixed(0)} cm'
-                  : '52 kg · 5\'9" · setup shortcut',
+              subtitle: _bodyBasicsLabel(profile, region),
               accentColor: OptivusColors.roseAccent,
               onTap: () => _showSetupReview(
                 context,
@@ -453,12 +453,12 @@ class PermissionsDataSourcesScreen extends ConsumerWidget {
       eyebrow: 'Profile',
       title: 'Permissions & Data Sources',
       subtitle:
-          'Android live status is the source of truth. Firestore stores last known status only.',
+          'Last known status is shown here. Android live checks connect in the native pass.',
       accentColor: _profileAccent,
       onBack: onBack,
       children: [
         LiquidDetailSection(
-          title: 'Live-check capable',
+          title: 'Last known status',
           children: permissions.map((permission) {
             return LiquidActionRow(
               icon: _permissionIcon(permission.type),
@@ -518,13 +518,13 @@ class PermissionDetailScreen extends ConsumerWidget {
       onBack: onBack,
       children: [
         LiquidDetailSection(
-          title: 'Current status',
+          title: 'Last known status',
           children: [
             LiquidActionRow(
               icon: _permissionIcon(permissionType),
               title: permission.status.label,
               subtitle:
-                  '${permission.sourceOfTruth} · last checked ${permission.lastChecked}',
+                  'Android live check connects in the native pass · last checked ${permission.lastChecked}',
               accentColor: _statusColor(permission.status),
             ),
           ],
@@ -548,9 +548,9 @@ class PermissionDetailScreen extends ConsumerWidget {
           children: [
             LiquidActionRow(
               icon: Icons.open_in_new_rounded,
-              title: permissionType.primaryAction,
+              title: 'Preview recheck',
               subtitle:
-                  'Mock action now. Native Android permission flow can connect later.',
+                  '${permissionType.primaryAction}. This updates the frontend status preview until native Android permission wiring is connected.',
               accentColor: _profileAccent,
               onTap: () => ref
                   .read(profileSettingsProvider.notifier)
@@ -700,13 +700,13 @@ class AppPreferencesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(profileSettingsProvider).preferences;
+    final region = ref.watch(regionSettingsProvider);
     final notifier = ref.read(profileSettingsProvider.notifier);
 
     return LiquidDetailScaffold(
       eyebrow: 'Profile',
       title: 'App Preferences',
-      subtitle:
-          'Theme, tab layout, timeline display, coach voice, and language.',
+      subtitle: 'Theme, tab layout, timeline display, coach voice, and region.',
       accentColor: _profileAccent,
       onBack: onBack,
       children: [
@@ -718,16 +718,20 @@ class AppPreferencesScreen extends ConsumerWidget {
               title: 'Haptic Feedback',
               value: prefs.haptics,
               color: _profileAccent,
-              onChanged: (v) =>
-                  notifier.updatePreferences(prefs.copyWith(haptics: v)),
+              onChanged: (v) {
+                final current = ref.read(profileSettingsProvider).preferences;
+                notifier.updatePreferences(current.copyWith(haptics: v));
+              },
             ),
             _SwitchRow(
               icon: Icons.spellcheck_rounded,
               title: 'Correct Spelling Automatically',
               value: prefs.autoCorrect,
               color: _profileAccent,
-              onChanged: (v) =>
-                  notifier.updatePreferences(prefs.copyWith(autoCorrect: v)),
+              onChanged: (v) {
+                final current = ref.read(profileSettingsProvider).preferences;
+                notifier.updatePreferences(current.copyWith(autoCorrect: v));
+              },
             ),
             LiquidActionRow(
               icon: Icons.public_rounded,
@@ -802,23 +806,23 @@ class AppPreferencesScreen extends ConsumerWidget {
                   notifier.updatePreferences(prefs.copyWith(coachVoice: v)),
             ),
             const SizedBox(height: 14),
-            _LabeledSegment(
-              label: 'Language',
-              options: const [
-                'English',
-                'Hindi',
-                'Bengali',
-                'Japanese',
-                'German',
-                'Spanish',
-                'French',
-                'Korean',
-                'Chinese',
-                'Custom',
-              ],
-              selected: prefs.language,
-              onSelected: (v) =>
-                  notifier.updatePreferences(prefs.copyWith(language: v)),
+            LiquidActionRow(
+              icon: Icons.translate_rounded,
+              title: 'Language / Region',
+              subtitle:
+                  '${_languageName(region.languageCode)} · ${region.countryName} · ${region.currencyCode}',
+              accentColor: _profileAccent,
+              onTap: () {
+                final target = const ProfileDetailTarget(
+                  view: ProfileDetailView.regionLocalization,
+                );
+                if (onOpenProfileDetail != null) {
+                  onOpenProfileDetail!(target);
+                } else {
+                  ref.read(profileDetailViewRequestProvider.notifier).state =
+                      target;
+                }
+              },
             ),
           ],
         ),
@@ -973,6 +977,18 @@ class PrivacySecurityScreen extends ConsumerWidget {
                 fontWeight: FontWeight.w800,
                 color: OptivusColors.textSecondary,
               ),
+            ),
+          ],
+        ),
+        LiquidDetailSection(
+          title: 'Data Privacy',
+          children: const [
+            LiquidActionRow(
+              icon: Icons.privacy_tip_outlined,
+              title: 'Data Privacy',
+              subtitle:
+                  'Export and deletion controls live in Data Control. Coach access follows the toggles above.',
+              accentColor: _profileAccent,
             ),
           ],
         ),
@@ -1180,7 +1196,7 @@ class _ExportDataScreenState extends ConsumerState<ExportDataScreen> {
                   ],
                   const SizedBox(height: 12),
                   _SmallActionButton(
-                    label: 'Mock generate',
+                    label: 'Generate preview',
                     color: _profileAccent,
                     onTap: () {
                       ref
@@ -1416,7 +1432,7 @@ class ArchivedIdentitiesScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'Archived date: mock history · Restore / View in Goals',
+                  'Archived date will appear after Goals history sync · Restore / View in Goals',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -1729,6 +1745,53 @@ IconData _serviceIcon(ConnectedServiceType type) {
   };
 }
 
+String _profileRoleLabel(UserProfile profile) {
+  final parts = <String>[
+    if (profile.lifeRole.trim().isNotEmpty) profile.lifeRole.trim(),
+    if (profile.workingExtra?.trim().isNotEmpty == true)
+      profile.workingExtra!.trim(),
+    if (profile.businessMode?.trim().isNotEmpty == true)
+      profile.businessMode!.trim(),
+  ];
+  return parts.isEmpty ? 'Not completed' : parts.join(' + ');
+}
+
+String _bodyBasicsLabel(UserProfile profile, RegionSettings region) {
+  if (profile.weight <= 0 || profile.height <= 0) return 'Not completed';
+
+  final weight = switch (region.weightUnit) {
+    WeightUnit.lb => '${(profile.weight * 2.20462).round()} lb',
+    WeightUnit.kg => '${profile.weight.round()} kg',
+  };
+  final height = switch (region.heightUnit) {
+    HeightUnit.ftIn => _cmToFeetInches(profile.height),
+    HeightUnit.cm => '${profile.height.round()} cm',
+  };
+  return '$weight · $height';
+}
+
+String _cmToFeetInches(double centimeters) {
+  final totalInches = (centimeters / 2.54).round();
+  final feet = totalInches ~/ 12;
+  final inches = totalInches % 12;
+  return '$feet ft $inches in';
+}
+
+String _languageName(String code) {
+  return switch (code.toLowerCase()) {
+    'en' => 'English',
+    'hi' => 'Hindi',
+    'bn' => 'Bengali',
+    'ja' => 'Japanese',
+    'de' => 'German',
+    'es' => 'Spanish',
+    'fr' => 'French',
+    'ko' => 'Korean',
+    'zh' => 'Chinese',
+    _ => code.toUpperCase(),
+  };
+}
+
 void _showSetupReview(BuildContext context, String title, String body) {
   showModalBottomSheet<void>(
     context: context,
@@ -1847,7 +1910,7 @@ void _confirmSelectedDelete(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: const Text('Delete selected data?'),
       content: Text(
-        'This local deletion request will clear the selected categories from this build:\n\n${selected.join(', ')}',
+        'This will prepare deletion for selected categories. Final deletion connects during the data-control backend phase.\n\n${selected.join(', ')}',
       ),
       actions: [
         TextButton(

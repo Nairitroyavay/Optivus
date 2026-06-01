@@ -87,7 +87,7 @@ class PermissionStatusModel {
     required this.status,
     required this.lastChecked,
     this.liveCheckCapable = true,
-    this.sourceOfTruth = 'Android live status',
+    this.sourceOfTruth = 'Last known status',
   });
 
   PermissionStatusModel copyWith({
@@ -174,9 +174,9 @@ class UserProfileSettings {
   final String photoState;
 
   const UserProfileSettings({
-    this.name = 'Roy',
-    this.username = 'roy',
-    this.bio = 'Building discipline with Optivus.',
+    this.name = '',
+    this.username = '',
+    this.bio = '',
     this.customIdentityDisplay = false,
     this.photoState = 'No photo uploaded',
   });

@@ -1,3 +1,4 @@
+// Legacy Profile sheet helper. Active Profile screens use LiquidDetailScaffold.
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 

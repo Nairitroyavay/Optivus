@@ -19,6 +19,20 @@ class RegionLocalizationScreen extends ConsumerWidget {
     'Other / Custom',
   ];
 
+  static const _languagePresets = [
+    'en',
+    'hi',
+    'bn',
+    'ja',
+    'de',
+    'es',
+    'fr',
+    'ko',
+    'zh',
+  ];
+
+  static const _currencyPresets = ['USD', 'INR', 'EUR', 'GBP', 'JPY'];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(regionSettingsProvider);
@@ -69,12 +83,34 @@ class RegionLocalizationScreen extends ConsumerWidget {
             _SummaryRow(
               icon: Icons.translate_rounded,
               title: 'Language',
-              value: settings.languageCode.toUpperCase(),
+              value: _languageLabel(settings.languageCode),
             ),
             _SummaryRow(
               icon: Icons.payments_outlined,
               title: 'Currency',
               value: '${settings.currencyCode} ${settings.currencySymbol}',
+            ),
+            const SizedBox(height: 14),
+            _SegmentRow<String>(
+              label: 'Language',
+              values: _languagePresets,
+              selected: settings.languageCode,
+              labelFor: _languageLabel,
+              onSelected: (value) =>
+                  notifier.save(settings.copyWith(languageCode: value)),
+            ),
+            const SizedBox(height: 14),
+            _SegmentRow<String>(
+              label: 'Currency',
+              values: _currencyPresets,
+              selected: settings.currencyCode,
+              labelFor: _currencyLabel,
+              onSelected: (value) => notifier.save(
+                settings.copyWith(
+                  currencyCode: value,
+                  currencySymbol: _currencySymbol(value),
+                ),
+              ),
             ),
           ],
         ),
@@ -160,9 +196,18 @@ class RegionLocalizationScreen extends ConsumerWidget {
             _SummaryRow(
               icon: Icons.account_balance_wallet_outlined,
               title: 'Payment options',
-              value: settings.paymentRegionLabel,
+              value: _paymentModeLabel(settings.paymentRegion),
             ),
             const SizedBox(height: 10),
+            _SegmentRow<PaymentRegion>(
+              label: 'Payment mode',
+              values: _paymentModesFor(settings),
+              selected: settings.paymentRegion,
+              labelFor: _paymentModeLabel,
+              onSelected: (value) =>
+                  notifier.save(settings.copyWith(paymentRegion: value)),
+            ),
+            const SizedBox(height: 12),
             const Text(
               'Optivus does not hold money. You save using your own bank, cash, or local payment app.',
               style: TextStyle(
@@ -177,6 +222,52 @@ class RegionLocalizationScreen extends ConsumerWidget {
       ],
     );
   }
+}
+
+List<PaymentRegion> _paymentModesFor(RegionSettings settings) {
+  if (settings.countryCode == 'IN') {
+    return const [
+      PaymentRegion.manualOnly,
+      PaymentRegion.indiaUpi,
+      PaymentRegion.global,
+    ];
+  }
+  return const [PaymentRegion.manualOnly, PaymentRegion.global];
+}
+
+String _paymentModeLabel(PaymentRegion value) {
+  return switch (value) {
+    PaymentRegion.manualOnly => 'Manual only',
+    PaymentRegion.indiaUpi => 'India UPI + manual',
+    PaymentRegion.global => 'Local payment later',
+  };
+}
+
+String _languageLabel(String code) {
+  return switch (code.toLowerCase()) {
+    'en' => 'English',
+    'hi' => 'Hindi',
+    'bn' => 'Bengali',
+    'ja' => 'Japanese',
+    'de' => 'German',
+    'es' => 'Spanish',
+    'fr' => 'French',
+    'ko' => 'Korean',
+    'zh' => 'Chinese',
+    _ => code.toUpperCase(),
+  };
+}
+
+String _currencyLabel(String code) => '$code ${_currencySymbol(code)}';
+
+String _currencySymbol(String code) {
+  return switch (code) {
+    'INR' => '₹',
+    'EUR' => '€',
+    'GBP' => '£',
+    'JPY' => '¥',
+    _ => r'$',
+  };
 }
 
 class _PresetChip extends StatelessWidget {

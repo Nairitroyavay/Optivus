@@ -367,7 +367,7 @@ extension FoodVocabularyModeLabel on FoodVocabularyMode {
 extension PaymentRegionLabel on PaymentRegion {
   String get label {
     return switch (this) {
-      PaymentRegion.global => 'Global / local methods',
+      PaymentRegion.global => 'Local payment later',
       PaymentRegion.indiaUpi => 'India UPI + manual',
       PaymentRegion.manualOnly => 'Manual only',
     };
