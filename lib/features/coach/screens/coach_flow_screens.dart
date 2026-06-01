@@ -277,7 +277,7 @@ class CoachNewSessionScreen extends StatelessWidget {
     return LiquidDetailScaffold(
       eyebrow: 'Coach',
       title: 'New Session',
-      subtitle: 'Create and select a mock Coach session.',
+      subtitle: 'Create and select a local Coach session.',
       accentColor: OptivusColors.coachAccent,
       onBack: onBack,
       children: [
@@ -346,7 +346,7 @@ class CoachPrivacyDataScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.delete_outline_rounded,
               title: 'Delete coach sessions',
-              subtitle: 'Confirmation required before clearing mock sessions.',
+              subtitle: 'Confirmation required before clearing local sessions.',
               accentColor: OptivusColors.danger,
               destructive: true,
               onTap: () => _confirmDeleteAllSessions(context, ref),
@@ -566,7 +566,7 @@ void _confirmDeleteSession(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: const Text('Delete session?'),
-      content: const Text('This clears the selected mock coach session.'),
+      content: const Text('This clears the selected local coach session.'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
@@ -596,7 +596,7 @@ void _confirmDeleteAllSessions(BuildContext context, WidgetRef ref) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: const Text('Delete all coach sessions?'),
       content: const Text(
-        'This clears all mock coach sessions after confirmation.',
+        'This clears all local coach sessions after confirmation.',
       ),
       actions: [
         TextButton(

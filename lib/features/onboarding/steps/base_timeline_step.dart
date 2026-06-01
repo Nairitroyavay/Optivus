@@ -2250,7 +2250,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
         children: [
           _setupHeader(
             'Eating',
-            'Choose living context, meal timing, menu style, and mock calorie/protein estimates.',
+            'Choose living context, meal timing, menu style, and local calorie/protein estimates.',
             'Always required',
             Icons.restaurant_rounded,
             OptivusColors.success,
@@ -2347,8 +2347,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
               'Hard block',
               'Soft block',
               'Menu style',
-              'Mock kcal',
-              'Mock protein',
+              'Estimated kcal',
+              'Estimated protein',
             ],
           ),
           const SizedBox(height: 12),
@@ -2780,7 +2780,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           ),
           const SizedBox(height: 8),
           const Text(
-            'Manual entries stay local in mock onboarding state. Imported AI/photo review is represented as an in-app review draft.',
+            'Manual entries stay local in onboarding state. Imported AI/photo review is represented as an in-app review draft.',
             style: TextStyle(
               fontSize: 11,
               color: OptivusColors.textSecondary,
@@ -3021,7 +3021,7 @@ class _SectionStatusRail extends StatelessWidget {
           accent: accent,
         ),
         OnboardingChip(
-          label: 'Local mock only',
+          label: 'Local preview only',
           selected: true,
           icon: Icons.lock_outline_rounded,
           accent: OptivusColors.aquaAccent,

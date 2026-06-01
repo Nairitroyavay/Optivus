@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
+import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
 import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
 import 'package:optivus/features/goals/screens/goals_flow_screens.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/features/goals/widgets/goals_tab_widgets.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 
 class GoalsTab extends ConsumerStatefulWidget {
   const GoalsTab({super.key});
@@ -86,9 +89,7 @@ class _GoalsMain extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final media = MediaQuery.of(context);
-    final bottomReserve =
-        76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
+    final bottomReserve = liquidTabBarReserve(context);
 
     final goals = ref.watch(mockGoalProvider);
 
@@ -127,10 +128,33 @@ class _GoalsMain extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (primaryGoal != null) ...[
-                      TodayIdentityFocusCard(primaryGoal: primaryGoal),
+                      TodayIdentityFocusCard(
+                        primaryGoal: primaryGoal,
+                        onViewRoutine: () => ref
+                            .read(appNavigationProvider.notifier)
+                            .goToRoutine(),
+                        onAskCoach: () {
+                          ref.read(appNavigationProvider.notifier).goToCoach();
+                          ref
+                                  .read(coachDetailViewRequestProvider.notifier)
+                                  .state =
+                              CoachDetailView.newSession;
+                        },
+                        onSwitchGoal: () => onOpen(
+                          const GoalsDetailTarget(
+                            view: GoalsDetailView.goalSettings,
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 32),
                     ] else ...[
-                      const GoalsEmptyIdentityCard(),
+                      GoalsEmptyIdentityCard(
+                        onAddGoal: () => onOpen(
+                          const GoalsDetailTarget(
+                            view: GoalsDetailView.addGoal,
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 32),
                     ],
 

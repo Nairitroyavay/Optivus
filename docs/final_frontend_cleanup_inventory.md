@@ -1,0 +1,330 @@
+# Final Frontend Cleanup Inventory
+
+Date: 2026-06-01
+
+Baseline: `flutter clean`, `flutter pub get`, and `flutter analyze` pass on branch `cleanup/final-frontend-cleanup`. The pre-cleanup commit was requested, but the working tree was already clean so Git had nothing to commit.
+
+## App Shell And Router
+
+Active app shell files:
+
+- `lib/views/screens/app_shell.dart`
+- `lib/core/router/app_router.dart`
+- `lib/app/app_navigation_controller.dart`
+
+The app shell uses an `IndexedStack` and floating `LiquidGlassTabBar`. `/app?tab=x` is the active tab entrypoint. Existing deep-link routes redirect into `/app?tab=x` and set per-tab detail provider state instead of pushing standalone screens.
+
+Keep:
+
+- `app_router.dart` redirect-based in-tab detail routing
+- `app_shell.dart` tab cache and `IndexedStack`
+- `app_navigation_controller.dart` tab index state
+
+Cleanup notes:
+
+- Home has a detail provider but no dedicated `/home/mission` redirect yet.
+- Detail tabs use `PopScope` to close in-tab detail before leaving the app.
+- Main tab scroll padding should use the shared tab reserve helper where possible.
+
+## Home
+
+Active main tab:
+
+- `lib/features/home/home_tab.dart`
+
+Active detail provider:
+
+- `lib/features/home/providers/home_navigation_provider.dart`
+
+Active detail screen:
+
+- `lib/features/home/screens/home_mission_detail_screen.dart`
+
+Keep:
+
+- Home dashboard providers/models
+- Small Home sheets that are active and scroll-safe: notification, mind note, notebook, move later, focus control, mini action plan, note detail, coming up item, pillar detail
+- `today_mission_card.dart` as the entrypoint to full-screen mission detail
+
+Old/reference found:
+
+- `lib/features/home/widgets/sheets/mission_detail_sheet.dart` is unused and replaced by the full-screen mission detail.
+- `lib/features/home/widgets/sheets/demo_sheet.dart` is active as a small feedback sheet, but its name is legacy.
+
+Safe cleanup:
+
+- Delete `mission_detail_sheet.dart` after confirming no imports/calls.
+- Keep or rename the small feedback sheet; no user-facing copy says "demo".
+
+## Routine
+
+Active main tab:
+
+- `lib/features/routine/routine_tab.dart`
+
+Active detail provider:
+
+- `lib/features/routine/providers/routine_navigation_provider.dart`
+
+Active detail screens:
+
+- `lib/features/routine/managers/base_timeline/base_timeline_manager_screen.dart`
+- `lib/features/routine/managers/base_timeline/screens/classes_routine_setup_screen.dart`
+- `lib/features/routine/managers/base_timeline/screens/work_routine_setup_screen.dart`
+- `lib/features/routine/managers/base_timeline/screens/eating_routine_setup_screen.dart`
+- `lib/features/routine/managers/base_timeline/screens/fixed_routine_setup_screen.dart`
+- `lib/features/routine/managers/base_timeline/screens/skin_care_routine_setup_screen.dart`
+- `lib/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart`
+- Inline Routine Settings inside `routine_tab.dart`
+- `lib/features/routine/screens/routine_habit_systems_screen.dart`
+- `lib/features/routine/screens/routine_history_screen.dart`
+
+Keep:
+
+- `add_routine_sheet.dart`
+- `routine_detail_sheet.dart`
+- `routine_move_sheet.dart`
+- `routine_filter_sheet.dart`
+- `week_planner_sheet.dart`
+- `ai_assistant_sheet.dart`
+
+Old/reference found:
+
+- `lib/features/routine/sheets/routine_settings_sheet.dart` duplicates the active inline Routine Settings path.
+
+Safe cleanup:
+
+- Route header settings to inline Routine Settings.
+- Delete `routine_settings_sheet.dart` after its import/call is removed.
+
+## Tracker
+
+Active main tab:
+
+- `lib/features/tracker/tracker_tab.dart`
+
+Active detail provider:
+
+- `lib/features/tracker/providers/tracker_navigation_provider.dart`
+
+Active detail screens:
+
+- Money: `lib/features/tracker/money/money_system_screen.dart`
+- Meditation: `lib/features/tracker/meditation/meditation_tracker_screen.dart`
+- Fitness: `lib/features/tracker/fitness/fitness_center_screen.dart`
+- Screen Time: `lib/features/tracker/screen_time/screen_time_screen.dart`
+- Hydration: `lib/features/tracker/hydration/hydration_tracker_screen.dart`
+- Tracker Settings: `lib/features/tracker/screens/tracker_settings_screen.dart`
+- Usage Access: `lib/features/tracker/screens/usage_access_setup_screen.dart`
+- Health Connect: `lib/features/tracker/screens/health_connect_setup_screen.dart`
+- Location/Mapbox: `lib/features/tracker/screens/location_mapbox_setup_screen.dart`
+- Activation: `lib/features/tracker/screens/tracker_activation_screen.dart`
+- History: `lib/features/tracker/screens/tracker_history_screen.dart`
+- Focus: `lib/features/tracker/focus/focus_timer_screen.dart`
+- Bad Habit: `lib/features/tracker/bad_habits/bad_habit_tracker_screen.dart`
+- Sleep: `lib/features/tracker/sleep/sleep_tracker_screen.dart`
+- Nutrition: `lib/features/tracker/nutrition/nutrition_tracker_screen.dart`
+- Global Money Setup: `lib/features/tracker/money/global_money_setup_screen.dart`
+
+Keep:
+
+- Seed data files such as `screen_time_mock_data.dart` and `meditation_mock_data.dart`, documented as local seeded data.
+- `money_system_mock_flows.dart` while active money flows still import it.
+
+Needs cleanup:
+
+- User-facing copy that says "mock" in money, screen time, tracker settings/history, hydration, fitness, and native setup screens.
+- Empty native setup actions should update last-known local status instead of doing nothing.
+- UPI labels should only appear as primary for India; enum/internal names can remain.
+
+## Coach
+
+Active main tab:
+
+- `lib/features/coach/coach_tab.dart`
+
+Active detail provider:
+
+- `lib/features/coach/providers/coach_navigation_provider.dart`
+
+Active detail screens:
+
+- `CoachSessionHistoryScreen`, `CoachSettingsInlineScreen`, `CoachNewSessionScreen`, and `CoachPrivacyDataScreen` in `lib/features/coach/screens/coach_flow_screens.dart`
+
+Keep:
+
+- `coach_bottom_sheets.dart` only for the active input plus menu small flow.
+
+Old/reference found:
+
+- `lib/features/coach/screens/coach_sub_screens.dart`
+- `lib/features/coach/screens/coach_sessions_list_screen.dart`
+- `lib/features/coach/screens/coach_settings_screen.dart`
+- Unused static menu/new-session methods inside `coach_bottom_sheets.dart`
+
+Safe cleanup:
+
+- Delete unused old Coach screen files.
+- Trim unused static bottom-sheet methods.
+- Replace user-facing "mock Coach session" copy with local-state wording.
+
+## Goals
+
+Active main tab:
+
+- `lib/features/goals/goals_tab.dart`
+
+Active detail provider:
+
+- `lib/features/goals/providers/goals_navigation_provider.dart`
+
+Active detail screens:
+
+- `AddGoalInlineScreen`, `GoalDetailInlineScreen`, `WeeklyReviewInlineScreen`, `ArchivedGoalsScreen`, and `GoalsSettingsInlineScreen` in `lib/features/goals/screens/goals_flow_screens.dart`
+
+Keep:
+
+- `goals_flow_screens.dart`
+- Goals tab widgets and overload protection widgets
+
+Old/reference found:
+
+- `lib/features/goals/screens/goals_sub_screens.dart`
+- `lib/features/goals/screens/add_goal_screen.dart`
+- `lib/features/goals/screens/goal_detail_screen.dart`
+- `lib/features/goals/screens/goal_weekly_review_screen.dart`
+- `lib/features/goals/screens/archived_goals_screen.dart` is a one-line re-export and is not imported.
+
+Safe cleanup:
+
+- Delete unused old Goals sheet files and barrel/re-export files.
+- Wire no-op Goals card actions to active tab/detail paths.
+
+## Profile
+
+Active main tab:
+
+- `lib/features/profile/profile_tab.dart`
+
+Active detail provider:
+
+- `lib/features/profile/providers/profile_navigation_provider.dart`
+
+Active detail screens:
+
+- Main implementations live in `lib/features/profile/screens/profile_control_screens.dart`
+- Region/localization lives in `lib/features/profile/screens/region_localization_screen.dart`
+
+Keep:
+
+- `profile_display_name.dart`
+- `profile_settings_provider.dart`
+- `profile_settings_models.dart`
+- `profile_header_card.dart`
+- `profile_control_screens.dart` for now; it is large but active.
+
+Old/reference found:
+
+- Many one-line screen re-export files under `lib/features/profile/screens/` are unused from `lib/` and can be deleted later, but are low-risk clutter. Keep for now unless the cleanup needs stricter removal.
+
+Needs cleanup:
+
+- Ensure Profile remains summary-based.
+- Haptic and Correct Spelling already toggle in place.
+- Region/localization owns language/country/currency/units/payment.
+- Connected services and permission statuses are last-known/native-pending and do not claim connection unless configured.
+
+## Onboarding
+
+Active flow:
+
+- `lib/features/onboarding/onboarding_flow.dart`
+- `lib/features/onboarding/steps/onboarding_steps.dart`
+
+Known huge file:
+
+- `lib/features/onboarding/steps/base_timeline_step.dart` is 3039 lines because it contains all Base Timeline step subflows: classes, work, eating, fixed routine, skin care, import review, shared block editors, meal estimates, and review UI.
+
+Keep for now:
+
+- `base_timeline_step.dart`; splitting it is risky during cleanup.
+- `models/onboarding_draft.dart`; backend-ready model serialization is broad and tested.
+- `repositories/onboarding_repositories.dart`; backend-ready Firestore repository boundaries.
+
+Old/reference found:
+
+- `repositories/onboarding_repository.dart` is an unused fake repository with overlapping names. Keep for now unless repository cleanup later confirms deletion is safe.
+
+Needs cleanup:
+
+- User-facing onboarding copy should not say "mock".
+- Notification step no-op permission action should record local permission intent instead of doing nothing.
+
+## Root And Reference Files
+
+Root one-time scripts found:
+
+- `fix_colors.py`
+- `fix_feedback.py`
+- `fix_harsh_borders.py`
+- `fix_indicator.py`
+- `fix_overflow.py`
+- `fix_shadows.py`
+- `fix_small_widgets.py`
+- `fix_syntax.py`
+- `make_liquid.py`
+- `make_really_liquid.py`
+- `refactor_theme.py`
+- `replace_widgets.py`
+- `style_fixes.py`
+
+Cleanup result:
+
+- Moved to `tools/one_time_migrations/`.
+- Added `tools/one_time_migrations/README.md` warning not to run without review.
+
+Reference-only folders:
+
+- `reference_copied_old_frontend/`
+- `scratch/`
+
+Cleanup result:
+
+- They are not imported by `lib/`.
+- Moved under `tools/reference_archives/`.
+- `analysis_options.yaml` excludes `tools/reference_archives/**` and `tools/one_time_migrations/**`.
+
+## Huge Files
+
+Documented future refactor candidates:
+
+- `lib/features/onboarding/steps/base_timeline_step.dart`
+- `lib/features/profile/screens/profile_control_screens.dart`
+- `lib/models/onboarding_draft.dart`
+- `lib/features/tracker/meditation/meditation_tracker_widgets.dart`
+- `lib/features/tracker/fitness/widgets/fitness_center_widgets.dart`
+- `lib/features/tracker/tracker_tab.dart`
+- `lib/features/tracker/money/money_system_widgets.dart`
+- `lib/state/app_state.dart`
+- `lib/features/home/widgets/home_glass_widgets.dart`
+- `lib/features/goals/widgets/goals_tab_widgets.dart`
+- `lib/features/routine/sheets/add_routine_sheet.dart`
+
+Decision: do not split these during final frontend cleanup unless a compile-safe extraction is obvious.
+
+## Backend Boundary
+
+Fake/local state is still active and expected before backend:
+
+- Auth: `auth_state.dart` + fake `AuthRepository`
+- Home/Routine/Tracker/Goals/Coach/Profile: Riverpod local state and fake repositories
+- Native services: `services/native/native_service_adapters.dart`
+- Cloudflare clients: `services/cloudflare/cloudflare_clients.dart`
+
+Backend replacement targets remain:
+
+- AuthRepository fake -> FirebaseAuthRepository
+- Profile/Routine/Tracker/Goals repositories -> Firestore
+- Coach AI -> Cloudflare Worker
+- R2 upload client -> signed upload flow
+- Native services -> Android platform adapters

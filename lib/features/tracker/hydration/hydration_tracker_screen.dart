@@ -41,7 +41,7 @@ class _HydrationTrackerScreenState
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text('Reset today?'),
-        content: const Text('This clears today\'s mock hydration logs.'),
+        content: const Text('This clears today\'s local hydration logs.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

@@ -64,7 +64,7 @@ class TrackerSettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Drag ordering is prepared for the Android integration pass. This mock keeps the active list deterministic.',
+              'Drag ordering is prepared for the Android integration pass. The active list stays deterministic in this frontend build.',
               style: TextStyle(
                 fontSize: 12,
                 height: 1.35,
@@ -152,7 +152,7 @@ class TrackerSettingsScreen extends ConsumerWidget {
               title: 'Screen Time privacy',
               subtitle: settings.screenTimePrivacyHideNames
                   ? 'App names hidden. Categories only.'
-                  : 'App names visible in mock insights.',
+                  : 'App names visible in local insights.',
               accentColor: OptivusColors.roseAccent,
               trailing: Switch(
                 value: settings.screenTimePrivacyHideNames,
@@ -162,7 +162,7 @@ class TrackerSettingsScreen extends ConsumerWidget {
             ),
             LiquidActionRow(
               icon: Icons.restart_alt_rounded,
-              title: 'Reset tracker mock settings',
+              title: 'Reset tracker settings',
               subtitle:
                   'Restores active tracker toggles and reminder defaults.',
               accentColor: OptivusColors.danger,

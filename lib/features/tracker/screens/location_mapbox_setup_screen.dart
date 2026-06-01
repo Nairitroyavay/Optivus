@@ -59,14 +59,16 @@ class LocationMapboxSetupScreen extends ConsumerWidget {
             LiquidActionRow(
               icon: Icons.settings_outlined,
               title: 'Allow Location / Open Settings',
-              subtitle: 'Native permission connects in backend/native pass.',
+              subtitle: 'Native settings intent connects in the Android pass.',
               accentColor: OptivusColors.trackerAccent,
-              onTap: () {},
+              onTap: () => ref
+                  .read(profileSettingsProvider.notifier)
+                  .previewPermissionRecheck(ProfilePermissionType.location),
             ),
             LiquidActionRow(
               icon: Icons.route_outlined,
               title: 'Test Mapbox config',
-              subtitle: 'Mock recheck updates the last checked timestamp.',
+              subtitle: 'Recheck updates the last-known service timestamp.',
               accentColor: OptivusColors.info,
               onTap: () => ref
                   .read(profileSettingsProvider.notifier)

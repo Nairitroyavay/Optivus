@@ -48,7 +48,7 @@ class ScreenTimeUsageStatusCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
-                    'Mock data',
+                    'Local data',
                     style: TextStyle(
                       color: OptivusColors.mintAccent,
                       fontSize: 10,
@@ -60,7 +60,7 @@ class ScreenTimeUsageStatusCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Using mock app usage data for this UI pass.\n\nOptivus reads app usage duration, not your messages, chats, reels, or content.',
+              'Using local app usage seed data for this UI pass.\n\nOptivus reads app usage duration, not your messages, chats, reels, or content.',
               style: TextStyle(
                 fontSize: 12,
                 color: OptivusColors.sub,

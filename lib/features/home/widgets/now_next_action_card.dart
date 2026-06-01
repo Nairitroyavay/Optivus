@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'home_glass_widgets.dart';
 import 'sheets/demo_sheet.dart';
@@ -112,10 +113,11 @@ class NowNextActionCard extends ConsumerWidget {
                     selected: true,
                     onTap: () {
                       if (actionState!.currentType == NowActionType.freeTime) {
-                        DemoSheet.show(
-                          context,
-                          title: "Focus Started",
-                          message: "10 minute deep focus block initiated.",
+                        ref.read(appNavigationProvider.notifier).goToTracker();
+                        ref
+                            .read(trackerDetailViewRequestProvider.notifier)
+                            .state = TrackerDetailTarget.view(
+                          TrackerDetailView.focusTimer,
                         );
                       } else {
                         ref.read(appNavigationProvider.notifier).goToTracker();
@@ -192,30 +194,32 @@ class NowNextActionCard extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    actionState!.currentType == NowActionType.freeTime
-                        ? 'NEXT SMALL WIN'
-                        : 'NEXT FREE ACTION',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: nextLabelColor,
-                      letterSpacing: 1.0,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      actionState!.currentType == NowActionType.freeTime
+                          ? 'NEXT SMALL WIN'
+                          : 'NEXT FREE ACTION',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: nextLabelColor,
+                        letterSpacing: 1.0,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    actionState!.nextActionTitle,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w500,
-                      color: titleColor,
+                    const SizedBox(height: 2),
+                    Text(
+                      actionState!.nextActionTitle,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: titleColor,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

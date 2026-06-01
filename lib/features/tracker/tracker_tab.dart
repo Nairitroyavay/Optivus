@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/utils/currency_formatter.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/tracker/bad_habits/bad_habit_tracker_screen.dart';
 import 'package:optivus/features/tracker/focus/focus_timer_screen.dart';
 import 'package:optivus/features/tracker/widgets/tracker_components.dart';
@@ -101,9 +102,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
       });
     }
 
-    final media = MediaQuery.of(context);
-    final bottomReserve =
-        76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
+    final bottomReserve = liquidTabBarReserve(context);
     final trackerState = ref.watch(mockTrackerProvider);
     final region = ref.watch(regionSettingsProvider);
     final snapshot = _TrackerUiSnapshot.fromState(trackerState, region);
@@ -433,7 +432,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
         iconEmoji: '📱',
         buttonText: 'View',
         accentColor: OptivusColors.roseAccent,
-        activationSource: 'mock permission',
+        activationSource: 'permission',
         target: TrackerDetailTarget.view(TrackerDetailView.screenTime),
       ),
       _ActiveTrackerConfig(

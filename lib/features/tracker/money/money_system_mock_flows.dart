@@ -149,13 +149,13 @@ void showResetMoneyConfirmationSheet(BuildContext context, WidgetRef ref) {
     backgroundColor: OptivusColors.trackerBottom,
     builder: (ctx) => _SheetScaffold(
       title: 'Reset money system?',
-      subtitle: 'This clears local mock savings history.',
+      subtitle: 'This clears local savings history.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const _SoftNotice(
             text:
-                'This only resets frontend mock data in Optivus. It does not affect any bank, cash, local payment app, or external account.',
+                'This only resets local frontend data in Optivus. It does not affect any bank, cash, local payment app, or external account.',
             accent: OptivusColors.roseAccent,
           ),
           const SizedBox(height: 18),
@@ -274,10 +274,11 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
     return _SheetScaffold(
       title: convertEntry == null
           ? isIndiaUpi
-                ? 'Save via UPI mock'
+                ? 'Save via UPI'
                 : 'Save with local method'
           : 'Convert potential saving',
-      subtitle: 'Frontend mock only. No payment is made inside Optivus.',
+      subtitle:
+          'Local frontend record only. No payment is made inside Optivus.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -957,7 +958,7 @@ class _MoneySettingSheetState extends State<_MoneySettingSheet> {
     final state = widget.ref.read(mockTrackerProvider);
     return _SheetScaffold(
       title: 'Export savings data',
-      subtitle: 'Frontend mock export preview.',
+      subtitle: 'Local export preview.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1382,9 +1383,7 @@ MoneySaveMethod _methodFromLabel(String label) {
 String moneySaveMethodLabel(MoneySaveMethod method, [RegionSettings? region]) {
   return switch (method) {
     MoneySaveMethod.upiMock =>
-      region?.paymentRegion == PaymentRegion.indiaUpi
-          ? 'UPI mock'
-          : 'Payment app',
+      region?.paymentRegion == PaymentRegion.indiaUpi ? 'UPI' : 'Payment app',
     MoneySaveMethod.cash => 'Cash',
     MoneySaveMethod.bankTransfer => 'Bank transfer',
     MoneySaveMethod.secondAccount => 'Second account',
@@ -1402,9 +1401,7 @@ String moneyEntrySourceLabel(
     MoneyEntrySource.dailyTarget => 'Daily target',
     MoneyEntrySource.manual => 'Manual',
     MoneyEntrySource.upiMock =>
-      region?.paymentRegion == PaymentRegion.indiaUpi
-          ? 'UPI mock'
-          : 'Payment app',
+      region?.paymentRegion == PaymentRegion.indiaUpi ? 'UPI' : 'Payment app',
     MoneyEntrySource.badHabitAvoided => 'Bad habit avoided',
     MoneyEntrySource.badHabitConverted => 'Bad habit converted',
     MoneyEntrySource.routineTask => 'Routine task',

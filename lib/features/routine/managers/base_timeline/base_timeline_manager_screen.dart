@@ -269,7 +269,7 @@ class _ImportReviewGrid extends StatelessWidget {
             subtitle: item.$2,
             icon: _icon(item.$1),
             itemCount: 0,
-            previewText: 'Review parsed mock blocks before saving',
+            previewText: 'Review parsed local blocks before saving',
             onTap: () {
               onOpenDetail?.call(
                 RoutineDetailTarget(

@@ -163,7 +163,7 @@ class _FitnessCenterScreenState extends ConsumerState<FitnessCenterScreen> {
                 context,
                 title: 'Fitness settings',
                 message:
-                    'Weekly distance, active minutes, map style, and activity source settings are editable in local mock state.',
+                    'Weekly distance, active minutes, map style, and activity source settings are editable in local state.',
               ),
               onHistory: () => widget.onOpenDetail?.call(
                 TrackerDetailTarget.view(TrackerDetailView.trackerHistory),
@@ -227,7 +227,7 @@ class _FitnessCenterScreenState extends ConsumerState<FitnessCenterScreen> {
                       context,
                       title: 'Fitness goals',
                       message:
-                          'Current mock goals are distance, active minutes, and workout sessions. Backend persistence will store goal period, target, unit, and progress.',
+                          'Current local goals are distance, active minutes, and workout sessions. Backend persistence will store goal period, target, unit, and progress.',
                     ),
                     onTinyVersion: () => _showFitnessPanel(
                       context,
