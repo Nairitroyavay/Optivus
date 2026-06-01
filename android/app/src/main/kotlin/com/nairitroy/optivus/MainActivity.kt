@@ -1,4 +1,4 @@
-package com.optivus.optivus
+package com.nairitroy.optivus
 
 import io.flutter.embedding.android.FlutterActivity
 

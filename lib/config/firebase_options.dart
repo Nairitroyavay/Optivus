@@ -53,10 +53,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBQ2QcjSxC2iGvNREm8SgZcZN6D-K2gViE',
-    appId: '1:731735225406:android:aa40c09061fec65f570d6f',
-    messagingSenderId: '731735225406',
-    projectId: 'optivus-2nd',
-    storageBucket: 'optivus-2nd.firebasestorage.app',
+    apiKey: 'AIzaSyB6fX863z3BnAXZ1f-P3OMuB-cROi3NHX0',
+    appId: '1:783577835780:android:e451817a3d87bbb34d8851',
+    messagingSenderId: '783577835780',
+    projectId: 'optivus-lifeos',
+    storageBucket: 'optivus-lifeos.firebasestorage.app',
   );
+
 }

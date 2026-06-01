@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "783577835780",
+    "project_id": "optivus-lifeos",
+    "storage_bucket": "optivus-lifeos.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:783577835780:android:e451817a3d87bbb34d8851",
+        "android_client_info": {
+          "package_name": "com.nairitroy.optivus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6fX863z3BnAXZ1f-P3OMuB-cROi3NHX0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
