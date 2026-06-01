@@ -239,7 +239,9 @@ class FirebaseAuthRepository implements AuthRepository {
     if (user == null) return null;
     await user.reload();
     final refreshed = _auth.currentUser;
-    return refreshed == null ? null : _authUserFromFirebase(refreshed);
+    if (refreshed == null) return null;
+    await refreshed.getIdToken(true);
+    return _authUserFromFirebase(refreshed);
   }
 
   @override

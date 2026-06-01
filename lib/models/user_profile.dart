@@ -4,6 +4,7 @@ class UserProfile {
   final String uid;
   final String email;
   final String displayName;
+  final String accountStatus;
 
   // Timestamps
   final DateTime? createdAt;
@@ -44,6 +45,7 @@ class UserProfile {
     required this.uid,
     required this.email,
     required this.displayName,
+    this.accountStatus = 'active',
     this.createdAt,
     this.updatedAt,
     this.onboardingCompleted = false,
@@ -76,6 +78,7 @@ class UserProfile {
       uid: uid,
       email: email,
       displayName: displayName,
+      accountStatus: 'active',
       onboardingCompleted: false,
       onboardingStep: 0,
     );
@@ -86,6 +89,7 @@ class UserProfile {
       'uid': uid,
       'email': email,
       'displayName': displayName,
+      'accountStatus': accountStatus,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
       'onboardingCompleted': onboardingCompleted,
@@ -115,6 +119,7 @@ class UserProfile {
       'uid': uid,
       'email': email,
       'displayName': displayName,
+      'accountStatus': accountStatus,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
       'onboardingCompleted': onboardingCompleted,
@@ -144,6 +149,7 @@ class UserProfile {
       uid: map['uid'] as String? ?? '',
       email: map['email'] as String? ?? '',
       displayName: map['displayName'] as String? ?? '',
+      accountStatus: map['accountStatus'] as String? ?? 'active',
       createdAt: _dateTimeFromMapValue(map['createdAt']),
       updatedAt: _dateTimeFromMapValue(map['updatedAt']),
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
@@ -176,6 +182,7 @@ class UserProfile {
     String? uid,
     String? email,
     String? displayName,
+    String? accountStatus,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? onboardingCompleted,
@@ -202,6 +209,7 @@ class UserProfile {
       uid: uid ?? this.uid,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
+      accountStatus: accountStatus ?? this.accountStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
