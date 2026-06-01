@@ -70,13 +70,21 @@ class HomeTab extends ConsumerWidget {
       badHabitsAvoided: dashboardState.missionSummary.badHabitsAvoided,
     );
 
+    void closeDetail() {
+      ref.read(homeDetailViewRequestProvider.notifier).state =
+          const HomeDetailTarget.none();
+    }
+
     if (detailTarget.view == HomeDetailView.missionDetail) {
-      return HomeMissionDetailScreen(
-        summary: missionSummary,
-        onBack: () {
-          ref.read(homeDetailViewRequestProvider.notifier).state =
-              const HomeDetailTarget.none();
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) closeDetail();
         },
+        child: HomeMissionDetailScreen(
+          summary: missionSummary,
+          onBack: closeDetail,
+        ),
       );
     }
 

@@ -2,7 +2,44 @@
 
 Date: 2026-06-01
 
-Baseline: `flutter clean`, `flutter pub get`, and `flutter analyze` pass on branch `cleanup/final-frontend-cleanup`. The pre-cleanup commit was requested, but the working tree was already clean so Git had nothing to commit.
+## Final Frontend-Ready Pass
+
+Branch: `cleanup-frontend-ready-final-check`
+
+Baseline on `main` before edits:
+
+- `git status`: clean working tree
+- `git branch`: `main`
+- `flutter clean`: pass
+- `flutter pub get`: pass
+- `flutter analyze`: pass
+- `flutter test`: pass
+
+Scope of this pass:
+
+- Keep the current app design, app shell, tab bar, router pattern, and fake backend mode.
+- Do not start backend work, add paid Google Cloud dependencies, add Firebase Functions/Storage/Hosting, or add Google Maps API.
+- Fix only frontend-readiness blockers found during audit.
+
+Final-pass findings:
+
+- Analyzer config still excludes only `tools/reference_archives/**` and `tools/one_time_migrations/**`; active `lib/repositories`, `lib/services`, and `lib/config` remain analyzed.
+- Backend mode still defaults to `OPTIVUS_BACKEND=fake`; Firebase initialization remains dart-define gated.
+- Router detail paths redirect into `/app?tab=x` and set tab-local detail providers.
+- Home Mission detail now follows the same Android-back behavior as other tab details.
+- UPI remains available only for India UPI payment mode; non-India money setup saves a manual method if a stale UPI selection is present.
+- User-facing raw frontend-preview copy was reworded to backend-pending product copy.
+- Bottom sheets are active only for compact/interaction flows and remain scroll-controlled or constrained.
+- Spark-only/native-pending guardrail language remains in Profile/native setup areas.
+
+Backend phase 1 readiness notes:
+
+- Firestore path targets are documented in `lib/repositories/firestore_paths.dart`.
+- Fake repositories and fake/native service adapters compile and remain active by default.
+- UI depends on repository/state boundaries rather than direct future Firebase code, except auth can switch through `OptivusBackendConfig`.
+- Android manifest remains minimal; notification, location, foreground service, camera/photos, microphone, Health Connect, Usage Access, UPI intents, Mapbox config, HTTP/Dio, and R2 upload flow are future native/backend tasks.
+
+Earlier cleanup baseline: `flutter clean`, `flutter pub get`, and `flutter analyze` passed during the prior cleanup pass. The pre-cleanup commit was requested then, but the working tree was already clean so Git had nothing to commit.
 
 ## App Shell And Router
 

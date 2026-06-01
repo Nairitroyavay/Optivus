@@ -348,56 +348,66 @@ class _CoachTabState extends ConsumerState<CoachTab> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: const AnimatedBotAvatar(
-                  baseColor: OptivusColors.glassFill,
-                  rimColor: OptivusColors.coachTop,
-                  lightColor: Colors.white,
-                  iconColor: OptivusColors.coachAccent,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    coachName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textPrimary,
-                    ),
+          Expanded(
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: const AnimatedBotAvatar(
+                    baseColor: OptivusColors.glassFill,
+                    rimColor: OptivusColors.coachTop,
+                    lightColor: Colors.white,
+                    iconColor: OptivusColors.coachAccent,
                   ),
-                  Row(
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: OptivusColors.success,
+                      Text(
+                        coachName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.textPrimary,
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Online · Ask Anything',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: OptivusColors.textSecondary.withValues(
-                            alpha: 0.8,
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: OptivusColors.success,
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'Online · Ask Anything',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: OptivusColors.textSecondary.withValues(
+                                  alpha: 0.8,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
           Row(
             children: [

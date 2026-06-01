@@ -199,16 +199,24 @@ class _GlobalMoneySetupScreenState
           backgroundColor: OptivusColors.trackerAccent,
           foregroundColor: OptivusColors.ink,
           onPressed: () {
+            final effectiveMethod =
+                _savingMethod == MoneySaveMethod.upiMock &&
+                    region.paymentRegion != PaymentRegion.indiaUpi
+                ? MoneySaveMethod.custom
+                : _savingMethod;
             ref
                 .read(mockTrackerProvider.notifier)
                 .updateMoneySettings(
                   currencyCode: region.currencyCode,
                   tinySaveAmount: _dailyTinyTarget,
-                  defaultMethod: _savingMethod,
+                  defaultMethod: effectiveMethod,
                   dailyTarget: goal.currentLevelAmount <= 0
                       ? _dailyTinyTarget
                       : goal.currentLevelAmount,
                 );
+            if (effectiveMethod != _savingMethod) {
+              _savingMethod = effectiveMethod;
+            }
             setState(() => _saved = true);
           },
         ),

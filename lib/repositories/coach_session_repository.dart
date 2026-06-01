@@ -52,7 +52,7 @@ class FakeCoachAiRepository implements CoachAiRepository {
       id: 'coach-ai-${DateTime.now().microsecondsSinceEpoch}',
       isFromCoach: true,
       content:
-          'Frontend preview: Coach AI will call a Cloudflare Worker with allowed context only.',
+          'Backend connection pending. Coach AI will use allowed context through a Cloudflare Worker.',
       timestamp: 'Just now',
     );
   }

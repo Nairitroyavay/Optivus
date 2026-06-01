@@ -745,7 +745,7 @@ class _MoneySettingSheetState extends State<_MoneySettingSheet> {
         context,
         title: 'Reminder time',
         subtitle:
-            'Frontend label only. No notification permission is requested.',
+            'Notification permission is not requested until native reminders are added.',
         hint: '8:00 PM',
         onSave: (value) => widget.ref
             .read(mockTrackerProvider.notifier)
