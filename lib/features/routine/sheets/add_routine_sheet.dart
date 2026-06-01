@@ -735,59 +735,65 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (ctx) {
+        final media = MediaQuery.of(ctx);
         return Container(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          constraints: BoxConstraints(maxHeight: media.size.height * 0.72),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 40 + media.padding.bottom),
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Select Duration',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: OptivusColors.textPrimary,
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Select Duration',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.textPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                alignment: WrapAlignment.center,
-                children: [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480]
-                    .map((mins) {
-                      return ActionChip(
-                        label: Text(
-                          TimelineUtils.formatDuration(mins),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: _durationMinutes == mins
-                                ? OptivusColors.routineAccent
-                                : OptivusColors.textPrimary,
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.center,
+                  children: [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 480]
+                      .map((mins) {
+                        return ActionChip(
+                          label: Text(
+                            TimelineUtils.formatDuration(mins),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: _durationMinutes == mins
+                                  ? OptivusColors.routineAccent
+                                  : OptivusColors.textPrimary,
+                            ),
                           ),
-                        ),
-                        backgroundColor: _durationMinutes == mins
-                            ? OptivusColors.routineAccent.withValues(
-                                alpha: 0.15,
-                              )
-                            : Colors.grey.shade100,
-                        side: BorderSide.none,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        onPressed: () {
-                          setState(() => _durationMinutes = mins);
-                          Navigator.of(ctx).pop();
-                        },
-                      );
-                    })
-                    .toList(),
-              ),
-            ],
+                          backgroundColor: _durationMinutes == mins
+                              ? OptivusColors.routineAccent.withValues(
+                                  alpha: 0.15,
+                                )
+                              : Colors.grey.shade100,
+                          side: BorderSide.none,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          onPressed: () {
+                            setState(() => _durationMinutes = mins);
+                            Navigator.of(ctx).pop();
+                          },
+                        );
+                      })
+                      .toList(),
+                ),
+              ],
+            ),
           ),
         );
       },

@@ -623,7 +623,11 @@ void _showCoachSheet(BuildContext context, String title, String body) {
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
+    isScrollControlled: true,
     builder: (context) => Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
       margin: const EdgeInsets.all(16),
       padding: EdgeInsets.fromLTRB(
         22,
@@ -636,41 +640,44 @@ void _showCoachSheet(BuildContext context, String title, String body) {
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Colors.white),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            body,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 18),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: OptivusColors.coachAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
               ),
             ),
-            child: const Text('Done'),
-          ),
-        ],
+            const SizedBox(height: 12),
+            Text(
+              body,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: OptivusColors.coachAccent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
       ),
     ),
   );

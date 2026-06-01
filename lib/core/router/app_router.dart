@@ -16,6 +16,7 @@ import '../../features/profile/providers/profile_navigation_provider.dart';
 import '../../features/routine/providers/routine_navigation_provider.dart';
 import '../../features/coach/providers/coach_navigation_provider.dart';
 import '../../features/goals/providers/goals_navigation_provider.dart';
+import '../../features/home/providers/home_navigation_provider.dart';
 
 class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
@@ -36,6 +37,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     ref.read(trackerDetailViewRequestProvider.notifier).state =
         TrackerDetailTarget.view(detail);
     return '/app?tab=2';
+  }
+
+  String openHomeDetail(HomeDetailTarget target) {
+    ref.read(appNavigationProvider.notifier).goToHome();
+    ref.read(homeDetailViewRequestProvider.notifier).state = target;
+    return '/app?tab=0';
   }
 
   String openProfileDetail(ProfileDetailView detail) {
@@ -124,6 +131,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(path: '/home', redirect: (context, state) => '/app'),
+      GoRoute(
+        path: '/home/mission',
+        redirect: (context, state) =>
+            openHomeDetail(const HomeDetailTarget.mission()),
+      ),
       GoRoute(
         path: '/tracker/money',
         redirect: (context, state) =>

@@ -97,53 +97,58 @@ class _TrackerHistoryScreenState extends ConsumerState<TrackerHistoryScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
+        final media = MediaQuery.of(context);
         return Container(
+          constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
           margin: const EdgeInsets.all(16),
-          padding: EdgeInsets.fromLTRB(
-            18,
-            18,
-            18,
-            18 + MediaQuery.of(context).padding.bottom,
-          ),
+          padding: EdgeInsets.fromLTRB(18, 18, 18, 18 + media.padding.bottom),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: Colors.white),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.title,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.textPrimary,
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                entry.subtitle,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
+                const SizedBox(height: 8),
+                Text(
+                  entry.subtitle,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.textSecondary,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: [
-                  LiquidPill(label: entry.category, color: OptivusColors.info),
-                  if (entry.valueLabel != null)
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
                     LiquidPill(
-                      label: entry.valueLabel!,
-                      color: OptivusColors.trackerAccent,
+                      label: entry.category,
+                      color: OptivusColors.info,
                     ),
-                ],
-              ),
-            ],
+                    if (entry.valueLabel != null)
+                      LiquidPill(
+                        label: entry.valueLabel!,
+                        color: OptivusColors.trackerAccent,
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         );
       },

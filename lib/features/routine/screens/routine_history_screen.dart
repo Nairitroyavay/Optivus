@@ -217,64 +217,69 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        margin: const EdgeInsets.all(16),
-        padding: EdgeInsets.fromLTRB(
-          18,
-          18,
-          18,
-          18 + MediaQuery.of(context).padding.bottom,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              row.title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${row.originalTime} · ${row.status.name} · source ${row.source}',
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+      isScrollControlled: true,
+      builder: (context) {
+        final media = MediaQuery.of(context);
+        return Container(
+          constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
+          margin: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(18, 18, 18, 18 + media.padding.bottom),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white),
+          ),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SheetButton(
-                  label: 'Restore / repeat',
-                  color: OptivusColors.routineAccent,
-                  onTap: () => Navigator.of(context).pop(),
+                Text(
+                  row.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
                 ),
-                _SheetButton(
-                  label: 'Ask Coach',
-                  color: OptivusColors.coachAccent,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    ref.read(appNavigationProvider.notifier).goToCoach();
-                    ref.read(coachDetailViewRequestProvider.notifier).state =
-                        CoachDetailView.newSession;
-                  },
+                const SizedBox(height: 8),
+                Text(
+                  '${row.originalTime} · ${row.status.name} · source ${row.source}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _SheetButton(
+                      label: 'Restore / repeat',
+                      color: OptivusColors.routineAccent,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    _SheetButton(
+                      label: 'Ask Coach',
+                      color: OptivusColors.coachAccent,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        ref.read(appNavigationProvider.notifier).goToCoach();
+                        ref
+                                .read(coachDetailViewRequestProvider.notifier)
+                                .state =
+                            CoachDetailView.newSession;
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

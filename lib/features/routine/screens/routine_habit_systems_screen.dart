@@ -214,74 +214,82 @@ class _SystemSection extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        margin: const EdgeInsets.all(16),
-        padding: EdgeInsets.fromLTRB(
-          18,
-          18,
-          18,
-          18 + MediaQuery.of(context).padding.bottom,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _SheetAction(
-              label: 'View system',
-              onTap: () => Navigator.of(context).pop(),
+      isScrollControlled: true,
+      builder: (context) {
+        final media = MediaQuery.of(context);
+        return Container(
+          constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
+          margin: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(18, 18, 18, 18 + media.padding.bottom),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white),
+          ),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SheetAction(
+                  label: 'View system',
+                  onTap: () => Navigator.of(context).pop(),
+                ),
+                _SheetAction(
+                  label: 'Edit frequency',
+                  onTap: () {
+                    ref
+                        .read(routineNotifierProvider.notifier)
+                        .updateItem(item.copyWith(repeatDays: const [1, 3, 5]));
+                    Navigator.of(context).pop();
+                  },
+                ),
+                _SheetAction(
+                  label: 'Tiny version',
+                  onTap: () {
+                    ref
+                        .read(routineNotifierProvider.notifier)
+                        .makeTinyVersion(item);
+                    Navigator.of(context).pop();
+                  },
+                ),
+                _SheetAction(
+                  label: 'Pause system',
+                  onTap: () {
+                    ref
+                        .read(routineNotifierProvider.notifier)
+                        .updateItem(
+                          item.copyWith(status: RoutineStatus.skipped),
+                        );
+                    Navigator.of(context).pop();
+                  },
+                ),
+                _SheetAction(
+                  label: 'Open Tracker',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    ref.read(appNavigationProvider.notifier).goToTracker();
+                    if (item.trackerType == TrackerType.focus) {
+                      ref
+                          .read(trackerDetailViewRequestProvider.notifier)
+                          .state = TrackerDetailTarget.view(
+                        TrackerDetailView.focusTimer,
+                      );
+                    }
+                  },
+                ),
+                _SheetAction(
+                  label: 'Open Goals',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    ref.read(appNavigationProvider.notifier).goToGoals();
+                  },
+                ),
+              ],
             ),
-            _SheetAction(
-              label: 'Edit frequency',
-              onTap: () {
-                ref
-                    .read(routineNotifierProvider.notifier)
-                    .updateItem(item.copyWith(repeatDays: const [1, 3, 5]));
-                Navigator.of(context).pop();
-              },
-            ),
-            _SheetAction(
-              label: 'Tiny version',
-              onTap: () {
-                ref
-                    .read(routineNotifierProvider.notifier)
-                    .makeTinyVersion(item);
-                Navigator.of(context).pop();
-              },
-            ),
-            _SheetAction(
-              label: 'Pause system',
-              onTap: () {
-                ref
-                    .read(routineNotifierProvider.notifier)
-                    .updateItem(item.copyWith(status: RoutineStatus.skipped));
-                Navigator.of(context).pop();
-              },
-            ),
-            _SheetAction(
-              label: 'Open Tracker',
-              onTap: () {
-                Navigator.of(context).pop();
-                ref.read(appNavigationProvider.notifier).goToTracker();
-                if (item.trackerType == TrackerType.focus) {
-                  ref.read(trackerDetailViewRequestProvider.notifier).state =
-                      TrackerDetailTarget.view(TrackerDetailView.focusTimer);
-                }
-              },
-            ),
-            _SheetAction(
-              label: 'Open Goals',
-              onTap: () {
-                Navigator.of(context).pop();
-                ref.read(appNavigationProvider.notifier).goToGoals();
-              },
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

@@ -68,16 +68,18 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
+          constraints: BoxConstraints(maxHeight: media.size.height * 0.88),
           padding: EdgeInsets.only(
             left: 24,
             right: 24,
             top: 24,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            bottom: media.viewInsets.bottom + 24,
           ),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.85),
@@ -89,9 +91,13 @@ class _MindSwitchSheetState extends ConsumerState<MindSwitchSheet> {
               ),
             ),
           ),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: _buildCurrentStep(),
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const BouncingScrollPhysics(),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: _buildCurrentStep(),
+            ),
           ),
         ),
       ),

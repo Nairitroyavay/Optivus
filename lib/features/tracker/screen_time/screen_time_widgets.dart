@@ -513,67 +513,70 @@ void _showScreenTimeControlSheet(
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (context) => Container(
-      margin: const EdgeInsets.all(16),
-      padding: EdgeInsets.fromLTRB(
-        22,
-        18,
-        22,
-        22 + MediaQuery.of(context).padding.bottom,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: OptivusColors.borderSoft,
-                borderRadius: BorderRadius.circular(999),
+    isScrollControlled: true,
+    builder: (context) {
+      final media = MediaQuery.of(context);
+      return Container(
+        constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
+        margin: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(22, 18, 22, 22 + media.padding.bottom),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white),
+        ),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: OptivusColors.borderSoft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
               ),
-            ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.ink,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            body,
-            style: const TextStyle(
-              color: OptivusColors.sub,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: OptivusColors.ink,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+              const SizedBox(height: 18),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.ink,
+                ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: const Text('Done'),
+              const SizedBox(height: 12),
+              Text(
+                body,
+                style: const TextStyle(
+                  color: OptivusColors.sub,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: OptivusColors.ink,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text('Done'),
+              ),
+            ],
           ),
-        ],
-      ),
-    ),
+        ),
+      );
+    },
   );
 }
 

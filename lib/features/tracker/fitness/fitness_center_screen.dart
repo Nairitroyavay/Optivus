@@ -44,45 +44,50 @@ class _FitnessCenterScreenState extends ConsumerState<FitnessCenterScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => Container(
-        margin: const EdgeInsets.all(16),
-        padding: EdgeInsets.fromLTRB(
-          18,
-          18,
-          18,
-          18 + MediaQuery.of(context).padding.bottom,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.96),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.textPrimary,
-              ),
+      builder: (context) {
+        final media = MediaQuery.of(context);
+        return Container(
+          constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
+          margin: const EdgeInsets.all(16),
+          padding: EdgeInsets.fromLTRB(18, 18, 18, 18 + media.padding.bottom),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white),
+          ),
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+                if (actions.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  ...actions,
+                ],
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-            if (actions.isNotEmpty) ...[const SizedBox(height: 14), ...actions],
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

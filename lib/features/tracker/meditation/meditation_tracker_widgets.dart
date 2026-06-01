@@ -239,6 +239,7 @@ class MeditationDurationSelector extends StatelessWidget {
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: OptivusColors.ink.withValues(alpha: 0.08),
+      isScrollControlled: true,
       useSafeArea: true,
       builder: (context) {
         return SafeArea(

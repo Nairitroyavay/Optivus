@@ -426,7 +426,11 @@ class _CoachTabState extends ConsumerState<CoachTab> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
+        ),
         margin: const EdgeInsets.all(16),
         padding: EdgeInsets.fromLTRB(
           20,
@@ -439,51 +443,54 @@ class _CoachTabState extends ConsumerState<CoachTab> {
           borderRadius: BorderRadius.circular(28),
           border: Border.all(color: Colors.white),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Coach Menu',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.textPrimary,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Coach Menu',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: 14),
-            _CoachMenuRow(
-              icon: Icons.settings_outlined,
-              label: 'Coach Settings',
-              onTap: () {
-                Navigator.of(context).pop();
-                _openDetail(CoachDetailView.coachSettings);
-              },
-            ),
-            _CoachMenuRow(
-              icon: Icons.history_outlined,
-              label: 'Session History',
-              onTap: () {
-                Navigator.of(context).pop();
-                _openDetail(CoachDetailView.sessionHistory);
-              },
-            ),
-            _CoachMenuRow(
-              icon: Icons.add_circle_outline_rounded,
-              label: 'New Session',
-              onTap: () {
-                Navigator.of(context).pop();
-                _openDetail(CoachDetailView.newSession);
-              },
-            ),
-            _CoachMenuRow(
-              icon: Icons.privacy_tip_outlined,
-              label: 'Privacy / Export / Delete',
-              onTap: () {
-                Navigator.of(context).pop();
-                _openDetail(CoachDetailView.privacyData);
-              },
-            ),
-          ],
+              const SizedBox(height: 14),
+              _CoachMenuRow(
+                icon: Icons.settings_outlined,
+                label: 'Coach Settings',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openDetail(CoachDetailView.coachSettings);
+                },
+              ),
+              _CoachMenuRow(
+                icon: Icons.history_outlined,
+                label: 'Session History',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openDetail(CoachDetailView.sessionHistory);
+                },
+              ),
+              _CoachMenuRow(
+                icon: Icons.add_circle_outline_rounded,
+                label: 'New Session',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openDetail(CoachDetailView.newSession);
+                },
+              ),
+              _CoachMenuRow(
+                icon: Icons.privacy_tip_outlined,
+                label: 'Privacy / Export / Delete',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openDetail(CoachDetailView.privacyData);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

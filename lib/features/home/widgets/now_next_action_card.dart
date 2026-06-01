@@ -6,7 +6,7 @@ import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'home_glass_widgets.dart';
-import 'sheets/demo_sheet.dart';
+import 'sheets/now_next_feedback_sheet.dart';
 import 'sheets/move_later_sheet.dart';
 
 class NowNextActionCard extends ConsumerWidget {
@@ -137,7 +137,7 @@ class NowNextActionCard extends ConsumerWidget {
                     compact: true,
                     selected: true,
                     onTap: () {
-                      DemoSheet.show(
+                      NowNextFeedbackSheet.show(
                         context,
                         title: "Tiny Version",
                         message: "Task downgraded to a 2-minute tiny version.",
@@ -161,7 +161,7 @@ class NowNextActionCard extends ConsumerWidget {
                   label: 'Skip',
                   compact: true,
                   onTap: () {
-                    DemoSheet.show(
+                    NowNextFeedbackSheet.show(
                       context,
                       title: "Skipped",
                       message:

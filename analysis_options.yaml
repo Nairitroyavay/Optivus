@@ -9,9 +9,6 @@ analyzer:
   exclude:
     - "tools/reference_archives/**"
     - "tools/one_time_migrations/**"
-    - "lib/repositories/**"
-    - "lib/services/**"
-    - "lib/config/**"
 
 # The following line activates a set of recommended lints for Flutter apps,
 # packages, and plugins designed to encourage good coding practices.

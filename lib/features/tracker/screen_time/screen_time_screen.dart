@@ -145,6 +145,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => _ScreenTimeSheet(
         title: 'Screen Time privacy',
         children: const [
@@ -372,6 +373,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => _ScreenTimeSheet(
         title: 'Customize categories',
         children: [
@@ -484,6 +486,7 @@ class _ScreenTimeScreenState extends State<ScreenTimeScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) => _ScreenTimeSheet(
         title: title,
         children: [
@@ -587,58 +590,58 @@ class _ScreenTimeSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
     return Container(
+      constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
       margin: const EdgeInsets.all(16),
-      padding: EdgeInsets.fromLTRB(
-        20,
-        16,
-        20,
-        20 + MediaQuery.of(context).padding.bottom,
-      ),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + media.padding.bottom),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(28),
         border: Border.all(color: Colors.white),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 44,
-              height: 4,
-              decoration: BoxDecoration(
-                color: OptivusColors.borderSoft,
-                borderRadius: BorderRadius.circular(999),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: OptivusColors.borderSoft,
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.ink,
-            ),
-          ),
-          const SizedBox(height: 14),
-          ...children,
-          const SizedBox(height: 18),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: OptivusColors.ink,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.ink,
               ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            child: const Text('Done'),
-          ),
-        ],
+            const SizedBox(height: 14),
+            ...children,
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: OptivusColors.ink,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
       ),
     );
   }

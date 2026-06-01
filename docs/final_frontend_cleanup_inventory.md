@@ -46,15 +46,10 @@ Keep:
 - Small Home sheets that are active and scroll-safe: notification, mind note, notebook, move later, focus control, mini action plan, note detail, coming up item, pillar detail
 - `today_mission_card.dart` as the entrypoint to full-screen mission detail
 
-Old/reference found:
-
-- `lib/features/home/widgets/sheets/mission_detail_sheet.dart` is unused and replaced by the full-screen mission detail.
-- `lib/features/home/widgets/sheets/demo_sheet.dart` is active as a small feedback sheet, but its name is legacy.
-
 Safe cleanup:
 
-- Delete `mission_detail_sheet.dart` after confirming no imports/calls.
-- Keep or rename the small feedback sheet; no user-facing copy says "demo".
+- The old mission detail sheet is gone; Home mission uses the full-screen in-tab detail.
+- The active Now/Next feedback sheet was renamed to `now_next_feedback_sheet.dart`; no user-facing copy says "demo".
 
 ## Routine
 
@@ -311,6 +306,24 @@ Documented future refactor candidates:
 - `lib/features/routine/sheets/add_routine_sheet.dart`
 
 Decision: do not split these during final frontend cleanup unless a compile-safe extraction is obvious.
+
+## Large Files To Refactor Later
+
+Do not split these during the backend-readiness cleanup. They are active,
+compile-safe files with broad imports, so refactoring them before backend work
+would create avoidable route, provider, and UI risk.
+
+- `lib/features/onboarding/steps/base_timeline_step.dart` - split into base timeline setup flows, shared editors, and import review helpers after backend contracts settle.
+- `lib/features/profile/screens/profile_control_screens.dart` - split by Profile detail screen once repository persistence is wired.
+- `lib/models/onboarding_draft.dart` - split draft submodels only after Firestore serialization tests are expanded.
+- `lib/features/tracker/meditation/meditation_tracker_widgets.dart` - split meditation controls, session cards, and painters after tracker persistence lands.
+- `lib/features/tracker/fitness/widgets/fitness_center_widgets.dart` - split cards, charts, and route preview widgets after native fitness service boundaries are real.
+- `lib/features/tracker/tracker_tab.dart` - split tab sections after tracker repository providers replace local state.
+- `lib/features/tracker/money/money_system_widgets.dart` - split money summary, history, and setup widgets after the money repository shape is final.
+- `lib/state/app_state.dart` - break mock notifiers into feature state files during the backend provider migration.
+- `lib/features/home/widgets/home_glass_widgets.dart` - split shared Home primitives once cross-feature widget reuse is stable.
+- `lib/features/goals/widgets/goals_tab_widgets.dart` - split goals cards and review widgets after GoalRepository writes are active.
+- `lib/features/routine/sheets/add_routine_sheet.dart` - split form sections after routine write validation moves into repository/service code.
 
 ## Backend Boundary
 
