@@ -70,12 +70,16 @@ class _LiquidPrimaryButtonState extends State<LiquidPrimaryButton> {
                       Icon(widget.icon, color: fg, size: 18),
                       const SizedBox(width: 8),
                     ],
-                    Text(
-                      widget.label,
-                      style: TextStyle(
-                        color: fg,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: fg,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ],
@@ -122,12 +126,16 @@ class LiquidOutlineButton extends StatelessWidget {
               Icon(icon, size: 16, color: OptivusColors.textPrimary),
               const SizedBox(width: 8),
             ],
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: OptivusColors.textPrimary,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: OptivusColors.textPrimary,
+                ),
               ),
             ),
           ],

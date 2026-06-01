@@ -255,13 +255,14 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
     final goal = state.moneyGoal;
     final convertEntry = _convertEntry(state);
     final isIndiaUpi = region.paymentRegion == PaymentRegion.indiaUpi;
+    final tinyDefault = defaultTinySaveAmount(region);
     final amountOptions = <double>{
       if (convertEntry != null) convertEntry.amount,
       goal.tinySaveAmount,
       goal.currentLevelAmount,
       goal.nextLevelAmount,
-      50,
-      100,
+      tinyDefault,
+      tinyDefault * 2,
     }.where((amount) => amount > 0).toList();
     final destinationOptions = {
       goal.destinationLabel,
@@ -375,6 +376,7 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
                       notifier.saveMoneyToday(
                         amount: _amount!,
                         method: method,
+                        currencyCode: region.currencyCode,
                         source: isIndiaUpi
                             ? widget.source
                             : MoneyEntrySource.manual,
@@ -383,7 +385,7 @@ class _SaveViaUpiSheetState extends ConsumerState<_SaveViaUpiSheet> {
                             widget.source == MoneyEntrySource.routineTask
                             ? 'Routine Money System task'
                             : isIndiaUpi
-                            ? 'UPI mock transfer marked done'
+                            ? 'Payment app transfer marked done'
                             : 'Manual saving confirmed',
                       );
                     }
@@ -453,12 +455,13 @@ class _AlreadySavedSheetState extends ConsumerState<_AlreadySavedSheet> {
   Widget build(BuildContext context) {
     final goal = ref.watch(mockTrackerProvider).moneyGoal;
     final region = ref.watch(regionSettingsProvider);
+    final tinyDefault = defaultTinySaveAmount(region);
     final amountOptions = <double>{
       goal.tinySaveAmount,
       goal.currentLevelAmount,
       goal.nextLevelAmount,
-      50,
-      100,
+      tinyDefault,
+      tinyDefault * 2,
     }.where((amount) => amount > 0).toList();
     final canConfirm = goal.manualConfirmationAllowed;
 
@@ -528,6 +531,7 @@ class _AlreadySavedSheetState extends ConsumerState<_AlreadySavedSheet> {
                         .saveMoneyToday(
                           amount: _amount!,
                           method: _selectedMethod,
+                          currencyCode: region.currencyCode,
                           source: widget.source,
                           routineTaskId: widget.routineTaskId,
                           description:
@@ -578,6 +582,7 @@ class _TinySaveSheet extends ConsumerWidget {
                   .saveMoneyToday(
                     amount: goal.tinySaveAmount,
                     method: goal.defaultMethod,
+                    currencyCode: region.currencyCode,
                     source: MoneyEntrySource.dailyTarget,
                     routineTaskId: routineTaskId,
                     description: 'Tiny save',

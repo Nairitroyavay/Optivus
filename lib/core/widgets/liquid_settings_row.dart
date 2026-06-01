@@ -56,6 +56,8 @@ class LiquidSettingsRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -66,6 +68,8 @@ class LiquidSettingsRow extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 11,
                         color: OptivusColors.textSecondary,
@@ -76,7 +80,10 @@ class LiquidSettingsRow extends StatelessWidget {
               ),
             ),
             // Trailing widget
-            ?trailing,
+            if (trailing != null) ...[
+              const SizedBox(width: 10),
+              Flexible(child: trailing!),
+            ],
             if (trailing == null && onTap != null)
               const Icon(
                 Icons.chevron_right,

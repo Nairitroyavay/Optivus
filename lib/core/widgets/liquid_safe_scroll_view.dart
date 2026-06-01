@@ -24,15 +24,19 @@ class LiquidSafeScrollView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final effectiveBottomPadding =
+        bottomPadding + media.padding.bottom + media.viewInsets.bottom;
     return SingleChildScrollView(
       controller: controller,
       physics: physics ?? const BouncingScrollPhysics(),
-      padding: padding.copyWith(bottom: bottomPadding),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: padding.copyWith(bottom: effectiveBottomPadding),
       child: Column(
         crossAxisAlignment: crossAxisAlignment,
         children: [
           // SafeArea top spacing
-          SizedBox(height: MediaQuery.of(context).padding.top + 8),
+          SizedBox(height: media.padding.top + 8),
           ...children,
         ],
       ),

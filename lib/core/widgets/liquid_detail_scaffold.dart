@@ -284,6 +284,8 @@ class LiquidActionRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w800,
@@ -296,6 +298,8 @@ class LiquidActionRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       subtitle!,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -309,7 +313,7 @@ class LiquidActionRow extends StatelessWidget {
             ),
             const SizedBox(width: 10),
             if (trailing != null)
-              trailing!
+              Flexible(child: trailing!)
             else if (onTap != null)
               const Icon(
                 Icons.chevron_right_rounded,

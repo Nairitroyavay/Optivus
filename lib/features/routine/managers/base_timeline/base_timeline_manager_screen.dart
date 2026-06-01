@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/managers/base_timeline/utils/base_timeline_filter_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_option_card.dart';
@@ -30,6 +31,7 @@ class BaseTimelineManagerScreen extends ConsumerWidget {
     final skinCare = BaseTimelineFilterUtils.getSkinCareItems(items);
 
     final embedded = onBack != null;
+    final bottomReserve = embedded ? liquidTabBarReserve(context) : 60.0;
 
     return Scaffold(
       backgroundColor: embedded
@@ -72,7 +74,7 @@ class BaseTimelineManagerScreen extends ConsumerWidget {
               20,
               embedded ? 16 : 16,
               20,
-              embedded ? 76 + MediaQuery.of(context).padding.bottom + 48 : 60,
+              bottomReserve,
             ),
             children: [
               if (embedded) ...[

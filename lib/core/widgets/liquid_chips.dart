@@ -23,46 +23,60 @@ class LiquidChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = selectedColor ?? OptivusColors.brandAccent;
+    final maxWidth = MediaQuery.of(context).size.width - 48;
 
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? accent : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? accent : OptivusColors.borderSoft,
-            width: 1.5,
-          ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: maxWidth.clamp(120.0, 480.0).toDouble(),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (emoji != null) ...[
-              Text(emoji!, style: const TextStyle(fontSize: 14)),
-              const SizedBox(width: 6),
-            ],
-            if (icon != null) ...[
-              Icon(
-                icon,
-                size: 14,
-                color: isSelected ? Colors.white : OptivusColors.textSecondary,
-              ),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: isSelected ? Colors.white : OptivusColors.textPrimary,
-              ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected ? accent : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? accent : OptivusColors.borderSoft,
+              width: 1.5,
             ),
-          ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (emoji != null) ...[
+                Text(emoji!, style: const TextStyle(fontSize: 14)),
+                const SizedBox(width: 6),
+              ],
+              if (icon != null) ...[
+                Icon(
+                  icon,
+                  size: 14,
+                  color: isSelected
+                      ? Colors.white
+                      : OptivusColors.textSecondary,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected
+                        ? Colors.white
+                        : OptivusColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

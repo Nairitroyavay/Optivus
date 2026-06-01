@@ -17,39 +17,44 @@ Future<T?> showLiquidBottomSheet<T>(
     isDismissible: isDismissible,
     backgroundColor: Colors.transparent,
     builder: (ctx) {
-      return Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
-        ),
-        decoration: BoxDecoration(
-          color: backgroundColor ?? Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 30,
-              offset: const Offset(0, -8),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Drag handle
-            Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 8),
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: OptivusColors.borderSoft,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+      final media = MediaQuery.of(ctx);
+      return Padding(
+        padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+        child: SafeArea(
+          top: false,
+          child: Container(
+            constraints: BoxConstraints(maxHeight: media.size.height * 0.9),
+            decoration: BoxDecoration(
+              color: backgroundColor ?? Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 30,
+                  offset: const Offset(0, -8),
+                ),
+              ],
             ),
-            // Content
-            Flexible(child: builder(ctx)),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 8),
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: OptivusColors.borderSoft,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Flexible(child: builder(ctx)),
+              ],
+            ),
+          ),
         ),
       );
     },

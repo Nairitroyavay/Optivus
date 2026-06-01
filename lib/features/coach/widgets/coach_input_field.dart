@@ -14,6 +14,8 @@ class CoachInputField extends StatefulWidget {
   final FocusNode? focusNode;
   final bool hasText;
   final VoidCallback onSend;
+  final ValueChanged<String>? onQuickPrompt;
+  final VoidCallback? onNewSession;
 
   const CoachInputField({
     super.key,
@@ -21,6 +23,8 @@ class CoachInputField extends StatefulWidget {
     this.focusNode,
     required this.hasText,
     required this.onSend,
+    this.onQuickPrompt,
+    this.onNewSession,
   });
 
   @override
@@ -149,7 +153,11 @@ class _CoachInputFieldState extends State<CoachInputField>
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        CoachBottomSheets.showInputPlusMenuSheet(context);
+        CoachBottomSheets.showInputPlusMenuSheet(
+          context,
+          onPromptSelected: widget.onQuickPrompt,
+          onNewSession: widget.onNewSession,
+        );
       },
       child: Container(
         width: 48,
@@ -170,6 +178,11 @@ class _CoachInputFieldState extends State<CoachInputField>
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
+        if (icon == Icons.mic_rounded) {
+          widget.onQuickPrompt?.call(
+            'I want to capture a voice note. Help me turn it into a short written note.',
+          );
+        }
       },
       child: Container(
         width: 48,

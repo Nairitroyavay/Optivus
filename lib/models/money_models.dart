@@ -23,6 +23,7 @@ enum MoneySaveMethod {
 class SavingEntry {
   final String id;
   final double amount;
+  final String currencyCode;
   final DateTime createdAt;
   final String dateKey; // YYYY-MM-DD
   final String description;
@@ -37,6 +38,7 @@ class SavingEntry {
   SavingEntry({
     required this.id,
     required this.amount,
+    this.currencyCode = 'USD',
     required this.createdAt,
     required this.dateKey,
     required this.description,
@@ -56,6 +58,7 @@ class SavingEntry {
   SavingEntry copyWith({
     String? id,
     double? amount,
+    String? currencyCode,
     DateTime? createdAt,
     String? dateKey,
     String? description,
@@ -70,6 +73,7 @@ class SavingEntry {
     return SavingEntry(
       id: id ?? this.id,
       amount: amount ?? this.amount,
+      currencyCode: currencyCode ?? this.currencyCode,
       createdAt: createdAt ?? this.createdAt,
       dateKey: dateKey ?? this.dateKey,
       description: description ?? this.description,
@@ -86,6 +90,7 @@ class SavingEntry {
 
 class MoneyGoal {
   final String id;
+  final String currencyCode;
   final double dailyTarget;
   final double tinySaveAmount;
   final double totalConfirmedSaved;
@@ -104,6 +109,7 @@ class MoneyGoal {
 
   MoneyGoal({
     required this.id,
+    this.currencyCode = 'USD',
     this.dailyTarget = 10.0,
     this.tinySaveAmount = 5.0,
     this.totalConfirmedSaved = 0.0,
@@ -123,6 +129,7 @@ class MoneyGoal {
 
   MoneyGoal copyWith({
     String? id,
+    String? currencyCode,
     double? dailyTarget,
     double? tinySaveAmount,
     double? totalConfirmedSaved,
@@ -141,6 +148,7 @@ class MoneyGoal {
   }) {
     return MoneyGoal(
       id: id ?? this.id,
+      currencyCode: currencyCode ?? this.currencyCode,
       dailyTarget: dailyTarget ?? this.dailyTarget,
       tinySaveAmount: tinySaveAmount ?? this.tinySaveAmount,
       totalConfirmedSaved: totalConfirmedSaved ?? this.totalConfirmedSaved,

@@ -104,6 +104,7 @@ class TodayCheckInCard extends ConsumerWidget {
                           .saveMoneyToday(
                             amount: amount,
                             method: goal.defaultMethod,
+                            currencyCode: region.currencyCode,
                             source: MoneyEntrySource.manual,
                             description: 'Home money saved check-in',
                           );

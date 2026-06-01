@@ -49,12 +49,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   void initState() {
     super.initState();
     _tabCache = List<Widget?>.filled(_tabGradients.length, null);
-    _ensureTabLoaded(widget.initialIndex.clamp(0, _tabGradients.length - 1));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(appNavigationProvider.notifier)
-          .setTab(widget.initialIndex.clamp(0, _tabGradients.length - 1));
-    });
+    final initialIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
+    _ensureTabLoaded(initialIndex);
+    ref.read(appNavigationProvider.notifier).setTab(initialIndex);
   }
 
   @override
@@ -63,10 +60,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (oldWidget.initialIndex != widget.initialIndex) {
       final nextIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
       _ensureTabLoaded(nextIndex);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        ref.read(appNavigationProvider.notifier).setTab(nextIndex);
-      });
+      ref.read(appNavigationProvider.notifier).setTab(nextIndex);
     }
   }
 

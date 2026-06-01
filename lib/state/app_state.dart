@@ -574,7 +574,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     }
     return switch (source) {
       MoneyEntrySource.dailyTarget => 'Daily target saved',
-      MoneyEntrySource.upiMock => 'UPI mock transfer marked done',
+      MoneyEntrySource.upiMock => 'Payment app transfer marked done',
       MoneyEntrySource.routineTask => 'Routine Money System task',
       MoneyEntrySource.badHabitConverted => 'Bad-habit money converted',
       MoneyEntrySource.adjustment => 'Savings adjustment',
@@ -589,6 +589,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     MoneyEntrySource source = MoneyEntrySource.manual,
     String? description,
     String? routineTaskId,
+    String? currencyCode,
   }) {
     if (!amount.isFinite || amount <= 0) return;
 
@@ -608,6 +609,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     final entry = SavingEntry(
       id: _entryId(),
       amount: amount,
+      currencyCode: currencyCode ?? state.moneyGoal.currencyCode,
       createdAt: now,
       dateKey: today,
       description: effectiveDescription,
@@ -642,6 +644,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     required double amount,
     required String description,
     String? badHabitKey,
+    String? currencyCode,
   }) {
     if (!amount.isFinite || amount <= 0) return;
 
@@ -649,6 +652,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     final entry = SavingEntry(
       id: _entryId(),
       amount: amount,
+      currencyCode: currencyCode ?? state.moneyGoal.currencyCode,
       createdAt: now,
       dateKey: _todayKey(),
       description: description.trim().isEmpty
@@ -736,6 +740,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     final entry = SavingEntry(
       id: _entryId(),
       amount: 0,
+      currencyCode: state.moneyGoal.currencyCode,
       createdAt: now,
       dateKey: today,
       description: 'Skipped today',
@@ -785,6 +790,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     double? dailyTarget,
     double? tinySaveAmount,
     String? destinationLabel,
+    String? currencyCode,
     MoneySaveMethod? defaultMethod,
     String? reminderTimeLabel,
     int? levelUpAfterDays,
@@ -801,6 +807,7 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
     state = state.copyWith(
       moneyGoal: state.moneyGoal.copyWith(
         dailyTarget: normalizedTarget,
+        currencyCode: currencyCode,
         tinySaveAmount: normalizedTiny,
         currentLevelAmount: normalizedTarget,
         nextLevelAmount: normalizedTarget == null
@@ -823,7 +830,10 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
 
   void resetMoneySystem() {
     state = state.copyWith(
-      moneyGoal: MoneyGoal(id: state.moneyGoal.id),
+      moneyGoal: MoneyGoal(
+        id: state.moneyGoal.id,
+        currencyCode: state.moneyGoal.currencyCode,
+      ),
       savingsEntries: const [],
     );
   }

@@ -2780,7 +2780,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           ),
           const SizedBox(height: 8),
           const Text(
-            'Manual entries stay local in mock onboarding state. Imported AI/photo review is represented as frontend preview UI only.',
+            'Manual entries stay local in mock onboarding state. Imported AI/photo review is represented as an in-app review draft.',
             style: TextStyle(
               fontSize: 11,
               color: OptivusColors.textSecondary,
@@ -2963,7 +2963,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       _TimelineOption('pg', 'Shared apartment'),
       _TimelineOption('flat', 'Alone / Studio'),
       _TimelineOption('mess', 'Cafeteria / Dining hall'),
-      _TimelineOption('staying_alone', 'Meal plan'),
+      _TimelineOption('staying_alone', 'Meal plan / outside food'),
       _TimelineOption('mixed', 'Mixed'),
     ];
   }

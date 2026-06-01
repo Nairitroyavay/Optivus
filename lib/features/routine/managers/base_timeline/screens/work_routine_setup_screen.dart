@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/utils/base_timeline_filter_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/utils/base_timeline_conflict_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_block_card.dart';
@@ -220,6 +221,10 @@ class _WorkRoutineSetupScreenState
   Widget build(BuildContext context) {
     final allItems = ref.watch(routineNotifierProvider).items;
     final work = BaseTimelineFilterUtils.getWorkItems(allItems);
+    final bottomReserve = liquidTabBarReserve(context) + 40;
+    final fabBottomOffset = (liquidTabBarReserve(context) - 88)
+        .clamp(24.0, 96.0)
+        .toDouble();
 
     return Scaffold(
       backgroundColor: widget.onBack == null
@@ -277,7 +282,7 @@ class _WorkRoutineSetupScreenState
               ),
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
               children: work
                   .map(
                     (w) => BaseTimelineBlockCard(
@@ -288,14 +293,17 @@ class _WorkRoutineSetupScreenState
                   .toList(),
             ),
       floatingActionButton: work.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _showForm,
-              backgroundColor: OptivusColors.routineAccent,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text(
-                'Add Work Block',
-                style: TextStyle(fontWeight: FontWeight.bold),
+          ? Padding(
+              padding: EdgeInsets.only(bottom: fabBottomOffset),
+              child: FloatingActionButton.extended(
+                onPressed: _showForm,
+                backgroundColor: OptivusColors.routineAccent,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text(
+                  'Add Work Block',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             )
           : null,

@@ -335,7 +335,7 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Photo or attachment frontend preview',
+                        'Photo or attachment review draft',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/routine/managers/base_timeline/utils/base_timeline_filter_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/utils/base_timeline_conflict_utils.dart';
 import 'package:optivus/features/routine/managers/base_timeline/widgets/base_timeline_block_card.dart';
@@ -194,6 +195,10 @@ class _ClassesRoutineSetupScreenState
   Widget build(BuildContext context) {
     final allItems = ref.watch(routineNotifierProvider).items;
     final classes = BaseTimelineFilterUtils.getClasses(allItems);
+    final bottomReserve = liquidTabBarReserve(context) + 40;
+    final fabBottomOffset = (liquidTabBarReserve(context) - 88)
+        .clamp(24.0, 96.0)
+        .toDouble();
 
     return Scaffold(
       backgroundColor: widget.onBack == null
@@ -251,7 +256,7 @@ class _ClassesRoutineSetupScreenState
               ),
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, bottomReserve),
               children: classes
                   .map(
                     (c) => BaseTimelineBlockCard(
@@ -262,14 +267,17 @@ class _ClassesRoutineSetupScreenState
                   .toList(),
             ),
       floatingActionButton: classes.isNotEmpty
-          ? FloatingActionButton.extended(
-              onPressed: _showForm,
-              backgroundColor: OptivusColors.routineAccent,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text(
-                'Add Class',
-                style: TextStyle(fontWeight: FontWeight.bold),
+          ? Padding(
+              padding: EdgeInsets.only(bottom: fabBottomOffset),
+              child: FloatingActionButton.extended(
+                onPressed: _showForm,
+                backgroundColor: OptivusColors.routineAccent,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text(
+                  'Add Class',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             )
           : null,

@@ -330,7 +330,7 @@ class SystemSetupScreen extends ConsumerWidget {
               subtitle: 'Confirmation required. Current history is preserved.',
               accentColor: OptivusColors.danger,
               destructive: true,
-              onTap: () => _showResetSetupDialog(context),
+              onTap: () => _showResetSetupDialog(context, ref),
             ),
           ],
         ),
@@ -1578,7 +1578,7 @@ class HelpCenterScreen extends StatelessWidget {
                   onTap: () => _showSetupReview(
                     context,
                     topic,
-                    'Help article frontend preview. Final hosted article can live on Cloudflare Pages.',
+                    'This guide opens as an in-app local draft. Final hosted articles can live on Cloudflare Pages.',
                   ),
                 ),
               )
@@ -1586,30 +1586,50 @@ class HelpCenterScreen extends StatelessWidget {
         ),
         LiquidDetailSection(
           title: 'Legal pages',
-          children: const [
+          children: [
             LiquidActionRow(
               icon: Icons.description_outlined,
               title: 'Terms of Use',
               subtitle: 'Cloudflare Pages legal link later.',
               accentColor: _profileAccent,
+              onTap: () => _showSetupReview(
+                context,
+                'Terms of Use',
+                'The production Terms of Use will be hosted on Cloudflare Pages. This local draft keeps the link path reserved for backend handoff.',
+              ),
             ),
             LiquidActionRow(
               icon: Icons.privacy_tip_outlined,
               title: 'Privacy Policy',
               subtitle: 'Cloudflare Pages legal link later.',
               accentColor: _profileAccent,
+              onTap: () => _showSetupReview(
+                context,
+                'Privacy Policy',
+                'The production Privacy Policy will be hosted on Cloudflare Pages. This local draft keeps the link path reserved for backend handoff.',
+              ),
             ),
             LiquidActionRow(
               icon: Icons.auto_delete_outlined,
               title: 'Delete Account Instructions',
               subtitle: 'Shows export-first and 7-day cancellation flow.',
               accentColor: _profileAccent,
+              onTap: () => _showSetupReview(
+                context,
+                'Delete Account Instructions',
+                'Export data first, submit a delete account request, then use the 7-day cancellation window if the request was accidental.',
+              ),
             ),
             LiquidActionRow(
               icon: Icons.support_agent_outlined,
               title: 'Support',
-              subtitle: 'Support link frontend preview.',
+              subtitle: 'Support link draft for the backend handoff.',
               accentColor: _profileAccent,
+              onTap: () => _showSetupReview(
+                context,
+                'Support',
+                'Support requests are handled in Profile > Report Bug for this build. Backend can later attach Cloudflare Pages and worker endpoints.',
+              ),
             ),
           ],
         ),
@@ -1713,60 +1733,70 @@ void _showSetupReview(BuildContext context, String title, String body) {
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (context) => Container(
-      margin: const EdgeInsets.all(16),
-      padding: EdgeInsets.fromLTRB(
-        22,
-        18,
-        22,
-        22 + MediaQuery.of(context).padding.bottom,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            body,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              fontWeight: FontWeight.w600,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 18),
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _profileAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+    isScrollControlled: true,
+    builder: (context) => SafeArea(
+      top: false,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
+        ),
+        margin: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(
+          22,
+          18,
+          22,
+          22 + MediaQuery.of(context).padding.bottom,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white),
+        ),
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textPrimary,
+                ),
               ),
-            ),
-            child: const Text('Done'),
+              const SizedBox(height: 12),
+              Text(
+                body,
+                style: const TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 18),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _profileAccent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text('Done'),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );
 }
 
-void _showResetSetupDialog(BuildContext context) {
+void _showResetSetupDialog(BuildContext context, WidgetRef ref) {
   showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
@@ -1774,7 +1804,7 @@ void _showResetSetupDialog(BuildContext context) {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: const Text('Re-run setup?'),
       content: const Text(
-        'This frontend flow preserves history and only affects future setup defaults.',
+        'This local setup flow preserves history and only affects future setup defaults.',
       ),
       actions: [
         TextButton(
@@ -1782,7 +1812,18 @@ void _showResetSetupDialog(BuildContext context) {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            final profile = ref.read(mockUserProfileProvider);
+            ref
+                .read(mockUserProfileProvider.notifier)
+                .updateProfile(
+                  profile.copyWith(
+                    onboardingCompleted: false,
+                    onboardingStep: 0,
+                  ),
+                );
+            Navigator.of(context).pop();
+          },
           style: ElevatedButton.styleFrom(
             backgroundColor: OptivusColors.danger,
             foregroundColor: Colors.white,
@@ -1806,7 +1847,7 @@ void _confirmSelectedDelete(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: const Text('Delete selected data?'),
       content: Text(
-        'This mock deletion request will clear the selected categories from this frontend flow:\n\n${selected.join(', ')}',
+        'This local deletion request will clear the selected categories from this build:\n\n${selected.join(', ')}',
       ),
       actions: [
         TextButton(

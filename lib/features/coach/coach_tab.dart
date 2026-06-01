@@ -127,7 +127,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
         },
       );
     }
-    return const SizedBox.shrink(); // Placeholders for others would go here
+    return const SizedBox.shrink();
   }
 
   @override
@@ -308,6 +308,8 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                 focusNode: _focusNode,
                 hasText: _messageController.text.isNotEmpty,
                 onSend: () => _sendMessage(_messageController.text),
+                onQuickPrompt: _sendMessage,
+                onNewSession: () => _openDetail(CoachDetailView.newSession),
               ),
             ),
           ],

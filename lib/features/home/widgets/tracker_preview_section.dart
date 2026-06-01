@@ -106,9 +106,21 @@ class TrackerPreviewSection extends ConsumerWidget {
                     ref.read(trackerDetailViewRequestProvider.notifier).state =
                         TrackerDetailTarget.view(TrackerDetailView.money);
                     ref.read(appNavigationProvider.notifier).goToTracker();
+                  } else if (preview.id == 'meditation') {
+                    ref.read(trackerDetailViewRequestProvider.notifier).state =
+                        TrackerDetailTarget.view(TrackerDetailView.meditation);
+                    ref.read(appNavigationProvider.notifier).goToTracker();
+                  } else if (preview.id == 'screen_time') {
+                    ref.read(trackerDetailViewRequestProvider.notifier).state =
+                        TrackerDetailTarget.view(TrackerDetailView.screenTime);
+                    ref.read(appNavigationProvider.notifier).goToTracker();
                   } else if (preview.id == 'hydration') {
                     ref.read(trackerDetailViewRequestProvider.notifier).state =
                         TrackerDetailTarget.view(TrackerDetailView.hydration);
+                    ref.read(appNavigationProvider.notifier).goToTracker();
+                  } else if (preview.id == 'workout') {
+                    ref.read(trackerDetailViewRequestProvider.notifier).state =
+                        TrackerDetailTarget.view(TrackerDetailView.fitness);
                     ref.read(appNavigationProvider.notifier).goToTracker();
                   } else if (preview.id == 'smoking') {
                     ref

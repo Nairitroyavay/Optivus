@@ -202,6 +202,7 @@ class _GlobalMoneySetupScreenState
             ref
                 .read(mockTrackerProvider.notifier)
                 .updateMoneySettings(
+                  currencyCode: region.currencyCode,
                   tinySaveAmount: _dailyTinyTarget,
                   defaultMethod: _savingMethod,
                   dailyTarget: goal.currentLevelAmount <= 0

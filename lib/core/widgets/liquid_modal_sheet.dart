@@ -91,6 +91,10 @@ Future<T?> showLiquidModalSheet<T>({
     isScrollControlled: isScrollControlled,
     backgroundColor: Colors.transparent,
     builder: (ctx) {
+      final media = MediaQuery.of(ctx);
+      final height =
+          (media.size.height - media.viewInsets.bottom) *
+          heightFactor.clamp(0.4, 0.98);
       return ClipRRect(
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(30),
@@ -98,9 +102,12 @@ Future<T?> showLiquidModalSheet<T>({
         ),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: SizedBox(
-            height: MediaQuery.of(ctx).size.height * heightFactor,
-            child: builder(ctx),
+          child: Padding(
+            padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+            child: SafeArea(
+              top: false,
+              child: SizedBox(height: height, child: builder(ctx)),
+            ),
           ),
         ),
       );
