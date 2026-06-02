@@ -1,4 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/features/onboarding/steps/base_timeline_step.dart';
+import 'package:optivus/models/coach_models.dart';
+import 'package:optivus/models/notification_preferences.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -7,6 +11,7 @@ import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/services/routine_import_conversion_service.dart';
 import 'package:optivus/services/routine_import_extraction_service.dart';
+import 'package:optivus/services/routine_import_timeline_edit_service.dart';
 import 'package:optivus/services/routine_import_validation_service.dart';
 import 'package:optivus/services/uploads/upload_object_key.dart';
 
@@ -54,11 +59,19 @@ void main() {
   test('RoutineImportCandidateBlock toMap/fromMap round-trips', () {
     final candidate = _candidate(
       candidateType: RoutineImportCandidateType.flexibleTask,
+      hasFixedTime: false,
+      suggestedStartMinute: 9 * 60,
+      suggestedEndMinute: 10 * 60,
       confidenceScore: 0.84,
       confidenceLabel: 'medium',
       sourceAssetId: 'asset-1',
       sourceR2Key: 'users/uid/onboarding/work_schedule/asset-1.jpg',
       sourceTextSnippet: 'Mon 9 AM work',
+      sourcePageIndex: 1,
+      sourceImageIndex: 2,
+      sourceRowLabel: 'Monday',
+      sourceColumnLabel: '9 AM',
+      sourceBoundingBox: const {'x': 10, 'y': 20, 'w': 90, 'h': 30},
       validationIssues: const ['Needs room'],
       extractionEngine: 'futureAiText',
       extractionVersion: 'v1',
@@ -67,11 +80,19 @@ void main() {
     final roundTrip = RoutineImportCandidateBlock.fromMap(candidate.toMap());
 
     expect(roundTrip.candidateType, RoutineImportCandidateType.flexibleTask);
+    expect(roundTrip.hasFixedTime, isFalse);
+    expect(roundTrip.suggestedStartMinute, 9 * 60);
+    expect(roundTrip.suggestedEndMinute, 10 * 60);
     expect(roundTrip.confidenceScore, 0.84);
     expect(roundTrip.confidenceLabel, 'medium');
     expect(roundTrip.sourceAssetId, 'asset-1');
     expect(roundTrip.sourceR2Key, contains('work_schedule'));
     expect(roundTrip.sourceTextSnippet, 'Mon 9 AM work');
+    expect(roundTrip.sourcePageIndex, 1);
+    expect(roundTrip.sourceImageIndex, 2);
+    expect(roundTrip.sourceRowLabel, 'Monday');
+    expect(roundTrip.sourceColumnLabel, '9 AM');
+    expect(roundTrip.sourceBoundingBox, {'x': 10, 'y': 20, 'w': 90, 'h': 30});
     expect(roundTrip.validationIssues, ['Needs room']);
     expect(roundTrip.extractionEngine, 'futureAiText');
     expect(roundTrip.extractionVersion, 'v1');
@@ -88,10 +109,33 @@ void main() {
       candidateType: RoutineImportCandidateType.flexibleTask,
       blockType: TimelineBlockDraft.flexibleTaskKey,
       hardBlock: false,
+      hasFixedTime: false,
     );
 
     expect(candidate.candidateType, RoutineImportCandidateType.flexibleTask);
     expect(candidate.blockType, TimelineBlockDraft.flexibleTaskKey);
+    expect(candidate.hasFixedTime, isFalse);
+    expect(candidate.isUnplaced, isTrue);
+  });
+
+  test('Untimed flexible task is treated as unplaced', () {
+    final candidate = _candidate(
+      title: 'Revise DSA',
+      candidateType: RoutineImportCandidateType.flexibleTask,
+      blockType: TimelineBlockDraft.flexibleTaskKey,
+      hardBlock: false,
+      hasFixedTime: false,
+      selected: false,
+    );
+    final validation = const RoutineImportValidationService()
+        .validateCandidates(candidates: [candidate]);
+
+    expect(candidate.isUnplaced, isTrue);
+    expect(
+      validation.warningsFor(candidate.id),
+      contains('Flexible task has no fixed time.'),
+    );
+    expect(validation.hasBlockingIssues, isFalse);
   });
 
   test('Extraction service attaches uploadedAssetId/R2 key', () {
@@ -168,6 +212,10 @@ void main() {
     final service = const RoutineImportExtractionService();
 
     expect(
+      onboardingUploadPurposeForBaseTimelineSection('Job / Work / Business'),
+      UploadedAssetPurpose.workSchedule,
+    );
+    expect(
       service.timelineSectionKey(RoutineImportReviewSource.work),
       'job_work_business',
     );
@@ -186,6 +234,27 @@ void main() {
       'users/uid/onboarding/work_schedule/asset.jpg',
     );
   });
+
+  test(
+    'Completion bundle fallback builds review with uploadedAssetId/R2 key',
+    () {
+      final review = const RoutineImportExtractionService()
+          .buildReviewDraftFromCompletionBundle(
+            uid: 'uid-1',
+            source: RoutineImportReviewSource.work,
+            bundle: _completionBundleWithWorkAsset(),
+          );
+
+      expect(review.uploadedAssetId, 'work-asset');
+      expect(review.uploadedAssetR2Key, contains('work_schedule'));
+      expect(
+        review.warnings,
+        contains(RoutineImportExtractionService.noAiExtractionWarning),
+      );
+      expect(review.candidateBlocks.single.sourceAssetId, 'work-asset');
+      expect(review.candidateBlocks.single.needsManualReview, isTrue);
+    },
+  );
 
   test('FakeRoutineImportReviewRepository saves and fetches review', () async {
     final repository = FakeRoutineImportReviewRepository();
@@ -222,17 +291,41 @@ void main() {
     'Conversion service converts timed selected candidate to RoutineItem',
     () {
       final items = const RoutineImportConversionService()
-          .convertAcceptedCandidates(candidates: [_candidate()]);
+          .convertAcceptedCandidates(
+            reviewId: 'review-1',
+            candidates: [_candidate()],
+          );
 
       expect(items, hasLength(1));
       expect(items.single.title, 'Candidate block');
       expect(items.single.blockType, RoutineBlockType.hardBlock);
+      expect(items.single.id, 'imported-review-1-candidate-1');
     },
   );
 
   test('Conversion service rejects unselected candidate', () {
     final items = const RoutineImportConversionService()
-        .convertAcceptedCandidates(candidates: [_candidate(selected: false)]);
+        .convertAcceptedCandidates(
+          reviewId: 'review-1',
+          candidates: [_candidate(selected: false)],
+        );
+
+    expect(items, isEmpty);
+  });
+
+  test('Conversion service rejects untimed flexible task', () {
+    final items = const RoutineImportConversionService()
+        .convertAcceptedCandidates(
+          reviewId: 'review-1',
+          candidates: [
+            _candidate(
+              candidateType: RoutineImportCandidateType.flexibleTask,
+              blockType: TimelineBlockDraft.flexibleTaskKey,
+              hardBlock: false,
+              hasFixedTime: false,
+            ),
+          ],
+        );
 
     expect(items, isEmpty);
   });
@@ -240,6 +333,7 @@ void main() {
   test('Conversion service puts checklist steps into notes', () {
     final items = const RoutineImportConversionService()
         .convertAcceptedCandidates(
+          reviewId: 'review-1',
           candidates: [
             _candidate(
               candidateType: RoutineImportCandidateType.checklistStep,
@@ -254,12 +348,52 @@ void main() {
     expect(items.single.steps, ['Cleanser', 'Sunscreen']);
   });
 
+  test('Drag math helper converts vertical delta to snapped minutes', () {
+    final delta = RoutineImportTimelineEditService.snappedDeltaMinutes(
+      verticalDelta: 17,
+      pixelsPerMinute: 0.5,
+      snapMinutes: 10,
+    );
+
+    expect(delta, 30);
+  });
+
+  test('Resize helper respects minimum duration', () {
+    final resized = RoutineImportTimelineEditService.resizeEnd(
+      startMinute: 8 * 60,
+      endMinute: 8 * 60 + 30,
+      deltaMinutes: -25,
+      minDurationMinutes: 10,
+    );
+
+    expect(resized.startMinute, 8 * 60);
+    expect(resized.endMinute, 8 * 60 + 10);
+  });
+
   test('Validation service catches invalid time', () {
     final result = const RoutineImportValidationService().validateCandidates(
       candidates: [_candidate(startMinute: 10 * 60, endMinute: 9 * 60)],
     );
 
     expect(result.hasBlockingIssues, isTrue);
+    expect(
+      result.issuesFor('candidate-1'),
+      contains('End time must be after start time.'),
+    );
+  });
+
+  test('Invalid timed block fails apply validation', () {
+    final result = const RoutineImportValidationService().validateCandidates(
+      candidates: [
+        _candidate(
+          hasFixedTime: true,
+          startMinute: 12 * 60,
+          endMinute: 12 * 60,
+        ),
+      ],
+    );
+
+    expect(result.hasBlockingIssuesFor('candidate-1'), isTrue);
     expect(
       result.issuesFor('candidate-1'),
       contains('End time must be after start time.'),
@@ -276,6 +410,97 @@ void main() {
       result.warningsFor('candidate-1'),
       contains('Low confidence. Review manually before saving.'),
     );
+  });
+
+  test('Low confidence warning is not a hard block after manual review', () {
+    final result = const RoutineImportValidationService().validateCandidates(
+      candidates: [
+        _candidate(confidenceLabel: 'manual', needsManualReview: false),
+      ],
+    );
+
+    expect(result.hasBlockingIssues, isFalse);
+    expect(result.warningsFor('candidate-1'), isEmpty);
+  });
+
+  test('Already accepted review blocks duplicate apply', () {
+    final review = RoutineImportReviewDraft(
+      id: 'review-1',
+      uid: 'uid-1',
+      source: RoutineImportReviewSource.classes,
+      status: RoutineImportReviewStatus.accepted,
+      sourceLabel: 'Classes',
+      candidateBlocks: [_candidate()],
+      appliedRoutineItemIds: const ['imported-review-1-candidate-1'],
+      createdAt: DateTime.utc(2026, 6, 2),
+      updatedAt: DateTime.utc(2026, 6, 2),
+    );
+
+    expect(review.blocksDuplicateApply, isTrue);
+  });
+
+  test('Eating source uses eating category', () {
+    final review = const RoutineImportExtractionService().buildReviewDraft(
+      uid: 'uid-1',
+      source: RoutineImportReviewSource.eating,
+      onboardingDraft: _draftWithUploadReferences(),
+    );
+
+    expect(review.candidateBlocks.first.category, RoutineCategory.eating.name);
+  });
+
+  test('Skin Care source uses skin care category', () {
+    final review = const RoutineImportExtractionService().buildReviewDraft(
+      uid: 'uid-1',
+      source: RoutineImportReviewSource.skinCare,
+      onboardingDraft: _draftWithUploadReferences(),
+    );
+
+    expect(
+      review.candidateBlocks.first.category,
+      RoutineCategory.skinCare.name,
+    );
+  });
+
+  test('Work source uses job/work category', () {
+    final review = const RoutineImportExtractionService().buildReviewDraft(
+      uid: 'uid-1',
+      source: RoutineImportReviewSource.work,
+      onboardingDraft: _draftWithWorkUploadReference(),
+    );
+
+    expect(review.candidateBlocks.first.category, RoutineCategory.job.name);
+  });
+
+  test('No local preview path or image bytes are serialized', () {
+    final asset = UploadedAsset(
+      assetId: 'asset',
+      ownerUid: 'uid',
+      sourceFeature: OnboardingDraft.sourceOnboarding,
+      purpose: UploadedAssetPurpose.workSchedule,
+      fileName: 'photo.jpg',
+      contentType: 'image/jpeg',
+      sizeBytes: 42,
+      r2Key: 'users/uid/onboarding/work_schedule/asset.jpg',
+      localPreviewPath: '/tmp/photo.jpg',
+      status: UploadedAssetStatus.uploaded,
+      createdAt: DateTime.utc(2026, 6, 2),
+      updatedAt: DateTime.utc(2026, 6, 2),
+    );
+    final review = RoutineImportReviewDraft(
+      id: 'review-1',
+      uid: 'uid',
+      source: RoutineImportReviewSource.work,
+      status: RoutineImportReviewStatus.needsReview,
+      sourceLabel: 'Work',
+      candidateBlocks: [_candidate(sourceAssetId: 'asset')],
+      createdAt: DateTime.utc(2026, 6, 2),
+      updatedAt: DateTime.utc(2026, 6, 2),
+    );
+
+    expect(asset.toFirestoreMap().containsKey('localPreviewPath'), isFalse);
+    expect(review.toMap().toString(), isNot(contains('localPreviewPath')));
+    expect(review.toMap().toString(), isNot(contains('imageBytes')));
   });
 
   test('RoutineImportExtractionResult supports future strict candidates', () {
@@ -326,12 +551,23 @@ RoutineImportCandidateBlock _candidate({
   String extractionEngine = 'manualSeed',
   String? extractionVersion,
   List<String> steps = const [],
+  bool hasFixedTime = true,
+  int? suggestedStartMinute,
+  int? suggestedEndMinute,
+  int? sourcePageIndex,
+  int? sourceImageIndex,
+  String? sourceRowLabel,
+  String? sourceColumnLabel,
+  Map<String, dynamic>? sourceBoundingBox,
 }) {
   return RoutineImportCandidateBlock(
     id: id,
     title: title,
     startMinute: startMinute,
     endMinute: endMinute,
+    hasFixedTime: hasFixedTime,
+    suggestedStartMinute: suggestedStartMinute,
+    suggestedEndMinute: suggestedEndMinute,
     repeatDays: repeatDays,
     blockType: blockType,
     category: category,
@@ -345,6 +581,11 @@ RoutineImportCandidateBlock _candidate({
     sourceAssetId: sourceAssetId,
     sourceR2Key: sourceR2Key,
     sourceTextSnippet: sourceTextSnippet,
+    sourcePageIndex: sourcePageIndex,
+    sourceImageIndex: sourceImageIndex,
+    sourceRowLabel: sourceRowLabel,
+    sourceColumnLabel: sourceColumnLabel,
+    sourceBoundingBox: sourceBoundingBox,
     extractionEngine: extractionEngine,
     extractionVersion: extractionVersion,
     steps: steps,
@@ -368,6 +609,16 @@ OnboardingDraft _draftWithUploadReferences() {
           uploadedAssetStatus: 'uploaded',
         ),
         PendingFutureImportDraft(
+          id: 'work_photo',
+          section: 'Job / Work / Business',
+          mode: 'Photo Upload',
+          createdAt: now,
+          uploadedAssetId: 'work-asset',
+          uploadedAssetR2Key:
+              'users/uid-1/onboarding/work_schedule/work-asset.jpg',
+          uploadedAssetStatus: 'uploaded',
+        ),
+        PendingFutureImportDraft(
           id: 'eating_photo',
           section: 'Eating',
           mode: 'Photo Upload',
@@ -388,5 +639,70 @@ OnboardingDraft _draftWithUploadReferences() {
         ),
       ],
     ),
+  );
+}
+
+OnboardingDraft _draftWithWorkUploadReference() {
+  final now = DateTime.utc(2026, 6, 2, 8);
+  return OnboardingDraft(
+    uid: 'uid-1',
+    baseTimeline: BaseTimelineDraft(
+      pendingFutureImports: [
+        PendingFutureImportDraft(
+          id: 'work_photo',
+          section: 'Job / Work / Business',
+          mode: 'Photo Upload',
+          createdAt: now,
+          uploadedAssetId: 'work-asset',
+          uploadedAssetR2Key:
+              'users/uid-1/onboarding/work_schedule/work-asset.jpg',
+          uploadedAssetStatus: 'uploaded',
+        ),
+      ],
+    ),
+  );
+}
+
+OnboardingCompletionBundle _completionBundleWithWorkAsset() {
+  final now = DateTime.utc(2026, 6, 2, 8);
+  return OnboardingCompletionBundle(
+    uid: 'uid-1',
+    createdAt: now,
+    updatedAt: now,
+    userProfilePatch: const {'onboardingCompleted': true},
+    baseTimelineBlocks: const [
+      TimelineBlockDraft(
+        id: 'work-block',
+        section: 'job_work_business',
+        title: 'Office shift',
+        startMinute: 9 * 60,
+        endMinute: 17 * 60,
+        repeatDays: [1, 2, 3, 4, 5],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+    ],
+    finalTimelineItems: const [],
+    routineItemsForApp: const [],
+    goodHabitTemplates: const [],
+    badHabitCheckIns: const [],
+    identityGoalSystems: const [],
+    notificationPreferences: NotificationPreferences(),
+    coachPreferences: CoachPreferences(),
+    moneyGoal: null,
+    uploadedAssetReferences: [
+      OnboardingUploadedAssetReference(
+        id: 'work_photo',
+        section: 'Job / Work / Business',
+        mode: 'Photo Upload',
+        uploadedAssetId: 'work-asset',
+        uploadedAssetR2Key:
+            'users/uid-1/onboarding/work_schedule/work-asset.jpg',
+        uploadedAssetStatus: 'uploaded',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ],
+    warnings: const [],
+    duplicateSystemKeysMerged: const [],
   );
 }

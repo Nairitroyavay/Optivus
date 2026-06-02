@@ -6,19 +6,29 @@ class RoutineImportConversionService {
   const RoutineImportConversionService();
 
   List<RoutineItem> convertAcceptedCandidates({
+    required String reviewId,
     required List<RoutineImportCandidateBlock> candidates,
   }) {
     final items = <RoutineItem>[];
     for (final candidate in candidates) {
       if (!candidate.selected) continue;
+      if (!candidate.hasFixedTime) continue;
       if (!_hasConvertibleTime(candidate)) continue;
       if (candidate.title.trim().isEmpty) continue;
       if (candidate.repeatDays.isEmpty) continue;
       if (candidate.candidateType == RoutineImportCandidateType.unknown) {
         continue;
       }
+      if (candidate.candidateType == RoutineImportCandidateType.note) {
+        continue;
+      }
 
-      items.add(_routineItemFromCandidate(candidate));
+      items.add(
+        _routineItemFromCandidate(
+          candidate,
+          itemId: 'imported-$reviewId-${candidate.id}',
+        ),
+      );
     }
     return items;
   }
@@ -31,10 +41,13 @@ class RoutineImportConversionService {
         candidate.startMinute < candidate.endMinute;
   }
 
-  RoutineItem _routineItemFromCandidate(RoutineImportCandidateBlock candidate) {
+  RoutineItem _routineItemFromCandidate(
+    RoutineImportCandidateBlock candidate, {
+    required String itemId,
+  }) {
     final blockType = _routineBlockType(candidate);
     return RoutineItem(
-      id: candidate.id,
+      id: itemId,
       title: candidate.title.trim(),
       startMinute: candidate.startMinute,
       endMinute: candidate.endMinute,

@@ -57,6 +57,12 @@ class RoutineImportReviewDraft {
     required this.updatedAt,
   });
 
+  bool get blocksDuplicateApply {
+    return (status == RoutineImportReviewStatus.accepted ||
+            status == RoutineImportReviewStatus.partiallyAccepted) &&
+        appliedRoutineItemIds.isNotEmpty;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
@@ -195,6 +201,9 @@ class RoutineImportCandidateBlock {
   final String title;
   final int startMinute;
   final int endMinute;
+  final bool hasFixedTime;
+  final int? suggestedStartMinute;
+  final int? suggestedEndMinute;
   final List<int> repeatDays;
   final String blockType;
   final String category;
@@ -208,6 +217,11 @@ class RoutineImportCandidateBlock {
   final String? sourceAssetId;
   final String? sourceR2Key;
   final String? sourceTextSnippet;
+  final int? sourcePageIndex;
+  final int? sourceImageIndex;
+  final String? sourceRowLabel;
+  final String? sourceColumnLabel;
+  final Map<String, dynamic>? sourceBoundingBox;
   final String extractionEngine;
   final String? extractionVersion;
   final String? location;
@@ -220,6 +234,9 @@ class RoutineImportCandidateBlock {
     required this.title,
     required this.startMinute,
     required this.endMinute,
+    this.hasFixedTime = true,
+    this.suggestedStartMinute,
+    this.suggestedEndMinute,
     required this.repeatDays,
     required this.blockType,
     required this.category,
@@ -233,6 +250,11 @@ class RoutineImportCandidateBlock {
     this.sourceAssetId,
     this.sourceR2Key,
     this.sourceTextSnippet,
+    this.sourcePageIndex,
+    this.sourceImageIndex,
+    this.sourceRowLabel,
+    this.sourceColumnLabel,
+    this.sourceBoundingBox,
     this.extractionEngine = 'manualSeed',
     this.extractionVersion,
     this.location,
@@ -244,12 +266,27 @@ class RoutineImportCandidateBlock {
            confidenceLabel == 'low' ||
            candidateType == RoutineImportCandidateType.unknown;
 
+  bool get hasValidFixedTime {
+    return startMinute >= 0 &&
+        startMinute < 24 * 60 &&
+        endMinute > 0 &&
+        endMinute <= 24 * 60 &&
+        startMinute < endMinute;
+  }
+
+  bool get isUnplaced {
+    return !hasFixedTime || !hasValidFixedTime || repeatDays.isEmpty;
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'title': title,
       'startMinute': startMinute,
       'endMinute': endMinute,
+      'hasFixedTime': hasFixedTime,
+      'suggestedStartMinute': suggestedStartMinute,
+      'suggestedEndMinute': suggestedEndMinute,
       'repeatDays': repeatDays,
       'blockType': blockType,
       'category': category,
@@ -263,6 +300,11 @@ class RoutineImportCandidateBlock {
       'sourceAssetId': sourceAssetId,
       'sourceR2Key': sourceR2Key,
       'sourceTextSnippet': sourceTextSnippet,
+      'sourcePageIndex': sourcePageIndex,
+      'sourceImageIndex': sourceImageIndex,
+      'sourceRowLabel': sourceRowLabel,
+      'sourceColumnLabel': sourceColumnLabel,
+      'sourceBoundingBox': sourceBoundingBox,
       'extractionEngine': extractionEngine,
       'extractionVersion': extractionVersion,
       'location': location,
@@ -278,6 +320,9 @@ class RoutineImportCandidateBlock {
       title: map['title'] as String? ?? '',
       startMinute: (map['startMinute'] as num?)?.toInt() ?? 0,
       endMinute: (map['endMinute'] as num?)?.toInt() ?? 0,
+      hasFixedTime: map['hasFixedTime'] as bool? ?? true,
+      suggestedStartMinute: (map['suggestedStartMinute'] as num?)?.toInt(),
+      suggestedEndMinute: (map['suggestedEndMinute'] as num?)?.toInt(),
       repeatDays: _readIntList(map['repeatDays']),
       blockType: map['blockType'] as String? ?? 'soft_block',
       category: map['category'] as String? ?? 'fixed',
@@ -291,6 +336,13 @@ class RoutineImportCandidateBlock {
       sourceAssetId: map['sourceAssetId'] as String?,
       sourceR2Key: map['sourceR2Key'] as String?,
       sourceTextSnippet: map['sourceTextSnippet'] as String?,
+      sourcePageIndex: (map['sourcePageIndex'] as num?)?.toInt(),
+      sourceImageIndex: (map['sourceImageIndex'] as num?)?.toInt(),
+      sourceRowLabel: map['sourceRowLabel'] as String?,
+      sourceColumnLabel: map['sourceColumnLabel'] as String?,
+      sourceBoundingBox: map['sourceBoundingBox'] is Map
+          ? Map<String, dynamic>.from(map['sourceBoundingBox'] as Map)
+          : null,
       extractionEngine: map['extractionEngine'] as String? ?? 'manualSeed',
       extractionVersion: map['extractionVersion'] as String?,
       location: map['location'] as String?,
@@ -313,6 +365,9 @@ class RoutineImportCandidateBlock {
     String? title,
     int? startMinute,
     int? endMinute,
+    bool? hasFixedTime,
+    int? suggestedStartMinute,
+    int? suggestedEndMinute,
     List<int>? repeatDays,
     String? blockType,
     String? category,
@@ -326,6 +381,11 @@ class RoutineImportCandidateBlock {
     String? sourceAssetId,
     String? sourceR2Key,
     String? sourceTextSnippet,
+    int? sourcePageIndex,
+    int? sourceImageIndex,
+    String? sourceRowLabel,
+    String? sourceColumnLabel,
+    Map<String, dynamic>? sourceBoundingBox,
     String? extractionEngine,
     String? extractionVersion,
     String? location,
@@ -337,6 +397,13 @@ class RoutineImportCandidateBlock {
     bool clearSourceAssetId = false,
     bool clearSourceR2Key = false,
     bool clearSourceTextSnippet = false,
+    bool clearSuggestedStartMinute = false,
+    bool clearSuggestedEndMinute = false,
+    bool clearSourcePageIndex = false,
+    bool clearSourceImageIndex = false,
+    bool clearSourceRowLabel = false,
+    bool clearSourceColumnLabel = false,
+    bool clearSourceBoundingBox = false,
     bool clearExtractionVersion = false,
     bool clearLocation = false,
     bool clearNotes = false,
@@ -347,6 +414,13 @@ class RoutineImportCandidateBlock {
       title: title ?? this.title,
       startMinute: startMinute ?? this.startMinute,
       endMinute: endMinute ?? this.endMinute,
+      hasFixedTime: hasFixedTime ?? this.hasFixedTime,
+      suggestedStartMinute: clearSuggestedStartMinute
+          ? null
+          : (suggestedStartMinute ?? this.suggestedStartMinute),
+      suggestedEndMinute: clearSuggestedEndMinute
+          ? null
+          : (suggestedEndMinute ?? this.suggestedEndMinute),
       repeatDays: repeatDays ?? this.repeatDays,
       blockType: blockType ?? this.blockType,
       category: category ?? this.category,
@@ -368,6 +442,21 @@ class RoutineImportCandidateBlock {
       sourceTextSnippet: clearSourceTextSnippet
           ? null
           : (sourceTextSnippet ?? this.sourceTextSnippet),
+      sourcePageIndex: clearSourcePageIndex
+          ? null
+          : (sourcePageIndex ?? this.sourcePageIndex),
+      sourceImageIndex: clearSourceImageIndex
+          ? null
+          : (sourceImageIndex ?? this.sourceImageIndex),
+      sourceRowLabel: clearSourceRowLabel
+          ? null
+          : (sourceRowLabel ?? this.sourceRowLabel),
+      sourceColumnLabel: clearSourceColumnLabel
+          ? null
+          : (sourceColumnLabel ?? this.sourceColumnLabel),
+      sourceBoundingBox: clearSourceBoundingBox
+          ? null
+          : (sourceBoundingBox ?? this.sourceBoundingBox),
       extractionEngine: extractionEngine ?? this.extractionEngine,
       extractionVersion: clearExtractionVersion
           ? null

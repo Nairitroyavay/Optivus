@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -5,6 +7,7 @@ import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -12,6 +15,7 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/services/routine_import_conversion_service.dart';
 import 'package:optivus/services/routine_import_extraction_service.dart';
+import 'package:optivus/services/routine_import_timeline_edit_service.dart';
 import 'package:optivus/services/routine_import_validation_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
@@ -33,6 +37,8 @@ class RoutineImportReviewScreen extends ConsumerStatefulWidget {
 
 class _RoutineImportReviewScreenState
     extends ConsumerState<RoutineImportReviewScreen> {
+  static const double _pixelsPerMinute = 0.56;
+
   final RoutineImportExtractionService _extractionService =
       const RoutineImportExtractionService();
   final RoutineImportConversionService _conversionService =
@@ -46,6 +52,7 @@ class _RoutineImportReviewScreenState
   bool _hadDeletedCandidate = false;
   final Set<String> _deletedCandidateIds = {};
   int _initialCandidateCount = 0;
+  int _activeDay = 1;
   String? _errorMessage;
 
   @override
@@ -72,26 +79,28 @@ class _RoutineImportReviewScreenState
             candidates: review.candidateBlocks,
             existingRoutineItems: existing,
           );
-    final selectedCount =
+    final selected =
         review?.candidateBlocks
             .where((candidate) => candidate.selected)
-            .length ??
-        0;
-    final selectedHasBlockingIssues =
-        review?.candidateBlocks
-            .where((candidate) => candidate.selected)
-            .any(
-              (candidate) => validation.hasBlockingIssuesFor(candidate.id),
-            ) ??
-        false;
+            .toList(growable: false) ??
+        const <RoutineImportCandidateBlock>[];
+    final selectedHasBlockingIssues = selected.any(
+      (candidate) => validation.hasBlockingIssuesFor(candidate.id),
+    );
+    final alreadyApplied = _alreadyApplied(review);
 
     return LiquidDetailScaffold(
       eyebrow: 'Routine import',
       title: '${review?.sourceLabel ?? _sourceLabel(widget.source)} Review',
-      subtitle:
-          'Review starter blocks from onboarding/manual input and attached source evidence. No AI/OCR extraction runs in this phase.',
+      subtitle: 'Review before saving to Routine',
       accentColor: OptivusColors.routineAccent,
       onBack: widget.onBack,
+      trailing: _HeaderSaveButton(
+        enabled: !_loading && review != null && !_saving && !alreadyApplied,
+        saving: _saving,
+        blocked: selectedHasBlockingIssues,
+        onTap: () => _saveAction(validation),
+      ),
       children: [
         if (_loading)
           const LiquidDetailSection(
@@ -108,163 +117,273 @@ class _RoutineImportReviewScreenState
             ],
           )
         else if (_errorMessage != null)
-          LiquidDetailSection(
-            title: 'Import review error',
-            tint: OptivusColors.danger.withValues(alpha: 0.08),
-            children: [
-              Text(
-                _errorMessage!,
-                style: const TextStyle(
-                  fontSize: 13,
-                  height: 1.35,
-                  fontWeight: FontWeight.w800,
-                  color: OptivusColors.danger,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _TextButton(
-                label: 'Retry',
-                color: OptivusColors.routineAccent,
-                onTap: _loadReview,
-              ),
-            ],
-          )
+          _errorSection()
         else if (review != null) ...[
-          _sourceSummarySection(review),
-          _reviewWarningSection(review),
-          LiquidDetailSection(
-            title: 'Candidate blocks',
-            children: [
-              if (review.candidateBlocks.isEmpty)
-                const Text(
-                  'No candidate blocks are left in this review. Add one manually or cancel.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.35,
-                    fontWeight: FontWeight.w700,
-                    color: OptivusColors.textSecondary,
-                  ),
-                )
-              else
-                ..._groupCandidatesByDay(review.candidateBlocks).entries.expand(
-                  (entry) => [
-                    _DayGroupHeader(label: entry.key),
-                    ...entry.value.map(
-                      (candidate) => _ImportBlockTile(
-                        candidate: candidate,
-                        messages: validation.messagesFor(candidate.id),
-                        hasBlockingIssue: validation.hasBlockingIssuesFor(
-                          candidate.id,
-                        ),
-                        onEdit: () => _shiftCandidate(candidate),
-                        onDelete: () => _deleteCandidate(candidate),
-                        onToggleFlexible: () => _toggleFlexible(candidate),
-                        onToggleSelected: () => _toggleSelected(candidate),
-                      ),
-                    ),
-                  ],
-                ),
-              const SizedBox(height: 10),
-              _TextButton(
-                label: 'Add block',
-                color: OptivusColors.routineAccent,
-                onTap: _addCandidate,
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: _RoutineButton(
-                  label: 'Cancel',
-                  color: OptivusColors.textSecondary,
-                  onTap: _saving ? null : widget.onBack,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _RoutineButton(
-                  label: _saving
-                      ? 'Saving...'
-                      : selectedHasBlockingIssues
-                      ? 'Fix issues'
-                      : selectedCount == 0
-                      ? 'Save review'
-                      : 'Save to Base Timeline',
-                  color: selectedHasBlockingIssues || selectedCount == 0
-                      ? OptivusColors.textSecondary
-                      : OptivusColors.routineAccent,
-                  onTap: _saving ? null : () => _saveAcceptedReview(validation),
-                ),
-              ),
-            ],
+          _daySelector(),
+          _sourceEvidenceSection(review),
+          if (alreadyApplied) _alreadyAppliedSection(review),
+          _warningSummarySection(review, validation),
+          _unplacedTray(review, validation),
+          _timelineSection(review, validation),
+          _footerActions(
+            review: review,
+            validation: validation,
+            selectedCount: selected.length,
+            selectedHasBlockingIssues: selectedHasBlockingIssues,
+            alreadyApplied: alreadyApplied,
           ),
         ],
       ],
     );
   }
 
-  Widget _sourceSummarySection(RoutineImportReviewDraft review) {
+  Widget _errorSection() {
     return LiquidDetailSection(
-      title: 'Import source summary',
+      title: 'Import review error',
+      tint: OptivusColors.danger.withValues(alpha: 0.08),
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            LiquidPill(
-              label: review.sourceLabel,
-              color: OptivusColors.routineAccent,
-              filled: true,
-            ),
-            LiquidPill(
-              label: _statusLabel(review.status),
-              color: _statusColor(review.status),
-            ),
-            if (review.uploadedAssetStatus != null)
-              LiquidPill(
-                label: 'Asset ${review.uploadedAssetStatus}',
-                color: OptivusColors.aquaAccent,
-              ),
-          ],
+        Text(
+          _errorMessage!,
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            fontWeight: FontWeight.w800,
+            color: OptivusColors.danger,
+          ),
         ),
-        const SizedBox(height: 14),
-        _EvidenceCard(review: review),
+        const SizedBox(height: 12),
+        _GlassTextButton(
+          label: 'Retry',
+          icon: Icons.refresh_rounded,
+          color: OptivusColors.routineAccent,
+          onTap: _loadReview,
+        ),
       ],
     );
   }
 
-  Widget _reviewWarningSection(RoutineImportReviewDraft review) {
+  Widget _daySelector() {
     return LiquidDetailSection(
-      title: 'Review warning',
-      tint: OptivusColors.warning.withValues(alpha: 0.08),
+      title: 'Day review',
+      padding: const EdgeInsets.all(12),
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: List.generate(7, (index) {
+              final day = index + 1;
+              return Padding(
+                padding: EdgeInsets.only(right: index == 6 ? 0 : 8),
+                child: _DayChip(
+                  label: TimelineUtils.getShortDayName(day),
+                  selected: _activeDay == day,
+                  onTap: () => setState(() => _activeDay = day),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sourceEvidenceSection(RoutineImportReviewDraft review) {
+    return LiquidDetailSection(
+      title: 'Source evidence',
+      children: [_SourceEvidenceCard(review: review)],
+    );
+  }
+
+  Widget _alreadyAppliedSection(RoutineImportReviewDraft review) {
+    return LiquidDetailSection(
+      title: 'Already applied',
+      tint: OptivusColors.success.withValues(alpha: 0.08),
       children: [
         const Text(
-          'AI extraction is not connected yet. Review these starter blocks manually.',
+          'This review has already been applied to the Base Timeline. Normal save is disabled to avoid duplicate routine blocks.',
           style: TextStyle(
             fontSize: 13,
             height: 1.4,
-            fontWeight: FontWeight.w900,
-            color: OptivusColors.warning,
+            fontWeight: FontWeight.w800,
+            color: OptivusColors.success,
           ),
         ),
-        if (review.warnings.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          ...review.warnings.map(
-            (warning) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                warning,
-                style: const TextStyle(
-                  fontSize: 12,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: review.appliedRoutineItemIds
+              .map((id) => LiquidPill(label: id, color: OptivusColors.success))
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
+
+  Widget _warningSummarySection(
+    RoutineImportReviewDraft review,
+    RoutineImportValidationResult validation,
+  ) {
+    final messages = <String>[
+      ...review.warnings,
+      for (final candidate in review.candidateBlocks)
+        ...validation
+            .messagesFor(candidate.id)
+            .map(
+              (message) =>
+                  '${candidate.title.trim().isEmpty ? 'Untitled' : candidate.title}: $message',
+            ),
+    ];
+    if (messages.isEmpty) return const SizedBox.shrink();
+
+    return LiquidDetailSection(
+      title: 'Validation and confidence',
+      tint: OptivusColors.warning.withValues(alpha: 0.08),
+      children: [
+        ...messages
+            .take(6)
+            .map(
+              (message) => Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.warning,
+                  ),
                 ),
               ),
             ),
+        if (messages.length > 6)
+          Text(
+            '+${messages.length - 6} more warnings',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.textSecondary,
+            ),
           ),
-        ],
+      ],
+    );
+  }
+
+  Widget _unplacedTray(
+    RoutineImportReviewDraft review,
+    RoutineImportValidationResult validation,
+  ) {
+    final unplaced = review.candidateBlocks
+        .where((candidate) => _isUnplaced(candidate))
+        .toList(growable: false);
+    if (unplaced.isEmpty) return const SizedBox.shrink();
+
+    return LiquidDetailSection(
+      title: 'Unplaced / Flexible Tasks',
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: unplaced
+              .map(
+                (candidate) => _UnplacedCandidateChip(
+                  candidate: candidate,
+                  messages: validation.messagesFor(candidate.id),
+                  onTap: () => _openCandidateEditor(candidate),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ],
+    );
+  }
+
+  Widget _timelineSection(
+    RoutineImportReviewDraft review,
+    RoutineImportValidationResult validation,
+  ) {
+    final dayCandidates =
+        review.candidateBlocks
+            .where(
+              (candidate) =>
+                  !_isUnplaced(candidate) &&
+                  candidate.repeatDays.contains(_activeDay),
+            )
+            .toList(growable: false)
+          ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+
+    return LiquidDetailSection(
+      title: '${TimelineUtils.getShortDayName(_activeDay)} timeline',
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+      children: [
+        _VisualTimeline(
+          candidates: dayCandidates,
+          validation: validation,
+          pixelsPerMinute: _pixelsPerMinute,
+          onOpen: _openCandidateEditor,
+          onMoveDelta: (candidate, delta) => _applyCandidateTimelineEdit(
+            RoutineImportTimelineEditService.moveCandidate(
+              candidate: candidate,
+              deltaMinutes: delta,
+            ),
+          ),
+          onResizeStartDelta: (candidate, delta) => _applyCandidateTimelineEdit(
+            RoutineImportTimelineEditService.resizeCandidateStart(
+              candidate: candidate,
+              deltaMinutes: delta,
+            ),
+          ),
+          onResizeEndDelta: (candidate, delta) => _applyCandidateTimelineEdit(
+            RoutineImportTimelineEditService.resizeCandidateEnd(
+              candidate: candidate,
+              deltaMinutes: delta,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _footerActions({
+    required RoutineImportReviewDraft review,
+    required RoutineImportValidationResult validation,
+    required int selectedCount,
+    required bool selectedHasBlockingIssues,
+    required bool alreadyApplied,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: _RoutineButton(
+            label: 'Add block',
+            color: OptivusColors.textSecondary,
+            onTap: _saving || alreadyApplied ? null : _addCandidate,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _RoutineButton(
+            label: alreadyApplied
+                ? 'Already applied'
+                : _saving
+                ? 'Saving...'
+                : selectedHasBlockingIssues
+                ? 'Fix issues'
+                : selectedCount == 0
+                ? 'Save review'
+                : 'Save to Base Timeline',
+            color:
+                alreadyApplied ||
+                    selectedHasBlockingIssues ||
+                    selectedCount == 0
+                ? OptivusColors.textSecondary
+                : OptivusColors.routineAccent,
+            onTap: _saving || alreadyApplied
+                ? null
+                : () => _saveAction(validation),
+          ),
+        ),
       ],
     );
   }
@@ -282,12 +401,16 @@ class _RoutineImportReviewScreenState
 
     try {
       final uid = _currentUid();
-      var onboardingDraft = ref.read(mockOnboardingProvider).draft;
-      if (uid.trim().isNotEmpty &&
-          _shouldFetchPersistedDraft(onboardingDraft, widget.source)) {
-        final fetched = await ref
-            .read(onboardingRepositoryProvider)
-            .fetchDraft(uid);
+      final source = _reviewSourceFor(widget.source);
+      final onboardingRepository = ref.read(onboardingRepositoryProvider);
+      var onboardingDraft = ref
+          .read(mockOnboardingProvider)
+          .draft
+          .copyWith(uid: uid);
+
+      if (!_hasRelevantDraftSource(onboardingDraft, source) &&
+          uid.trim().isNotEmpty) {
+        final fetched = await onboardingRepository.fetchDraft(uid);
         if (fetched != null) {
           onboardingDraft = fetched.copyWith(
             uid: uid,
@@ -299,12 +422,28 @@ class _RoutineImportReviewScreenState
         }
       }
 
-      final source = _reviewSourceFor(widget.source);
-      final builtReview = _extractionService.buildReviewDraft(
-        uid: uid,
-        source: source,
-        onboardingDraft: onboardingDraft.copyWith(uid: uid),
-      );
+      RoutineImportReviewDraft builtReview;
+      if (_hasRelevantDraftSource(onboardingDraft, source)) {
+        builtReview = _extractionService.buildReviewDraft(
+          uid: uid,
+          source: source,
+          onboardingDraft: onboardingDraft,
+        );
+      } else {
+        final bundle = await onboardingRepository.fetchCompletionBundle(uid);
+        builtReview = bundle != null && _hasRelevantBundleSource(bundle, source)
+            ? _extractionService.buildReviewDraftFromCompletionBundle(
+                uid: uid,
+                source: source,
+                bundle: bundle,
+              )
+            : _extractionService.buildReviewDraft(
+                uid: uid,
+                source: source,
+                onboardingDraft: onboardingDraft,
+              );
+      }
+
       final repository = ref.read(routineImportReviewRepositoryProvider);
       final savedReview = await repository.fetchReview(
         uid: uid,
@@ -330,20 +469,35 @@ class _RoutineImportReviewScreenState
     }
   }
 
-  bool _shouldFetchPersistedDraft(
+  bool _hasRelevantDraftSource(
     OnboardingDraft draft,
-    RoutineImportSource source,
+    RoutineImportReviewSource source,
   ) {
-    final reviewSource = _reviewSourceFor(source);
-    final sectionLabel = _extractionService.sourceSectionLabel(reviewSource);
-    final sectionKey = _extractionService.timelineSectionKey(reviewSource);
-    final hasRelevantImport = draft.baseTimeline.pendingFutureImports.any(
-      (entry) => entry.section == sectionLabel,
-    );
-    final hasRelevantBlocks = draft.baseTimeline.blocks.any(
-      (block) => block.section == sectionKey,
-    );
-    return !hasRelevantImport && !hasRelevantBlocks;
+    final sectionLabel = _extractionService.sourceSectionLabel(source);
+    final sectionKey = _extractionService.timelineSectionKey(source);
+    return draft.baseTimeline.pendingFutureImports.any(
+          (entry) => entry.section == sectionLabel,
+        ) ||
+        draft.baseTimeline.blocks.any((block) => block.section == sectionKey);
+  }
+
+  bool _hasRelevantBundleSource(
+    OnboardingCompletionBundle bundle,
+    RoutineImportReviewSource source,
+  ) {
+    final sectionLabel = _extractionService.sourceSectionLabel(source);
+    final sectionKey = _extractionService.timelineSectionKey(source);
+    final purposeKey = _extractionService.uploadedAssetPurposeKey(source);
+    return bundle.baseTimelineBlocks.any(
+          (block) => block.section == sectionKey,
+        ) ||
+        bundle.uploadedAssetReferences.any((entry) {
+          final sectionMatches = entry.section == sectionLabel;
+          final keyMatches =
+              purposeKey != null &&
+              (entry.uploadedAssetR2Key?.contains('/$purposeKey/') ?? false);
+          return sectionMatches || keyMatches;
+        });
   }
 
   String _currentUid() {
@@ -356,14 +510,27 @@ class _RoutineImportReviewScreenState
     return 'local-routine-import-review';
   }
 
+  bool _alreadyApplied(RoutineImportReviewDraft? review) {
+    return review?.blocksDuplicateApply ?? false;
+  }
+
+  bool _isUnplaced(RoutineImportCandidateBlock candidate) {
+    return candidate.isUnplaced;
+  }
+
   Future<void> _replaceCandidates(
     List<RoutineImportCandidateBlock> candidates,
   ) async {
     final review = _review;
     if (review == null) return;
+    final validation = _validationService.validateCandidates(
+      candidates: candidates,
+      existingRoutineItems: ref.read(routineNotifierProvider).items,
+    );
+    final nextCandidates = _candidatesWithValidation(candidates, validation);
     final next = review.copyWith(
-      candidateBlocks: candidates,
-      status: candidates.any((candidate) => candidate.needsManualReview)
+      candidateBlocks: nextCandidates,
+      status: nextCandidates.any((candidate) => candidate.needsManualReview)
           ? RoutineImportReviewStatus.needsReview
           : RoutineImportReviewStatus.draft,
       updatedAt: DateTime.now(),
@@ -381,27 +548,20 @@ class _RoutineImportReviewScreenState
     }
   }
 
-  Future<void> _shiftCandidate(RoutineImportCandidateBlock candidate) async {
+  Future<void> _applyCandidateTimelineEdit(
+    RoutineImportCandidateBlock candidate,
+  ) async {
     final review = _review;
-    if (review == null) return;
-    final duration = (candidate.endMinute - candidate.startMinute).clamp(
-      5,
-      24 * 60,
-    );
-    final nextStart = (candidate.startMinute + 15).clamp(0, 1439);
-    final nextEnd = (nextStart + duration).clamp(1, 1440);
+    if (review == null || _alreadyApplied(review)) return;
     await _replaceCandidates([
       for (final item in review.candidateBlocks)
-        if (item.id == candidate.id)
-          item.copyWith(startMinute: nextStart, endMinute: nextEnd)
-        else
-          item,
+        if (item.id == candidate.id) candidate else item,
     ]);
   }
 
   Future<void> _deleteCandidate(RoutineImportCandidateBlock candidate) async {
     final review = _review;
-    if (review == null) return;
+    if (review == null || _alreadyApplied(review)) return;
     _hadDeletedCandidate = true;
     _deletedCandidateIds.add(candidate.id);
     await _replaceCandidates(
@@ -411,66 +571,53 @@ class _RoutineImportReviewScreenState
     );
   }
 
-  Future<void> _toggleSelected(RoutineImportCandidateBlock candidate) async {
-    final review = _review;
-    if (review == null) return;
-    await _replaceCandidates([
-      for (final item in review.candidateBlocks)
-        if (item.id == candidate.id)
-          item.copyWith(selected: !item.selected)
-        else
-          item,
-    ]);
-  }
-
-  Future<void> _toggleFlexible(RoutineImportCandidateBlock candidate) async {
-    final review = _review;
-    if (review == null) return;
-    final isFlexible =
-        candidate.blockType == TimelineBlockDraft.flexibleTaskKey;
-    final restoredType = _defaultBlockTypeForSource(review.source);
-    final nextType = isFlexible
-        ? restoredType
-        : TimelineBlockDraft.flexibleTaskKey;
-    final nextCandidateType = nextType == TimelineBlockDraft.flexibleTaskKey
-        ? RoutineImportCandidateType.flexibleTask
-        : RoutineImportCandidateType.block;
-    await _replaceCandidates([
-      for (final item in review.candidateBlocks)
-        if (item.id == candidate.id)
-          item.copyWith(
-            blockType: nextType,
-            candidateType: nextCandidateType,
-            hardBlock: nextType == TimelineBlockDraft.hardBlockKey,
-          )
-        else
-          item,
-    ]);
-  }
-
   Future<void> _addCandidate() async {
     final review = _review;
-    if (review == null) return;
+    if (review == null || _alreadyApplied(review)) return;
     final now = DateTime.now().millisecondsSinceEpoch;
     final blockType = _defaultBlockTypeForSource(review.source);
     final candidate = RoutineImportCandidateBlock(
       id: 'added_${review.source.name}_$now',
-      title: 'Added review block',
+      title: _defaultTitleForSource(review.source),
       startMinute: 15 * 60,
       endMinute: 15 * 60 + 45,
-      repeatDays: const [1, 2, 3, 4, 5],
+      hasFixedTime: true,
+      repeatDays: [_activeDay],
       blockType: blockType,
       category: _categoryNameForReviewSource(review.source),
       hardBlock: blockType == TimelineBlockDraft.hardBlockKey,
       selected: true,
       candidateType: RoutineImportCandidateType.block,
-      confidenceLabel: 'low',
+      confidenceLabel: 'manual',
       extractionEngine: 'manualSeed',
       extractionVersion: 'phase2c',
-      needsManualReview: true,
       notes: 'Added during import review.',
     );
     await _replaceCandidates([...review.candidateBlocks, candidate]);
+  }
+
+  Future<void> _saveAction(RoutineImportValidationResult validation) async {
+    final review = _review;
+    if (review == null || _saving) return;
+    if (_alreadyApplied(review)) {
+      setState(() {
+        _errorMessage =
+            'This review was already applied. Reopen Base Timeline to edit the saved routine items.';
+      });
+      return;
+    }
+
+    final selectedCount = review.candidateBlocks
+        .where((candidate) => candidate.selected)
+        .length;
+    if (selectedCount == 0) {
+      final savedReview = review.copyWith(updatedAt: DateTime.now());
+      setState(() => _review = savedReview);
+      await _persistReview(savedReview);
+      return;
+    }
+
+    await _saveAcceptedReview(validation);
   }
 
   Future<void> _saveAcceptedReview(
@@ -507,27 +654,37 @@ class _RoutineImportReviewScreenState
         return;
       }
 
-      final selected = candidatesWithValidation
-          .where((candidate) => candidate.selected)
-          .toList(growable: false);
-      final now = DateTime.now();
-      final candidatesForConversion = [
-        for (var i = 0; i < selected.length; i++)
-          selected[i].copyWith(
-            id: 'import-${review.source.name}-${selected[i].id}-${now.microsecondsSinceEpoch}-$i',
-          ),
-      ];
       final routineItems = _conversionService.convertAcceptedCandidates(
-        candidates: candidatesForConversion,
+        reviewId: review.id,
+        candidates: candidatesWithValidation,
       );
+      if (routineItems.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _saving = false;
+          _errorMessage =
+              'Assign a valid time to selected candidates before saving.';
+        });
+        return;
+      }
+
       final routineController = ref.read(routineNotifierProvider.notifier);
+      final existingIds = ref
+          .read(routineNotifierProvider)
+          .items
+          .map((item) => item.id)
+          .toSet();
       final appliedRoutineItemIds = <String>[];
       for (final item in routineItems) {
+        if (existingIds.contains(item.id)) continue;
         final itemWithUser = item.copyWith(userId: review.uid);
         appliedRoutineItemIds.add(itemWithUser.id);
         await routineController.addItem(itemWithUser);
       }
 
+      final selected = candidatesWithValidation
+          .where((candidate) => candidate.selected)
+          .toList(growable: false);
       final acceptedCandidateIds = selected
           .map((candidate) => candidate.id)
           .toList(growable: false);
@@ -536,6 +693,7 @@ class _RoutineImportReviewScreenState
         for (final candidate in candidatesWithValidation)
           if (!candidate.selected) candidate.id,
       }.toList(growable: false);
+      final now = DateTime.now();
       final status = acceptedCandidateIds.isEmpty
           ? RoutineImportReviewStatus.rejected
           : _isPartialAcceptance(
@@ -565,7 +723,10 @@ class _RoutineImportReviewScreenState
       }
 
       if (!mounted) return;
-      widget.onBack();
+      setState(() {
+        _review = acceptedReview;
+        _saving = false;
+      });
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -644,17 +805,717 @@ class _RoutineImportReviewScreenState
     ref.read(mockOnboardingProvider.notifier).loadSeedData(nextDraft);
     await repository.saveDraft(nextDraft);
   }
+
+  Future<void> _openCandidateEditor(
+    RoutineImportCandidateBlock candidate,
+  ) async {
+    final review = _review;
+    if (review == null || _alreadyApplied(review)) return;
+
+    final titleController = TextEditingController(text: candidate.title);
+    final locationController = TextEditingController(
+      text: candidate.location ?? '',
+    );
+    final notesController = TextEditingController(text: candidate.notes ?? '');
+    final mealController = TextEditingController(
+      text: candidate.mealCategory ?? '',
+    );
+    final stepsController = TextEditingController(
+      text: candidate.steps.join(', '),
+    );
+    var startMinute = candidate.startMinute.clamp(0, 1430);
+    var endMinute = candidate.endMinute.clamp(startMinute + 10, 1440);
+    var repeatDays = candidate.repeatDays.toSet();
+    var blockType = candidate.blockType;
+    var candidateType = candidate.candidateType;
+    var category = candidate.category;
+    var selected = candidate.selected;
+    var needsManualReview = candidate.needsManualReview;
+    var hasFixedTime = candidate.hasFixedTime;
+
+    final updated = await showModalBottomSheet<RoutineImportCandidateBlock>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final bottom = MediaQuery.of(context).viewInsets.bottom;
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(12, 0, 12, bottom + 12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(26),
+                  child: Material(
+                    color: OptivusColors.routineBgTop,
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 22),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _SheetHeader(
+                            title: 'Candidate details',
+                            onClose: () => Navigator.of(context).pop(),
+                          ),
+                          const SizedBox(height: 14),
+                          _SheetSection(
+                            title: 'Main',
+                            children: [
+                              _SheetTextField(
+                                controller: titleController,
+                                label: 'Title',
+                              ),
+                              const SizedBox(height: 10),
+                              _SheetSwitchRow(
+                                label: selected ? 'Selected' : 'Skipped',
+                                value: selected,
+                                onChanged: (value) =>
+                                    setSheetState(() => selected = value),
+                              ),
+                            ],
+                          ),
+                          _SheetSection(
+                            title: 'Time & Days',
+                            children: [
+                              _SheetSwitchRow(
+                                label: hasFixedTime
+                                    ? 'Fixed time'
+                                    : 'Unplaced / flexible',
+                                value: hasFixedTime,
+                                onChanged: (value) =>
+                                    setSheetState(() => hasFixedTime = value),
+                              ),
+                              if (hasFixedTime) ...[
+                                const SizedBox(height: 8),
+                                _TimeSlider(
+                                  label: 'Start',
+                                  value: startMinute,
+                                  max: 1430,
+                                  onChanged: (value) => setSheetState(() {
+                                    startMinute = value;
+                                    if (endMinute < startMinute + 10) {
+                                      endMinute = (startMinute + 10).clamp(
+                                        10,
+                                        1440,
+                                      );
+                                    }
+                                  }),
+                                ),
+                                _TimeSlider(
+                                  label: 'End',
+                                  value: endMinute,
+                                  min: 10,
+                                  max: 1440,
+                                  onChanged: (value) => setSheetState(() {
+                                    endMinute = math.max(
+                                      value,
+                                      startMinute + 10,
+                                    );
+                                  }),
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: List.generate(7, (index) {
+                                  final day = index + 1;
+                                  return _SelectablePill(
+                                    label: TimelineUtils.getShortDayName(day),
+                                    selected: repeatDays.contains(day),
+                                    color: OptivusColors.routineAccent,
+                                    onTap: () => setSheetState(() {
+                                      if (repeatDays.contains(day)) {
+                                        repeatDays = {...repeatDays}
+                                          ..remove(day);
+                                      } else {
+                                        repeatDays = {...repeatDays, day};
+                                      }
+                                    }),
+                                  );
+                                }),
+                              ),
+                            ],
+                          ),
+                          _SheetSection(
+                            title: 'Category',
+                            children: [
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _blockTypeOptions
+                                    .map(
+                                      (option) => _SelectablePill(
+                                        label: _blockTypeLabel(option),
+                                        selected: blockType == option,
+                                        color: _blockTypeColor(option),
+                                        onTap: () => setSheetState(() {
+                                          blockType = option;
+                                          if (option ==
+                                              TimelineBlockDraft
+                                                  .flexibleTaskKey) {
+                                            candidateType =
+                                                RoutineImportCandidateType
+                                                    .flexibleTask;
+                                          }
+                                        }),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: RoutineImportCandidateType.values
+                                    .where(
+                                      (type) =>
+                                          type !=
+                                          RoutineImportCandidateType.unknown,
+                                    )
+                                    .map(
+                                      (type) => _SelectablePill(
+                                        label: _candidateTypeLabel(type),
+                                        selected: candidateType == type,
+                                        color: OptivusColors.aquaAccent,
+                                        onTap: () => setSheetState(
+                                          () => candidateType = type,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: _categoryOptions
+                                    .map(
+                                      (option) => _SelectablePill(
+                                        label: _categoryLabel(option),
+                                        selected: category == option,
+                                        color: OptivusColors.routineAccent,
+                                        onTap: () => setSheetState(
+                                          () => category = option,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
+                              const SizedBox(height: 10),
+                              _SheetTextField(
+                                controller: locationController,
+                                label: 'Location',
+                              ),
+                            ],
+                          ),
+                          _SheetSection(
+                            title: 'Notes / Steps',
+                            children: [
+                              _SheetTextField(
+                                controller: mealController,
+                                label: 'Meal category',
+                              ),
+                              const SizedBox(height: 10),
+                              _SheetTextField(
+                                controller: notesController,
+                                label: 'Notes',
+                                minLines: 3,
+                              ),
+                              const SizedBox(height: 10),
+                              _SheetTextField(
+                                controller: stepsController,
+                                label: 'Steps / checklist',
+                                minLines: 2,
+                              ),
+                            ],
+                          ),
+                          _SheetSection(
+                            title: 'Review Status',
+                            children: [
+                              _SheetSwitchRow(
+                                label: needsManualReview
+                                    ? 'Needs manual review'
+                                    : 'Reviewed manually',
+                                value: needsManualReview,
+                                onChanged: (value) => setSheetState(
+                                  () => needsManualReview = value,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  LiquidPill(
+                                    label: _confidenceLabel(candidate),
+                                    color: _confidenceColor(candidate),
+                                  ),
+                                  LiquidPill(
+                                    label: _sourceBadgeLabel(candidate),
+                                    color: OptivusColors.aquaAccent,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _RoutineButton(
+                                  label: 'Delete',
+                                  color: OptivusColors.danger,
+                                  onTap: () {
+                                    Navigator.of(context).pop();
+                                    _deleteCandidate(candidate);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _RoutineButton(
+                                  label: 'Save details',
+                                  color: OptivusColors.routineAccent,
+                                  onTap: () {
+                                    final nextBlockType = blockType;
+                                    final next = candidate.copyWith(
+                                      title: titleController.text.trim(),
+                                      startMinute: startMinute,
+                                      endMinute: endMinute,
+                                      hasFixedTime: hasFixedTime,
+                                      suggestedStartMinute: hasFixedTime
+                                          ? null
+                                          : startMinute,
+                                      suggestedEndMinute: hasFixedTime
+                                          ? null
+                                          : endMinute,
+                                      repeatDays: repeatDays.toList(
+                                        growable: false,
+                                      )..sort(),
+                                      blockType: nextBlockType,
+                                      candidateType: candidateType,
+                                      category: category,
+                                      hardBlock:
+                                          nextBlockType ==
+                                          TimelineBlockDraft.hardBlockKey,
+                                      selected: selected,
+                                      needsManualReview: needsManualReview,
+                                      confidenceLabel: needsManualReview
+                                          ? candidate.confidenceLabel
+                                          : 'manual',
+                                      location: _emptyToNull(
+                                        locationController.text,
+                                      ),
+                                      notes: _emptyToNull(notesController.text),
+                                      mealCategory: _emptyToNull(
+                                        mealController.text,
+                                      ),
+                                      steps: _parseSteps(stepsController.text),
+                                      clearSuggestedStartMinute: hasFixedTime,
+                                      clearSuggestedEndMinute: hasFixedTime,
+                                      clearLocation: locationController.text
+                                          .trim()
+                                          .isEmpty,
+                                      clearNotes: notesController.text
+                                          .trim()
+                                          .isEmpty,
+                                      clearMealCategory: mealController.text
+                                          .trim()
+                                          .isEmpty,
+                                    );
+                                    Navigator.of(context).pop(next);
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    titleController.dispose();
+    locationController.dispose();
+    notesController.dispose();
+    mealController.dispose();
+    stepsController.dispose();
+
+    if (updated != null) {
+      await _applyCandidateTimelineEdit(updated);
+    }
+  }
 }
 
-class _EvidenceCard extends StatelessWidget {
+class _VisualTimeline extends StatelessWidget {
+  final List<RoutineImportCandidateBlock> candidates;
+  final RoutineImportValidationResult validation;
+  final double pixelsPerMinute;
+  final ValueChanged<RoutineImportCandidateBlock> onOpen;
+  final void Function(RoutineImportCandidateBlock candidate, int deltaMinutes)
+  onMoveDelta;
+  final void Function(RoutineImportCandidateBlock candidate, int deltaMinutes)
+  onResizeStartDelta;
+  final void Function(RoutineImportCandidateBlock candidate, int deltaMinutes)
+  onResizeEndDelta;
+
+  const _VisualTimeline({
+    required this.candidates,
+    required this.validation,
+    required this.pixelsPerMinute,
+    required this.onOpen,
+    required this.onMoveDelta,
+    required this.onResizeStartDelta,
+    required this.onResizeEndDelta,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final height = 24 * 60 * pixelsPerMinute;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 480),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
+      ),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: SizedBox(
+          height: height,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                left: 52,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    border: Border(
+                      left: BorderSide(
+                        color: OptivusColors.routineAccent.withValues(
+                          alpha: 0.25,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              ...List.generate(25, (hour) {
+                final top = hour * 60 * pixelsPerMinute;
+                return Positioned(
+                  top: top,
+                  left: 0,
+                  right: 0,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 46,
+                        child: Text(
+                          TimelineUtils.formatMinute(hour * 60),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            color: OptivusColors.textMuted,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Container(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.58),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              if (candidates.isEmpty)
+                const Positioned(
+                  top: 220,
+                  left: 70,
+                  right: 20,
+                  child: Text(
+                    'No fixed-time candidates for this day.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ...candidates.map(
+                (candidate) => _DraggableTimelineBlock(
+                  candidate: candidate,
+                  messages: validation.messagesFor(candidate.id),
+                  hasBlockingIssue: validation.hasBlockingIssuesFor(
+                    candidate.id,
+                  ),
+                  pixelsPerMinute: pixelsPerMinute,
+                  onOpen: () => onOpen(candidate),
+                  onMoveDelta: (delta) => onMoveDelta(candidate, delta),
+                  onResizeStartDelta: (delta) =>
+                      onResizeStartDelta(candidate, delta),
+                  onResizeEndDelta: (delta) =>
+                      onResizeEndDelta(candidate, delta),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DraggableTimelineBlock extends StatefulWidget {
+  final RoutineImportCandidateBlock candidate;
+  final List<String> messages;
+  final bool hasBlockingIssue;
+  final double pixelsPerMinute;
+  final VoidCallback onOpen;
+  final ValueChanged<int> onMoveDelta;
+  final ValueChanged<int> onResizeStartDelta;
+  final ValueChanged<int> onResizeEndDelta;
+
+  const _DraggableTimelineBlock({
+    required this.candidate,
+    required this.messages,
+    required this.hasBlockingIssue,
+    required this.pixelsPerMinute,
+    required this.onOpen,
+    required this.onMoveDelta,
+    required this.onResizeStartDelta,
+    required this.onResizeEndDelta,
+  });
+
+  @override
+  State<_DraggableTimelineBlock> createState() =>
+      _DraggableTimelineBlockState();
+}
+
+class _DraggableTimelineBlockState extends State<_DraggableTimelineBlock> {
+  double _dragDelta = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final candidate = widget.candidate;
+    final top = candidate.startMinute * widget.pixelsPerMinute;
+    final duration = (candidate.endMinute - candidate.startMinute).clamp(
+      10,
+      1440,
+    );
+    final height = math.max(duration * widget.pixelsPerMinute, 64.0);
+    final color = _categoryColor(candidate.category);
+
+    return Positioned(
+      top: top,
+      left: 64,
+      right: 10,
+      height: height,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onOpen,
+              onVerticalDragStart: (_) => _dragDelta = 0,
+              onVerticalDragUpdate: (details) => _dragDelta += details.delta.dy,
+              onVerticalDragEnd: (_) => _finishDrag(widget.onMoveDelta),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+                decoration: BoxDecoration(
+                  color: color.withValues(
+                    alpha: candidate.selected ? 0.22 : 0.10,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: widget.hasBlockingIssue
+                        ? OptivusColors.danger.withValues(alpha: 0.55)
+                        : widget.messages.isNotEmpty
+                        ? OptivusColors.warning.withValues(alpha: 0.55)
+                        : color.withValues(alpha: 0.45),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.12),
+                      blurRadius: 14,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _categoryIcon(candidate.category),
+                          size: 16,
+                          color: color,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            candidate.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        if (widget.messages.isNotEmpty)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: widget.hasBlockingIssue
+                                  ? OptivusColors.danger
+                                  : OptivusColors.warning,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      TimelineUtils.formatTimeRange(
+                        candidate.startMinute,
+                        candidate.endMinute,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: OptivusColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 5,
+                      children: [
+                        LiquidPill(
+                          label: _confidenceLabel(candidate),
+                          color: _confidenceColor(candidate),
+                        ),
+                        if (candidate.needsManualReview)
+                          const LiquidPill(
+                            label: 'Needs review',
+                            color: OptivusColors.warning,
+                          ),
+                        LiquidPill(
+                          label: _sourceBadgeLabel(candidate),
+                          color: OptivusColors.aquaAccent,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 18,
+            right: 18,
+            height: 14,
+            child: _DragHandle(
+              onVerticalDragStart: () => _dragDelta = 0,
+              onVerticalDragUpdate: (delta) => _dragDelta += delta,
+              onVerticalDragEnd: () => _finishDrag(widget.onResizeStartDelta),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 18,
+            right: 18,
+            height: 14,
+            child: _DragHandle(
+              onVerticalDragStart: () => _dragDelta = 0,
+              onVerticalDragUpdate: (delta) => _dragDelta += delta,
+              onVerticalDragEnd: () => _finishDrag(widget.onResizeEndDelta),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _finishDrag(ValueChanged<int> callback) {
+    final delta = RoutineImportTimelineEditService.snappedDeltaMinutes(
+      verticalDelta: _dragDelta,
+      pixelsPerMinute: widget.pixelsPerMinute,
+      snapMinutes: 5,
+    );
+    _dragDelta = 0;
+    if (delta != 0) callback(delta);
+  }
+}
+
+class _DragHandle extends StatelessWidget {
+  final VoidCallback onVerticalDragStart;
+  final ValueChanged<double> onVerticalDragUpdate;
+  final VoidCallback onVerticalDragEnd;
+
+  const _DragHandle({
+    required this.onVerticalDragStart,
+    required this.onVerticalDragUpdate,
+    required this.onVerticalDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) => onVerticalDragStart(),
+      onVerticalDragUpdate: (details) => onVerticalDragUpdate(details.delta.dy),
+      onVerticalDragEnd: (_) => onVerticalDragEnd(),
+      child: Center(
+        child: Container(
+          width: 44,
+          height: 4,
+          decoration: BoxDecoration(
+            color: OptivusColors.textMuted.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(99),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SourceEvidenceCard extends StatelessWidget {
   final RoutineImportReviewDraft review;
 
-  const _EvidenceCard({required this.review});
+  const _SourceEvidenceCard({required this.review});
 
   @override
   Widget build(BuildContext context) {
     final hasEvidence =
-        review.uploadedAssetId != null || review.uploadedAssetR2Key != null;
+        review.uploadedAssetId != null || review.uploadedAssetStatus != null;
+    final sourceType = hasEvidence
+        ? review.warnings.contains(
+                RoutineImportExtractionService.noAiExtractionWarning,
+              )
+              ? 'From onboarding photo'
+              : 'From uploaded photo'
+        : 'Manual starter';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -669,7 +1530,9 @@ class _EvidenceCard extends StatelessWidget {
           Row(
             children: [
               Icon(
-                hasEvidence ? Icons.image_outlined : Icons.info_outline_rounded,
+                hasEvidence
+                    ? Icons.image_outlined
+                    : Icons.edit_calendar_rounded,
                 color: hasEvidence
                     ? OptivusColors.aquaAccent
                     : OptivusColors.textSecondary,
@@ -678,70 +1541,50 @@ class _EvidenceCard extends StatelessWidget {
               const SizedBox(width: 9),
               Expanded(
                 child: Text(
-                  hasEvidence
-                      ? 'Attached source evidence'
-                      : 'No uploaded source evidence attached',
+                  sourceType,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: FontWeight.w900,
                     color: OptivusColors.textPrimary,
                   ),
                 ),
               ),
+              LiquidPill(
+                label: _statusLabel(review.status),
+                color: _statusColor(review.status),
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          _EvidenceRow(
-            label: 'Pending import',
-            value: review.onboardingPendingImportId,
-          ),
-          _EvidenceRow(label: 'Asset ID', value: review.uploadedAssetId),
-          _EvidenceRow(label: 'R2 key', value: review.uploadedAssetR2Key),
-          _EvidenceRow(
-            label: 'Asset status',
-            value: review.uploadedAssetStatus,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EvidenceRow extends StatelessWidget {
-  final String label;
-  final String? value;
-
-  const _EvidenceRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 98,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.textSecondary,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              LiquidPill(
+                label: review.sourceLabel,
+                color: OptivusColors.routineAccent,
+                filled: true,
               ),
-            ),
+              if (review.uploadedAssetStatus != null)
+                LiquidPill(
+                  label: 'Asset ${review.uploadedAssetStatus}',
+                  color: OptivusColors.aquaAccent,
+                ),
+              if (review.uploadedAssetId != null)
+                LiquidPill(
+                  label: 'Photo attached',
+                  color: OptivusColors.success,
+                ),
+            ],
           ),
-          Expanded(
-            child: Text(
-              value == null || value!.trim().isEmpty ? 'Not attached' : value!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                height: 1.3,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.textPrimary,
-              ),
+          const SizedBox(height: 10),
+          const Text(
+            'AI extraction is not connected yet. Review manually before saving.',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.warning,
             ),
           ),
         ],
@@ -750,240 +1593,173 @@ class _EvidenceRow extends StatelessWidget {
   }
 }
 
-class _DayGroupHeader extends StatelessWidget {
-  final String label;
-
-  const _DayGroupHeader({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(2, 12, 2, 8),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w900,
-          color: OptivusColors.textSecondary,
-          letterSpacing: 0.4,
-        ),
-      ),
-    );
-  }
-}
-
-class _ImportBlockTile extends StatelessWidget {
+class _UnplacedCandidateChip extends StatelessWidget {
   final RoutineImportCandidateBlock candidate;
   final List<String> messages;
-  final bool hasBlockingIssue;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onToggleFlexible;
-  final VoidCallback onToggleSelected;
+  final VoidCallback onTap;
 
-  const _ImportBlockTile({
+  const _UnplacedCandidateChip({
     required this.candidate,
     required this.messages,
-    required this.hasBlockingIssue,
-    required this.onEdit,
-    required this.onDelete,
-    required this.onToggleFlexible,
-    required this.onToggleSelected,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isFlexible =
-        candidate.blockType == TimelineBlockDraft.flexibleTaskKey;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: candidate.selected
-            ? Colors.white.withValues(alpha: 0.56)
-            : Colors.white.withValues(alpha: 0.30),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: hasBlockingIssue
-              ? OptivusColors.danger.withValues(alpha: 0.48)
-              : messages.isNotEmpty
-              ? OptivusColors.warning.withValues(alpha: 0.45)
-              : Colors.white.withValues(alpha: 0.78),
+    final color = _categoryColor(candidate.category);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 120, maxWidth: 260),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.13),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: messages.isEmpty
+                ? color.withValues(alpha: 0.28)
+                : OptivusColors.warning.withValues(alpha: 0.48),
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  candidate.title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: candidate.selected
-                        ? OptivusColors.textPrimary
-                        : OptivusColors.textSecondary,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(_categoryIcon(candidate.category), size: 16, color: color),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    candidate.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      height: 1.2,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-              LiquidPill(
-                label: candidate.selected ? 'Selected' : 'Skipped',
-                color: candidate.selected
-                    ? OptivusColors.success
-                    : OptivusColors.textSecondary,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              LiquidPill(
-                label: isFlexible
-                    ? 'Flexible'
-                    : candidate.hardBlock
-                    ? 'Hard block'
-                    : 'Soft block',
-                color: isFlexible
-                    ? OptivusColors.blockFlex
-                    : candidate.hardBlock
-                    ? OptivusColors.blockHard
-                    : OptivusColors.blockSoft,
-              ),
-              if (candidate.needsManualReview)
-                LiquidPill(label: 'Needs review', color: OptivusColors.warning),
-              if (candidate.confidenceLabel != null)
-                LiquidPill(
-                  label: '${candidate.confidenceLabel} confidence',
-                  color: candidate.confidenceLabel == 'low'
-                      ? OptivusColors.warning
-                      : OptivusColors.routineAccent,
-                ),
-              if (messages.isNotEmpty)
-                LiquidPill(
-                  label: hasBlockingIssue ? 'Fix issue' : 'Warnings',
-                  color: hasBlockingIssue
-                      ? OptivusColors.danger
-                      : OptivusColors.warning,
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            TimelineUtils.formatTimeRange(
-              candidate.startMinute,
-              candidate.endMinute,
+              ],
             ),
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          if (candidate.location != null && candidate.location!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              candidate.location!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.textMuted,
-              ),
-            ),
-          ],
-          if (candidate.steps.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              candidate.steps.join(' • '),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                height: 1.3,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.textMuted,
-              ),
-            ),
-          ],
-          if (candidate.notes != null && candidate.notes!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              candidate.notes!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                height: 1.3,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-          ],
-          if (messages.isNotEmpty) ...[
             const SizedBox(height: 8),
-            ...messages.map(
-              (message) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  message,
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.3,
-                    fontWeight: FontWeight.w800,
-                    color: hasBlockingIssue
-                        ? OptivusColors.danger
-                        : OptivusColors.warning,
-                  ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                LiquidPill(
+                  label: _candidateTypeLabel(candidate.candidateType),
+                  color: OptivusColors.blockFlex,
                 ),
-              ),
+                if (messages.isNotEmpty)
+                  const LiquidPill(
+                    label: 'Warning',
+                    color: OptivusColors.warning,
+                  ),
+              ],
             ),
           ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _TextButton(
-                label: 'Edit +15m',
-                color: OptivusColors.routineAccent,
-                onTap: onEdit,
-              ),
-              _TextButton(
-                label: isFlexible ? 'Restore type' : 'Mark flexible',
-                color: OptivusColors.blockFlex,
-                onTap: onToggleFlexible,
-              ),
-              _TextButton(
-                label: candidate.selected ? 'Unselect' : 'Select',
-                color: candidate.selected
-                    ? OptivusColors.textSecondary
-                    : OptivusColors.success,
-                onTap: onToggleSelected,
-              ),
-              _TextButton(
-                label: 'Delete',
-                color: OptivusColors.danger,
-                onTap: onDelete,
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _TextButton extends StatelessWidget {
+class _HeaderSaveButton extends StatelessWidget {
+  final bool enabled;
+  final bool saving;
+  final bool blocked;
+  final VoidCallback onTap;
+
+  const _HeaderSaveButton({
+    required this.enabled,
+    required this.saving,
+    required this.blocked,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = blocked ? OptivusColors.warning : OptivusColors.routineAccent;
+    return Opacity(
+      opacity: enabled ? 1 : 0.52,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.48),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+          ),
+          child: Icon(
+            saving
+                ? Icons.more_horiz_rounded
+                : blocked
+                ? Icons.error_outline_rounded
+                : Icons.check_rounded,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DayChip extends StatelessWidget {
   final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DayChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 54,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected
+              ? OptivusColors.routineAccent
+              : Colors.white.withValues(alpha: 0.36),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? OptivusColors.routineAccent
+                : Colors.white.withValues(alpha: 0.72),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: selected ? Colors.white : OptivusColors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassTextButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
   final Color color;
   final VoidCallback onTap;
 
-  const _TextButton({
+  const _GlassTextButton({
     required this.label,
+    required this.icon,
     required this.color,
     required this.onTap,
   });
@@ -993,18 +1769,25 @@ class _TextButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1028,22 +1811,247 @@ class _RoutineButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Opacity(
-        opacity: enabled ? 1 : 0.62,
+        opacity: enabled ? 1 : 0.56,
         child: Container(
           margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.symmetric(vertical: 15),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w900,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetHeader extends StatelessWidget {
+  final String title;
+  final VoidCallback onClose;
+
+  const _SheetHeader({required this.title, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.textPrimary,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.close_rounded),
+          color: OptivusColors.textSecondary,
+          onPressed: onClose,
+        ),
+      ],
+    );
+  }
+}
+
+class _SheetSection extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _SheetSection({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.38),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            title.toUpperCase(),
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.1,
+              color: OptivusColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _SheetTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final int minLines;
+
+  const _SheetTextField({
+    required this.controller,
+    required this.label,
+    this.minLines = 1,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      minLines: minLines,
+      maxLines: minLines == 1 ? 1 : 5,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.45),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.72)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.72)),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetSwitchRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SheetSwitchRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile.adaptive(
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w900,
+          color: OptivusColors.textPrimary,
+        ),
+      ),
+      value: value,
+      activeThumbColor: OptivusColors.routineAccent,
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _TimeSlider extends StatelessWidget {
+  final String label;
+  final int value;
+  final int min;
+  final int max;
+  final ValueChanged<int> onChanged;
+
+  const _TimeSlider({
+    required this.label,
+    required this.value,
+    this.min = 0,
+    required this.max,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final safeValue = value.clamp(min, max).toInt();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+            ),
+            Text(
+              TimelineUtils.formatMinute(safeValue),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        Slider(
+          min: min.toDouble(),
+          max: max.toDouble(),
+          divisions: ((max - min) / 5).round(),
+          value: safeValue.toDouble(),
+          activeColor: OptivusColors.routineAccent,
+          onChanged: (next) => onChanged((next / 5).round() * 5),
+        ),
+      ],
+    );
+  }
+}
+
+class _SelectablePill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SelectablePill({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? color : color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.28)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: selected ? Colors.white : color,
           ),
         ),
       ),
@@ -1066,41 +2074,6 @@ String _sourceLabel(RoutineImportSource source) {
     RoutineImportSource.work => 'Work',
     RoutineImportSource.eating => 'Eating',
     RoutineImportSource.skinCare => 'Skin Care',
-  };
-}
-
-Map<String, List<RoutineImportCandidateBlock>> _groupCandidatesByDay(
-  List<RoutineImportCandidateBlock> candidates,
-) {
-  final grouped = <String, List<RoutineImportCandidateBlock>>{};
-  for (final candidate in candidates) {
-    final days = candidate.repeatDays.toSet();
-    if (days.length == 7) {
-      grouped.putIfAbsent('Every day', () => []).add(candidate);
-      continue;
-    }
-    if (days.isEmpty) {
-      grouped.putIfAbsent('No repeat days', () => []).add(candidate);
-      continue;
-    }
-    final sortedDays = days.toList(growable: false)..sort();
-    for (final day in sortedDays) {
-      grouped.putIfAbsent(_dayName(day), () => []).add(candidate);
-    }
-  }
-  return grouped;
-}
-
-String _dayName(int day) {
-  return switch (day) {
-    1 => 'Monday',
-    2 => 'Tuesday',
-    3 => 'Wednesday',
-    4 => 'Thursday',
-    5 => 'Friday',
-    6 => 'Saturday',
-    7 => 'Sunday',
-    _ => 'No repeat days',
   };
 }
 
@@ -1131,6 +2104,15 @@ String _defaultBlockTypeForSource(RoutineImportReviewSource source) {
       : TimelineBlockDraft.softBlockKey;
 }
 
+String _defaultTitleForSource(RoutineImportReviewSource source) {
+  return switch (source) {
+    RoutineImportReviewSource.classes => 'Class block',
+    RoutineImportReviewSource.work => 'Work block',
+    RoutineImportReviewSource.eating => 'Meal window',
+    RoutineImportReviewSource.skinCare => 'Skin care routine',
+  };
+}
+
 String _categoryNameForReviewSource(RoutineImportReviewSource source) {
   return switch (source) {
     RoutineImportReviewSource.classes => RoutineCategory.classBlock.name,
@@ -1138,4 +2120,125 @@ String _categoryNameForReviewSource(RoutineImportReviewSource source) {
     RoutineImportReviewSource.eating => RoutineCategory.eating.name,
     RoutineImportReviewSource.skinCare => RoutineCategory.skinCare.name,
   };
+}
+
+const _blockTypeOptions = [
+  TimelineBlockDraft.hardBlockKey,
+  TimelineBlockDraft.softBlockKey,
+  TimelineBlockDraft.flexibleTaskKey,
+];
+
+const _categoryOptions = [
+  'classBlock',
+  'job',
+  'eating',
+  'skinCare',
+  'fixed',
+  'habit',
+  'health',
+];
+
+String _blockTypeLabel(String blockType) {
+  return switch (blockType) {
+    TimelineBlockDraft.hardBlockKey || 'hardBlock' => 'Hard',
+    TimelineBlockDraft.flexibleTaskKey || 'flexibleTask' => 'Flexible',
+    _ => 'Soft',
+  };
+}
+
+Color _blockTypeColor(String blockType) {
+  return switch (blockType) {
+    TimelineBlockDraft.hardBlockKey || 'hardBlock' => OptivusColors.blockHard,
+    TimelineBlockDraft.flexibleTaskKey ||
+    'flexibleTask' => OptivusColors.blockFlex,
+    _ => OptivusColors.blockSoft,
+  };
+}
+
+String _candidateTypeLabel(RoutineImportCandidateType type) {
+  return switch (type) {
+    RoutineImportCandidateType.block => 'Block',
+    RoutineImportCandidateType.flexibleTask => 'Flexible task',
+    RoutineImportCandidateType.checklistStep => 'Checklist step',
+    RoutineImportCandidateType.note => 'Note',
+    RoutineImportCandidateType.unknown => 'Unknown',
+  };
+}
+
+String _categoryLabel(String category) {
+  return switch (category) {
+    'classBlock' || 'class_block' || 'classes' => 'Classes',
+    'job' || 'job_work_business' || 'work' => 'Work',
+    'eating' => 'Eating',
+    'skinCare' || 'skin_care' => 'Skin Care',
+    'habit' => 'Habit',
+    'health' => 'Health',
+    _ => 'Fixed',
+  };
+}
+
+Color _categoryColor(String category) {
+  return switch (category) {
+    'classBlock' || 'class_block' || 'classes' => OptivusColors.aquaAccent,
+    'job' || 'job_work_business' || 'work' => OptivusColors.brandAccent,
+    'eating' => OptivusColors.warning,
+    'skinCare' || 'skin_care' => const Color(0xFFFF88C9),
+    'habit' => OptivusColors.blockFlex,
+    'health' => OptivusColors.success,
+    _ => OptivusColors.routineAccent,
+  };
+}
+
+IconData _categoryIcon(String category) {
+  return switch (category) {
+    'classBlock' || 'class_block' || 'classes' => Icons.school_rounded,
+    'job' || 'job_work_business' || 'work' => Icons.work_rounded,
+    'eating' => Icons.restaurant_rounded,
+    'skinCare' || 'skin_care' => Icons.face_retouching_natural_rounded,
+    'habit' => Icons.task_alt_rounded,
+    'health' => Icons.favorite_rounded,
+    _ => Icons.schedule_rounded,
+  };
+}
+
+String _confidenceLabel(RoutineImportCandidateBlock candidate) {
+  return switch (candidate.confidenceLabel) {
+    'high' => 'High',
+    'medium' => 'Medium',
+    'low' => 'Low',
+    'manual' => 'Manual',
+    _ => candidate.extractionEngine == 'manualSeed' ? 'Manual' : 'Medium',
+  };
+}
+
+Color _confidenceColor(RoutineImportCandidateBlock candidate) {
+  return switch (candidate.confidenceLabel) {
+    'high' => OptivusColors.success,
+    'medium' => OptivusColors.routineAccent,
+    'low' => OptivusColors.warning,
+    _ => OptivusColors.textSecondary,
+  };
+}
+
+String _sourceBadgeLabel(RoutineImportCandidateBlock candidate) {
+  if (candidate.extractionEngine.toLowerCase().contains('ai')) {
+    return 'Future AI';
+  }
+  if (candidate.sourceAssetId != null || candidate.sourceR2Key != null) {
+    return 'Photo';
+  }
+  return 'Manual';
+}
+
+String? _emptyToNull(String value) {
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+List<String> _parseSteps(String value) {
+  return value
+      .split(RegExp(r'[\n,]+'))
+      .map((step) => step.trim())
+      .where((step) => step.isNotEmpty)
+      .toList(growable: false);
 }

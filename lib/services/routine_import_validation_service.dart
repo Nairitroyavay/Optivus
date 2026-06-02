@@ -58,8 +58,9 @@ class RoutineImportValidationService {
     final duplicateIds = _duplicates(candidates.map((item) => item.id));
     final duplicateSignatures = _duplicates(
       candidates.map(
-        (item) =>
-            '${item.title.trim().toLowerCase()}|${item.startMinute}|${item.endMinute}',
+        (item) => item.hasFixedTime
+            ? '${item.title.trim().toLowerCase()}|${item.startMinute}|${item.endMinute}'
+            : '${item.title.trim().toLowerCase()}|${item.candidateType.name}|unplaced',
       ),
     );
 
@@ -86,24 +87,47 @@ class RoutineImportValidationService {
     final warnings = <String>[];
     final title = candidate.title.trim();
 
+    final validatesAsTimed =
+        candidate.hasFixedTime ||
+        candidate.candidateType == RoutineImportCandidateType.block;
+    final canStayUnplaced =
+        !candidate.hasFixedTime &&
+        (candidate.candidateType == RoutineImportCandidateType.flexibleTask ||
+            candidate.candidateType ==
+                RoutineImportCandidateType.checklistStep ||
+            candidate.candidateType == RoutineImportCandidateType.note);
+
     if (title.isEmpty) issues.add('Title is required.');
-    if (candidate.startMinute < 0 || candidate.startMinute >= 24 * 60) {
-      issues.add('Start time is invalid.');
-    }
-    if (candidate.endMinute <= 0 || candidate.endMinute > 24 * 60) {
-      issues.add('End time is invalid.');
-    }
-    if (candidate.startMinute >= candidate.endMinute) {
-      issues.add('End time must be after start time.');
-    }
-    if (candidate.repeatDays.isEmpty) {
-      issues.add('Choose at least one repeat day.');
+    if (validatesAsTimed) {
+      if (candidate.startMinute < 0 || candidate.startMinute >= 24 * 60) {
+        issues.add('Start time is invalid.');
+      }
+      if (candidate.endMinute <= 0 || candidate.endMinute > 24 * 60) {
+        issues.add('End time is invalid.');
+      }
+      if (candidate.startMinute >= candidate.endMinute) {
+        issues.add('End time must be after start time.');
+      }
+      if (candidate.repeatDays.isEmpty) {
+        issues.add('Choose at least one repeat day.');
+      }
+    } else if (canStayUnplaced) {
+      warnings.add('Flexible task has no fixed time.');
+      if (candidate.repeatDays.isEmpty) {
+        warnings.add('No repeat day selected.');
+      }
+      if (candidate.selected) {
+        issues.add('Assign a time before saving to Base Timeline.');
+      }
+    } else {
+      issues.add('Candidate time placement is unknown.');
     }
     if (duplicateIds.contains(candidate.id)) {
       issues.add('Duplicate candidate id.');
     }
-    final signature =
-        '${title.toLowerCase()}|${candidate.startMinute}|${candidate.endMinute}';
+    final signature = candidate.hasFixedTime
+        ? '${title.toLowerCase()}|${candidate.startMinute}|${candidate.endMinute}'
+        : '${title.toLowerCase()}|${candidate.candidateType.name}|unplaced';
     if (title.isNotEmpty && duplicateSignatures.contains(signature)) {
       warnings.add('Possible duplicate title/time candidate.');
     }
@@ -116,7 +140,8 @@ class RoutineImportValidationService {
     if (candidate.needsManualReview) {
       warnings.add('Needs manual review.');
     }
-    if (_overlapsExisting(candidate, existingRoutineItems)) {
+    if (validatesAsTimed &&
+        _overlapsExisting(candidate, existingRoutineItems)) {
       warnings.add('Overlaps an existing routine item.');
     }
 

@@ -8,6 +8,7 @@ import 'package:optivus/repositories/firestore_paths.dart';
 
 abstract class OnboardingRepository {
   Future<OnboardingDraft?> fetchDraft(String uid);
+  Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid);
   Future<void> saveDraft(OnboardingDraft draft);
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle);
   Future<void> completeOnboarding({
@@ -23,6 +24,11 @@ class FakeOnboardingRepository implements OnboardingRepository {
   @override
   Future<OnboardingDraft?> fetchDraft(String uid) async {
     return _drafts[uid];
+  }
+
+  @override
+  Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid) async {
+    return _bundles[uid];
   }
 
   @override
@@ -62,6 +68,15 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
         .get();
     final data = doc.data();
     return data == null ? null : OnboardingDraft.fromMap(data);
+  }
+
+  @override
+  Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid) async {
+    final doc = await _firestore
+        .doc(FirestoreUserPaths.onboardingCompletionBundle(uid))
+        .get();
+    final data = doc.data();
+    return data == null ? null : OnboardingCompletionBundle.fromMap(data);
   }
 
   @override

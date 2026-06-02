@@ -1,4 +1,5 @@
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
 
@@ -6,7 +7,7 @@ class RoutineImportExtractionService {
   const RoutineImportExtractionService();
 
   static const String noAiExtractionWarning =
-      'Photo is attached, but AI extraction is not connected yet. Review and edit before saving.';
+      'Photo is attached from onboarding. AI extraction is not connected yet. Review manually before saving.';
 
   RoutineImportReviewDraft buildReviewDraft({
     required String uid,
@@ -87,6 +88,68 @@ class RoutineImportExtractionService {
     );
   }
 
+  RoutineImportReviewDraft buildReviewDraftFromCompletionBundle({
+    required String uid,
+    required RoutineImportReviewSource source,
+    required OnboardingCompletionBundle bundle,
+  }) {
+    final now = DateTime.now();
+    final sourceLabel = sourceSectionLabel(source);
+    final sectionKey = timelineSectionKey(source);
+    final assetReference = _assetReferenceForSource(bundle, source);
+    final candidates = bundle.baseTimelineBlocks
+        .where((block) => block.section == sectionKey)
+        .map(
+          (block) => _candidateFromTimelineBlock(
+            block,
+            source: source,
+            idPrefix: 'bundle',
+            needsManualReview: true,
+            sourceAssetId: assetReference?.uploadedAssetId,
+            sourceR2Key: assetReference?.uploadedAssetR2Key,
+            confidenceLabel: 'low',
+            notes:
+                'Attached from completed onboarding. Confirm details manually before saving.',
+          ),
+        )
+        .toList(growable: false);
+    final warnings = <String>[];
+    if (_hasUploadedAssetReference(assetReference)) {
+      warnings.add(noAiExtractionWarning);
+    }
+
+    final candidateBlocks = candidates.isNotEmpty
+        ? candidates
+        : _hasUploadedAssetReference(assetReference)
+        ? _photoOnlyCandidates(
+            source,
+            _pendingImportFromBundleAsset(source, assetReference!),
+          )
+        : [_manualStarterCandidate(source)];
+
+    if (!_hasUploadedAssetReference(assetReference) && candidates.isEmpty) {
+      warnings.add(
+        'No completed onboarding source was found for $sourceLabel. Add or edit details manually before saving.',
+      );
+    }
+
+    return RoutineImportReviewDraft(
+      id: reviewIdForSource(source),
+      uid: uid,
+      source: source,
+      status: RoutineImportReviewStatus.needsReview,
+      sourceLabel: sourceLabel,
+      onboardingPendingImportId: assetReference?.id,
+      uploadedAssetId: assetReference?.uploadedAssetId,
+      uploadedAssetR2Key: assetReference?.uploadedAssetR2Key,
+      uploadedAssetStatus: assetReference?.uploadedAssetStatus,
+      candidateBlocks: candidateBlocks,
+      warnings: warnings,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
   String reviewIdForSource(RoutineImportReviewSource source) {
     return 'onboarding_${source.name}_import_review';
   }
@@ -139,11 +202,60 @@ class RoutineImportExtractionService {
     return matches.last;
   }
 
-  bool _hasUploadedAssetReference(PendingFutureImportDraft? entry) {
-    return entry != null &&
-        ((entry.uploadedAssetId?.trim().isNotEmpty ?? false) ||
-            (entry.uploadedAssetR2Key?.trim().isNotEmpty ?? false) ||
-            (entry.uploadedAssetStatus?.trim().isNotEmpty ?? false));
+  bool _hasUploadedAssetReference(Object? entry) {
+    if (entry is PendingFutureImportDraft) {
+      return entry.uploadedAssetId?.trim().isNotEmpty == true ||
+          entry.uploadedAssetR2Key?.trim().isNotEmpty == true ||
+          entry.uploadedAssetStatus?.trim().isNotEmpty == true;
+    }
+    if (entry is OnboardingUploadedAssetReference) {
+      return entry.uploadedAssetId?.trim().isNotEmpty == true ||
+          entry.uploadedAssetR2Key?.trim().isNotEmpty == true ||
+          entry.uploadedAssetStatus?.trim().isNotEmpty == true;
+    }
+    return false;
+  }
+
+  OnboardingUploadedAssetReference? _assetReferenceForSource(
+    OnboardingCompletionBundle bundle,
+    RoutineImportReviewSource source,
+  ) {
+    final sourceLabel = sourceSectionLabel(source);
+    final purposeKey = uploadedAssetPurposeKey(source);
+    final matches = bundle.uploadedAssetReferences
+        .where((entry) {
+          final sectionMatches = entry.section == sourceLabel;
+          final keyMatches =
+              purposeKey != null &&
+              (entry.uploadedAssetR2Key?.contains('/$purposeKey/') ?? false);
+          return sectionMatches || keyMatches;
+        })
+        .toList(growable: false);
+    if (matches.isEmpty) return null;
+
+    final withAsset = matches.reversed.where(_hasUploadedAssetReference);
+    if (withAsset.isNotEmpty) return withAsset.first;
+    return matches.last;
+  }
+
+  PendingFutureImportDraft _pendingImportFromBundleAsset(
+    RoutineImportReviewSource source,
+    OnboardingUploadedAssetReference assetReference,
+  ) {
+    return PendingFutureImportDraft(
+      id: assetReference.id.trim().isEmpty
+          ? '${source.name}_completion_bundle_photo'
+          : assetReference.id,
+      section: sourceSectionLabel(source),
+      mode: assetReference.mode.trim().isEmpty
+          ? 'Photo Upload'
+          : assetReference.mode,
+      createdAt: assetReference.createdAt,
+      updatedAt: assetReference.updatedAt,
+      uploadedAssetId: assetReference.uploadedAssetId,
+      uploadedAssetR2Key: assetReference.uploadedAssetR2Key,
+      uploadedAssetStatus: assetReference.uploadedAssetStatus,
+    );
   }
 
   RoutineImportCandidateBlock _candidateFromTimelineBlock(

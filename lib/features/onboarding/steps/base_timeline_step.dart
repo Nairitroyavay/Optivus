@@ -14,6 +14,18 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/state/upload_state.dart';
 
+UploadedAssetPurpose? onboardingUploadPurposeForBaseTimelineSection(
+  String section,
+) {
+  return switch (section) {
+    'Classes' => UploadedAssetPurpose.classTimetable,
+    'Job / Work / Business' => UploadedAssetPurpose.workSchedule,
+    'Eating' => UploadedAssetPurpose.eatingMenu,
+    'Skin Care' => UploadedAssetPurpose.skinCare,
+    _ => null,
+  };
+}
+
 class BaseTimelineStep extends ConsumerStatefulWidget {
   const BaseTimelineStep({super.key});
 
@@ -1090,12 +1102,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   UploadedAssetPurpose? _uploadPurposeForSection(String section) {
-    return switch (section) {
-      'Classes' => UploadedAssetPurpose.classTimetable,
-      'Eating' => UploadedAssetPurpose.eatingMenu,
-      'Skin Care' => UploadedAssetPurpose.skinCare,
-      _ => null,
-    };
+    return onboardingUploadPurposeForBaseTimelineSection(section);
   }
 
   String _photoUploadStatusText({
