@@ -31,6 +31,14 @@ class FirestoreUserPaths {
     return 'users/$uid/onboarding/completionBundle';
   }
 
+  static String uploadedAsset(String uid, String assetId) {
+    return 'users/$uid/uploads/$assetId';
+  }
+
+  static String uploadedAssets(String uid) {
+    return 'users/$uid/uploads';
+  }
+
   static String onboardingSetupVersion(String uid, int version) {
     return 'users/$uid/onboarding/setupVersions/$version';
   }

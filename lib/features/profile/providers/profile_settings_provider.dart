@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/upload_config.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
@@ -150,7 +151,7 @@ class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
     this._ref,
     this._profileRepository,
     this._appPreferencesRepository,
-  ) : super(ProfileSettingsState.defaults());
+  ) : super(_profileSettingsDefaults());
 
   String get _currentUid => _ref.read(mockUserProfileProvider).uid;
 
@@ -163,7 +164,7 @@ class ProfileSettingsNotifier extends StateNotifier<ProfileSettingsState> {
   }
 
   void resetForSignedOut() {
-    state = ProfileSettingsState.defaults();
+    state = _profileSettingsDefaults();
   }
 
   Future<void> updateProfile(UserProfileSettings profile) async {
@@ -341,7 +342,10 @@ String _permissionPreviewResult(ProfilePermissionType type) {
 
 ProfileConnectionStatus _servicePreviewStatus(ConnectedServiceType type) {
   return switch (type) {
-    ConnectedServiceType.cloudflareR2 => ProfileConnectionStatus.notConfigured,
+    ConnectedServiceType.cloudflareR2 =>
+      OptivusUploadConfig.useR2 && OptivusUploadConfig.hasWorkerUrl
+          ? ProfileConnectionStatus.connected
+          : ProfileConnectionStatus.notConfigured,
     ConnectedServiceType.mapbox => ProfileConnectionStatus.notConfigured,
     ConnectedServiceType.cloudflareWorkers =>
       ProfileConnectionStatus.notConfigured,
@@ -353,7 +357,10 @@ ProfileConnectionStatus _servicePreviewStatus(ConnectedServiceType type) {
 
 String _servicePreviewResult(ConnectedServiceType type) {
   return switch (type) {
-    ConnectedServiceType.cloudflareR2 => 'R2 upload config not added yet',
+    ConnectedServiceType.cloudflareR2 =>
+      OptivusUploadConfig.useR2 && OptivusUploadConfig.hasWorkerUrl
+          ? 'R2 upload worker configured'
+          : 'R2 upload mode is not configured',
     ConnectedServiceType.mapbox =>
       'Mapbox token/style config not connected yet',
     ConnectedServiceType.cloudflareWorkers =>
@@ -362,4 +369,20 @@ String _servicePreviewResult(ConnectedServiceType type) {
     ConnectedServiceType.androidUsageAccess =>
       'Android usage access check pending',
   };
+}
+
+ProfileSettingsState _profileSettingsDefaults() {
+  final defaults = ProfileSettingsState.defaults();
+  return defaults.copyWith(
+    services: [
+      for (final service in defaults.services)
+        if (service.type == ConnectedServiceType.cloudflareR2)
+          service.copyWith(
+            status: _servicePreviewStatus(service.type),
+            lastChecked: _servicePreviewResult(service.type),
+          )
+        else
+          service,
+    ],
+  );
 }

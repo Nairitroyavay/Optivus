@@ -46,8 +46,7 @@ class AuthState {
   bool get isLoggedIn => user != null;
   bool get isLoading => status == AuthFlowStatus.loading;
   bool get isSignedOut => status == AuthFlowStatus.signedOut;
-  bool get emailUnverified =>
-      status == AuthFlowStatus.signedInEmailUnverified;
+  bool get emailUnverified => status == AuthFlowStatus.signedInEmailUnverified;
   bool get onboardingIncomplete =>
       status == AuthFlowStatus.signedInOnboardingIncomplete;
   bool get onboardingComplete =>
@@ -188,7 +187,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
-          errorMessage: 'Email not verified yet.',
+          errorMessage:
+              'We could not confirm it yet. Tap the link in your email, then try again.',
         );
         throw Exception('Email not verified yet.');
       }
@@ -219,15 +219,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> markOnboardingComplete(AuthUser user) async {
-    final profile = _ref.read(mockUserProfileProvider).copyWith(
-      uid: user.uid,
-      email: user.email ?? _ref.read(mockUserProfileProvider).email,
-      displayName:
-          user.displayName ?? _ref.read(mockUserProfileProvider).displayName,
-      onboardingCompleted: true,
-      onboardingStep: OnboardingDraft.lastStepIndex,
-      updatedAt: DateTime.now(),
-    );
+    final profile = _ref
+        .read(mockUserProfileProvider)
+        .copyWith(
+          uid: user.uid,
+          email: user.email ?? _ref.read(mockUserProfileProvider).email,
+          displayName:
+              user.displayName ??
+              _ref.read(mockUserProfileProvider).displayName,
+          onboardingCompleted: true,
+          onboardingStep: OnboardingDraft.lastStepIndex,
+          updatedAt: DateTime.now(),
+        );
     _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
     if (OptivusBackendConfig.useFirebase && !_needsEmailVerification(user)) {
       await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
@@ -240,12 +243,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> markOnboardingIncomplete(AuthUser user) async {
-    final profile = _ref.read(mockUserProfileProvider).copyWith(
-      uid: user.uid,
-      onboardingCompleted: false,
-      onboardingStep: 0,
-      updatedAt: DateTime.now(),
-    );
+    final profile = _ref
+        .read(mockUserProfileProvider)
+        .copyWith(
+          uid: user.uid,
+          onboardingCompleted: false,
+          onboardingStep: 0,
+          updatedAt: DateTime.now(),
+        );
     _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
     if (OptivusBackendConfig.useFirebase && !_needsEmailVerification(user)) {
       await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
@@ -326,7 +331,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final now = DateTime.now();
     final profileRepository = _ref.read(profileRepositoryProvider);
     final regionRepository = _ref.read(regionSettingsRepositoryProvider);
-    final appPreferencesRepository = _ref.read(appPreferencesRepositoryProvider);
+    final appPreferencesRepository = _ref.read(
+      appPreferencesRepositoryProvider,
+    );
 
     var profile = await profileRepository.fetchUserProfile(user.uid);
     final createdProfile = profile == null;
@@ -382,9 +389,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
     if (profile.onboardingCompleted) {
-      _ref.read(mockOnboardingProvider.notifier).completeOnboarding(
-        uid: user.uid,
-      );
+      _ref
+          .read(mockOnboardingProvider.notifier)
+          .completeOnboarding(uid: user.uid);
     } else {
       _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
     }

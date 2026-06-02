@@ -52,6 +52,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
   Future<void>? _authOperation;
   bool _showRules = false; // shows rules panel once user starts typing password
   String? _errorMsg;
+  String? _successMsg;
+  String? _accountExistsEmail;
+  bool _resetLoading = false;
   // final AuthRepository _authRepository = AuthRepository(AuthService());
 
   // Animation for rule panel sliding in
@@ -136,6 +139,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
 
     setState(() {
       _errorMsg = null;
+      _successMsg = null;
+      _accountExistsEmail = null;
       _authOperation = authOperation;
     });
 
@@ -147,6 +152,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
     } catch (error) {
       if (!mounted) return;
       setState(() {
+        _accountExistsEmail = isEmailAlreadyInUseError(error)
+            ? _emailCtrl.text.trim()
+            : null;
         _errorMsg = friendlyAuthError(error);
       });
     } finally {
@@ -154,6 +162,43 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
         setState(() => _authOperation = null);
       }
     }
+  }
+
+  Future<void> _sendResetForExistingAccount() async {
+    if (_resetLoading) return;
+    final email = (_accountExistsEmail ?? _emailCtrl.text).trim();
+    if (email.isEmpty) {
+      setState(() => _errorMsg = 'Enter your email to reset your password.');
+      return;
+    }
+
+    setState(() {
+      _resetLoading = true;
+      _successMsg = null;
+    });
+
+    try {
+      await ref.read(authProvider.notifier).sendPasswordResetEmail(email);
+      if (!mounted) return;
+      setState(() {
+        _successMsg = 'Password reset email sent to $email.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _errorMsg = friendlyAuthError(error));
+    } finally {
+      if (mounted) setState(() => _resetLoading = false);
+    }
+  }
+
+  void _useAnotherEmail() {
+    setState(() {
+      _emailCtrl.clear();
+      _errorMsg = null;
+      _successMsg = null;
+      _accountExistsEmail = null;
+    });
+    FocusScope.of(context).requestFocus(_emailFocus);
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
@@ -330,7 +375,20 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
                       // Error message
                       if (_errorMsg != null) ...[
                         const SizedBox(height: 16),
-                        _ErrorBanner(message: _errorMsg!),
+                        _accountExistsEmail == null
+                            ? _ErrorBanner(message: _errorMsg!)
+                            : _AccountExistsBanner(
+                                message: _errorMsg!,
+                                resetLoading: _resetLoading,
+                                onLogin: () => context.go('/login'),
+                                onForgotPassword: _sendResetForExistingAccount,
+                                onUseAnotherEmail: _useAnotherEmail,
+                              ),
+                      ],
+
+                      if (_successMsg != null) ...[
+                        const SizedBox(height: 16),
+                        _SuccessBanner(message: _successMsg!),
                       ],
 
                       const SizedBox(height: 20),
@@ -609,6 +667,184 @@ class _ErrorBanner extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13,
                     color: _kRed,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountExistsBanner extends StatelessWidget {
+  final String message;
+  final bool resetLoading;
+  final VoidCallback onLogin;
+  final VoidCallback onForgotPassword;
+  final VoidCallback onUseAnotherEmail;
+
+  const _AccountExistsBanner({
+    required this.message,
+    required this.resetLoading,
+    required this.onLogin,
+    required this.onForgotPassword,
+    required this.onUseAnotherEmail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _kAmber.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _kAmber.withValues(alpha: 0.38),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: _kAmber,
+                    size: 19,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: _kInk,
+                        height: 1.35,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _InlineAuthAction(
+                    label: 'Log in',
+                    icon: Icons.login_rounded,
+                    onTap: onLogin,
+                  ),
+                  _InlineAuthAction(
+                    label: resetLoading ? 'Sending...' : 'Forgot password',
+                    icon: Icons.lock_reset_rounded,
+                    onTap: resetLoading ? null : onForgotPassword,
+                  ),
+                  _InlineAuthAction(
+                    label: 'Use another email',
+                    icon: Icons.alternate_email_rounded,
+                    onTap: onUseAnotherEmail,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineAuthAction extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _InlineAuthAction({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: onTap == null ? 0.55 : 1,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.78)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: _kInk),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: _kInk,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SuccessBanner extends StatelessWidget {
+  final String message;
+  const _SuccessBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _kGreen.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: _kGreen.withValues(alpha: 0.35),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.check_circle_outline_rounded,
+                color: _kGreen,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF15803D),
                     fontWeight: FontWeight.w600,
                   ),
                 ),

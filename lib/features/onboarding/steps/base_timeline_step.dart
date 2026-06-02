@@ -8,8 +8,11 @@ import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dar
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
+import 'package:optivus/state/upload_state.dart';
 
 class BaseTimelineStep extends ConsumerStatefulWidget {
   const BaseTimelineStep({super.key});
@@ -67,6 +70,10 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             _hardBlock = false;
           } else if (tab == 'Job / Work / Business') {
             _hardBlock = _businessMode != 'flexible_business';
+          }
+          if (_setupMode == 'Photo Upload' &&
+              _uploadPurposeForSection(tab) == null) {
+            _setupMode = 'Manual';
           }
         });
       }
@@ -775,6 +782,8 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
   }
 
   Widget _modeTabs() {
+    final section = _tabs[_tabController.index];
+    final photoPurpose = _uploadPurposeForSection(section);
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -795,16 +804,17 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           },
           accent: OptivusColors.aquaAccent,
         ),
-        OnboardingChip(
-          label: 'Photo Upload preview',
-          selected: _setupMode == 'Photo Upload',
-          icon: Icons.document_scanner_rounded,
-          onTap: () {
-            setState(() => _setupMode = 'Photo Upload');
-            _savePendingImportChoice('Photo Upload');
-          },
-          accent: const Color(0xFFFF88C9),
-        ),
+        if (photoPurpose != null)
+          OnboardingChip(
+            label: 'Photo Upload preview',
+            selected: _setupMode == 'Photo Upload',
+            icon: Icons.document_scanner_rounded,
+            onTap: () {
+              setState(() => _setupMode = 'Photo Upload');
+              _savePendingImportChoice('Photo Upload');
+            },
+            accent: const Color(0xFFFF88C9),
+          ),
       ],
     );
   }
@@ -825,30 +835,43 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
 
   Widget _importPreviewCard() {
     final currentImport = _currentPendingImport();
+    final uploadState = ref.watch(uploadControllerProvider);
+    final isPhotoMode = _setupMode == 'Photo Upload';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: OnboardingGlassCard(
-        tint: OptivusColors.aquaAccent.withValues(alpha: 0.08),
+        tint: (isPhotoMode ? const Color(0xFFFF88C9) : OptivusColors.aquaAccent)
+            .withValues(alpha: 0.08),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(
-                  Icons.auto_fix_high_rounded,
-                  color: OptivusColors.aquaAccent,
+                Icon(
+                  isPhotoMode
+                      ? Icons.cloud_upload_rounded
+                      : Icons.auto_fix_high_rounded,
+                  color: isPhotoMode
+                      ? const Color(0xFFFF88C9)
+                      : OptivusColors.aquaAccent,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    _setupMode == 'AI Text'
+                    isPhotoMode
+                        ? 'Upload a photo for this section. AI review will connect later; manual input stays available.'
+                        : _setupMode == 'AI Text'
                         ? 'Paste text for a local stub parse. No AI or backend call runs.'
-                        : 'Pending upload object created. No photo picker, upload, or backend call runs.',
+                        : 'Import preview is ready.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
               ],
             ),
+            if (isPhotoMode) ...[
+              const SizedBox(height: 12),
+              _photoUploadCard(currentImport, uploadState),
+            ],
             if (_setupMode == 'AI Text') ...[
               const SizedBox(height: 12),
               _glassTextField(
@@ -902,6 +925,155 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     );
   }
 
+  Widget _photoUploadCard(
+    PendingFutureImportDraft? currentImport,
+    UploadState uploadState,
+  ) {
+    final section = _tabs[_tabController.index];
+    final purpose = _uploadPurposeForSection(section);
+    if (purpose == null) return const SizedBox.shrink();
+    final applies =
+        uploadState.purpose == purpose &&
+        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding;
+    final busy = applies && uploadState.isBusy;
+    final controllerAsset = uploadState.asset;
+    final uploadedFileName =
+        controllerAsset != null &&
+            controllerAsset.assetId == currentImport?.uploadedAssetId
+        ? controllerAsset.fileName
+        : null;
+    final hasUploadReference = currentImport?.uploadedAssetId != null;
+    final isUploaded =
+        currentImport?.uploadedAssetStatus ==
+        UploadedAssetStatus.uploaded.wireName;
+    final isFailed =
+        currentImport?.uploadedAssetStatus ==
+            UploadedAssetStatus.failed.wireName ||
+        (applies && uploadState.status == UploadFlowStatus.failed);
+    final statusText = _photoUploadStatusText(
+      currentImport: currentImport,
+      uploadState: uploadState,
+      applies: applies,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.76)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isFailed
+                    ? Icons.error_outline_rounded
+                    : isUploaded
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.image_outlined,
+                color: isFailed
+                    ? OptivusColors.danger
+                    : isUploaded
+                    ? OptivusColors.success
+                    : const Color(0xFFFF88C9),
+                size: 18,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (uploadedFileName != null) ...[
+            const SizedBox(height: 7),
+            Text(
+              uploadedFileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ],
+          if (currentImport?.uploadedAssetR2Key != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              currentImport!.uploadedAssetR2Key!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.textMuted,
+              ),
+            ),
+          ],
+          if (currentImport?.errorMessage != null ||
+              (applies && uploadState.errorMessage != null)) ...[
+            const SizedBox(height: 8),
+            Text(
+              currentImport?.errorMessage ?? uploadState.errorMessage!,
+              style: const TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.danger,
+              ),
+            ),
+          ],
+          if (isUploaded) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Photo saved. AI review will connect in the Routine Import phase.',
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.success,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OnboardingActionPill(
+                label: isFailed ? 'Retry upload' : 'Upload photo',
+                icon: isFailed ? Icons.refresh_rounded : Icons.upload_rounded,
+                accent: const Color(0xFFFF88C9),
+                selected: true,
+                compact: true,
+                onTap: busy ? null : _startCurrentPhotoUpload,
+              ),
+              if (hasUploadReference)
+                OnboardingActionPill(
+                  label: 'Remove',
+                  icon: Icons.delete_outline_rounded,
+                  accent: OptivusColors.danger,
+                  compact: true,
+                  onTap: busy ? null : _removeCurrentPhotoUpload,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   PendingFutureImportDraft? _currentPendingImport() {
     final section = _tabs[_tabController.index];
     final imports = ref
@@ -915,6 +1087,144 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
       }
     }
     return null;
+  }
+
+  UploadedAssetPurpose? _uploadPurposeForSection(String section) {
+    return switch (section) {
+      'Classes' => UploadedAssetPurpose.classTimetable,
+      'Eating' => UploadedAssetPurpose.eatingMenu,
+      'Skin Care' => UploadedAssetPurpose.skinCare,
+      _ => null,
+    };
+  }
+
+  String _photoUploadStatusText({
+    required PendingFutureImportDraft? currentImport,
+    required UploadState uploadState,
+    required bool applies,
+  }) {
+    if (applies) {
+      return switch (uploadState.status) {
+        UploadFlowStatus.picking => 'Choosing photo...',
+        UploadFlowStatus.preparing => 'Preparing compressed JPEG...',
+        UploadFlowStatus.signing => 'Preparing secure upload...',
+        UploadFlowStatus.uploading => 'Uploading photo...',
+        UploadFlowStatus.savingMetadata => 'Saving upload reference...',
+        UploadFlowStatus.uploaded => 'Uploaded',
+        UploadFlowStatus.failed => 'Upload failed',
+        UploadFlowStatus.idle => _draftUploadStatusText(currentImport),
+      };
+    }
+    return _draftUploadStatusText(currentImport);
+  }
+
+  String _draftUploadStatusText(PendingFutureImportDraft? currentImport) {
+    return switch (currentImport?.uploadedAssetStatus) {
+      'uploaded' => 'Uploaded',
+      'failed' => 'Upload failed',
+      'deleted' => 'Removed',
+      'uploading' => 'Uploading photo...',
+      _ => 'No photo uploaded yet',
+    };
+  }
+
+  Future<void> _startCurrentPhotoUpload() async {
+    final section = _tabs[_tabController.index];
+    final purpose = _uploadPurposeForSection(section);
+    if (purpose == null) return;
+    _savePendingImportChoice('Photo Upload');
+    final uid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    final asset = await ref
+        .read(uploadControllerProvider.notifier)
+        .startUpload(
+          uid: uid,
+          purpose: purpose,
+          sourceFeature: OnboardingDraft.sourceOnboarding,
+        );
+    if (!mounted) return;
+    final uploadState = ref.read(uploadControllerProvider);
+    if (asset != null) {
+      _upsertCurrentPhotoImport(
+        uploadedAssetId: asset.assetId,
+        uploadedAssetR2Key: asset.r2Key,
+        uploadedAssetStatus: asset.status.wireName,
+      );
+      return;
+    }
+    if (uploadState.status == UploadFlowStatus.failed) {
+      _upsertCurrentPhotoImport(
+        uploadedAssetId: uploadState.asset?.assetId,
+        uploadedAssetR2Key: uploadState.asset?.r2Key,
+        uploadedAssetStatus:
+            uploadState.asset?.status.wireName ??
+            UploadedAssetStatus.failed.wireName,
+        errorMessage: uploadState.errorMessage,
+      );
+    }
+  }
+
+  Future<void> _removeCurrentPhotoUpload() async {
+    final currentImport = _currentPendingImport();
+    final assetId = currentImport?.uploadedAssetId;
+    final uid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    if (assetId != null && uid.trim().isNotEmpty) {
+      await ref
+          .read(uploadControllerProvider.notifier)
+          .markDeleted(uid: uid, assetId: assetId);
+    }
+    if (!mounted) return;
+    _upsertCurrentPhotoImport(clearUploadReference: true);
+  }
+
+  void _upsertCurrentPhotoImport({
+    String? uploadedAssetId,
+    String? uploadedAssetR2Key,
+    String? uploadedAssetStatus,
+    String? errorMessage,
+    bool clearUploadReference = false,
+  }) {
+    final section = _tabs[_tabController.index];
+    final existing = _currentPendingImport();
+    final now = DateTime.now();
+    final entry = PendingFutureImportDraft(
+      id: '${section.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}_photo_upload',
+      section: section,
+      mode: 'Photo Upload',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      status: uploadedAssetStatus == UploadedAssetStatus.failed.wireName
+          ? PendingFutureImportDraft.errorStatus
+          : PendingFutureImportDraft.pendingStatus,
+      pastedText: existing?.pastedText,
+      uploadPlaceholderPath: existing?.uploadPlaceholderPath,
+      uploadedAssetId: clearUploadReference
+          ? null
+          : (uploadedAssetId ?? existing?.uploadedAssetId),
+      uploadedAssetR2Key: clearUploadReference
+          ? null
+          : (uploadedAssetR2Key ?? existing?.uploadedAssetR2Key),
+      uploadedAssetStatus: clearUploadReference
+          ? null
+          : (uploadedAssetStatus ?? existing?.uploadedAssetStatus),
+      errorMessage: clearUploadReference ? null : errorMessage,
+      parsedBlocks: existing?.parsedBlocks ?? const [],
+      confidence: existing?.confidence,
+      userVerified: existing?.userVerified ?? false,
+      userEdited: existing?.userEdited ?? false,
+    );
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: draft.baseTimeline.upsertPendingImport(entry),
+            clearFinalPreview: true,
+          ),
+        );
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(4, true);
   }
 
   void _parseCurrentImportText() {

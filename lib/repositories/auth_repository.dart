@@ -35,6 +35,8 @@ abstract class AuthRepository {
 
   Future<AuthUser?> reloadCurrentUser();
 
+  Future<String?> currentIdToken();
+
   Future<void> sendPasswordResetEmail(String email);
 
   Future<void> signOut();
@@ -147,6 +149,12 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<String?> currentIdToken() async {
+    await Future.delayed(const Duration(milliseconds: 80));
+    return _currentUser == null ? null : 'fake-firebase-id-token';
+  }
+
+  @override
   Future<void> sendPasswordResetEmail(String email) async {
     await Future.delayed(const Duration(milliseconds: 1000));
     // Simulated success
@@ -242,6 +250,12 @@ class FirebaseAuthRepository implements AuthRepository {
     if (refreshed == null) return null;
     await refreshed.getIdToken(true);
     return _authUserFromFirebase(refreshed);
+  }
+
+  @override
+  Future<String?> currentIdToken() async {
+    final user = _auth.currentUser;
+    return user?.getIdToken(true);
   }
 
   @override

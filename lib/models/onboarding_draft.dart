@@ -1417,6 +1417,9 @@ class PendingFutureImportDraft {
   final String status;
   final String? pastedText;
   final String? uploadPlaceholderPath;
+  final String? uploadedAssetId;
+  final String? uploadedAssetR2Key;
+  final String? uploadedAssetStatus;
   final String? errorMessage;
   final List<TimelineBlockDraft> parsedBlocks;
   final double? confidence;
@@ -1432,6 +1435,9 @@ class PendingFutureImportDraft {
     this.status = pendingStatus,
     this.pastedText,
     this.uploadPlaceholderPath,
+    this.uploadedAssetId,
+    this.uploadedAssetR2Key,
+    this.uploadedAssetStatus,
     this.errorMessage,
     this.parsedBlocks = const [],
     this.confidence,
@@ -1454,6 +1460,9 @@ class PendingFutureImportDraft {
       status: map['status'] as String? ?? pendingStatus,
       pastedText: map['pastedText'] as String?,
       uploadPlaceholderPath: map['uploadPlaceholderPath'] as String?,
+      uploadedAssetId: map['uploadedAssetId'] as String?,
+      uploadedAssetR2Key: map['uploadedAssetR2Key'] as String?,
+      uploadedAssetStatus: map['uploadedAssetStatus'] as String?,
       errorMessage: map['errorMessage'] as String?,
       parsedBlocks: _readList(
         map['parsedBlocks'],
@@ -1474,6 +1483,9 @@ class PendingFutureImportDraft {
     'status': status,
     'pastedText': pastedText,
     'uploadPlaceholderPath': uploadPlaceholderPath,
+    'uploadedAssetId': uploadedAssetId,
+    'uploadedAssetR2Key': uploadedAssetR2Key,
+    'uploadedAssetStatus': uploadedAssetStatus,
     'errorMessage': errorMessage,
     'parsedBlocks': parsedBlocks.map((block) => block.toMap()).toList(),
     'confidence': confidence,
@@ -1490,11 +1502,16 @@ class PendingFutureImportDraft {
     String? status,
     String? pastedText,
     String? uploadPlaceholderPath,
+    String? uploadedAssetId,
+    String? uploadedAssetR2Key,
+    String? uploadedAssetStatus,
     String? errorMessage,
     List<TimelineBlockDraft>? parsedBlocks,
     double? confidence,
     bool? userVerified,
     bool? userEdited,
+    bool clearUploadedAssetReference = false,
+    bool clearErrorMessage = false,
   }) {
     return PendingFutureImportDraft(
       id: id ?? this.id,
@@ -1506,7 +1523,18 @@ class PendingFutureImportDraft {
       pastedText: pastedText ?? this.pastedText,
       uploadPlaceholderPath:
           uploadPlaceholderPath ?? this.uploadPlaceholderPath,
-      errorMessage: errorMessage ?? this.errorMessage,
+      uploadedAssetId: clearUploadedAssetReference
+          ? null
+          : (uploadedAssetId ?? this.uploadedAssetId),
+      uploadedAssetR2Key: clearUploadedAssetReference
+          ? null
+          : (uploadedAssetR2Key ?? this.uploadedAssetR2Key),
+      uploadedAssetStatus: clearUploadedAssetReference
+          ? null
+          : (uploadedAssetStatus ?? this.uploadedAssetStatus),
+      errorMessage: clearErrorMessage
+          ? null
+          : (errorMessage ?? this.errorMessage),
       parsedBlocks: parsedBlocks ?? this.parsedBlocks,
       confidence: confidence ?? this.confidence,
       userVerified: userVerified ?? this.userVerified,

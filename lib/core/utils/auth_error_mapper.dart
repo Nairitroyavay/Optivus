@@ -1,5 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 
+const emailAlreadyInUseMessage =
+    'An account already exists with this email. Please log in. If your email is not verified yet, we’ll help you resend the verification email.';
+
 String friendlyAuthError(Object error) {
   if (error is firebase_auth.FirebaseAuthException) {
     return _messageForCode(error.code);
@@ -17,13 +20,19 @@ String friendlyAuthError(Object error) {
   return 'Something went wrong. Please try again.';
 }
 
+bool isEmailAlreadyInUseError(Object error) {
+  if (error is firebase_auth.FirebaseAuthException) {
+    return error.code == 'email-already-in-use';
+  }
+  return error.toString().contains('email-already-in-use');
+}
+
 String _messageForCode(String code) {
   return _codeMessages[code] ?? 'Something went wrong. Please try again.';
 }
 
 const _codeMessages = <String, String>{
-  'email-already-in-use':
-      'An account already exists for this email. Please log in instead.',
+  'email-already-in-use': emailAlreadyInUseMessage,
   'invalid-email': 'Please enter a valid email address.',
   'weak-password': 'Please choose a stronger password.',
   'wrong-password': 'The email or password is incorrect.',

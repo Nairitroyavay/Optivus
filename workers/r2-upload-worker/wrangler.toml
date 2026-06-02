@@ -1,0 +1,15 @@
+name = "optivus-r2-upload-worker"
+main = "src/index.ts"
+compatibility_date = "2026-06-02"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FIREBASE_PROJECT_ID = "optivus-lifeos"
+R2_BUCKET_NAME = "optivus-uploads-dev"
+UPLOAD_URL_EXPIRES_SECONDS = "900"
+MAX_UPLOAD_BYTES = "1048576"
+ALLOWED_ORIGINS = ""
+
+[observability]
+enabled = true
+head_sampling_rate = 1

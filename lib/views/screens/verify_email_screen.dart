@@ -25,7 +25,7 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 }
 
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
-  static const _resendCooldownSeconds = 45;
+  static const _resendCooldownSeconds = 60;
 
   bool _checking = false;
   bool _resending = false;
@@ -59,7 +59,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     } catch (error) {
       if (!mounted) return;
       final message = error.toString().contains('Email not verified yet.')
-          ? 'Email not verified yet.'
+          ? 'We could not confirm it yet. Tap the link in your email, then try again.'
           : friendlyAuthError(error);
       setState(() => _error = message);
     } finally {
@@ -85,7 +85,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       await ref.read(authProvider.notifier).resendEmailVerification();
       if (!mounted) return;
       setState(() {
-        _success = 'Verification email sent again.';
+        _success = 'Verification email sent. Check your inbox.';
         _cooldown = _resendCooldownSeconds;
       });
       _startCooldown();
@@ -211,7 +211,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                         ),
                         const SizedBox(height: 18),
                         const Text(
-                          'Open your inbox, tap the verification link, then come back and press I verified.',
+                          'Check your inbox and tap the verification link. Then return here and press I verified.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: _kSub,
@@ -236,6 +236,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                             icon: Icons.check_circle_outline_rounded,
                           ),
                         ],
+                        const SizedBox(height: 18),
+                        _VerificationHelpCard(
+                          cooldown: _cooldown,
+                          resending: _resending,
+                          onResend: _resend,
+                          onTryAnotherEmail: _signOut,
+                        ),
                         const SizedBox(height: 36),
                       ],
                     ),
@@ -245,22 +252,11 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                     ? _LoadingButton(operation: _verifyOperation)
                     : AppButton(text: 'I verified', onPressed: _checkVerified),
                 const SizedBox(height: 12),
-                _SecondaryButton(
-                  label: _cooldown > 0
-                      ? 'Resend email in ${_cooldown}s'
-                      : _resending
-                      ? 'Sending...'
-                      : 'Resend email',
-                  icon: Icons.refresh_rounded,
-                  enabled: !_resending && _cooldown == 0,
-                  onTap: _resend,
-                ),
-                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
                       child: _SecondaryButton(
-                        label: 'Change email',
+                        label: 'Try another email',
                         icon: Icons.edit_outlined,
                         onTap: _signOut,
                       ),
@@ -286,58 +282,188 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   }
 }
 
+class _VerificationHelpCard extends StatelessWidget {
+  final int cooldown;
+  final bool resending;
+  final VoidCallback onResend;
+  final VoidCallback onTryAnotherEmail;
+
+  const _VerificationHelpCard({
+    required this.cooldown,
+    required this.resending,
+    required this.onResend,
+    required this.onTryAnotherEmail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final resendEnabled = !resending && cooldown == 0;
+    return LiquidGlassPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Didn’t receive it?',
+            style: TextStyle(
+              color: _kInk,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _HelpActionRow(
+            icon: Icons.refresh_rounded,
+            label: cooldown > 0
+                ? 'Resend email in ${cooldown}s'
+                : resending
+                ? 'Sending...'
+                : 'Resend email',
+            enabled: resendEnabled,
+            onTap: onResend,
+          ),
+          const SizedBox(height: 10),
+          const _HelpTextRow(
+            icon: Icons.alternate_email_rounded,
+            label: 'Make sure the email address is correct',
+          ),
+          const SizedBox(height: 10),
+          _HelpActionRow(
+            icon: Icons.edit_outlined,
+            label: 'Try another email',
+            onTap: onTryAnotherEmail,
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Still not finding it? Some email apps may move new app emails to Updates, Promotions, or Spam during testing.',
+            style: TextStyle(
+              color: _kSub,
+              fontSize: 11,
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HelpActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  const _HelpActionRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: GestureDetector(
+        onTap: enabled ? onTap : null,
+        child: Row(
+          children: [
+            Icon(icon, color: _kAmber, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: _kInk,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: _kSub, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HelpTextRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _HelpTextRow({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: _kSub, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: _kSub,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _SecondaryButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
-  final bool enabled;
   final bool danger;
 
   const _SecondaryButton({
     required this.label,
     required this.icon,
     required this.onTap,
-    this.enabled = true,
     this.danger = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final color = danger ? _kRed : _kInk;
-    return Opacity(
-      opacity: enabled ? 1 : 0.55,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Container(
-          width: double.infinity,
-          height: 52,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.45),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.85),
-              width: 1,
-            ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 52,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.85),
+            width: 1,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 18),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
