@@ -104,12 +104,8 @@ class OnboardingDraft {
       stepCompleted: _readBoolList(map['stepCompleted'], stepCount),
       stepDirty: _readBoolList(map['stepDirty'], stepCount),
       stepLoading: _readBoolList(map['stepLoading'], stepCount),
-      createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'])
-          : null,
-      updatedAt: map['updatedAt'] != null
-          ? DateTime.tryParse(map['updatedAt'])
-          : null,
+      createdAt: _readDateTime(map['createdAt']),
+      updatedAt: _readDateTime(map['updatedAt']),
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
@@ -1451,11 +1447,11 @@ class PendingFutureImportDraft {
       section: map['section'] as String? ?? '',
       mode: map['mode'] as String? ?? '',
       createdAt:
-          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          _readDateTime(map['createdAt']) ??
           DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt:
-          DateTime.tryParse(map['updatedAt'] as String? ?? '') ??
-          DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          _readDateTime(map['updatedAt']) ??
+          _readDateTime(map['createdAt']) ??
           DateTime.fromMillisecondsSinceEpoch(0),
       status: map['status'] as String? ?? pendingStatus,
       pastedText: map['pastedText'] as String?,
@@ -2232,6 +2228,19 @@ List<T> _readList<T>(
 List<String> _readStringList(Object? value) {
   return (value as List?)?.map((item) => item.toString()).toList() ??
       <String>[];
+}
+
+DateTime? _readDateTime(Object? value) {
+  if (value == null) return null;
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value);
+  try {
+    final converted = (value as dynamic).toDate();
+    if (converted is DateTime) return converted;
+  } catch (_) {
+    return null;
+  }
+  return null;
 }
 
 List<PendingFutureImportDraft> _readPendingFutureImports(Object? value) {

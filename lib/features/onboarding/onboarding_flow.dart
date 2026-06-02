@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/coach_models.dart';
+import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
@@ -60,6 +63,17 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return onboarding.draft.validateStep(step, onboarding.stepCompleted);
   }
 
+  bool _needsEmailVerification(AuthUser? user) {
+    return user != null && user.providerId == 'password' && !user.emailVerified;
+  }
+
+  String? _currentPersistenceUid() {
+    final authUser = ref.read(authProvider).user;
+    if (_needsEmailVerification(authUser)) return null;
+    if (OptivusBackendConfig.useFirebase && authUser == null) return null;
+    return authUser?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+  }
+
   // Core Save step action — with double-tap prevention
   Future<bool> _saveStep(int step) async {
     if (_isSaving) return false; // Prevent double tap
@@ -74,6 +88,16 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return false;
       }
 
+      final uid = _currentPersistenceUid();
+      if (uid == null) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(
+              'Please verify your email before saving onboarding.',
+            );
+        return false;
+      }
+
       ref.read(mockOnboardingProvider.notifier).setStepLoading(step, true);
       ref.read(mockOnboardingProvider.notifier).clearValidation();
 
@@ -81,9 +105,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       await Future.delayed(const Duration(milliseconds: 600));
 
       final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
-      final uid =
-          ref.read(authProvider).user?.uid ??
-          ref.read(mockOnboardingProvider).draft.uid;
       onboardingNotifier.saveStep(
         step,
         uid: uid,
@@ -101,11 +122,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         },
       );
 
+      final savedDraft = ref.read(mockOnboardingProvider).draft;
+      await ref.read(onboardingRepositoryProvider).saveDraft(savedDraft);
+
       return true;
     } catch (e) {
+      ref.read(mockOnboardingProvider.notifier).setStepDirty(step, true);
       ref
           .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(e.toString());
+          .setValidationMessage(
+            OptivusBackendConfig.useFirebase
+                ? 'Could not save this step. Please check your connection and try again.'
+                : e.toString(),
+          );
       return false;
     } finally {
       ref.read(mockOnboardingProvider.notifier).setStepLoading(step, false);
@@ -172,7 +201,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     final savedDraft = ref.read(mockOnboardingProvider).draft;
-    final bundle = OnboardingCompletionService.buildBundle(savedDraft);
+    final uid = _currentPersistenceUid();
+    if (uid == null) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(
+            'Please verify your email before finishing onboarding.',
+          );
+      return;
+    }
+
+    final draftForBundle = savedDraft.copyWith(uid: uid);
+    final bundle = OnboardingCompletionService.buildBundle(draftForBundle);
     String? blockingWarning;
     for (final warning in bundle.warnings) {
       if (warning.startsWith('Resolve or accept')) {
@@ -187,7 +227,32 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return;
     }
 
-    final uid = ref.read(authProvider).user?.uid ?? savedDraft.uid;
+    final now = DateTime.now();
+    final finalDraft = draftForBundle.copyWith(
+      onboardingCompleted: true,
+      currentStep: OnboardingDraft.lastStepIndex,
+      stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+      stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
+      stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+      finalPreview:
+          draftForBundle.finalPreview ?? draftForBundle.buildFinalPreview(),
+      createdAt: draftForBundle.createdAt ?? now,
+      updatedAt: now,
+    );
+
+    try {
+      await ref
+          .read(onboardingRepositoryProvider)
+          .completeOnboarding(finalDraft: finalDraft, bundle: bundle);
+    } catch (_) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(
+            'Could not finish setup. Please check your connection and try again.',
+          );
+      return;
+    }
+
     ref
         .read(mockRoutineProvider.notifier)
         .replaceWith(bundle.routineItemsForApp);
@@ -200,7 +265,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         .read(mockNotificationPreferencesProvider.notifier)
         .updatePreferences(bundle.notificationPreferences);
     ref.read(mockUserProfileProvider.notifier).applyOnboardingBundle(bundle);
-    ref.read(mockOnboardingProvider.notifier).completeOnboarding(uid: uid);
+    ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
 
     // Initialize the coach tab with a starter session so it doesn't crash empty
     ref

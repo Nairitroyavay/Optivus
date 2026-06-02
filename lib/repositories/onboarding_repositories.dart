@@ -1,3 +1,6 @@
+// LEGACY/FUTURE REFERENCE ONLY.
+// Active Phase 2B onboarding persistence uses onboarding_repository.dart.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/notification_preferences.dart';

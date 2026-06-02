@@ -48,9 +48,35 @@ class OnboardingCompletionService {
       notificationPreferences: _notificationPreferences(draft),
       coachPreferences: _coachPreferences(draft),
       moneyGoal: moneyGoal,
+      uploadedAssetReferences: _uploadedAssetReferences(draft),
       warnings: preview.warnings,
       duplicateSystemKeysMerged: preview.duplicateSystemKeysSkipped,
     );
+  }
+
+  static List<OnboardingUploadedAssetReference> _uploadedAssetReferences(
+    OnboardingDraft draft,
+  ) {
+    return draft.baseTimeline.pendingFutureImports
+        .where(
+          (entry) =>
+              entry.uploadedAssetId != null ||
+              entry.uploadedAssetR2Key != null ||
+              entry.uploadedAssetStatus != null,
+        )
+        .map(
+          (entry) => OnboardingUploadedAssetReference(
+            id: entry.id,
+            section: entry.section,
+            mode: entry.mode,
+            uploadedAssetId: entry.uploadedAssetId,
+            uploadedAssetR2Key: entry.uploadedAssetR2Key,
+            uploadedAssetStatus: entry.uploadedAssetStatus,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt,
+          ),
+        )
+        .toList(growable: false);
   }
 
   static List<RoutineItem> _scheduleRoutineItems(

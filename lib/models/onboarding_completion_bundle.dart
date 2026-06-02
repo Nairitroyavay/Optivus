@@ -23,6 +23,7 @@ class OnboardingCompletionBundle {
   final NotificationPreferences notificationPreferences;
   final CoachPreferences coachPreferences;
   final MoneyGoal? moneyGoal;
+  final List<OnboardingUploadedAssetReference> uploadedAssetReferences;
   final List<String> warnings;
   final List<String> duplicateSystemKeysMerged;
 
@@ -42,6 +43,7 @@ class OnboardingCompletionBundle {
     required this.notificationPreferences,
     required this.coachPreferences,
     required this.moneyGoal,
+    required this.uploadedAssetReferences,
     required this.warnings,
     required this.duplicateSystemKeysMerged,
   });
@@ -95,10 +97,46 @@ class OnboardingCompletionBundle {
               'streakDays': moneyGoal!.streakDays,
               'streakLevel': moneyGoal!.streakLevel,
             },
+      'uploadedAssetReferences': uploadedAssetReferences
+          .map((asset) => asset.toMap())
+          .toList(),
       'warnings': warnings,
       'duplicateSystemKeysMerged': duplicateSystemKeysMerged,
     };
   }
+}
+
+class OnboardingUploadedAssetReference {
+  final String id;
+  final String section;
+  final String mode;
+  final String? uploadedAssetId;
+  final String? uploadedAssetR2Key;
+  final String? uploadedAssetStatus;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const OnboardingUploadedAssetReference({
+    required this.id,
+    required this.section,
+    required this.mode,
+    required this.createdAt,
+    required this.updatedAt,
+    this.uploadedAssetId,
+    this.uploadedAssetR2Key,
+    this.uploadedAssetStatus,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'section': section,
+    'mode': mode,
+    'uploadedAssetId': uploadedAssetId,
+    'uploadedAssetR2Key': uploadedAssetR2Key,
+    'uploadedAssetStatus': uploadedAssetStatus,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+  };
 }
 
 class GoodHabitTemplateBundle {

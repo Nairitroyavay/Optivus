@@ -6,6 +6,7 @@ import 'package:optivus/features/profile/providers/profile_settings_provider.dar
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
 
@@ -393,7 +394,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
           .read(mockOnboardingProvider.notifier)
           .completeOnboarding(uid: user.uid);
     } else {
-      _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+      final savedDraft = await _ref
+          .read(onboardingRepositoryProvider)
+          .fetchDraft(user.uid);
+      if (savedDraft != null) {
+        final safeDraft = savedDraft.copyWith(
+          uid: user.uid,
+          stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+        );
+        _ref.read(mockOnboardingProvider.notifier).loadSeedData(safeDraft);
+      } else {
+        _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+      }
     }
     _resetUserScopedMockState();
     _ref
