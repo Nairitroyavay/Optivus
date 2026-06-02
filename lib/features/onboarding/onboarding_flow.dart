@@ -382,6 +382,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
     );
+
+    _persistCurrentDraftAfterNavigation();
   }
 
   void _onDotTapped(int index) => _navigateToIndicatorStep(index);

@@ -91,17 +91,20 @@ void main() {
     );
   });
 
-  test('FakeOnboardingRepository updates saved currentStep', () async {
-    final repository = FakeOnboardingRepository();
-    final draft = _draftWithUploadReferences().copyWith(currentStep: 3);
+  test(
+    'FakeOnboardingRepository persists backward currentStep changes',
+    () async {
+      final repository = FakeOnboardingRepository();
+      final draft = _draftWithUploadReferences().copyWith(currentStep: 3);
 
-    await repository.saveDraft(draft);
-    await repository.saveDraft(draft.copyWith(currentStep: 4));
+      await repository.saveDraft(draft);
+      await repository.saveDraft(draft.copyWith(currentStep: 2));
 
-    final saved = await repository.fetchDraft(draft.uid);
-    expect(saved, isNotNull);
-    expect(saved!.currentStep, 4);
-  });
+      final saved = await repository.fetchDraft(draft.uid);
+      expect(saved, isNotNull);
+      expect(saved!.currentStep, 2);
+    },
+  );
 
   test(
     'FakeOnboardingRepository completeOnboarding saves final draft and completion bundle',
