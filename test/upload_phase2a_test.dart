@@ -1,10 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:optivus/config/upload_config.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
+import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/services/uploads/upload_object_key.dart';
 
@@ -60,6 +63,18 @@ void main() {
     expect(FirestoreUserPaths.uploadedAssets('uid-1'), 'users/uid-1/uploads');
   });
 
+  test('object key builder uses expected onboarding shape', () {
+    expect(
+      UploadObjectKeyBuilder.build(
+        uid: 'uid',
+        sourceFeature: 'onboarding',
+        purpose: UploadedAssetPurpose.classTimetable,
+        assetId: 'asset',
+      ),
+      'users/uid/onboarding/class_timetable/asset.jpg',
+    );
+  });
+
   test('object key builder rejects unsafe path segments', () {
     expect(
       UploadObjectKeyBuilder.build(
@@ -77,6 +92,33 @@ void main() {
         sourceFeature: 'onboarding',
         purpose: UploadedAssetPurpose.eatingMenu,
         assetId: 'asset-123',
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => UploadObjectKeyBuilder.build(
+        uid: r'uid\other',
+        sourceFeature: 'onboarding',
+        purpose: UploadedAssetPurpose.eatingMenu,
+        assetId: 'asset-123',
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => UploadObjectKeyBuilder.build(
+        uid: 'uid',
+        sourceFeature: 'onboarding//extra',
+        purpose: UploadedAssetPurpose.eatingMenu,
+        assetId: 'asset-123',
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => UploadObjectKeyBuilder.build(
+        uid: 'uid',
+        sourceFeature: 'onboarding',
+        purpose: UploadedAssetPurpose.eatingMenu,
+        assetId: '..',
       ),
       throwsArgumentError,
     );
@@ -109,10 +151,40 @@ void main() {
     expect(prepared, isNull);
   });
 
+  test('UploadedAsset invalid status falls back to pending', () {
+    expect(
+      uploadedAssetStatusFromString('complete'),
+      UploadedAssetStatus.pending,
+    );
+    expect(
+      UploadedAsset.fromMap({'status': 'unknown'}).status,
+      UploadedAssetStatus.pending,
+    );
+  });
+
   test('auth mapper explains email-already-in-use recovery', () {
     expect(
       friendlyAuthError(Exception('email-already-in-use')),
       emailAlreadyInUseMessage,
+    );
+  });
+
+  test('worker client handles non-json error responses safely', () async {
+    final client = RealCloudflareWorkerClient(
+      baseUrl: 'https://worker.example',
+      client: MockClient((request) async {
+        return http.Response('<html>Bad gateway</html>', 502);
+      }),
+    );
+
+    final response = await client.post(
+      const CloudflareWorkerRequest(path: '/health', body: {}),
+    );
+
+    expect(response.statusCode, 502);
+    expect(
+      response.body['message'],
+      'Upload service returned an invalid response.',
     );
   });
 }

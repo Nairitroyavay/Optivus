@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
@@ -8,6 +8,7 @@ type Env = {
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
   R2_BUCKET_NAME: string;
+  UPLOAD_BUCKET: R2Bucket;
   UPLOAD_URL_EXPIRES_SECONDS?: string;
   MAX_UPLOAD_BYTES?: string;
   ALLOWED_ORIGINS?: string;
@@ -39,7 +40,13 @@ export default {
     try {
       const url = new URL(request.url);
       if (request.method === "GET" && url.pathname === "/health") {
-        return jsonResponse(request, env, { ok: true, service: "r2-upload-worker" });
+        const config = validateWorkerConfig(env);
+        return jsonResponse(request, env, {
+          ok: true,
+          service: "r2-upload-worker",
+          bucket: config.bucketName,
+          projectId: config.projectId,
+        });
       }
 
       if (request.method === "POST" && url.pathname === "/v1/uploads/sign") {
@@ -128,6 +135,14 @@ async function handleCompleteUpload(request: Request, env: Env): Promise<Respons
     throw new HttpError(400, "invalid_size", "Upload size is invalid.");
   }
 
+  const object = await requiredUploadBucket(env).head(objectKey);
+  if (!object) {
+    throw new HttpError(404, "object_not_found", "Uploaded object was not found.");
+  }
+  if (typeof object.size === "number" && object.size !== sizeBytes) {
+    throw new HttpError(400, "size_mismatch", "Uploaded object size does not match.");
+  }
+
   return jsonResponse(request, env, { ok: true, assetId, objectKey });
 }
 
@@ -137,12 +152,7 @@ async function handleDeleteUpload(request: Request, env: Env): Promise<Response>
   const objectKey = readString(body, "objectKey");
   assertOwnedObjectKey(user.uid, objectKey);
 
-  await r2Client(env).send(
-    new DeleteObjectCommand({
-      Bucket: requiredEnv(env.R2_BUCKET_NAME, "R2_BUCKET_NAME"),
-      Key: objectKey,
-    }),
-  );
+  await requiredUploadBucket(env).delete(objectKey);
 
   return jsonResponse(request, env, { ok: true, objectKey });
 }
@@ -188,8 +198,29 @@ function buildObjectKey(uid: string, purpose: string, assetId: string): string {
 }
 
 function assertOwnedObjectKey(uid: string, objectKey: string): void {
-  const prefix = `users/${safeSegment(uid, "uid")}/onboarding/`;
-  if (!objectKey.startsWith(prefix) || objectKey.includes("..") || objectKey.includes("\\")) {
+  const safeUid = safeSegment(uid, "uid");
+  if (
+    objectKey.includes("..") ||
+    objectKey.includes("\\") ||
+    objectKey.includes("//") ||
+    !objectKey.endsWith(".jpg")
+  ) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+
+  const parts = objectKey.split("/");
+  if (
+    parts.length !== 5 ||
+    parts[0] !== "users" ||
+    parts[1] !== safeUid ||
+    parts[2] !== "onboarding" ||
+    !approvedPurposes.has(parts[3])
+  ) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+
+  const assetId = parts[4].slice(0, -".jpg".length);
+  if (!isSafeSegment(assetId)) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
 }
@@ -224,15 +255,19 @@ function readNumber(body: Record<string, unknown>, key: string): number {
 
 function safeSegment(value: string, label: string): string {
   const trimmed = value.trim();
-  if (
-    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(trimmed) ||
-    trimmed.includes("..") ||
-    trimmed.includes("/") ||
-    trimmed.includes("\\")
-  ) {
+  if (!isSafeSegment(trimmed)) {
     throw new HttpError(400, "unsafe_segment", `${label} is not safe for an object key.`);
   }
   return trimmed;
+}
+
+function isSafeSegment(value: string): boolean {
+  return (
+    /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value) &&
+    !value.includes("..") &&
+    !value.includes("/") &&
+    !value.includes("\\")
+  );
 }
 
 function requiredEnv(value: string | undefined, key: string): string {
@@ -240,6 +275,23 @@ function requiredEnv(value: string | undefined, key: string): string {
     throw new HttpError(500, "missing_env", `${key} is not configured.`);
   }
   return value.trim();
+}
+
+function requiredUploadBucket(env: Env): R2Bucket {
+  if (!env.UPLOAD_BUCKET) {
+    throw new HttpError(500, "missing_env", "UPLOAD_BUCKET is not configured.");
+  }
+  return env.UPLOAD_BUCKET;
+}
+
+function validateWorkerConfig(env: Env): { projectId: string; bucketName: string } {
+  const projectId = requiredEnv(env.FIREBASE_PROJECT_ID, "FIREBASE_PROJECT_ID");
+  const bucketName = requiredEnv(env.R2_BUCKET_NAME, "R2_BUCKET_NAME");
+  requiredEnv(env.R2_ACCOUNT_ID, "R2_ACCOUNT_ID");
+  requiredEnv(env.R2_ACCESS_KEY_ID, "R2_ACCESS_KEY_ID");
+  requiredEnv(env.R2_SECRET_ACCESS_KEY, "R2_SECRET_ACCESS_KEY");
+  requiredUploadBucket(env);
+  return { projectId, bucketName };
 }
 
 function numberEnv(value: string | undefined, fallback: number): number {

@@ -18,8 +18,41 @@ service cloud.firestore {
       return isOwner(uid) && emailVerified();
     }
 
-    match /users/{uid}/{document=**} {
+    function validUploadPurpose(purpose) {
+      return purpose == "class_timetable"
+        || purpose == "eating_menu"
+        || purpose == "skin_care"
+        || purpose == "profile_photo";
+    }
+
+    function validUploadStatus(status) {
+      return status == "pending"
+        || status == "uploading"
+        || status == "uploaded"
+        || status == "failed"
+        || status == "deleted";
+    }
+
+    match /users/{uid}/uploads/{assetId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.assetId == assetId
+        && request.resource.data.sizeBytes is int
+        && request.resource.data.sizeBytes > 0
+        && request.resource.data.sizeBytes <= 1048576
+        && request.resource.data.contentType == "image/jpeg"
+        && validUploadPurpose(request.resource.data.purpose)
+        && validUploadStatus(request.resource.data.status);
+      allow delete: if false;
+    }
+
+    match /users/{uid} {
       allow read, write: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/{collectionId}/{document=**} {
+      allow read, write: if verifiedOwner(uid) && collectionId != "uploads";
     }
   }
 }

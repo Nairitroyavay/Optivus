@@ -1,4 +1,4 @@
-name = "optivus-r2-upload-worker"
+name = "optivus-r2-upload-worker-dev"
 main = "src/index.ts"
 compatibility_date = "2026-06-02"
 compatibility_flags = ["nodejs_compat"]
@@ -6,9 +6,14 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 FIREBASE_PROJECT_ID = "optivus-lifeos"
 R2_BUCKET_NAME = "optivus-uploads-dev"
+R2_ACCOUNT_ID = "f6091305880e9647819cd1bdfe95bbcd"
 UPLOAD_URL_EXPIRES_SECONDS = "900"
 MAX_UPLOAD_BYTES = "1048576"
 ALLOWED_ORIGINS = ""
+
+[[r2_buckets]]
+binding = "UPLOAD_BUCKET"
+bucket_name = "optivus-uploads-dev"
 
 [observability]
 enabled = true

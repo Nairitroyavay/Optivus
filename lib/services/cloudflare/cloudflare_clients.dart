@@ -134,10 +134,14 @@ class RealCloudflareWorkerClient implements CloudflareWorkerClient {
 
   Map<String, dynamic> _jsonObject(String source) {
     if (source.trim().isEmpty) return const {};
-    final decoded = jsonDecode(source);
-    if (decoded is Map<String, dynamic>) return decoded;
-    if (decoded is Map) return Map<String, dynamic>.from(decoded);
-    return {'value': decoded};
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      return {'value': decoded};
+    } on FormatException {
+      return const {'message': 'Upload service returned an invalid response.'};
+    }
   }
 }
 

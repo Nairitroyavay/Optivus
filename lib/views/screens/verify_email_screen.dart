@@ -333,9 +333,15 @@ class _VerificationHelpCard extends StatelessWidget {
             label: 'Try another email',
             onTap: onTryAnotherEmail,
           ),
+          const SizedBox(height: 10),
+          const _HelpTextRow(
+            icon: Icons.folder_open_outlined,
+            label:
+                'Check Updates or Promotions if your email app separates new messages.',
+          ),
           const SizedBox(height: 12),
           const Text(
-            'Still not finding it? Some email apps may move new app emails to Updates, Promotions, or Spam during testing.',
+            'During early testing, some providers may place new app emails in other folders.',
             style: TextStyle(
               color: _kSub,
               fontSize: 11,
