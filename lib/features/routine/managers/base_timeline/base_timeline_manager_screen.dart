@@ -255,7 +255,7 @@ class _ImportReviewGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = const [
-      (RoutineImportSource.classes, 'Classes AI text/photo/manual import'),
+      (RoutineImportSource.classes, 'Classes text/photo/manual import review'),
       (RoutineImportSource.work, 'Job / Work / Business schedule import'),
       (RoutineImportSource.eating, 'Eating / meal-plan import'),
       (RoutineImportSource.skinCare, 'Skin care product/routine import'),
@@ -269,7 +269,7 @@ class _ImportReviewGrid extends StatelessWidget {
             subtitle: item.$2,
             icon: _icon(item.$1),
             itemCount: 0,
-            previewText: 'Review parsed local blocks before saving',
+            previewText: 'Review starter blocks before saving',
             onTap: () {
               onOpenDetail?.call(
                 RoutineDetailTarget(

@@ -20,6 +20,7 @@ service cloud.firestore {
 
     function validUploadPurpose(purpose) {
       return purpose == "class_timetable"
+        || purpose == "work_schedule"
         || purpose == "eating_menu"
         || purpose == "skin_care"
         || purpose == "profile_photo";
@@ -31,6 +32,20 @@ service cloud.firestore {
         || status == "uploaded"
         || status == "failed"
         || status == "deleted";
+    }
+
+    function validRoutineImportReviewStatus(status) {
+      return status == "draft"
+        || status == "needsReview"
+        || status == "accepted"
+        || status == "partiallyAccepted"
+        || status == "rejected";
+    }
+
+    function validRoutineImportReview(data, reviewId) {
+      return data.uid == request.auth.uid
+        && (!data.keys().hasAny(["id"]) || data.id == reviewId)
+        && validRoutineImportReviewStatus(data.status);
     }
 
     match /users/{uid}/uploads/{assetId} {
@@ -52,12 +67,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{uid}/routineImportReviews/{reviewId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validRoutineImportReview(request.resource.data, reviewId);
+      allow delete: if false;
+    }
+
     match /users/{uid} {
       allow read, write: if verifiedOwner(uid);
     }
 
     match /users/{uid}/{collectionId}/{document=**} {
-      allow read, write: if verifiedOwner(uid) && collectionId != "uploads";
+      allow read, write: if verifiedOwner(uid)
+        && collectionId != "uploads"
+        && collectionId != "routineImportReviews";
     }
   }
 }

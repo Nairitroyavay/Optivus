@@ -26,6 +26,7 @@ const firebaseJwks = createRemoteJWKSet(
 
 const approvedPurposes = new Set([
   "class_timetable",
+  "work_schedule",
   "eating_menu",
   "skin_care",
   "profile_photo",

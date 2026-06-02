@@ -24,7 +24,7 @@ No Firebase Functions are used.
 ## Upload Rules
 
 - source feature: `onboarding`
-- purposes: `class_timetable`, `eating_menu`, `skin_care`, `profile_photo`
+- purposes: `class_timetable`, `work_schedule`, `eating_menu`, `skin_care`, `profile_photo`
 - content type: `image/jpeg`
 - max size: `1048576` bytes by default
 - object key: `users/{uid}/onboarding/{purpose}/{assetId}.jpg`

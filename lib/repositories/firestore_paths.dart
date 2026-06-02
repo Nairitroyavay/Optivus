@@ -39,6 +39,14 @@ class FirestoreUserPaths {
     return 'users/$uid/uploads';
   }
 
+  static String routineImportReviews(String uid) {
+    return 'users/$uid/routineImportReviews';
+  }
+
+  static String routineImportReview(String uid, String reviewId) {
+    return 'users/$uid/routineImportReviews/$reviewId';
+  }
+
   static String onboardingSetupVersion(String uid, int version) {
     return 'users/$uid/onboarding/setupVersions/$version';
   }

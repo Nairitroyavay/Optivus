@@ -1,6 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum UploadedAssetPurpose { classTimetable, eatingMenu, skinCare, profilePhoto }
+enum UploadedAssetPurpose {
+  classTimetable,
+  workSchedule,
+  eatingMenu,
+  skinCare,
+  profilePhoto,
+}
 
 enum UploadedAssetStatus { pending, uploading, uploaded, failed, deleted }
 
@@ -8,6 +14,7 @@ extension UploadedAssetPurposeWireName on UploadedAssetPurpose {
   String get wireName {
     return switch (this) {
       UploadedAssetPurpose.classTimetable => 'class_timetable',
+      UploadedAssetPurpose.workSchedule => 'work_schedule',
       UploadedAssetPurpose.eatingMenu => 'eating_menu',
       UploadedAssetPurpose.skinCare => 'skin_care',
       UploadedAssetPurpose.profilePhoto => 'profile_photo',
@@ -159,6 +166,7 @@ class UploadedAsset {
 
 UploadedAssetPurpose uploadedAssetPurposeFromString(String? value) {
   return switch (value) {
+    'work_schedule' => UploadedAssetPurpose.workSchedule,
     'eating_menu' => UploadedAssetPurpose.eatingMenu,
     'skin_care' => UploadedAssetPurpose.skinCare,
     'profile_photo' => UploadedAssetPurpose.profilePhoto,
