@@ -42,6 +42,11 @@ service cloud.firestore {
         && request.resource.data.sizeBytes > 0
         && request.resource.data.sizeBytes <= 1048576
         && request.resource.data.contentType == "image/jpeg"
+        && request.resource.data.sourceFeature == "onboarding"
+        && request.resource.data.r2Key is string
+        && request.resource.data.fileName is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp
         && validUploadPurpose(request.resource.data.purpose)
         && validUploadStatus(request.resource.data.status);
       allow delete: if false;

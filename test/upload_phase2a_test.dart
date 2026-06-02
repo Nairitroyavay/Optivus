@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -48,10 +50,12 @@ void main() {
       expect(fromMap.status, UploadedAssetStatus.uploaded);
 
       final firestoreMap = asset.toFirestoreMap();
+      expect(firestoreMap.containsKey('localPreviewPath'), isFalse);
       expect(firestoreMap['createdAt'], isA<Timestamp>());
       final fromFirestore = UploadedAsset.fromFirestoreMap(firestoreMap);
       expect(fromFirestore.createdAt.toUtc(), createdAt);
       expect(fromFirestore.updatedAt.toUtc(), updatedAt);
+      expect(fromFirestore.localPreviewPath, isNull);
     },
   );
 
@@ -146,6 +150,25 @@ void main() {
     expect(fromMap.uploadedAssetStatus, 'uploaded');
   });
 
+  test('PendingFutureImportDraft copyWith supports uploadedAssetId', () {
+    final draft = PendingFutureImportDraft(
+      id: 'classes_photo_upload',
+      section: 'Classes',
+      mode: 'Photo Upload',
+      createdAt: DateTime.utc(2026, 6, 2),
+    );
+
+    final updated = draft.copyWith(
+      uploadedAssetId: 'asset-2',
+      uploadedAssetR2Key: 'users/u/onboarding/class_timetable/asset-2.jpg',
+      uploadedAssetStatus: 'uploaded',
+    );
+
+    expect(updated.uploadedAssetId, 'asset-2');
+    expect(updated.uploadedAssetR2Key, contains('asset-2.jpg'));
+    expect(updated.uploadedAssetStatus, 'uploaded');
+  });
+
   test('image prepare service handles cancelled picker safely', () async {
     final prepared = await ImagePrepareService().preparePickedFile(null);
     expect(prepared, isNull);
@@ -186,5 +209,76 @@ void main() {
       response.body['message'],
       'Upload service returned an invalid response.',
     );
+  });
+
+  test('RealR2UploadClient markUploadComplete throws on 404 and 405', () async {
+    for (final statusCode in [404, 405]) {
+      final client = RealR2UploadClient(
+        workerClient: RealCloudflareWorkerClient(
+          baseUrl: 'https://worker.example',
+          client: MockClient((request) async {
+            return http.Response(
+              jsonEncode({'message': 'Complete endpoint unavailable.'}),
+              statusCode,
+            );
+          }),
+        ),
+      );
+
+      await expectLater(
+        client.markUploadComplete(
+          assetId: 'asset',
+          objectKey: 'users/uid/onboarding/class_timetable/asset.jpg',
+          sizeBytes: 100,
+          idToken: 'token',
+        ),
+        throwsA(
+          isA<CloudflareClientException>()
+              .having((error) => error.statusCode, 'statusCode', statusCode)
+              .having(
+                (error) => error.message,
+                'message',
+                'Complete endpoint unavailable.',
+              ),
+        ),
+      );
+    }
+  });
+
+  test('FakeR2UploadClient deleteUpload succeeds', () async {
+    await expectLater(
+      FakeR2UploadClient().deleteUpload(
+        objectKey: 'users/uid/onboarding/class_timetable/asset.jpg',
+        idToken: 'token',
+      ),
+      completes,
+    );
+  });
+
+  test('RealR2UploadClient deleteUpload calls delete endpoint', () async {
+    late http.Request recordedRequest;
+    final client = RealR2UploadClient(
+      workerClient: RealCloudflareWorkerClient(
+        baseUrl: 'https://worker.example',
+        client: MockClient((request) async {
+          recordedRequest = request;
+          return http.Response(jsonEncode({'ok': true}), 200);
+        }),
+      ),
+    );
+
+    await client.deleteUpload(
+      objectKey: 'users/uid/onboarding/class_timetable/asset.jpg',
+      idToken: 'token',
+    );
+
+    expect(
+      recordedRequest.url.toString(),
+      'https://worker.example/v1/uploads/delete',
+    );
+    expect(recordedRequest.headers['authorization'], 'Bearer token');
+    expect(jsonDecode(recordedRequest.body), {
+      'objectKey': 'users/uid/onboarding/class_timetable/asset.jpg',
+    });
   });
 }

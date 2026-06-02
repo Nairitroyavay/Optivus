@@ -78,6 +78,11 @@ abstract class R2UploadClient {
     required int sizeBytes,
     required String idToken,
   });
+
+  Future<void> deleteUpload({
+    required String objectKey,
+    required String idToken,
+  });
 }
 
 class FakeCloudflareWorkerClient implements CloudflareWorkerClient {
@@ -188,6 +193,14 @@ class FakeR2UploadClient implements R2UploadClient {
   }) async {
     await Future<void>.delayed(const Duration(milliseconds: 120));
   }
+
+  @override
+  Future<void> deleteUpload({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+  }
 }
 
 class RealR2UploadClient implements R2UploadClient {
@@ -277,8 +290,22 @@ class RealR2UploadClient implements R2UploadClient {
         },
       ),
     );
-    if (response.statusCode == 404 || response.statusCode == 405) return;
     _throwIfWorkerFailed(response, 'Could not confirm the R2 upload.');
+  }
+
+  @override
+  Future<void> deleteUpload({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    final response = await _workerClient.post(
+      CloudflareWorkerRequest(
+        path: '/v1/uploads/delete',
+        headers: {'authorization': 'Bearer $idToken'},
+        body: {'objectKey': objectKey},
+      ),
+    );
+    _throwIfWorkerFailed(response, 'Could not delete the uploaded photo.');
   }
 
   void _throwIfWorkerFailed(

@@ -86,7 +86,6 @@ class UploadedAsset {
       'contentType': contentType,
       'sizeBytes': sizeBytes,
       'r2Key': r2Key,
-      'localPreviewPath': localPreviewPath,
       'status': status.wireName,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),

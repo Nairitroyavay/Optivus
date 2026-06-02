@@ -1177,6 +1177,9 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           .markDeleted(uid: uid, assetId: assetId);
     }
     if (!mounted) return;
+    if (ref.read(uploadControllerProvider).status == UploadFlowStatus.failed) {
+      return;
+    }
     _upsertCurrentPhotoImport(clearUploadReference: true);
   }
 

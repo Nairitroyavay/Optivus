@@ -245,19 +245,62 @@ class UploadController extends StateNotifier<UploadState> {
     required String uid,
     required String assetId,
   }) async {
-    await _assetRepository.markDeleted(uid: uid, assetId: assetId);
     final current = state.asset;
-    state = state.copyWith(
-      status: UploadFlowStatus.idle,
-      asset: current == null || current.assetId != assetId
+    try {
+      final asset =
+          current != null &&
+              current.ownerUid == uid &&
+              current.assetId == assetId
           ? current
-          : current.copyWith(
-              status: UploadedAssetStatus.deleted,
-              updatedAt: DateTime.now(),
-              clearErrorMessage: true,
-            ),
-      clearError: true,
-    );
+          : await _assetRepository.fetchAsset(uid: uid, assetId: assetId);
+
+      state = asset == null
+          ? state.copyWith(
+              status: UploadFlowStatus.savingMetadata,
+              uid: uid,
+              clearError: true,
+            )
+          : state.copyWith(
+              status: UploadFlowStatus.savingMetadata,
+              asset: asset,
+              uid: uid,
+              purpose: asset.purpose,
+              sourceFeature: asset.sourceFeature,
+              clearError: true,
+            );
+      final objectKey = asset?.r2Key.trim() ?? '';
+      if (objectKey.isNotEmpty) {
+        final idToken = await _authRepository.currentIdToken();
+        if (idToken == null || idToken.trim().isEmpty) {
+          throw const CloudflareClientException(
+            'Please sign in again before removing the photo.',
+          );
+        }
+        await _r2UploadClient.deleteUpload(
+          objectKey: objectKey,
+          idToken: idToken,
+        );
+      }
+
+      await _assetRepository.markDeleted(uid: uid, assetId: assetId);
+      final deletedAsset = asset?.copyWith(
+        status: UploadedAssetStatus.deleted,
+        updatedAt: DateTime.now(),
+        clearErrorMessage: true,
+      );
+      state = deletedAsset == null
+          ? state.copyWith(status: UploadFlowStatus.idle, clearError: true)
+          : state.copyWith(
+              status: UploadFlowStatus.idle,
+              asset: deletedAsset,
+              clearError: true,
+            );
+    } catch (error) {
+      state = state.copyWith(
+        status: UploadFlowStatus.failed,
+        errorMessage: _friendlyUploadError(error),
+      );
+    }
   }
 
   void clear() {
