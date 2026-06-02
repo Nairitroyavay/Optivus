@@ -74,6 +74,26 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return authUser?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
   }
 
+  Future<void> _persistCurrentDraftAfterNavigation() async {
+    final uid = _currentPersistenceUid();
+    if (uid == null) return;
+
+    final draft = ref.read(mockOnboardingProvider).draft.copyWith(uid: uid);
+
+    try {
+      await ref.read(onboardingRepositoryProvider).saveDraft(draft);
+    } catch (_) {
+      if (!mounted) return;
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(
+            OptivusBackendConfig.useFirebase
+                ? 'Your progress is saved locally, but cloud sync failed. Please check your connection.'
+                : null,
+          );
+    }
+  }
+
   // Core Save step action — with double-tap prevention
   Future<bool> _saveStep(int step) async {
     if (_isSaving) return false; // Prevent double tap
@@ -173,6 +193,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeInOut,
       );
+      await _persistCurrentDraftAfterNavigation();
     } catch (e) {
       ref
           .read(mockOnboardingProvider.notifier)
@@ -300,7 +321,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return lastCompleted;
   }
 
-  void _navigateToIndicatorStep(int index) {
+  Future<void> _navigateToIndicatorStep(int index) async {
     final onboardingState = ref.read(mockOnboardingProvider);
     final boundedIndex = index.clamp(
       0,
@@ -339,11 +360,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     _currentPage = boundedIndex;
     ref.read(mockOnboardingProvider.notifier).setStep(boundedIndex);
-    _pageController.animateToPage(
+    await _pageController.animateToPage(
       boundedIndex,
       duration: const Duration(milliseconds: 350),
       curve: Curves.easeInOut,
     );
+    await _persistCurrentDraftAfterNavigation();
   }
 
   void _goToPreviousStep() {
