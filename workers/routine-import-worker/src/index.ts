@@ -7,6 +7,7 @@ type Env = {
   GEMINI_INLINE_MAX_IMAGE_BYTES?: string;
   AI_PROVIDER?: string;
   AI_MODEL?: string;
+  AI_FALLBACK_MODEL?: string;
   OPENAI_API_KEY?: string;
   GEMINI_API_KEY?: string;
   ALLOWED_ORIGINS?: string;
@@ -21,7 +22,13 @@ type RoutineImportCandidateType =
   | "note"
   | "unknown";
 type ConfidenceLabel = "high" | "medium" | "low";
-type ExtractionEngine = "disabled" | "fake" | "aiVision" | "aiText";
+type ExtractionEngine =
+  | "disabled"
+  | "fake"
+  | "gemini"
+  | "openai"
+  | "aiVision"
+  | "aiText";
 
 type RoutineImportExtractionResponse = {
   id: string;
@@ -199,16 +206,20 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
     typeof object.size === "number" &&
     object.size > geminiInlineMaxImageBytes(env, maxBytes)
   ) {
-    const raw = inlineImageTooLargeFallback({
-      uid: user.uid,
-      reviewId,
-      source,
-      sourceLabel,
-      imageBytes: new ArrayBuffer(0),
-      contentType: normalizedSourceContentType,
-      objectKey: uploadedAssetR2Key,
-      uploadedAssetId,
-    });
+    const raw = inlineImageTooLargeFallback(
+      {
+        uid: user.uid,
+        reviewId,
+        source,
+        sourceLabel,
+        imageBytes: new ArrayBuffer(0),
+        contentType: normalizedSourceContentType,
+        objectKey: uploadedAssetR2Key,
+        uploadedAssetId,
+      },
+      "gemini",
+      env.AI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+    );
     return jsonResponse(
       request,
       env,
@@ -229,16 +240,20 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
     aiProviderName(env) === "gemini" &&
     imageBytes.byteLength > geminiInlineMaxImageBytes(env, maxBytes)
   ) {
-    const raw = inlineImageTooLargeFallback({
-      uid: user.uid,
-      reviewId,
-      source,
-      sourceLabel,
-      imageBytes,
-      contentType: normalizedSourceContentType,
-      objectKey: uploadedAssetR2Key,
-      uploadedAssetId,
-    });
+    const raw = inlineImageTooLargeFallback(
+      {
+        uid: user.uid,
+        reviewId,
+        source,
+        sourceLabel,
+        imageBytes,
+        contentType: normalizedSourceContentType,
+        objectKey: uploadedAssetR2Key,
+        uploadedAssetId,
+      },
+      "gemini",
+      env.AI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+    );
     return jsonResponse(
       request,
       env,
@@ -307,14 +322,30 @@ class FakeAiRoutineExtractor implements AiRoutineExtractor {
 class VisionAiRoutineExtractor implements AiRoutineExtractor {
   private readonly apiKey: string;
   private readonly model: string;
+  private readonly fallbackModel?: string;
 
-  constructor(apiKey: string, model: string) {
+  constructor(apiKey: string, model: string, fallbackModel?: string) {
     this.apiKey = apiKey;
     this.model = model;
+    this.fallbackModel = fallbackModel;
   }
 
   async extract(args: ExtractArgs): Promise<RoutineImportExtractionResponse> {
-    const prompt = buildRoutineImportPrompt(args.source);
+    const primary = await this.extractWithModel(args, this.model);
+    return maybeRunFallbackModel({
+      args,
+      primary,
+      primaryModel: this.model,
+      fallbackModel: this.fallbackModel,
+      runFallback: (model) => this.extractWithModel(args, model),
+    });
+  }
+
+  private async extractWithModel(
+    args: ExtractArgs,
+    model: string,
+  ): Promise<RoutineImportExtractionResponse> {
+    const prompt = buildRoutineImportPrompt(args.source, "openai");
     const imageDataUrl = `data:${args.contentType};base64,${arrayBufferToBase64(args.imageBytes)}`;
     try {
       const response = await fetch("https://api.openai.com/v1/responses", {
@@ -324,7 +355,7 @@ class VisionAiRoutineExtractor implements AiRoutineExtractor {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: this.model,
+          model,
           input: [
             {
               role: "user",
@@ -338,37 +369,41 @@ class VisionAiRoutineExtractor implements AiRoutineExtractor {
       });
 
       if (!response.ok) {
-        return aiVisionFallback(args, "AI provider could not process the image.");
+        return providerFallback(args, "openai", model, "AI provider could not process the image.");
       }
 
       let providerBody: unknown;
       try {
         providerBody = await response.json();
       } catch {
-        return aiVisionFallback(args, "AI provider returned invalid JSON.");
+        return providerFallback(args, "openai", model, "AI provider returned invalid JSON.");
       }
 
       const text = readProviderText(providerBody);
       let parsed = parseAiJsonText(text);
       if (!parsed) {
-        parsed = await this.repairAiJsonText(text, args);
+        parsed = await this.repairAiJsonText(text, args, model);
       }
       if (!parsed) {
-        return unsafeAiOutputFallback(args);
+        return unsafeAiOutputFallback(args, "openai", model);
       }
 
       const validation = validateExtractionShape(parsed);
       if (!validation.ok) {
-        return unsafeAiOutputFallback(args);
+        return unsafeAiOutputFallback(args, "openai", model);
       }
 
-      return coerceExtractionResponse(parsed, args);
+      return coerceExtractionResponse(parsed, args, "openai", model);
     } catch {
-      return aiVisionFallback(args, "AI provider is unavailable. Try again later.");
+      return providerFallback(args, "openai", model, "AI provider is unavailable. Try again later.");
     }
   }
 
-  private async repairAiJsonText(text: string, args: ExtractArgs): Promise<unknown | null> {
+  private async repairAiJsonText(
+    text: string,
+    args: ExtractArgs,
+    model: string,
+  ): Promise<unknown | null> {
     if (!text.trim()) return null;
     try {
       const response = await fetch("https://api.openai.com/v1/responses", {
@@ -378,7 +413,7 @@ class VisionAiRoutineExtractor implements AiRoutineExtractor {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: this.model,
+          model,
           input: [
             {
               role: "user",
@@ -405,20 +440,41 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
   private readonly apiKey: string;
   private readonly model: string;
   private readonly inlineMaxBytes: number;
+  private readonly fallbackModel?: string;
 
-  constructor(apiKey: string, model: string, inlineMaxBytes: number) {
+  constructor(
+    apiKey: string,
+    model: string,
+    inlineMaxBytes: number,
+    fallbackModel?: string,
+  ) {
     this.apiKey = apiKey;
     this.model = model;
     this.inlineMaxBytes = inlineMaxBytes;
+    this.fallbackModel = fallbackModel;
   }
 
   async extract(args: ExtractArgs): Promise<RoutineImportExtractionResponse> {
+    const primary = await this.extractWithModel(args, this.model);
+    return maybeRunFallbackModel({
+      args,
+      primary,
+      primaryModel: this.model,
+      fallbackModel: this.fallbackModel,
+      runFallback: (model) => this.extractWithModel(args, model),
+    });
+  }
+
+  private async extractWithModel(
+    args: ExtractArgs,
+    configuredModel: string,
+  ): Promise<RoutineImportExtractionResponse> {
     if (args.imageBytes.byteLength > this.inlineMaxBytes) {
-      return inlineImageTooLargeFallback(args);
+      return inlineImageTooLargeFallback(args, "gemini", configuredModel);
     }
 
-    const prompt = buildRoutineImportPrompt(args.source);
-    const model = this.model.replace(/^models\//, "");
+    const prompt = buildRoutineImportPrompt(args.source, "gemini");
+    const model = configuredModel.replace(/^models\//, "");
     try {
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -432,13 +488,13 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
             contents: [
               {
                 parts: [
-                  { text: prompt },
                   {
                     inlineData: {
                       mimeType: args.contentType,
                       data: arrayBufferToBase64(args.imageBytes),
                     },
                   },
+                  { text: prompt },
                 ],
               },
             ],
@@ -451,29 +507,29 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
       );
 
       if (!response.ok) {
-        return aiVisionFallback(args, "AI provider could not process the image.");
+        return providerFallback(args, "gemini", configuredModel, "AI provider could not process the image.");
       }
 
       let providerBody: unknown;
       try {
         providerBody = await response.json();
       } catch {
-        return aiVisionFallback(args, "AI provider returned invalid JSON.");
+        return providerFallback(args, "gemini", configuredModel, "AI provider returned invalid JSON.");
       }
 
       const parsed = parseAiJsonText(readProviderText(providerBody));
       if (!parsed) {
-        return unsafeAiOutputFallback(args);
+        return unsafeAiOutputFallback(args, "gemini", configuredModel);
       }
 
       const validation = validateExtractionShape(parsed);
       if (!validation.ok) {
-        return unsafeAiOutputFallback(args);
+        return unsafeAiOutputFallback(args, "gemini", configuredModel);
       }
 
-      return coerceExtractionResponse(parsed, args);
+      return coerceExtractionResponse(parsed, args, "gemini", configuredModel);
     } catch {
-      return aiVisionFallback(args, "AI provider is unavailable. Try again later.");
+      return providerFallback(args, "gemini", configuredModel, "AI provider is unavailable. Try again later.");
     }
   }
 }
@@ -481,11 +537,13 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
 function extractorFor(env: Env): AiRoutineExtractor {
   const provider = aiProviderName(env);
   if (provider === "fake") return new FakeAiRoutineExtractor();
+  const fallbackModel = aiFallbackModel(env);
   if (provider === "gemini" && env.GEMINI_API_KEY?.trim()) {
     return new GeminiAiRoutineExtractor(
       env.GEMINI_API_KEY.trim(),
       env.AI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
       geminiInlineMaxImageBytes(env, sourceImageMaxBytes(env)),
+      fallbackModel,
     );
   }
   if (
@@ -493,7 +551,11 @@ function extractorFor(env: Env): AiRoutineExtractor {
     env.OPENAI_API_KEY?.trim() &&
     env.AI_MODEL?.trim()
   ) {
-    return new VisionAiRoutineExtractor(env.OPENAI_API_KEY.trim(), env.AI_MODEL.trim());
+    return new VisionAiRoutineExtractor(
+      env.OPENAI_API_KEY.trim(),
+      env.AI_MODEL.trim(),
+      fallbackModel,
+    );
   }
   return new DisabledAiRoutineExtractor();
 }
@@ -502,7 +564,15 @@ function aiProviderName(env: Env): string {
   return (env.AI_PROVIDER ?? "disabled").trim() || "disabled";
 }
 
-function buildRoutineImportPrompt(source: RoutineImportReviewSource): string {
+function aiFallbackModel(env: Env): string | undefined {
+  const value = env.AI_FALLBACK_MODEL?.trim();
+  return value && value !== env.AI_MODEL?.trim() ? value : undefined;
+}
+
+function buildRoutineImportPrompt(
+  source: RoutineImportReviewSource,
+  engine: ExtractionEngine = "aiVision",
+): string {
   const sourceRules = {
     classes:
       "Extract subjects/classes/labs/tutorials. Use hard blocks by default. Preserve room/location if visible. If only period numbers exist and exact times are missing, create flexible/unplaced low-confidence candidates.",
@@ -551,7 +621,7 @@ function buildRoutineImportPrompt(source: RoutineImportReviewSource): string {
       id: "string",
       uid: "string",
       source,
-      engine: "aiVision",
+      engine,
       engineVersion: "string",
       sourceAssetId: "string",
       sourceR2Key: "string",
@@ -579,7 +649,7 @@ function buildRoutineImportPrompt(source: RoutineImportReviewSource): string {
           sourceRowLabel: "row label",
           sourceColumnLabel: "column label",
           sourceBoundingBox: {},
-          extractionEngine: "aiVision",
+          extractionEngine: engine,
           extractionVersion: "phase2d",
           location: "room/location if visible",
           notes: "safe note",
@@ -861,7 +931,12 @@ function sanitizeCandidate(
   };
 }
 
-function coerceExtractionResponse(value: unknown, args: ExtractArgs): RoutineImportExtractionResponse {
+function coerceExtractionResponse(
+  value: unknown,
+  args: ExtractArgs,
+  engine: ExtractionEngine,
+  engineVersion: string,
+): RoutineImportExtractionResponse {
   const body = record(value);
   const candidates = Array.isArray(body.candidates)
     ? body.candidates.map((item) => coerceCandidate(item))
@@ -870,8 +945,8 @@ function coerceExtractionResponse(value: unknown, args: ExtractArgs): RoutineImp
     id: textValue(body.id) ?? `ai-${args.reviewId}`,
     uid: args.uid,
     source: args.source,
-    engine: "aiVision",
-    engineVersion: "phase2d",
+    engine,
+    engineVersion,
     sourceAssetId: args.uploadedAssetId,
     sourceR2Key: args.objectKey,
     rawText: textValue(body.rawText),
@@ -954,21 +1029,27 @@ function fallbackResponse(
   };
 }
 
-function aiVisionFallback(
+function providerFallback(
   args: ExtractArgs,
+  engine: ExtractionEngine,
+  engineVersion: string,
   warning: string,
 ): RoutineImportExtractionResponse {
   return fallbackResponse({
     args,
-    engine: "aiVision",
-    engineVersion: "phase2d-fallback",
+    engine,
+    engineVersion,
     warning,
   });
 }
 
-function inlineImageTooLargeFallback(args: ExtractArgs): RoutineImportExtractionResponse {
+function inlineImageTooLargeFallback(
+  args: ExtractArgs,
+  engine: ExtractionEngine,
+  engineVersion: string,
+): RoutineImportExtractionResponse {
   return {
-    ...baseResponse(args, "aiVision", "phase2d-inline-limit"),
+    ...baseResponse(args, engine, engineVersion),
     warnings: [
       INLINE_IMAGE_TOO_LARGE_WARNING,
       "image too large for inline AI processing",
@@ -976,11 +1057,147 @@ function inlineImageTooLargeFallback(args: ExtractArgs): RoutineImportExtraction
   };
 }
 
-function unsafeAiOutputFallback(args: ExtractArgs): RoutineImportExtractionResponse {
-  return aiVisionFallback(
+function unsafeAiOutputFallback(
+  args: ExtractArgs,
+  engine: ExtractionEngine,
+  engineVersion: string,
+): RoutineImportExtractionResponse {
+  return providerFallback(
     args,
+    engine,
+    engineVersion,
     "AI output could not be safely parsed. Review manually.",
   );
+}
+
+async function maybeRunFallbackModel(options: {
+  args: ExtractArgs;
+  primary: RoutineImportExtractionResponse;
+  primaryModel: string;
+  fallbackModel?: string;
+  runFallback: (model: string) => Promise<RoutineImportExtractionResponse>;
+}): Promise<RoutineImportExtractionResponse> {
+  const fallbackModel = options.fallbackModel?.trim();
+  if (!fallbackModel || fallbackModel === options.primaryModel.trim()) {
+    return options.primary;
+  }
+  if (!shouldRunFallback(options.primary, options.args)) {
+    return options.primary;
+  }
+
+  try {
+    const fallback = await options.runFallback(fallbackModel);
+    if (fallbackModelFailed(fallback)) {
+      return withMergedWarnings(options.primary, [
+        "AI fallback model could not improve extraction.",
+      ]);
+    }
+    return withMergedWarnings(fallback, [
+      "AI fallback model used after low-confidence primary extraction.",
+    ]);
+  } catch {
+    return withMergedWarnings(options.primary, [
+      "AI fallback model could not improve extraction.",
+    ]);
+  }
+}
+
+function shouldRunFallback(
+  result: RoutineImportExtractionResponse,
+  args: ExtractArgs,
+): boolean {
+  if (result.engine === "disabled" || result.engine === "fake") return false;
+  if (result.candidates.length === 0) return true;
+  if (averageConfidence(result.candidates) < 0.72) return true;
+  if (lowConfidenceRatio(result.candidates) > 0.5) return true;
+  if (result.warnings.some(isSeriousImageWarning)) return true;
+  if (result.warnings.some(isJsonParseFailureWarning)) return true;
+  if (
+    (args.source === "classes" || args.source === "work") &&
+    !result.candidates.some(hasTimedBlock)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function averageConfidence(candidates: RoutineImportCandidate[]): number {
+  if (candidates.length === 0) return 0;
+  const total = candidates.reduce((sum, candidate) => {
+    if (typeof candidate.confidenceScore === "number") {
+      return sum + clampNumber(candidate.confidenceScore, 0, 1);
+    }
+    return sum + confidenceFromLabel(candidate.confidenceLabel);
+  }, 0);
+  return total / candidates.length;
+}
+
+function lowConfidenceRatio(candidates: RoutineImportCandidate[]): number {
+  if (candidates.length === 0) return 1;
+  const lowCount = candidates.filter((candidate) => {
+    if (candidate.confidenceLabel === "low") return true;
+    if (typeof candidate.confidenceScore === "number") {
+      return candidate.confidenceScore < 0.52;
+    }
+    return false;
+  }).length;
+  return lowCount / candidates.length;
+}
+
+function confidenceFromLabel(label: ConfidenceLabel | undefined): number {
+  if (label === "high") return 0.9;
+  if (label === "medium") return 0.65;
+  return 0.35;
+}
+
+function hasTimedBlock(candidate: RoutineImportCandidate): boolean {
+  return candidate.hasFixedTime === true &&
+    candidate.candidateType === "block" &&
+    candidate.startMinute >= 0 &&
+    candidate.endMinute > candidate.startMinute &&
+    candidate.endMinute <= 24 * 60;
+}
+
+function isSeriousImageWarning(warning: string): boolean {
+  const text = warning.toLowerCase();
+  return text.includes("hard to read") ||
+    text.includes("blurry") ||
+    text.includes("dark image") ||
+    text.includes("rotated") ||
+    text.includes("too small") ||
+    text.includes("cropped") ||
+    text.includes("partial") ||
+    text.includes("unreadable") ||
+    text.includes("wrong source") ||
+    text.includes("multiple sheets") ||
+    text.includes("image too large");
+}
+
+function isJsonParseFailureWarning(warning: string): boolean {
+  const text = warning.toLowerCase();
+  return text.includes("could not be safely parsed") ||
+    text.includes("invalid json");
+}
+
+function fallbackModelFailed(result: RoutineImportExtractionResponse): boolean {
+  if (result.candidates.length > 0) return false;
+  return result.warnings.some((warning) => {
+    const text = warning.toLowerCase();
+    return text.includes("unavailable") ||
+      text.includes("could not process") ||
+      text.includes("returned invalid json") ||
+      text.includes("could not be safely parsed");
+  });
+}
+
+function withMergedWarnings(
+  result: RoutineImportExtractionResponse,
+  warnings: string[],
+): RoutineImportExtractionResponse {
+  return {
+    ...result,
+    warnings: [...new Set([...result.warnings, ...warnings])],
+  };
 }
 
 async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<VerifiedUser> {
@@ -1335,7 +1552,12 @@ function normalizedContentType(value: string): string {
 }
 
 function safeEngine(value: unknown): ExtractionEngine {
-  return value === "aiVision" || value === "aiText" || value === "fake" || value === "disabled"
+  return value === "gemini" ||
+    value === "openai" ||
+    value === "aiVision" ||
+    value === "aiText" ||
+    value === "fake" ||
+    value === "disabled"
     ? value
     : "fake";
 }

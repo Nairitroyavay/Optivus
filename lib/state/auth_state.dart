@@ -9,6 +9,8 @@ import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
+import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
+import 'package:optivus/services/routine_import_applied_restore_service.dart';
 
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/mock_seed_data.dart';
@@ -389,6 +391,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
+    var completedBundleLoaded = false;
     if (profile.onboardingCompleted) {
       _ref
           .read(mockOnboardingProvider.notifier)
@@ -413,6 +416,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
         .loadProfileSettings(profileSettings);
     _ref.read(profileSettingsProvider.notifier).loadPreferences(preferences);
     _ref.read(regionSettingsProvider.notifier).loadSettings(regionSettings);
+
+    if (profile.onboardingCompleted) {
+      try {
+        final bundle = await _ref
+            .read(onboardingRepositoryProvider)
+            .fetchCompletionBundle(user.uid);
+        if (bundle != null) {
+          await const OnboardingFrontendHydrationService().hydrate(
+            read: _ref.read,
+            bundle: bundle,
+          );
+          completedBundleLoaded = true;
+        }
+      } catch (_) {
+        completedBundleLoaded = false;
+      }
+      try {
+        await const RoutineImportAppliedRestoreService()
+            .restoreMissingAcceptedReviews(read: _ref.read, uid: user.uid);
+      } catch (_) {
+        // Best effort only: Routine import restore must not block login.
+      }
+      if (!completedBundleLoaded) {
+        _ref
+            .read(mockUserProfileProvider.notifier)
+            .updateProfile(profile.copyWith(onboardingCompleted: true));
+      }
+    }
 
     state = state.copyWith(
       user: user,

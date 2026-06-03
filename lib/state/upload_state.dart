@@ -68,6 +68,9 @@ class UploadState {
 }
 
 class UploadController extends StateNotifier<UploadState> {
+  static const String _metadataSaveFailedMessage =
+      'Photo upload could not be saved. Please try again.';
+
   final UploadedAssetRepository _assetRepository;
   final AuthRepository _authRepository;
   final ImagePrepareService _imagePrepareService;
@@ -123,6 +126,9 @@ class UploadController extends StateNotifier<UploadState> {
 
     PreparedUploadImage? preparedImage;
     R2SignedUpload? signedUpload;
+    String? uploadIdToken;
+    var uploadCompleted = false;
+    var savingMetadata = false;
     try {
       state = state.copyWith(
         status: UploadFlowStatus.picking,
@@ -148,8 +154,8 @@ class UploadController extends StateNotifier<UploadState> {
         return null;
       }
 
-      final idToken = await _authRepository.currentIdToken();
-      if (idToken == null || idToken.trim().isEmpty) {
+      uploadIdToken = await _authRepository.currentIdToken();
+      if (uploadIdToken == null || uploadIdToken.trim().isEmpty) {
         throw const CloudflareClientException(
           'Please sign in again before uploading a photo.',
         );
@@ -162,7 +168,7 @@ class UploadController extends StateNotifier<UploadState> {
         sourceFeature: sourceFeature,
         contentType: preparedImage.contentType,
         sizeBytes: preparedImage.sizeBytes,
-        idToken: idToken,
+        idToken: uploadIdToken,
       );
 
       state = state.copyWith(status: UploadFlowStatus.uploading);
@@ -175,8 +181,9 @@ class UploadController extends StateNotifier<UploadState> {
         assetId: signedUpload.assetId,
         objectKey: signedUpload.objectKey,
         sizeBytes: preparedImage.sizeBytes,
-        idToken: idToken,
+        idToken: uploadIdToken,
       );
+      uploadCompleted = true;
 
       final now = DateTime.now();
       final asset = UploadedAsset(
@@ -195,7 +202,9 @@ class UploadController extends StateNotifier<UploadState> {
       );
 
       state = state.copyWith(status: UploadFlowStatus.savingMetadata);
+      savingMetadata = true;
       await _assetRepository.saveAsset(asset);
+      savingMetadata = false;
       state = state.copyWith(
         status: UploadFlowStatus.uploaded,
         asset: asset,
@@ -203,7 +212,31 @@ class UploadController extends StateNotifier<UploadState> {
       );
       return asset;
     } catch (error) {
-      final message = _friendlyUploadError(error);
+      final metadataSaveFailedAfterR2 =
+          savingMetadata &&
+          uploadCompleted &&
+          signedUpload != null &&
+          _isRemoteCompletedUpload(signedUpload) &&
+          uploadIdToken != null &&
+          uploadIdToken.trim().isNotEmpty;
+      if (metadataSaveFailedAfterR2) {
+        final cleanupSucceeded = await _tryCleanupCompletedR2Upload(
+          objectKey: signedUpload.objectKey,
+          idToken: uploadIdToken,
+        );
+        if (cleanupSucceeded) {
+          state = state.copyWith(
+            status: UploadFlowStatus.failed,
+            errorMessage: _metadataSaveFailedMessage,
+            clearAsset: true,
+          );
+          return null;
+        }
+      }
+
+      final message = metadataSaveFailedAfterR2
+          ? _metadataSaveFailedMessage
+          : _friendlyUploadError(error);
       final failedAsset = signedUpload == null || preparedImage == null
           ? null
           : _failedAsset(
@@ -215,7 +248,11 @@ class UploadController extends StateNotifier<UploadState> {
               errorMessage: message,
             );
       if (failedAsset != null) {
-        await _assetRepository.saveAsset(failedAsset);
+        try {
+          await _assetRepository.saveAsset(failedAsset);
+        } catch (_) {
+          // Metadata was already the failing step; keep the UI error generic.
+        }
       }
       state = state.copyWith(
         status: UploadFlowStatus.failed,
@@ -224,6 +261,25 @@ class UploadController extends StateNotifier<UploadState> {
       );
       return null;
     }
+  }
+
+  Future<bool> _tryCleanupCompletedR2Upload({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    try {
+      await _r2UploadClient.deleteUpload(
+        objectKey: objectKey,
+        idToken: idToken,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _isRemoteCompletedUpload(R2SignedUpload signedUpload) {
+    return !signedUpload.uploadUrl.startsWith('r2://fake-r2/');
   }
 
   Future<UploadedAsset?> retryFailedUpload() {

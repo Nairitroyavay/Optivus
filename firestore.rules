@@ -72,6 +72,8 @@ service cloud.firestore {
         && validRoutineImportReviewStatus(data.status);
     }
 
+    // Strict Phase 2A upload metadata rule. R2 bytes are owned by the Worker;
+    // Firestore stores only verified owner metadata.
     match /users/{uid}/uploads/{assetId} {
       allow read: if verifiedOwner(uid);
       allow create, update: if verifiedOwner(uid)
@@ -96,6 +98,8 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Strict Phase 2C/2D visual review rule. AI only writes review candidates;
+    // Routine items are not created by this collection.
     match /users/{uid}/routineImportReviews/{reviewId} {
       allow read: if verifiedOwner(uid);
       allow create, update: if verifiedOwner(uid)
@@ -103,10 +107,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Phase 2B onboarding draft/completion bundle. Validation stays light for
+    // early development; production backend modules must add specific schemas.
+    match /users/{uid}/onboarding/{docId} {
+      allow read, write: if verifiedOwner(uid);
+    }
+
     match /users/{uid} {
       allow read, write: if verifiedOwner(uid);
     }
 
+    // Temporary verified-owner development catchall.
+    // Home/Routine/Tracker/Goals/Coach backend collections must get specific
+    // collection rules before production release. Uploads and import reviews
+    // are excluded here because their stricter rules above already apply.
     match /users/{uid}/{collectionId}/{document=**} {
       allow read, write: if verifiedOwner(uid)
         && collectionId != "uploads"

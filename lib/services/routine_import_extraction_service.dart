@@ -7,7 +7,7 @@ class RoutineImportExtractionService {
   const RoutineImportExtractionService();
 
   static const String noAiExtractionWarning =
-      'Photo is attached from onboarding. AI extraction is not connected yet. Review manually before saving.';
+      'Photo is attached from onboarding. Run AI extraction or review manually before saving.';
 
   RoutineImportReviewDraft buildReviewDraft({
     required String uid,

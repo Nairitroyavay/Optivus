@@ -1,4 +1,6 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/onboarding/steps/base_timeline_step.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
@@ -9,11 +11,13 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
+import 'package:optivus/services/routine_import_applied_restore_service.dart';
 import 'package:optivus/services/routine_import_conversion_service.dart';
 import 'package:optivus/services/routine_import_extraction_service.dart';
 import 'package:optivus/services/routine_import_timeline_edit_service.dart';
 import 'package:optivus/services/routine_import_validation_service.dart';
 import 'package:optivus/services/uploads/upload_object_key.dart';
+import 'package:optivus/state/app_state.dart';
 
 void main() {
   test('RoutineImportReviewDraft toMap/fromMap round-trips', () {
@@ -439,6 +443,56 @@ void main() {
     expect(review.blocksDuplicateApply, isTrue);
   });
 
+  test('Accepted import review restores missing local routine items', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final review = _acceptedReview();
+
+    final result = await const RoutineImportAppliedRestoreService()
+        .restoreMissingForReview(read: container.read, review: review);
+
+    expect(result.missingItemIds, ['imported-review-1-candidate-1']);
+    expect(result.restoredItemIds, ['imported-review-1-candidate-1']);
+    expect(
+      container.read(routineNotifierProvider).items.map((item) => item.id),
+      contains('imported-review-1-candidate-1'),
+    );
+    expect(
+      container.read(mockRoutineProvider).map((item) => item.id),
+      contains('imported-review-1-candidate-1'),
+    );
+  });
+
+  test(
+    'Already-applied review restore does not duplicate existing item',
+    () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final review = _acceptedReview();
+      final service = const RoutineImportAppliedRestoreService();
+
+      await service.restoreMissingForReview(
+        read: container.read,
+        review: review,
+      );
+      final second = await service.restoreMissingForReview(
+        read: container.read,
+        review: review,
+      );
+
+      expect(second.missingItemIds, isEmpty);
+      expect(second.restoredItemIds, isEmpty);
+      expect(
+        container
+            .read(routineNotifierProvider)
+            .items
+            .where((item) => item.id == 'imported-review-1-candidate-1'),
+        hasLength(1),
+      );
+      expect(review.blocksDuplicateApply, isTrue);
+    },
+  );
+
   test('Eating source uses eating category', () {
     final review = const RoutineImportExtractionService().buildReviewDraft(
       uid: 'uid-1',
@@ -528,6 +582,22 @@ void main() {
       RoutineImportCandidateType.block,
     );
   });
+}
+
+RoutineImportReviewDraft _acceptedReview() {
+  return RoutineImportReviewDraft(
+    id: 'review-1',
+    uid: 'uid-1',
+    source: RoutineImportReviewSource.classes,
+    status: RoutineImportReviewStatus.accepted,
+    sourceLabel: 'Classes',
+    candidateBlocks: [_candidate()],
+    acceptedCandidateIds: const ['candidate-1'],
+    appliedRoutineItemIds: const ['imported-review-1-candidate-1'],
+    appliedAt: DateTime.utc(2026, 6, 2),
+    createdAt: DateTime.utc(2026, 6, 2),
+    updatedAt: DateTime.utc(2026, 6, 2),
+  );
 }
 
 RoutineImportCandidateBlock _candidate({

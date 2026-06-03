@@ -1,8 +1,12 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
+import 'package:optivus/state/app_state.dart';
 
 void main() {
   test('OnboardingDraft toMap/fromMap preserves currentStep', () {
@@ -142,6 +146,34 @@ void main() {
       'users/abc/onboarding/completionBundle',
     );
   });
+
+  test('completed onboarding bundle hydrates local frontend state', () async {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final bundle = OnboardingCompletionService.buildBundle(
+      _completedHydrationDraft(),
+    );
+
+    final result = await const OnboardingFrontendHydrationService().hydrate(
+      read: container.read,
+      bundle: bundle,
+    );
+
+    expect(result.changed, isTrue);
+    expect(container.read(mockRoutineProvider), isNotEmpty);
+    expect(container.read(routineNotifierProvider).items, isNotEmpty);
+    expect(container.read(mockGoalProvider), isNotEmpty);
+    expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
+    expect(container.read(mockUserProfileProvider).onboardingCompleted, isTrue);
+
+    final second = await const OnboardingFrontendHydrationService().hydrate(
+      read: container.read,
+      bundle: bundle,
+    );
+    expect(second.routineItemIds, isEmpty);
+    expect(second.mockRoutineItemIds, isEmpty);
+    expect(second.goalIds, isEmpty);
+  });
 }
 
 OnboardingDraft _draftWithUploadReferences() {
@@ -190,5 +222,40 @@ OnboardingDraft _draftWithUploadReferences() {
         ),
       ],
     ),
+  );
+}
+
+OnboardingDraft _completedHydrationDraft() {
+  return OnboardingDraft(
+    uid: 'phase2b-user',
+    baseTimeline: const BaseTimelineDraft(
+      blocks: [
+        TimelineBlockDraft(
+          id: 'class-main',
+          section: 'classes',
+          title: 'Morning class',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+          repeatDays: [1, 2, 3, 4, 5],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+      ],
+    ),
+    badHabits: const [
+      BadHabitDraft(
+        id: 'bad-scroll',
+        habitKey: 'doom_scrolling',
+        displayName: 'Doom Scrolling',
+        dailySpend: 25,
+        lostTimeMinutes: 30,
+      ),
+    ],
+    identityGoals: const [
+      IdentityGoalDraft(
+        goalKey: 'focused_student',
+        displayName: 'Focused Student',
+        systemKeys: ['study_block'],
+      ),
+    ],
   );
 }

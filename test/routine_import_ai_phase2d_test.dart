@@ -82,6 +82,34 @@ void main() {
     expect(result.candidates.single.id, 'ai_class_math');
   });
 
+  test('Gemini engine parses safely and preserves candidate engine', () async {
+    final result = await _extractWorkerResult(
+      _resultMap(
+        engine: 'gemini',
+        engineVersion: 'phase2d-gemini',
+        candidateExtractionEngine: 'gemini',
+      ),
+    );
+
+    expect(result.engine, 'gemini');
+    expect(result.engineVersion, 'phase2d-gemini');
+    expect(result.candidates.single.extractionEngine, 'gemini');
+  });
+
+  test('OpenAI engine parses safely and preserves candidate engine', () async {
+    final result = await _extractWorkerResult(
+      _resultMap(
+        engine: 'openai',
+        engineVersion: 'gpt-vision-test',
+        candidateExtractionEngine: 'openai',
+      ),
+    );
+
+    expect(result.engine, 'openai');
+    expect(result.engineVersion, 'gpt-vision-test');
+    expect(result.candidates.single.extractionEngine, 'openai');
+  });
+
   test(
     'Worker disabled-style response with engine disabled parses safely',
     () async {
@@ -176,6 +204,30 @@ void main() {
 
     expect(wrangler, contains('MAX_IMAGE_BYTES = "15728640"'));
     expect(wrangler, contains('GEMINI_INLINE_MAX_IMAGE_BYTES = "11534336"'));
+    expect(wrangler, contains('AI_FALLBACK_MODEL = ""'));
+  });
+
+  test('Gemini request puts image part before text prompt', () {
+    final worker = File(
+      'workers/routine-import-worker/src/index.ts',
+    ).readAsStringSync();
+    final inlineDataIndex = worker.indexOf('inlineData');
+    final textPromptIndex = worker.indexOf('{ text: prompt }');
+
+    expect(inlineDataIndex, greaterThanOrEqualTo(0));
+    expect(textPromptIndex, greaterThanOrEqualTo(0));
+    expect(inlineDataIndex, lessThan(textPromptIndex));
+  });
+
+  test('fallback model support is configured but optional', () {
+    final worker = File(
+      'workers/routine-import-worker/src/index.ts',
+    ).readAsStringSync();
+
+    expect(worker, contains('AI_FALLBACK_MODEL?: string'));
+    expect(worker, contains('maybeRunFallbackModel'));
+    expect(worker, contains('result.engine === "disabled"'));
+    expect(worker, contains('result.engine === "fake"'));
   });
 
   test('Flutter rejects Worker response with wrong uid', () async {
@@ -269,6 +321,16 @@ void main() {
     expect(updated.extractionAttemptCount, 1);
     expect(updated.status, RoutineImportReviewStatus.needsReview);
     expect(updated.candidateBlocks.single.sourceAssetId, 'asset-1');
+  });
+
+  test('AI extraction metadata still requires visual review before save', () {
+    final result = RoutineImportExtractionResult.fromMap(_resultMap());
+    final updated = const RoutineImportAiReviewUpdateService()
+        .applySuccessfulExtraction(review: _review(), result: result);
+
+    expect(updated.status, RoutineImportReviewStatus.needsReview);
+    expect(updated.appliedRoutineItemIds, isEmpty);
+    expect(updated.appliedAt, isNull);
   });
 
   test('Already applied review cannot run extraction', () {

@@ -237,6 +237,7 @@ class RoutineConflictSummary {
 class RoutineNotifier extends StateNotifier<RoutineState> {
   final RoutineRepository _repository;
   final Ref _ref;
+  late final Future<void> _initialLoad;
 
   RoutineNotifier(this._repository, this._ref)
     : super(
@@ -245,7 +246,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           selectedDay: TimelineUtils.dateOnly(DateTime.now()),
         ),
       ) {
-    _loadItems();
+    _initialLoad = _loadItems();
   }
 
   Future<void> _loadItems() async {
@@ -299,6 +300,25 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _recalculateConflicts();
     final uid = _ref.read(mockUserProfileProvider).uid;
     await _repository.saveRoutineItem(uid, item);
+  }
+
+  Future<List<String>> addMissingItems(List<RoutineItem> items) async {
+    await _initialLoad;
+    final existingIds = state.items.map((item) => item.id).toSet();
+    final missing = <RoutineItem>[];
+    for (final item in items) {
+      if (item.id.trim().isEmpty || existingIds.contains(item.id)) continue;
+      missing.add(item);
+      existingIds.add(item.id);
+    }
+    if (missing.isEmpty) return const [];
+
+    final newItems = [...state.items, ...missing];
+    state = state.copyWith(items: newItems);
+    _recalculateConflicts();
+    final uid = _ref.read(mockUserProfileProvider).uid;
+    await _repository.saveRoutineItems(uid, newItems);
+    return missing.map((item) => item.id).toList(growable: false);
   }
 
   Future<void> updateItem(RoutineItem item) async {

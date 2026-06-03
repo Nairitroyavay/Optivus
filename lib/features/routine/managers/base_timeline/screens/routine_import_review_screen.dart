@@ -14,6 +14,7 @@ import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
+import 'package:optivus/services/routine_import_applied_restore_service.dart';
 import 'package:optivus/services/routine_import_conversion_service.dart';
 import 'package:optivus/services/routine_import_ai_review_update_service.dart';
 import 'package:optivus/services/routine_import_extraction_service.dart';
@@ -46,6 +47,8 @@ class _RoutineImportReviewScreenState
       const RoutineImportExtractionService();
   final RoutineImportConversionService _conversionService =
       const RoutineImportConversionService();
+  final RoutineImportAppliedRestoreService _restoreService =
+      const RoutineImportAppliedRestoreService();
   final RoutineImportValidationService _validationService =
       const RoutineImportValidationService();
   final RoutineImportAiReviewUpdateService _aiReviewUpdateService =
@@ -93,6 +96,12 @@ class _RoutineImportReviewScreenState
       (candidate) => validation.hasBlockingIssuesFor(candidate.id),
     );
     final alreadyApplied = _alreadyApplied(review);
+    final missingAppliedItems = review == null
+        ? const <RoutineItem>[]
+        : _restoreService.missingItemsForReview(
+            review: review,
+            currentItems: existing,
+          );
     final aiState = ref.watch(routineImportAiControllerProvider);
     final authUser = ref.watch(authProvider).user;
 
@@ -136,7 +145,8 @@ class _RoutineImportReviewScreenState
             ),
             onRunAi: () => _runAiExtraction(review),
           ),
-          if (alreadyApplied) _alreadyAppliedSection(review),
+          if (alreadyApplied)
+            _alreadyAppliedSection(review, missingAppliedItems),
           _warningSummarySection(review, validation),
           _unplacedTray(review, validation),
           _timelineSection(review, validation),
@@ -226,27 +236,48 @@ class _RoutineImportReviewScreenState
     );
   }
 
-  Widget _alreadyAppliedSection(RoutineImportReviewDraft review) {
+  Widget _alreadyAppliedSection(
+    RoutineImportReviewDraft review,
+    List<RoutineItem> missingAppliedItems,
+  ) {
+    final hasMissing = missingAppliedItems.isNotEmpty;
     return LiquidDetailSection(
       title: 'Already applied',
-      tint: OptivusColors.success.withValues(alpha: 0.08),
+      tint: (hasMissing ? OptivusColors.warning : OptivusColors.success)
+          .withValues(alpha: 0.08),
       children: [
-        const Text(
-          'This review has already been applied to the Base Timeline. Normal save is disabled to avoid duplicate routine blocks.',
+        Text(
+          hasMissing
+              ? 'Imported blocks are missing from this session.'
+              : 'This review has already been applied to the Base Timeline. Normal save is disabled to avoid duplicate routine blocks.',
           style: TextStyle(
             fontSize: 13,
             height: 1.4,
             fontWeight: FontWeight.w800,
-            color: OptivusColors.success,
+            color: hasMissing ? OptivusColors.warning : OptivusColors.success,
           ),
         ),
         const SizedBox(height: 10),
+        if (hasMissing) ...[
+          _GlassTextButton(
+            label: _saving ? 'Restoring...' : 'Restore imported blocks',
+            icon: Icons.restore_rounded,
+            color: OptivusColors.warning,
+            onTap: _saving ? null : () => _restoreAppliedBlocks(review),
+          ),
+          const SizedBox(height: 10),
+        ],
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: review.appliedRoutineItemIds
-              .map((id) => LiquidPill(label: id, color: OptivusColors.success))
-              .toList(growable: false),
+          children:
+              (hasMissing
+                      ? missingAppliedItems.map((item) => item.id)
+                      : review.appliedRoutineItemIds)
+                  .map(
+                    (id) => LiquidPill(label: id, color: OptivusColors.success),
+                  )
+                  .toList(growable: false),
         ),
       ],
     );
@@ -778,6 +809,35 @@ class _RoutineImportReviewScreenState
     await _saveAcceptedReview(validation);
   }
 
+  Future<void> _restoreAppliedBlocks(RoutineImportReviewDraft review) async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _errorMessage = null;
+    });
+    try {
+      final result = await _restoreService.restoreMissingForReview(
+        read: ref.read,
+        review: review,
+      );
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        if (result.hasMissingItems && !result.restoredAny) {
+          _errorMessage =
+              'Imported blocks could not be restored. Please try again.';
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _errorMessage =
+            'Imported blocks could not be restored. Please try again.';
+      });
+    }
+  }
+
   Future<void> _saveAcceptedReview(
     RoutineImportValidationResult validation,
   ) async {
@@ -833,12 +893,16 @@ class _RoutineImportReviewScreenState
           .map((item) => item.id)
           .toSet();
       final appliedRoutineItemIds = <String>[];
+      final appliedItems = <RoutineItem>[];
       for (final item in routineItems) {
-        if (existingIds.contains(item.id)) continue;
         final itemWithUser = item.copyWith(userId: review.uid);
         appliedRoutineItemIds.add(itemWithUser.id);
+        appliedItems.add(itemWithUser);
+        if (existingIds.contains(item.id)) continue;
         await routineController.addItem(itemWithUser);
+        existingIds.add(item.id);
       }
+      ref.read(mockRoutineProvider.notifier).mergeMissing(appliedItems);
 
       final selected = candidatesWithValidation
           .where((candidate) => candidate.selected)
@@ -2020,7 +2084,7 @@ class _GlassTextButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _GlassTextButton({
     required this.label,

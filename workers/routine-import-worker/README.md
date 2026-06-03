@@ -20,6 +20,7 @@ No AI key goes into Flutter. Flutter only calls this Worker with a Firebase ID t
 ```toml
 AI_PROVIDER = "disabled"
 AI_MODEL = "gemini-2.5-flash"
+AI_FALLBACK_MODEL = ""
 ```
 
 Disabled mode needs no AI key. Use it to test Worker auth, R2 object-key checks, private R2 reads, `/health`, and safe fallback behavior. Extraction returns `engine: "disabled"` with a manual-review warning.
@@ -29,6 +30,7 @@ Disabled mode needs no AI key. Use it to test Worker auth, R2 object-key checks,
 ```toml
 AI_PROVIDER = "fake"
 AI_MODEL = "gemini-2.5-flash"
+AI_FALLBACK_MODEL = ""
 ```
 
 Fake mode needs no AI key. Use it to test the Flutter AI review UI with deterministic candidates. Fake candidates still must be reviewed, edited, dragged, and accepted by the user before they can become Base Timeline items.
@@ -38,6 +40,7 @@ Fake mode needs no AI key. Use it to test the Flutter AI review UI with determin
 ```toml
 AI_PROVIDER = "gemini"
 AI_MODEL = "gemini-2.5-flash"
+AI_FALLBACK_MODEL = ""
 ```
 
 Gemini mode requires a Gemini API key stored as a Worker secret:
@@ -51,6 +54,7 @@ OpenAI-compatible mode remains available:
 ```toml
 AI_PROVIDER = "openai"
 AI_MODEL = "<model-name>"
+AI_FALLBACK_MODEL = ""
 ```
 
 OpenAI mode requires an OpenAI API key stored as a Worker secret:
@@ -60,6 +64,12 @@ wrangler secret put OPENAI_API_KEY
 ```
 
 Real AI output still returns review candidates only. It never writes Routine items directly and must pass Worker validation, Flutter validation, visual timeline review, and user acceptance.
+
+Optional fallback model support is disabled by default. Set
+`AI_FALLBACK_MODEL` to call one stronger model once when the primary result is
+empty, low-confidence, hard to read, fails JSON parsing, or produces no timed
+class/work block. Fallback is never used in disabled or fake mode. If fallback
+fails, the Worker keeps the primary result with a warning.
 
 ## Deploy
 
@@ -101,6 +111,7 @@ MAX_IMAGE_BYTES = "15728640"
 GEMINI_INLINE_MAX_IMAGE_BYTES = "11534336"
 AI_PROVIDER = "disabled"
 AI_MODEL = "gemini-2.5-flash"
+AI_FALLBACK_MODEL = ""
 
 [[r2_buckets]]
 binding = "UPLOAD_BUCKET"
@@ -206,7 +217,8 @@ Keep these checks passing before Phase 3:
 - Source object content type rejects anything except JPEG, PNG, or WEBP.
 - Disabled provider returns `engine: "disabled"` and `engineVersion: "phase2d-disabled"`.
 - Fake provider returns strict JSON candidates with `engine: "fake"`.
-- Real provider returns `engine: "aiVision"` and never bypasses review.
+- Real Gemini provider returns `engine: "gemini"` and real OpenAI provider
+  returns `engine: "openai"`; neither bypasses review.
 - Invalid AI JSON returns the warning `AI output could not be safely parsed. Review manually.`
 - Candidate sanitization never exposes `routineItems`, `appliedRoutineItemIds`, `imageBytes`, `localPath`, `localFilePath`, or `localPreviewPath`.
 - Flutter must still validate candidates and require visual review before converting accepted candidates into Routine items.

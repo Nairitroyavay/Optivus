@@ -385,6 +385,8 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
 }
 
 const Set<String> _allowedResultEngines = {
+  'gemini',
+  'openai',
   'disabled',
   'fake',
   'aiVision',

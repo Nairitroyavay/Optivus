@@ -10,6 +10,7 @@ import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
@@ -274,18 +275,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return;
     }
 
-    ref
-        .read(mockRoutineProvider.notifier)
-        .replaceWith(bundle.routineItemsForApp);
-    ref.read(mockGoalProvider.notifier).replaceWith(bundle.identityGoalSystems);
-    ref.read(mockTrackerProvider.notifier).applyOnboardingBundle(bundle);
-    ref
-        .read(mockCoachPreferencesProvider.notifier)
-        .updatePreferences(bundle.coachPreferences);
-    ref
-        .read(mockNotificationPreferencesProvider.notifier)
-        .updatePreferences(bundle.notificationPreferences);
-    ref.read(mockUserProfileProvider.notifier).applyOnboardingBundle(bundle);
+    await const OnboardingFrontendHydrationService().hydrate(
+      read: ref.read,
+      bundle: bundle,
+    );
     ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
 
     // Initialize the coach tab with a starter session so it doesn't crash empty

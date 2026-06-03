@@ -13,10 +13,13 @@ import 'package:optivus/config/upload_policy.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/services/uploads/upload_object_key.dart';
+import 'package:optivus/state/upload_state.dart';
 
 void main() {
   test('upload config defaults to fake mode', () {
@@ -211,6 +214,16 @@ void main() {
     expect(UploadImagePolicy.routineAiImport.minJpegQuality, 88);
   });
 
+  test('upload policy keeps Gemini inline cap below routine upload max', () {
+    final wrangler = File(
+      'workers/routine-import-worker/wrangler.toml',
+    ).readAsStringSync();
+
+    expect(UploadImagePolicy.normal.maxBytes, 5 * 1024 * 1024);
+    expect(UploadImagePolicy.routineAiImport.maxBytes, 15 * 1024 * 1024);
+    expect(wrangler, contains('GEMINI_INLINE_MAX_IMAGE_BYTES = "11534336"'));
+  });
+
   test(
     'routine import PNG under 15 MB is preserved without recompression',
     () async {
@@ -291,6 +304,20 @@ void main() {
 
     expect(wrangler, contains('MAX_PROFILE_UPLOAD_BYTES = "5242880"'));
     expect(wrangler, contains('MAX_ROUTINE_IMPORT_UPLOAD_BYTES = "15728640"'));
+  });
+
+  test('R2 complete verifies object content type when metadata exists', () {
+    final worker = File(
+      'workers/r2-upload-worker/src/index.ts',
+    ).readAsStringSync();
+
+    expect(worker, contains('requiredUploadBucket(env).head(objectKey)'));
+    expect(worker, contains('normalizedOptionalContentType'));
+    expect(worker, contains('invalid_content_type'));
+    expect(
+      worker,
+      contains('R2 may omit content type metadata for some clients'),
+    );
   });
 
   test(
@@ -428,6 +455,40 @@ void main() {
       'objectKey': 'users/uid/onboarding/class_timetable/asset.jpg',
     });
   });
+
+  test(
+    'UploadController cleans completed R2 object when metadata save fails',
+    () async {
+      final r2 = _RecordingR2UploadClient();
+      final repository = _FailingUploadedAssetRepository();
+      final controller = UploadController(
+        assetRepository: repository,
+        authRepository: _TokenAuthRepository(),
+        imagePrepareService: _PreparedImageService(),
+        r2UploadClient: r2,
+      );
+
+      final asset = await controller.startUpload(
+        uid: 'uid-1',
+        purpose: UploadedAssetPurpose.classTimetable,
+        sourceFeature: OnboardingDraft.sourceOnboarding,
+      );
+
+      expect(asset, isNull);
+      expect(r2.completed, isTrue);
+      expect(
+        r2.deletedObjectKey,
+        'users/uid-1/onboarding/class_timetable/asset-1.jpg',
+      );
+      expect(repository.saveAttempts, 1);
+      expect(controller.state.status, UploadFlowStatus.failed);
+      expect(
+        controller.state.errorMessage,
+        'Photo upload could not be saved. Please try again.',
+      );
+      expect(controller.state.asset, isNull);
+    },
+  );
 }
 
 Uint8List _pngBytes({required int width, required int height}) {
@@ -443,4 +504,145 @@ Uint8List _jpegBytes({required int width, required int height}) {
       quality: 92,
     ),
   );
+}
+
+class _TokenAuthRepository implements AuthRepository {
+  @override
+  Stream<AuthUser?> get authStateChanges => const Stream<AuthUser?>.empty();
+
+  @override
+  AuthUser? get currentUser => const AuthUser(
+    uid: 'uid-1',
+    email: 'test@optivus.dev',
+    emailVerified: true,
+  );
+
+  @override
+  Future<String?> currentIdToken() async => 'token';
+
+  @override
+  Future<AuthUser?> reloadCurrentUser() async => currentUser;
+
+  @override
+  Future<void> sendEmailVerification() async {}
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
+
+  @override
+  Future<AuthUser> signIn(String email, String password) async => currentUser!;
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<AuthUser> signUp(
+    String email,
+    String password, {
+    String? name,
+  }) async => currentUser!;
+}
+
+class _PreparedImageService extends ImagePrepareService {
+  final XFile _file = XFile.fromData(
+    Uint8List.fromList([1, 2, 3]),
+    name: 'photo.jpg',
+    mimeType: 'image/jpeg',
+  );
+
+  @override
+  Future<XFile?> pickImageFile({
+    ImageSource source = ImageSource.gallery,
+  }) async {
+    return _file;
+  }
+
+  @override
+  Future<PreparedUploadImage?> preparePickedFile(
+    XFile? picked, {
+    UploadedAssetPurpose purpose = UploadedAssetPurpose.profilePhoto,
+  }) async {
+    return PreparedUploadImage(
+      fileName: 'photo.jpg',
+      contentType: 'image/jpeg',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      sizeBytes: 3,
+    );
+  }
+}
+
+class _RecordingR2UploadClient implements R2UploadClient {
+  bool completed = false;
+  String? deletedObjectKey;
+
+  @override
+  Future<R2SignedUpload> signUpload({
+    required String uid,
+    required UploadedAssetPurpose purpose,
+    required String sourceFeature,
+    required String contentType,
+    required int sizeBytes,
+    required String idToken,
+  }) async {
+    return const R2SignedUpload(
+      assetId: 'asset-1',
+      objectKey: 'users/uid-1/onboarding/class_timetable/asset-1.jpg',
+      uploadUrl: 'https://r2.example/upload',
+    );
+  }
+
+  @override
+  Future<void> uploadBytes({
+    required String uploadUrl,
+    required String contentType,
+    required Uint8List bytes,
+  }) async {}
+
+  @override
+  Future<void> markUploadComplete({
+    required String assetId,
+    required String objectKey,
+    required int sizeBytes,
+    required String idToken,
+  }) async {
+    completed = true;
+  }
+
+  @override
+  Future<void> deleteUpload({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    deletedObjectKey = objectKey;
+  }
+}
+
+class _FailingUploadedAssetRepository implements UploadedAssetRepository {
+  int saveAttempts = 0;
+
+  @override
+  Future<UploadedAsset?> fetchAsset({
+    required String uid,
+    required String assetId,
+  }) async => null;
+
+  @override
+  Future<List<UploadedAsset>> fetchRecentAssets({
+    required String uid,
+    String? sourceFeature,
+    UploadedAssetPurpose? purpose,
+    int limit = 20,
+  }) async => const [];
+
+  @override
+  Future<void> markDeleted({
+    required String uid,
+    required String assetId,
+  }) async {}
+
+  @override
+  Future<void> saveAsset(UploadedAsset asset) async {
+    saveAttempts += 1;
+    throw Exception('firestore unavailable');
+  }
 }

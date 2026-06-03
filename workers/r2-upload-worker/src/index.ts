@@ -165,6 +165,17 @@ async function handleCompleteUpload(request: Request, env: Env): Promise<Respons
   if (typeof object.size === "number" && object.size !== sizeBytes) {
     throw new HttpError(400, "size_mismatch", "Uploaded object size does not match.");
   }
+  const objectContentType = normalizedOptionalContentType(
+    object.httpMetadata?.contentType,
+  );
+  if (
+    objectContentType &&
+    !isAllowedContentTypeForPurpose(keyInfo.purpose, objectContentType)
+  ) {
+    throw new HttpError(400, "invalid_content_type", contentTypeErrorMessage(keyInfo.purpose));
+  }
+  // R2 may omit content type metadata for some clients. Keep Phase 2A behavior
+  // in that case; object key extension and upload signing still constrain type.
 
   return jsonResponse(request, env, { ok: true, assetId, objectKey });
 }
@@ -345,6 +356,11 @@ function isAllowedContentTypeForPurpose(purpose: string, contentType: string): b
 function normalizedContentType(value: string): string {
   const contentType = value.split(";")[0].trim().toLowerCase();
   return contentType === "image/jpg" ? "image/jpeg" : contentType;
+}
+
+function normalizedOptionalContentType(value: string | undefined): string | undefined {
+  if (!value || value.trim() === "") return undefined;
+  return normalizedContentType(value);
 }
 
 function extensionForContentType(contentType: string): string {

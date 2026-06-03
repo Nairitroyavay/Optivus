@@ -166,6 +166,20 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
     _checkConflicts();
   }
 
+  List<String> mergeMissing(List<RoutineItem> items) {
+    final existingIds = state.map((item) => item.id).toSet();
+    final missing = <RoutineItem>[];
+    for (final item in items) {
+      if (item.id.trim().isEmpty || existingIds.contains(item.id)) continue;
+      missing.add(item);
+      existingIds.add(item.id);
+    }
+    if (missing.isEmpty) return const [];
+    state = [...state, ...missing];
+    _checkConflicts();
+    return missing.map((item) => item.id).toList(growable: false);
+  }
+
   void addRoutineItem(RoutineItem item) {
     state = [...state, item];
     _checkConflicts();
@@ -449,10 +463,17 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
           ),
         )
         .toList();
+    final existingSessionIds = state.trackerSessions
+        .map((session) => session.id)
+        .toSet();
+    final mergedSessions = [
+      ...state.trackerSessions,
+      for (final session in sessions)
+        if (!existingSessionIds.contains(session.id)) session,
+    ];
     state = state.copyWith(
-      trackerSessions: sessions,
-      moneyGoal: bundle.moneyGoal ?? MoneyGoal(id: 'money-goal-empty'),
-      savingsEntries: const [],
+      trackerSessions: mergedSessions,
+      moneyGoal: bundle.moneyGoal ?? state.moneyGoal,
     );
   }
 
@@ -947,6 +968,19 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
 
   void replaceWith(List<GoalModel> goals) {
     state = List<GoalModel>.from(goals);
+  }
+
+  List<String> mergeMissing(List<GoalModel> goals) {
+    final existingIds = state.map((goal) => goal.id).toSet();
+    final missing = <GoalModel>[];
+    for (final goal in goals) {
+      if (goal.id.trim().isEmpty || existingIds.contains(goal.id)) continue;
+      missing.add(goal);
+      existingIds.add(goal.id);
+    }
+    if (missing.isEmpty) return const [];
+    state = [...state, ...missing];
+    return missing.map((goal) => goal.id).toList(growable: false);
   }
 
   void addGoal(GoalModel goal) {
