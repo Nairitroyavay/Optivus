@@ -8,6 +8,7 @@ class UploadObjectKeyBuilder {
     required String sourceFeature,
     required UploadedAssetPurpose purpose,
     required String assetId,
+    String contentType = 'image/jpeg',
   }) {
     final safeUid = _safeSegment(uid, fieldName: 'uid');
     final safeSourceFeature = _safeSegment(
@@ -15,7 +16,8 @@ class UploadObjectKeyBuilder {
       fieldName: 'sourceFeature',
     );
     final safeAssetId = _safeSegment(assetId, fieldName: 'assetId');
-    return 'users/$safeUid/$safeSourceFeature/${purpose.wireName}/$safeAssetId.jpg';
+    final extension = _extensionForContentType(contentType);
+    return 'users/$safeUid/$safeSourceFeature/${purpose.wireName}/$safeAssetId.$extension';
   }
 
   static String _safeSegment(String value, {required String fieldName}) {
@@ -28,5 +30,14 @@ class UploadObjectKeyBuilder {
       throw ArgumentError.value(value, fieldName, 'Unsafe upload path segment');
     }
     return trimmed;
+  }
+
+  static String _extensionForContentType(String contentType) {
+    final normalized = contentType.split(';').first.trim().toLowerCase();
+    return switch (normalized) {
+      'image/png' => 'png',
+      'image/webp' => 'webp',
+      _ => 'jpg',
+    };
   }
 }

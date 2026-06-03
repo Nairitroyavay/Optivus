@@ -1,6 +1,6 @@
 # Optivus R2 Upload Worker
 
-Phase 2A scaffold for onboarding image uploads. Flutter asks this Worker for a short-lived R2 presigned `PUT` URL, uploads compressed JPEG bytes directly to R2, then stores upload metadata in Firestore.
+Phase 2A scaffold for onboarding image uploads. Flutter asks this Worker for a short-lived R2 presigned `PUT` URL, uploads prepared image bytes directly to R2, then stores upload metadata in Firestore.
 
 ## Endpoints
 
@@ -25,9 +25,11 @@ No Firebase Functions are used.
 
 - source feature: `onboarding`
 - purposes: `class_timetable`, `work_schedule`, `eating_menu`, `skin_care`, `profile_photo`
-- content type: `image/jpeg`
-- max size: `1048576` bytes by default
-- object key: `users/{uid}/onboarding/{purpose}/{assetId}.jpg`
+- profile content types: `image/jpeg`, `image/png`
+- routine import content types: `image/jpeg`, `image/png`, `image/webp`
+- profile max size: `5242880` bytes
+- routine import max size: `15728640` bytes
+- object key: `users/{uid}/onboarding/{purpose}/{assetId}.{jpg|png|webp}`
 
 R2 presigned URLs work with the S3 API domain, not custom domains. The Worker signs against `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`.
 
@@ -40,7 +42,8 @@ FIREBASE_PROJECT_ID=optivus-lifeos
 R2_BUCKET_NAME=optivus-uploads-dev
 R2_ACCOUNT_ID=<account id>
 UPLOAD_URL_EXPIRES_SECONDS=900
-MAX_UPLOAD_BYTES=1048576
+MAX_PROFILE_UPLOAD_BYTES=5242880
+MAX_ROUTINE_IMPORT_UPLOAD_BYTES=15728640
 ALLOWED_ORIGINS=
 ```
 

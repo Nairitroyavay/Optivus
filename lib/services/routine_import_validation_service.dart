@@ -135,7 +135,7 @@ class RoutineImportValidationService {
       issues.add('Candidate type is unknown.');
     }
     if (candidate.confidenceLabel == 'low') {
-      warnings.add('Low confidence. Review manually before saving.');
+      warnings.add('Low confidence. Please check this block.');
     }
     if (candidate.needsManualReview) {
       warnings.add('Needs manual review.');

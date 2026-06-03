@@ -19,7 +19,7 @@ No AI key goes into Flutter. Flutter only calls this Worker with a Firebase ID t
 
 ```toml
 AI_PROVIDER = "disabled"
-AI_MODEL = ""
+AI_MODEL = "gemini-2.5-flash"
 ```
 
 Disabled mode needs no AI key. Use it to test Worker auth, R2 object-key checks, private R2 reads, `/health`, and safe fallback behavior. Extraction returns `engine: "disabled"` with a manual-review warning.
@@ -28,7 +28,7 @@ Disabled mode needs no AI key. Use it to test Worker auth, R2 object-key checks,
 
 ```toml
 AI_PROVIDER = "fake"
-AI_MODEL = ""
+AI_MODEL = "gemini-2.5-flash"
 ```
 
 Fake mode needs no AI key. Use it to test the Flutter AI review UI with deterministic candidates. Fake candidates still must be reviewed, edited, dragged, and accepted by the user before they can become Base Timeline items.
@@ -36,11 +36,24 @@ Fake mode needs no AI key. Use it to test the Flutter AI review UI with determin
 ### Real AI mode
 
 ```toml
+AI_PROVIDER = "gemini"
+AI_MODEL = "gemini-2.5-flash"
+```
+
+Gemini mode requires a Gemini API key stored as a Worker secret:
+
+```bash
+wrangler secret put GEMINI_API_KEY
+```
+
+OpenAI-compatible mode remains available:
+
+```toml
 AI_PROVIDER = "openai"
 AI_MODEL = "<model-name>"
 ```
 
-Real AI mode requires an OpenAI API key stored as a Worker secret:
+OpenAI mode requires an OpenAI API key stored as a Worker secret:
 
 ```bash
 wrangler secret put OPENAI_API_KEY
@@ -84,9 +97,10 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 FIREBASE_PROJECT_ID = "optivus-lifeos"
 R2_BUCKET_NAME = "optivus-uploads-dev"
-MAX_IMAGE_BYTES = "1048576"
+MAX_IMAGE_BYTES = "15728640"
+GEMINI_INLINE_MAX_IMAGE_BYTES = "11534336"
 AI_PROVIDER = "disabled"
-AI_MODEL = ""
+AI_MODEL = "gemini-2.5-flash"
 
 [[r2_buckets]]
 binding = "UPLOAD_BUCKET"
@@ -166,12 +180,13 @@ The Worker rejects:
 - unverified email
 - object keys outside `users/{uid}/onboarding/...`
 - `..`, backslashes, double slashes
-- non-jpg keys
+- unsafe image key extensions
 - unknown source/purpose
 - profile photo purpose
 - missing R2 object
-- non-JPEG source object content types
+- non-JPEG/PNG/WEBP source object content types
 - images larger than `MAX_IMAGE_BYTES`
+- Gemini inline images larger than `GEMINI_INLINE_MAX_IMAGE_BYTES` return a warning instead of calling the provider
 - malformed AI JSON
 - AI payloads that include Routine items, applied Routine IDs, local file paths, or image bytes
 
@@ -188,7 +203,7 @@ Keep these checks passing before Phase 3:
 - `/health` returns the configured Firebase project, bucket, and AI provider.
 - Object-key validation rejects another uid.
 - Object-key validation rejects `profile_photo` and any non-routine-import purpose.
-- Source object content type rejects anything except `image/jpeg` or `image/jpg`.
+- Source object content type rejects anything except JPEG, PNG, or WEBP.
 - Disabled provider returns `engine: "disabled"` and `engineVersion: "phase2d-disabled"`.
 - Fake provider returns strict JSON candidates with `engine: "fake"`.
 - Real provider returns `engine: "aiVision"` and never bypasses review.

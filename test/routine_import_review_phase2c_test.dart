@@ -408,7 +408,7 @@ void main() {
     expect(result.hasBlockingIssues, isFalse);
     expect(
       result.warningsFor('candidate-1'),
-      contains('Low confidence. Review manually before saving.'),
+      contains('Low confidence. Please check this block.'),
     );
   });
 

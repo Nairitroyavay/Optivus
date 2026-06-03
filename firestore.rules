@@ -18,12 +18,36 @@ service cloud.firestore {
       return isOwner(uid) && emailVerified();
     }
 
-    function validUploadPurpose(purpose) {
+    function isRoutineImportPurpose(purpose) {
       return purpose == "class_timetable"
         || purpose == "work_schedule"
         || purpose == "eating_menu"
-        || purpose == "skin_care"
+        || purpose == "skin_care";
+    }
+
+    function validUploadPurpose(purpose) {
+      return isRoutineImportPurpose(purpose)
         || purpose == "profile_photo";
+    }
+
+    function validUploadContentType(purpose, contentType) {
+      return purpose == "profile_photo"
+        ? contentType == "image/jpeg"
+          || contentType == "image/jpg"
+          || contentType == "image/png"
+        : isRoutineImportPurpose(purpose)
+          && (contentType == "image/jpeg"
+            || contentType == "image/jpg"
+            || contentType == "image/png"
+            || contentType == "image/webp");
+    }
+
+    function isValidUploadSize(purpose, sizeBytes) {
+      return purpose == "profile_photo"
+        ? sizeBytes > 0 && sizeBytes <= 5242880
+        : isRoutineImportPurpose(purpose)
+          && sizeBytes > 0
+          && sizeBytes <= 15728640;
     }
 
     function validUploadStatus(status) {
@@ -54,9 +78,14 @@ service cloud.firestore {
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.assetId == assetId
         && request.resource.data.sizeBytes is int
-        && request.resource.data.sizeBytes > 0
-        && request.resource.data.sizeBytes <= 1048576
-        && request.resource.data.contentType == "image/jpeg"
+        && isValidUploadSize(
+          request.resource.data.purpose,
+          request.resource.data.sizeBytes
+        )
+        && validUploadContentType(
+          request.resource.data.purpose,
+          request.resource.data.contentType
+        )
         && request.resource.data.sourceFeature == "onboarding"
         && request.resource.data.r2Key is string
         && request.resource.data.fileName is string

@@ -139,7 +139,10 @@ class UploadController extends StateNotifier<UploadState> {
       }
 
       state = state.copyWith(status: UploadFlowStatus.preparing);
-      preparedImage = await _imagePrepareService.preparePickedFile(pickedFile);
+      preparedImage = await _imagePrepareService.preparePickedFile(
+        pickedFile,
+        purpose: purpose,
+      );
       if (preparedImage == null) {
         state = state.copyWith(status: UploadFlowStatus.idle, clearError: true);
         return null;

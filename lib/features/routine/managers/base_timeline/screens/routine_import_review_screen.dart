@@ -704,13 +704,20 @@ class _RoutineImportReviewScreenState
       await _persistExtractionWarning(review, result);
       if (!mounted) return;
       setState(() {
-        _errorMessage = result.warnings.isEmpty
-            ? 'AI extraction did not return candidates.'
-            : result.warnings.join('\n');
+        _errorMessage = _emptyExtractionMessage(result);
       });
       return;
     }
     await _applyExtractionResult(review: review, result: result);
+  }
+
+  String _emptyExtractionMessage(RoutineImportExtractionResult result) {
+    if (result.warnings.any(_isSeriousImageQualityWarning)) {
+      return _hardToReadPhotoMessage;
+    }
+    return result.warnings.isEmpty
+        ? 'AI extraction did not return candidates.'
+        : result.warnings.join('\n');
   }
 
   bool _shouldConfirmAiReplacement(RoutineImportReviewDraft review) {
@@ -1740,7 +1747,7 @@ class _SourceEvidenceCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'AI extraction creates draft candidates only. Review manually before saving.',
+            'AI extraction creates draft candidates only. Review before saving.',
             style: TextStyle(
               fontSize: 12,
               height: 1.35,
@@ -1782,7 +1789,7 @@ class _AiExtractionButton extends StatelessWidget {
     final label = extracting
         ? 'Extracting...'
         : extracted
-        ? 'AI draft ready - review below'
+        ? 'AI draft ready — review before saving.'
         : disabledReason ?? 'Run AI extraction';
     final color = failed
         ? OptivusColors.danger
@@ -2317,11 +2324,27 @@ class _SelectablePill extends StatelessWidget {
   }
 }
 
+const _hardToReadPhotoMessage =
+    'This photo is hard to read. Retake a sharper image or review manually.';
+
+bool _isSeriousImageQualityWarning(String message) {
+  final normalized = message.toLowerCase();
+  return normalized.contains('blurry image') ||
+      normalized.contains('dark image') ||
+      normalized.contains('rotated image') ||
+      normalized.contains('text too small') ||
+      normalized.contains('partial/cropped sheet') ||
+      normalized.contains('cropped sheet') ||
+      normalized.contains('wrong source type') ||
+      normalized.contains('multiple sheets mixed') ||
+      normalized.contains('handwriting unreadable');
+}
+
 List<String> routineImportWarningSummaryMessages({
   required RoutineImportReviewDraft review,
   required RoutineImportValidationResult validation,
 }) {
-  final messages = <String>[
+  final rawMessages = <String>[
     ...review.warnings,
     ...review.extractionWarnings,
     for (final candidate in review.candidateBlocks)
@@ -2331,6 +2354,10 @@ List<String> routineImportWarningSummaryMessages({
             (message) =>
                 '${candidate.title.trim().isEmpty ? 'Untitled' : candidate.title}: $message',
           ),
+  ];
+  final messages = <String>[
+    if (rawMessages.any(_isSeriousImageQualityWarning)) _hardToReadPhotoMessage,
+    ...rawMessages,
   ];
   return {...messages}.toList(growable: false);
 }

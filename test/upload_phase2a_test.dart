@@ -1,10 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:image/image.dart' as image_lib;
+import 'package:image_picker/image_picker.dart';
 import 'package:optivus/config/upload_config.dart';
+import 'package:optivus/config/upload_policy.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -76,6 +81,29 @@ void main() {
         assetId: 'asset',
       ),
       'users/uid/onboarding/class_timetable/asset.jpg',
+    );
+  });
+
+  test('object key builder preserves safe image extensions', () {
+    expect(
+      UploadObjectKeyBuilder.build(
+        uid: 'uid',
+        sourceFeature: 'onboarding',
+        purpose: UploadedAssetPurpose.eatingMenu,
+        assetId: 'asset',
+        contentType: 'image/png',
+      ),
+      'users/uid/onboarding/eating_menu/asset.png',
+    );
+    expect(
+      UploadObjectKeyBuilder.build(
+        uid: 'uid',
+        sourceFeature: 'onboarding',
+        purpose: UploadedAssetPurpose.skinCare,
+        assetId: 'asset',
+        contentType: 'image/webp',
+      ),
+      'users/uid/onboarding/skin_care/asset.webp',
     );
   });
 
@@ -174,6 +202,111 @@ void main() {
     expect(prepared, isNull);
   });
 
+  test('upload image policy sets profile and routine limits', () {
+    expect(UploadImagePolicy.normal.maxBytes, 5 * 1024 * 1024);
+    expect(UploadImagePolicy.routineAiImport.maxBytes, 15 * 1024 * 1024);
+    expect(UploadImagePolicy.normal.initialJpegQuality, 95);
+    expect(UploadImagePolicy.normal.minJpegQuality, 80);
+    expect(UploadImagePolicy.routineAiImport.initialJpegQuality, 100);
+    expect(UploadImagePolicy.routineAiImport.minJpegQuality, 88);
+  });
+
+  test(
+    'routine import PNG under 15 MB is preserved without recompression',
+    () async {
+      final bytes = _pngBytes(width: 24, height: 16);
+      final prepared = await ImagePrepareService().preparePickedFile(
+        XFile.fromData(
+          bytes,
+          name: 'menu screenshot.png',
+          mimeType: 'image/png',
+        ),
+        purpose: UploadedAssetPurpose.eatingMenu,
+      );
+
+      expect(prepared, isNotNull);
+      expect(prepared!.contentType, 'image/png');
+      expect(prepared.fileName, endsWith('.png'));
+      expect(prepared.sizeBytes, bytes.length);
+      expect(prepared.bytes, orderedEquals(bytes));
+    },
+  );
+
+  test('profile JPEG under 5 MB is preserved safely', () async {
+    final bytes = _jpegBytes(width: 20, height: 20);
+    final prepared = await ImagePrepareService().preparePickedFile(
+      XFile.fromData(bytes, name: 'profile.jpeg', mimeType: 'image/jpeg'),
+      purpose: UploadedAssetPurpose.profilePhoto,
+    );
+
+    expect(prepared, isNotNull);
+    expect(prepared!.contentType, 'image/jpeg');
+    expect(prepared.sizeBytes, bytes.length);
+    expect(prepared.bytes, orderedEquals(bytes));
+  });
+
+  test(
+    'wide routine import image is resized without cropping aspect ratio',
+    () async {
+      final bytes = _pngBytes(width: 5000, height: 1000);
+      final prepared = await ImagePrepareService().preparePickedFile(
+        XFile.fromData(bytes, name: 'wide-menu.png', mimeType: 'image/png'),
+        purpose: UploadedAssetPurpose.eatingMenu,
+      );
+
+      expect(prepared, isNotNull);
+      expect(prepared!.contentType, 'image/jpeg');
+      expect(prepared.sizeBytes, lessThanOrEqualTo(15 * 1024 * 1024));
+      final decoded = image_lib.decodeImage(prepared.bytes);
+      expect(decoded, isNotNull);
+      expect(decoded!.width, 4096);
+      expect(decoded.height, closeTo(819, 1));
+    },
+  );
+
+  test('unsupported routine image type gets friendly message', () async {
+    await expectLater(
+      ImagePrepareService().preparePickedFile(
+        XFile.fromData(
+          Uint8List.fromList([1, 2, 3]),
+          name: 'photo.heic',
+          mimeType: 'image/heic',
+        ),
+        purpose: UploadedAssetPurpose.classTimetable,
+      ),
+      throwsA(
+        isA<ImagePreparationException>().having(
+          (error) => error.message,
+          'message',
+          'Please upload JPEG, PNG, or WEBP for now.',
+        ),
+      ),
+    );
+  });
+
+  test('R2 worker upload vars keep profile and routine limits separate', () {
+    final wrangler = File(
+      'workers/r2-upload-worker/wrangler.toml',
+    ).readAsStringSync();
+
+    expect(wrangler, contains('MAX_PROFILE_UPLOAD_BYTES = "5242880"'));
+    expect(wrangler, contains('MAX_ROUTINE_IMPORT_UPLOAD_BYTES = "15728640"'));
+  });
+
+  test(
+    'Firestore upload rules allow 5 MB profile and 15 MB routine metadata',
+    () {
+      final rules = File('firestore.rules').readAsStringSync();
+
+      expect(rules, contains('sizeBytes <= 5242880'));
+      expect(rules, contains('sizeBytes <= 15728640'));
+      expect(
+        rules,
+        contains('request.resource.data.ownerUid == request.auth.uid'),
+      );
+    },
+  );
+
   test('UploadedAsset invalid status falls back to pending', () {
     expect(
       uploadedAssetStatusFromString('complete'),
@@ -255,6 +388,20 @@ void main() {
     );
   });
 
+  test('FakeR2UploadClient uses content-type aware object keys', () async {
+    final signed = await FakeR2UploadClient().signUpload(
+      uid: 'uid',
+      purpose: UploadedAssetPurpose.eatingMenu,
+      sourceFeature: OnboardingDraft.sourceOnboarding,
+      contentType: 'image/png',
+      sizeBytes: 100,
+      idToken: 'token',
+    );
+
+    expect(signed.objectKey, startsWith('users/uid/onboarding/eating_menu/'));
+    expect(signed.objectKey, endsWith('.png'));
+  });
+
   test('RealR2UploadClient deleteUpload calls delete endpoint', () async {
     late http.Request recordedRequest;
     final client = RealR2UploadClient(
@@ -281,4 +428,19 @@ void main() {
       'objectKey': 'users/uid/onboarding/class_timetable/asset.jpg',
     });
   });
+}
+
+Uint8List _pngBytes({required int width, required int height}) {
+  return Uint8List.fromList(
+    image_lib.encodePng(image_lib.Image(width: width, height: height)),
+  );
+}
+
+Uint8List _jpegBytes({required int width, required int height}) {
+  return Uint8List.fromList(
+    image_lib.encodeJpg(
+      image_lib.Image(width: width, height: height),
+      quality: 92,
+    ),
+  );
 }

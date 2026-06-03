@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -120,6 +121,61 @@ void main() {
       result.warnings,
       contains('AI extraction service returned invalid structured data.'),
     );
+  });
+
+  test('Gemini-style image quality warning parses safely', () async {
+    final body = _resultMap(
+      engine: 'aiVision',
+      engineVersion: 'phase2d-inline-limit',
+      warnings: const [
+        'This photo is hard to read. Retake a sharper image or review manually.',
+        'blurry image',
+      ],
+    );
+    body['candidates'] = [];
+
+    final result = await _extractWorkerResult(body);
+
+    expect(result.engine, 'aiVision');
+    expect(result.candidates, isEmpty);
+    expect(
+      result.warnings,
+      contains(
+        'This photo is hard to read. Retake a sharper image or review manually.',
+      ),
+    );
+    expect(result.warnings, contains('blurry image'));
+  });
+
+  test('oversized inline AI image warning parses safely', () async {
+    final body = _resultMap(
+      engine: 'aiVision',
+      engineVersion: 'phase2d-inline-limit',
+      warnings: const [
+        'This photo is saved, but it is too large for AI extraction. Please upload a sharper photo under 11 MB or use manual review.',
+        'image too large for inline AI processing',
+      ],
+    );
+    body['candidates'] = [];
+
+    final result = await _extractWorkerResult(body);
+
+    expect(result.candidates, isEmpty);
+    expect(
+      result.warnings,
+      contains(
+        'This photo is saved, but it is too large for AI extraction. Please upload a sharper photo under 11 MB or use manual review.',
+      ),
+    );
+  });
+
+  test('routine import worker Gemini inline cap is lower than source max', () {
+    final wrangler = File(
+      'workers/routine-import-worker/wrangler.toml',
+    ).readAsStringSync();
+
+    expect(wrangler, contains('MAX_IMAGE_BYTES = "15728640"'));
+    expect(wrangler, contains('GEMINI_INLINE_MAX_IMAGE_BYTES = "11534336"'));
   });
 
   test('Flutter rejects Worker response with wrong uid', () async {
@@ -250,6 +306,20 @@ void main() {
     );
 
     expect(messages, ['Review manually.']);
+  });
+
+  test('Image quality warning summary shows hard-to-read guidance', () {
+    final messages = routineImportWarningSummaryMessages(
+      review: _review(extractionWarnings: const ['blurry image']),
+      validation: const RoutineImportValidationResult(candidateResults: []),
+    );
+
+    expect(
+      messages,
+      contains(
+        'This photo is hard to read. Retake a sharper image or review manually.',
+      ),
+    );
   });
 
   test('Attempt limit blocks extraction when extractionAttemptCount >= 5', () {

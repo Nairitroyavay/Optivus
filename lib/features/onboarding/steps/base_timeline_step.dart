@@ -871,7 +871,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
                 Expanded(
                   child: Text(
                     isPhotoMode
-                        ? 'Upload a photo for this section. AI review will connect later; manual input stays available.'
+                        ? 'Upload clear photo. Best under 15 MB. Keep the sheet flat, bright, and readable. Avoid blur and cropped edges.'
                         : _setupMode == 'AI Text'
                         ? 'Paste text for a local stub parse. No AI or backend call runs.'
                         : 'Import preview is ready.',
@@ -1049,7 +1049,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
           if (isUploaded) ...[
             const SizedBox(height: 8),
             const Text(
-              'Photo saved. AI review will connect in the Routine Import phase.',
+              'Photo saved. Open Routine Import Review to create an AI draft and review before saving.',
               style: TextStyle(
                 fontSize: 11,
                 height: 1.35,
@@ -1064,7 +1064,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
             runSpacing: 8,
             children: [
               OnboardingActionPill(
-                label: isFailed ? 'Retry upload' : 'Upload photo',
+                label: isFailed ? 'Retry upload' : 'Upload clear photo',
                 icon: isFailed ? Icons.refresh_rounded : Icons.upload_rounded,
                 accent: const Color(0xFFFF88C9),
                 selected: true,
@@ -1113,7 +1113,7 @@ class _BaseTimelineStepState extends ConsumerState<BaseTimelineStep>
     if (applies) {
       return switch (uploadState.status) {
         UploadFlowStatus.picking => 'Choosing photo...',
-        UploadFlowStatus.preparing => 'Preparing compressed JPEG...',
+        UploadFlowStatus.preparing => 'Preparing photo...',
         UploadFlowStatus.signing => 'Preparing secure upload...',
         UploadFlowStatus.uploading => 'Uploading photo...',
         UploadFlowStatus.savingMetadata => 'Saving upload reference...',

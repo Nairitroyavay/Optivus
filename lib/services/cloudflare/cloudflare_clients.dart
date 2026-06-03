@@ -166,6 +166,7 @@ class FakeR2UploadClient implements R2UploadClient {
       sourceFeature: sourceFeature,
       purpose: purpose,
       assetId: assetId,
+      contentType: contentType,
     );
     return R2SignedUpload(
       assetId: assetId,

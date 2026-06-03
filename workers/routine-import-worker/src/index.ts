@@ -4,9 +4,11 @@ type Env = {
   FIREBASE_PROJECT_ID: string;
   R2_BUCKET_NAME: string;
   MAX_IMAGE_BYTES?: string;
+  GEMINI_INLINE_MAX_IMAGE_BYTES?: string;
   AI_PROVIDER?: string;
   AI_MODEL?: string;
   OPENAI_API_KEY?: string;
+  GEMINI_API_KEY?: string;
   ALLOWED_ORIGINS?: string;
   UPLOAD_BUCKET: R2Bucket;
 };
@@ -83,6 +85,14 @@ type ExtractArgs = {
 type VerifiedUser = {
   uid: string;
 };
+
+const SOURCE_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+const GEMINI_INLINE_MAX_IMAGE_BYTES = 11 * 1024 * 1024;
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const INLINE_IMAGE_TOO_LARGE_WARNING =
+  "This photo is saved, but it is too large for AI extraction. Please upload a sharper photo under 11 MB or use manual review.";
+const HARD_TO_READ_WARNING =
+  "This photo is hard to read. Retake a sharper image or review manually.";
 
 interface AiRoutineExtractor {
   extract(args: ExtractArgs): Promise<RoutineImportExtractionResponse>;
@@ -169,9 +179,9 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
     throw new HttpError(404, "source_image_not_found", "Uploaded source image was not found.");
   }
 
-  const maxBytes = numberEnv(env.MAX_IMAGE_BYTES, 1024 * 1024);
+  const maxBytes = sourceImageMaxBytes(env);
   if (typeof object.size === "number" && object.size > maxBytes) {
-    throw new HttpError(413, "image_too_large", "Uploaded image is too large for AI extraction.");
+    throw new HttpError(413, "image_too_large", "This photo is too large. Please upload a photo under 15 MB.");
   }
 
   const contentType = object.httpMetadata?.contentType ?? "image/jpeg";
@@ -179,13 +189,66 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
     throw new HttpError(
       400,
       "invalid_source_content_type",
-      "Uploaded source image type is not supported.",
+      "Please upload JPEG, PNG, or WEBP for now.",
+    );
+  }
+
+  const normalizedSourceContentType = normalizedContentType(contentType);
+  if (
+    aiProviderName(env) === "gemini" &&
+    typeof object.size === "number" &&
+    object.size > geminiInlineMaxImageBytes(env, maxBytes)
+  ) {
+    const raw = inlineImageTooLargeFallback({
+      uid: user.uid,
+      reviewId,
+      source,
+      sourceLabel,
+      imageBytes: new ArrayBuffer(0),
+      contentType: normalizedSourceContentType,
+      objectKey: uploadedAssetR2Key,
+      uploadedAssetId,
+    });
+    return jsonResponse(
+      request,
+      env,
+      sanitizeExtractionResponse(raw, {
+        uid: user.uid,
+        source,
+        objectKey: uploadedAssetR2Key,
+        uploadedAssetId,
+      }),
     );
   }
 
   const imageBytes = await object.arrayBuffer();
   if (imageBytes.byteLength > maxBytes) {
-    throw new HttpError(413, "image_too_large", "Uploaded image is too large for AI extraction.");
+    throw new HttpError(413, "image_too_large", "This photo is too large. Please upload a photo under 15 MB.");
+  }
+  if (
+    aiProviderName(env) === "gemini" &&
+    imageBytes.byteLength > geminiInlineMaxImageBytes(env, maxBytes)
+  ) {
+    const raw = inlineImageTooLargeFallback({
+      uid: user.uid,
+      reviewId,
+      source,
+      sourceLabel,
+      imageBytes,
+      contentType: normalizedSourceContentType,
+      objectKey: uploadedAssetR2Key,
+      uploadedAssetId,
+    });
+    return jsonResponse(
+      request,
+      env,
+      sanitizeExtractionResponse(raw, {
+        uid: user.uid,
+        source,
+        objectKey: uploadedAssetR2Key,
+        uploadedAssetId,
+      }),
+    );
   }
 
   const extractor = extractorFor(env);
@@ -195,7 +258,7 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
     source,
     sourceLabel,
     imageBytes,
-    contentType: normalizedContentType(contentType),
+    contentType: normalizedSourceContentType,
     objectKey: uploadedAssetR2Key,
     uploadedAssetId,
   });
@@ -338,9 +401,93 @@ class VisionAiRoutineExtractor implements AiRoutineExtractor {
   }
 }
 
+class GeminiAiRoutineExtractor implements AiRoutineExtractor {
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly inlineMaxBytes: number;
+
+  constructor(apiKey: string, model: string, inlineMaxBytes: number) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.inlineMaxBytes = inlineMaxBytes;
+  }
+
+  async extract(args: ExtractArgs): Promise<RoutineImportExtractionResponse> {
+    if (args.imageBytes.byteLength > this.inlineMaxBytes) {
+      return inlineImageTooLargeFallback(args);
+    }
+
+    const prompt = buildRoutineImportPrompt(args.source);
+    const model = this.model.replace(/^models\//, "");
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "x-goog-api-key": this.apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: args.contentType,
+                      data: arrayBufferToBase64(args.imageBytes),
+                    },
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0,
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        return aiVisionFallback(args, "AI provider could not process the image.");
+      }
+
+      let providerBody: unknown;
+      try {
+        providerBody = await response.json();
+      } catch {
+        return aiVisionFallback(args, "AI provider returned invalid JSON.");
+      }
+
+      const parsed = parseAiJsonText(readProviderText(providerBody));
+      if (!parsed) {
+        return unsafeAiOutputFallback(args);
+      }
+
+      const validation = validateExtractionShape(parsed);
+      if (!validation.ok) {
+        return unsafeAiOutputFallback(args);
+      }
+
+      return coerceExtractionResponse(parsed, args);
+    } catch {
+      return aiVisionFallback(args, "AI provider is unavailable. Try again later.");
+    }
+  }
+}
+
 function extractorFor(env: Env): AiRoutineExtractor {
   const provider = aiProviderName(env);
   if (provider === "fake") return new FakeAiRoutineExtractor();
+  if (provider === "gemini" && env.GEMINI_API_KEY?.trim()) {
+    return new GeminiAiRoutineExtractor(
+      env.GEMINI_API_KEY.trim(),
+      env.AI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
+      geminiInlineMaxImageBytes(env, sourceImageMaxBytes(env)),
+    );
+  }
   if (
     (provider === "openai" || provider === "vision" || provider === "aiVision") &&
     env.OPENAI_API_KEY?.trim() &&
@@ -369,24 +516,31 @@ function buildRoutineImportPrompt(source: RoutineImportReviewSource): string {
 
   return [
     "You extract routine candidates from a user-uploaded image for Optivus.",
-    "Return only strict JSON. No markdown. No prose outside JSON. Do not create RoutineItem objects.",
+    "Return only strict JSON. No markdown. No prose outside JSON. Do not use TOON. Do not create RoutineItem objects.",
     "",
     "Accuracy principle: never invent exact time/day if unclear. Use hasFixedTime=false and needsManualReview=true when unsure.",
+    "The goal is a user-approved review draft, not direct Routine writes and not 100% raw AI accuracy.",
     "",
     "Stage 1 read:",
-    "- Read all visible text.",
-    "- Preserve table structure, row labels, column labels, days, and times exactly.",
+    "- Read small text carefully.",
+    "- Preserve table rows and columns.",
+    "- Preserve row labels, column labels, day labels, and time labels exactly.",
     "- Do not guess missing values.",
+    "- Do not invent unclear values.",
     "",
     "Stage 2 normalize:",
     "- Convert days to Monday=1, Tuesday=2, Wednesday=3, Thursday=4, Friday=5, Saturday=6, Sunday=7.",
     "- Convert clear times to minutes from midnight.",
     "- Use hasFixedTime=false if no clear time.",
+    "- If uncertain, set needsManualReview=true.",
+    "- If text is unclear, use low confidence.",
     "- Add confidenceScore 0..1 and confidenceLabel high/medium/low.",
     "",
     "Stage 3 validate:",
     "- Add validationIssues for missing title/day, unclear time, duplicate row, impossible time, low confidence, ambiguous abbreviation, or language uncertainty.",
     "- For blurry/unclear content, confidenceLabel must be low.",
+    "- Add warnings for blurry image, dark image, rotated image, text too small, partial/cropped sheet, wrong source type, multiple sheets mixed, handwriting unreadable, or image too large for inline AI processing.",
+    `- If the photo is too hard to read, return an empty candidates array and include this warning: ${HARD_TO_READ_WARNING}`,
     "- Keep sourceTextSnippet for every candidate.",
     "- Keep sourceRowLabel/sourceColumnLabel for table-like content.",
     "",
@@ -812,6 +966,16 @@ function aiVisionFallback(
   });
 }
 
+function inlineImageTooLargeFallback(args: ExtractArgs): RoutineImportExtractionResponse {
+  return {
+    ...baseResponse(args, "aiVision", "phase2d-inline-limit"),
+    warnings: [
+      INLINE_IMAGE_TOO_LARGE_WARNING,
+      "image too large for inline AI processing",
+    ],
+  };
+}
+
 function unsafeAiOutputFallback(args: ExtractArgs): RoutineImportExtractionResponse {
   return aiVisionFallback(
     args,
@@ -851,8 +1015,7 @@ function assertOwnedRoutineImportObjectKey(args: {
   if (
     args.objectKey.includes("..") ||
     args.objectKey.includes("\\") ||
-    args.objectKey.includes("//") ||
-    !args.objectKey.endsWith(".jpg")
+    args.objectKey.includes("//")
   ) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
@@ -869,8 +1032,22 @@ function assertOwnedRoutineImportObjectKey(args: {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
 
-  const assetId = parts[4].slice(0, -".jpg".length);
+  const fileName = parts[4];
+  const lastDot = fileName.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === fileName.length - 1) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+  const assetId = fileName.slice(0, lastDot);
+  const extension = fileName.slice(lastDot + 1).toLowerCase();
   if (!isSafeSegment(assetId)) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+  if (
+    extension !== "jpg" &&
+    extension !== "jpeg" &&
+    extension !== "png" &&
+    extension !== "webp"
+  ) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
   if (args.uploadedAssetId && args.uploadedAssetId !== assetId) {
@@ -952,6 +1129,18 @@ function numberEnv(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function sourceImageMaxBytes(env: Env): number {
+  return numberEnv(env.MAX_IMAGE_BYTES, SOURCE_IMAGE_MAX_BYTES);
+}
+
+function geminiInlineMaxImageBytes(env: Env, sourceMaxBytes: number): number {
+  const configured = numberEnv(
+    env.GEMINI_INLINE_MAX_IMAGE_BYTES,
+    GEMINI_INLINE_MAX_IMAGE_BYTES,
+  );
+  return Math.min(configured, Math.max(1, sourceMaxBytes - 1));
+}
+
 function jsonResponse(
   request: Request,
   env: Env,
@@ -1001,6 +1190,18 @@ function readProviderText(value: unknown): string {
   const body = record(value);
   const outputText = textValue(body.output_text);
   if (outputText) return outputText;
+
+  const geminiCandidates = Array.isArray(body.candidates) ? body.candidates : [];
+  for (const candidate of geminiCandidates) {
+    const candidateRecord = record(candidate);
+    const contentRecord = record(candidateRecord.content);
+    const parts = Array.isArray(contentRecord.parts) ? contentRecord.parts : [];
+    for (const part of parts) {
+      const text = textValue(record(part).text);
+      if (text) return text;
+    }
+  }
+
   const output = Array.isArray(body.output) ? body.output : [];
   for (const item of output) {
     const itemRecord = record(item);
@@ -1123,11 +1324,14 @@ function isCandidateType(value: unknown): value is RoutineImportCandidateType {
 
 function isAllowedSourceContentType(value: string): boolean {
   const contentType = normalizedContentType(value);
-  return contentType === "image/jpeg" || contentType === "image/jpg";
+  return contentType === "image/jpeg" ||
+    contentType === "image/png" ||
+    contentType === "image/webp";
 }
 
 function normalizedContentType(value: string): string {
-  return value.split(";")[0].trim().toLowerCase();
+  const contentType = value.split(";")[0].trim().toLowerCase();
+  return contentType === "image/jpg" ? "image/jpeg" : contentType;
 }
 
 function safeEngine(value: unknown): ExtractionEngine {

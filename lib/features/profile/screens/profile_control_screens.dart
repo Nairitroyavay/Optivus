@@ -108,7 +108,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'Upload path is designed for Cloudflare R2. No Firebase Storage.',
+                        'Best under 5 MB. Upload path is designed for Cloudflare R2. No Firebase Storage.',
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.35,

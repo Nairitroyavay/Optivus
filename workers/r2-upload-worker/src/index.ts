@@ -10,7 +10,8 @@ type Env = {
   R2_BUCKET_NAME: string;
   UPLOAD_BUCKET: R2Bucket;
   UPLOAD_URL_EXPIRES_SECONDS?: string;
-  MAX_UPLOAD_BYTES?: string;
+  MAX_PROFILE_UPLOAD_BYTES?: string;
+  MAX_ROUTINE_IMPORT_UPLOAD_BYTES?: string;
   ALLOWED_ORIGINS?: string;
 };
 
@@ -18,17 +19,30 @@ type VerifiedUser = {
   uid: string;
 };
 
+type ObjectKeyInfo = {
+  purpose: string;
+  assetId: string;
+  extension: string;
+};
+
+const PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const ROUTINE_IMPORT_MAX_BYTES = 15 * 1024 * 1024;
+
 const firebaseJwks = createRemoteJWKSet(
   new URL(
     "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
   ),
 );
 
-const approvedPurposes = new Set([
+const routineImportPurposes = new Set([
   "class_timetable",
   "work_schedule",
   "eating_menu",
   "skin_care",
+]);
+
+const approvedPurposes = new Set([
+  ...routineImportPurposes,
   "profile_photo",
 ]);
 
@@ -83,9 +97,8 @@ async function handleSignUpload(request: Request, env: Env): Promise<Response> {
   const body = await readSmallJson(request);
   const purpose = readString(body, "purpose");
   const sourceFeature = readString(body, "sourceFeature");
-  const contentType = readString(body, "contentType");
+  const contentType = normalizedContentType(readString(body, "contentType"));
   const sizeBytes = readNumber(body, "sizeBytes");
-  const maxBytes = numberEnv(env.MAX_UPLOAD_BYTES, 1024 * 1024);
 
   if (!approvedPurposes.has(purpose)) {
     throw new HttpError(400, "invalid_purpose", "Upload purpose is not allowed.");
@@ -93,22 +106,27 @@ async function handleSignUpload(request: Request, env: Env): Promise<Response> {
   if (sourceFeature !== "onboarding") {
     throw new HttpError(400, "invalid_source", "Only onboarding uploads are enabled in Phase 2A.");
   }
-  if (contentType !== "image/jpeg") {
-    throw new HttpError(400, "invalid_content_type", "Only image/jpeg uploads are allowed.");
+  if (!isAllowedContentTypeForPurpose(purpose, contentType)) {
+    throw new HttpError(400, "invalid_content_type", contentTypeErrorMessage(purpose));
   }
+  const maxBytes = maxUploadBytesForPurpose(env, purpose);
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > maxBytes) {
-    throw new HttpError(400, "invalid_size", "Upload is too large.");
+    throw new HttpError(
+      400,
+      "invalid_size",
+      sizeBytes > maxBytes ? uploadTooLargeMessage(purpose) : "Upload size is invalid.",
+    );
   }
 
   const assetId = crypto.randomUUID();
-  const objectKey = buildObjectKey(user.uid, purpose, assetId);
+  const objectKey = buildObjectKey(user.uid, purpose, assetId, contentType);
   const expiresIn = numberEnv(env.UPLOAD_URL_EXPIRES_SECONDS, 900);
   const uploadUrl = await getSignedUrl(
     r2Client(env),
     new PutObjectCommand({
       Bucket: requiredEnv(env.R2_BUCKET_NAME, "R2_BUCKET_NAME"),
       Key: objectKey,
-      ContentType: "image/jpeg",
+      ContentType: contentType,
     }),
     { expiresIn },
   );
@@ -128,12 +146,16 @@ async function handleCompleteUpload(request: Request, env: Env): Promise<Respons
   const objectKey = readString(body, "objectKey");
   const sizeBytes = readNumber(body, "sizeBytes");
 
-  assertOwnedObjectKey(user.uid, objectKey);
-  if (!objectKey.endsWith(`/${assetId}.jpg`)) {
+  const keyInfo = assertOwnedObjectKey(user.uid, objectKey);
+  if (keyInfo.assetId !== assetId) {
     throw new HttpError(400, "asset_mismatch", "Object key does not match assetId.");
   }
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
     throw new HttpError(400, "invalid_size", "Upload size is invalid.");
+  }
+  const maxBytes = maxUploadBytesForPurpose(env, keyInfo.purpose);
+  if (sizeBytes > maxBytes) {
+    throw new HttpError(400, "invalid_size", uploadTooLargeMessage(keyInfo.purpose));
   }
 
   const object = await requiredUploadBucket(env).head(objectKey);
@@ -191,20 +213,25 @@ function r2Client(env: Env): S3Client {
   });
 }
 
-function buildObjectKey(uid: string, purpose: string, assetId: string): string {
+function buildObjectKey(
+  uid: string,
+  purpose: string,
+  assetId: string,
+  contentType: string,
+): string {
   const safeUid = safeSegment(uid, "uid");
   const safePurpose = safeSegment(purpose, "purpose");
   const safeAssetId = safeSegment(assetId, "assetId");
-  return `users/${safeUid}/onboarding/${safePurpose}/${safeAssetId}.jpg`;
+  const extension = extensionForContentType(contentType);
+  return `users/${safeUid}/onboarding/${safePurpose}/${safeAssetId}.${extension}`;
 }
 
-function assertOwnedObjectKey(uid: string, objectKey: string): void {
+function assertOwnedObjectKey(uid: string, objectKey: string): ObjectKeyInfo {
   const safeUid = safeSegment(uid, "uid");
   if (
     objectKey.includes("..") ||
     objectKey.includes("\\") ||
-    objectKey.includes("//") ||
-    !objectKey.endsWith(".jpg")
+    objectKey.includes("//")
   ) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
@@ -220,10 +247,20 @@ function assertOwnedObjectKey(uid: string, objectKey: string): void {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
 
-  const assetId = parts[4].slice(0, -".jpg".length);
+  const fileName = parts[4];
+  const lastDot = fileName.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === fileName.length - 1) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+  const assetId = fileName.slice(0, lastDot);
+  const extension = fileName.slice(lastDot + 1).toLowerCase();
   if (!isSafeSegment(assetId)) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
+  if (!isSafeExtensionForPurpose(parts[3], extension)) {
+    throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
+  }
+  return { purpose: parts[3], assetId, extension };
 }
 
 async function readSmallJson(request: Request): Promise<Record<string, unknown>> {
@@ -269,6 +306,59 @@ function isSafeSegment(value: string): boolean {
     !value.includes("/") &&
     !value.includes("\\")
   );
+}
+
+function maxUploadBytesForPurpose(env: Env, purpose: string): number {
+  if (purpose === "profile_photo") {
+    return numberEnv(env.MAX_PROFILE_UPLOAD_BYTES, PROFILE_PHOTO_MAX_BYTES);
+  }
+  if (routineImportPurposes.has(purpose)) {
+    return numberEnv(env.MAX_ROUTINE_IMPORT_UPLOAD_BYTES, ROUTINE_IMPORT_MAX_BYTES);
+  }
+  throw new HttpError(400, "invalid_purpose", "Upload purpose is not allowed.");
+}
+
+function uploadTooLargeMessage(purpose: string): string {
+  return purpose === "profile_photo"
+    ? "This photo is too large. Please upload a profile photo under 5 MB."
+    : "This photo is too large. Please upload a photo under 15 MB.";
+}
+
+function contentTypeErrorMessage(purpose: string): string {
+  return purpose === "profile_photo"
+    ? "Please upload JPEG or PNG for profile photos."
+    : "Please upload JPEG, PNG, or WEBP for now.";
+}
+
+function isAllowedContentTypeForPurpose(purpose: string, contentType: string): boolean {
+  if (purpose === "profile_photo") {
+    return contentType === "image/jpeg" || contentType === "image/png";
+  }
+  if (routineImportPurposes.has(purpose)) {
+    return contentType === "image/jpeg" ||
+      contentType === "image/png" ||
+      contentType === "image/webp";
+  }
+  return false;
+}
+
+function normalizedContentType(value: string): string {
+  const contentType = value.split(";")[0].trim().toLowerCase();
+  return contentType === "image/jpg" ? "image/jpeg" : contentType;
+}
+
+function extensionForContentType(contentType: string): string {
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function isSafeExtensionForPurpose(purpose: string, extension: string): boolean {
+  if (extension !== "jpg" && extension !== "jpeg" && extension !== "png" && extension !== "webp") {
+    return false;
+  }
+  if (purpose === "profile_photo") return extension !== "webp";
+  return routineImportPurposes.has(purpose);
 }
 
 function requiredEnv(value: string | undefined, key: string): string {
