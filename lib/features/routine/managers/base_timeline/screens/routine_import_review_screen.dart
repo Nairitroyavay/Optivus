@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/routine_import_ai_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
@@ -14,10 +15,12 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/services/routine_import_conversion_service.dart';
+import 'package:optivus/services/routine_import_ai_review_update_service.dart';
 import 'package:optivus/services/routine_import_extraction_service.dart';
 import 'package:optivus/services/routine_import_timeline_edit_service.dart';
 import 'package:optivus/services/routine_import_validation_service.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/auth_state.dart';
 
 class RoutineImportReviewScreen extends ConsumerStatefulWidget {
@@ -45,6 +48,8 @@ class _RoutineImportReviewScreenState
       const RoutineImportConversionService();
   final RoutineImportValidationService _validationService =
       const RoutineImportValidationService();
+  final RoutineImportAiReviewUpdateService _aiReviewUpdateService =
+      const RoutineImportAiReviewUpdateService();
 
   RoutineImportReviewDraft? _review;
   bool _loading = true;
@@ -88,6 +93,8 @@ class _RoutineImportReviewScreenState
       (candidate) => validation.hasBlockingIssuesFor(candidate.id),
     );
     final alreadyApplied = _alreadyApplied(review);
+    final aiState = ref.watch(routineImportAiControllerProvider);
+    final authUser = ref.watch(authProvider).user;
 
     return LiquidDetailScaffold(
       eyebrow: 'Routine import',
@@ -120,7 +127,15 @@ class _RoutineImportReviewScreenState
           _errorSection()
         else if (review != null) ...[
           _daySelector(),
-          _sourceEvidenceSection(review),
+          _sourceEvidenceSection(
+            review: review,
+            aiState: aiState,
+            canRunAi: _canRunAiExtraction(
+              review: review,
+              emailVerified: authUser?.emailVerified,
+            ),
+            onRunAi: () => _runAiExtraction(review),
+          ),
           if (alreadyApplied) _alreadyAppliedSection(review),
           _warningSummarySection(review, validation),
           _unplacedTray(review, validation),
@@ -188,10 +203,26 @@ class _RoutineImportReviewScreenState
     );
   }
 
-  Widget _sourceEvidenceSection(RoutineImportReviewDraft review) {
+  Widget _sourceEvidenceSection({
+    required RoutineImportReviewDraft review,
+    required RoutineImportAiState aiState,
+    required bool canRunAi,
+    required VoidCallback onRunAi,
+  }) {
     return LiquidDetailSection(
       title: 'Source evidence',
-      children: [_SourceEvidenceCard(review: review)],
+      children: [
+        _SourceEvidenceCard(
+          review: review,
+          aiState: aiState,
+          canRunAi: canRunAi,
+          disabledReason: _aiDisabledReason(
+            review: review,
+            emailVerified: ref.read(authProvider).user?.emailVerified,
+          ),
+          onRunAi: onRunAi,
+        ),
+      ],
     );
   }
 
@@ -514,6 +545,33 @@ class _RoutineImportReviewScreenState
     return review?.blocksDuplicateApply ?? false;
   }
 
+  bool _canRunAiExtraction({
+    required RoutineImportReviewDraft review,
+    required bool? emailVerified,
+  }) {
+    return _aiDisabledReason(review: review, emailVerified: emailVerified) ==
+        null;
+  }
+
+  String? _aiDisabledReason({
+    required RoutineImportReviewDraft review,
+    required bool? emailVerified,
+  }) {
+    if (OptivusRoutineImportAiConfig.mode ==
+        OptivusRoutineImportAiMode.disabled) {
+      return 'AI disabled';
+    }
+    if (_alreadyApplied(review)) return 'Already applied';
+    if (review.uploadedAssetR2Key?.trim().isEmpty ?? true) {
+      return 'Upload photo first';
+    }
+    if (emailVerified != true) return 'Verify email first';
+    if (ref.read(routineImportAiControllerProvider).isExtracting) {
+      return 'Extracting...';
+    }
+    return null;
+  }
+
   bool _isUnplaced(RoutineImportCandidateBlock candidate) {
     return candidate.isUnplaced;
   }
@@ -594,6 +652,94 @@ class _RoutineImportReviewScreenState
       notes: 'Added during import review.',
     );
     await _replaceCandidates([...review.candidateBlocks, candidate]);
+  }
+
+  Future<void> _runAiExtraction(RoutineImportReviewDraft review) async {
+    if (_alreadyApplied(review)) return;
+    setState(() => _errorMessage = null);
+
+    if (_shouldConfirmAiReplacement(review)) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Replace starter candidates?'),
+            content: const Text(
+              'AI extraction will replace starter candidates. Continue?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Continue'),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true) return;
+    }
+
+    final result = await ref
+        .read(routineImportAiControllerProvider.notifier)
+        .runExtraction(review);
+    if (!mounted) return;
+    if (result == null) {
+      setState(() {
+        _errorMessage = ref
+            .read(routineImportAiControllerProvider)
+            .errorMessage;
+      });
+      return;
+    }
+    if (result.candidates.isEmpty) {
+      await _persistExtractionWarning(review, result);
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = result.warnings.isEmpty
+            ? 'AI extraction did not return candidates.'
+            : result.warnings.join('\n');
+      });
+      return;
+    }
+    await _applyExtractionResult(review: review, result: result);
+  }
+
+  bool _shouldConfirmAiReplacement(RoutineImportReviewDraft review) {
+    return review.candidateBlocks.isNotEmpty &&
+        (review.extractionAttemptCount > 0 ||
+            review.candidateBlocks.any((candidate) => candidate.selected));
+  }
+
+  Future<void> _persistExtractionWarning(
+    RoutineImportReviewDraft review,
+    RoutineImportExtractionResult result,
+  ) async {
+    final next = _aiReviewUpdateService.recordExtractionWarning(
+      review: review,
+      result: result,
+    );
+    setState(() => _review = next);
+    await _persistReview(next);
+  }
+
+  Future<void> _applyExtractionResult({
+    required RoutineImportReviewDraft review,
+    required RoutineImportExtractionResult result,
+  }) async {
+    final next = _aiReviewUpdateService.applySuccessfulExtraction(
+      review: review,
+      result: result,
+      existingRoutineItems: ref.read(routineNotifierProvider).items,
+    );
+    setState(() {
+      _review = next;
+      _initialCandidateCount = next.candidateBlocks.length;
+    });
+    await _persistReview(next);
   }
 
   Future<void> _saveAction(RoutineImportValidationResult validation) async {
@@ -1501,8 +1647,18 @@ class _DragHandle extends StatelessWidget {
 
 class _SourceEvidenceCard extends StatelessWidget {
   final RoutineImportReviewDraft review;
+  final RoutineImportAiState aiState;
+  final bool canRunAi;
+  final String? disabledReason;
+  final VoidCallback onRunAi;
 
-  const _SourceEvidenceCard({required this.review});
+  const _SourceEvidenceCard({
+    required this.review,
+    required this.aiState,
+    required this.canRunAi,
+    required this.disabledReason,
+    required this.onRunAi,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1579,7 +1735,7 @@ class _SourceEvidenceCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'AI extraction is not connected yet. Review manually before saving.',
+            'AI extraction creates draft candidates only. Review manually before saving.',
             style: TextStyle(
               fontSize: 12,
               height: 1.35,
@@ -1587,8 +1743,105 @@ class _SourceEvidenceCard extends StatelessWidget {
               color: OptivusColors.warning,
             ),
           ),
+          const SizedBox(height: 12),
+          _AiExtractionButton(
+            state: aiState,
+            enabled: canRunAi,
+            disabledReason: disabledReason,
+            onTap: onRunAi,
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _AiExtractionButton extends StatelessWidget {
+  final RoutineImportAiState state;
+  final bool enabled;
+  final String? disabledReason;
+  final VoidCallback onTap;
+
+  const _AiExtractionButton({
+    required this.state,
+    required this.enabled,
+    required this.disabledReason,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final extracting = state.status == RoutineImportAiStatus.extracting;
+    final extracted = state.status == RoutineImportAiStatus.extracted;
+    final failed = state.status == RoutineImportAiStatus.failed;
+    final label = extracting
+        ? 'Extracting...'
+        : extracted
+        ? 'AI draft ready - review below'
+        : disabledReason ?? 'Run AI extraction';
+    final color = failed
+        ? OptivusColors.danger
+        : extracted
+        ? OptivusColors.success
+        : OptivusColors.routineAccent;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GestureDetector(
+          onTap: enabled && !extracting ? onTap : null,
+          child: Opacity(
+            opacity: enabled && !extracting ? 1 : 0.58,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.13),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(color: color.withValues(alpha: 0.26)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    extracting
+                        ? Icons.hourglass_top_rounded
+                        : extracted
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.auto_fix_high_rounded,
+                    size: 18,
+                    color: color,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.25,
+                        fontWeight: FontWeight.w900,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (failed && state.errorMessage != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            state.errorMessage!,
+            style: const TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              fontWeight: FontWeight.w800,
+              color: OptivusColors.danger,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

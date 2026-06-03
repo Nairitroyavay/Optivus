@@ -1,0 +1,19 @@
+name = "optivus-routine-import-worker-dev"
+main = "src/index.ts"
+compatibility_date = "2026-06-02"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+FIREBASE_PROJECT_ID = "optivus-lifeos"
+R2_BUCKET_NAME = "optivus-uploads-dev"
+MAX_IMAGE_BYTES = "1048576"
+AI_PROVIDER = "disabled"
+AI_MODEL = ""
+
+[[r2_buckets]]
+binding = "UPLOAD_BUCKET"
+bucket_name = "optivus-uploads-dev"
+
+[observability]
+enabled = true
+head_sampling_rate = 1

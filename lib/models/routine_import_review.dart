@@ -34,6 +34,11 @@ class RoutineImportReviewDraft {
   final List<String> rejectedCandidateIds;
   final List<String> appliedRoutineItemIds;
   final DateTime? appliedAt;
+  final String? extractionEngine;
+  final String? extractionVersion;
+  final DateTime? lastExtractedAt;
+  final List<String> extractionWarnings;
+  final int extractionAttemptCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -53,6 +58,11 @@ class RoutineImportReviewDraft {
     this.rejectedCandidateIds = const [],
     this.appliedRoutineItemIds = const [],
     this.appliedAt,
+    this.extractionEngine,
+    this.extractionVersion,
+    this.lastExtractedAt,
+    this.extractionWarnings = const [],
+    this.extractionAttemptCount = 0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -82,6 +92,11 @@ class RoutineImportReviewDraft {
       'rejectedCandidateIds': rejectedCandidateIds,
       'appliedRoutineItemIds': appliedRoutineItemIds,
       'appliedAt': appliedAt?.toIso8601String(),
+      'extractionEngine': extractionEngine,
+      'extractionVersion': extractionVersion,
+      'lastExtractedAt': lastExtractedAt?.toIso8601String(),
+      'extractionWarnings': extractionWarnings,
+      'extractionAttemptCount': extractionAttemptCount,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -106,6 +121,13 @@ class RoutineImportReviewDraft {
       'rejectedCandidateIds': rejectedCandidateIds,
       'appliedRoutineItemIds': appliedRoutineItemIds,
       'appliedAt': appliedAt == null ? null : Timestamp.fromDate(appliedAt!),
+      'extractionEngine': extractionEngine,
+      'extractionVersion': extractionVersion,
+      'lastExtractedAt': lastExtractedAt == null
+          ? null
+          : Timestamp.fromDate(lastExtractedAt!),
+      'extractionWarnings': extractionWarnings,
+      'extractionAttemptCount': extractionAttemptCount,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -133,6 +155,12 @@ class RoutineImportReviewDraft {
       rejectedCandidateIds: _readStringList(map['rejectedCandidateIds']),
       appliedRoutineItemIds: _readStringList(map['appliedRoutineItemIds']),
       appliedAt: _dateTimeFromValue(map['appliedAt']),
+      extractionEngine: map['extractionEngine'] as String?,
+      extractionVersion: map['extractionVersion'] as String?,
+      lastExtractedAt: _dateTimeFromValue(map['lastExtractedAt']),
+      extractionWarnings: _readStringList(map['extractionWarnings']),
+      extractionAttemptCount:
+          (map['extractionAttemptCount'] as num?)?.toInt() ?? 0,
       createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt:
           updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
@@ -159,11 +187,19 @@ class RoutineImportReviewDraft {
     List<String>? rejectedCandidateIds,
     List<String>? appliedRoutineItemIds,
     DateTime? appliedAt,
+    String? extractionEngine,
+    String? extractionVersion,
+    DateTime? lastExtractedAt,
+    List<String>? extractionWarnings,
+    int? extractionAttemptCount,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool clearOnboardingPendingImportId = false,
     bool clearUploadedAssetReference = false,
     bool clearAppliedAt = false,
+    bool clearExtractionEngine = false,
+    bool clearExtractionVersion = false,
+    bool clearLastExtractedAt = false,
   }) {
     return RoutineImportReviewDraft(
       id: id ?? this.id,
@@ -190,6 +226,18 @@ class RoutineImportReviewDraft {
       appliedRoutineItemIds:
           appliedRoutineItemIds ?? this.appliedRoutineItemIds,
       appliedAt: clearAppliedAt ? null : (appliedAt ?? this.appliedAt),
+      extractionEngine: clearExtractionEngine
+          ? null
+          : (extractionEngine ?? this.extractionEngine),
+      extractionVersion: clearExtractionVersion
+          ? null
+          : (extractionVersion ?? this.extractionVersion),
+      lastExtractedAt: clearLastExtractedAt
+          ? null
+          : (lastExtractedAt ?? this.lastExtractedAt),
+      extractionWarnings: extractionWarnings ?? this.extractionWarnings,
+      extractionAttemptCount:
+          extractionAttemptCount ?? this.extractionAttemptCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
