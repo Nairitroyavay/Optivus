@@ -98,12 +98,23 @@ String? routineImportAiPreflightError({
   required RoutineImportReviewDraft review,
   required bool signedIn,
   required bool emailVerified,
+  DateTime? now,
 }) {
   if (review.blocksDuplicateApply) {
     return 'Already applied reviews cannot run AI extraction.';
   }
   if (review.uploadedAssetR2Key?.trim().isEmpty ?? true) {
     return 'Upload a photo before running AI extraction.';
+  }
+  if (review.extractionAttemptCount >= 5) {
+    return "You've reached the extraction retry limit for this review.";
+  }
+  final lastExtractedAt = review.lastExtractedAt;
+  if (lastExtractedAt != null) {
+    final elapsed = (now ?? DateTime.now()).difference(lastExtractedAt);
+    if (elapsed.inSeconds < 60) {
+      return 'Please wait a moment before running extraction again.';
+    }
   }
   if (!signedIn) return 'Sign in before running AI extraction.';
   if (!emailVerified) return 'Verify your email before running AI extraction.';

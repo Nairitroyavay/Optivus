@@ -31,7 +31,7 @@ class FakeRoutineImportAiClient implements RoutineImportAiClient {
         uid: uid,
         review: review,
         engine: disabled ? 'disabled' : 'fake',
-        engineVersion: 'phase2d',
+        engineVersion: disabled ? 'phase2d-disabled' : 'phase2d',
         warning: 'Upload a photo before running AI extraction.',
       );
     }
@@ -41,9 +41,16 @@ class FakeRoutineImportAiClient implements RoutineImportAiClient {
         uid: uid,
         review: review,
         engine: 'disabled',
-        engineVersion: 'phase2d',
-        warning: 'AI disabled.',
-        candidates: [_manualReviewCandidate(uid: uid, review: review)],
+        engineVersion: 'phase2d-disabled',
+        warning: 'AI provider is disabled.',
+        candidates: [
+          _manualReviewCandidate(
+            uid: uid,
+            review: review,
+            engine: 'disabled',
+            engineVersion: 'phase2d-disabled',
+          ),
+        ],
       );
     }
 
@@ -237,7 +244,7 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
       }
 
       final result = RoutineImportExtractionResult.fromMap(body);
-      if (!_isValidResult(result, uid: uid, review: review)) {
+      if (!_isValidResult(result, uid: uid, review: review, raw: body)) {
         return _fallbackResult(
           uid: uid,
           review: review,
@@ -281,17 +288,122 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
     RoutineImportExtractionResult result, {
     required String uid,
     required RoutineImportReviewDraft review,
+    required Map<String, dynamic> raw,
   }) {
+    if (_containsForbiddenField(raw)) return false;
     if (result.id.trim().isEmpty) return false;
     if (result.uid != uid) return false;
     if (result.source != review.source) return false;
-    if (result.engine.trim().isEmpty) return false;
-    return result.candidates.every((candidate) {
-      return candidate.id.trim().isNotEmpty &&
-          candidate.extractionEngine.trim().isNotEmpty;
+    if (raw['source'] != review.source.name) return false;
+    if (!_allowedResultEngines.contains(result.engine)) return false;
+    if (!_matchesRequiredReference(
+      result.sourceR2Key,
+      review.uploadedAssetR2Key,
+    )) {
+      return false;
+    }
+    if (!_matchesRequiredReference(
+      result.sourceAssetId,
+      review.uploadedAssetId,
+    )) {
+      return false;
+    }
+
+    final rawCandidates = raw['candidates'];
+    if (rawCandidates is! List) return false;
+    if (rawCandidates.length != result.candidates.length) return false;
+
+    for (var i = 0; i < result.candidates.length; i += 1) {
+      final rawCandidate = rawCandidates[i];
+      if (rawCandidate is! Map) return false;
+      final candidate = result.candidates[i];
+      if (!_isValidCandidate(candidate, rawCandidate, review)) return false;
+    }
+    return true;
+  }
+
+  bool _isValidCandidate(
+    RoutineImportCandidateBlock candidate,
+    Map<dynamic, dynamic> rawCandidate,
+    RoutineImportReviewDraft review,
+  ) {
+    if (_containsForbiddenField(rawCandidate)) return false;
+    if (candidate.id.trim().isEmpty) return false;
+    if (candidate.title.trim().isEmpty && !_hasMissingTitleIssue(candidate)) {
+      return false;
+    }
+    if (!_allowedCandidateTypeNames.contains(rawCandidate['candidateType'])) {
+      return false;
+    }
+    if (candidate.extractionEngine.trim().isEmpty) return false;
+    if (!_matchesOptionalReference(
+      candidate.sourceR2Key,
+      review.uploadedAssetR2Key,
+    )) {
+      return false;
+    }
+    if (!_matchesOptionalReference(
+      candidate.sourceAssetId,
+      review.uploadedAssetId,
+    )) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _hasMissingTitleIssue(RoutineImportCandidateBlock candidate) {
+    return candidate.validationIssues.any((issue) {
+      final normalized = issue.toLowerCase();
+      return normalized.contains('title') &&
+          (normalized.contains('missing') || normalized.contains('required'));
     });
   }
+
+  bool _matchesRequiredReference(String? value, String? expected) {
+    if (expected == null || expected.trim().isEmpty) return value == null;
+    return value == expected;
+  }
+
+  bool _matchesOptionalReference(String? value, String? expected) {
+    if (value == null || value.trim().isEmpty) return true;
+    return value == expected;
+  }
+
+  bool _containsForbiddenField(Object? value) {
+    if (value is Map) {
+      for (final entry in value.entries) {
+        final key = entry.key.toString();
+        if (_forbiddenWorkerFields.contains(key)) return true;
+        if (_containsForbiddenField(entry.value)) return true;
+      }
+    }
+    if (value is List) {
+      return value.any(_containsForbiddenField);
+    }
+    return false;
+  }
 }
+
+const Set<String> _allowedResultEngines = {
+  'disabled',
+  'fake',
+  'aiVision',
+  'aiText',
+  'worker',
+};
+
+final Set<String> _allowedCandidateTypeNames = RoutineImportCandidateType.values
+    .map((type) => type.name)
+    .toSet();
+
+const Set<String> _forbiddenWorkerFields = {
+  'routineItems',
+  'appliedRoutineItemIds',
+  'imageBytes',
+  'localPath',
+  'localFilePath',
+  'localPreviewPath',
+};
 
 final routineImportAiClientProvider = Provider<RoutineImportAiClient>((ref) {
   return switch (OptivusRoutineImportAiConfig.mode) {
@@ -332,6 +444,8 @@ RoutineImportExtractionResult _fallbackResult({
 RoutineImportCandidateBlock _manualReviewCandidate({
   required String uid,
   required RoutineImportReviewDraft review,
+  required String engine,
+  required String engineVersion,
 }) {
   return _unclearCandidate(
     review: review,
@@ -339,6 +453,8 @@ RoutineImportCandidateBlock _manualReviewCandidate({
     title: '${review.sourceLabel} photo needs manual review',
     category: _categoryName(review.source),
     snippet: 'AI provider is disabled.',
+    engine: engine,
+    engineVersion: engineVersion,
   );
 }
 
@@ -349,6 +465,8 @@ RoutineImportCandidateBlock _unclearCandidate({
   required String category,
   required String snippet,
   List<String> steps = const [],
+  String engine = 'fake',
+  String engineVersion = 'phase2d',
 }) {
   return RoutineImportCandidateBlock(
     id: id,
@@ -371,8 +489,8 @@ RoutineImportCandidateBlock _unclearCandidate({
     sourceR2Key: review.uploadedAssetR2Key,
     sourceTextSnippet: snippet,
     sourceImageIndex: 0,
-    extractionEngine: 'fake',
-    extractionVersion: 'phase2d',
+    extractionEngine: engine,
+    extractionVersion: engineVersion,
     needsManualReview: true,
     notes: 'Time was unclear. Assign a time if this should become routine.',
     steps: steps,

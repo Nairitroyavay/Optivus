@@ -11,13 +11,44 @@ cd workers/routine-import-worker
 npm install
 ```
 
-AI provider secrets are only needed when `AI_PROVIDER` uses a real provider such as OpenAI:
+No AI key goes into Flutter. Flutter only calls this Worker with a Firebase ID token.
+
+## Deploy Modes
+
+### Disabled mode
+
+```toml
+AI_PROVIDER = "disabled"
+AI_MODEL = ""
+```
+
+Disabled mode needs no AI key. Use it to test Worker auth, R2 object-key checks, private R2 reads, `/health`, and safe fallback behavior. Extraction returns `engine: "disabled"` with a manual-review warning.
+
+### Fake mode
+
+```toml
+AI_PROVIDER = "fake"
+AI_MODEL = ""
+```
+
+Fake mode needs no AI key. Use it to test the Flutter AI review UI with deterministic candidates. Fake candidates still must be reviewed, edited, dragged, and accepted by the user before they can become Base Timeline items.
+
+### Real AI mode
+
+```toml
+AI_PROVIDER = "openai"
+AI_MODEL = "<model-name>"
+```
+
+Real AI mode requires an OpenAI API key stored as a Worker secret:
 
 ```bash
 wrangler secret put OPENAI_API_KEY
 ```
 
-`AI_PROVIDER=disabled` deploys without any AI key.
+Real AI output still returns review candidates only. It never writes Routine items directly and must pass Worker validation, Flutter validation, visual timeline review, and user acceptance.
+
+## Deploy
 
 ```bash
 wrangler deploy
@@ -48,6 +79,7 @@ Firebase project id must be `optivus-lifeos`.
 name = "optivus-routine-import-worker-dev"
 main = "src/index.ts"
 compatibility_date = "2026-06-02"
+compatibility_flags = ["nodejs_compat"]
 
 [vars]
 FIREBASE_PROJECT_ID = "optivus-lifeos"
@@ -59,11 +91,15 @@ AI_MODEL = ""
 [[r2_buckets]]
 binding = "UPLOAD_BUCKET"
 bucket_name = "optivus-uploads-dev"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
 ```
 
-No AI key goes into Flutter.
-
 ## Flutter Run
+
+Run Flutter with both the upload Worker and routine-import Worker configured:
 
 ```bash
 flutter run \
@@ -110,7 +146,8 @@ Expected disabled-provider result:
 
 ```json
 {
-  "engine": "fake",
+  "engine": "disabled",
+  "engineVersion": "phase2d-disabled",
   "warnings": ["AI provider is disabled."],
   "candidates": [
     {
@@ -133,10 +170,28 @@ The Worker rejects:
 - unknown source/purpose
 - profile photo purpose
 - missing R2 object
+- non-JPEG source object content types
 - images larger than `MAX_IMAGE_BYTES`
+- malformed AI JSON
+- AI payloads that include Routine items, applied Routine IDs, local file paths, or image bytes
 
 Typecheck:
 
 ```bash
 npm run typecheck
 ```
+
+## Contract Checklist
+
+Keep these checks passing before Phase 3:
+
+- `/health` returns the configured Firebase project, bucket, and AI provider.
+- Object-key validation rejects another uid.
+- Object-key validation rejects `profile_photo` and any non-routine-import purpose.
+- Source object content type rejects anything except `image/jpeg` or `image/jpg`.
+- Disabled provider returns `engine: "disabled"` and `engineVersion: "phase2d-disabled"`.
+- Fake provider returns strict JSON candidates with `engine: "fake"`.
+- Real provider returns `engine: "aiVision"` and never bypasses review.
+- Invalid AI JSON returns the warning `AI output could not be safely parsed. Review manually.`
+- Candidate sanitization never exposes `routineItems`, `appliedRoutineItemIds`, `imageBytes`, `localPath`, `localFilePath`, or `localPreviewPath`.
+- Flutter must still validate candidates and require visual review before converting accepted candidates into Routine items.

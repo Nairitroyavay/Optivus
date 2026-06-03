@@ -256,16 +256,10 @@ class _RoutineImportReviewScreenState
     RoutineImportReviewDraft review,
     RoutineImportValidationResult validation,
   ) {
-    final messages = <String>[
-      ...review.warnings,
-      for (final candidate in review.candidateBlocks)
-        ...validation
-            .messagesFor(candidate.id)
-            .map(
-              (message) =>
-                  '${candidate.title.trim().isEmpty ? 'Untitled' : candidate.title}: $message',
-            ),
-    ];
+    final messages = routineImportWarningSummaryMessages(
+      review: review,
+      validation: validation,
+    );
     if (messages.isEmpty) return const SizedBox.shrink();
 
     return LiquidDetailSection(
@@ -561,11 +555,13 @@ class _RoutineImportReviewScreenState
         OptivusRoutineImportAiMode.disabled) {
       return 'AI disabled';
     }
-    if (_alreadyApplied(review)) return 'Already applied';
-    if (review.uploadedAssetR2Key?.trim().isEmpty ?? true) {
-      return 'Upload photo first';
-    }
-    if (emailVerified != true) return 'Verify email first';
+    final authUser = ref.read(authProvider).user;
+    final preflightError = routineImportAiPreflightError(
+      review: review,
+      signedIn: authUser != null,
+      emailVerified: emailVerified == true,
+    );
+    if (preflightError != null) return preflightError;
     if (ref.read(routineImportAiControllerProvider).isExtracting) {
       return 'Extracting...';
     }
@@ -655,7 +651,16 @@ class _RoutineImportReviewScreenState
   }
 
   Future<void> _runAiExtraction(RoutineImportReviewDraft review) async {
-    if (_alreadyApplied(review)) return;
+    final authUser = ref.read(authProvider).user;
+    final preflightError = routineImportAiPreflightError(
+      review: review,
+      signedIn: authUser != null,
+      emailVerified: authUser?.emailVerified ?? false,
+    );
+    if (preflightError != null) {
+      setState(() => _errorMessage = preflightError);
+      return;
+    }
     setState(() => _errorMessage = null);
 
     if (_shouldConfirmAiReplacement(review)) {
@@ -2310,6 +2315,24 @@ class _SelectablePill extends StatelessWidget {
       ),
     );
   }
+}
+
+List<String> routineImportWarningSummaryMessages({
+  required RoutineImportReviewDraft review,
+  required RoutineImportValidationResult validation,
+}) {
+  final messages = <String>[
+    ...review.warnings,
+    ...review.extractionWarnings,
+    for (final candidate in review.candidateBlocks)
+      ...validation
+          .messagesFor(candidate.id)
+          .map(
+            (message) =>
+                '${candidate.title.trim().isEmpty ? 'Untitled' : candidate.title}: $message',
+          ),
+  ];
+  return {...messages}.toList(growable: false);
 }
 
 RoutineImportReviewSource _reviewSourceFor(RoutineImportSource source) {

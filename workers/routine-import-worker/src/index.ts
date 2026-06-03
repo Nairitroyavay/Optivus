@@ -19,7 +19,7 @@ type RoutineImportCandidateType =
   | "note"
   | "unknown";
 type ConfidenceLabel = "high" | "medium" | "low";
-type ExtractionEngine = "fake" | "aiVision" | "aiText";
+type ExtractionEngine = "disabled" | "fake" | "aiVision" | "aiText";
 
 type RoutineImportExtractionResponse = {
   id: string;
@@ -174,6 +174,15 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
     throw new HttpError(413, "image_too_large", "Uploaded image is too large for AI extraction.");
   }
 
+  const contentType = object.httpMetadata?.contentType ?? "image/jpeg";
+  if (!isAllowedSourceContentType(contentType)) {
+    throw new HttpError(
+      400,
+      "invalid_source_content_type",
+      "Uploaded source image type is not supported.",
+    );
+  }
+
   const imageBytes = await object.arrayBuffer();
   if (imageBytes.byteLength > maxBytes) {
     throw new HttpError(413, "image_too_large", "Uploaded image is too large for AI extraction.");
@@ -186,7 +195,7 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
     source,
     sourceLabel,
     imageBytes,
-    contentType: object.httpMetadata?.contentType ?? "image/jpeg",
+    contentType: normalizedContentType(contentType),
     objectKey: uploadedAssetR2Key,
     uploadedAssetId,
   });
@@ -202,9 +211,21 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
 
 class DisabledAiRoutineExtractor implements AiRoutineExtractor {
   async extract(args: ExtractArgs): Promise<RoutineImportExtractionResponse> {
-    return fallbackResponse(args, "AI provider is disabled.", [
-      manualReviewCandidate(args, "ai_disabled_manual_review", `${args.sourceLabel} photo needs manual review`),
-    ]);
+    return fallbackResponse({
+      args,
+      engine: "disabled",
+      engineVersion: "phase2d-disabled",
+      warning: "AI provider is disabled.",
+      candidates: [
+        manualReviewCandidate(
+          args,
+          "ai_disabled_manual_review",
+          `${args.sourceLabel} photo needs manual review`,
+          "disabled",
+          "phase2d-disabled",
+        ),
+      ],
+    });
   }
 }
 
@@ -254,25 +275,65 @@ class VisionAiRoutineExtractor implements AiRoutineExtractor {
       });
 
       if (!response.ok) {
-        return fallbackResponse(args, "AI provider could not process the image.");
+        return aiVisionFallback(args, "AI provider could not process the image.");
       }
 
       let providerBody: unknown;
       try {
         providerBody = await response.json();
       } catch {
-        return fallbackResponse(args, "AI provider returned invalid JSON.");
+        return aiVisionFallback(args, "AI provider returned invalid JSON.");
       }
 
       const text = readProviderText(providerBody);
-      const parsed = parseAiJsonText(text);
+      let parsed = parseAiJsonText(text);
       if (!parsed) {
-        return fallbackResponse(args, "AI provider returned invalid JSON.");
+        parsed = await this.repairAiJsonText(text, args);
+      }
+      if (!parsed) {
+        return unsafeAiOutputFallback(args);
+      }
+
+      const validation = validateExtractionShape(parsed);
+      if (!validation.ok) {
+        return unsafeAiOutputFallback(args);
       }
 
       return coerceExtractionResponse(parsed, args);
     } catch {
-      return fallbackResponse(args, "AI provider is unavailable. Try again later.");
+      return aiVisionFallback(args, "AI provider is unavailable. Try again later.");
+    }
+  }
+
+  private async repairAiJsonText(text: string, args: ExtractArgs): Promise<unknown | null> {
+    if (!text.trim()) return null;
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.model,
+          input: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: buildJsonRepairPrompt(args.source, text),
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      if (!response.ok) return null;
+      const providerBody = await response.json();
+      return parseAiJsonText(readProviderText(providerBody));
+    } catch {
+      return null;
     }
   }
 }
@@ -378,6 +439,24 @@ function buildRoutineImportPrompt(source: RoutineImportReviewSource): string {
   ].join("\n");
 }
 
+function buildJsonRepairPrompt(
+  source: RoutineImportReviewSource,
+  unsafeText: string,
+): string {
+  return [
+    "Repair the following routine import extraction output into strict JSON only.",
+    "Return no markdown and no prose outside JSON.",
+    "Do not add facts, times, days, candidates, source images, local paths, image bytes, Routine items, or applied IDs.",
+    "If a value is unclear, keep it unclear and use needsManualReview=true with low confidence.",
+    `The source must be one of classes, work, eating, skinCare. Current source: ${source}.`,
+    "Required root keys: id, uid, source, engine, engineVersion, sourceAssetId, sourceR2Key, rawText, candidates, warnings, createdAt.",
+    "Required candidate keys: id, title, candidateType, startMinute, endMinute, hasFixedTime, repeatDays, blockType, category, hardBlock, selected, needsManualReview, validationIssues, extractionEngine, steps.",
+    "",
+    "Unsafe output to repair:",
+    unsafeText.slice(0, 12000),
+  ].join("\n");
+}
+
 function fakeCandidates(args: ExtractArgs): RoutineImportCandidate[] {
   const common = (
     id: string,
@@ -421,7 +500,13 @@ function fakeCandidates(args: ExtractArgs): RoutineImportCandidate[] {
     case "classes":
       return [
         common("ai_class_math", "Math class", 540, 600, [1, 3, 5], "hard_block", "classBlock", true, "MON/WED/FRI 9:00 Math"),
-        unclearCandidate(args, "ai_class_unclear_period", "Unclear class period", "classBlock", "Period 4 - Physics"),
+        unclearCandidate({
+          args,
+          id: "ai_class_unclear_period",
+          title: "Unclear class period",
+          category: "classBlock",
+          snippet: "Period 4 - Physics",
+        }),
       ];
     case "work":
       return [
@@ -438,7 +523,13 @@ function fakeCandidates(args: ExtractArgs): RoutineImportCandidate[] {
     case "skinCare":
       return [
         {
-          ...unclearCandidate(args, "ai_skin_care_steps", "Morning skin care routine", "skinCare", "Cleanser > Serum > Sunscreen"),
+          ...unclearCandidate({
+            args,
+            id: "ai_skin_care_steps",
+            title: "Morning skin care routine",
+            category: "skinCare",
+            snippet: "Cleanser > Serum > Sunscreen",
+          }),
           candidateType: "checklistStep",
           steps: ["Cleanser", "Serum", "Sunscreen"],
         },
@@ -446,17 +537,41 @@ function fakeCandidates(args: ExtractArgs): RoutineImportCandidate[] {
   }
 }
 
-function manualReviewCandidate(args: ExtractArgs, id: string, title: string): RoutineImportCandidate {
-  return unclearCandidate(args, id, title, sourceCategory[args.source], "AI provider is disabled.");
-}
-
-function unclearCandidate(
+function manualReviewCandidate(
   args: ExtractArgs,
   id: string,
   title: string,
-  category: string,
-  snippet: string,
+  engine: ExtractionEngine,
+  engineVersion: string,
 ): RoutineImportCandidate {
+  return unclearCandidate({
+    args,
+    id,
+    title,
+    category: sourceCategory[args.source],
+    snippet: "AI provider is disabled.",
+    engine,
+    engineVersion,
+  });
+}
+
+function unclearCandidate({
+  args,
+  id,
+  title,
+  category,
+  snippet,
+  engine = "fake",
+  engineVersion = "phase2d",
+}: {
+  args: ExtractArgs;
+  id: string;
+  title: string;
+  category: string;
+  snippet: string;
+  engine?: ExtractionEngine;
+  engineVersion?: string;
+}): RoutineImportCandidate {
   return {
     id,
     title,
@@ -479,8 +594,8 @@ function unclearCandidate(
     sourceR2Key: args.objectKey,
     sourceTextSnippet: snippet,
     sourceImageIndex: 0,
-    extractionEngine: "fake",
-    extractionVersion: "phase2d",
+    extractionEngine: engine,
+    extractionVersion: engineVersion,
     notes: "Assign a time if this should become routine.",
     steps: [],
   };
@@ -669,15 +784,39 @@ function baseResponse(
 }
 
 function fallbackResponse(
-  args: ExtractArgs,
-  warning: string,
-  candidates: RoutineImportCandidate[] = [],
+  options: {
+    args: ExtractArgs;
+    engine: ExtractionEngine;
+    engineVersion: string;
+    warning: string;
+    candidates?: RoutineImportCandidate[];
+  },
 ): RoutineImportExtractionResponse {
+  const { args, engine, engineVersion, warning, candidates = [] } = options;
   return {
-    ...baseResponse(args, "fake", "phase2d-fallback"),
+    ...baseResponse(args, engine, engineVersion),
     candidates,
     warnings: [warning],
   };
+}
+
+function aiVisionFallback(
+  args: ExtractArgs,
+  warning: string,
+): RoutineImportExtractionResponse {
+  return fallbackResponse({
+    args,
+    engine: "aiVision",
+    engineVersion: "phase2d-fallback",
+    warning,
+  });
+}
+
+function unsafeAiOutputFallback(args: ExtractArgs): RoutineImportExtractionResponse {
+  return aiVisionFallback(
+    args,
+    "AI output could not be safely parsed. Review manually.",
+  );
 }
 
 async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<VerifiedUser> {
@@ -889,8 +1028,112 @@ function parseAiJsonText(text: string): unknown | null {
   }
 }
 
+function validateExtractionShape(value: unknown): {
+  ok: boolean;
+  issues: string[];
+} {
+  const issues: string[] = [];
+  collectForbiddenFieldIssues(value, "$", issues);
+
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    issues.push("Root must be an object.");
+    return { ok: false, issues };
+  }
+
+  const body = value as Record<string, unknown>;
+  if (!isRoutineImportSource(body.source)) {
+    issues.push("source is invalid.");
+  }
+  if (!Array.isArray(body.candidates)) {
+    issues.push("candidates must be an array.");
+  } else {
+    body.candidates.forEach((candidate, index) => {
+      if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
+        issues.push(`candidates[${index}] must be an object.`);
+        return;
+      }
+      const candidateBody = candidate as Record<string, unknown>;
+      if (typeof candidateBody.id !== "string" || candidateBody.id.trim() === "") {
+        issues.push(`candidates[${index}].id is missing.`);
+      }
+      if (typeof candidateBody.title !== "string" || candidateBody.title.trim() === "") {
+        issues.push(`candidates[${index}].title is missing.`);
+      }
+      if (!isCandidateType(candidateBody.candidateType)) {
+        issues.push(`candidates[${index}].candidateType is invalid.`);
+      }
+      if (
+        candidateBody.repeatDays !== undefined &&
+        !Array.isArray(candidateBody.repeatDays)
+      ) {
+        issues.push(`candidates[${index}].repeatDays must be an array.`);
+      }
+      if (candidateBody.hasFixedTime === true) {
+        if (!isNumber(candidateBody.startMinute)) {
+          issues.push(`candidates[${index}].startMinute must be a number.`);
+        }
+        if (!isNumber(candidateBody.endMinute)) {
+          issues.push(`candidates[${index}].endMinute must be a number.`);
+        }
+      }
+    });
+  }
+
+  return { ok: issues.length === 0, issues };
+}
+
+function collectForbiddenFieldIssues(
+  value: unknown,
+  path: string,
+  issues: string[],
+): void {
+  if (value === null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectForbiddenFieldIssues(item, `${path}[${index}]`, issues));
+    return;
+  }
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    if (isForbiddenOutputField(key)) {
+      issues.push(`${path}.${key} is not allowed.`);
+    }
+    collectForbiddenFieldIssues(nested, `${path}.${key}`, issues);
+  }
+}
+
+function isForbiddenOutputField(key: string): boolean {
+  return key === "routineItems" ||
+    key === "appliedRoutineItemIds" ||
+    key === "imageBytes" ||
+    key === "localPath" ||
+    key === "localFilePath" ||
+    key === "localPreviewPath";
+}
+
+function isRoutineImportSource(value: unknown): value is RoutineImportReviewSource {
+  return value === "classes" || value === "work" || value === "eating" || value === "skinCare";
+}
+
+function isCandidateType(value: unknown): value is RoutineImportCandidateType {
+  return value === "block" ||
+    value === "flexibleTask" ||
+    value === "checklistStep" ||
+    value === "note" ||
+    value === "unknown";
+}
+
+function isAllowedSourceContentType(value: string): boolean {
+  const contentType = normalizedContentType(value);
+  return contentType === "image/jpeg" || contentType === "image/jpg";
+}
+
+function normalizedContentType(value: string): string {
+  return value.split(";")[0].trim().toLowerCase();
+}
+
 function safeEngine(value: unknown): ExtractionEngine {
-  return value === "aiVision" || value === "aiText" || value === "fake" ? value : "fake";
+  return value === "aiVision" || value === "aiText" || value === "fake" || value === "disabled"
+    ? value
+    : "fake";
 }
 
 function safeCandidateType(value: unknown): RoutineImportCandidateType {
