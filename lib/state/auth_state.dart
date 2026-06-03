@@ -20,10 +20,14 @@ import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  if (OptivusBackendConfig.useFirebase) {
+  if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
     return FirebaseAuthRepository();
   }
   return FakeAuthRepository();
+});
+
+final optivusBackendModeProvider = Provider<OptivusBackendMode>((ref) {
+  return OptivusBackendConfig.mode;
 });
 
 enum AuthFlowStatus {
@@ -235,7 +239,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           updatedAt: DateTime.now(),
         );
     _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
-    if (OptivusBackendConfig.useFirebase && !_needsEmailVerification(user)) {
+    if (_useFirebaseBackend && !_needsEmailVerification(user)) {
       await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
     }
     state = state.copyWith(
@@ -255,7 +259,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           updatedAt: DateTime.now(),
         );
     _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
-    if (OptivusBackendConfig.useFirebase && !_needsEmailVerification(user)) {
+    if (_useFirebaseBackend && !_needsEmailVerification(user)) {
       await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
     }
     state = state.copyWith(
@@ -298,7 +302,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    if (OptivusBackendConfig.useFirebase) {
+    if (_useFirebaseBackend) {
       await _loadOrCreateBackendUserState(user);
       return;
     }
@@ -314,7 +318,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _loadOrCreateBackendUserState(AuthUser user) async {
-    if (!OptivusBackendConfig.useFirebase) {
+    if (!_useFirebaseBackend) {
       if (user.uid == 'dev-user-12345') {
         _loadDevSeedState(user);
       } else {
@@ -450,6 +454,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       status: statusFor(user, profile.onboardingCompleted),
       clearError: true,
     );
+  }
+
+  bool get _useFirebaseBackend {
+    return _ref.read(optivusBackendModeProvider) == OptivusBackendMode.firebase;
   }
 
   void _loadDevSeedState(AuthUser user) {

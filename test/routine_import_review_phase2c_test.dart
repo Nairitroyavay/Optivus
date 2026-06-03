@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/routine/routine_state.dart';
@@ -291,6 +293,15 @@ void main() {
     );
   });
 
+  test('Firestore routine import review rules block direct Routine payloads', () {
+    final rules = File('firestore.rules').readAsStringSync();
+
+    expect(rules, contains('validRoutineImportReviewKeys(data)'));
+    expect(rules, contains('"routineItems"'));
+    expect(rules, contains('"localPreviewPath"'));
+    expect(rules, contains('data.candidateBlocks is list'));
+  });
+
   test(
     'Conversion service converts timed selected candidate to RoutineItem',
     () {
@@ -443,6 +454,39 @@ void main() {
     expect(review.blocksDuplicateApply, isTrue);
   });
 
+  test(
+    'Accepted review without applied ids still blocks save and can restore',
+    () async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final review = _acceptedReview(appliedRoutineItemIds: const []);
+      final service = const RoutineImportAppliedRestoreService();
+
+      expect(review.blocksDuplicateApply, isTrue);
+      expect(
+        service.missingItemsForReview(
+          review: review,
+          currentItems: container.read(routineNotifierProvider).items,
+        ).map((item) => item.id),
+        ['imported-review-1-candidate-1'],
+      );
+
+      final result = await service.restoreMissingForReview(
+        read: container.read,
+        review: review,
+      );
+
+      expect(result.restoredItemIds, ['imported-review-1-candidate-1']);
+      expect(
+        container
+            .read(routineNotifierProvider)
+            .items
+            .where((item) => item.id == 'imported-review-1-candidate-1'),
+        hasLength(1),
+      );
+    },
+  );
+
   test('Accepted import review restores missing local routine items', () async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
@@ -492,6 +536,35 @@ void main() {
       expect(review.blocksDuplicateApply, isTrue);
     },
   );
+
+  test('Accepted review restore works after repository fetch', () async {
+    final repository = FakeRoutineImportReviewRepository();
+    final review = _acceptedReview();
+    await repository.saveReview(review);
+    final container = ProviderContainer(
+      overrides: [
+        routineImportReviewRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final result = await const RoutineImportAppliedRestoreService()
+        .restoreMissingAcceptedReviews(read: container.read, uid: review.uid);
+    final second = await const RoutineImportAppliedRestoreService()
+        .restoreMissingAcceptedReviews(read: container.read, uid: review.uid);
+
+    expect(result.missingItemIds, ['imported-review-1-candidate-1']);
+    expect(result.restoredItemIds, ['imported-review-1-candidate-1']);
+    expect(second.missingItemIds, isEmpty);
+    expect(second.restoredItemIds, isEmpty);
+    expect(
+      container
+          .read(routineNotifierProvider)
+          .items
+          .where((item) => item.id == 'imported-review-1-candidate-1'),
+      hasLength(1),
+    );
+  });
 
   test('Eating source uses eating category', () {
     final review = const RoutineImportExtractionService().buildReviewDraft(
@@ -584,7 +657,11 @@ void main() {
   });
 }
 
-RoutineImportReviewDraft _acceptedReview() {
+RoutineImportReviewDraft _acceptedReview({
+  List<String> appliedRoutineItemIds = const [
+    'imported-review-1-candidate-1',
+  ],
+}) {
   return RoutineImportReviewDraft(
     id: 'review-1',
     uid: 'uid-1',
@@ -593,7 +670,7 @@ RoutineImportReviewDraft _acceptedReview() {
     sourceLabel: 'Classes',
     candidateBlocks: [_candidate()],
     acceptedCandidateIds: const ['candidate-1'],
-    appliedRoutineItemIds: const ['imported-review-1-candidate-1'],
+    appliedRoutineItemIds: appliedRoutineItemIds,
     appliedAt: DateTime.utc(2026, 6, 2),
     createdAt: DateTime.utc(2026, 6, 2),
     updatedAt: DateTime.utc(2026, 6, 2),

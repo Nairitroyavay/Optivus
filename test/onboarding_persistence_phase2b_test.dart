@@ -1,12 +1,23 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/models/notification_preferences.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/user_profile.dart';
+import 'package:optivus/repositories/app_preferences_repository.dart';
+import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/profile_repository.dart';
+import 'package:optivus/repositories/region_settings_repository.dart';
+import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 
 void main() {
   test('OnboardingDraft toMap/fromMap preserves currentStep', () {
@@ -147,6 +158,27 @@ void main() {
     );
   });
 
+  test(
+    'completion bundle round trip preserves routine item contract fields',
+    () {
+      final bundle = OnboardingCompletionService.buildBundle(
+        _completedHydrationDraft(),
+      );
+
+      final roundTrip = OnboardingCompletionBundle.fromMap(bundle.toMap());
+      final item = roundTrip.routineItemsForApp.firstWhere(
+        (candidate) => candidate.id == 'class-main',
+      );
+
+      expect(item.userId, 'phase2b-user');
+      expect(item.category, RoutineCategory.classBlock);
+      expect(item.source, RoutineSource.onboarding);
+      expect(item.priority, RoutinePriority.mustDo);
+      expect(item.hardBlock, isTrue);
+      expect(item.blockType, RoutineBlockType.hardBlock);
+    },
+  );
+
   test('completed onboarding bundle hydrates local frontend state', () async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
@@ -165,6 +197,21 @@ void main() {
     expect(container.read(mockGoalProvider), isNotEmpty);
     expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
     expect(container.read(mockUserProfileProvider).onboardingCompleted, isTrue);
+    expect(container.read(mockTrackerProvider).moneyGoal.dailyTarget, 25);
+    expect(container.read(mockCoachPreferencesProvider).name, 'Mira');
+    expect(container.read(mockCoachPreferencesProvider).style, 'Strict Mentor');
+    expect(
+      container.read(mockNotificationPreferencesProvider).morningStart,
+      isFalse,
+    );
+    expect(
+      container.read(mockNotificationPreferencesProvider).nightReflection,
+      isFalse,
+    );
+    expect(
+      container.read(mockNotificationPreferencesProvider).intensity,
+      NotificationIntensity.high,
+    );
 
     final second = await const OnboardingFrontendHydrationService().hydrate(
       read: container.read,
@@ -173,7 +220,90 @@ void main() {
     expect(second.routineItemIds, isEmpty);
     expect(second.mockRoutineItemIds, isEmpty);
     expect(second.goalIds, isEmpty);
+    expect(
+      container
+          .read(routineNotifierProvider)
+          .items
+          .where((item) => item.id == 'class-main'),
+      hasLength(1),
+    );
+    expect(
+      container
+          .read(mockRoutineProvider)
+          .where((item) => item.id == 'class-main'),
+      hasLength(1),
+    );
   });
+
+  test('missing completion bundle fetch is null-safe', () async {
+    final repository = FakeOnboardingRepository();
+
+    await expectLater(
+      repository.fetchCompletionBundle('missing-user'),
+      completion(isNull),
+    );
+  });
+
+  test(
+    'completed firebase login tolerates missing completion bundle',
+    () async {
+      final user = AuthUser(
+        uid: 'phase2b-user',
+        email: 'completed@example.com',
+        displayName: 'Completed User',
+        emailVerified: true,
+      );
+      final profileRepository = FakeProfileRepository();
+      await profileRepository.saveUserProfile(
+        UserProfile.empty(
+          uid: user.uid,
+          email: user.email ?? '',
+          displayName: user.displayName ?? '',
+        ).copyWith(
+          onboardingCompleted: true,
+          onboardingStep: OnboardingDraft.lastStepIndex,
+          updatedAt: DateTime.utc(2026, 6, 2),
+        ),
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          optivusBackendModeProvider.overrideWithValue(
+            OptivusBackendMode.firebase,
+          ),
+          authRepositoryProvider.overrideWithValue(
+            _ImmediateAuthRepository(user),
+          ),
+          profileRepositoryProvider.overrideWithValue(profileRepository),
+          regionSettingsRepositoryProvider.overrideWithValue(
+            FakeRegionSettingsRepository(),
+          ),
+          appPreferencesRepositoryProvider.overrideWithValue(
+            FakeAppPreferencesRepository(),
+          ),
+          onboardingRepositoryProvider.overrideWithValue(
+            FakeOnboardingRepository(),
+          ),
+          routineImportReviewRepositoryProvider.overrideWithValue(
+            FakeRoutineImportReviewRepository(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(authProvider.notifier).login(
+        'completed@example.com',
+        'password',
+      );
+
+      expect(
+        container.read(authProvider).status,
+        AuthFlowStatus.signedInOnboardingComplete,
+      );
+      expect(container.read(mockUserProfileProvider).onboardingCompleted, true);
+      expect(container.read(routineNotifierProvider).items, isEmpty);
+    },
+  );
 }
 
 OnboardingDraft _draftWithUploadReferences() {
@@ -225,6 +355,43 @@ OnboardingDraft _draftWithUploadReferences() {
   );
 }
 
+class _ImmediateAuthRepository implements AuthRepository {
+  final AuthUser user;
+
+  const _ImmediateAuthRepository(this.user);
+
+  @override
+  Stream<AuthUser?> get authStateChanges => const Stream<AuthUser?>.empty();
+
+  @override
+  AuthUser? get currentUser => user;
+
+  @override
+  Future<String?> currentIdToken() async => 'firebase-token';
+
+  @override
+  Future<AuthUser?> reloadCurrentUser() async => user;
+
+  @override
+  Future<void> sendEmailVerification() async {}
+
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
+
+  @override
+  Future<AuthUser> signIn(String email, String password) async => user;
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<AuthUser> signUp(
+    String email,
+    String password, {
+    String? name,
+  }) async => user;
+}
+
 OnboardingDraft _completedHydrationDraft() {
   return OnboardingDraft(
     uid: 'phase2b-user',
@@ -257,5 +424,20 @@ OnboardingDraft _completedHydrationDraft() {
         systemKeys: ['study_block'],
       ),
     ],
+    coachSetup: const CoachSetupDraft(
+      coachName: 'Sensei',
+      customCoachName: 'Mira',
+      coachStyle: 'strict_mentor',
+    ),
+    notifications: const NotificationSetupDraft(
+      preferencesConfirmed: true,
+      morningStartReminder: false,
+      nextTaskReminder: true,
+      eatingReminder: false,
+      badHabitCheckInReminder: true,
+      savingsReminder: true,
+      nightReflectionReminder: false,
+      reminderIntensity: 'high',
+    ),
   );
 }

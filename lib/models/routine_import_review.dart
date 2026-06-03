@@ -68,9 +68,8 @@ class RoutineImportReviewDraft {
   });
 
   bool get blocksDuplicateApply {
-    return (status == RoutineImportReviewStatus.accepted ||
-            status == RoutineImportReviewStatus.partiallyAccepted) &&
-        appliedRoutineItemIds.isNotEmpty;
+    return status == RoutineImportReviewStatus.accepted ||
+        status == RoutineImportReviewStatus.partiallyAccepted;
   }
 
   Map<String, dynamic> toMap() {

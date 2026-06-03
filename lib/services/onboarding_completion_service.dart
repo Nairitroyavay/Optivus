@@ -86,26 +86,31 @@ class OnboardingCompletionService {
   ) {
     // Generate base routines
     final scheduled = baseBlocks
-        .map(
-          (b) => RoutineItem(
+        .map((b) {
+          final blockType = _routineBlockTypeForDraft(b.blockType);
+          return RoutineItem(
             id: b.id,
+            userId: draft.uid,
             title: b.title,
             startMinute: b.startMinute,
             endMinute: b.endMinute,
             crossesMidnight: b.crossesMidnight,
             endsNextDay: b.endsNextDay,
             repeatDays: b.repeatDays,
-            blockType: b.blockType == TimelineBlockDraft.hardBlockKey
-                ? RoutineBlockType.hardBlock
-                : RoutineBlockType.softBlock,
+            blockType: blockType,
+            category: _categoryForTimelineSource(b.section, blockType),
+            source: RoutineSource.onboarding,
+            priority: _priorityForBlockType(blockType),
+            hardBlock: blockType == RoutineBlockType.hardBlock,
             location: b.location,
             mealCategory: b.mealCategory,
             dishes: b.dishes,
             caloriesEstimate: b.calories,
             proteinEstimate: b.protein,
+            steps: b.skincareProducts,
             skincareProducts: b.skincareProducts,
-          ),
-        )
+          );
+        })
         .toList();
 
     // Group the preview items by priority / flexible status
@@ -169,11 +174,16 @@ class OnboardingCompletionService {
         scheduled.add(
           RoutineItem(
             id: flex.id,
+            userId: draft.uid,
             title: flex.title,
             startMinute: currentStartMinute,
             endMinute: currentStartMinute + flex.durationMinutes,
             repeatDays: successfulDays, // Only repeat on days we could fit it
             blockType: blockType,
+            category: _categoryForTimelineSource(flex.source, blockType),
+            source: RoutineSource.onboarding,
+            priority: _priorityForBlockType(blockType),
+            hardBlock: blockType == RoutineBlockType.hardBlock,
             notes: flex.source,
           ),
         );
@@ -182,11 +192,18 @@ class OnboardingCompletionService {
         scheduled.add(
           RoutineItem(
             id: flex.id,
+            userId: draft.uid,
             title: '[Tiny] ${flex.title}',
             startMinute: 0,
             endMinute: 0,
             repeatDays: flex.repeatDays,
             blockType: RoutineBlockType.flexibleTask,
+            category: _categoryForTimelineSource(
+              flex.source,
+              RoutineBlockType.flexibleTask,
+            ),
+            source: RoutineSource.onboarding,
+            priority: RoutinePriority.goodToDo,
             notes: 'Unscheduled fallback due to schedule overflow',
           ),
         );
@@ -194,6 +211,44 @@ class OnboardingCompletionService {
     }
 
     return scheduled;
+  }
+
+  static RoutineBlockType _routineBlockTypeForDraft(String blockType) {
+    return switch (blockType) {
+      TimelineBlockDraft.hardBlockKey => RoutineBlockType.hardBlock,
+      TimelineBlockDraft.checkInKey => RoutineBlockType.checkIn,
+      'money_task' => RoutineBlockType.moneyTask,
+      TimelineBlockDraft.flexibleTaskKey => RoutineBlockType.flexibleTask,
+      _ => RoutineBlockType.softBlock,
+    };
+  }
+
+  static RoutineCategory _categoryForTimelineSource(
+    String source,
+    RoutineBlockType blockType,
+  ) {
+    return switch (source) {
+      'classes' => RoutineCategory.classBlock,
+      'job_work_business' => RoutineCategory.job,
+      'eating' => RoutineCategory.eating,
+      'skin_care' => RoutineCategory.skinCare,
+      'good_habit' || 'merged_habit_system' => RoutineCategory.habit,
+      'identity_system' => RoutineCategory.identity,
+      'bad_habit_check_in' => RoutineCategory.badHabit,
+      'money' || 'money_task' => RoutineCategory.finance,
+      'fixed' => RoutineCategory.fixed,
+      _ => blockType == RoutineBlockType.checkIn
+          ? RoutineCategory.health
+          : RoutineCategory.fixed,
+    };
+  }
+
+  static RoutinePriority _priorityForBlockType(RoutineBlockType blockType) {
+    return blockType == RoutineBlockType.hardBlock ||
+            blockType == RoutineBlockType.moneyTask ||
+            blockType == RoutineBlockType.checkIn
+        ? RoutinePriority.mustDo
+        : RoutinePriority.goodToDo;
   }
 
   static Map<String, dynamic> _userProfilePatch(OnboardingDraft draft) {

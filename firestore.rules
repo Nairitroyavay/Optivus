@@ -58,6 +58,24 @@ service cloud.firestore {
         || status == "deleted";
     }
 
+    function validUploadKeys(data) {
+      return data.keys().hasOnly([
+        "assetId",
+        "ownerUid",
+        "sourceFeature",
+        "purpose",
+        "fileName",
+        "contentType",
+        "sizeBytes",
+        "r2Key",
+        "status",
+        "createdAt",
+        "updatedAt",
+        "errorMessage"
+      ])
+      && !data.keys().hasAny(["localPreviewPath", "imageBytes", "bytes"]);
+    }
+
     function validRoutineImportReviewStatus(status) {
       return status == "draft"
         || status == "needsReview"
@@ -66,10 +84,62 @@ service cloud.firestore {
         || status == "rejected";
     }
 
+    function validRoutineImportReviewSource(source) {
+      return source == "classes"
+        || source == "work"
+        || source == "eating"
+        || source == "skinCare";
+    }
+
+    function validRoutineImportReviewKeys(data) {
+      return data.keys().hasOnly([
+        "id",
+        "uid",
+        "source",
+        "status",
+        "sourceLabel",
+        "onboardingPendingImportId",
+        "uploadedAssetId",
+        "uploadedAssetR2Key",
+        "uploadedAssetStatus",
+        "candidateBlocks",
+        "warnings",
+        "acceptedCandidateIds",
+        "rejectedCandidateIds",
+        "appliedRoutineItemIds",
+        "appliedAt",
+        "extractionEngine",
+        "extractionVersion",
+        "lastExtractedAt",
+        "extractionWarnings",
+        "extractionAttemptCount",
+        "createdAt",
+        "updatedAt"
+      ])
+      && !data.keys().hasAny([
+        "routineItems",
+        "imageBytes",
+        "localPath",
+        "localFilePath",
+        "localPreviewPath"
+      ]);
+    }
+
     function validRoutineImportReview(data, reviewId) {
       return data.uid == request.auth.uid
         && (!data.keys().hasAny(["id"]) || data.id == reviewId)
-        && validRoutineImportReviewStatus(data.status);
+        && validRoutineImportReviewKeys(data)
+        && validRoutineImportReviewSource(data.source)
+        && validRoutineImportReviewStatus(data.status)
+        && data.sourceLabel is string
+        && data.candidateBlocks is list
+        && data.warnings is list
+        && data.acceptedCandidateIds is list
+        && data.rejectedCandidateIds is list
+        && data.appliedRoutineItemIds is list
+        && data.extractionAttemptCount is int
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     // Strict Phase 2A upload metadata rule. R2 bytes are owned by the Worker;
@@ -77,6 +147,7 @@ service cloud.firestore {
     match /users/{uid}/uploads/{assetId} {
       allow read: if verifiedOwner(uid);
       allow create, update: if verifiedOwner(uid)
+        && validUploadKeys(request.resource.data)
         && request.resource.data.ownerUid == request.auth.uid
         && request.resource.data.assetId == assetId
         && request.resource.data.sizeBytes is int

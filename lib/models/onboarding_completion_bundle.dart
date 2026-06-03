@@ -327,26 +327,7 @@ class BadHabitCheckInBundle {
   };
 }
 
-Map<String, dynamic> _routineItemToMap(RoutineItem item) => {
-  'id': item.id,
-  'title': item.title,
-  'startMinute': item.startMinute,
-  'endMinute': item.endMinute,
-  'crossesMidnight': item.crossesMidnight,
-  'endsNextDay': item.endsNextDay,
-  'repeatDays': item.repeatDays,
-  'location': item.location,
-  'blockType': item.blockType.name,
-  'notes': item.notes,
-  'subtasks': item.subtasks,
-  'mealCategory': item.mealCategory,
-  'dishes': item.dishes,
-  'calories': item.caloriesEstimate,
-  'protein': item.proteinEstimate,
-  'skincareProducts': item.skincareProducts,
-  'hasConflict': item.hasConflict,
-  'conflictMessage': item.conflictMessage,
-};
+Map<String, dynamic> _routineItemToMap(RoutineItem item) => item.toMap();
 
 Map<String, dynamic> _goalToMap(GoalModel goal) => {
   'id': goal.id,

@@ -331,6 +331,9 @@ void main() {
         rules,
         contains('request.resource.data.ownerUid == request.auth.uid'),
       );
+      expect(rules, contains('validUploadKeys(request.resource.data)'));
+      expect(rules, contains('"localPreviewPath"'));
+      expect(rules, contains('"imageBytes"'));
     },
   );
 
