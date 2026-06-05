@@ -202,9 +202,21 @@ void main() {
       'workers/routine-import-worker/wrangler.toml',
     ).readAsStringSync();
 
-    expect(wrangler, contains('MAX_IMAGE_BYTES = "15728640"'));
-    expect(wrangler, contains('GEMINI_INLINE_MAX_IMAGE_BYTES = "11534336"'));
-    expect(wrangler, contains('AI_FALLBACK_MODEL = ""'));
+    final maxImageBytes = int.parse(_workerVar(wrangler, 'MAX_IMAGE_BYTES'));
+    final geminiInlineMaxImageBytes = int.parse(
+      _workerVar(wrangler, 'GEMINI_INLINE_MAX_IMAGE_BYTES'),
+    );
+    final primaryModel = _workerVar(wrangler, 'AI_MODEL');
+    final fallbackModel = _workerVar(wrangler, 'AI_FALLBACK_MODEL');
+
+    expect(maxImageBytes, 15728640);
+    expect(geminiInlineMaxImageBytes, 11534336);
+    expect(geminiInlineMaxImageBytes, lessThan(maxImageBytes));
+    expect(_workerVar(wrangler, 'AI_PROVIDER'), 'gemini');
+    expect(_isValidConfiguredModel(primaryModel), isTrue);
+    if (fallbackModel.isNotEmpty) {
+      expect(_isValidConfiguredModel(fallbackModel), isTrue);
+    }
   });
 
   test('Gemini request puts image part before text prompt', () {
@@ -559,4 +571,25 @@ String _keyForSource(String source) {
     _ => 'class_timetable',
   };
   return 'users/uid-1/onboarding/$purpose/asset-1.jpg';
+}
+
+String _workerVar(String toml, String key) {
+  final match = RegExp('^$key = "([^"]*)"\$', multiLine: true).firstMatch(toml);
+  if (match == null) {
+    fail('Missing $key in routine import worker wrangler.toml');
+  }
+  return match.group(1)!;
+}
+
+bool _isValidConfiguredModel(String value) {
+  if (value.trim() != value || value.isEmpty) return false;
+  final lower = value.toLowerCase();
+  if (lower == 'placeholder' ||
+      lower == 'model-name' ||
+      lower == 'todo' ||
+      value.contains('<') ||
+      value.contains('>')) {
+    return false;
+  }
+  return RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:/-]*$').hasMatch(value);
 }

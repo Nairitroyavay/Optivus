@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/widgets/app_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 
 /// Shown while resolving the user's Auth and Firestore status.
 /// Prevents premature redirects and gives a polished first-launch experience.
 class LoadingScreen extends ConsumerStatefulWidget {
-  const LoadingScreen({super.key});
+  final String? message;
+
+  const LoadingScreen({super.key, this.message});
 
   @override
   ConsumerState<LoadingScreen> createState() => _LoadingScreenState();
@@ -29,20 +32,6 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
       begin: 0.85,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-
-    // Simple automatic navigation check:
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Backend pass: connect Firebase Auth state check here.
-      // FirebaseAuth.instance.authStateChanges().first.then((user) { ... });
-
-      // Simulate checking mock session/state briefly for splash feeling
-      Future.delayed(const Duration(milliseconds: 1200), () {
-        if (mounted) {
-          // Go to home, let the GoRouter redirect logic handle the actual destination
-          context.go('/');
-        }
-      });
-    });
   }
 
   @override
@@ -53,6 +42,17 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authProvider);
+    final restoreFailed = auth.backendRestoreFailed;
+    final message =
+        widget.message ??
+        (restoreFailed
+            ? auth.errorMessage ??
+                  'Could not restore setup. Check your connection and try again.'
+            : auth.isBackendRestoreInProgress
+            ? 'Restoring your setup...'
+            : 'Starting Optivus...');
+
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -115,8 +115,30 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
 
               const Spacer(flex: 2),
 
-              // Animated loading dots
-              _LoadingDots(controller: _controller),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: restoreFailed
+                      ? const Color(0xFF9F1239)
+                      : Colors.blueGrey.shade700,
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (restoreFailed)
+                SizedBox(
+                  width: 220,
+                  child: AppButton(
+                    text: 'Try Again',
+                    onPressed: () {
+                      ref.read(authProvider.notifier).retryBackendRestore();
+                    },
+                  ),
+                )
+              else
+                _LoadingDots(controller: _controller),
               const SizedBox(height: 48),
             ],
           ),

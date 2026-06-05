@@ -80,12 +80,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isSignedOutRoute =
           state.uri.path == '/login' ||
           state.uri.path == '/signup' ||
-          state.uri.path == '/' ||
-          state.uri.path == '/loading';
+          state.uri.path == '/';
       final isVerifyRoute = state.uri.path == '/verify-email';
 
-      // Still loading (auth check not complete / mock delay)
-      if (authState.isLoading) return null;
+      // Still resolving auth/profile/onboarding draft state.
+      if (authState.isLoading || authState.backendRestoreFailed) {
+        return state.uri.path == '/loading' ? null : '/loading';
+      }
 
       // 1. Not signed in -> restricted to auth routes
       if (!authState.isLoggedIn) {
@@ -110,7 +111,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       // 3. Signed in & onboarding complete -> redirect away from auth/onboarding
-      if (isSignedOutRoute || state.uri.path == '/onboarding') {
+      if (isSignedOutRoute ||
+          state.uri.path == '/loading' ||
+          state.uri.path == '/onboarding') {
         return '/app?tab=0';
       }
 

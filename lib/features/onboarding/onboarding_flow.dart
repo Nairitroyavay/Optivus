@@ -11,6 +11,7 @@ import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
+import 'package:optivus/views/screens/loading_screen.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
@@ -24,30 +25,69 @@ class OnboardingFlow extends ConsumerStatefulWidget {
 }
 
 class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
-  late final PageController _pageController;
+  late PageController _pageController;
 
   double _pageOffset = 0.0;
   int _currentPage = 0;
+  bool _initialDraftReady = true;
+  bool _initialDraftSyncScheduled = false;
   bool _isSaving = false; // Double-tap prevention for Save
   bool _isNavigating = false; // Double-tap prevention for Next
 
   @override
   void initState() {
     super.initState();
-    final initialStep = ref
+    final initialAuthState = ref.read(authProvider);
+    _initialDraftReady = !initialAuthState.isLoading;
+    final initialStep = _initialDraftReady ? _currentDraftStep() : 0;
+    _currentPage = initialStep;
+    _pageOffset = initialStep.toDouble();
+    _createPageController(initialStep);
+  }
+
+  int _currentDraftStep() {
+    return ref
         .read(mockOnboardingProvider)
         .draft
         .currentStep
         .clamp(0, OnboardingDraft.lastStepIndex);
-    _currentPage = initialStep;
-    _pageOffset = initialStep.toDouble();
-    _pageController = PageController(initialPage: initialStep);
+  }
 
-    _pageController.addListener(() {
-      if (mounted) {
-        setState(() {
-          _pageOffset = _pageController.page ?? 0.0;
-        });
+  void _createPageController(int initialStep) {
+    _pageController = PageController(initialPage: initialStep);
+    _pageController.addListener(_handlePageControllerChanged);
+  }
+
+  void _replacePageController(int initialStep) {
+    _pageController.removeListener(_handlePageControllerChanged);
+    _pageController.dispose();
+    _createPageController(initialStep);
+  }
+
+  void _handlePageControllerChanged() {
+    if (!mounted) return;
+    setState(() {
+      _pageOffset = _pageController.page ?? _currentPage.toDouble();
+    });
+  }
+
+  void _scheduleInitialDraftSync() {
+    if (_initialDraftSyncScheduled) return;
+    _initialDraftSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initialDraftSyncScheduled = false;
+      if (!mounted) return;
+      final restoredStep = _currentDraftStep();
+      if (!_pageController.hasClients) {
+        _replacePageController(restoredStep);
+      }
+      setState(() {
+        _currentPage = restoredStep;
+        _pageOffset = restoredStep.toDouble();
+        _initialDraftReady = true;
+      });
+      if (_pageController.hasClients) {
+        _pageController.jumpToPage(restoredStep);
       }
     });
   }
@@ -385,7 +425,20 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
     final onboardingState = ref.watch(mockOnboardingProvider);
+    if (authState.isLoading) {
+      return const LoadingScreen(message: 'Restoring your setup...');
+    }
+    if (authState.backendRestoreFailed) {
+      return const LoadingScreen();
+    }
+
+    if (!_initialDraftReady) {
+      _scheduleInitialDraftSync();
+      return const LoadingScreen(message: 'Restoring your setup...');
+    }
+
     final bool isSaved =
         onboardingState.stepCompleted[_currentPage] &&
         !onboardingState.stepDirty[_currentPage];
