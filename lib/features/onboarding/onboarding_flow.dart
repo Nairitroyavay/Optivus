@@ -606,6 +606,52 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return true;
   }
 
+  List<TimelineBlockDraft> _timelineBlocksFromLocalSchedule(
+    List<ClassRoutineBlock> localBlocks,
+    String section,
+  ) {
+    return localBlocks
+        .where((block) => block.subject.trim().isNotEmpty)
+        .where((block) => block.startMinute < block.endMinute)
+        .map((block) {
+          return TimelineBlockDraft(
+            id: block.id,
+            section: section,
+            title: block.subject.trim(),
+            startMinute: block.startMinute,
+            endMinute: block.endMinute,
+            repeatDays: block.repeatDays,
+            location: block.room.trim().isEmpty ? null : block.room.trim(),
+            blockType: TimelineBlockDraft.hardBlockKey,
+            source: 'ai_import',
+          );
+        })
+        .toList(growable: false);
+  }
+
+  List<TimelineBlockDraft> _normalizeSavedScheduleBlocks(
+    List<TimelineBlockDraft> blocks,
+    String section,
+  ) {
+    return blocks
+        .where((block) => block.title.trim().isNotEmpty)
+        .where((block) => block.startMinute < block.endMinute)
+        .map((block) {
+          return TimelineBlockDraft(
+            id: block.id,
+            section: section,
+            title: block.title.trim(),
+            startMinute: block.startMinute,
+            endMinute: block.endMinute,
+            repeatDays: block.repeatDays,
+            location: block.location,
+            blockType: TimelineBlockDraft.hardBlockKey,
+            source: 'ai_import',
+          );
+        })
+        .toList(growable: false);
+  }
+
   Future<bool> _nextClassesJob(OnboardingDraft draft) async {
     final base = draft.baseTimeline;
     final role = draft.lifeRole.lifeRole;
@@ -622,41 +668,22 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     if (classesRequired && stage <= 2) {
       final localBlocks = ref.read(onboardingClassTimelineProvider);
+      final confirmedClassBlocks = base.confirmedBlocksForSection('classes');
       final pendingParsedBlocks =
           base.latestImportForSection(onboardingSectionClasses)?.parsedBlocks ??
           const <TimelineBlockDraft>[];
-      if (localBlocks.isEmpty && pendingParsedBlocks.isEmpty) {
+      if (localBlocks.isEmpty &&
+          confirmedClassBlocks.isEmpty &&
+          pendingParsedBlocks.isEmpty) {
         _setInternalValidation('Upload your class timetable to continue.');
         return true;
       }
 
       final confirmedBlocks = localBlocks.isNotEmpty
-          ? localBlocks.map((c) {
-              return TimelineBlockDraft(
-                id: c.id,
-                section: 'classes',
-                title: c.subject,
-                startMinute: c.startMinute,
-                endMinute: c.endMinute,
-                repeatDays: c.repeatDays,
-                blockType: TimelineBlockDraft.hardBlockKey,
-                source: 'ai_import',
-                location: c.room.trim().isEmpty ? null : c.room.trim(),
-              );
-            }).toList()
-          : pendingParsedBlocks.map((block) {
-              return TimelineBlockDraft(
-                id: block.id,
-                section: 'classes',
-                title: block.title,
-                startMinute: block.startMinute,
-                endMinute: block.endMinute,
-                repeatDays: block.repeatDays,
-                location: block.location,
-                blockType: TimelineBlockDraft.hardBlockKey,
-                source: 'ai_import',
-              );
-            }).toList();
+          ? _timelineBlocksFromLocalSchedule(localBlocks, 'classes')
+          : confirmedClassBlocks.isNotEmpty
+          ? _normalizeSavedScheduleBlocks(confirmedClassBlocks, 'classes')
+          : _normalizeSavedScheduleBlocks(pendingParsedBlocks, 'classes');
 
       final newBlocks =
           base.blocks.where((b) => b.section != 'classes').toList()
@@ -672,15 +699,42 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return true;
     }
 
-    if (stage == 3 && !_sectionHasUploadOrBlocks(base, onboardingSectionWork)) {
-      _setInternalValidation('Upload work schedule to continue.');
-      return true;
-    }
-    if (stage == 4 && !base.hasConfirmedSection('job_work_business')) {
-      _setInternalValidation(
-        base.sectionNeedsImportReview(onboardingSectionWork)
-            ? 'Review AI draft to continue.'
-            : 'Upload work schedule to continue.',
+    final shouldSaveWork =
+        workRequired && (!classesRequired || stage == 3 || stage == 4);
+    if (shouldSaveWork) {
+      final localBlocks = ref.read(onboardingWorkTimelineProvider);
+      final confirmedWorkBlocks = base.confirmedBlocksForSection(
+        'job_work_business',
+      );
+      final pendingParsedBlocks =
+          base.latestImportForSection(onboardingSectionWork)?.parsedBlocks ??
+          const <TimelineBlockDraft>[];
+      if (localBlocks.isEmpty &&
+          confirmedWorkBlocks.isEmpty &&
+          pendingParsedBlocks.isEmpty) {
+        _setInternalValidation('Upload work schedule to continue.');
+        return true;
+      }
+
+      final confirmedBlocks = localBlocks.isNotEmpty
+          ? _timelineBlocksFromLocalSchedule(localBlocks, 'job_work_business')
+          : confirmedWorkBlocks.isNotEmpty
+          ? _normalizeSavedScheduleBlocks(
+              confirmedWorkBlocks,
+              'job_work_business',
+            )
+          : _normalizeSavedScheduleBlocks(
+              pendingParsedBlocks,
+              'job_work_business',
+            );
+
+      final newBlocks =
+          base.blocks.where((b) => b.section != 'job_work_business').toList()
+            ..addAll(confirmedBlocks);
+
+      _updateBaseTimelineStage(
+        onboardingClassJobStepIndex,
+        (base) => base.copyWith(classJobSetupStep: 5, blocks: newBlocks),
       );
       return true;
     }

@@ -1467,13 +1467,13 @@ class BaseTimelineDraft {
     if (!classesRequired && !jobRequired) return null;
     if (classesRequired && !_hasConfirmedSection('classes')) {
       if (sectionNeedsImportReview('Classes')) {
-        return 'Review AI draft to continue.';
+        return 'Save your class timetable to continue.';
       }
       return 'Add class schedule.';
     }
     if (jobRequired && !_hasConfirmedSection('job_work_business')) {
       if (sectionNeedsImportReview('Job / Work / Business')) {
-        return 'Review AI draft to continue.';
+        return 'Save your work schedule to continue.';
       }
       return 'Add work schedule.';
     }

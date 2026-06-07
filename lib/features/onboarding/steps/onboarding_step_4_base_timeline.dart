@@ -26,7 +26,13 @@ class OnboardingStep4 extends ConsumerWidget {
     final workBlocks = base.confirmedBlocksForSection('job_work_business');
 
     if (classesRequired && base.classJobSetupStep <= 2) {
-      return const OnboardingClassSetupWidget(
+      return OnboardingClassSetupWidget(stepIndex: onboardingClassJobStepIndex);
+    }
+
+    if (workRequired &&
+        (!classesRequired ||
+            (base.classJobSetupStep >= 3 && base.classJobSetupStep <= 4))) {
+      return OnboardingClassSetupWidget.work(
         stepIndex: onboardingClassJobStepIndex,
       );
     }
@@ -41,21 +47,6 @@ class OnboardingStep4 extends ConsumerWidget {
             classesRequired: classesRequired,
             workRequired: workRequired,
             role: role,
-          )
-        else if (base.classJobSetupStep == 3)
-          const OnboardingUploadReviewCard(
-            sectionLabel: onboardingSectionWork,
-            title: 'Upload work schedule',
-            subtitle:
-                'Use a clear photo of shifts, office hours, client hours, or business schedule.',
-            stepIndex: onboardingClassJobStepIndex,
-            accent: OptivusColors.brandAccent,
-          )
-        else if (base.classJobSetupStep == 4)
-          _ReviewCard(
-            sectionLabel: onboardingSectionWork,
-            blocks: workBlocks,
-            accent: OptivusColors.brandAccent,
           )
         else
           _SummaryCard(
@@ -105,7 +96,7 @@ class _IntroCard extends StatelessWidget {
                 child: Text(
                   noSetupNeeded
                       ? 'No class/work setup needed'
-                      : 'Upload first, review next',
+                      : 'Upload photo, then edit the timeline',
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
@@ -155,71 +146,6 @@ class _IntroCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ReviewCard extends StatelessWidget {
-  final String sectionLabel;
-  final List<TimelineBlockDraft> blocks;
-  final Color accent;
-
-  const _ReviewCard({
-    required this.sectionLabel,
-    required this.blocks,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final source = onboardingImportSourceForSection(sectionLabel);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        OnboardingGlassCard(
-          tint: accent.withValues(alpha: 0.07),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Review AI draft',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                blocks.isEmpty
-                    ? 'Open review, accept or edit the candidates, then apply.'
-                    : 'Review is applied. You can reopen it for edits.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              OnboardingActionPill(
-                label: blocks.isEmpty ? 'Open review' : 'Reopen review',
-                icon: Icons.rate_review_rounded,
-                accent: accent,
-                selected: true,
-                onTap: () => openOnboardingImportReview(
-                  context,
-                  source: source,
-                  autoRunAiOnLoad: false,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        OnboardingMiniBlockList(
-          title: '$sectionLabel blocks',
-          blocks: blocks,
-          accent: accent,
-          emptyLabel: 'No reviewed blocks yet.',
-        ),
-      ],
     );
   }
 }
