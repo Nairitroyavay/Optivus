@@ -15,6 +15,7 @@ import 'package:optivus/views/screens/loading_screen.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 
 // ── Main Onboarding Flow Wizard ──────────────────────────────────────────────
@@ -462,7 +463,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final bool isSaved =
         onboardingState.stepCompleted[_currentPage] &&
         !onboardingState.stepDirty[_currentPage];
-    final bool showSave = _currentPage >= 2;
+    final bool showSave = false; // Globally hidden for onboarding.
 
     String ctaLabel = 'Next Step';
     bool ctaEnabled = !_isNavigating && !_isSaving;
@@ -487,7 +488,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         onDotTap: _onDotTapped,
         onIndicatorDraggedTo: _onIndicatorDraggedTo,
         onNext: _onNextPressed,
-        onSave: showSave ? () => _saveStep(_currentPage) : null,
+        onSave: null,
         showSave: showSave,
         isSaving: onboardingState.stepLoading[_currentPage] || _isSaving,
         isSaved: isSaved,
@@ -618,19 +619,39 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (!classesRequired && !workRequired) return false;
 
     final stage = base.classJobSetupStep;
-    if (stage == 1 &&
-        !_sectionHasUploadOrBlocks(base, onboardingSectionClasses)) {
-      _setInternalValidation('Upload class timetable to continue.');
-      return true;
-    }
-    if (stage == 2 && !base.hasConfirmedSection('classes')) {
-      _setInternalValidation(
-        base.sectionNeedsImportReview(onboardingSectionClasses)
-            ? 'Review AI draft to continue.'
-            : 'Upload class timetable to continue.',
+
+    if (classesRequired && (stage == 1 || stage == 2)) {
+      final localBlocks = ref.read(onboardingClassTimelineProvider);
+      if (localBlocks.isEmpty) {
+        _setInternalValidation('Upload your class timetable to continue.');
+        return true;
+      }
+
+      final confirmedBlocks = localBlocks.map((c) {
+        final start = (c.start * 60 + 6 * 60).round();
+        final end = ((c.start + c.duration) * 60 + 6 * 60).round();
+        return TimelineBlockDraft(
+          id: c.id,
+          section: 'classes',
+          title: c.subject,
+          startMinute: start,
+          endMinute: end,
+          repeatDays: [c.weekday ?? 1],
+          blockType: TimelineBlockDraft.hardBlockKey,
+          source: 'ai_import',
+          location: c.room,
+        );
+      }).toList();
+
+      final newBlocks = base.blocks.where((b) => b.section != 'classes').toList()..addAll(confirmedBlocks);
+
+      _updateBaseTimelineStage(
+        onboardingClassJobStepIndex,
+        (base) => base.copyWith(classJobSetupStep: workRequired ? 3 : 5, blocks: newBlocks),
       );
       return true;
     }
+
     if (stage == 3 && !_sectionHasUploadOrBlocks(base, onboardingSectionWork)) {
       _setInternalValidation('Upload work schedule to continue.');
       return true;

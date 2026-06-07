@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -35,20 +36,9 @@ class OnboardingStep4 extends ConsumerWidget {
             workRequired: workRequired,
             role: role,
           )
-        else if (base.classJobSetupStep == 1)
-          const OnboardingUploadReviewCard(
-            sectionLabel: onboardingSectionClasses,
-            title: 'Upload class timetable',
-            subtitle:
-                'Use a clear photo of your timetable. Manual edits happen inside review.',
+        else if (base.classJobSetupStep == 1 || base.classJobSetupStep == 2)
+          const OnboardingClassSetupWidget(
             stepIndex: onboardingClassJobStepIndex,
-            accent: OptivusColors.aquaAccent,
-          )
-        else if (base.classJobSetupStep == 2)
-          _ReviewCard(
-            sectionLabel: onboardingSectionClasses,
-            blocks: classBlocks,
-            accent: OptivusColors.aquaAccent,
           )
         else if (base.classJobSetupStep == 3)
           const OnboardingUploadReviewCard(
