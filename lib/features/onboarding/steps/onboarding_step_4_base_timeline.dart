@@ -25,6 +25,12 @@ class OnboardingStep4 extends ConsumerWidget {
     final classBlocks = base.confirmedBlocksForSection('classes');
     final workBlocks = base.confirmedBlocksForSection('job_work_business');
 
+    if (base.classJobSetupStep == 1 || base.classJobSetupStep == 2) {
+      return const OnboardingClassSetupWidget(
+        stepIndex: onboardingClassJobStepIndex,
+      );
+    }
+
     return OnboardingStepBody(
       title: 'Classes & Job',
       subtitle: 'Set the fixed responsibilities Optivus must protect.',
@@ -35,10 +41,6 @@ class OnboardingStep4 extends ConsumerWidget {
             classesRequired: classesRequired,
             workRequired: workRequired,
             role: role,
-          )
-        else if (base.classJobSetupStep == 1 || base.classJobSetupStep == 2)
-          const OnboardingClassSetupWidget(
-            stepIndex: onboardingClassJobStepIndex,
           )
         else if (base.classJobSetupStep == 3)
           const OnboardingUploadReviewCard(
