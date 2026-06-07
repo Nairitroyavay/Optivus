@@ -338,9 +338,7 @@ class _OnboardingClassSetupWidgetState
   }
 
   bool _pendingStatusBlocksExtraction(PendingFutureImportDraft pending) {
-    return pending.status == PendingFutureImportDraft.parsedStatus ||
-        pending.status == PendingFutureImportDraft.appliedStatus ||
-        pending.status == PendingFutureImportDraft.errorStatus;
+    return pending.status != PendingFutureImportDraft.pendingStatus;
   }
 
   TimelineBlockDraft _timelineDraftFromCandidate(
@@ -577,9 +575,6 @@ class _OnboardingClassSetupWidgetState
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       status: PendingFutureImportDraft.pendingStatus,
-      uploadedAssetId: existing?.uploadedAssetId,
-      uploadedAssetR2Key: existing?.uploadedAssetR2Key,
-      uploadedAssetStatus: existing?.uploadedAssetStatus,
       parsedBlocks: const [], // Clear parsed blocks for new upload
     );
 
@@ -599,19 +594,26 @@ class _OnboardingClassSetupWidgetState
 
     if (!mounted) return;
     final state = ref.read(uploadControllerProvider);
+    final uploadedAssetId = asset?.assetId ?? state.asset?.assetId;
+    final uploadedAssetR2Key = asset?.r2Key ?? state.asset?.r2Key;
+    final hasUploadedAsset =
+        uploadedAssetId?.trim().isNotEmpty == true ||
+        uploadedAssetR2Key?.trim().isNotEmpty == true;
     final next = seed.copyWith(
       updatedAt: DateTime.now(),
       status: asset == null && state.status == UploadFlowStatus.failed
           ? PendingFutureImportDraft.errorStatus
           : PendingFutureImportDraft.pendingStatus,
-      uploadedAssetId: asset?.assetId ?? state.asset?.assetId,
-      uploadedAssetR2Key: asset?.r2Key ?? state.asset?.r2Key,
+      uploadedAssetId: uploadedAssetId,
+      uploadedAssetR2Key: uploadedAssetR2Key,
       uploadedAssetStatus:
           asset?.status.name ??
           state.asset?.status.name ??
           (state.status == UploadFlowStatus.failed
               ? UploadedAssetStatus.failed.name
-              : UploadedAssetStatus.uploaded.name),
+              : hasUploadedAsset
+              ? UploadedAssetStatus.uploaded.name
+              : null),
       errorMessage: state.status == UploadFlowStatus.failed
           ? state.errorMessage
           : null,
@@ -689,7 +691,9 @@ class _OnboardingClassSetupWidgetState
     }
 
     final canAttemptExtraction =
-        pending != null && !_pendingStatusBlocksExtraction(pending);
+        pending != null &&
+        pending.status == PendingFutureImportDraft.pendingStatus &&
+        !_pendingStatusBlocksExtraction(pending);
 
     if (hasUploadedAsset && canAttemptExtraction && !attemptedExtraction) {
       return _buildCenteredState(
@@ -1431,7 +1435,11 @@ class _OnboardingClassSetupWidgetState
       text: item.displayEndTime,
     );
     TextEditingController roomCtrl = TextEditingController(text: item.room);
-    int selectedDay = item.weekday ?? _day + 1;
+    final selectedDays = <int>{
+      ..._safeClassRepeatDays(
+        item.repeatDays.isEmpty ? <int>[_day + 1] : item.repeatDays,
+      ),
+    };
     final formKey = GlobalKey<FormState>();
     String? sheetError;
 
@@ -1526,11 +1534,16 @@ class _OnboardingClassSetupWidgetState
                                     'Sat',
                                     'Sun',
                                   ][index];
-                                  final isSelected = selectedDay == index + 1;
+                                  final day = index + 1;
+                                  final isSelected = selectedDays.contains(day);
                                   return GestureDetector(
-                                    onTap: () => setSheetState(
-                                      () => selectedDay = index + 1,
-                                    ),
+                                    onTap: () => setSheetState(() {
+                                      if (selectedDays.contains(day)) {
+                                        selectedDays.remove(day);
+                                      } else {
+                                        selectedDays.add(day);
+                                      }
+                                    }),
                                     child: Container(
                                       margin: const EdgeInsets.only(right: 8),
                                       padding: const EdgeInsets.symmetric(
@@ -1703,6 +1716,8 @@ class _OnboardingClassSetupWidgetState
                                     } else if (parsedEnd - parsedStart >
                                         8 * 60) {
                                       error = _config.durationTooLongText;
+                                    } else if (selectedDays.isEmpty) {
+                                      error = 'Select at least one repeat day.';
                                     }
 
                                     if (error != null) {
@@ -1710,12 +1725,14 @@ class _OnboardingClassSetupWidgetState
                                       return;
                                     }
 
+                                    final repeatDays = selectedDays.toList()
+                                      ..sort();
                                     final updated = item.copyWith(
                                       subject: subject,
                                       room: roomCtrl.text.trim(),
                                       startMinute: parsedStart,
                                       endMinute: parsedEnd,
-                                      repeatDays: [selectedDay],
+                                      repeatDays: repeatDays,
                                     );
                                     final currentList =
                                         _currentEditableBlocks();
