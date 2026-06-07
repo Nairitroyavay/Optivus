@@ -140,9 +140,16 @@ class RoutineImportValidationService {
     if (candidate.needsManualReview) {
       warnings.add('Needs manual review.');
     }
-    if (validatesAsTimed &&
-        _overlapsExisting(candidate, existingRoutineItems)) {
-      warnings.add('Overlaps an existing routine item.');
+    if (validatesAsTimed) {
+      final overlap = _overlapWithExisting(candidate, existingRoutineItems);
+      if (overlap != null) {
+        final isHardHard = candidate.hardBlock && overlap.hardBlock;
+        if (isHardHard) {
+          issues.add('Hard block overlaps ${overlap.title}.');
+        } else {
+          warnings.add('Overlaps an existing routine item.');
+        }
+      }
     }
 
     return RoutineImportCandidateValidation(
@@ -152,19 +159,19 @@ class RoutineImportValidationService {
     );
   }
 
-  bool _overlapsExisting(
+  RoutineItem? _overlapWithExisting(
     RoutineImportCandidateBlock candidate,
     List<RoutineItem> existingItems,
   ) {
-    if (candidate.startMinute >= candidate.endMinute) return false;
+    if (candidate.startMinute >= candidate.endMinute) return null;
     for (final item in existingItems) {
       if (!_sharesRepeatDay(candidate.repeatDays, item.repeatDays)) continue;
       if (candidate.startMinute < item.endMinute &&
           candidate.endMinute > item.startMinute) {
-        return true;
+        return item;
       }
     }
-    return false;
+    return null;
   }
 
   bool _sharesRepeatDay(List<int> first, List<int> second) {

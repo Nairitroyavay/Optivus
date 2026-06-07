@@ -83,9 +83,9 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
         ),
       ];
     } else if (widget.hasConflict) {
-      bgColor = OptivusColors.danger.withValues(alpha: 0.08);
-      borderColor = OptivusColors.danger;
-      borderWidth = 1.2;
+      bgColor = Colors.white.withValues(alpha: 0.55);
+      borderColor = OptivusColors.warning.withValues(alpha: 0.45);
+      borderWidth = 1.1;
       shadows = [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.06),
@@ -153,41 +153,82 @@ class _RoutineCardBaseState extends State<RoutineCardBase>
         animation: _scaleAnim,
         builder: (_, child) =>
             Transform.scale(scale: _scaleAnim.value, child: child),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor, width: borderWidth),
-            boxShadow: shadows,
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Accent bar — 3.5px with glow shadow
-                Container(
-                  width: 3.5,
-                  height: accentRailHeight,
-                  margin: const EdgeInsets.only(right: 10, top: 2),
+        child: Stack(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderColor, width: borderWidth),
+                boxShadow: shadows,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Accent bar — 3.5px with glow shadow
+                    Container(
+                      width: 3.5,
+                      height: accentRailHeight,
+                      margin: const EdgeInsets.only(right: 10, top: 2),
+                      decoration: BoxDecoration(
+                        color: railColor,
+                        borderRadius: BorderRadius.circular(3),
+                        boxShadow: [
+                          BoxShadow(
+                            color: railColor.withValues(alpha: 0.45),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Content
+                    Expanded(child: widget.child),
+                  ],
+                ),
+              ),
+            ),
+            if (widget.hasConflict)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
-                    color: railColor,
-                    borderRadius: BorderRadius.circular(3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: railColor.withValues(alpha: 0.45),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
+                    color: OptivusColors.warning.withValues(alpha: 0.13),
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(
+                      color: OptivusColors.warning.withValues(alpha: 0.22),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 11,
+                        color: OptivusColors.warning,
+                      ),
+                      SizedBox(width: 3),
+                      Text(
+                        'Conflict',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.warning,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                // Content
-                Expanded(child: widget.child),
-              ],
-            ),
-          ),
+              ),
+          ],
         ),
       ),
     );

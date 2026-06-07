@@ -6,14 +6,14 @@ import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dar
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/widgets/animated_bot_avatar.dart';
 
-class OnboardingStep8 extends ConsumerStatefulWidget {
-  const OnboardingStep8({super.key});
+class OnboardingStep11 extends ConsumerStatefulWidget {
+  const OnboardingStep11({super.key});
 
   @override
-  ConsumerState<OnboardingStep8> createState() => _OnboardingStep8State();
+  ConsumerState<OnboardingStep11> createState() => _OnboardingStep11State();
 }
 
-class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
+class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
   final _customCtrl = TextEditingController();
   static const coaches = [
     'Coach',
@@ -119,7 +119,7 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
                               );
                           ref
                               .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(8, true);
+                              .setStepDirty(11, true);
                         },
                       );
                     }).toList(),
@@ -151,7 +151,7 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
                             );
                         ref
                             .read(mockOnboardingProvider.notifier)
-                            .setStepDirty(8, true);
+                            .setStepDirty(11, true);
                       },
                     ),
                   ),
@@ -180,7 +180,7 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
                                   );
                               ref
                                   .read(mockOnboardingProvider.notifier)
-                                  .setStepDirty(8, true);
+                                  .setStepDirty(11, true);
                             },
                           ),
                         )

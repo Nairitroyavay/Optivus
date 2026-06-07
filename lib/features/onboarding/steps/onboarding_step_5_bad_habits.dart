@@ -5,14 +5,14 @@ import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dar
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep5 extends ConsumerStatefulWidget {
-  const OnboardingStep5({super.key});
+class OnboardingStep8 extends ConsumerStatefulWidget {
+  const OnboardingStep8({super.key});
 
   @override
-  ConsumerState<OnboardingStep5> createState() => _OnboardingStep5State();
+  ConsumerState<OnboardingStep8> createState() => _OnboardingStep8State();
 }
 
-class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
+class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
   final _customCtrl = TextEditingController();
   bool _notNow = false;
   final List<_BadHabit> _habits = [
@@ -55,7 +55,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   }
 
   void _dirty() =>
-      ref.read(mockOnboardingProvider.notifier).setStepDirty(5, true);
+      ref.read(mockOnboardingProvider.notifier).setStepDirty(8, true);
 
   void _syncDraft() {
     final selected = _notNow

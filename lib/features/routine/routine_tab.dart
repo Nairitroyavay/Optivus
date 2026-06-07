@@ -148,11 +148,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                 // ── Conflict Banner ──
                 ConflictBanner(
                   conflictCount: conflictCount,
-                  onTap: () {
-                    ref
-                        .read(routineNotifierProvider.notifier)
-                        .setPrimaryFilter('conflicts');
-                  },
+                  onTap: () => showRoutineConflictResolverSheet(context, ref),
                 ),
 
                 // Add a small spacing if there are conflicts so timeline doesn't touch it
@@ -180,6 +176,14 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                           isToday: isToday,
                           showCurrentTimeLine: showCurrentTimeLine,
                           onCardTap: (item) {
+                            if (item.hasConflict) {
+                              showRoutineConflictResolverSheet(
+                                context,
+                                ref,
+                                itemId: item.id,
+                              );
+                              return;
+                            }
                             showRoutineDetailSheet(context, ref, item);
                           },
                         ),

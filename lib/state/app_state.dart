@@ -1433,7 +1433,7 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 
   void setStep(int step) {
-    final bounded = step.clamp(0, OnboardingDraft.lastStepIndex);
+    final bounded = step.clamp(0, OnboardingDraft.lastStepIndex).toInt();
     state = state.copyWith(
       draft: state.draft.copyWith(currentStep: bounded),
       currentStep: bounded,

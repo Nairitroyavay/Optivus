@@ -4,14 +4,14 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep10 extends ConsumerStatefulWidget {
-  const OnboardingStep10({super.key});
+class OnboardingStep13 extends ConsumerStatefulWidget {
+  const OnboardingStep13({super.key});
 
   @override
-  ConsumerState<OnboardingStep10> createState() => _OnboardingStep10State();
+  ConsumerState<OnboardingStep13> createState() => _OnboardingStep13State();
 }
 
-class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
+class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
   @override
   Widget build(BuildContext context) {
     final notifications = ref.watch(mockOnboardingProvider).draft.notifications;
@@ -148,7 +148,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                                   );
                               ref
                                   .read(mockOnboardingProvider.notifier)
-                                  .setStepDirty(10, true);
+                                  .setStepDirty(13, true);
                             },
                             accent: OptivusColors.brandAccent,
                           ),
@@ -195,7 +195,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                                       );
                                   ref
                                       .read(mockOnboardingProvider.notifier)
-                                      .setStepDirty(10, true);
+                                      .setStepDirty(13, true);
                                 },
                                 accent: OptivusColors.aquaAccent,
                               ),
@@ -257,7 +257,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                               );
                           ref
                               .read(mockOnboardingProvider.notifier)
-                              .setStepDirty(10, true);
+                              .setStepDirty(13, true);
                         },
                       ),
                     ],
@@ -312,7 +312,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                                       );
                                   ref
                                       .read(mockOnboardingProvider.notifier)
-                                      .setStepDirty(10, true);
+                                      .setStepDirty(13, true);
                                 },
                                 child: const Text(
                                   'Don\'t Allow',
@@ -338,7 +338,7 @@ class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
                                       );
                                   ref
                                       .read(mockOnboardingProvider.notifier)
-                                      .setStepDirty(10, true);
+                                      .setStepDirty(13, true);
                                 },
                                 child: const Text(
                                   'Allow',

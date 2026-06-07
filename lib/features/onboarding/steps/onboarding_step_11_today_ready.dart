@@ -6,10 +6,10 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep11 extends ConsumerWidget {
+class OnboardingStep14 extends ConsumerWidget {
   final ValueChanged<int>? onJumpToStep;
 
-  const OnboardingStep11({super.key, this.onJumpToStep});
+  const OnboardingStep14({super.key, this.onJumpToStep});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,18 +21,30 @@ class OnboardingStep11 extends ConsumerWidget {
         const _MissingSetup('Role and lifestyle', 2),
       if (draft.bodyBasics.validate() != null)
         const _MissingSetup('Body basics', 3),
-      if (draft.baseTimeline.validateForRole(draft.lifeRole.lifeRole) != null)
-        const _MissingSetup('Base timeline', 4),
+      if (draft.baseTimeline.validateClassesAndWorkForRole(
+            draft.lifeRole.lifeRole,
+          ) !=
+          null)
+        const _MissingSetup('Classes & job', 4),
+      if (draft.baseTimeline.validateEatingSetup() != null)
+        const _MissingSetup('Eating setup', 5),
+      if (draft.baseTimeline.validateFixedSchedule() != null)
+        const _MissingSetup('Fixed schedule', 6),
+      if (draft.baseTimeline.validateSkinCareSetup() != null)
+        const _MissingSetup('Skin care', 7),
       if (!draft.badHabitsNotNow && draft.badHabits.isEmpty)
-        const _MissingSetup('Bad habits', 5),
+        const _MissingSetup('Bad habits', 8),
       if (!draft.goodHabitsNotNow && draft.goodHabits.isEmpty)
-        const _MissingSetup('Good habits', 6),
-      if (draft.identityGoals.isEmpty) const _MissingSetup('Identity goals', 7),
+        const _MissingSetup('Good habits', 9),
+      if (draft.identityGoals.isEmpty)
+        const _MissingSetup('Identity goals', 10),
       if (draft.coachSetup.validate() != null)
-        const _MissingSetup('Coach setup', 8),
+        const _MissingSetup('Coach setup', 11),
       if (draft.slipUpHandling == null)
-        const _MissingSetup('Slip-up handling', 9),
-      if (!onboarding.stepCompleted.sublist(0, 11).every((done) => done))
+        const _MissingSetup('Slip-up handling', 12),
+      if (!onboarding.stepCompleted
+          .take(OnboardingDraft.lastStepIndex)
+          .every((done) => done))
         const _MissingSetup('Unsaved setup steps', 0),
     ];
 

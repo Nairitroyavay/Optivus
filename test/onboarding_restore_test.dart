@@ -95,7 +95,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Set Base Timeline'), findsOneWidget);
+    expect(find.text('Classes & Job'), findsOneWidget);
     expect(find.text('Welcome to\nOptivus'), findsNothing);
   });
 

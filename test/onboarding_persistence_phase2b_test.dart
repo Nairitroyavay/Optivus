@@ -50,6 +50,26 @@ void main() {
     },
   );
 
+  test('legacy 12-step onboarding draft migrates to 15-step indexes', () {
+    final legacyCompleted = List<bool>.filled(12, true);
+    final legacyDirty = List<bool>.filled(12, false);
+    legacyDirty[5] = true;
+
+    final migrated = OnboardingDraft.fromMap({
+      'schemaVersion': 1,
+      'uid': 'legacy-user',
+      'currentStep': 11,
+      'stepCompleted': legacyCompleted,
+      'stepDirty': legacyDirty,
+      'stepLoading': List<bool>.filled(12, false),
+    });
+
+    expect(migrated.currentStep, OnboardingDraft.lastStepIndex);
+    expect(migrated.stepCompleted, hasLength(OnboardingDraft.stepCount));
+    expect(migrated.stepCompleted.every((done) => done), isTrue);
+    expect(migrated.stepDirty[8], isTrue);
+  });
+
   test(
     'OnboardingDraft toMap/fromMap preserves PendingFutureImportDraft uploaded asset references',
     () {
@@ -291,10 +311,9 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      await container.read(authProvider.notifier).login(
-        'completed@example.com',
-        'password',
-      );
+      await container
+          .read(authProvider.notifier)
+          .login('completed@example.com', 'password');
 
       expect(
         container.read(authProvider).status,

@@ -5,14 +5,14 @@ import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dar
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep7 extends ConsumerStatefulWidget {
-  const OnboardingStep7({super.key});
+class OnboardingStep10 extends ConsumerStatefulWidget {
+  const OnboardingStep10({super.key});
 
   @override
-  ConsumerState<OnboardingStep7> createState() => _OnboardingStep7State();
+  ConsumerState<OnboardingStep10> createState() => _OnboardingStep10State();
 }
 
-class _OnboardingStep7State extends ConsumerState<OnboardingStep7> {
+class _OnboardingStep10State extends ConsumerState<OnboardingStep10> {
   final List<_IdentityGoal> _goals = [
     _IdentityGoal(
       'financially_free',
@@ -93,7 +93,7 @@ class _OnboardingStep7State extends ConsumerState<OnboardingStep7> {
           (draft) =>
               draft.copyWith(identityGoals: selected, clearFinalPreview: true),
         );
-    ref.read(mockOnboardingProvider.notifier).setStepDirty(7, true);
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(10, true);
   }
 
   @override

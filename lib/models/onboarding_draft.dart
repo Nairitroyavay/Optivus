@@ -1,7 +1,8 @@
 class OnboardingDraft {
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
   static const String sourceOnboarding = 'onboarding';
-  static const int stepCount = 12;
+  static const int _legacyStepCount = 12;
+  static const int stepCount = 15;
   static const int lastStepIndex = stepCount - 1;
 
   final String uid;
@@ -45,6 +46,9 @@ class OnboardingDraft {
       false,
       false,
       false,
+      false,
+      false,
+      false,
     ],
     this.stepDirty = const [
       false,
@@ -59,8 +63,14 @@ class OnboardingDraft {
       false,
       false,
       false,
+      false,
+      false,
+      false,
     ],
     this.stepLoading = const [
+      false,
+      false,
+      false,
       false,
       false,
       false,
@@ -95,15 +105,25 @@ class OnboardingDraft {
   });
 
   factory OnboardingDraft.fromMap(Map<String, dynamic> map) {
+    final migrateLegacySteps = _shouldMigrateLegacySteps(map);
     return OnboardingDraft(
       uid: map['uid'] as String? ?? '',
-      currentStep: ((map['currentStep'] as num?)?.toInt() ?? 0).clamp(
-        0,
-        lastStepIndex,
+      currentStep: _migratedStepIndex(
+        (map['currentStep'] as num?)?.toInt() ?? 0,
+        migrateLegacySteps: migrateLegacySteps,
       ),
-      stepCompleted: _readBoolList(map['stepCompleted'], stepCount),
-      stepDirty: _readBoolList(map['stepDirty'], stepCount),
-      stepLoading: _readBoolList(map['stepLoading'], stepCount),
+      stepCompleted: _readStepBoolList(
+        map['stepCompleted'],
+        migrateLegacySteps: migrateLegacySteps,
+      ),
+      stepDirty: _readStepBoolList(
+        map['stepDirty'],
+        migrateLegacySteps: migrateLegacySteps,
+      ),
+      stepLoading: _readStepBoolList(
+        map['stepLoading'],
+        migrateLegacySteps: migrateLegacySteps,
+      ),
       createdAt: _readDateTime(map['createdAt']),
       updatedAt: _readDateTime(map['updatedAt']),
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
@@ -216,7 +236,9 @@ class OnboardingDraft {
   }) {
     return OnboardingDraft(
       uid: uid ?? this.uid,
-      currentStep: (currentStep ?? this.currentStep).clamp(0, lastStepIndex),
+      currentStep: (currentStep ?? this.currentStep)
+          .clamp(0, lastStepIndex)
+          .toInt(),
       stepCompleted: _normalizeBoolList(
         stepCompleted ?? this.stepCompleted,
         stepCount,
@@ -267,29 +289,35 @@ class OnboardingDraft {
       case 3:
         return bodyBasics.validate();
       case 4:
-        return baseTimeline.validateForRole(lifeRole.lifeRole);
+        return baseTimeline.validateClassesAndWorkForRole(lifeRole.lifeRole);
       case 5:
+        return baseTimeline.validateEatingSetup();
+      case 6:
+        return baseTimeline.validateFixedSchedule();
+      case 7:
+        return baseTimeline.validateSkinCareSetup();
+      case 8:
         return badHabitsNotNow || badHabits.isNotEmpty
             ? null
             : 'Choose Not now or select at least one bad habit.';
-      case 6:
+      case 9:
         return goodHabitsNotNow || goodHabits.isNotEmpty
             ? null
             : 'Choose Not now or select at least one good habit.';
-      case 7:
+      case 10:
         return identityGoals.isNotEmpty
             ? null
             : 'Select at least one long-term identity goal.';
-      case 8:
+      case 11:
         return coachSetup.validate();
-      case 9:
+      case 12:
         return slipUpHandling == null
             ? 'Choose a slip-up handling style.'
             : null;
-      case 10:
+      case 13:
         return notifications.validate();
-      case 11:
-        if (!completedSteps.take(11).every((done) => done)) {
+      case 14:
+        if (!completedSteps.take(lastStepIndex).every((done) => done)) {
           return 'Complete and save all previous onboarding steps first.';
         }
         final preview = buildFinalPreview();
@@ -666,19 +694,63 @@ class OnboardingDraft {
     return windows;
   }
 
-  static List<bool> _readBoolList(dynamic value, int length) {
-    if (value is List) {
-      return _normalizeBoolList(value.map((e) => e == true).toList(), length);
-    }
-    return List.filled(length, false);
-  }
-
   static List<bool> _normalizeBoolList(List<bool> value, int length) {
     if (value.length == length) return List<bool>.from(value);
     return List<bool>.generate(
       length,
       (index) => index < value.length ? value[index] : false,
     );
+  }
+
+  static bool _shouldMigrateLegacySteps(Map<String, dynamic> map) {
+    final version = (map['schemaVersion'] as num?)?.toInt();
+    if (version != null && version >= schemaVersion) return false;
+    final completed = map['stepCompleted'];
+    if (completed is List && completed.length == _legacyStepCount) return true;
+    final dirty = map['stepDirty'];
+    if (dirty is List && dirty.length == _legacyStepCount) return true;
+    final loading = map['stepLoading'];
+    if (loading is List && loading.length == _legacyStepCount) return true;
+    return version != null && version < schemaVersion;
+  }
+
+  static int _migratedStepIndex(int step, {required bool migrateLegacySteps}) {
+    final migrated = migrateLegacySteps && step >= 5 ? step + 3 : step;
+    return migrated.clamp(0, lastStepIndex).toInt();
+  }
+
+  static List<bool> _readStepBoolList(
+    dynamic value, {
+    required bool migrateLegacySteps,
+  }) {
+    final raw = value is List
+        ? value.map((e) => e == true).toList(growable: false)
+        : <bool>[];
+    if (migrateLegacySteps && raw.length <= _legacyStepCount) {
+      return _migrateLegacyStepBoolList(raw);
+    }
+    return _normalizeBoolList(raw, stepCount);
+  }
+
+  static List<bool> _migrateLegacyStepBoolList(List<bool> legacy) {
+    bool old(int index) => index >= 0 && index < legacy.length && legacy[index];
+    return <bool>[
+      old(0),
+      old(1),
+      old(2),
+      old(3),
+      old(4),
+      old(4),
+      old(4),
+      old(4),
+      old(5),
+      old(6),
+      old(7),
+      old(8),
+      old(9),
+      old(10),
+      old(11),
+    ];
   }
 
   static List<T> _readList<T>(
@@ -896,10 +968,15 @@ class BaseTimelineDraft {
   static const fixedBathId = 'fixed-bath';
 
   final List<TimelineBlockDraft> blocks;
+  final int classJobSetupStep;
+  final int eatingSetupStep;
+  final int fixedScheduleSetupStep;
+  final int skinCareSetupStep;
   final String? businessMode;
   final int? workDurationMinutes;
   final String? workBestTime;
   final String? workPriority;
+  final String? eatingSetupPath;
   final String? eatingMode;
   final bool? shouldPlanMeals;
   final String? mealPlanningGoal;
@@ -907,6 +984,17 @@ class BaseTimelineDraft {
   final String? mealBudget;
   final String? cookingAbility;
   final int? mealsPerDay;
+  final int? breakfastMinute;
+  final int? lunchMinute;
+  final int? dinnerMinute;
+  final int? snackMinute;
+  final String? skinCareSetupPath;
+  final String? skinCareProductNames;
+  final bool skinCareFacePhotoSkipped;
+  final String? skinCareSkinType;
+  final List<String> skinCareProblems;
+  final String? skinCareBudget;
+  final String? skinCarePreference;
   final bool skinCareSkipped;
   final List<PendingFutureImportDraft> pendingFutureImports;
   final List<String> acceptedConflictKeys;
@@ -914,10 +1002,15 @@ class BaseTimelineDraft {
 
   const BaseTimelineDraft({
     this.blocks = const [],
+    this.classJobSetupStep = 0,
+    this.eatingSetupStep = 0,
+    this.fixedScheduleSetupStep = 0,
+    this.skinCareSetupStep = 0,
     this.businessMode,
     this.workDurationMinutes,
     this.workBestTime,
     this.workPriority,
+    this.eatingSetupPath,
     this.eatingMode,
     this.shouldPlanMeals,
     this.mealPlanningGoal,
@@ -925,6 +1018,17 @@ class BaseTimelineDraft {
     this.mealBudget,
     this.cookingAbility,
     this.mealsPerDay,
+    this.breakfastMinute,
+    this.lunchMinute,
+    this.dinnerMinute,
+    this.snackMinute,
+    this.skinCareSetupPath,
+    this.skinCareProductNames,
+    this.skinCareFacePhotoSkipped = false,
+    this.skinCareSkinType,
+    this.skinCareProblems = const [],
+    this.skinCareBudget,
+    this.skinCarePreference,
     this.skinCareSkipped = false,
     this.pendingFutureImports = const [],
     this.acceptedConflictKeys = const [],
@@ -937,10 +1041,16 @@ class BaseTimelineDraft {
         map['blocks'],
         (value) => TimelineBlockDraft.fromMap(value),
       ),
+      classJobSetupStep: (map['classJobSetupStep'] as num?)?.toInt() ?? 0,
+      eatingSetupStep: (map['eatingSetupStep'] as num?)?.toInt() ?? 0,
+      fixedScheduleSetupStep:
+          (map['fixedScheduleSetupStep'] as num?)?.toInt() ?? 0,
+      skinCareSetupStep: (map['skinCareSetupStep'] as num?)?.toInt() ?? 0,
       businessMode: map['businessMode'] as String?,
       workDurationMinutes: (map['workDurationMinutes'] as num?)?.toInt(),
       workBestTime: map['workBestTime'] as String?,
       workPriority: map['workPriority'] as String?,
+      eatingSetupPath: map['eatingSetupPath'] as String?,
       eatingMode: map['eatingMode'] as String?,
       shouldPlanMeals: map['shouldPlanMeals'] as bool?,
       mealPlanningGoal: map['mealPlanningGoal'] as String?,
@@ -948,6 +1058,18 @@ class BaseTimelineDraft {
       mealBudget: map['mealBudget'] as String?,
       cookingAbility: map['cookingAbility'] as String?,
       mealsPerDay: (map['mealsPerDay'] as num?)?.toInt(),
+      breakfastMinute: (map['breakfastMinute'] as num?)?.toInt(),
+      lunchMinute: (map['lunchMinute'] as num?)?.toInt(),
+      dinnerMinute: (map['dinnerMinute'] as num?)?.toInt(),
+      snackMinute: (map['snackMinute'] as num?)?.toInt(),
+      skinCareSetupPath: map['skinCareSetupPath'] as String?,
+      skinCareProductNames: map['skinCareProductNames'] as String?,
+      skinCareFacePhotoSkipped:
+          map['skinCareFacePhotoSkipped'] as bool? ?? false,
+      skinCareSkinType: map['skinCareSkinType'] as String?,
+      skinCareProblems: _readStringList(map['skinCareProblems']),
+      skinCareBudget: map['skinCareBudget'] as String?,
+      skinCarePreference: map['skinCarePreference'] as String?,
       skinCareSkipped: map['skinCareSkipped'] as bool? ?? false,
       pendingFutureImports: _readPendingFutureImports(
         map['pendingFutureImports'],
@@ -959,10 +1081,15 @@ class BaseTimelineDraft {
 
   Map<String, dynamic> toMap() => {
     'blocks': blocks.map((block) => block.toMap()).toList(),
+    'classJobSetupStep': classJobSetupStep,
+    'eatingSetupStep': eatingSetupStep,
+    'fixedScheduleSetupStep': fixedScheduleSetupStep,
+    'skinCareSetupStep': skinCareSetupStep,
     'businessMode': businessMode,
     'workDurationMinutes': workDurationMinutes,
     'workBestTime': workBestTime,
     'workPriority': workPriority,
+    'eatingSetupPath': eatingSetupPath,
     'eatingMode': eatingMode,
     'shouldPlanMeals': shouldPlanMeals,
     'mealPlanningGoal': mealPlanningGoal,
@@ -970,6 +1097,17 @@ class BaseTimelineDraft {
     'mealBudget': mealBudget,
     'cookingAbility': cookingAbility,
     'mealsPerDay': mealsPerDay,
+    'breakfastMinute': breakfastMinute,
+    'lunchMinute': lunchMinute,
+    'dinnerMinute': dinnerMinute,
+    'snackMinute': snackMinute,
+    'skinCareSetupPath': skinCareSetupPath,
+    'skinCareProductNames': skinCareProductNames,
+    'skinCareFacePhotoSkipped': skinCareFacePhotoSkipped,
+    'skinCareSkinType': skinCareSkinType,
+    'skinCareProblems': skinCareProblems,
+    'skinCareBudget': skinCareBudget,
+    'skinCarePreference': skinCarePreference,
     'skinCareSkipped': skinCareSkipped,
     'pendingFutureImports': pendingFutureImports
         .map((entry) => entry.toMap())
@@ -980,10 +1118,15 @@ class BaseTimelineDraft {
 
   BaseTimelineDraft copyWith({
     List<TimelineBlockDraft>? blocks,
+    int? classJobSetupStep,
+    int? eatingSetupStep,
+    int? fixedScheduleSetupStep,
+    int? skinCareSetupStep,
     String? businessMode,
     int? workDurationMinutes,
     String? workBestTime,
     String? workPriority,
+    String? eatingSetupPath,
     String? eatingMode,
     bool? shouldPlanMeals,
     String? mealPlanningGoal,
@@ -991,6 +1134,17 @@ class BaseTimelineDraft {
     String? mealBudget,
     String? cookingAbility,
     int? mealsPerDay,
+    int? breakfastMinute,
+    int? lunchMinute,
+    int? dinnerMinute,
+    int? snackMinute,
+    String? skinCareSetupPath,
+    String? skinCareProductNames,
+    bool? skinCareFacePhotoSkipped,
+    String? skinCareSkinType,
+    List<String>? skinCareProblems,
+    String? skinCareBudget,
+    String? skinCarePreference,
     bool? skinCareSkipped,
     List<PendingFutureImportDraft>? pendingFutureImports,
     List<String>? acceptedConflictKeys,
@@ -998,9 +1152,27 @@ class BaseTimelineDraft {
     bool clearMealPlanning = false,
     bool clearBusinessPlanning = false,
     bool clearRoleChangeWarnings = false,
+    bool clearSnackMinute = false,
+    bool clearSkinCareProductNames = false,
+    bool clearSkinCareSkinType = false,
+    bool clearSkinCareProblems = false,
+    bool clearSkinCarePlanning = false,
   }) {
     return BaseTimelineDraft(
       blocks: blocks ?? this.blocks,
+      classJobSetupStep: (classJobSetupStep ?? this.classJobSetupStep)
+          .clamp(0, 8)
+          .toInt(),
+      eatingSetupStep: (eatingSetupStep ?? this.eatingSetupStep)
+          .clamp(0, 8)
+          .toInt(),
+      fixedScheduleSetupStep:
+          (fixedScheduleSetupStep ?? this.fixedScheduleSetupStep)
+              .clamp(0, 8)
+              .toInt(),
+      skinCareSetupStep: (skinCareSetupStep ?? this.skinCareSetupStep)
+          .clamp(0, 8)
+          .toInt(),
       businessMode: clearBusinessPlanning
           ? null
           : (businessMode ?? this.businessMode),
@@ -1013,6 +1185,7 @@ class BaseTimelineDraft {
       workPriority: clearBusinessPlanning
           ? null
           : (workPriority ?? this.workPriority),
+      eatingSetupPath: eatingSetupPath ?? this.eatingSetupPath,
       eatingMode: eatingMode ?? this.eatingMode,
       shouldPlanMeals: clearMealPlanning
           ? null
@@ -1026,6 +1199,36 @@ class BaseTimelineDraft {
           ? null
           : (cookingAbility ?? this.cookingAbility),
       mealsPerDay: clearMealPlanning ? null : (mealsPerDay ?? this.mealsPerDay),
+      breakfastMinute: clearMealPlanning
+          ? null
+          : (breakfastMinute ?? this.breakfastMinute),
+      lunchMinute: clearMealPlanning ? null : (lunchMinute ?? this.lunchMinute),
+      dinnerMinute: clearMealPlanning
+          ? null
+          : (dinnerMinute ?? this.dinnerMinute),
+      snackMinute: clearMealPlanning || clearSnackMinute
+          ? null
+          : (snackMinute ?? this.snackMinute),
+      skinCareSetupPath: clearSkinCarePlanning
+          ? null
+          : (skinCareSetupPath ?? this.skinCareSetupPath),
+      skinCareProductNames: clearSkinCarePlanning || clearSkinCareProductNames
+          ? null
+          : (skinCareProductNames ?? this.skinCareProductNames),
+      skinCareFacePhotoSkipped:
+          skinCareFacePhotoSkipped ?? this.skinCareFacePhotoSkipped,
+      skinCareSkinType: clearSkinCarePlanning || clearSkinCareSkinType
+          ? null
+          : (skinCareSkinType ?? this.skinCareSkinType),
+      skinCareProblems: clearSkinCarePlanning || clearSkinCareProblems
+          ? const []
+          : (skinCareProblems ?? this.skinCareProblems),
+      skinCareBudget: clearSkinCarePlanning
+          ? null
+          : (skinCareBudget ?? this.skinCareBudget),
+      skinCarePreference: clearSkinCarePlanning
+          ? null
+          : (skinCarePreference ?? this.skinCarePreference),
       skinCareSkipped: skinCareSkipped ?? this.skinCareSkipped,
       pendingFutureImports: pendingFutureImports ?? this.pendingFutureImports,
       acceptedConflictKeys: acceptedConflictKeys ?? this.acceptedConflictKeys,
@@ -1250,6 +1453,70 @@ class BaseTimelineDraft {
     );
   }
 
+  String? validateClassesAndWorkForRole(String? lifeRole) {
+    final classesRequired =
+        lifeRole == LifeRoleDraft.studentKey ||
+        lifeRole == LifeRoleDraft.studentWorkingKey;
+    final jobRequired =
+        lifeRole == LifeRoleDraft.workingKey ||
+        lifeRole == LifeRoleDraft.studentWorkingKey ||
+        lifeRole == LifeRoleDraft.businessKey;
+    if (lifeRole == null) {
+      return 'Choose your role before setting classes and work.';
+    }
+    if (!classesRequired && !jobRequired) return null;
+    if (classesRequired && !_hasConfirmedSection('classes')) {
+      if (sectionNeedsImportReview('Classes')) {
+        return 'Review AI draft to continue.';
+      }
+      return 'Add class schedule.';
+    }
+    if (jobRequired && !_hasConfirmedSection('job_work_business')) {
+      if (sectionNeedsImportReview('Job / Work / Business')) {
+        return 'Review AI draft to continue.';
+      }
+      return 'Add work schedule.';
+    }
+    return null;
+  }
+
+  String? validateEatingSetup() {
+    if (_hasConfirmedSection('eating')) return null;
+    if (sectionNeedsImportReview('Eating')) {
+      return 'Review AI draft to continue.';
+    }
+    if (eatingSetupPath == null) {
+      return 'Choose how to set up eating.';
+    }
+    if (eatingSetupPath == 'has_routine') {
+      return 'Upload your eating routine or menu.';
+    }
+    if (mealPlanningGoal == null || eatingMode == null) {
+      return 'Complete eating setup details.';
+    }
+    return 'Generate eating routine to continue.';
+  }
+
+  String? validateFixedSchedule() {
+    if (!_hasSleepBlock(blocks)) return 'Set sleep and wake time.';
+    if (!_hasBathBlock(blocks)) return 'Set bath time.';
+    return null;
+  }
+
+  String? validateSkinCareSetup() {
+    if (skinCareSkipped || _hasConfirmedSection('skin_care')) return null;
+    if (sectionNeedsImportReview('Skin Care')) {
+      return 'Review AI draft to continue.';
+    }
+    if (skinCareSetupPath == null) {
+      return 'Choose skincare setup or skip.';
+    }
+    if (skinCareSetupPath == 'has_products') {
+      return 'Add product photo or product names, or skip.';
+    }
+    return 'Complete skin care questions or skip.';
+  }
+
   String? validateForRole(String? lifeRole) {
     final classesRequired =
         lifeRole == LifeRoleDraft.studentKey ||
@@ -1309,6 +1576,37 @@ class BaseTimelineDraft {
       return 'Resolve or explicitly keep hard-block timeline conflicts.';
     }
     return null;
+  }
+
+  List<TimelineBlockDraft> confirmedBlocksForSection(String section) {
+    return blocks
+        .where(
+          (block) =>
+              block.section == section &&
+              !block.needsTimeConfirmation &&
+              block.title.trim().isNotEmpty,
+        )
+        .toList(growable: false);
+  }
+
+  bool hasConfirmedSection(String section) {
+    return _hasConfirmedSection(section);
+  }
+
+  PendingFutureImportDraft? latestImportForSection(String sectionLabel) {
+    for (final entry in pendingFutureImports.reversed) {
+      if (entry.section == sectionLabel) return entry;
+    }
+    return null;
+  }
+
+  bool sectionNeedsImportReview(String sectionLabel) {
+    return pendingFutureImports.reversed.any(
+      (entry) =>
+          entry.section == sectionLabel &&
+          entry.status != PendingFutureImportDraft.appliedStatus &&
+          (entry.hasUploadedAssetReference || entry.parsedBlocks.isNotEmpty),
+    );
   }
 
   bool _hasConfirmedSection(String section) {
@@ -1440,6 +1738,13 @@ class PendingFutureImportDraft {
     this.userVerified = false,
     this.userEdited = false,
   }) : updatedAt = updatedAt ?? createdAt;
+
+  bool get hasUploadedAssetReference {
+    final hasStatus = uploadedAssetStatus == 'uploaded';
+    return hasStatus ||
+        uploadedAssetId?.trim().isNotEmpty == true ||
+        uploadedAssetR2Key?.trim().isNotEmpty == true;
+  }
 
   factory PendingFutureImportDraft.fromMap(Map<String, dynamic> map) {
     return PendingFutureImportDraft(

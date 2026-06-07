@@ -27,11 +27,13 @@ import 'package:optivus/state/auth_state.dart';
 class RoutineImportReviewScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
   final RoutineImportSource source;
+  final bool autoRunAiOnLoad;
 
   const RoutineImportReviewScreen({
     super.key,
     required this.onBack,
     required this.source,
+    this.autoRunAiOnLoad = false,
   });
 
   @override
@@ -62,6 +64,7 @@ class _RoutineImportReviewScreenState
   int _initialCandidateCount = 0;
   int _activeDay = 1;
   String? _errorMessage;
+  bool _autoRunAttempted = false;
 
   @override
   void initState() {
@@ -73,6 +76,7 @@ class _RoutineImportReviewScreenState
   void didUpdateWidget(covariant RoutineImportReviewScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.source != widget.source) {
+      _autoRunAttempted = false;
       Future.microtask(_loadReview);
     }
   }
@@ -95,6 +99,7 @@ class _RoutineImportReviewScreenState
     final selectedHasBlockingIssues = selected.any(
       (candidate) => validation.hasBlockingIssuesFor(candidate.id),
     );
+    final warningCount = _reviewWarningCount(review, validation);
     final alreadyApplied = _alreadyApplied(review);
     final missingAppliedItems = review == null
         ? const <RoutineItem>[]
@@ -106,10 +111,14 @@ class _RoutineImportReviewScreenState
     final authUser = ref.watch(authProvider).user;
 
     return LiquidDetailScaffold(
-      eyebrow: 'Routine import',
+      eyebrow: 'AI draft',
       title: '${review?.sourceLabel ?? _sourceLabel(widget.source)} Review',
-      subtitle: 'Review before saving to Routine',
-      accentColor: OptivusColors.routineAccent,
+      subtitle: review == null
+          ? 'Preparing draft'
+          : _reviewSubtitle(review, aiState),
+      accentColor: _reviewAccentColor(
+        review?.source ?? _reviewSourceFor(widget.source),
+      ),
       onBack: widget.onBack,
       trailing: _HeaderSaveButton(
         enabled: !_loading && review != null && !_saving && !alreadyApplied,
@@ -118,25 +127,12 @@ class _RoutineImportReviewScreenState
         onTap: () => _saveAction(validation),
       ),
       children: [
-        if (_loading)
-          const LiquidDetailSection(
-            title: 'Preparing review',
-            children: [
-              Text(
-                'Loading onboarding import references...',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-            ],
-          )
+        if (_loading || aiState.isExtracting)
+          _loadingDraftSection(aiState)
         else if (_errorMessage != null)
           _errorSection()
         else if (review != null) ...[
-          _daySelector(),
-          _sourceEvidenceSection(
+          _importSummaryStrip(
             review: review,
             aiState: aiState,
             canRunAi: _canRunAiExtraction(
@@ -147,17 +143,48 @@ class _RoutineImportReviewScreenState
           ),
           if (alreadyApplied)
             _alreadyAppliedSection(review, missingAppliedItems),
-          _warningSummarySection(review, validation),
-          _unplacedTray(review, validation),
-          _timelineSection(review, validation),
-          _footerActions(
-            review: review,
-            validation: validation,
-            selectedCount: selected.length,
-            selectedHasBlockingIssues: selectedHasBlockingIssues,
-            alreadyApplied: alreadyApplied,
-          ),
+          if (!alreadyApplied) ...[
+            if (review.candidateBlocks.isEmpty)
+              _emptyDraftSection(review)
+            else ...[
+              if (_shouldShowDaySelector(review)) _daySelector(),
+              _reviewNoticeStrip(
+                warningCount: warningCount,
+                blockingCount: _blockingCount(review, validation),
+              ),
+              _timelineSection(review, validation),
+              _candidateReviewSection(review, validation),
+              _footerActions(
+                review: review,
+                validation: validation,
+                selectedCount: selected.length,
+                selectedHasBlockingIssues: selectedHasBlockingIssues,
+                alreadyApplied: alreadyApplied,
+              ),
+            ],
+          ],
         ],
+      ],
+    );
+  }
+
+  Widget _loadingDraftSection(RoutineImportAiState aiState) {
+    return LiquidDetailSection(
+      title: aiState.isExtracting ? 'Reading with AI' : 'Preparing draft',
+      tint: OptivusColors.warning.withValues(alpha: 0.08),
+      children: const [
+        SizedBox(height: 6),
+        LinearProgressIndicator(minHeight: 5),
+        SizedBox(height: 14),
+        Text(
+          'Building a clean review from your source.',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            fontWeight: FontWeight.w800,
+            color: OptivusColors.textSecondary,
+          ),
+        ),
       ],
     );
   }
@@ -187,9 +214,151 @@ class _RoutineImportReviewScreenState
     );
   }
 
+  Widget _importSummaryStrip({
+    required RoutineImportReviewDraft review,
+    required RoutineImportAiState aiState,
+    required bool canRunAi,
+    required VoidCallback onRunAi,
+  }) {
+    final accent = _reviewAccentColor(review.source);
+    final hasPhoto =
+        review.uploadedAssetId != null || review.uploadedAssetR2Key != null;
+    final sourceText = hasPhoto
+        ? 'Uploaded photo'
+        : review.extractionEngine == 'manualSeed'
+        ? 'Generated draft'
+        : 'AI draft';
+    return LiquidDetailSection(
+      title: review.sourceLabel,
+      padding: const EdgeInsets.all(14),
+      tint: accent.withValues(alpha: 0.08),
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: accent.withValues(alpha: 0.24)),
+              ),
+              child: Icon(_sourceIcon(review.source), color: accent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    sourceText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${review.candidateBlocks.length} block${review.candidateBlocks.length == 1 ? '' : 's'} found',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (canRunAi && !aiState.isExtracting)
+              _IconCircleButton(
+                icon: Icons.auto_awesome_rounded,
+                color: accent,
+                onTap: onRunAi,
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _emptyDraftSection(RoutineImportReviewDraft review) {
+    return LiquidDetailSection(
+      title: 'Empty draft',
+      tint: OptivusColors.warning.withValues(alpha: 0.08),
+      children: [
+        const Text(
+          'AI did not find routine blocks in this source.',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            fontWeight: FontWeight.w800,
+            color: OptivusColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _GlassTextButton(
+          label: 'Add block',
+          icon: Icons.add_rounded,
+          color: _reviewAccentColor(review.source),
+          onTap: _addCandidate,
+        ),
+      ],
+    );
+  }
+
+  Widget _reviewNoticeStrip({
+    required int warningCount,
+    required int blockingCount,
+  }) {
+    if (warningCount == 0 && blockingCount == 0) {
+      return const SizedBox.shrink();
+    }
+    final blocking = blockingCount > 0;
+    final color = blocking ? OptivusColors.danger : OptivusColors.warning;
+    final label = blocking
+        ? '$blockingCount hard conflict${blockingCount == 1 ? '' : 's'}'
+        : '$warningCount item${warningCount == 1 ? '' : 's'} need review';
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              blocking ? Icons.block_rounded : Icons.info_outline_rounded,
+              size: 17,
+              color: color,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _daySelector() {
     return LiquidDetailSection(
-      title: 'Day review',
+      title: 'Days',
       padding: const EdgeInsets.all(12),
       children: [
         SingleChildScrollView(
@@ -213,24 +382,36 @@ class _RoutineImportReviewScreenState
     );
   }
 
-  Widget _sourceEvidenceSection({
-    required RoutineImportReviewDraft review,
-    required RoutineImportAiState aiState,
-    required bool canRunAi,
-    required VoidCallback onRunAi,
-  }) {
+  Widget _candidateReviewSection(
+    RoutineImportReviewDraft review,
+    RoutineImportValidationResult validation,
+  ) {
+    final candidates = review.candidateBlocks.toList(growable: false)
+      ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+    final accent = _reviewAccentColor(review.source);
     return LiquidDetailSection(
-      title: 'Source evidence',
+      title: 'Blocks',
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
       children: [
-        _SourceEvidenceCard(
-          review: review,
-          aiState: aiState,
-          canRunAi: canRunAi,
-          disabledReason: _aiDisabledReason(
-            review: review,
-            emailVerified: ref.read(authProvider).user?.emailVerified,
+        ...candidates.map(
+          (candidate) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _ReviewCandidateCard(
+              candidate: candidate,
+              accent: accent,
+              messages: validation.messagesFor(candidate.id),
+              blocking: validation.hasBlockingIssuesFor(candidate.id),
+              onAccept: () => _setCandidateSelected(candidate, true),
+              onEdit: () => _openCandidateEditor(candidate),
+              onRemove: () => _deleteCandidate(candidate),
+            ),
           ),
-          onRunAi: onRunAi,
+        ),
+        _GlassTextButton(
+          label: 'Add block',
+          icon: Icons.add_rounded,
+          color: OptivusColors.textSecondary,
+          onTap: _addCandidate,
         ),
       ],
     );
@@ -242,21 +423,55 @@ class _RoutineImportReviewScreenState
   ) {
     final hasMissing = missingAppliedItems.isNotEmpty;
     return LiquidDetailSection(
-      title: 'Already applied',
+      title: hasMissing ? 'Restore needed' : 'Applied',
       tint: (hasMissing ? OptivusColors.warning : OptivusColors.success)
           .withValues(alpha: 0.08),
       children: [
-        Text(
-          hasMissing
-              ? 'Imported blocks are missing from this session.'
-              : 'This review has already been applied to the Base Timeline. Normal save is disabled to avoid duplicate routine blocks.',
-          style: TextStyle(
-            fontSize: 13,
-            height: 1.4,
-            fontWeight: FontWeight.w800,
-            color: hasMissing ? OptivusColors.warning : OptivusColors.success,
-          ),
+        Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color:
+                    (hasMissing ? OptivusColors.warning : OptivusColors.success)
+                        .withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Icon(
+                hasMissing ? Icons.restore_rounded : Icons.check_circle_rounded,
+                color: hasMissing
+                    ? OptivusColors.warning
+                    : OptivusColors.success,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                hasMissing
+                    ? 'Imported blocks are missing from this session.'
+                    : 'Accepted blocks were saved to your routine.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.35,
+                  fontWeight: FontWeight.w900,
+                  color: hasMissing
+                      ? OptivusColors.warning
+                      : OptivusColors.success,
+                ),
+              ),
+            ),
+          ],
         ),
+        if (!hasMissing) ...[
+          const SizedBox(height: 12),
+          _GlassTextButton(
+            label: 'Done',
+            icon: Icons.arrow_back_rounded,
+            color: OptivusColors.success,
+            onTap: widget.onBack,
+          ),
+        ],
         const SizedBox(height: 10),
         if (hasMissing) ...[
           _GlassTextButton(
@@ -267,90 +482,6 @@ class _RoutineImportReviewScreenState
           ),
           const SizedBox(height: 10),
         ],
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children:
-              (hasMissing
-                      ? missingAppliedItems.map((item) => item.id)
-                      : review.appliedRoutineItemIds)
-                  .map(
-                    (id) => LiquidPill(label: id, color: OptivusColors.success),
-                  )
-                  .toList(growable: false),
-        ),
-      ],
-    );
-  }
-
-  Widget _warningSummarySection(
-    RoutineImportReviewDraft review,
-    RoutineImportValidationResult validation,
-  ) {
-    final messages = routineImportWarningSummaryMessages(
-      review: review,
-      validation: validation,
-    );
-    if (messages.isEmpty) return const SizedBox.shrink();
-
-    return LiquidDetailSection(
-      title: 'Validation and confidence',
-      tint: OptivusColors.warning.withValues(alpha: 0.08),
-      children: [
-        ...messages
-            .take(6)
-            .map(
-              (message) => Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.35,
-                    fontWeight: FontWeight.w800,
-                    color: OptivusColors.warning,
-                  ),
-                ),
-              ),
-            ),
-        if (messages.length > 6)
-          Text(
-            '+${messages.length - 6} more warnings',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _unplacedTray(
-    RoutineImportReviewDraft review,
-    RoutineImportValidationResult validation,
-  ) {
-    final unplaced = review.candidateBlocks
-        .where((candidate) => _isUnplaced(candidate))
-        .toList(growable: false);
-    if (unplaced.isEmpty) return const SizedBox.shrink();
-
-    return LiquidDetailSection(
-      title: 'Unplaced / Flexible Tasks',
-      children: [
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: unplaced
-              .map(
-                (candidate) => _UnplacedCandidateChip(
-                  candidate: candidate,
-                  messages: validation.messagesFor(candidate.id),
-                  onTap: () => _openCandidateEditor(candidate),
-                ),
-              )
-              .toList(growable: false),
-        ),
       ],
     );
   }
@@ -516,6 +647,7 @@ class _RoutineImportReviewScreenState
         _initialCandidateCount = review.candidateBlocks.length;
         _loading = false;
       });
+      _maybeAutoRunAi(review);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -656,6 +788,25 @@ class _RoutineImportReviewScreenState
     );
   }
 
+  Future<void> _setCandidateSelected(
+    RoutineImportCandidateBlock candidate,
+    bool selected,
+  ) async {
+    final review = _review;
+    if (review == null || _alreadyApplied(review)) return;
+    await _replaceCandidates([
+      for (final item in review.candidateBlocks)
+        if (item.id == candidate.id)
+          item.copyWith(
+            selected: selected,
+            needsManualReview: selected ? false : item.needsManualReview,
+            confidenceLabel: selected ? 'manual' : item.confidenceLabel,
+          )
+        else
+          item,
+    ]);
+  }
+
   Future<void> _addCandidate() async {
     final review = _review;
     if (review == null || _alreadyApplied(review)) return;
@@ -682,6 +833,13 @@ class _RoutineImportReviewScreenState
   }
 
   Future<void> _runAiExtraction(RoutineImportReviewDraft review) async {
+    return _runAiExtractionInternal(review);
+  }
+
+  Future<void> _runAiExtractionInternal(
+    RoutineImportReviewDraft review, {
+    bool confirmReplacement = true,
+  }) async {
     final authUser = ref.read(authProvider).user;
     final preflightError = routineImportAiPreflightError(
       review: review,
@@ -694,7 +852,7 @@ class _RoutineImportReviewScreenState
     }
     setState(() => _errorMessage = null);
 
-    if (_shouldConfirmAiReplacement(review)) {
+    if (confirmReplacement && _shouldConfirmAiReplacement(review)) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) {
@@ -740,6 +898,21 @@ class _RoutineImportReviewScreenState
       return;
     }
     await _applyExtractionResult(review: review, result: result);
+  }
+
+  void _maybeAutoRunAi(RoutineImportReviewDraft review) {
+    if (!widget.autoRunAiOnLoad || _autoRunAttempted) return;
+    _autoRunAttempted = true;
+    if (!_canRunAiExtraction(
+      review: review,
+      emailVerified: ref.read(authProvider).user?.emailVerified,
+    )) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _runAiExtractionInternal(review, confirmReplacement: false);
+    });
   }
 
   String _emptyExtractionMessage(RoutineImportExtractionResult result) {
@@ -941,7 +1114,10 @@ class _RoutineImportReviewScreenState
             .markAccepted(uid: review.uid, reviewId: review.id);
       }
       if (acceptedCandidateIds.isNotEmpty) {
-        await _markOnboardingPendingImportApplied(acceptedReview);
+        await _applyAcceptedReviewToOnboardingDraft(
+          acceptedReview,
+          candidatesWithValidation,
+        );
       }
 
       if (!mounted) return;
@@ -976,26 +1152,83 @@ class _RoutineImportReviewScreenState
     return review.candidateBlocks.any((candidate) => !candidate.selected);
   }
 
-  Future<void> _markOnboardingPendingImportApplied(
+  bool _shouldShowDaySelector(RoutineImportReviewDraft review) {
+    final daySets = review.candidateBlocks
+        .where((candidate) => candidate.repeatDays.isNotEmpty)
+        .map((candidate) => candidate.repeatDays.join(','))
+        .toSet();
+    return daySets.length > 1 ||
+        review.candidateBlocks.any(
+          (candidate) => candidate.repeatDays.length < 7,
+        );
+  }
+
+  int _reviewWarningCount(
+    RoutineImportReviewDraft? review,
+    RoutineImportValidationResult validation,
+  ) {
+    if (review == null) return 0;
+    var count = review.extractionWarnings.length;
+    for (final candidate in review.candidateBlocks) {
+      count += validation.warningsFor(candidate.id).length;
+      if (candidate.needsManualReview) count += 1;
+    }
+    return count;
+  }
+
+  int _blockingCount(
     RoutineImportReviewDraft review,
+    RoutineImportValidationResult validation,
+  ) {
+    return review.candidateBlocks
+        .where((candidate) => validation.hasBlockingIssuesFor(candidate.id))
+        .length;
+  }
+
+  String _reviewSubtitle(
+    RoutineImportReviewDraft review,
+    RoutineImportAiState aiState,
+  ) {
+    if (aiState.isExtracting) return 'Reading your source';
+    if (_alreadyApplied(review)) return 'Applied to routine';
+    if (review.candidateBlocks.isEmpty) return 'No blocks found';
+    return 'Accept, edit, or remove blocks';
+  }
+
+  Future<void> _applyAcceptedReviewToOnboardingDraft(
+    RoutineImportReviewDraft review,
+    List<RoutineImportCandidateBlock> candidates,
   ) async {
     final importId = review.onboardingPendingImportId;
-    if (importId == null || importId.trim().isEmpty) return;
     final repository = ref.read(onboardingRepositoryProvider);
     var draft = ref.read(mockOnboardingProvider).draft;
-    if (!draft.baseTimeline.pendingFutureImports.any(
-      (entry) => entry.id == importId,
-    )) {
+    if (importId != null &&
+        importId.trim().isNotEmpty &&
+        !draft.baseTimeline.pendingFutureImports.any(
+          (entry) => entry.id == importId,
+        )) {
       final fetched = await repository.fetchDraft(review.uid);
       if (fetched == null) return;
       draft = fetched;
     }
 
-    var changed = false;
     final now = DateTime.now();
+    final appliedBlocks = _timelineBlocksFromAcceptedCandidates(
+      review,
+      candidates,
+    );
+    final nextBlocks = [...draft.baseTimeline.blocks];
+    for (final block in appliedBlocks) {
+      final index = nextBlocks.indexWhere((item) => item.id == block.id);
+      if (index >= 0) {
+        nextBlocks[index] = block;
+      } else {
+        nextBlocks.add(block);
+      }
+    }
     final nextImports = [
       for (final entry in draft.baseTimeline.pendingFutureImports)
-        if (entry.id == importId)
+        if (importId != null && entry.id == importId)
           entry.copyWith(
             status: PendingFutureImportDraft.appliedStatus,
             updatedAt: now,
@@ -1005,21 +1238,16 @@ class _RoutineImportReviewScreenState
         else
           entry,
     ];
-    changed = nextImports.any((entry) {
-      final current = draft.baseTimeline.pendingFutureImports.firstWhere(
-        (candidate) => candidate.id == entry.id,
-      );
-      return current.status != entry.status ||
-          current.updatedAt != entry.updatedAt ||
-          current.userVerified != entry.userVerified ||
-          current.userEdited != entry.userEdited;
-    });
-    if (!changed) return;
+    final dirty = List<bool>.from(draft.stepDirty);
+    final stepIndex = _onboardingStepForReviewSource(review.source);
+    if (stepIndex >= 0 && stepIndex < dirty.length) dirty[stepIndex] = true;
 
     final nextDraft = draft.copyWith(
       uid: review.uid,
       updatedAt: now,
+      stepDirty: dirty,
       baseTimeline: draft.baseTimeline.copyWith(
+        blocks: nextBlocks,
         pendingFutureImports: nextImports,
       ),
       clearFinalPreview: true,
@@ -1721,110 +1949,154 @@ class _DragHandle extends StatelessWidget {
   }
 }
 
-class _SourceEvidenceCard extends StatelessWidget {
-  final RoutineImportReviewDraft review;
-  final RoutineImportAiState aiState;
-  final bool canRunAi;
-  final String? disabledReason;
-  final VoidCallback onRunAi;
+class _ReviewCandidateCard extends StatelessWidget {
+  final RoutineImportCandidateBlock candidate;
+  final Color accent;
+  final List<String> messages;
+  final bool blocking;
+  final VoidCallback onAccept;
+  final VoidCallback onEdit;
+  final VoidCallback onRemove;
 
-  const _SourceEvidenceCard({
-    required this.review,
-    required this.aiState,
-    required this.canRunAi,
-    required this.disabledReason,
-    required this.onRunAi,
+  const _ReviewCandidateCard({
+    required this.candidate,
+    required this.accent,
+    required this.messages,
+    required this.blocking,
+    required this.onAccept,
+    required this.onEdit,
+    required this.onRemove,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasEvidence =
-        review.uploadedAssetId != null || review.uploadedAssetStatus != null;
-    final sourceType = hasEvidence
-        ? review.warnings.contains(
-                RoutineImportExtractionService.noAiExtractionWarning,
-              )
-              ? 'From onboarding photo'
-              : 'From uploaded photo'
-        : 'Manual starter';
-
+    final needsReview =
+        candidate.needsManualReview ||
+        messages.isNotEmpty ||
+        candidate.confidenceLabel == 'low';
+    final timeLabel = candidate.hasFixedTime
+        ? TimelineUtils.formatTimeRange(
+            candidate.startMinute,
+            candidate.endMinute,
+          )
+        : 'Flexible';
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.38),
+        color: Colors.white.withValues(alpha: candidate.selected ? 0.48 : 0.28),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+        border: Border.all(
+          color: candidate.selected
+              ? accent.withValues(alpha: 0.34)
+              : Colors.white.withValues(alpha: 0.54),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.08),
+            blurRadius: 14,
+            offset: const Offset(0, 7),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                hasEvidence
-                    ? Icons.image_outlined
-                    : Icons.edit_calendar_rounded,
-                color: hasEvidence
-                    ? OptivusColors.aquaAccent
-                    : OptivusColors.textSecondary,
-                size: 18,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  sourceType,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.textPrimary,
-                  ),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _categoryIcon(candidate.category),
+                  size: 18,
+                  color: accent,
                 ),
               ),
-              LiquidPill(
-                label: _statusLabel(review.status),
-                color: _statusColor(review.status),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      candidate.title.trim().isEmpty
+                          ? 'Untitled block'
+                          : candidate.title.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$timeLabel • ${_daySummary(candidate.repeatDays)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: OptivusColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              if (needsReview)
+                LiquidPill(
+                  label: blocking ? 'Fix' : 'Needs review',
+                  color: blocking
+                      ? OptivusColors.danger
+                      : OptivusColors.warning,
+                )
+              else if (candidate.confidenceLabel == 'high')
+                const LiquidPill(label: 'High', color: OptivusColors.success),
             ],
           ),
+          if (messages.isNotEmpty) ...[
+            const SizedBox(height: 9),
+            Text(
+              messages.first,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: blocking ? OptivusColors.danger : OptivusColors.warning,
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              LiquidPill(
-                label: review.sourceLabel,
-                color: OptivusColors.routineAccent,
-                filled: true,
+              _GlassTextButton(
+                label: candidate.selected ? 'Accepted' : 'Accept',
+                icon: candidate.selected
+                    ? Icons.check_circle_rounded
+                    : Icons.check_rounded,
+                color: candidate.selected ? OptivusColors.success : accent,
+                onTap: candidate.selected ? null : onAccept,
               ),
-              if (review.uploadedAssetStatus != null)
-                LiquidPill(
-                  label: 'Asset ${review.uploadedAssetStatus}',
-                  color: OptivusColors.aquaAccent,
-                ),
-              if (review.uploadedAssetId != null)
-                LiquidPill(
-                  label: 'Photo attached',
-                  color: OptivusColors.success,
-                ),
+              _GlassTextButton(
+                label: 'Edit',
+                icon: Icons.edit_rounded,
+                color: OptivusColors.textSecondary,
+                onTap: onEdit,
+              ),
+              _GlassTextButton(
+                label: 'Remove',
+                icon: Icons.close_rounded,
+                color: OptivusColors.danger,
+                onTap: onRemove,
+              ),
             ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'AI extraction creates draft candidates only. Review before saving.',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.35,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.warning,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _AiExtractionButton(
-            state: aiState,
-            enabled: canRunAi,
-            disabledReason: disabledReason,
-            onTap: onRunAi,
           ),
         ],
       ),
@@ -1832,164 +2104,30 @@ class _SourceEvidenceCard extends StatelessWidget {
   }
 }
 
-class _AiExtractionButton extends StatelessWidget {
-  final RoutineImportAiState state;
-  final bool enabled;
-  final String? disabledReason;
-  final VoidCallback onTap;
+class _IconCircleButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onTap;
 
-  const _AiExtractionButton({
-    required this.state,
-    required this.enabled,
-    required this.disabledReason,
+  const _IconCircleButton({
+    required this.icon,
+    required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final extracting = state.status == RoutineImportAiStatus.extracting;
-    final extracted = state.status == RoutineImportAiStatus.extracted;
-    final failed = state.status == RoutineImportAiStatus.failed;
-    final label = extracting
-        ? 'Extracting...'
-        : extracted
-        ? 'AI draft ready — review before saving.'
-        : disabledReason ?? 'Run AI extraction';
-    final color = failed
-        ? OptivusColors.danger
-        : extracted
-        ? OptivusColors.success
-        : OptivusColors.routineAccent;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        GestureDetector(
-          onTap: enabled && !extracting ? onTap : null,
-          child: Opacity(
-            opacity: enabled && !extracting ? 1 : 0.58,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.13),
-                borderRadius: BorderRadius.circular(15),
-                border: Border.all(color: color.withValues(alpha: 0.26)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    extracting
-                        ? Icons.hourglass_top_rounded
-                        : extracted
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.auto_fix_high_rounded,
-                    size: 18,
-                    color: color,
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        height: 1.25,
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        if (failed && state.errorMessage != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            state.errorMessage!,
-            style: const TextStyle(
-              fontSize: 11,
-              height: 1.35,
-              fontWeight: FontWeight.w800,
-              color: OptivusColors.danger,
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _UnplacedCandidateChip extends StatelessWidget {
-  final RoutineImportCandidateBlock candidate;
-  final List<String> messages;
-  final VoidCallback onTap;
-
-  const _UnplacedCandidateChip({
-    required this.candidate,
-    required this.messages,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _categoryColor(candidate.category);
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(minWidth: 120, maxWidth: 260),
-        padding: const EdgeInsets.all(12),
+        width: 38,
+        height: 38,
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.13),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: messages.isEmpty
-                ? color.withValues(alpha: 0.28)
-                : OptivusColors.warning.withValues(alpha: 0.48),
-          ),
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.20)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(_categoryIcon(candidate.category), size: 16, color: color),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    candidate.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      height: 1.2,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.textPrimary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                LiquidPill(
-                  label: _candidateTypeLabel(candidate.candidateType),
-                  color: OptivusColors.blockFlex,
-                ),
-                if (messages.isNotEmpty)
-                  const LiquidPill(
-                    label: 'Warning',
-                    color: OptivusColors.warning,
-                  ),
-              ],
-            ),
-          ],
-        ),
+        child: Icon(icon, size: 18, color: color),
       ),
     );
   }
@@ -2426,6 +2564,60 @@ List<String> routineImportWarningSummaryMessages({
   return {...messages}.toList(growable: false);
 }
 
+List<TimelineBlockDraft> _timelineBlocksFromAcceptedCandidates(
+  RoutineImportReviewDraft review,
+  List<RoutineImportCandidateBlock> candidates,
+) {
+  final section = _timelineSectionKeyForReviewSource(review.source);
+  return candidates
+      .where((candidate) => candidate.selected)
+      .where((candidate) => candidate.hasFixedTime)
+      .where((candidate) => candidate.title.trim().isNotEmpty)
+      .where((candidate) => candidate.repeatDays.isNotEmpty)
+      .where(
+        (candidate) =>
+            candidate.candidateType != RoutineImportCandidateType.note &&
+            candidate.candidateType != RoutineImportCandidateType.unknown,
+      )
+      .map(
+        (candidate) => TimelineBlockDraft(
+          id: 'imported-${review.id}-${candidate.id}',
+          section: section,
+          title: candidate.title.trim(),
+          startMinute: candidate.startMinute,
+          endMinute: candidate.endMinute,
+          repeatDays: candidate.repeatDays,
+          location: candidate.location,
+          blockType: candidate.blockType,
+          source: OnboardingDraft.sourceOnboarding,
+          mealCategory: review.source == RoutineImportReviewSource.eating
+              ? candidate.mealCategory ?? candidate.title.trim()
+              : candidate.mealCategory,
+          skincareProducts: review.source == RoutineImportReviewSource.skinCare
+              ? candidate.steps
+              : const [],
+        ),
+      )
+      .toList(growable: false);
+}
+
+String _timelineSectionKeyForReviewSource(RoutineImportReviewSource source) {
+  return switch (source) {
+    RoutineImportReviewSource.classes => 'classes',
+    RoutineImportReviewSource.work => 'job_work_business',
+    RoutineImportReviewSource.eating => 'eating',
+    RoutineImportReviewSource.skinCare => 'skin_care',
+  };
+}
+
+int _onboardingStepForReviewSource(RoutineImportReviewSource source) {
+  return switch (source) {
+    RoutineImportReviewSource.classes || RoutineImportReviewSource.work => 4,
+    RoutineImportReviewSource.eating => 5,
+    RoutineImportReviewSource.skinCare => 7,
+  };
+}
+
 RoutineImportReviewSource _reviewSourceFor(RoutineImportSource source) {
   return switch (source) {
     RoutineImportSource.classes => RoutineImportReviewSource.classes,
@@ -2444,23 +2636,21 @@ String _sourceLabel(RoutineImportSource source) {
   };
 }
 
-String _statusLabel(RoutineImportReviewStatus status) {
-  return switch (status) {
-    RoutineImportReviewStatus.draft => 'Draft',
-    RoutineImportReviewStatus.needsReview => 'Needs review',
-    RoutineImportReviewStatus.accepted => 'Accepted',
-    RoutineImportReviewStatus.partiallyAccepted => 'Partially accepted',
-    RoutineImportReviewStatus.rejected => 'Rejected',
+Color _reviewAccentColor(RoutineImportReviewSource source) {
+  return switch (source) {
+    RoutineImportReviewSource.classes => OptivusColors.aquaAccent,
+    RoutineImportReviewSource.work => OptivusColors.brandAccent,
+    RoutineImportReviewSource.eating => OptivusColors.warning,
+    RoutineImportReviewSource.skinCare => OptivusColors.success,
   };
 }
 
-Color _statusColor(RoutineImportReviewStatus status) {
-  return switch (status) {
-    RoutineImportReviewStatus.accepted => OptivusColors.success,
-    RoutineImportReviewStatus.partiallyAccepted ||
-    RoutineImportReviewStatus.needsReview => OptivusColors.warning,
-    RoutineImportReviewStatus.rejected => OptivusColors.danger,
-    RoutineImportReviewStatus.draft => OptivusColors.routineAccent,
+IconData _sourceIcon(RoutineImportReviewSource source) {
+  return switch (source) {
+    RoutineImportReviewSource.classes => Icons.school_rounded,
+    RoutineImportReviewSource.work => Icons.work_rounded,
+    RoutineImportReviewSource.eating => Icons.restaurant_rounded,
+    RoutineImportReviewSource.skinCare => Icons.face_retouching_natural_rounded,
   };
 }
 
@@ -2595,6 +2785,17 @@ String _sourceBadgeLabel(RoutineImportCandidateBlock candidate) {
     return 'Photo';
   }
   return 'Manual';
+}
+
+String _daySummary(List<int> days) {
+  final normalized = days.where((day) => day >= 1 && day <= 7).toSet();
+  if (normalized.length == 7) return 'Every day';
+  if (normalized.length == 5 && normalized.containsAll(const [1, 2, 3, 4, 5])) {
+    return 'Weekdays';
+  }
+  if (normalized.isEmpty) return 'No days';
+  final sorted = normalized.toList(growable: false)..sort();
+  return sorted.map(TimelineUtils.getShortDayName).join(', ');
 }
 
 String? _emptyToNull(String value) {

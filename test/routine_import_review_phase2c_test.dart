@@ -293,14 +293,17 @@ void main() {
     );
   });
 
-  test('Firestore routine import review rules block direct Routine payloads', () {
-    final rules = File('firestore.rules').readAsStringSync();
+  test(
+    'Firestore routine import review rules block direct Routine payloads',
+    () {
+      final rules = File('firestore.rules').readAsStringSync();
 
-    expect(rules, contains('validRoutineImportReviewKeys(data)'));
-    expect(rules, contains('"routineItems"'));
-    expect(rules, contains('"localPreviewPath"'));
-    expect(rules, contains('data.candidateBlocks is list'));
-  });
+      expect(rules, contains('validRoutineImportReviewKeys(data)'));
+      expect(rules, contains('"routineItems"'));
+      expect(rules, contains('"localPreviewPath"'));
+      expect(rules, contains('data.candidateBlocks is list'));
+    },
+  );
 
   test(
     'Conversion service converts timed selected candidate to RoutineItem',
@@ -438,6 +441,29 @@ void main() {
     expect(result.warningsFor('candidate-1'), isEmpty);
   });
 
+  test('Validation blocks only hard-hard existing overlaps', () {
+    final service = const RoutineImportValidationService();
+    final hardOverlap = service.validateCandidates(
+      candidates: [_candidate()],
+      existingRoutineItems: [_routineItem(hardBlock: true)],
+    );
+    final softOverlap = service.validateCandidates(
+      candidates: [_candidate(hardBlock: false)],
+      existingRoutineItems: [_routineItem(hardBlock: true)],
+    );
+
+    expect(hardOverlap.hasBlockingIssuesFor('candidate-1'), isTrue);
+    expect(
+      hardOverlap.issuesFor('candidate-1').single,
+      contains('Hard block overlaps'),
+    );
+    expect(softOverlap.hasBlockingIssuesFor('candidate-1'), isFalse);
+    expect(
+      softOverlap.warningsFor('candidate-1'),
+      contains('Overlaps an existing routine item.'),
+    );
+  });
+
   test('Already accepted review blocks duplicate apply', () {
     final review = RoutineImportReviewDraft(
       id: 'review-1',
@@ -464,10 +490,12 @@ void main() {
 
       expect(review.blocksDuplicateApply, isTrue);
       expect(
-        service.missingItemsForReview(
-          review: review,
-          currentItems: container.read(routineNotifierProvider).items,
-        ).map((item) => item.id),
+        service
+            .missingItemsForReview(
+              review: review,
+              currentItems: container.read(routineNotifierProvider).items,
+            )
+            .map((item) => item.id),
         ['imported-review-1-candidate-1'],
       );
 
@@ -658,9 +686,7 @@ void main() {
 }
 
 RoutineImportReviewDraft _acceptedReview({
-  List<String> appliedRoutineItemIds = const [
-    'imported-review-1-candidate-1',
-  ],
+  List<String> appliedRoutineItemIds = const ['imported-review-1-candidate-1'],
 }) {
   return RoutineImportReviewDraft(
     id: 'review-1',
@@ -736,6 +762,21 @@ RoutineImportCandidateBlock _candidate({
     extractionEngine: extractionEngine,
     extractionVersion: extractionVersion,
     steps: steps,
+  );
+}
+
+RoutineItem _routineItem({bool hardBlock = true}) {
+  return RoutineItem(
+    id: 'existing-1',
+    title: 'Existing block',
+    startMinute: 9 * 60 + 15,
+    endMinute: 9 * 60 + 45,
+    repeatDays: const [1, 3, 5],
+    blockType: hardBlock
+        ? RoutineBlockType.hardBlock
+        : RoutineBlockType.softBlock,
+    hardBlock: hardBlock,
+    category: RoutineCategory.fixed,
   );
 }
 

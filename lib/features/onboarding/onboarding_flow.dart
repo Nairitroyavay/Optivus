@@ -13,6 +13,7 @@ import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 
+import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 
@@ -176,7 +177,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           if (step == 3) {
             return draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
           }
-          if (step == 11) {
+          if (step == OnboardingDraft.lastStepIndex) {
             return draft.copyWith(finalPreview: draft.buildFinalPreview());
           }
           return draft;
@@ -212,6 +213,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       final onboardingState = ref.read(mockOnboardingProvider);
       if (_currentPage == OnboardingDraft.lastStepIndex) {
         await _completeOnboarding();
+        return;
+      }
+
+      if (await _handleInternalNextIfNeeded()) {
         return;
       }
 
@@ -402,6 +407,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   void _goToPreviousStep() {
+    if (_handleInternalBackIfNeeded()) {
+      return;
+    }
+
     if (_currentPage <= 0) {
       context.go('/');
       return;
@@ -417,6 +426,17 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     );
 
     _persistCurrentDraftAfterNavigation();
+  }
+
+  bool _handleInternalBackIfNeeded() {
+    final draft = ref.read(mockOnboardingProvider).draft;
+    return switch (_currentPage) {
+      onboardingClassJobStepIndex => _backClassesJob(draft),
+      onboardingEatingStepIndex => _backEating(draft),
+      onboardingFixedStepIndex => _backFixed(draft),
+      onboardingSkinCareStepIndex => _backSkinCare(draft),
+      _ => false,
+    };
   }
 
   void _onDotTapped(int index) => _navigateToIndicatorStep(index);
@@ -449,7 +469,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     if (_currentPage == 0) {
       ctaLabel = 'Get Started';
-    } else if (_currentPage == 11) {
+    } else if (_currentPage == OnboardingDraft.lastStepIndex) {
       ctaLabel = 'Enter Optivus';
       ctaEnabled = !_isNavigating && !_isSaving;
     }
@@ -490,10 +510,408 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             const OnboardingStep8(),
             const OnboardingStep9(),
             const OnboardingStep10(),
-            OnboardingStep11(onJumpToStep: _onDotTapped),
+            const OnboardingStep11(),
+            const OnboardingStep12(),
+            const OnboardingStep13(),
+            OnboardingStep14(onJumpToStep: _onDotTapped),
           ],
         ),
       ),
     );
+  }
+
+  Future<bool> _handleInternalNextIfNeeded() async {
+    final draft = ref.read(mockOnboardingProvider).draft;
+    return switch (_currentPage) {
+      onboardingClassJobStepIndex => _nextClassesJob(draft),
+      onboardingEatingStepIndex => _nextEating(draft),
+      onboardingFixedStepIndex => _nextFixed(draft),
+      onboardingSkinCareStepIndex => _nextSkinCare(draft),
+      _ => Future.value(false),
+    };
+  }
+
+  bool _backClassesJob(OnboardingDraft draft) {
+    final base = draft.baseTimeline;
+    final role = draft.lifeRole.lifeRole;
+    final classesRequired =
+        role == LifeRoleDraft.studentKey ||
+        role == LifeRoleDraft.studentWorkingKey;
+    final workRequired =
+        role == LifeRoleDraft.workingKey ||
+        role == LifeRoleDraft.studentWorkingKey ||
+        role == LifeRoleDraft.businessKey;
+    final stages = [
+      0,
+      if (classesRequired) ...[1, 2],
+      if (workRequired) ...[3, 4],
+      5,
+    ];
+    final previous = _previousInternalStage(base.classJobSetupStep, stages);
+    if (previous == null) return false;
+    _updateBaseTimelineStage(
+      onboardingClassJobStepIndex,
+      (base) => base.copyWith(classJobSetupStep: previous),
+    );
+    return true;
+  }
+
+  bool _backEating(OnboardingDraft draft) {
+    final base = draft.baseTimeline;
+    final path = base.eatingSetupPath;
+    final stages = path == 'has_routine'
+        ? const [0, 1, 2, 3]
+        : const [0, 1, 2, 3, 4, 5];
+    final previous = _previousInternalStage(base.eatingSetupStep, stages);
+    if (previous == null) return false;
+    _updateBaseTimelineStage(
+      onboardingEatingStepIndex,
+      (base) => base.copyWith(eatingSetupStep: previous),
+    );
+    return true;
+  }
+
+  bool _backFixed(OnboardingDraft draft) {
+    final previous = _previousInternalStage(
+      draft.baseTimeline.fixedScheduleSetupStep,
+      const [0, 1, 2, 3, 4, 5],
+    );
+    if (previous == null) return false;
+    _updateBaseTimelineStage(
+      onboardingFixedStepIndex,
+      (base) => base.copyWith(fixedScheduleSetupStep: previous),
+    );
+    return true;
+  }
+
+  bool _backSkinCare(OnboardingDraft draft) {
+    final base = draft.baseTimeline;
+    if (base.skinCareSkipped) {
+      _updateBaseTimelineStage(
+        onboardingSkinCareStepIndex,
+        (base) => base.copyWith(skinCareSkipped: false, skinCareSetupStep: 0),
+      );
+      return true;
+    }
+    final stages = base.skinCareSetupPath == 'has_products'
+        ? const [0, 1, 2, 3]
+        : const [0, 1, 2, 3, 4, 5, 6, 7];
+    final previous = _previousInternalStage(base.skinCareSetupStep, stages);
+    if (previous == null) return false;
+    _updateBaseTimelineStage(
+      onboardingSkinCareStepIndex,
+      (base) => base.copyWith(skinCareSetupStep: previous),
+    );
+    return true;
+  }
+
+  Future<bool> _nextClassesJob(OnboardingDraft draft) async {
+    final base = draft.baseTimeline;
+    final role = draft.lifeRole.lifeRole;
+    final classesRequired =
+        role == LifeRoleDraft.studentKey ||
+        role == LifeRoleDraft.studentWorkingKey;
+    final workRequired =
+        role == LifeRoleDraft.workingKey ||
+        role == LifeRoleDraft.studentWorkingKey ||
+        role == LifeRoleDraft.businessKey;
+    if (!classesRequired && !workRequired) return false;
+
+    final stage = base.classJobSetupStep;
+    if (stage == 1 &&
+        !_sectionHasUploadOrBlocks(base, onboardingSectionClasses)) {
+      _setInternalValidation('Upload class timetable to continue.');
+      return true;
+    }
+    if (stage == 2 && !base.hasConfirmedSection('classes')) {
+      _setInternalValidation(
+        base.sectionNeedsImportReview(onboardingSectionClasses)
+            ? 'Review AI draft to continue.'
+            : 'Upload class timetable to continue.',
+      );
+      return true;
+    }
+    if (stage == 3 && !_sectionHasUploadOrBlocks(base, onboardingSectionWork)) {
+      _setInternalValidation('Upload work schedule to continue.');
+      return true;
+    }
+    if (stage == 4 && !base.hasConfirmedSection('job_work_business')) {
+      _setInternalValidation(
+        base.sectionNeedsImportReview(onboardingSectionWork)
+            ? 'Review AI draft to continue.'
+            : 'Upload work schedule to continue.',
+      );
+      return true;
+    }
+
+    final stages = [
+      0,
+      if (classesRequired) ...[1, 2],
+      if (workRequired) ...[3, 4],
+      5,
+    ];
+    final next = _nextInternalStage(stage, stages);
+    if (next == null) return false;
+    _updateBaseTimelineStage(
+      onboardingClassJobStepIndex,
+      (base) => base.copyWith(classJobSetupStep: next),
+    );
+    return true;
+  }
+
+  Future<bool> _nextEating(OnboardingDraft draft) async {
+    final base = draft.baseTimeline;
+    final stage = base.eatingSetupStep;
+    final path = base.eatingSetupPath;
+    if (stage == 0) {
+      if (path == null) {
+        _setInternalValidation('Choose how to set up eating.');
+        return true;
+      }
+      _updateBaseTimelineStage(
+        onboardingEatingStepIndex,
+        (base) => base.copyWith(eatingSetupStep: 1),
+      );
+      return true;
+    }
+
+    if (path == 'has_routine') {
+      if (stage == 1 &&
+          !_sectionHasUploadOrBlocks(base, onboardingSectionEating)) {
+        _setInternalValidation('Upload your eating routine or menu.');
+        return true;
+      }
+      if (stage == 2 && !base.hasConfirmedSection('eating')) {
+        _setInternalValidation(
+          base.sectionNeedsImportReview(onboardingSectionEating)
+              ? 'Review AI draft to continue.'
+              : 'Upload your eating routine or menu.',
+        );
+        return true;
+      }
+      final next = _nextInternalStage(stage, const [1, 2, 3]);
+      if (next == null) return false;
+      _updateBaseTimelineStage(
+        onboardingEatingStepIndex,
+        (base) => base.copyWith(eatingSetupStep: next),
+      );
+      return true;
+    }
+
+    if (stage == 1 && base.mealPlanningGoal == null) {
+      _setInternalValidation('Choose an eating goal.');
+      return true;
+    }
+    if (stage == 2 && base.eatingMode == null) {
+      _setInternalValidation('Choose your eating situation.');
+      return true;
+    }
+    if (stage == 3) {
+      final detailError = _eatingDetailError(base);
+      if (detailError != null) {
+        _setInternalValidation(detailError);
+        return true;
+      }
+      _updateBaseTimelineStage(
+        onboardingEatingStepIndex,
+        (base) => upsertGeneratedEatingImport(
+          base.copyWith(eatingSetupStep: 4),
+          draft.bodyBasics,
+        ),
+      );
+      if (!mounted) return true;
+      await openOnboardingImportReview(
+        context,
+        source: onboardingImportSourceForSection(onboardingSectionEating),
+        autoRunAiOnLoad: false,
+      );
+      return true;
+    }
+    if (stage == 4 && !base.hasConfirmedSection('eating')) {
+      _setInternalValidation('Review AI draft to continue.');
+      return true;
+    }
+    final next = _nextInternalStage(stage, const [1, 2, 3, 4, 5]);
+    if (next == null) return false;
+    _updateBaseTimelineStage(
+      onboardingEatingStepIndex,
+      (base) => base.copyWith(eatingSetupStep: next),
+    );
+    return true;
+  }
+
+  Future<bool> _nextFixed(OnboardingDraft draft) async {
+    final stage = draft.baseTimeline.fixedScheduleSetupStep;
+    final next = _nextInternalStage(stage, const [0, 1, 2, 3, 4, 5]);
+    if (next == null) return false;
+    _updateBaseTimelineStage(
+      onboardingFixedStepIndex,
+      (base) =>
+          base.withRequiredFixedBlocks().copyWith(fixedScheduleSetupStep: next),
+    );
+    return true;
+  }
+
+  Future<bool> _nextSkinCare(OnboardingDraft draft) async {
+    final base = draft.baseTimeline;
+    if (base.skinCareSkipped) return false;
+    final stage = base.skinCareSetupStep;
+    final path = base.skinCareSetupPath;
+    if (stage == 0) {
+      if (path == null) {
+        _setInternalValidation('Choose skincare setup or skip.');
+        return true;
+      }
+      _updateBaseTimelineStage(
+        onboardingSkinCareStepIndex,
+        (base) => base.copyWith(skinCareSetupStep: 1),
+      );
+      return true;
+    }
+
+    if (path == 'has_products') {
+      if (stage == 1) {
+        if (_skinProductNames(base).isNotEmpty) {
+          _updateBaseTimelineStage(
+            onboardingSkinCareStepIndex,
+            (base) => upsertGeneratedSkinCareImport(
+              base.copyWith(skinCareSetupStep: 2),
+            ),
+          );
+          if (!mounted) return true;
+          await openOnboardingImportReview(
+            context,
+            source: onboardingImportSourceForSection(onboardingSectionSkinCare),
+            autoRunAiOnLoad: false,
+          );
+          return true;
+        }
+        if (!_sectionHasUploadOrBlocks(base, onboardingSectionSkinCare)) {
+          _setInternalValidation(
+            'Add product photo or product names, or skip.',
+          );
+          return true;
+        }
+      }
+      if (stage == 2 && !base.hasConfirmedSection('skin_care')) {
+        _setInternalValidation('Review AI draft to continue.');
+        return true;
+      }
+      final next = _nextInternalStage(stage, const [1, 2, 3]);
+      if (next == null) return false;
+      _updateBaseTimelineStage(
+        onboardingSkinCareStepIndex,
+        (base) => base.copyWith(skinCareSetupStep: next),
+      );
+      return true;
+    }
+
+    if (stage == 1 &&
+        !base.skinCareFacePhotoSkipped &&
+        !_sectionHasUploadOrBlocks(base, onboardingSectionSkinCare)) {
+      _setInternalValidation('Upload face photo or skip photo.');
+      return true;
+    }
+    if (stage == 2 && base.skinCareSkinType == null) {
+      _setInternalValidation('Choose your skin type.');
+      return true;
+    }
+    if (stage == 3 && base.skinCareProblems.isEmpty) {
+      _setInternalValidation('Choose skin problems or None.');
+      return true;
+    }
+    if (stage == 4 && base.skinCareBudget == null) {
+      _setInternalValidation('Choose skin care budget.');
+      return true;
+    }
+    if (stage == 5) {
+      if (base.skinCarePreference == null) {
+        _setInternalValidation('Choose simple, minimal, or advanced.');
+        return true;
+      }
+      _updateBaseTimelineStage(
+        onboardingSkinCareStepIndex,
+        (base) =>
+            upsertGeneratedSkinCareImport(base.copyWith(skinCareSetupStep: 6)),
+      );
+      if (!mounted) return true;
+      await openOnboardingImportReview(
+        context,
+        source: onboardingImportSourceForSection(onboardingSectionSkinCare),
+        autoRunAiOnLoad: false,
+      );
+      return true;
+    }
+    if (stage == 6 && !base.hasConfirmedSection('skin_care')) {
+      _setInternalValidation('Review AI draft to continue.');
+      return true;
+    }
+    final next = _nextInternalStage(stage, const [1, 2, 3, 4, 5, 6, 7]);
+    if (next == null) return false;
+    _updateBaseTimelineStage(
+      onboardingSkinCareStepIndex,
+      (base) => base.copyWith(skinCareSetupStep: next),
+    );
+    return true;
+  }
+
+  void _setInternalValidation(String message) {
+    ref.read(mockOnboardingProvider.notifier).setValidationMessage(message);
+  }
+
+  void _updateBaseTimelineStage(
+    int stepIndex,
+    BaseTimelineDraft Function(BaseTimelineDraft base) update,
+  ) {
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: update(draft.baseTimeline),
+            clearFinalPreview: true,
+          ),
+        );
+    ref.read(mockOnboardingProvider.notifier).setStepDirty(stepIndex, true);
+  }
+
+  int? _nextInternalStage(int current, List<int> stages) {
+    for (final stage in stages) {
+      if (stage > current) return stage;
+    }
+    return null;
+  }
+
+  int? _previousInternalStage(int current, List<int> stages) {
+    for (var i = stages.length - 1; i >= 0; i--) {
+      if (stages[i] < current) return stages[i];
+    }
+    return null;
+  }
+
+  bool _sectionHasUploadOrBlocks(BaseTimelineDraft base, String sectionLabel) {
+    final sectionKey = onboardingTimelineSectionKey(sectionLabel);
+    final pending = base.latestImportForSection(sectionLabel);
+    return base.hasConfirmedSection(sectionKey) ||
+        pending?.hasUploadedAssetReference == true ||
+        pending?.parsedBlocks.isNotEmpty == true;
+  }
+
+  String? _eatingDetailError(BaseTimelineDraft base) {
+    if (base.eatingMode == 'self_cook') {
+      if (base.foodType == null) return 'Choose veg, egg, or non-veg.';
+      if (base.mealBudget == null) return 'Choose meal budget.';
+      if (base.cookingAbility == null) return 'Choose cooking skill.';
+      if (base.mealsPerDay == null) return 'Choose meals per day.';
+    }
+    return null;
+  }
+
+  List<String> _skinProductNames(BaseTimelineDraft base) {
+    return base.skinCareProductNames
+            ?.split(RegExp(r'[\n,]+'))
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toList(growable: false) ??
+        const [];
   }
 }

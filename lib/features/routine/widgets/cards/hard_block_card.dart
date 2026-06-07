@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -131,19 +130,6 @@ class HardBlockCard extends ConsumerWidget {
                 ),
             ],
           ),
-          if (item.conflictMessage != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              item.conflictMessage!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: OptivusColors.danger,
-              ),
-            ),
-          ],
           const SizedBox(height: 8),
           Wrap(
             spacing: 6,
@@ -162,15 +148,6 @@ class HardBlockCard extends ConsumerWidget {
                   icon: Icons.edit_calendar_rounded,
                   onTap: () =>
                       showAddRoutineSheet(context, ref, editItem: item),
-                ),
-              if (item.hasConflict && !item.isContinuation)
-                CardActionButton(
-                  label: 'Allow overlap',
-                  color: OptivusColors.warning,
-                  icon: Icons.layers_rounded,
-                  onTap: () => ref
-                      .read(routineNotifierProvider.notifier)
-                      .updateItem(item.copyWith(allowOverlap: true)),
                 ),
             ],
           ),

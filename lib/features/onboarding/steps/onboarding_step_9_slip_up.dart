@@ -4,8 +4,8 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/state/app_state.dart';
 
-class OnboardingStep9 extends ConsumerWidget {
-  const OnboardingStep9({super.key});
+class OnboardingStep12 extends ConsumerWidget {
+  const OnboardingStep12({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -68,7 +68,7 @@ class OnboardingStep9 extends ConsumerWidget {
                             );
                         ref
                             .read(mockOnboardingProvider.notifier)
-                            .setStepDirty(9, true);
+                            .setStepDirty(12, true);
                       },
                     ),
                   );
