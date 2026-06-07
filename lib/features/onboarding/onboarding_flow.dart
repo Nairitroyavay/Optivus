@@ -745,7 +745,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           status: PendingFutureImportDraft.appliedStatus,
           parsedBlocks: normalizedBlocks,
           userVerified: true,
-          userEdited: true,
+          userEdited: pending.userEdited,
           clearErrorMessage: true,
         ),
       );
@@ -801,6 +801,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           nextStage: workRequired ? 3 : 5,
         ),
       );
+      await _persistCurrentDraftAfterNavigation();
       ref.read(onboardingClassTimelineProvider.notifier).state = const [];
       return true;
     }
@@ -844,6 +845,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           nextStage: 5,
         ),
       );
+      await _persistCurrentDraftAfterNavigation();
       ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
       return true;
     }

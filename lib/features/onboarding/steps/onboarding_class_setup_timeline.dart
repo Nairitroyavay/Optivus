@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/routine_import_extraction_service.dart';
 import 'package:optivus/features/onboarding/steps/base_timeline_step.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -423,11 +425,29 @@ class _OnboardingClassSetupWidgetState
   }
 
   List<ClassRoutineBlock> _currentEditableBlocks() {
+    final restored = _restoredBlocksFromDraft();
+    if (restored.isNotEmpty) return restored;
     final local = ref.read(_provider);
-    return local.isNotEmpty ? local : _restoredBlocksFromDraft();
+    return local;
   }
 
-  void _syncLocalBlocksToPending() {
+  Future<void> _persistCurrentDraftNow() async {
+    final authUser = ref.read(authProvider).user;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final uid = authUser?.uid.trim().isNotEmpty == true
+        ? authUser!.uid.trim()
+        : draft.uid.trim();
+    if (uid.isEmpty) return;
+    await ref
+        .read(onboardingRepositoryProvider)
+        .saveDraft(draft.copyWith(uid: uid));
+  }
+
+  void _persistCurrentDraftSoon() {
+    unawaited(_persistCurrentDraftNow().catchError((_) {}));
+  }
+
+  Future<void> _syncLocalBlocksToPending() async {
     final candidates = ref.read(_provider);
     final draft = ref.read(mockOnboardingProvider).draft;
     final pending = draft.baseTimeline.latestImportForSection(
@@ -446,10 +466,19 @@ class _OnboardingClassSetupWidgetState
 
     final blocks = candidates.map(_timelineDraftFromClassBlock).toList();
 
-    updateBaseTimelineDraft(
-      ref,
-      widget.stepIndex,
-      (base) => base.upsertPendingImport(
+    updateBaseTimelineDraft(ref, widget.stepIndex, (base) {
+      final hasConfirmed = _confirmedTimelineBlocks(base).isNotEmpty;
+      final nextBase = hasConfirmed
+          ? base.copyWith(
+              blocks: [
+                ...base.blocks.where(
+                  (block) => block.section != _config.timelineSection,
+                ),
+                ...blocks,
+              ],
+            )
+          : base;
+      return nextBase.upsertPendingImport(
         target.copyWith(
           updatedAt: now,
           status: blocks.isEmpty
@@ -459,8 +488,9 @@ class _OnboardingClassSetupWidgetState
           userEdited: true,
           clearErrorMessage: blocks.isNotEmpty,
         ),
-      ),
-    );
+      );
+    });
+    await _persistCurrentDraftNow();
   }
 
   void _triggerExtractionFromPendingIfNeeded({
@@ -508,14 +538,14 @@ class _OnboardingClassSetupWidgetState
           .where((block) => block.title.trim().isNotEmpty)
           .where((block) => block.startMinute < block.endMinute)
           .toList(growable: false);
-      _updatePendingParsedBlocks(parsedBlocks);
+      await _updatePendingParsedBlocks(parsedBlocks);
       ref.read(_provider.notifier).state = parsedBlocks
           .asMap()
           .entries
           .map((entry) => _classBlockFromTimelineDraft(entry.value, entry.key))
           .toList(growable: false);
     } else {
-      _updatePendingParsedBlocks(
+      await _updatePendingParsedBlocks(
         const [],
         errorMessage: _config.clearFailureText,
       );
@@ -525,10 +555,10 @@ class _OnboardingClassSetupWidgetState
     setState(() => _activeExtractionKey = null);
   }
 
-  void _updatePendingParsedBlocks(
+  Future<void> _updatePendingParsedBlocks(
     List<TimelineBlockDraft> blocks, {
     String? errorMessage,
-  }) {
+  }) async {
     final draft = ref.read(mockOnboardingProvider).draft;
     final pending = draft.baseTimeline.latestImportForSection(
       _config.sectionLabel,
@@ -550,6 +580,7 @@ class _OnboardingClassSetupWidgetState
         ),
       ),
     );
+    await _persistCurrentDraftNow();
   }
 
   Future<void> _startUpload(BuildContext context) async {
@@ -583,6 +614,7 @@ class _OnboardingClassSetupWidgetState
       widget.stepIndex,
       (base) => base.upsertPendingImport(seed),
     );
+    _persistCurrentDraftSoon();
 
     final asset = await ref
         .read(uploadControllerProvider.notifier)
@@ -625,6 +657,7 @@ class _OnboardingClassSetupWidgetState
       widget.stepIndex,
       (base) => base.upsertPendingImport(next),
     );
+    await _persistCurrentDraftNow();
   }
 
   @override
@@ -681,12 +714,12 @@ class _OnboardingClassSetupWidgetState
       );
     }
 
-    if (localBlocks.isNotEmpty || hasConfirmedBlocks || hasParsedBlocks) {
-      final visibleBlocks = localBlocks.isNotEmpty
-          ? localBlocks
-          : hasConfirmedBlocks
+    if (hasConfirmedBlocks || hasParsedBlocks || localBlocks.isNotEmpty) {
+      final visibleBlocks = hasConfirmedBlocks
           ? _classBlocksFromTimelineDrafts(confirmedBlocks)
-          : _classBlocksFromTimelineDrafts(pending?.parsedBlocks ?? const []);
+          : hasParsedBlocks
+          ? _classBlocksFromTimelineDrafts(pending?.parsedBlocks ?? const [])
+          : localBlocks;
       return _buildTimelineState(visibleBlocks);
     }
 
@@ -1000,7 +1033,7 @@ class _OnboardingClassSetupWidgetState
           ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
     final range = _timelineRangeFor(allBlocks);
     const topPadding = 18.0;
-    const bottomPadding = 180.0;
+    const bottomPadding = 220.0;
     final maxCardBottom = dayItems.fold<double>(0, (maxBottom, item) {
       final top =
           topPadding +
@@ -1110,7 +1143,7 @@ class _OnboardingClassSetupWidgetState
                 blendMode: BlendMode.dstIn,
                 child: SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.only(bottom: 180),
+                  padding: const EdgeInsets.only(bottom: 220),
                   child: SizedBox(
                     height: timelineHeight,
                     child: Stack(
@@ -1252,6 +1285,48 @@ class _OnboardingClassSetupWidgetState
                     color: _config.accent.withValues(alpha: 0.10),
                   ),
                 ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    for (final minute in boundaryMinutes.where((minute) => minute % 15 != 0)) {
+      if (minute <= range.startMinute || minute >= range.endMinute) continue;
+      final top =
+          topPadding + ((minute - range.startMinute) / 60) * kHourHeight;
+      widgets.add(
+        Positioned(
+          top: top,
+          left: 2,
+          right: 16,
+          height: 1,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 34,
+                child: Text(
+                  TimelineUtils.formatMinuteShort(minute),
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: _config.accent.withValues(alpha: 0.58),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 9,
+                height: 1,
+                color: _config.accent.withValues(alpha: 0.30),
+              ),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: _config.accent.withValues(alpha: 0.08),
+                ),
+              ),
             ],
           ),
         ),
@@ -1653,7 +1728,7 @@ class _OnboardingClassSetupWidgetState
                             Row(
                               children: [
                                 TextButton.icon(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     final currentList =
                                         _currentEditableBlocks();
                                     ref
@@ -1661,7 +1736,8 @@ class _OnboardingClassSetupWidgetState
                                         .state = currentList
                                         .where((b) => b.id != item.id)
                                         .toList(growable: false);
-                                    _syncLocalBlocksToPending();
+                                    await _syncLocalBlocksToPending();
+                                    if (!ctx.mounted) return;
                                     Navigator.pop(ctx);
                                   },
                                   icon: const Icon(
@@ -1691,7 +1767,7 @@ class _OnboardingClassSetupWidgetState
                                       borderRadius: BorderRadius.circular(16),
                                     ),
                                   ),
-                                  onPressed: () {
+                                  onPressed: () async {
                                     if (!formKey.currentState!.validate()) {
                                       return;
                                     }
@@ -1743,7 +1819,8 @@ class _OnboardingClassSetupWidgetState
                                         else
                                           block,
                                     ];
-                                    _syncLocalBlocksToPending();
+                                    await _syncLocalBlocksToPending();
+                                    if (!ctx.mounted) return;
                                     Navigator.pop(ctx);
                                   },
                                   child: const Text(
