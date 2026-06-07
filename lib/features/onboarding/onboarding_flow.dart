@@ -620,34 +620,54 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     final stage = base.classJobSetupStep;
 
-    if (classesRequired && (stage == 1 || stage == 2)) {
+    if (classesRequired && stage <= 2) {
       final localBlocks = ref.read(onboardingClassTimelineProvider);
-      if (localBlocks.isEmpty) {
+      final pendingParsedBlocks =
+          base.latestImportForSection(onboardingSectionClasses)?.parsedBlocks ??
+          const <TimelineBlockDraft>[];
+      if (localBlocks.isEmpty && pendingParsedBlocks.isEmpty) {
         _setInternalValidation('Upload your class timetable to continue.');
         return true;
       }
 
-      final confirmedBlocks = localBlocks.map((c) {
-        final start = (c.start * 60 + 6 * 60).round();
-        final end = ((c.start + c.duration) * 60 + 6 * 60).round();
-        return TimelineBlockDraft(
-          id: c.id,
-          section: 'classes',
-          title: c.subject,
-          startMinute: start,
-          endMinute: end,
-          repeatDays: [c.weekday ?? 1],
-          blockType: TimelineBlockDraft.hardBlockKey,
-          source: 'ai_import',
-          location: c.room,
-        );
-      }).toList();
+      final confirmedBlocks = localBlocks.isNotEmpty
+          ? localBlocks.map((c) {
+              return TimelineBlockDraft(
+                id: c.id,
+                section: 'classes',
+                title: c.subject,
+                startMinute: c.startMinute,
+                endMinute: c.endMinute,
+                repeatDays: c.repeatDays,
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: 'ai_import',
+                location: c.room.trim().isEmpty ? null : c.room.trim(),
+              );
+            }).toList()
+          : pendingParsedBlocks.map((block) {
+              return TimelineBlockDraft(
+                id: block.id,
+                section: 'classes',
+                title: block.title,
+                startMinute: block.startMinute,
+                endMinute: block.endMinute,
+                repeatDays: block.repeatDays,
+                location: block.location,
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: 'ai_import',
+              );
+            }).toList();
 
-      final newBlocks = base.blocks.where((b) => b.section != 'classes').toList()..addAll(confirmedBlocks);
+      final newBlocks =
+          base.blocks.where((b) => b.section != 'classes').toList()
+            ..addAll(confirmedBlocks);
 
       _updateBaseTimelineStage(
         onboardingClassJobStepIndex,
-        (base) => base.copyWith(classJobSetupStep: workRequired ? 3 : 5, blocks: newBlocks),
+        (base) => base.copyWith(
+          classJobSetupStep: workRequired ? 3 : 5,
+          blocks: newBlocks,
+        ),
       );
       return true;
     }

@@ -20,22 +20,21 @@ final onboardingClassTimelineProvider =
 
 class ClassRoutineBlock {
   final String id;
-  String subject;
-  String room;
-  String professor;
-  double start; // Hours from 6 AM
-  double duration; // Hours length
-  IconData? icon;
-  Color? color;
-  bool isAdd;
-  bool hasTopTape;
-  bool hasBottomTape;
-  bool reminderEnabled;
-  int? weekday;
-  String? suggestionId;
+  final String subject;
+  final String room;
+  final String professor;
+  final int startMinute;
+  final int endMinute;
+  final List<int> repeatDays;
+  final IconData? icon;
+  final Color? color;
+  final bool hasTopTape;
+  final bool hasBottomTape;
+  final bool reminderEnabled;
+  final String? suggestionId;
 
-  int get startMinute => ((start + 6) * 60).round();
-  int get endMinute => (((start + duration) + 6) * 60).round();
+  int? get weekday => repeatDays.isEmpty ? null : repeatDays.first;
+  int get durationMinutes => (endMinute - startMinute).clamp(1, 24 * 60);
 
   String get displayStartTime => TimelineUtils.formatMinute(startMinute);
   String get displayEndTime => TimelineUtils.formatMinute(endMinute);
@@ -45,59 +44,92 @@ class ClassRoutineBlock {
     required this.subject,
     this.room = '',
     this.professor = '',
-    required this.start,
-    this.duration = 1.0,
+    required this.startMinute,
+    required this.endMinute,
+    this.repeatDays = const [1],
     this.icon,
     this.color,
-    this.isAdd = false,
     this.hasTopTape = false,
     this.hasBottomTape = false,
     this.reminderEnabled = false,
-    this.weekday,
     this.suggestionId,
   });
 
-  ClassRoutineBlock clone() {
+  ClassRoutineBlock copyWith({
+    String? id,
+    String? subject,
+    String? room,
+    String? professor,
+    int? startMinute,
+    int? endMinute,
+    List<int>? repeatDays,
+    IconData? icon,
+    Color? color,
+    bool? hasTopTape,
+    bool? hasBottomTape,
+    bool? reminderEnabled,
+    String? suggestionId,
+  }) {
     return ClassRoutineBlock(
-      id: id,
-      subject: subject,
-      room: room,
-      professor: professor,
-      start: start,
-      duration: duration,
-      icon: icon,
-      color: color,
-      isAdd: isAdd,
-      hasTopTape: hasTopTape,
-      hasBottomTape: hasBottomTape,
-      reminderEnabled: reminderEnabled,
-      weekday: weekday,
-      suggestionId: suggestionId,
+      id: id ?? this.id,
+      subject: subject ?? this.subject,
+      room: room ?? this.room,
+      professor: professor ?? this.professor,
+      startMinute: startMinute ?? this.startMinute,
+      endMinute: endMinute ?? this.endMinute,
+      repeatDays: repeatDays ?? this.repeatDays,
+      icon: icon ?? this.icon,
+      color: color ?? this.color,
+      hasTopTape: hasTopTape ?? this.hasTopTape,
+      hasBottomTape: hasBottomTape ?? this.hasBottomTape,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+      suggestionId: suggestionId ?? this.suggestionId,
     );
   }
 }
 
+int? _parseClockMinute(String value) {
+  final match = RegExp(
+    r'^\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?\s*$',
+  ).firstMatch(value);
+  if (match == null) return null;
 
-double _parseHoursFrom6AM(String timeStr) {
-  try {
-    timeStr = timeStr.trim().toUpperCase();
-    bool isPM = timeStr.contains('PM');
-    String cleaned = timeStr.replaceAll('AM', '').replaceAll('PM', '').trim();
-    List<String> parts = cleaned.split(':');
-    if (parts.isEmpty) return 0.0;
-    int h = int.parse(parts[0]);
-    int m = parts.length > 1 ? int.parse(parts[1]) : 0;
+  final hour = int.tryParse(match.group(1) ?? '');
+  final minute = int.tryParse(match.group(2) ?? '0');
+  final period = match.group(3)?.toUpperCase();
+  if (hour == null || minute == null || minute < 0 || minute > 59) return null;
 
-    if (isPM && h != 12) h += 12;
-    if (!isPM && h == 12 && timeStr.contains('AM')) h = 0;
-
-    double hoursFromMidnight = h + (m / 60.0);
-    double from6AM = hoursFromMidnight - 6;
-    if (from6AM < 0) from6AM += 24;
-    return from6AM;
-  } catch (e) {
-    return 0.0;
+  var h = hour;
+  if (period != null) {
+    if (h < 1 || h > 12) return null;
+    if (period == 'PM' && h != 12) h += 12;
+    if (period == 'AM' && h == 12) h = 0;
+  } else if (h < 0 || h > 23) {
+    return null;
   }
+
+  return h * 60 + minute;
+}
+
+String _formatClassRange(int startMinute, int endMinute) {
+  return '${TimelineUtils.formatMinute(startMinute)} - ${TimelineUtils.formatMinute(endMinute)}';
+}
+
+List<int> _safeClassRepeatDays(List<int> repeatDays) {
+  final days = repeatDays.where((day) => day >= 1 && day <= 7).toSet().toList()
+    ..sort();
+  return days.isEmpty ? const [1] : days;
+}
+
+class _ClassTimelineRange {
+  final int startHour;
+  final int endHour;
+
+  const _ClassTimelineRange({required this.startHour, required this.endHour});
+
+  int get startMinute => startHour * 60;
+  int get endMinute => endHour * 60;
+  int get hourCount => (endHour - startHour).clamp(1, 24);
 }
 
 class OnboardingClassSetupWidget extends ConsumerStatefulWidget {
@@ -126,163 +158,258 @@ class _OnboardingClassSetupWidgetState
     const Color(0xFF8B5CF6), // Purple
     const Color(0xFFF43F5E), // Rose
   ];
-  int _colorIndex = 0;
-  bool _localExtractionTriggered = false;
+  String? _activeExtractionKey;
+  final Set<String> _extractionAttemptedKeys = <String>{};
 
   @override
   void initState() {
     super.initState();
   }
 
+  TimelineBlockDraft _timelineDraftFromClassBlock(ClassRoutineBlock block) {
+    return TimelineBlockDraft(
+      id: block.id,
+      section: 'classes',
+      title: block.subject,
+      startMinute: block.startMinute,
+      endMinute: block.endMinute,
+      repeatDays: _safeClassRepeatDays(block.repeatDays),
+      location: block.room.trim().isEmpty ? null : block.room.trim(),
+      blockType: TimelineBlockDraft.hardBlockKey,
+      source: 'ai_import',
+    );
+  }
+
+  ClassRoutineBlock _classBlockFromTimelineDraft(
+    TimelineBlockDraft block,
+    int index,
+  ) {
+    return ClassRoutineBlock(
+      id: block.id,
+      subject: block.title,
+      room: block.location ?? '',
+      startMinute: block.startMinute.clamp(0, 24 * 60 - 1),
+      endMinute: block.endMinute.clamp(1, 24 * 60),
+      repeatDays: _safeClassRepeatDays(block.repeatDays),
+      icon: Icons.school_rounded,
+      color: _cycleColors[index % _cycleColors.length],
+      hasTopTape: true,
+      hasBottomTape: true,
+    );
+  }
+
+  List<ClassRoutineBlock> _classBlocksFromTimelineDrafts(
+    List<TimelineBlockDraft> blocks,
+  ) {
+    return blocks
+        .asMap()
+        .entries
+        .map((entry) => _classBlockFromTimelineDraft(entry.value, entry.key))
+        .where((block) => block.subject.trim().isNotEmpty)
+        .where((block) => block.startMinute < block.endMinute)
+        .toList(growable: false)
+      ..sort((a, b) {
+        final dayCompare = (a.weekday ?? 1).compareTo(b.weekday ?? 1);
+        return dayCompare != 0
+            ? dayCompare
+            : a.startMinute.compareTo(b.startMinute);
+      });
+  }
+
+  TimelineBlockDraft _timelineDraftFromCandidate(
+    RoutineImportCandidateBlock candidate,
+  ) {
+    return TimelineBlockDraft(
+      id: candidate.id,
+      section: 'classes',
+      title: candidate.title,
+      startMinute: candidate.startMinute.clamp(0, 24 * 60 - 1),
+      endMinute: candidate.endMinute.clamp(1, 24 * 60),
+      repeatDays: _safeClassRepeatDays(candidate.repeatDays),
+      location: candidate.location,
+      blockType: TimelineBlockDraft.hardBlockKey,
+      source: 'ai_import',
+    );
+  }
+
+  String _pendingExtractionKey(PendingFutureImportDraft pending) {
+    final assetKey = pending.uploadedAssetR2Key?.trim().isNotEmpty == true
+        ? pending.uploadedAssetR2Key!.trim()
+        : pending.uploadedAssetId?.trim();
+    return '${pending.id}:${assetKey ?? pending.updatedAt.toIso8601String()}';
+  }
+
+  bool _hasAttemptedExtraction(PendingFutureImportDraft pending) {
+    final key = _pendingExtractionKey(pending);
+    return _activeExtractionKey == key ||
+        _extractionAttemptedKeys.contains(key);
+  }
+
+  void _scheduleClassSetupStateWork({
+    required PendingFutureImportDraft? pending,
+    required bool uploadBusy,
+    required bool extracting,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _syncLocalTimelineFromPendingParsedBlocks();
+      _triggerExtractionFromPendingIfNeeded(
+        pending: pending,
+        uploadBusy: uploadBusy,
+        extracting: extracting,
+      );
+    });
+  }
+
+  void _syncLocalTimelineFromPendingParsedBlocks() {
+    final localBlocks = ref.read(onboardingClassTimelineProvider);
+    final pending = ref
+        .read(mockOnboardingProvider)
+        .draft
+        .baseTimeline
+        .latestImportForSection(onboardingSectionClasses);
+    if (localBlocks.isNotEmpty ||
+        pending == null ||
+        pending.parsedBlocks.isEmpty) {
+      return;
+    }
+
+    final blocks = _classBlocksFromTimelineDrafts(pending.parsedBlocks);
+
+    if (blocks.isNotEmpty) {
+      ref.read(onboardingClassTimelineProvider.notifier).state = blocks;
+    }
+  }
+
   void _syncLocalBlocksToPending() {
     final candidates = ref.read(onboardingClassTimelineProvider);
     final draft = ref.read(mockOnboardingProvider).draft;
-    final pending = draft.baseTimeline.latestImportForSection(onboardingSectionClasses);
+    final pending = draft.baseTimeline.latestImportForSection(
+      onboardingSectionClasses,
+    );
     if (pending == null) return;
 
-    final blocks = candidates.map((c) => TimelineBlockDraft(
-      id: c.id,
-      section: 'classes',
-      title: c.subject,
-      startMinute: c.startMinute,
-      endMinute: c.endMinute,
-      repeatDays: c.weekday != null ? [c.weekday!] : [1],
-      location: c.room.isNotEmpty ? c.room : null,
-      blockType: 'hard_block',
-      source: 'ai_import',
-    )).toList();
+    final blocks = candidates.map(_timelineDraftFromClassBlock).toList();
 
     updateBaseTimelineDraft(
       ref,
       widget.stepIndex,
-      (base) => base.upsertPendingImport(pending.copyWith(parsedBlocks: blocks)),
+      (base) => base.upsertPendingImport(
+        pending.copyWith(
+          updatedAt: DateTime.now(),
+          status: blocks.isEmpty
+              ? PendingFutureImportDraft.errorStatus
+              : PendingFutureImportDraft.parsedStatus,
+          parsedBlocks: blocks,
+          userEdited: true,
+          clearErrorMessage: blocks.isNotEmpty,
+        ),
+      ),
     );
   }
 
-  void _checkAndRunExtraction(BuildContext context) async {
-    if (_localExtractionTriggered) return;
+  void _triggerExtractionFromPendingIfNeeded({
+    required PendingFutureImportDraft? pending,
+    required bool uploadBusy,
+    required bool extracting,
+  }) {
+    if (pending == null ||
+        uploadBusy ||
+        extracting ||
+        !pending.hasUploadedAssetReference ||
+        pending.parsedBlocks.isNotEmpty) {
+      return;
+    }
+
+    final key = _pendingExtractionKey(pending);
+    if (_activeExtractionKey == key || _extractionAttemptedKeys.contains(key)) {
+      return;
+    }
+
+    _runExtractionForPending(key);
+  }
+
+  Future<void> _runExtractionForPending(String extractionKey) async {
+    _extractionAttemptedKeys.add(extractionKey);
+    setState(() => _activeExtractionKey = extractionKey);
 
     final draft = ref.read(mockOnboardingProvider).draft;
-    final pending = draft.baseTimeline.latestImportForSection(onboardingSectionClasses);
-    final uploadState = ref.read(uploadControllerProvider);
-    final purpose = onboardingUploadPurposeForBaseTimelineSection(onboardingSectionClasses);
-    final applies = purpose != null &&
-        uploadState.purpose == purpose &&
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding;
+    final aiController = ref.read(routineImportAiControllerProvider.notifier);
+    final reviewDraft = _extractionService.buildReviewDraft(
+      uid: draft.uid,
+      source: RoutineImportReviewSource.classes,
+      onboardingDraft: draft,
+    );
 
-    // Wait until upload finishes
-    if (applies && uploadState.isBusy) return;
+    final result = await aiController.runExtraction(reviewDraft);
+    if (!mounted) return;
 
-    if (pending != null &&
-        pending.hasUploadedAssetReference &&
-        pending.parsedBlocks.isEmpty) {
-      _localExtractionTriggered = true;
-
-      // Extract
-      final aiController = ref.read(routineImportAiControllerProvider.notifier);
-      final reviewDraft = _extractionService.buildReviewDraft(
-        uid: draft.uid,
-        source: RoutineImportReviewSource.classes,
-        onboardingDraft: draft,
+    if (result != null && result.candidates.isNotEmpty) {
+      final parsedBlocks = result.candidates
+          .map(_timelineDraftFromCandidate)
+          .where((block) => block.title.trim().isNotEmpty)
+          .where((block) => block.startMinute < block.endMinute)
+          .toList(growable: false);
+      _updatePendingParsedBlocks(parsedBlocks);
+      ref.read(onboardingClassTimelineProvider.notifier).state = parsedBlocks
+          .asMap()
+          .entries
+          .map((entry) => _classBlockFromTimelineDraft(entry.value, entry.key))
+          .toList(growable: false);
+    } else {
+      _updatePendingParsedBlocks(
+        const [],
+        errorMessage: 'We couldn’t detect classes clearly.',
       );
-
-      final result = await aiController.runExtraction(reviewDraft);
-
-      if (!mounted) return;
-
-      if (result != null && result.candidates.isNotEmpty) {
-        _populateTimelineFromCandidates(result.candidates);
-        _syncLocalBlocksToPending();
-      } else {
-        // Zero blocks or error
-        _updatePendingBlocks([]);
-      }
-      _localExtractionTriggered = false;
-    } else if (pending != null && pending.parsedBlocks.isNotEmpty) {
-       // If returning to screen and blocks exist, ensure we populate if empty
-       final localBlocks = ref.read(onboardingClassTimelineProvider);
-       if (localBlocks.isEmpty && !_localExtractionTriggered) {
-          final reviewDraft = _extractionService.buildReviewDraft(
-            uid: draft.uid,
-            source: RoutineImportReviewSource.classes,
-            onboardingDraft: draft,
-          );
-          _populateTimelineFromCandidates(reviewDraft.candidateBlocks);
-       }
     }
+
+    if (!mounted) return;
+    setState(() => _activeExtractionKey = null);
   }
 
-  void _updatePendingBlocks(List<RoutineImportCandidateBlock> candidates) {
+  void _updatePendingParsedBlocks(
+    List<TimelineBlockDraft> blocks, {
+    String? errorMessage,
+  }) {
     final draft = ref.read(mockOnboardingProvider).draft;
-    final pending = draft.baseTimeline.latestImportForSection(onboardingSectionClasses);
+    final pending = draft.baseTimeline.latestImportForSection(
+      onboardingSectionClasses,
+    );
     if (pending == null) return;
-
-    final blocks = candidates.map((c) => TimelineBlockDraft(
-      id: c.id,
-      section: 'classes',
-      title: c.title,
-      startMinute: c.startMinute,
-      endMinute: c.endMinute,
-      repeatDays: c.repeatDays,
-      blockType: c.blockType,
-      source: 'ai_import',
-    )).toList();
 
     updateBaseTimelineDraft(
       ref,
       widget.stepIndex,
-      (base) => base.upsertPendingImport(pending.copyWith(parsedBlocks: blocks)),
+      (base) => base.upsertPendingImport(
+        pending.copyWith(
+          updatedAt: DateTime.now(),
+          status: blocks.isEmpty
+              ? PendingFutureImportDraft.errorStatus
+              : PendingFutureImportDraft.parsedStatus,
+          parsedBlocks: blocks,
+          errorMessage: errorMessage,
+          clearErrorMessage: errorMessage == null,
+        ),
+      ),
     );
-  }
-
-  void _populateTimelineFromCandidates(List<RoutineImportCandidateBlock> candidates) {
-    final Map<int, List<ClassRoutineBlock>> weekly = {
-      for (int i = 0; i < 7; i++) i: <ClassRoutineBlock>[],
-    };
-
-    for (final candidate in candidates) {
-      for (final day in candidate.repeatDays) {
-        final dayIndex = (day - 1).clamp(0, 6);
-        final startHours = ((candidate.startMinute / 60.0) - 6).clamp(0.0, 18.0).toDouble();
-        final endHours = ((candidate.endMinute / 60.0) - 6).clamp(0.0, 18.0).toDouble();
-        final duration = (endHours - startHours).clamp(0.5, 18.0).toDouble();
-
-        weekly[dayIndex]!.add(
-          ClassRoutineBlock(
-            id: 'class_${dayIndex}_${candidate.id}',
-            subject: candidate.title,
-            room: candidate.location ?? '',
-            start: startHours,
-            duration: duration,
-            icon: Icons.school_rounded,
-            color: _cycleColors[_colorIndex % _cycleColors.length],
-            hasTopTape: true,
-            hasBottomTape: true,
-            weekday: day,
-          ),
-        );
-        _colorIndex++;
-      }
-    }
-
-    final flatList = <ClassRoutineBlock>[];
-    for (int i = 0; i < 7; i++) {
-      weekly[i]!.sort((a, b) => a.start.compareTo(b.start));
-      flatList.addAll(weekly[i]!);
-    }
-
-    ref.read(onboardingClassTimelineProvider.notifier).state = flatList;
   }
 
   Future<void> _startUpload(BuildContext context) async {
-    final purpose = onboardingUploadPurposeForBaseTimelineSection(onboardingSectionClasses);
+    final purpose = onboardingUploadPurposeForBaseTimelineSection(
+      onboardingSectionClasses,
+    );
     if (purpose == null) return;
+
+    setState(() => _activeExtractionKey = null);
+    ref.read(onboardingClassTimelineProvider.notifier).state = const [];
 
     final draft = ref.read(mockOnboardingProvider).draft;
     final uid = ref.read(authProvider).user?.uid ?? draft.uid;
     final now = DateTime.now();
-    final existing = draft.baseTimeline.latestImportForSection(onboardingSectionClasses);
-    
+    final existing = draft.baseTimeline.latestImportForSection(
+      onboardingSectionClasses,
+    );
+
     final seed = PendingFutureImportDraft(
       id: onboardingImportId(onboardingSectionClasses, 'photo_upload'),
       section: onboardingSectionClasses,
@@ -302,11 +429,13 @@ class _OnboardingClassSetupWidgetState
       (base) => base.upsertPendingImport(seed),
     );
 
-    final asset = await ref.read(uploadControllerProvider.notifier).startUpload(
-      uid: uid,
-      purpose: purpose,
-      sourceFeature: OnboardingDraft.sourceOnboarding,
-    );
+    final asset = await ref
+        .read(uploadControllerProvider.notifier)
+        .startUpload(
+          uid: uid,
+          purpose: purpose,
+          sourceFeature: OnboardingDraft.sourceOnboarding,
+        );
 
     if (!mounted) return;
     final state = ref.read(uploadControllerProvider);
@@ -317,12 +446,15 @@ class _OnboardingClassSetupWidgetState
           : PendingFutureImportDraft.pendingStatus,
       uploadedAssetId: asset?.assetId ?? state.asset?.assetId,
       uploadedAssetR2Key: asset?.r2Key ?? state.asset?.r2Key,
-      uploadedAssetStatus: asset?.status.name ??
+      uploadedAssetStatus:
+          asset?.status.name ??
           state.asset?.status.name ??
           (state.status == UploadFlowStatus.failed
               ? UploadedAssetStatus.failed.name
               : UploadedAssetStatus.uploaded.name),
-      errorMessage: state.status == UploadFlowStatus.failed ? state.errorMessage : null,
+      errorMessage: state.status == UploadFlowStatus.failed
+          ? state.errorMessage
+          : null,
       clearErrorMessage: state.status != UploadFlowStatus.failed,
     );
 
@@ -336,75 +468,175 @@ class _OnboardingClassSetupWidgetState
   @override
   Widget build(BuildContext context) {
     ref.listen(uploadControllerProvider, (previous, next) {
-      _checkAndRunExtraction(context);
+      final draft = ref.read(mockOnboardingProvider).draft;
+      final pending = draft.baseTimeline.latestImportForSection(
+        onboardingSectionClasses,
+      );
+      _triggerExtractionFromPendingIfNeeded(
+        pending: pending,
+        uploadBusy: next.isBusy,
+        extracting: ref.read(routineImportAiControllerProvider).isExtracting,
+      );
     });
 
     final draft = ref.watch(mockOnboardingProvider).draft;
-    final pending = draft.baseTimeline.latestImportForSection(onboardingSectionClasses);
+    final pending = draft.baseTimeline.latestImportForSection(
+      onboardingSectionClasses,
+    );
     final uploadState = ref.watch(uploadControllerProvider);
     final aiState = ref.watch(routineImportAiControllerProvider);
+    final localBlocks = ref.watch(onboardingClassTimelineProvider);
 
-    final purpose = onboardingUploadPurposeForBaseTimelineSection(onboardingSectionClasses);
-    final applies = purpose != null &&
+    final purpose = onboardingUploadPurposeForBaseTimelineSection(
+      onboardingSectionClasses,
+    );
+    final applies =
+        purpose != null &&
         uploadState.purpose == purpose &&
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding;
     final busy = applies && uploadState.isBusy;
     final extracting = aiState.isExtracting;
+    final hasParsedBlocks = pending?.parsedBlocks.isNotEmpty == true;
+    final hasUploadedAsset = pending?.hasUploadedAssetReference == true;
+    final attemptedExtraction =
+        pending != null && _hasAttemptedExtraction(pending);
 
-    if (busy || extracting) {
-      return _buildCenteredState(_buildLoadingState(busy ? 'Uploading photo...' : 'AI is reading your timetable…'));
+    _scheduleClassSetupStateWork(
+      pending: pending,
+      uploadBusy: busy,
+      extracting: extracting,
+    );
+
+    if (busy || extracting || _activeExtractionKey != null) {
+      return _buildCenteredState(
+        _buildLoadingState(
+          busy ? 'Uploading photo...' : 'AI is reading your timetable…',
+        ),
+      );
     }
 
-    if (pending?.hasUploadedAssetReference == true && pending!.parsedBlocks.isNotEmpty) {
-       return _buildTimelineState();
+    if (hasParsedBlocks || localBlocks.isNotEmpty) {
+      final visibleBlocks = localBlocks.isNotEmpty
+          ? localBlocks
+          : _classBlocksFromTimelineDrafts(pending?.parsedBlocks ?? const []);
+      return _buildTimelineState(visibleBlocks);
     }
 
-    if (pending?.hasUploadedAssetReference == true && pending!.parsedBlocks.isEmpty && !extracting && !busy) {
-        return _buildCenteredState(_buildZeroBlocksState());
+    if (hasUploadedAsset && !attemptedExtraction) {
+      return _buildCenteredState(
+        _buildLoadingState('AI is reading your timetable…'),
+      );
+    }
+
+    if (hasUploadedAsset && attemptedExtraction) {
+      return _buildCenteredState(_buildZeroBlocksState());
     }
 
     return _buildCenteredState(_buildUploadState());
   }
 
   Widget _buildCenteredState(Widget child) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'CLASSES & JOB',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.brandAccent,
-                  letterSpacing: 1.5,
+    return Container(
+      color: const Color(0xFFFEFCE8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'CLASS SETUP',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFFD97706),
+                    letterSpacing: 1.5,
+                  ),
                 ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Set the fixed responsibilities Optivus must protect.',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: child,
+                const SizedBox(height: 16),
+                _buildHeaderPill(),
+              ],
             ),
           ),
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: child,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderPill() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.5,
         ),
-      ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: Row(
+                children:
+                    [
+                          const Color(0xFF93C5FD),
+                          const Color(0xFF60A5FA),
+                          const Color(0xFF3B82F6),
+                        ]
+                        .map(
+                          (color) => Expanded(
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    color.withValues(alpha: 0.1),
+                                    color.withValues(alpha: 0.35),
+                                    color.withValues(alpha: 0.1),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+              ),
+            ),
+            BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: const Center(
+                child: Text(
+                  'Set Your Weekly Class Schedule',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -419,7 +651,10 @@ class _OnboardingClassSetupWidgetState
               const SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2.5, color: OptivusColors.aquaAccent),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: OptivusColors.aquaAccent,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -440,7 +675,7 @@ class _OnboardingClassSetupWidgetState
   }
 
   Widget _buildZeroBlocksState() {
-     return OnboardingGlassCard(
+    return OnboardingGlassCard(
       tint: OptivusColors.warning.withValues(alpha: 0.07),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,7 +717,10 @@ class _OnboardingClassSetupWidgetState
         children: [
           const Row(
             children: [
-              Icon(Icons.document_scanner_rounded, color: OptivusColors.aquaAccent),
+              Icon(
+                Icons.document_scanner_rounded,
+                color: OptivusColors.aquaAccent,
+              ),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -520,18 +758,34 @@ class _OnboardingClassSetupWidgetState
     );
   }
 
-  Widget _buildTimelineState() {
-    final allBlocks = ref.watch(onboardingClassTimelineProvider);
-    final dayItems = allBlocks.where((b) => b.weekday == _day + 1).toList();
+  Widget _buildTimelineState(List<ClassRoutineBlock> allBlocks) {
+    final dayItems =
+        allBlocks
+            .where((b) => b.repeatDays.contains(_day + 1))
+            .toList(growable: false)
+          ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+    final range = _timelineRangeFor(allBlocks);
+    const topPadding = 18.0;
+    const bottomPadding = 48.0;
+    final maxCardBottom = dayItems.fold<double>(0, (maxBottom, item) {
+      final top =
+          topPadding +
+          ((item.startMinute - range.startMinute) / 60) * kHourHeight;
+      final height = ((item.endMinute - item.startMinute) / 60) * kHourHeight;
+      final bottom = top + (height < 64 ? 64 : height);
+      return bottom > maxBottom ? bottom : maxBottom;
+    });
+    final timelineHeight = [
+      topPadding + range.hourCount * kHourHeight + bottomPadding,
+      maxCardBottom + bottomPadding,
+    ].reduce((a, b) => a > b ? a : b);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-          decoration: const BoxDecoration(
-            color: Color(0xFFFEFCE8),
-          ),
+          decoration: const BoxDecoration(color: Color(0xFFFEFCE8)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -545,62 +799,7 @@ class _OnboardingClassSetupWidgetState
                 ),
               ),
               const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    )
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Row(
-                          children: [
-                            const Color(0xFF93C5FD),
-                            const Color(0xFF60A5FA),
-                            const Color(0xFF3B82F6),
-                          ].map((color) => Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    color.withValues(alpha: 0.1),
-                                    color.withValues(alpha: 0.35),
-                                    color.withValues(alpha: 0.1),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          )).toList(),
-                        ),
-                      ),
-                      BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                        child: const Center(
-                          child: Text(
-                            'Set Your Weekly Class Schedule',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF64748B),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              _buildHeaderPill(),
               const SizedBox(height: 24),
               const Text(
                 'Your Fixed Classes.',
@@ -631,7 +830,15 @@ class _OnboardingClassSetupWidgetState
             scrollDirection: Axis.horizontal,
             child: Row(
               children: List.generate(7, (index) {
-                final dayName = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'][index];
+                final dayName = [
+                  'MON',
+                  'TUE',
+                  'WED',
+                  'THU',
+                  'FRI',
+                  'SAT',
+                  'SUN',
+                ][index];
                 final isSelected = _day == index;
                 return GestureDetector(
                   onTap: () => setState(() => _day = index),
@@ -642,14 +849,20 @@ class _OnboardingClassSetupWidgetState
                       height: isSelected ? 44 : 36,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isSelected ? const Color(0xFF378ADD) : Colors.white,
+                        color: isSelected
+                            ? const Color(0xFF378ADD)
+                            : Colors.white,
                         border: Border.all(
-                          color: isSelected ? Colors.white : const Color(0xFFE2E8F0),
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFFE2E8F0),
                           width: isSelected ? 2 : 1,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: isSelected ? 0.15 : 0.05),
+                            color: Colors.black.withValues(
+                              alpha: isSelected ? 0.15 : 0.05,
+                            ),
                             blurRadius: isSelected ? 8 : 4,
                             offset: Offset(0, isSelected ? 4 : 2),
                           ),
@@ -661,7 +874,9 @@ class _OnboardingClassSetupWidgetState
                         style: TextStyle(
                           fontSize: isSelected ? 12 : 10,
                           fontWeight: FontWeight.w800,
-                          color: isSelected ? Colors.white : const Color(0xFF64748B),
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF64748B),
                         ),
                       ),
                     ),
@@ -676,14 +891,24 @@ class _OnboardingClassSetupWidgetState
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.4),
-              border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.8), width: 1.5)),
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  width: 1.5,
+                ),
+              ),
             ),
             child: ShaderMask(
               shaderCallback: (Rect bounds) {
                 return const LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.white, Colors.white, Colors.transparent],
+                  colors: [
+                    Colors.transparent,
+                    Colors.white,
+                    Colors.white,
+                    Colors.transparent,
+                  ],
                   stops: [0.0, 0.05, 0.95, 1.0],
                 ).createShader(bounds);
               },
@@ -692,7 +917,7 @@ class _OnboardingClassSetupWidgetState
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.only(bottom: 120),
                 child: SizedBox(
-                  height: 24 * kHourHeight,
+                  height: timelineHeight,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
@@ -705,7 +930,10 @@ class _OnboardingClassSetupWidgetState
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              width: 1.2,
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.04),
@@ -716,26 +944,45 @@ class _OnboardingClassSetupWidgetState
                           ),
                         ),
                       ),
-                      ...List.generate(24, (i) {
-                        final hour = (i + 6) % 24;
+                      ...List.generate(range.hourCount + 1, (i) {
+                        final hour = (range.startHour + i) % 24;
                         final ampm = hour < 12 ? 'AM' : 'PM';
-                        final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+                        final displayHour = hour == 0
+                            ? 12
+                            : (hour > 12 ? hour - 12 : hour);
                         final label = "$displayHour $ampm";
                         return Positioned(
-                          top: i * kHourHeight - 10,
+                          top: topPadding + i * kHourHeight - 10,
                           left: 0,
                           width: 44,
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF64748B))),
+                              Text(
+                                label,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF64748B),
+                                ),
+                              ),
                               const SizedBox(width: 6),
-                              Container(width: 4, height: 1.5, color: const Color(0xFFCBD5E1)),
+                              Container(
+                                width: 4,
+                                height: 1.5,
+                                color: const Color(0xFFCBD5E1),
+                              ),
                             ],
                           ),
                         );
                       }),
-                      ...dayItems.map((item) => _buildColoredBlock(item)),
+                      ...dayItems.map(
+                        (item) => _buildColoredBlock(
+                          item,
+                          rangeStartMinute: range.startMinute,
+                          topPadding: topPadding,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -747,10 +994,35 @@ class _OnboardingClassSetupWidgetState
     );
   }
 
-  Widget _buildColoredBlock(ClassRoutineBlock item) {
-    final top = item.start * kHourHeight;
-    final minHeight = 64.0;
-    final calculatedHeight = item.duration * kHourHeight;
+  _ClassTimelineRange _timelineRangeFor(List<ClassRoutineBlock> blocks) {
+    var startHour = 6;
+    var endHour = 23;
+    if (blocks.isNotEmpty) {
+      final minStart = blocks
+          .map((block) => block.startMinute)
+          .reduce((a, b) => a < b ? a : b);
+      final maxEnd = blocks
+          .map((block) => block.endMinute)
+          .reduce((a, b) => a > b ? a : b);
+      if (minStart < 6 * 60) {
+        startHour = (minStart ~/ 60).clamp(0, 23);
+      }
+      if (maxEnd > 23 * 60) {
+        endHour = ((maxEnd + 59) ~/ 60).clamp(startHour + 1, 24);
+      }
+    }
+    return _ClassTimelineRange(startHour: startHour, endHour: endHour);
+  }
+
+  Widget _buildColoredBlock(
+    ClassRoutineBlock item, {
+    required int rangeStartMinute,
+    required double topPadding,
+  }) {
+    final top =
+        topPadding + ((item.startMinute - rangeStartMinute) / 60) * kHourHeight;
+    final minHeight = 72.0;
+    final calculatedHeight = (item.durationMinutes / 60) * kHourHeight;
     final height = calculatedHeight < minHeight ? minHeight : calculatedHeight;
 
     final baseColor = item.color ?? OptivusColors.aquaAccent;
@@ -773,7 +1045,10 @@ class _OnboardingClassSetupWidgetState
                 baseColor.withValues(alpha: 0.05),
               ],
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.9),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
                 color: baseColor.withValues(alpha: 0.15),
@@ -786,57 +1061,93 @@ class _OnboardingClassSetupWidgetState
             borderRadius: BorderRadius.circular(24),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.school_rounded, color: baseColor, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item.subject,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: Color(0xFF0F111A)),
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.school_rounded,
+                            color: baseColor,
+                            size: 18,
                           ),
-                        ),
-                        const Icon(Icons.more_vert_rounded, color: Color(0xFF64748B), size: 18),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            borderRadius: BorderRadius.circular(8),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.subject,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0F111A),
+                              ),
+                            ),
                           ),
-                          child: Text(
-                            '${item.displayStartTime} - ${item.displayEndTime}',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF334155)),
+                          const Icon(
+                            Icons.more_vert_rounded,
+                            color: Color(0xFF64748B),
+                            size: 18,
                           ),
-                        ),
-                        if (item.room.isNotEmpty)
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.6),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              item.room,
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF334155)),
+                              _formatClassRange(
+                                item.startMinute,
+                                item.endMinute,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF334155),
+                              ),
                             ),
                           ),
-                      ],
-                    ),
-                  ],
+                          if (item.room.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                item.room,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF334155),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -847,12 +1158,19 @@ class _OnboardingClassSetupWidgetState
   }
 
   Future<void> _showEditDialog(ClassRoutineBlock item) async {
-    TextEditingController subjectCtrl = TextEditingController(text: item.subject);
-    TextEditingController startTimeCtrl = TextEditingController(text: item.displayStartTime);
-    TextEditingController endTimeCtrl = TextEditingController(text: item.displayEndTime);
+    TextEditingController subjectCtrl = TextEditingController(
+      text: item.subject,
+    );
+    TextEditingController startTimeCtrl = TextEditingController(
+      text: item.displayStartTime,
+    );
+    TextEditingController endTimeCtrl = TextEditingController(
+      text: item.displayEndTime,
+    );
     TextEditingController roomCtrl = TextEditingController(text: item.room);
     int selectedDay = item.weekday ?? _day + 1;
     final formKey = GlobalKey<FormState>();
+    String? sheetError;
 
     await showModalBottomSheet(
       context: context,
@@ -862,159 +1180,325 @@ class _OnboardingClassSetupWidgetState
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+              ),
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.95),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
                   border: Border.all(color: Colors.white, width: 1.5),
                   boxShadow: [
-                    BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 20, offset: const Offset(0, -4)),
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                    ),
                   ],
                 ),
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: Form(
-                      key: formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Edit Class', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Color(0xFF0F111A))),
-                          const SizedBox(height: 20),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: List.generate(7, (index) {
-                                final dayName = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index];
-                                final isSelected = selectedDay == index + 1;
-                                return GestureDetector(
-                                  onTap: () => setSheetState(() => selectedDay = index + 1),
-                                  child: Container(
-                                    margin: const EdgeInsets.only(right: 8),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? OptivusColors.aquaAccent : Colors.white.withValues(alpha: 0.5),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: isSelected ? OptivusColors.aquaAccent : const Color(0xFFE2E8F0)),
+                    child: SingleChildScrollView(
+                      child: Form(
+                        key: formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Edit Class',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF0F111A),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            if (sheetError != null) ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: OptivusColors.danger.withValues(
+                                    alpha: 0.08,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: OptivusColors.danger.withValues(
+                                      alpha: 0.22,
                                     ),
-                                    child: Text(
-                                      dayName,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w800,
-                                        color: isSelected ? Colors.white : const Color(0xFF475569),
+                                  ),
+                                ),
+                                child: Text(
+                                  sheetError!,
+                                  style: const TextStyle(
+                                    color: OptivusColors.danger,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: List.generate(7, (index) {
+                                  final dayName = [
+                                    'Mon',
+                                    'Tue',
+                                    'Wed',
+                                    'Thu',
+                                    'Fri',
+                                    'Sat',
+                                    'Sun',
+                                  ][index];
+                                  final isSelected = selectedDay == index + 1;
+                                  return GestureDetector(
+                                    onTap: () => setSheetState(
+                                      () => selectedDay = index + 1,
+                                    ),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? OptivusColors.aquaAccent
+                                            : Colors.white.withValues(
+                                                alpha: 0.5,
+                                              ),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? OptivusColors.aquaAccent
+                                              : const Color(0xFFE2E8F0),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        dayName,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : const Color(0xFF475569),
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              }),
+                                  );
+                                }),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: subjectCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Subject',
-                              filled: true,
-                              fillColor: Colors.white,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                            ),
-                            validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: startTimeCtrl,
-                                  decoration: InputDecoration(
-                                    labelText: 'Start (e.g. 9:00 AM)',
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                                  ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: subjectCtrl,
+                              decoration: InputDecoration(
+                                labelText: 'Subject',
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: endTimeCtrl,
-                                  decoration: InputDecoration(
-                                    labelText: 'End (e.g. 10:00 AM)',
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Required'
+                                  : null,
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: startTimeCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: 'Start (e.g. 9:00 AM)',
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                    validator: (v) =>
+                                        v == null || v.trim().isEmpty
+                                        ? 'Required'
+                                        : null,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: roomCtrl,
-                            decoration: InputDecoration(
-                              labelText: 'Location / Room (Optional)',
-                              filled: true,
-                              fillColor: Colors.white,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              TextButton.icon(
-                                onPressed: () {
-                                  final currentList = ref.read(onboardingClassTimelineProvider);
-                                  ref.read(onboardingClassTimelineProvider.notifier).state = currentList.where((b) => b.id != item.id).toList();
-                                  _syncLocalBlocksToPending();
-                                  Navigator.pop(ctx);
-                                },
-                                icon: const Icon(Icons.delete_outline_rounded, color: OptivusColors.danger, size: 20),
-                                label: const Text('Delete', style: TextStyle(color: OptivusColors.danger, fontWeight: FontWeight.w800, fontSize: 15)),
-                              ),
-                              const Spacer(),
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: OptivusColors.aquaAccent,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: endTimeCtrl,
+                                    decoration: InputDecoration(
+                                      labelText: 'End (e.g. 10:00 AM)',
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                    validator: (v) =>
+                                        v == null || v.trim().isEmpty
+                                        ? 'Required'
+                                        : null,
+                                  ),
                                 ),
-                                onPressed: () {
-                                  if (!formKey.currentState!.validate()) return;
-                                  item.subject = subjectCtrl.text.trim();
-                                  item.room = roomCtrl.text.trim();
-                                  item.weekday = selectedDay;
-                                  
-                                  double parsedStart = _parseHoursFrom6AM(startTimeCtrl.text);
-                                  double parsedEnd = _parseHoursFrom6AM(endTimeCtrl.text);
-                                  if (parsedEnd <= parsedStart && parsedEnd != 0.0) parsedEnd += 24;
-                                  item.start = parsedStart;
-                                  item.duration = parsedEnd - parsedStart > 0.5 ? parsedEnd - parsedStart : 0.5;
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: roomCtrl,
+                              decoration: InputDecoration(
+                                labelText: 'Location / Room (Optional)',
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Row(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () {
+                                    final currentList = ref.read(
+                                      onboardingClassTimelineProvider,
+                                    );
+                                    ref
+                                        .read(
+                                          onboardingClassTimelineProvider
+                                              .notifier,
+                                        )
+                                        .state = currentList
+                                        .where((b) => b.id != item.id)
+                                        .toList(growable: false);
+                                    _syncLocalBlocksToPending();
+                                    Navigator.pop(ctx);
+                                  },
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: OptivusColors.danger,
+                                    size: 20,
+                                  ),
+                                  label: const Text(
+                                    'Delete',
+                                    style: TextStyle(
+                                      color: OptivusColors.danger,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                ),
+                                const Spacer(),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: OptivusColors.aquaAccent,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    if (!formKey.currentState!.validate()) {
+                                      return;
+                                    }
+                                    final subject = subjectCtrl.text.trim();
+                                    final parsedStart = _parseClockMinute(
+                                      startTimeCtrl.text,
+                                    );
+                                    final parsedEnd = _parseClockMinute(
+                                      endTimeCtrl.text,
+                                    );
+                                    String? error;
+                                    if (subject.isEmpty) {
+                                      error = 'Subject is required.';
+                                    } else if (parsedStart == null) {
+                                      error =
+                                          'Use a valid start time like 9:00 AM.';
+                                    } else if (parsedEnd == null) {
+                                      error =
+                                          'Use a valid end time like 10:00 AM.';
+                                    } else if (parsedEnd <= parsedStart) {
+                                      error =
+                                          'Classes must end after they start on the same day.';
+                                    } else if (parsedEnd - parsedStart >
+                                        8 * 60) {
+                                      error =
+                                          'That class duration looks too long. Use a normal class window.';
+                                    }
 
-                                  final currentList = ref.read(onboardingClassTimelineProvider);
-                                  ref.read(onboardingClassTimelineProvider.notifier).state = [...currentList];
-                                  _syncLocalBlocksToPending();
-                                  Navigator.pop(ctx);
-                                },
-                                child: const Text('Save Changes', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
-                              ),
-                            ],
-                          ),
-                        ],
+                                    if (error != null) {
+                                      setSheetState(() => sheetError = error);
+                                      return;
+                                    }
+
+                                    final updated = item.copyWith(
+                                      subject: subject,
+                                      room: roomCtrl.text.trim(),
+                                      startMinute: parsedStart,
+                                      endMinute: parsedEnd,
+                                      repeatDays: [selectedDay],
+                                    );
+                                    final currentList = ref.read(
+                                      onboardingClassTimelineProvider,
+                                    );
+                                    ref
+                                        .read(
+                                          onboardingClassTimelineProvider
+                                              .notifier,
+                                        )
+                                        .state = [
+                                      for (final block in currentList)
+                                        if (block.id == item.id)
+                                          updated
+                                        else
+                                          block,
+                                    ];
+                                    _syncLocalBlocksToPending();
+                                    Navigator.pop(ctx);
+                                  },
+                                  child: const Text(
+                                    'Save Changes',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             );
-          }
+          },
         );
-      }
+      },
     );
   }
 }

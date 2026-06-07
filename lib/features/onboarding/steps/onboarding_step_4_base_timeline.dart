@@ -25,7 +25,7 @@ class OnboardingStep4 extends ConsumerWidget {
     final classBlocks = base.confirmedBlocksForSection('classes');
     final workBlocks = base.confirmedBlocksForSection('job_work_business');
 
-    if (base.classJobSetupStep == 1 || base.classJobSetupStep == 2) {
+    if (classesRequired && base.classJobSetupStep <= 2) {
       return const OnboardingClassSetupWidget(
         stepIndex: onboardingClassJobStepIndex,
       );
