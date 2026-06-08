@@ -44,6 +44,18 @@ class _TimelineRange {
   int get hourCount => (endHour - startHour).clamp(1, 24);
 }
 
+class _VisualTimelineBlock {
+  final ClassRoutineBlock block;
+  final int lane;
+  final int order;
+
+  const _VisualTimelineBlock({
+    required this.block,
+    required this.lane,
+    required this.order,
+  });
+}
+
 // ---------------------------------------------------------------------------
 //  OnboardingStep4Unified — the single-screen Classes & Job widget
 // ---------------------------------------------------------------------------
@@ -62,6 +74,9 @@ class _OnboardingStep4UnifiedState
   static const _kLeftOffset = 64.0;
   static const _kMinTimelineAreaHeight = 320.0;
   static const _kTimelineBottomPadding = 240.0;
+  static const _kMinBlockHeight = 56.0;
+  static const _kOverlapLaneOffset = 14.0;
+  static const _kMaxOverlapLane = 2;
 
   final List<_PhotoSlot> _photos = [];
   bool _isUploading = false;
@@ -70,6 +85,7 @@ class _OnboardingStep4UnifiedState
   String? _timelineError;
   int _day = 0; // 0=Mon … 6=Sun
   bool _didInitFromDraft = false;
+  String? _frontBlockId;
 
   // ---- Role helpers ----
   String? get _role => ref.read(mockOnboardingProvider).draft.lifeRole.lifeRole;
@@ -228,6 +244,89 @@ class _OnboardingStep4UnifiedState
     required double topPadding,
   }) {
     return topPadding + (minuteOfDay - visibleStartMinute) * _kPixelsPerMinute;
+  }
+
+  int _compareBlocksByTime(ClassRoutineBlock a, ClassRoutineBlock b) {
+    final startCompare = a.startMinute.compareTo(b.startMinute);
+    if (startCompare != 0) return startCompare;
+    final endCompare = a.endMinute.compareTo(b.endMinute);
+    if (endCompare != 0) return endCompare;
+    return a.subject.compareTo(b.subject);
+  }
+
+  bool _blocksOverlap(ClassRoutineBlock a, ClassRoutineBlock b) {
+    return a.startMinute < b.endMinute && a.endMinute > b.startMinute;
+  }
+
+  double _blockDurationHeight(ClassRoutineBlock item) {
+    final durationMinutes = (item.endMinute - item.startMinute)
+        .clamp(1, 24 * 60)
+        .toInt();
+    return durationMinutes * _kPixelsPerMinute;
+  }
+
+  double _blockVisualHeight(ClassRoutineBlock item) {
+    final exactHeight = _blockDurationHeight(item);
+    return exactHeight < _kMinBlockHeight ? _kMinBlockHeight : exactHeight;
+  }
+
+  List<_VisualTimelineBlock> _visualBlocksFor(
+    List<ClassRoutineBlock> dayItems,
+  ) {
+    final sorted = [...dayItems]..sort(_compareBlocksByTime);
+    final active = <_VisualTimelineBlock>[];
+    final visualBlocks = <_VisualTimelineBlock>[];
+
+    for (final block in sorted) {
+      active.removeWhere((entry) => !_blocksOverlap(block, entry.block));
+
+      final usedLanes = active.map((entry) => entry.lane).toSet();
+      var lane = 0;
+      while (usedLanes.contains(lane) && lane < _kMaxOverlapLane) {
+        lane++;
+      }
+      if (usedLanes.contains(lane)) {
+        lane = _kMaxOverlapLane;
+      }
+
+      final visual = _VisualTimelineBlock(
+        block: block,
+        lane: lane,
+        order: visualBlocks.length,
+      );
+      active.add(visual);
+      visualBlocks.add(visual);
+    }
+
+    return visualBlocks;
+  }
+
+  List<_VisualTimelineBlock> _paintOrderedBlocks(
+    List<_VisualTimelineBlock> blocks,
+  ) {
+    return [...blocks]..sort((a, b) {
+      if (a.block.id == _frontBlockId && b.block.id != _frontBlockId) {
+        return 1;
+      }
+      if (b.block.id == _frontBlockId && a.block.id != _frontBlockId) {
+        return -1;
+      }
+      final laneCompare = a.lane.compareTo(b.lane);
+      if (laneCompare != 0) return laneCompare;
+      return a.order.compareTo(b.order);
+    });
+  }
+
+  double _leftForLane(int lane) {
+    return _kLeftOffset + lane.clamp(0, _kMaxOverlapLane) * _kOverlapLaneOffset;
+  }
+
+  double _rightForLane(int lane) {
+    return switch (lane.clamp(0, _kMaxOverlapLane)) {
+      0 => 16.0,
+      1 => 8.0,
+      _ => 4.0,
+    };
   }
 
   // ---- Upload ----
@@ -1345,15 +1444,15 @@ class _OnboardingStep4UnifiedState
             boxShadow: [
               BoxShadow(
                 color: (selected ? _accent : Colors.black).withValues(
-                  alpha: selected ? 0.12 : 0.05,
+                  alpha: selected ? 0.08 : 0.04,
                 ),
-                blurRadius: selected ? 8 : 7,
+                blurRadius: selected ? 6 : 7,
                 spreadRadius: 0,
                 offset: Offset(0, selected ? 2 : 3),
               ),
               BoxShadow(
-                color: Colors.white.withValues(alpha: selected ? 0.56 : 0.70),
-                blurRadius: selected ? 7 : 10,
+                color: Colors.white.withValues(alpha: selected ? 0.60 : 0.70),
+                blurRadius: selected ? 6 : 10,
                 offset: const Offset(-2, -2),
               ),
             ],
@@ -1365,11 +1464,11 @@ class _OnboardingStep4UnifiedState
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: selected
-                      ? _accent.withValues(alpha: 0.75)
+                      ? _accent.withValues(alpha: 0.68)
                       : Colors.white.withValues(alpha: 0.38),
                   border: Border.all(
                     color: selected
-                        ? _accent.withValues(alpha: 0.35)
+                        ? _accent.withValues(alpha: 0.42)
                         : Colors.white.withValues(alpha: 0.72),
                     width: selected ? 1.8 : 1.2,
                   ),
@@ -1549,25 +1648,28 @@ class _OnboardingStep4UnifiedState
   }
 
   // ======================================================================
-  //  Timeline Rendering (faithfully replicating existing UI)
+  //  Timeline Rendering
   // ======================================================================
   Widget _buildTimeline(List<ClassRoutineBlock> allBlocks) {
     final dayItems =
         allBlocks
             .where((b) => b.repeatDays.contains(_day + 1))
             .toList(growable: false)
-          ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+          ..sort(_compareBlocksByTime);
+    final visualBlocks = _visualBlocksFor(dayItems);
+    final paintedBlocks = _paintOrderedBlocks(visualBlocks);
 
     final range = _rangeFor(allBlocks);
     const topPadding = 18.0;
     const bottomPadding = _kTimelineBottomPadding;
 
     final maxCardBottom = dayItems.fold<double>(0, (maxBottom, item) {
-      final bottom = _timelineY(
-        minuteOfDay: item.endMinute,
+      final top = _timelineY(
+        minuteOfDay: item.startMinute,
         visibleStartMinute: range.startMinute,
         topPadding: topPadding,
       );
+      final bottom = top + _blockVisualHeight(item);
       return bottom > maxBottom ? bottom : maxBottom;
     });
 
@@ -1625,12 +1727,12 @@ class _OnboardingStep4UnifiedState
                       color: _accent.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: _accent.withValues(alpha: 0.35),
+                        color: _accent.withValues(alpha: 0.40),
                         width: 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: _accent.withValues(alpha: 0.16),
+                          color: _accent.withValues(alpha: 0.18),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -1722,11 +1824,12 @@ class _OnboardingStep4UnifiedState
                   ),
 
                 // Block cards
-                ...dayItems.map(
-                  (item) => _buildColoredBlock(
-                    item,
+                ...paintedBlocks.map(
+                  (visual) => _buildColoredBlock(
+                    visual.block,
                     visibleStartMinute: range.startMinute,
                     topPadding: topPadding,
+                    overlapLane: visual.lane,
                   ),
                 ),
               ],
@@ -1779,12 +1882,26 @@ class _OnboardingStep4UnifiedState
         ),
         Positioned(
           top: y,
+          left: _kLeftOffset,
+          right: 16,
+          height: 1,
+          child: DecoratedBox(
+            key: ValueKey('onboarding-step4-minute-line-$minute'),
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+        ),
+        Positioned(
+          top: y,
           left: 44,
           width: 18,
           height: 1.5,
           child: DecoratedBox(
+            key: ValueKey('onboarding-step4-minute-tick-$minute'),
             decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.55),
+              color: _accent.withValues(alpha: 0.48),
               borderRadius: BorderRadius.circular(99),
             ),
           ),
@@ -1795,35 +1912,38 @@ class _OnboardingStep4UnifiedState
     return widgets;
   }
 
-  // ---- Colored block card (exact copy from existing) ----
+  // ---- Colored block card ----
   Widget _buildColoredBlock(
     ClassRoutineBlock item, {
     required int visibleStartMinute,
     required double topPadding,
+    required int overlapLane,
   }) {
     final top = _timelineY(
       minuteOfDay: item.startMinute,
       visibleStartMinute: visibleStartMinute,
       topPadding: topPadding,
     );
-    final bottom = _timelineY(
-      minuteOfDay: item.endMinute,
-      visibleStartMinute: visibleStartMinute,
-      topPadding: topPadding,
-    );
-    final height = (bottom - top).clamp(1.0, double.infinity).toDouble();
+    final exactHeight = _blockDurationHeight(item);
+    final height = _blockVisualHeight(item);
+    final compact = height < 72;
+    final showSecondaryChips = !compact && height >= 96;
 
     final config = _configForBlock(item);
     final baseColor = item.color ?? config.accent;
 
     return Positioned(
       top: top,
-      left: _kLeftOffset,
-      right: 16,
+      left: _leftForLane(overlapLane),
+      right: _rightForLane(overlapLane),
       height: height,
       child: GestureDetector(
+        key: ValueKey('onboarding-step4-block-${item.id}'),
         behavior: HitTestBehavior.opaque,
-        onTap: () => _showEditDialog(item),
+        onTap: () {
+          setState(() => _frontBlockId = item.id);
+          _showEditDialog(item);
+        },
         child: SizedBox.expand(
           child: Container(
             decoration: BoxDecoration(
@@ -1853,91 +1973,144 @@ class _OnboardingStep4UnifiedState
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 12 : 14,
+                    vertical: compact ? 7 : 10,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            item.icon ?? config.icon,
-                            color: baseColor,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              item.subject,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF0F111A),
-                              ),
-                            ),
-                          ),
-                          const Icon(
-                            Icons.more_vert_rounded,
-                            color: OptivusColors.textSecondary,
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              _formatRange(item.startMinute, item.endMinute),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textBody,
-                              ),
-                            ),
-                          ),
-                          if (item.room.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                item.room,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: OptivusColors.textBody,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  child: compact
+                      ? _buildCompactBlockContent(
+                          item: item,
+                          config: config,
+                          baseColor: baseColor,
+                        )
+                      : _buildRegularBlockContent(
+                          item: item,
+                          config: config,
+                          baseColor: baseColor,
+                          exactHeight: exactHeight,
+                          showSecondaryChips: showSecondaryChips,
+                        ),
                 ),
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegularBlockContent({
+    required ClassRoutineBlock item,
+    required ScheduleSetupConfig config,
+    required Color baseColor,
+    required double exactHeight,
+    required bool showSecondaryChips,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Icon(item.icon ?? config.icon, color: baseColor, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                item.subject,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F111A),
+                ),
+              ),
+            ),
+            const Icon(
+              Icons.more_vert_rounded,
+              color: OptivusColors.textSecondary,
+              size: 18,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _buildBlockInfoChip(
+              _formatRange(item.startMinute, item.endMinute),
+              compact: exactHeight < 84,
+            ),
+            if (showSecondaryChips && item.room.isNotEmpty)
+              _buildBlockInfoChip(item.room),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactBlockContent({
+    required ClassRoutineBlock item,
+    required ScheduleSetupConfig config,
+    required Color baseColor,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(item.icon ?? config.icon, color: baseColor, size: 16),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            item.subject,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F111A),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          flex: 0,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 132),
+            child: _buildBlockInfoChip(
+              _formatRange(item.startMinute, item.endMinute),
+              compact: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        const Icon(
+          Icons.more_vert_rounded,
+          color: OptivusColors.textSecondary,
+          size: 16,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBlockInfoChip(String text, {bool compact = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 7 : 8,
+        vertical: compact ? 3 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: compact ? 10 : 11,
+          fontWeight: FontWeight.w800,
+          color: OptivusColors.textBody,
         ),
       ),
     );
