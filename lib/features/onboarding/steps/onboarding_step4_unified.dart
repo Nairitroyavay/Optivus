@@ -30,6 +30,18 @@ class _PhotoSlot {
     required this.label,
     required this.source,
   });
+
+  _PhotoSlot copyWith({
+    UploadedAsset? asset,
+    String? label,
+    RoutineImportReviewSource? source,
+  }) {
+    return _PhotoSlot(
+      asset: asset ?? this.asset,
+      label: label ?? this.label,
+      source: source ?? this.source,
+    );
+  }
 }
 
 class _UploadTarget {
@@ -79,27 +91,106 @@ class _CandidateMappingResult {
   final int droppedNoTitle;
   final int droppedInvalidTime;
   final int droppedNoRepeatDays;
+  final int droppedNonWork;
+  final List<String> noRepeatDayExamples;
 
   const _CandidateMappingResult({
     required this.blocks,
     required this.droppedNoTitle,
     required this.droppedInvalidTime,
     required this.droppedNoRepeatDays,
+    required this.droppedNonWork,
+    this.noRepeatDayExamples = const [],
   });
 
   int get droppedTotal =>
-      droppedNoTitle + droppedInvalidTime + droppedNoRepeatDays;
+      droppedNoTitle +
+      droppedInvalidTime +
+      droppedNoRepeatDays +
+      droppedNonWork;
 
   String get filterSummary {
     if (droppedTotal == 0) return 'none';
     return 'noTitle=$droppedNoTitle invalidTime=$droppedInvalidTime '
-        'noRepeatDays=$droppedNoRepeatDays';
+        'noRepeatDays=$droppedNoRepeatDays nonWork=$droppedNonWork';
   }
+
+  String get noRepeatDayExampleText =>
+      noRepeatDayExamples.isEmpty ? 'none' : noRepeatDayExamples.join(' || ');
 }
 
 @visibleForTesting
 List<int> normalizeOnboarding4AiRepeatDays(List<int> days) {
   return days.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
+}
+
+@visibleForTesting
+List<int> repeatDaysForOnboarding4Candidate(
+  RoutineImportCandidateBlock candidate,
+) {
+  final explicitDays = normalizeOnboarding4AiRepeatDays(candidate.repeatDays);
+  if (explicitDays.isNotEmpty) return explicitDays;
+
+  final derived = <int>{};
+  for (final text in [
+    candidate.sourceColumnLabel,
+    candidate.sourceRowLabel,
+    candidate.sourceTextSnippet,
+  ]) {
+    if (text == null || text.trim().isEmpty) continue;
+    derived.addAll(_dayNumbersFromText(text));
+  }
+  return derived.toList()..sort();
+}
+
+List<int> _dayNumbersFromText(String text) {
+  final lower = text.toLowerCase();
+  final found = <int>{};
+  final aliases = <String, int>{
+    'mon': 1,
+    'monday': 1,
+    'tue': 2,
+    'tues': 2,
+    'tuesday': 2,
+    'wed': 3,
+    'wednesday': 3,
+    'thu': 4,
+    'thur': 4,
+    'thurs': 4,
+    'thursday': 4,
+    'fri': 5,
+    'friday': 5,
+    'sat': 6,
+    'saturday': 6,
+    'sun': 7,
+    'sunday': 7,
+  };
+  const dayToken =
+      r'monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat|sunday|sun';
+  final rangePattern = RegExp(
+    r'(^|[^a-z])(' +
+        dayToken +
+        r')\s*(?:-|to|through|thru)\s*(' +
+        dayToken +
+        r')(?=$|[^a-z])',
+  );
+  for (final match in rangePattern.allMatches(lower)) {
+    final start = aliases[match.group(2)];
+    final end = aliases[match.group(3)];
+    if (start == null || end == null || end < start) continue;
+    for (var day = start; day <= end; day += 1) {
+      found.add(day);
+    }
+  }
+
+  final tokenPattern = RegExp(r'(^|[^a-z])(' + dayToken + r')(?=$|[^a-z])');
+  final matches = tokenPattern.allMatches(lower).toList(growable: false);
+  for (final match in matches) {
+    final day = aliases[match.group(2)];
+    if (day != null) found.add(day);
+  }
+
+  return found.toList()..sort();
 }
 
 // ---------------------------------------------------------------------------
@@ -321,8 +412,8 @@ class _OnboardingStep4UnifiedState
     return safe.isEmpty ? const [1] : safe;
   }
 
-  List<int> _candidateRepeatDays(List<int> days) {
-    return normalizeOnboarding4AiRepeatDays(days);
+  List<int> _repeatDaysForCandidate(RoutineImportCandidateBlock candidate) {
+    return repeatDaysForOnboarding4Candidate(candidate);
   }
 
   _PhotoSlot? _photoForSource(RoutineImportReviewSource source) {
@@ -537,6 +628,38 @@ class _OnboardingStep4UnifiedState
     return 'Only one work schedule photo is allowed.';
   }
 
+  bool get _canSwapClassWorkPhotos {
+    return _needsBothPhotos &&
+        !_isUploading &&
+        !_isGenerating &&
+        _photoForSource(RoutineImportReviewSource.classes) != null &&
+        _photoForSource(RoutineImportReviewSource.work) != null;
+  }
+
+  void _swapClassWorkPhotos() {
+    if (!_canSwapClassWorkPhotos) return;
+    final classIndex = _photos.indexWhere(
+      (photo) => photo.source == RoutineImportReviewSource.classes,
+    );
+    final workIndex = _photos.indexWhere(
+      (photo) => photo.source == RoutineImportReviewSource.work,
+    );
+    if (classIndex < 0 || workIndex < 0) return;
+
+    final classPhoto = _photos[classIndex];
+    final workPhoto = _photos[workIndex];
+    setState(() {
+      _photos[classIndex] = classPhoto.copyWith(asset: workPhoto.asset);
+      _photos[workIndex] = workPhoto.copyWith(asset: classPhoto.asset);
+      _photos.sort(_comparePhotoSlots);
+      _generationError = null;
+      _timelineError = null;
+    });
+    ref.read(onboardingClassTimelineProvider.notifier).state = const [];
+    ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
+    _markClassJobDirty();
+  }
+
   void _markClassJobDirty() {
     ref
         .read(mockOnboardingProvider.notifier)
@@ -557,6 +680,8 @@ class _OnboardingStep4UnifiedState
     var droppedNoTitle = 0;
     var droppedInvalidTime = 0;
     var droppedNoRepeatDays = 0;
+    var droppedNonWork = 0;
+    final noRepeatDayExamples = <String>[];
 
     for (final candidate in candidates) {
       final title = candidate.title.trim();
@@ -564,13 +689,21 @@ class _OnboardingStep4UnifiedState
         droppedNoTitle++;
         continue;
       }
+      if (config.source == RoutineImportReviewSource.work &&
+          _isDisallowedWorkCandidate(candidate, title)) {
+        droppedNonWork++;
+        continue;
+      }
       if (candidate.startMinute >= candidate.endMinute) {
         droppedInvalidTime++;
         continue;
       }
-      final repeatDays = _candidateRepeatDays(candidate.repeatDays);
+      final repeatDays = _repeatDaysForCandidate(candidate);
       if (repeatDays.isEmpty) {
         droppedNoRepeatDays++;
+        if (noRepeatDayExamples.length < 3) {
+          noRepeatDayExamples.add(_candidateDayDebugLabel(candidate));
+        }
         continue;
       }
 
@@ -595,7 +728,52 @@ class _OnboardingStep4UnifiedState
       droppedNoTitle: droppedNoTitle,
       droppedInvalidTime: droppedInvalidTime,
       droppedNoRepeatDays: droppedNoRepeatDays,
+      droppedNonWork: droppedNonWork,
+      noRepeatDayExamples: noRepeatDayExamples,
     );
+  }
+
+  bool _isDisallowedWorkCandidate(
+    RoutineImportCandidateBlock candidate,
+    String title,
+  ) {
+    final normalized = title.trim().toLowerCase().replaceAll(
+      RegExp(r'\s+'),
+      ' ',
+    );
+    if (normalized.contains('rest day') || normalized.contains('no work')) {
+      return true;
+    }
+    final disallowedTitle = const {
+      'gym',
+      'exercise',
+      'workout',
+      'study',
+      'reading',
+      'personal habit',
+      'personal habits',
+      'gym / exercise',
+      'study / reading',
+    }.contains(normalized);
+    if (disallowedTitle) return true;
+    final snippet = candidate.sourceTextSnippet?.trim().toLowerCase();
+    if (snippet == null || snippet.isEmpty) return false;
+    return snippet.contains('rest day') || snippet.contains('no work');
+  }
+
+  String _candidateDayDebugLabel(RoutineImportCandidateBlock candidate) {
+    final title = candidate.title.trim().isEmpty
+        ? 'untitled'
+        : candidate.title.trim();
+    final row = candidate.sourceRowLabel?.trim();
+    final column = candidate.sourceColumnLabel?.trim();
+    final snippet = candidate.sourceTextSnippet?.trim();
+    final shortSnippet = snippet == null || snippet.isEmpty
+        ? 'none'
+        : (snippet.length > 80 ? '${snippet.substring(0, 80)}...' : snippet);
+    return 'title=$title row=${row?.isEmpty ?? true ? 'none' : row} '
+        'column=${column?.isEmpty ?? true ? 'none' : column} '
+        'snippet=$shortSnippet';
   }
 
   void _debugLogExtraction({
@@ -620,7 +798,8 @@ class _OnboardingStep4UnifiedState
         'uploadedAssetIdExists=${photo.asset.assetId.trim().isNotEmpty} '
         'uploadedAssetR2KeyExists=${photo.asset.r2Key.trim().isNotEmpty} '
         'warnings=$warningText rawCandidates=$candidateCount visibleCandidates=0 '
-        'filtered=${mapping.filterSummary}',
+        'filtered=${mapping.filterSummary} '
+        'noRepeatDayExamples=${mapping.noRepeatDayExampleText}',
       );
     }
   }
@@ -771,6 +950,7 @@ class _OnboardingStep4UnifiedState
                 droppedNoTitle: 0,
                 droppedInvalidTime: 0,
                 droppedNoRepeatDays: 0,
+                droppedNonWork: 0,
               )
             : _blocksFromCandidates(result.candidates, config);
 
@@ -1345,6 +1525,11 @@ class _OnboardingStep4UnifiedState
             ],
           ),
 
+          if (_canSwapClassWorkPhotos) ...[
+            const SizedBox(height: 10),
+            _buildSwapControl(),
+          ],
+
           // Generation error
           if (_generationError != null) ...[
             const SizedBox(height: 12),
@@ -1370,6 +1555,49 @@ class _OnboardingStep4UnifiedState
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildSwapControl() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _swapClassWorkPhotos,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  width: 1.1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.swap_horiz_rounded, color: _accent, size: 15),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Swap Class / Work',
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

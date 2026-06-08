@@ -5,6 +5,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/state/app_state.dart';
 
 void main() {
@@ -326,13 +327,33 @@ void main() {
     );
   });
 
-  test('AI repeat-day normalization does not default empty days to Monday', () {
-    expect(normalizeOnboarding4AiRepeatDays(const []), isEmpty);
-    expect(normalizeOnboarding4AiRepeatDays(const [0, 1, 1, 3, 8]), const [
-      1,
-      3,
-    ]);
-  });
+  test(
+    'AI repeat-day normalization derives clear labels without Monday default',
+    () {
+      expect(normalizeOnboarding4AiRepeatDays(const []), isEmpty);
+      expect(normalizeOnboarding4AiRepeatDays(const [0, 1, 1, 3, 8]), const [
+        1,
+        3,
+      ]);
+      expect(
+        repeatDaysForOnboarding4Candidate(
+          _candidate(sourceColumnLabel: 'MONDAY'),
+        ),
+        const [1],
+      );
+      expect(
+        repeatDaysForOnboarding4Candidate(_candidate(sourceRowLabel: 'Tue')),
+        const [2],
+      );
+      expect(
+        repeatDaysForOnboarding4Candidate(
+          _candidate(sourceTextSnippet: 'Mon-Fri 9:00 Office Work'),
+        ),
+        const [1, 2, 3, 4, 5],
+      );
+      expect(repeatDaysForOnboarding4Candidate(_candidate()), isEmpty);
+    },
+  );
 
   test(
     'business class/job step validation asks for work/business timeline',
@@ -387,6 +408,27 @@ TimelineBlockDraft _timelineBlock({
     repeatDays: const [1],
     blockType: TimelineBlockDraft.hardBlockKey,
     source: 'ai_import',
+  );
+}
+
+RoutineImportCandidateBlock _candidate({
+  List<int> repeatDays = const [],
+  String? sourceColumnLabel,
+  String? sourceRowLabel,
+  String? sourceTextSnippet,
+}) {
+  return RoutineImportCandidateBlock(
+    id: 'candidate',
+    title: 'Office Work',
+    startMinute: 9 * 60,
+    endMinute: 10 * 60,
+    repeatDays: repeatDays,
+    blockType: TimelineBlockDraft.hardBlockKey,
+    category: 'job',
+    hardBlock: true,
+    sourceColumnLabel: sourceColumnLabel,
+    sourceRowLabel: sourceRowLabel,
+    sourceTextSnippet: sourceTextSnippet,
   );
 }
 

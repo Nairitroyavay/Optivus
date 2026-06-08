@@ -577,7 +577,7 @@ function buildRoutineImportPrompt(
     classes:
       "Extract subjects/classes/labs/tutorials. Use hard blocks by default. Preserve room/location if visible. If only period numbers exist and exact times are missing, create flexible/unplaced low-confidence candidates.",
     work:
-      "Extract every clearly timed work/business schedule item from the image: Office Work, Work, Shift, Client Calls, meetings, Project Work, Team Sync, Training Session, Commute, Lunch Break / Break, Freelance Project, freelance/side-work, Business Hours. Preserve the visible title and time. Use hard_block for fixed timed blocks. Use category job. Do not ignore blocks just because they are not named exactly Work. For weekly grid images, days are columns and times are rows. Convert each visible timed cell into one candidate with repeatDays matching the day column. Treat all clearly timed work schedule items as fixed work/business blocks unless source text clearly says rest day/no work. Use flexible tasks only for to-dos without a visible time.",
+      "Extract every clearly timed work/business schedule item from the image: Office Work, Work, Shift, Client Calls, meetings, Project Work, Team Sync, Training Session, Commute, Lunch Break / Break, Freelance Project, freelance/side-work, Business Hours. Preserve the visible title and time. Use hard_block for fixed timed blocks. Use category job. Do not ignore blocks just because they are not named exactly Work. Do not extract Gym/Exercise, Study/Reading, Rest Day/No Work, or personal habit blocks as job candidates. For weekly grid images, days are columns and times are rows. Convert each visible timed cell into one candidate with repeatDays matching the day column. Treat all clearly timed work schedule items as fixed work/business blocks unless source text clearly says rest day/no work. Use flexible tasks only for to-dos without a visible time.",
     eating:
       "Extract meal windows as blocks. Preserve breakfast/lunch/dinner/snack mealCategory. Dishes should usually go into notes or steps, not separate timeline blocks.",
     skinCare:
@@ -1238,13 +1238,13 @@ function assertOwnedRoutineImportObjectKey(args: {
   }
 
   const parts = args.objectKey.split("/");
-  const purpose = sourcePurpose[args.source];
+  const allowedPurposes = classWorkScheduleSwapPurposes(args.source);
   if (
     parts.length !== 5 ||
     parts[0] !== "users" ||
     parts[1] !== safeUid ||
     parts[2] !== "onboarding" ||
-    parts[3] !== purpose
+    !allowedPurposes.has(parts[3])
   ) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
@@ -1270,6 +1270,15 @@ function assertOwnedRoutineImportObjectKey(args: {
   if (args.uploadedAssetId && args.uploadedAssetId !== assetId) {
     throw new HttpError(400, "asset_mismatch", "Object key does not match uploaded asset.");
   }
+}
+
+function classWorkScheduleSwapPurposes(source: RoutineImportReviewSource): Set<string> {
+  const purpose = sourcePurpose[source];
+  if (source === "classes" || source === "work") {
+    // Student + Working can swap mislabeled class/work thumbnails after upload.
+    return new Set([sourcePurpose.classes, sourcePurpose.work]);
+  }
+  return new Set([purpose]);
 }
 
 async function readSmallJson(request: Request): Promise<Record<string, unknown>> {

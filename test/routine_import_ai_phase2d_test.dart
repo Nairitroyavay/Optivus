@@ -258,6 +258,8 @@ void main() {
     expect(worker, contains('Freelance Project'));
     expect(worker, contains('Lunch Break / Break'));
     expect(worker, contains('freelance/side-work'));
+    expect(worker, contains('Do not extract Gym/Exercise'));
+    expect(worker, contains('Rest Day/No Work'));
     expect(
       worker,
       contains('For weekly grid images, days are columns and times are rows.'),
@@ -268,6 +270,8 @@ void main() {
         'Do not ignore blocks just because they are not named exactly Work.',
       ),
     );
+    expect(worker, contains('classWorkScheduleSwapPurposes'));
+    expect(worker, contains('sourcePurpose.classes, sourcePurpose.work'));
   });
 
   test('Flutter rejects Worker response with wrong uid', () async {
