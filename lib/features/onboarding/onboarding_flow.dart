@@ -213,7 +213,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     setState(() => _isNavigating = true);
 
     try {
-      final onboardingState = ref.read(mockOnboardingProvider);
       if (_currentPage == OnboardingDraft.lastStepIndex) {
         await _completeOnboarding();
         return;
@@ -223,6 +222,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return;
       }
 
+      final onboardingState = ref.read(mockOnboardingProvider);
       final isDirty = onboardingState.stepDirty[_currentPage];
       final isCompleted = onboardingState.stepCompleted[_currentPage];
 
@@ -604,20 +604,28 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return localBlocks
         .where((block) => block.subject.trim().isNotEmpty)
         .where((block) => block.startMinute < block.endMinute)
-        .map((block) {
-          return TimelineBlockDraft(
-            id: block.id,
-            section: section,
-            title: block.subject.trim(),
-            startMinute: block.startMinute,
-            endMinute: block.endMinute,
-            repeatDays: block.repeatDays,
-            location: block.room.trim().isEmpty ? null : block.room.trim(),
-            blockType: TimelineBlockDraft.hardBlockKey,
-            source: 'ai_import',
-          );
+        .expand<TimelineBlockDraft>((block) {
+          final repeatDays = _repeatDaysForClassJobSave(block.repeatDays);
+          if (repeatDays.isEmpty) return const <TimelineBlockDraft>[];
+          return [
+            TimelineBlockDraft(
+              id: block.id,
+              section: section,
+              title: block.subject.trim(),
+              startMinute: block.startMinute,
+              endMinute: block.endMinute,
+              repeatDays: repeatDays,
+              location: block.room.trim().isEmpty ? null : block.room.trim(),
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+            ),
+          ];
         })
         .toList(growable: false);
+  }
+
+  List<int> _repeatDaysForClassJobSave(List<int> days) {
+    return days.where((day) => day >= 1 && day <= 7).toSet().toList()..sort();
   }
 
   bool _classJobActionBusy(OnboardingDraft _, {required bool watch}) {
@@ -692,29 +700,49 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       allNewBlocks.addAll(visibleWorkBlocks);
     }
 
-    // Save all blocks to baseTimeline at once
-    _updateBaseTimelineStage(onboardingClassJobStepIndex, (base) {
-      final nextBlocks =
-          base.blocks
-              .where(
-                (b) =>
-                    b.section != 'classes' && b.section != 'job_work_business',
-              )
-              .toList()
-            ..addAll(allNewBlocks);
-      final nextPending = base.pendingFutureImports
-          .where(
-            (entry) =>
-                entry.section != onboardingSectionClasses &&
-                entry.section != onboardingSectionWork,
-          )
-          .toList(growable: false);
-      return base.copyWith(
-        classJobSetupStep: 5,
-        blocks: nextBlocks,
-        pendingFutureImports: nextPending,
-      );
-    });
+    final uid = _currentPersistenceUid();
+    if (uid == null) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(
+            'Please verify your email before saving onboarding.',
+          );
+      return true;
+    }
+
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .saveStep(
+          onboardingClassJobStepIndex,
+          uid: uid,
+          transform: (draft) {
+            final base = draft.baseTimeline;
+            final nextBlocks =
+                base.blocks
+                    .where(
+                      (b) =>
+                          b.section != 'classes' &&
+                          b.section != 'job_work_business',
+                    )
+                    .toList()
+                  ..addAll(allNewBlocks);
+            final nextPending = base.pendingFutureImports
+                .where(
+                  (entry) =>
+                      entry.section != onboardingSectionClasses &&
+                      entry.section != onboardingSectionWork,
+                )
+                .toList(growable: false);
+            return draft.copyWith(
+              baseTimeline: base.copyWith(
+                classJobSetupStep: 5,
+                blocks: nextBlocks,
+                pendingFutureImports: nextPending,
+              ),
+              clearFinalPreview: true,
+            );
+          },
+        );
     await _persistCurrentDraftAfterNavigation();
 
     // Return false to let outer flow advance to step 5

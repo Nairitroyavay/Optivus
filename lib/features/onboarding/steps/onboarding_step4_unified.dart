@@ -151,11 +151,11 @@ bool isDisallowedOnboarding4WorkCandidate(
   if (_hasDisallowedWorkText(normalized)) {
     return true;
   }
+  if (_hasAllowedWorkText(normalized)) return false;
   final snippet = candidate.sourceTextSnippet;
   if (snippet == null || snippet.isEmpty) return false;
   final normalizedSnippet = _normalizedWorkCandidateText(snippet);
   if (_hasDisallowedWorkPhrase(normalizedSnippet)) return true;
-  if (_hasAllowedWorkText(normalized)) return false;
   return _hasDisallowedWorkToken(normalizedSnippet);
 }
 
@@ -887,13 +887,13 @@ class _OnboardingStep4UnifiedState
       return 'AI could not detect class or work schedule blocks clearly.';
     }
     if (classFailed) {
-      return 'AI could not detect class timetable blocks clearly.';
+      return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
     }
     if (workFailed && _role == LifeRoleDraft.businessKey) {
-      return 'AI could not detect work/business schedule blocks clearly.';
+      return 'Work/business schedule could not be read clearly. Check the photo or upload a clearer image.';
     }
     if (workFailed) {
-      return 'AI could not detect work schedule blocks clearly.';
+      return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
     }
     return 'AI could not detect timetable blocks clearly.';
   }
@@ -915,6 +915,99 @@ class _OnboardingStep4UnifiedState
     if (_classesRequired) return hasClasses;
     if (_workRequired) return hasWork;
     return false;
+  }
+
+  Set<String> get _replaceScheduleSections {
+    return {
+      if (_classesRequired) 'classes',
+      if (_workRequired) 'job_work_business',
+    };
+  }
+
+  Set<String> get _replacePendingImportSections {
+    return {
+      if (_classesRequired) onboardingSectionClasses,
+      if (_workRequired) onboardingSectionWork,
+    };
+  }
+
+  Future<void> _confirmReplaceSchedule() async {
+    if (_isUploading || _isGenerating) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: Colors.white.withValues(alpha: 0.96),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          title: const Text(
+            'Replace saved schedule?',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.textPrimary,
+            ),
+          ),
+          content: const Text(
+            'This will clear the saved class/work blocks for this setup and let you upload again.',
+            style: TextStyle(
+              height: 1.35,
+              fontWeight: FontWeight.w700,
+              color: OptivusColors.textSecondary,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Replace schedule'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+    _replaceSavedSchedule();
+  }
+
+  void _replaceSavedSchedule() {
+    final sections = _replaceScheduleSections;
+    final pendingSections = _replacePendingImportSections;
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.copyWith(
+            baseTimeline: draft.baseTimeline.copyWith(
+              classJobSetupStep: 0,
+              blocks: draft.baseTimeline.blocks
+                  .where((block) => !sections.contains(block.section))
+                  .toList(growable: false),
+              pendingFutureImports: draft.baseTimeline.pendingFutureImports
+                  .where((entry) => !pendingSections.contains(entry.section))
+                  .toList(growable: false),
+            ),
+            clearFinalPreview: true,
+          ),
+        );
+    if (_classesRequired) {
+      ref.read(onboardingClassTimelineProvider.notifier).state = const [];
+    }
+    if (_workRequired) {
+      ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
+    }
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepCompleted(onboardingClassJobStepIndex, false);
+    _markClassJobDirty();
+    setState(() {
+      _photos.clear();
+      _generationError = null;
+      _timelineError = null;
+      _frontBlockId = null;
+    });
   }
 
   void _clearIrrelevantProvidersForRole() {
@@ -1628,35 +1721,60 @@ class _OnboardingStep4UnifiedState
   Widget _buildSavedScheduleCard() {
     return OnboardingGlassCard(
       tint: _accent.withValues(alpha: 0.07),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.check_circle_outline_rounded, color: _accent, size: 22),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Schedule generated',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.textPrimary,
-                  ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.check_circle_outline_rounded,
+                color: _accent,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Schedule generated',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 5),
+                    Text(
+                      'Your fixed responsibilities are ready. Edit blocks directly on the timeline.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(height: 5),
-                Text(
-                  'Your fixed responsibilities are ready. Edit blocks directly on the timeline.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.35,
-                    fontWeight: FontWeight.w700,
-                    color: OptivusColors.textSecondary,
-                  ),
-                ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: _confirmReplaceSchedule,
+            icon: Icon(Icons.refresh_rounded, size: 16, color: _accent),
+            label: const Text(
+              'Replace schedule',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: _accent,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
             ),
           ),
         ],

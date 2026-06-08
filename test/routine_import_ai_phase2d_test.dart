@@ -249,7 +249,9 @@ void main() {
 
     expect(
       worker,
-      contains('Extract every clearly timed work/business schedule item'),
+      contains(
+        'Extract only clearly timed work/business responsibility blocks',
+      ),
     );
     expect(worker, contains('Client Calls'));
     expect(worker, contains('Office Work'));
@@ -258,7 +260,9 @@ void main() {
     expect(worker, contains('Freelance Project'));
     expect(worker, contains('Lunch Break / Break'));
     expect(worker, contains('freelance/side-work'));
-    expect(worker, contains('Do not extract Gym/Exercise'));
+    expect(worker, contains('Do not import personal habit blocks'));
+    expect(worker, contains('Gym/Exercise'));
+    expect(worker, contains('Reading'));
     expect(worker, contains('Online Course'));
     expect(worker, contains('Rest Day/No Work'));
     expect(
