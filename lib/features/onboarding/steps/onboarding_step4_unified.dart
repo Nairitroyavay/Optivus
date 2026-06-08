@@ -78,11 +78,13 @@ class _VisualTimelineBlock {
   final ClassRoutineBlock block;
   final int lane;
   final int order;
+  final bool hasOverlap;
 
   const _VisualTimelineBlock({
     required this.block,
     required this.lane,
     required this.order,
+    required this.hasOverlap,
   });
 }
 
@@ -276,9 +278,10 @@ class _OnboardingStep4UnifiedState
   static const _kPixelsPerMinute = _kHourHeight / 60.0;
   static const _kLeftOffset = 64.0;
   static const _kMinTimelineAreaHeight = 320.0;
-  static const _kTimelineBottomPadding = 240.0;
+  static const _kTimelineBottomPadding = 280.0;
   static const _kMinBlockHeight = 56.0;
-  static const _kOverlapLaneOffset = 14.0;
+  static const _kOverlapFrontInset = 112.0;
+  static const _kOverlapBackStep = 24.0;
   static const _kMaxOverlapLane = 2;
   static const _classUploadTarget = _UploadTarget(
     source: RoutineImportReviewSource.classes,
@@ -564,6 +567,9 @@ class _OnboardingStep4UnifiedState
         block: block,
         lane: lane,
         order: visualBlocks.length,
+        hasOverlap: dayItems.any(
+          (other) => other.id != block.id && _blocksOverlap(block, other),
+        ),
       );
       active.add(visual);
       visualBlocks.add(visual);
@@ -572,15 +578,47 @@ class _OnboardingStep4UnifiedState
     return visualBlocks;
   }
 
+  bool _visualsOverlap(_VisualTimelineBlock a, _VisualTimelineBlock b) {
+    return a.block.id != b.block.id && _blocksOverlap(a.block, b.block);
+  }
+
+  bool _groupHasFocusedBlock(
+    _VisualTimelineBlock visual,
+    List<_VisualTimelineBlock> blocks,
+  ) {
+    final frontId = _frontBlockId;
+    if (frontId == null) return false;
+    return blocks.any(
+      (candidate) =>
+          candidate.block.id == frontId &&
+          (candidate.block.id == visual.block.id ||
+              _visualsOverlap(candidate, visual)),
+    );
+  }
+
+  bool _isFrontVisual(
+    _VisualTimelineBlock visual,
+    List<_VisualTimelineBlock> blocks,
+  ) {
+    if (!visual.hasOverlap) return true;
+    if (_groupHasFocusedBlock(visual, blocks)) {
+      return visual.block.id == _frontBlockId;
+    }
+    return visual.lane == 0;
+  }
+
   List<_VisualTimelineBlock> _paintOrderedBlocks(
     List<_VisualTimelineBlock> blocks,
   ) {
     return [...blocks]..sort((a, b) {
-      if (a.block.id == _frontBlockId && b.block.id != _frontBlockId) {
-        return 1;
+      final aFront = _isFrontVisual(a, blocks);
+      final bFront = _isFrontVisual(b, blocks);
+      if (aFront != bFront) {
+        return aFront ? 1 : -1;
       }
-      if (b.block.id == _frontBlockId && a.block.id != _frontBlockId) {
-        return -1;
+      if (!aFront && a.hasOverlap && b.hasOverlap) {
+        final laneCompare = b.lane.compareTo(a.lane);
+        if (laneCompare != 0) return laneCompare;
       }
       final laneCompare = a.lane.compareTo(b.lane);
       if (laneCompare != 0) return laneCompare;
@@ -588,15 +626,28 @@ class _OnboardingStep4UnifiedState
     });
   }
 
-  double _leftForLane(int lane) {
-    return _kLeftOffset + lane.clamp(0, _kMaxOverlapLane) * _kOverlapLaneOffset;
+  double _leftForVisual(
+    _VisualTimelineBlock visual,
+    List<_VisualTimelineBlock> blocks,
+  ) {
+    if (!visual.hasOverlap) return _kLeftOffset;
+    if (_isFrontVisual(visual, blocks)) {
+      return _kLeftOffset + _kOverlapFrontInset;
+    }
+    return _kLeftOffset +
+        visual.lane.clamp(0, _kMaxOverlapLane) * _kOverlapBackStep;
   }
 
-  double _rightForLane(int lane) {
-    return switch (lane.clamp(0, _kMaxOverlapLane)) {
-      0 => 16.0,
-      1 => 8.0,
-      _ => 4.0,
+  double _rightForVisual(
+    _VisualTimelineBlock visual,
+    List<_VisualTimelineBlock> blocks,
+  ) {
+    if (!visual.hasOverlap) return 16.0;
+    if (_isFrontVisual(visual, blocks)) return 18.0;
+    return switch (visual.lane.clamp(0, _kMaxOverlapLane)) {
+      0 => 8.0,
+      1 => 12.0,
+      _ => 16.0,
     };
   }
 
@@ -1521,6 +1572,51 @@ class _OnboardingStep4UnifiedState
     );
   }
 
+  void _deleteBlock(ClassRoutineBlock item) {
+    final config = _configForBlock(item);
+    final provider = _providerFor(config);
+    ref.read(provider.notifier).state = _currentBlocks(
+      config,
+    ).where((block) => block.id != item.id).toList(growable: false);
+    if (_frontBlockId == item.id) {
+      setState(() => _frontBlockId = null);
+    }
+    _markClassJobDirty();
+  }
+
+  Widget _buildBlockMenuButton(
+    ClassRoutineBlock item, {
+    required Color color,
+    required double size,
+  }) {
+    return PopupMenuButton<String>(
+      key: ValueKey('onboarding-step4-menu-${item.id}'),
+      tooltip: 'Block actions',
+      padding: EdgeInsets.zero,
+      iconSize: size,
+      splashRadius: 18,
+      child: SizedBox(
+        width: size + 18,
+        height: size + 18,
+        child: Center(
+          child: Icon(Icons.more_vert_rounded, color: color, size: size),
+        ),
+      ),
+      onSelected: (value) {
+        setState(() => _frontBlockId = item.id);
+        if (value == 'edit') {
+          _showEditDialog(item);
+        } else if (value == 'delete') {
+          _deleteBlock(item);
+        }
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem<String>(value: 'edit', child: Text('Edit block')),
+        PopupMenuItem<String>(value: 'delete', child: Text('Delete block')),
+      ],
+    );
+  }
+
   // ---- Parse clock time (same as existing) ----
   static int? _parseClockMinute(String value) {
     final match = RegExp(
@@ -1581,7 +1677,7 @@ class _OnboardingStep4UnifiedState
               : _buildUploadCard(),
         ),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
 
         // ── Schedule header ──
         Padding(
@@ -1597,7 +1693,7 @@ class _OnboardingStep4UnifiedState
           ),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
 
         // ── Day chips ──
         _buildDayChips(),
@@ -1625,96 +1721,116 @@ class _OnboardingStep4UnifiedState
   //  Upload Card
   // ======================================================================
   Widget _buildUploadCard() {
-    return OnboardingGlassCard(
-      tint: _accent.withValues(alpha: 0.07),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Title row
-          Row(
-            children: [
-              Icon(Icons.document_scanner_rounded, color: _accent),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  _uploadTitle,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _uploadSubtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              height: 1.4,
-              fontWeight: FontWeight.w700,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // Thumbnail row + arrow button
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Thumbnails
-              Expanded(
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final target in _uploadTargets)
-                      _buildUploadTarget(target),
-
-                    // Uploading indicator
-                    if (_isUploading) _buildUploadingIndicator(),
-                  ],
-                ),
-              ),
-
-              // Arrow generate button
-              _buildArrowButton(),
-            ],
-          ),
-
-          if (_canSwapClassWorkPhotos) ...[
-            const SizedBox(height: 10),
-            _buildSwapControl(),
-          ],
-
-          // Generation error
-          if (_generationError != null) ...[
-            const SizedBox(height: 12),
+    return KeyedSubtree(
+      key: const ValueKey('onboarding-step4-upload-card'),
+      child: OnboardingGlassCard(
+        tint: _accent.withValues(alpha: 0.07),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title row
             Row(
               children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  color: OptivusColors.warning,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
+                Icon(Icons.document_scanner_rounded, color: _accent, size: 20),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    _generationError!,
+                    _uploadTitle,
                     style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: OptivusColors.warning,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
                     ),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 7),
+            Text(
+              _uploadSubtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 11.5,
+                height: 1.28,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            _buildUploadTargetsRow(),
+
+            if (_canSwapClassWorkPhotos) ...[
+              const SizedBox(height: 8),
+              _buildSwapControl(),
+            ],
+
+            // Generation error
+            if (_generationError != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: OptivusColors.warning,
+                    size: 17,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _generationError!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.25,
+                        fontWeight: FontWeight.w800,
+                        color: OptivusColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildUploadTargetsRow() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(
+          child: _needsBothPhotos
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var index = 0; index < _uploadTargets.length; index++)
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            right: index == _uploadTargets.length - 1 ? 0 : 8,
+                          ),
+                          child: _buildUploadTarget(_uploadTargets[index]),
+                        ),
+                      ),
+                  ],
+                )
+              : Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildUploadTarget(_uploadTargets.first),
+                ),
+        ),
+        if (_isUploading) ...[
+          const SizedBox(width: 8),
+          _buildUploadingIndicator(),
+        ],
+        const SizedBox(width: 10),
+        _buildArrowButton(),
+      ],
     );
   }
 
@@ -1827,24 +1943,27 @@ class _OnboardingStep4UnifiedState
 
   Widget _buildUploadTarget(_UploadTarget target) {
     final photo = _photoForSource(target.source);
-    final width = _needsBothPhotos ? 118.0 : 164.0;
+    final width = _needsBothPhotos ? double.infinity : 116.0;
     return SizedBox(
+      key: ValueKey('onboarding-step4-upload-target-${target.source.name}'),
       width: width,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             target.title,
-            maxLines: 2,
+            textAlign: TextAlign.center,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 11,
-              height: 1.1,
+              fontSize: 10.5,
+              height: 1.05,
               fontWeight: FontWeight.w900,
               color: OptivusColors.textPrimary,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           photo == null
               ? _buildEmptyUploadTarget(target)
               : _buildPhotoThumbnail(photo, target),
@@ -1858,30 +1977,31 @@ class _OnboardingStep4UnifiedState
     final hasPreview = previewPath != null && File(previewPath).existsSync();
 
     return SizedBox(
-      width: 72,
-      height: 72,
+      width: 60,
+      height: 64,
       child: Stack(
         clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
         children: [
           Container(
-            width: 64,
-            height: 64,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(13),
               border: Border.all(
                 color: Colors.white.withValues(alpha: 0.9),
-                width: 1.5,
+                width: 1.3,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 7,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(13),
+              borderRadius: BorderRadius.circular(12),
               child: hasPreview
                   ? Image.file(File(previewPath), fit: BoxFit.cover)
                   : Container(
@@ -1889,14 +2009,14 @@ class _OnboardingStep4UnifiedState
                       child: Icon(
                         Icons.image_rounded,
                         color: _accent,
-                        size: 28,
+                        size: 24,
                       ),
                     ),
             ),
           ),
           // Label
           Positioned(
-            bottom: -6,
+            bottom: 0,
             left: 0,
             right: 0,
             child: Center(
@@ -1920,16 +2040,16 @@ class _OnboardingStep4UnifiedState
           // X close button
           if (!_isUploading && !_isGenerating)
             Positioned(
-              top: -6,
-              right: -6,
-              width: 24,
-              height: 24,
+              top: -5,
+              right: -3,
+              width: 23,
+              height: 23,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => _removePhotoForSource(target.source),
                 child: Container(
-                  width: 22,
-                  height: 22,
+                  width: 21,
+                  height: 21,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.white,
@@ -1947,7 +2067,7 @@ class _OnboardingStep4UnifiedState
                   ),
                   child: const Icon(
                     Icons.close_rounded,
-                    size: 14,
+                    size: 13,
                     color: OptivusColors.textSecondary,
                   ),
                 ),
@@ -1961,28 +2081,28 @@ class _OnboardingStep4UnifiedState
   Widget _buildEmptyUploadTarget(_UploadTarget target) {
     final disabled = _isUploading || _isGenerating;
     return SizedBox(
-      width: 64,
-      height: 64,
+      width: 54,
+      height: 54,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: disabled ? null : () => _pickAndUpload(target),
         child: Opacity(
           opacity: disabled ? 0.55 : 1,
           child: Container(
-            width: 64,
-            height: 64,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(13),
               color: Colors.white.withValues(alpha: 0.5),
               border: Border.all(
                 color: _accent.withValues(alpha: 0.3),
-                width: 1.5,
+                width: 1.3,
               ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(target.icon, color: _accent, size: 22),
+                Icon(target.icon, color: _accent, size: 20),
                 const SizedBox(height: 2),
                 Text(
                   'Upload',
@@ -2002,31 +2122,19 @@ class _OnboardingStep4UnifiedState
 
   Widget _buildUploadingIndicator() {
     return Container(
-      width: 148,
-      height: 64,
+      width: 44,
+      height: 54,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(13),
         color: Colors.white.withValues(alpha: 0.5),
         border: Border.all(color: _accent.withValues(alpha: 0.2), width: 1.5),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
-          ),
-          const SizedBox(width: 8),
-          const Text(
-            'Uploading photo...',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-        ],
+      child: Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2, color: _accent),
+        ),
       ),
     );
   }
@@ -2037,8 +2145,8 @@ class _OnboardingStep4UnifiedState
     final bool active = enabled || spinning;
 
     return SizedBox(
-      width: 54,
-      height: 54,
+      width: 50,
+      height: 50,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled && !spinning ? _runGeneration : null,
@@ -2047,8 +2155,8 @@ class _OnboardingStep4UnifiedState
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOutCubic,
-            width: 54,
-            height: 54,
+            width: 50,
+            height: 50,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: active
@@ -2063,14 +2171,14 @@ class _OnboardingStep4UnifiedState
               boxShadow: active
                   ? [
                       BoxShadow(
-                        color: _accent.withValues(alpha: 0.35),
-                        blurRadius: 18,
+                        color: _accent.withValues(alpha: 0.28),
+                        blurRadius: 14,
                         spreadRadius: 1,
-                        offset: const Offset(0, 8),
+                        offset: const Offset(0, 6),
                       ),
                       BoxShadow(
                         color: Colors.white.withValues(alpha: 0.62),
-                        blurRadius: 10,
+                        blurRadius: 8,
                         offset: const Offset(-3, -3),
                       ),
                     ]
@@ -2090,8 +2198,8 @@ class _OnboardingStep4UnifiedState
                   children: [
                     Positioned(
                       top: 5,
-                      left: 13,
-                      right: 13,
+                      left: 12,
+                      right: 12,
                       height: 8,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -2113,7 +2221,7 @@ class _OnboardingStep4UnifiedState
                       Icon(
                         Icons.arrow_upward_rounded,
                         color: active ? Colors.white : OptivusColors.textMuted,
-                        size: 26,
+                        size: 24,
                       ),
                   ],
                 ),
@@ -2130,7 +2238,7 @@ class _OnboardingStep4UnifiedState
   // ======================================================================
   Widget _buildDayChips() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -2146,8 +2254,8 @@ class _OnboardingStep4UnifiedState
             ][index];
             final isSelected = _day == index;
             return SizedBox(
-              width: 56,
-              height: 52,
+              width: 52,
+              height: 46,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => _day = index),
@@ -2161,7 +2269,7 @@ class _OnboardingStep4UnifiedState
   }
 
   Widget _buildDayChip(String label, bool selected) {
-    final size = selected ? 46.0 : 38.0;
+    final size = selected ? 42.0 : 36.0;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5),
       child: Center(
@@ -2175,9 +2283,9 @@ class _OnboardingStep4UnifiedState
             boxShadow: [
               BoxShadow(
                 color: (selected ? _accent : Colors.black).withValues(
-                  alpha: selected ? 0.08 : 0.04,
+                  alpha: selected ? 0.07 : 0.035,
                 ),
-                blurRadius: selected ? 6 : 7,
+                blurRadius: selected ? 5 : 7,
                 spreadRadius: 0,
                 offset: Offset(0, selected ? 2 : 3),
               ),
@@ -2556,10 +2664,10 @@ class _OnboardingStep4UnifiedState
                 // Block cards
                 ...paintedBlocks.map(
                   (visual) => _buildColoredBlock(
-                    visual.block,
+                    visual,
+                    visualBlocks: visualBlocks,
                     visibleStartMinute: range.startMinute,
                     topPadding: topPadding,
-                    overlapLane: visual.lane,
                   ),
                 ),
               ],
@@ -2648,11 +2756,14 @@ class _OnboardingStep4UnifiedState
 
   // ---- Colored block card ----
   Widget _buildColoredBlock(
-    ClassRoutineBlock item, {
+    _VisualTimelineBlock visual, {
+    required List<_VisualTimelineBlock> visualBlocks,
     required int visibleStartMinute,
     required double topPadding,
-    required int overlapLane,
   }) {
+    final item = visual.block;
+    final isFront = _isFrontVisual(visual, visualBlocks);
+    final isBackOverlap = visual.hasOverlap && !isFront;
     final top = _timelineY(
       minuteOfDay: item.startMinute,
       visibleStartMinute: visibleStartMinute,
@@ -2660,7 +2771,7 @@ class _OnboardingStep4UnifiedState
     );
     final exactHeight = _blockDurationHeight(item);
     final height = _blockVisualHeight(item);
-    final compact = height < 72;
+    final compact = height < 92;
     final showSecondaryChips = !compact && height >= 96;
 
     final config = _configForBlock(item);
@@ -2668,37 +2779,39 @@ class _OnboardingStep4UnifiedState
 
     return Positioned(
       top: top,
-      left: _leftForLane(overlapLane),
-      right: _rightForLane(overlapLane),
+      left: _leftForVisual(visual, visualBlocks),
+      right: _rightForVisual(visual, visualBlocks),
       height: height,
       child: GestureDetector(
         key: ValueKey('onboarding-step4-block-${item.id}'),
         behavior: HitTestBehavior.opaque,
         onTap: () {
           setState(() => _frontBlockId = item.id);
-          _showEditDialog(item);
         },
         child: SizedBox.expand(
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(24),
+              color: Colors.white.withValues(
+                alpha: visual.hasOverlap ? (isFront ? 0.72 : 0.58) : 0.42,
+              ),
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  baseColor.withValues(alpha: 0.3),
-                  baseColor.withValues(alpha: 0.05),
+                  baseColor.withValues(alpha: isFront ? 0.26 : 0.18),
+                  baseColor.withValues(alpha: isFront ? 0.08 : 0.04),
                 ],
               ),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.9),
-                width: 1.5,
+                color: Colors.white.withValues(alpha: isFront ? 0.96 : 0.82),
+                width: isFront ? 1.6 : 1.2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: baseColor.withValues(alpha: 0.15),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: baseColor.withValues(alpha: isFront ? 0.18 : 0.09),
+                  blurRadius: isFront ? 14 : 10,
+                  offset: Offset(0, isFront ? 5 : 3),
                 ),
               ],
             ),
@@ -2711,11 +2824,19 @@ class _OnboardingStep4UnifiedState
                     horizontal: compact ? 12 : 14,
                     vertical: compact ? 7 : 10,
                   ),
-                  child: compact
+                  child: isBackOverlap
+                      ? _buildBackOverlapBlockContent(
+                          item: item,
+                          config: config,
+                          baseColor: baseColor,
+                          compact: compact,
+                        )
+                      : compact
                       ? _buildCompactBlockContent(
                           item: item,
                           config: config,
                           baseColor: baseColor,
+                          showMenu: true,
                         )
                       : _buildRegularBlockContent(
                           item: item,
@@ -2723,6 +2844,7 @@ class _OnboardingStep4UnifiedState
                           baseColor: baseColor,
                           exactHeight: exactHeight,
                           showSecondaryChips: showSecondaryChips,
+                          showMenu: true,
                         ),
                 ),
               ),
@@ -2739,6 +2861,7 @@ class _OnboardingStep4UnifiedState
     required Color baseColor,
     required double exactHeight,
     required bool showSecondaryChips,
+    required bool showMenu,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2760,11 +2883,12 @@ class _OnboardingStep4UnifiedState
                 ),
               ),
             ),
-            const Icon(
-              Icons.more_vert_rounded,
-              color: OptivusColors.textSecondary,
-              size: 18,
-            ),
+            if (showMenu)
+              _buildBlockMenuButton(
+                item,
+                color: OptivusColors.textSecondary,
+                size: 18,
+              ),
           ],
         ),
         const SizedBox(height: 6),
@@ -2788,6 +2912,7 @@ class _OnboardingStep4UnifiedState
     required ClassRoutineBlock item,
     required ScheduleSetupConfig config,
     required Color baseColor,
+    required bool showMenu,
   }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -2818,12 +2943,60 @@ class _OnboardingStep4UnifiedState
           ),
         ),
         const SizedBox(width: 4),
-        const Icon(
-          Icons.more_vert_rounded,
-          color: OptivusColors.textSecondary,
-          size: 16,
-        ),
+        if (showMenu)
+          _buildBlockMenuButton(
+            item,
+            color: OptivusColors.textSecondary,
+            size: 16,
+          ),
       ],
+    );
+  }
+
+  Widget _buildBackOverlapBlockContent({
+    required ClassRoutineBlock item,
+    required ScheduleSetupConfig config,
+    required Color baseColor,
+    required bool compact,
+  }) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 96),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(item.icon ?? config.icon, color: baseColor, size: 13),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    item.subject,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: compact ? 10 : 11,
+                      height: 1.05,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (!compact) ...[
+              const SizedBox(height: 4),
+              _buildBlockInfoChip(
+                _formatRange(item.startMinute, item.endMinute),
+                compact: true,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 

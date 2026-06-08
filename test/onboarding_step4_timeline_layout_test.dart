@@ -96,7 +96,20 @@ void main() {
             find.byKey(const ValueKey('onboarding-step4-block-part-time-job')),
           )
           .dx;
-      expect(jobLeft - dataLeft, closeTo(14, 0.5));
+      final dataWidth = tester
+          .getSize(
+            find.byKey(
+              const ValueKey('onboarding-step4-block-data-structures'),
+            ),
+          )
+          .width;
+      final jobWidth = tester
+          .getSize(
+            find.byKey(const ValueKey('onboarding-step4-block-part-time-job')),
+          )
+          .width;
+      expect(dataLeft - jobLeft, greaterThan(70));
+      expect(dataWidth, lessThan(jobWidth));
 
       _expectBlockAlignedToTicks(
         tester,
@@ -121,11 +134,35 @@ void main() {
       final jobBlock = find.byKey(
         const ValueKey('onboarding-step4-block-part-time-job'),
       );
+      final dataBlock = find.byKey(
+        const ValueKey('onboarding-step4-block-data-structures'),
+      );
       await tester.ensureVisible(jobBlock);
       await tester.pumpAndSettle();
-      await tester.tap(jobBlock);
+
+      await tester.tap(dataBlock);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      expect(find.text('Edit Work Block'), findsNothing);
+
+      await tester.tapAt(tester.getTopLeft(jobBlock) + const Offset(18, 14));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Edit Work Block'), findsNothing);
+
+      final dataLeftAfter = tester.getTopLeft(dataBlock).dx;
+      final jobLeftAfter = tester.getTopLeft(jobBlock).dx;
+      final dataWidthAfter = tester.getSize(dataBlock).width;
+      final jobWidthAfter = tester.getSize(jobBlock).width;
+      expect(jobLeftAfter - dataLeftAfter, greaterThan(70));
+      expect(jobWidthAfter, lessThan(dataWidthAfter));
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step4-menu-part-time-job')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit block'));
+      await tester.pumpAndSettle();
       expect(find.text('Edit Work Block'), findsOneWidget);
     },
   );
@@ -160,6 +197,29 @@ void main() {
     expect(find.text('Upload your class and work timetable'), findsOneWidget);
     expect(find.text('Class timetable'), findsOneWidget);
     expect(find.text('Work schedule'), findsOneWidget);
+    final classTarget = find.byKey(
+      const ValueKey('onboarding-step4-upload-target-classes'),
+    );
+    final workTarget = find.byKey(
+      const ValueKey('onboarding-step4-upload-target-work'),
+    );
+    expect(classTarget, findsOneWidget);
+    expect(workTarget, findsOneWidget);
+    expect(
+      (tester.getTopLeft(classTarget).dy - tester.getTopLeft(workTarget).dy)
+          .abs(),
+      lessThan(2),
+    );
+    expect(
+      tester.getTopLeft(workTarget).dx,
+      greaterThan(tester.getTopLeft(classTarget).dx),
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const ValueKey('onboarding-step4-upload-card')))
+          .height,
+      lessThan(190),
+    );
     expect(
       find.text(
         'Upload both class and work schedule photos before generating your timeline.',
@@ -448,6 +508,15 @@ void main() {
     );
     await tester.ensureVisible(workBlock);
     await tester.tap(workBlock);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit Work Block'), findsNothing);
+
+    await tester.tap(
+      find.byKey(const ValueKey('onboarding-step4-menu-client-calls')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit block'));
     await tester.pumpAndSettle();
 
     expect(find.text('Edit Work Block'), findsOneWidget);
