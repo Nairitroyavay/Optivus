@@ -29,9 +29,6 @@ class OnboardingFlow extends ConsumerStatefulWidget {
 }
 
 class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
-  static const String _classJobAiBusyMessage =
-      'Wait while AI reads your timetable.';
-
   late PageController _pageController;
 
   double _pageOffset = 0.0;
@@ -471,11 +468,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final bool showSave = false; // Globally hidden for onboarding.
 
     String ctaLabel = 'Next Step';
-    bool ctaEnabled = !_isNavigating && !_isSaving;
+    bool ctaEnabled =
+        !_isNavigating &&
+        !_isSaving &&
+        !onboardingState.stepLoading[_currentPage];
     final classJobActionBusy =
         _currentPage == onboardingClassJobStepIndex &&
         _classJobActionBusy(onboardingState.draft, watch: true);
-    _scheduleClassJobBusyValidation(classJobActionBusy);
 
     if (_currentPage == 0) {
       ctaLabel = 'Get Started';
@@ -621,30 +620,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         .toList(growable: false);
   }
 
-  List<TimelineBlockDraft> _normalizeSavedScheduleBlocks(
-    List<TimelineBlockDraft> blocks,
-    String section,
-  ) {
-    return blocks
-        .where((block) => block.title.trim().isNotEmpty)
-        .where((block) => block.startMinute < block.endMinute)
-        .map((block) {
-          return TimelineBlockDraft(
-            id: block.id,
-            section: section,
-            title: block.title.trim(),
-            startMinute: block.startMinute,
-            endMinute: block.endMinute,
-            repeatDays: block.repeatDays,
-            location: block.location,
-            blockType: TimelineBlockDraft.hardBlockKey,
-            source: 'ai_import',
-          );
-        })
-        .toList(growable: false);
-  }
-
-  bool _classJobActionBusy(OnboardingDraft draft, {required bool watch}) {
+  bool _classJobActionBusy(OnboardingDraft _, {required bool watch}) {
     final aiState = watch
         ? ref.watch(routineImportAiControllerProvider)
         : ref.read(routineImportAiControllerProvider);
@@ -657,25 +633,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return aiState.isExtracting || uploadApplies;
   }
 
-  void _scheduleClassJobBusyValidation(bool busy) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final notifier = ref.read(mockOnboardingProvider.notifier);
-      final current = ref.read(mockOnboardingProvider).validationMessage;
-      if (busy) {
-        if (current != _classJobAiBusyMessage) {
-          notifier.setValidationMessage(_classJobAiBusyMessage);
-        }
-        return;
-      }
-      if (current == _classJobAiBusyMessage) {
-        notifier.clearValidation();
-      }
-    });
-  }
-
   Future<bool> _nextClassesJob(OnboardingDraft draft) async {
-    final base = draft.baseTimeline;
     final role = draft.lifeRole.lifeRole;
     final classesRequired =
         role == LifeRoleDraft.studentKey ||
@@ -687,21 +645,23 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (!classesRequired && !workRequired) return false;
 
     if (_classJobActionBusy(draft, watch: false)) {
-      _setInternalValidation(_classJobAiBusyMessage);
+      ref.read(mockOnboardingProvider.notifier).clearValidation();
       return true;
     }
 
     // Read generated blocks from unified step 4 providers
     final localClassBlocks = ref.read(onboardingClassTimelineProvider);
     final localWorkBlocks = ref.read(onboardingWorkTimelineProvider);
-    final confirmedClassBlocks = base.confirmedBlocksForSection('classes');
-    final confirmedWorkBlocks = base.confirmedBlocksForSection(
+    final visibleClassBlocks = _timelineBlocksFromLocalSchedule(
+      localClassBlocks,
+      'classes',
+    );
+    final visibleWorkBlocks = _timelineBlocksFromLocalSchedule(
+      localWorkBlocks,
       'job_work_business',
     );
-    final hasClassBlocks =
-        localClassBlocks.isNotEmpty || confirmedClassBlocks.isNotEmpty;
-    final hasWorkBlocks =
-        localWorkBlocks.isNotEmpty || confirmedWorkBlocks.isNotEmpty;
+    final hasClassBlocks = visibleClassBlocks.isNotEmpty;
+    final hasWorkBlocks = visibleWorkBlocks.isNotEmpty;
 
     // Validate
     if (classesRequired &&
@@ -722,24 +682,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     // Build all blocks to save
     final allNewBlocks = <TimelineBlockDraft>[];
     if (classesRequired) {
-      allNewBlocks.addAll(
-        localClassBlocks.isNotEmpty
-            ? _timelineBlocksFromLocalSchedule(localClassBlocks, 'classes')
-            : _normalizeSavedScheduleBlocks(confirmedClassBlocks, 'classes'),
-      );
+      allNewBlocks.addAll(visibleClassBlocks);
     }
     if (workRequired) {
-      allNewBlocks.addAll(
-        localWorkBlocks.isNotEmpty
-            ? _timelineBlocksFromLocalSchedule(
-                localWorkBlocks,
-                'job_work_business',
-              )
-            : _normalizeSavedScheduleBlocks(
-                confirmedWorkBlocks,
-                'job_work_business',
-              ),
-      );
+      allNewBlocks.addAll(visibleWorkBlocks);
     }
 
     // Save all blocks to baseTimeline at once
@@ -752,7 +698,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               )
               .toList()
             ..addAll(allNewBlocks);
-      return base.copyWith(classJobSetupStep: 5, blocks: nextBlocks);
+      final nextPending = base.pendingFutureImports
+          .where(
+            (entry) =>
+                entry.section != onboardingSectionClasses &&
+                entry.section != onboardingSectionWork,
+          )
+          .toList(growable: false);
+      return base.copyWith(
+        classJobSetupStep: 5,
+        blocks: nextBlocks,
+        pendingFutureImports: nextPending,
+      );
     });
     await _persistCurrentDraftAfterNavigation();
 

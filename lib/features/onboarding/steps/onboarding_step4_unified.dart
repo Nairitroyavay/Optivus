@@ -22,13 +22,11 @@ class _PhotoSlot {
   final UploadedAsset asset;
   final String label;
   final RoutineImportReviewSource source;
-  final String timelineSection;
 
   const _PhotoSlot({
     required this.asset,
     required this.label,
     required this.source,
-    required this.timelineSection,
   });
 }
 
@@ -61,11 +59,13 @@ class _OnboardingStep4UnifiedState
     extends ConsumerState<OnboardingStep4Unified> {
   static const _kHourHeight = 84.0;
   static const _kLeftOffset = 64.0;
+  static const _kMinTimelineAreaHeight = 320.0;
 
   final List<_PhotoSlot> _photos = [];
   bool _isUploading = false;
   bool _isGenerating = false;
   String? _generationError;
+  String? _timelineError;
   int _day = 0; // 0=Mon … 6=Sun
   bool _didInitFromDraft = false;
 
@@ -117,8 +117,7 @@ class _OnboardingStep4UnifiedState
   }
 
   // ---- Accent for the combined view (class-primary) ----
-  Color get _accent =>
-      _classesRequired ? OptivusColors.blueAccent : OptivusColors.brandAccent;
+  Color get _accent => OptivusColors.aquaAccent;
 
   @override
   void initState() {
@@ -233,19 +232,16 @@ class _OnboardingStep4UnifiedState
     UploadedAssetPurpose purpose;
     String label;
     RoutineImportReviewSource source;
-    String section;
 
     if (_needsBothPhotos) {
       if (!_hasClassPhoto) {
         purpose = UploadedAssetPurpose.classTimetable;
         label = 'Class';
         source = RoutineImportReviewSource.classes;
-        section = 'classes';
       } else if (!_hasWorkPhoto) {
         purpose = UploadedAssetPurpose.workSchedule;
         label = 'Work';
         source = RoutineImportReviewSource.work;
-        section = 'job_work_business';
       } else {
         setState(() {
           _generationError = 'Only class and work timetable photos are needed.';
@@ -256,15 +252,18 @@ class _OnboardingStep4UnifiedState
       purpose = UploadedAssetPurpose.classTimetable;
       label = 'Class';
       source = RoutineImportReviewSource.classes;
-      section = 'classes';
     } else {
       purpose = UploadedAssetPurpose.workSchedule;
       label = 'Work';
       source = RoutineImportReviewSource.work;
-      section = 'job_work_business';
     }
 
-    setState(() => _isUploading = true);
+    setState(() {
+      _isUploading = true;
+      _generationError = null;
+      _timelineError = null;
+    });
+    ref.read(mockOnboardingProvider.notifier).clearValidation();
 
     final draft = ref.read(mockOnboardingProvider).draft;
     final uid = ref.read(authProvider).user?.uid ?? draft.uid;
@@ -292,16 +291,10 @@ class _OnboardingStep4UnifiedState
     }
 
     setState(() {
-      _photos.add(
-        _PhotoSlot(
-          asset: asset,
-          label: label,
-          source: source,
-          timelineSection: section,
-        ),
-      );
+      _photos.add(_PhotoSlot(asset: asset, label: label, source: source));
       _photos.sort(_comparePhotoSlots);
       _generationError = null;
+      _timelineError = null;
     });
     _markClassJobDirty();
   }
@@ -312,6 +305,7 @@ class _OnboardingStep4UnifiedState
     setState(() {
       _photos.removeAt(index);
       _generationError = null;
+      _timelineError = null;
     });
 
     // Clear generated blocks for the removed section
@@ -348,9 +342,7 @@ class _OnboardingStep4UnifiedState
     if (!_canTapGenerate) return;
     if (_needsBothPhotos && !_hasAllPhotos) {
       setState(() {
-        _generationError =
-            'Missing one timetable photo.\n'
-            'Please upload both class and work schedules.';
+        _generationError = 'Missing one timetable photo';
       });
       return;
     }
@@ -358,78 +350,102 @@ class _OnboardingStep4UnifiedState
     setState(() {
       _isGenerating = true;
       _generationError = null;
+      _timelineError = null;
     });
+    ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepLoading(onboardingClassJobStepIndex, true);
 
     final draft = ref.read(mockOnboardingProvider).draft;
     final aiController = ref.read(routineImportAiControllerProvider.notifier);
 
     bool anySuccess = false;
 
-    for (final photo in _photos) {
-      if (!mounted) return;
-      if (photo.source == RoutineImportReviewSource.classes) {
-        ref.read(onboardingClassTimelineProvider.notifier).state = const [];
-      } else {
-        ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
-      }
-
-      final now = DateTime.now();
-      final reviewDraft = RoutineImportReviewDraft(
-        id: 'onboarding_${photo.source.name}_import_review',
-        uid: draft.uid,
-        source: photo.source,
-        status: RoutineImportReviewStatus.needsReview,
-        sourceLabel: photo.label,
-        uploadedAssetId: photo.asset.assetId,
-        uploadedAssetR2Key: photo.asset.r2Key,
-        uploadedAssetStatus: 'uploaded',
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      final result = await aiController.runExtraction(reviewDraft);
-      if (!mounted) return;
-
-      if (result != null && result.candidates.isNotEmpty) {
-        anySuccess = true;
-        final config = photo.source == RoutineImportReviewSource.classes
-            ? ScheduleSetupConfig.classSetup
-            : ScheduleSetupConfig.workSetup;
-
-        final blocks = result.candidates
-            .where(
-              (c) =>
-                  c.title.trim().isNotEmpty &&
-                  c.startMinute < c.endMinute &&
-                  c.candidateType == RoutineImportCandidateType.block,
-            )
-            .toList();
-
-        final classBlocks = blocks
-            .asMap()
-            .entries
-            .map(
-              (entry) => ClassRoutineBlock(
-                id: entry.value.id,
-                subject: entry.value.title,
-                room: entry.value.location ?? '',
-                startMinute: entry.value.startMinute.clamp(0, 24 * 60 - 1),
-                endMinute: entry.value.endMinute.clamp(1, 24 * 60),
-                repeatDays: _safeRepeatDays(entry.value.repeatDays),
-                icon: config.icon,
-                color: config.colorCycle[entry.key % config.colorCycle.length],
-                hasTopTape: true,
-                hasBottomTape: true,
-              ),
-            )
-            .toList(growable: false);
-
+    try {
+      for (final photo in _photos) {
+        if (!mounted) return;
         if (photo.source == RoutineImportReviewSource.classes) {
-          ref.read(onboardingClassTimelineProvider.notifier).state =
-              classBlocks;
+          ref.read(onboardingClassTimelineProvider.notifier).state = const [];
         } else {
-          ref.read(onboardingWorkTimelineProvider.notifier).state = classBlocks;
+          ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
         }
+
+        final now = DateTime.now();
+        final reviewDraft = RoutineImportReviewDraft(
+          id: 'onboarding_${photo.source.name}_import_review',
+          uid: draft.uid,
+          source: photo.source,
+          status: RoutineImportReviewStatus.needsReview,
+          sourceLabel: photo.label,
+          uploadedAssetId: photo.asset.assetId,
+          uploadedAssetR2Key: photo.asset.r2Key,
+          uploadedAssetStatus: 'uploaded',
+          createdAt: now,
+          updatedAt: now,
+        );
+
+        final result = await aiController.runExtraction(reviewDraft);
+        if (!mounted) return;
+
+        final candidateCount = result?.candidates.length ?? 0;
+        if (result != null && result.candidates.isNotEmpty) {
+          final config = photo.source == RoutineImportReviewSource.classes
+              ? ScheduleSetupConfig.classSetup
+              : ScheduleSetupConfig.workSetup;
+
+          final blocks = result.candidates
+              .where((c) => c.title.trim().isNotEmpty)
+              .where((c) => c.startMinute < c.endMinute)
+              .toList(growable: false);
+
+          final classBlocks = blocks
+              .asMap()
+              .entries
+              .map(
+                (entry) => ClassRoutineBlock(
+                  id: entry.value.id,
+                  subject: entry.value.title,
+                  room: entry.value.location ?? '',
+                  startMinute: entry.value.startMinute.clamp(0, 24 * 60 - 1),
+                  endMinute: entry.value.endMinute.clamp(1, 24 * 60),
+                  repeatDays: _safeRepeatDays(entry.value.repeatDays),
+                  icon: config.icon,
+                  color:
+                      config.colorCycle[entry.key % config.colorCycle.length],
+                  hasTopTape: true,
+                  hasBottomTape: true,
+                ),
+              )
+              .toList(growable: false);
+
+          debugPrint(
+            '[Onboarding4] ${photo.source.name} AI candidate count: '
+            '$candidateCount; visible blocks: ${classBlocks.length}',
+          );
+
+          if (classBlocks.isNotEmpty) {
+            anySuccess = true;
+            if (photo.source == RoutineImportReviewSource.classes) {
+              ref.read(onboardingClassTimelineProvider.notifier).state =
+                  classBlocks;
+            } else {
+              ref.read(onboardingWorkTimelineProvider.notifier).state =
+                  classBlocks;
+            }
+          }
+        } else {
+          debugPrint(
+            '[Onboarding4] ${photo.source.name} AI candidate count: 0; '
+            'visible blocks: 0',
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingClassJobStepIndex, false);
       }
     }
 
@@ -437,13 +453,10 @@ class _OnboardingStep4UnifiedState
     setState(() {
       _isGenerating = false;
       if (!anySuccess) {
-        _generationError =
-            'We couldn\'t detect any blocks. Try a clearer photo.';
+        _timelineError = 'AI could not detect timetable blocks clearly.';
       }
     });
-    if (anySuccess) {
-      _markClassJobDirty();
-    }
+    if (anySuccess) _markClassJobDirty();
   }
 
   // ---- Sync local blocks back to provider (for edits) ----
@@ -888,7 +901,20 @@ class _OnboardingStep4UnifiedState
         _buildDayChips(),
 
         // ── Timeline ──
-        Expanded(child: _buildTimelineArea(allBlocks, hasBlocks)),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final height =
+                  constraints.maxHeight.isFinite && constraints.maxHeight > 0
+                  ? constraints.maxHeight
+                  : _kMinTimelineAreaHeight;
+              return SizedBox(
+                height: height,
+                child: _buildTimelineArea(allBlocks, hasBlocks),
+              );
+            },
+          ),
+        ),
       ],
     );
   }
@@ -995,121 +1021,140 @@ class _OnboardingStep4UnifiedState
     final previewPath = photo.asset.localPreviewPath;
     final hasPreview = previewPath != null && File(previewPath).existsSync();
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.9),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
+    return SizedBox(
+      width: 72,
+      height: 72,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.9),
+                width: 1.5,
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(13),
-            child: hasPreview
-                ? Image.file(File(previewPath), fit: BoxFit.cover)
-                : Container(
-                    color: _accent.withValues(alpha: 0.1),
-                    child: Icon(Icons.image_rounded, color: _accent, size: 28),
-                  ),
-          ),
-        ),
-        // Label
-        Positioned(
-          bottom: -6,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: _accent,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                photo.label,
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
-              ),
+              ],
             ),
-          ),
-        ),
-        // X close button
-        if (!_isUploading && !_isGenerating)
-          Positioned(
-            top: -6,
-            right: -6,
-            child: GestureDetector(
-              onTap: () => _removePhoto(index),
-              child: Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                  border: Border.all(
-                    color: const Color(0xFFE2E8F0),
-                    width: 1.2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(13),
+              child: hasPreview
+                  ? Image.file(File(previewPath), fit: BoxFit.cover)
+                  : Container(
+                      color: _accent.withValues(alpha: 0.1),
+                      child: Icon(
+                        Icons.image_rounded,
+                        color: _accent,
+                        size: 28,
+                      ),
                     ),
-                  ],
+            ),
+          ),
+          // Label
+          Positioned(
+            bottom: -6,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _accent,
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Icon(
-                  Icons.close_rounded,
-                  size: 14,
-                  color: Color(0xFF64748B),
+                child: Text(
+                  photo.label,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ),
           ),
-      ],
+          // X close button
+          if (!_isUploading && !_isGenerating)
+            Positioned(
+              top: -6,
+              right: -6,
+              width: 24,
+              height: 24,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _removePhoto(index),
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                    border: Border.all(
+                      color: const Color(0xFFE2E8F0),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _buildAddPhotoButton() {
-    return GestureDetector(
-      onTap: _pickAndUpload,
-      child: Container(
-        width: 64,
-        height: 64,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          color: Colors.white.withValues(alpha: 0.5),
-          border: Border.all(color: _accent.withValues(alpha: 0.3), width: 1.5),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.add_photo_alternate_rounded, color: _accent, size: 24),
-            const SizedBox(height: 2),
-            Text(
-              'Upload',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: _accent,
-              ),
+    return SizedBox(
+      width: 64,
+      height: 64,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _pickAndUpload,
+        child: Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: Colors.white.withValues(alpha: 0.5),
+            border: Border.all(
+              color: _accent.withValues(alpha: 0.3),
+              width: 1.5,
             ),
-          ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add_photo_alternate_rounded, color: _accent, size: 24),
+              const SizedBox(height: 2),
+              Text(
+                'Upload',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: _accent,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1138,7 +1183,7 @@ class _OnboardingStep4UnifiedState
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF64748B),
+              color: OptivusColors.textSecondary,
             ),
           ),
         ],
@@ -1151,50 +1196,91 @@ class _OnboardingStep4UnifiedState
     final bool enabled = _canTapGenerate;
     final bool active = enabled || spinning;
 
-    return GestureDetector(
-      onTap: enabled && !spinning ? _runGeneration : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: active
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [_accent, _accent.withValues(alpha: 0.8)],
-                )
-              : null,
-          color: active ? null : const Color(0xFFE2E8F0),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: _accent.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : null,
-        ),
-        child: spinning
-            ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Colors.white,
-                ),
-              )
-            : Text(
-                '→',
-                style: TextStyle(
-                  color: active ? Colors.white : const Color(0xFF94A3B8),
-                  fontSize: 26,
-                  height: 1,
-                  fontWeight: FontWeight.w900,
+    return SizedBox(
+      width: 54,
+      height: 54,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled && !spinning ? _runGeneration : null,
+        child: Opacity(
+          opacity: active ? 1 : 0.48,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: active
+                  ? _accent.withValues(alpha: 0.88)
+                  : Colors.white.withValues(alpha: 0.36),
+              border: Border.all(
+                color: active
+                    ? Colors.white.withValues(alpha: 0.95)
+                    : Colors.white.withValues(alpha: 0.64),
+                width: 1.4,
+              ),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: _accent.withValues(alpha: 0.35),
+                        blurRadius: 18,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 8),
+                      ),
+                      BoxShadow(
+                        color: Colors.white.withValues(alpha: 0.62),
+                        blurRadius: 10,
+                        offset: const Offset(-3, -3),
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+            ),
+            child: ClipOval(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned(
+                      top: 5,
+                      left: 13,
+                      right: 13,
+                      height: 8,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(99),
+                          color: Colors.white.withValues(alpha: 0.34),
+                        ),
+                      ),
+                    ),
+                    if (spinning)
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
+                      )
+                    else
+                      Icon(
+                        Icons.arrow_upward_rounded,
+                        color: active ? Colors.white : OptivusColors.textMuted,
+                        size: 26,
+                      ),
+                  ],
                 ),
               ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1219,9 +1305,14 @@ class _OnboardingStep4UnifiedState
               'SUN',
             ][index];
             final isSelected = _day == index;
-            return GestureDetector(
-              onTap: () => setState(() => _day = index),
-              child: _buildDayChip(dayName, isSelected),
+            return SizedBox(
+              width: 56,
+              height: 52,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _day = index),
+                child: _buildDayChip(dayName, isSelected),
+              ),
             );
           }),
         ),
@@ -1233,66 +1324,72 @@ class _OnboardingStep4UnifiedState
     final size = selected ? 46.0 : 38.0;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: (selected ? _accent : Colors.black).withValues(
-                alpha: selected ? 0.20 : 0.06,
-              ),
-              blurRadius: selected ? 14 : 8,
-              offset: Offset(0, selected ? 6 : 3),
-            ),
-            BoxShadow(
-              color: Colors.white.withValues(alpha: 0.70),
-              blurRadius: 10,
-              offset: const Offset(-3, -3),
-            ),
-          ],
-        ),
-        child: ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: selected
-                    ? _accent.withValues(alpha: 0.46)
-                    : Colors.white.withValues(alpha: 0.38),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: selected ? 0.96 : 0.72),
-                  width: selected ? 1.8 : 1.2,
+      child: Center(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: (selected ? _accent : Colors.black).withValues(
+                  alpha: selected ? 0.24 : 0.06,
                 ),
+                blurRadius: selected ? 16 : 8,
+                offset: Offset(0, selected ? 6 : 3),
               ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned(
-                    top: 4,
-                    left: 9,
-                    right: 9,
-                    height: 10,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(99),
-                        color: Colors.white.withValues(alpha: 0.46),
+              BoxShadow(
+                color: Colors.white.withValues(alpha: 0.70),
+                blurRadius: 10,
+                offset: const Offset(-3, -3),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: selected
+                      ? _accent.withValues(alpha: 0.75)
+                      : Colors.white.withValues(alpha: 0.38),
+                  border: Border.all(
+                    color: selected
+                        ? _accent.withValues(alpha: 0.35)
+                        : Colors.white.withValues(alpha: 0.72),
+                    width: selected ? 1.8 : 1.2,
+                  ),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned(
+                      top: 4,
+                      left: 9,
+                      right: 9,
+                      height: 10,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(99),
+                          color: Colors.white.withValues(alpha: 0.46),
+                        ),
                       ),
                     ),
-                  ),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: selected ? 12 : 10,
-                      fontWeight: FontWeight.w900,
-                      color: selected ? Colors.white : const Color(0xFF64748B),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: selected ? 12 : 10,
+                        fontWeight: FontWeight.w900,
+                        color: selected
+                            ? Colors.white
+                            : OptivusColors.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -1307,48 +1404,90 @@ class _OnboardingStep4UnifiedState
   Widget _buildTimelineArea(List<ClassRoutineBlock> allBlocks, bool hasBlocks) {
     // Generating state: show AI reading message
     if (_isGenerating) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: OnboardingGlassCard(
-            tint: _accent.withValues(alpha: 0.07),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: _accent,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'AI is reading your timetable...',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          color: OptivusColors.textPrimary,
-                        ),
+      return SizedBox.expand(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 96),
+              child: OnboardingGlassCard(
+                tint: _accent.withValues(alpha: 0.07),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: _accent,
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        'AI is generating your timeline.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.textSecondary,
-                        ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'AI is reading your timetable...',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textPrimary,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'AI is generating your timeline.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: OptivusColors.textSecondary,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (!hasBlocks && _timelineError != null) {
+      return SizedBox.expand(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 112),
+              child: OnboardingGlassCard(
+                tint: _accent.withValues(alpha: 0.08),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.search_off_rounded,
+                      color: _accent.withValues(alpha: 0.85),
+                      size: 34,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _timelineError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: OptivusColors.textSecondary,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -1361,32 +1500,37 @@ class _OnboardingStep4UnifiedState
     }
 
     // Empty: show placeholder
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: OnboardingGlassCard(
-          tint: Colors.white.withValues(alpha: 0.3),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.schedule_rounded,
-                color: const Color(0xFF94A3B8),
-                size: 36,
+    return SizedBox.expand(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 112),
+            child: OnboardingGlassCard(
+              tint: Colors.white.withValues(alpha: 0.30),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.schedule_rounded,
+                    color: _accent.withValues(alpha: 0.75),
+                    size: 36,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Upload your timetable photo and tap the arrow '
+                    'to generate your weekly schedule.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.textSecondary,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Upload your timetable photo and tap the arrow '
-                'to generate your weekly schedule.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF64748B),
-                  height: 1.5,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1462,17 +1606,17 @@ class _OnboardingStep4UnifiedState
                   width: 8,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.35),
+                      color: _accent.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: _accent.withValues(alpha: 0.35),
                         width: 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 4,
-                          offset: const Offset(2, 2),
+                          color: _accent.withValues(alpha: 0.16),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
@@ -1506,14 +1650,14 @@ class _OnboardingStep4UnifiedState
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF64748B),
+                            color: OptivusColors.textSecondary,
                           ),
                         ),
                         const SizedBox(width: 6),
                         Container(
                           width: 4,
                           height: 1.5,
-                          color: const Color(0xFFCBD5E1),
+                          color: _accent.withValues(alpha: 0.35),
                         ),
                       ],
                     ),
@@ -1536,7 +1680,7 @@ class _OnboardingStep4UnifiedState
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF64748B),
+                          color: OptivusColors.textSecondary,
                         ),
                       ),
                     ),
@@ -1606,14 +1750,14 @@ class _OnboardingStep4UnifiedState
                 width: showLabel ? 10 : (isHalfHour ? 12 : 7),
                 height: isHalfHour ? 1.4 : 1,
                 color: _accent.withValues(
-                  alpha: showLabel ? 0.34 : (isHalfHour ? 0.20 : 0.13),
+                  alpha: showLabel ? 0.55 : (isHalfHour ? 0.35 : 0.22),
                 ),
               ),
               if (showLabel)
                 Expanded(
                   child: Container(
                     height: 1,
-                    color: _accent.withValues(alpha: 0.10),
+                    color: _accent.withValues(alpha: 0.18),
                   ),
                 ),
             ],
@@ -1652,12 +1796,12 @@ class _OnboardingStep4UnifiedState
               Container(
                 width: 9,
                 height: 1,
-                color: _accent.withValues(alpha: 0.30),
+                color: _accent.withValues(alpha: 0.50),
               ),
               Expanded(
                 child: Container(
                   height: 1,
-                  color: _accent.withValues(alpha: 0.08),
+                  color: _accent.withValues(alpha: 0.18),
                 ),
               ),
             ],
@@ -1691,36 +1835,36 @@ class _OnboardingStep4UnifiedState
       right: 16,
       height: height,
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => _showEditDialog(item),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                baseColor.withValues(alpha: 0.3),
-                baseColor.withValues(alpha: 0.05),
+        child: SizedBox.expand(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  baseColor.withValues(alpha: 0.3),
+                  baseColor.withValues(alpha: 0.05),
+                ],
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.9),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: baseColor.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
               ],
             ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.9),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: baseColor.withValues(alpha: 0.15),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -1752,7 +1896,7 @@ class _OnboardingStep4UnifiedState
                           ),
                           const Icon(
                             Icons.more_vert_rounded,
-                            color: Color(0xFF64748B),
+                            color: OptivusColors.textSecondary,
                             size: 18,
                           ),
                         ],
@@ -1776,7 +1920,7 @@ class _OnboardingStep4UnifiedState
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFF334155),
+                                color: OptivusColors.textBody,
                               ),
                             ),
                           ),
@@ -1795,7 +1939,7 @@ class _OnboardingStep4UnifiedState
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w800,
-                                  color: Color(0xFF334155),
+                                  color: OptivusColors.textBody,
                                 ),
                               ),
                             ),

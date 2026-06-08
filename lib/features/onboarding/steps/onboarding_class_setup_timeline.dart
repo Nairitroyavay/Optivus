@@ -86,8 +86,8 @@ class ScheduleSetupConfig {
     durationTooLongText:
         'That class duration looks too long. Use a normal class window.',
     icon: Icons.school_rounded,
-    accent: OptivusColors.blueAccent,
-    titleAccent: OptivusColors.brandAccent,
+    accent: OptivusColors.aquaAccent,
+    titleAccent: OptivusColors.aquaAccent,
     colorCycle: [
       Color(0xFF378ADD),
       Color(0xFFF59E0B),
@@ -117,8 +117,8 @@ class ScheduleSetupConfig {
     durationTooLongText:
         'That work block duration looks too long. Use a normal work window.',
     icon: Icons.work_rounded,
-    accent: OptivusColors.brandAccent,
-    titleAccent: OptivusColors.roseAccent,
+    accent: OptivusColors.aquaAccent,
+    titleAccent: OptivusColors.aquaAccent,
     colorCycle: [
       Color(0xFFF59E0B),
       Color(0xFFFF9560),
