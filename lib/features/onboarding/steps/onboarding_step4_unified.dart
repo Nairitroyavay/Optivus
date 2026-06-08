@@ -58,8 +58,10 @@ class OnboardingStep4Unified extends ConsumerStatefulWidget {
 class _OnboardingStep4UnifiedState
     extends ConsumerState<OnboardingStep4Unified> {
   static const _kHourHeight = 84.0;
+  static const _kPixelsPerMinute = _kHourHeight / 60.0;
   static const _kLeftOffset = 64.0;
   static const _kMinTimelineAreaHeight = 320.0;
+  static const _kTimelineBottomPadding = 240.0;
 
   final List<_PhotoSlot> _photos = [];
   bool _isUploading = false;
@@ -218,6 +220,14 @@ class _OnboardingStep4UnifiedState
       }
     }
     return _TimelineRange(startHour: startHour, endHour: endHour);
+  }
+
+  double _timelineY({
+    required int minuteOfDay,
+    required int visibleStartMinute,
+    required double topPadding,
+  }) {
+    return topPadding + (minuteOfDay - visibleStartMinute) * _kPixelsPerMinute;
   }
 
   // ---- Upload ----
@@ -1335,15 +1345,16 @@ class _OnboardingStep4UnifiedState
             boxShadow: [
               BoxShadow(
                 color: (selected ? _accent : Colors.black).withValues(
-                  alpha: selected ? 0.24 : 0.06,
+                  alpha: selected ? 0.12 : 0.05,
                 ),
-                blurRadius: selected ? 16 : 8,
-                offset: Offset(0, selected ? 6 : 3),
+                blurRadius: selected ? 8 : 7,
+                spreadRadius: 0,
+                offset: Offset(0, selected ? 2 : 3),
               ),
               BoxShadow(
-                color: Colors.white.withValues(alpha: 0.70),
-                blurRadius: 10,
-                offset: const Offset(-3, -3),
+                color: Colors.white.withValues(alpha: selected ? 0.56 : 0.70),
+                blurRadius: selected ? 7 : 10,
+                offset: const Offset(-2, -2),
               ),
             ],
           ),
@@ -1549,19 +1560,24 @@ class _OnboardingStep4UnifiedState
 
     final range = _rangeFor(allBlocks);
     const topPadding = 18.0;
-    const bottomPadding = 220.0;
+    const bottomPadding = _kTimelineBottomPadding;
 
     final maxCardBottom = dayItems.fold<double>(0, (maxBottom, item) {
-      final top =
-          topPadding +
-          ((item.startMinute - range.startMinute) / 60) * _kHourHeight;
-      final height = ((item.endMinute - item.startMinute) / 60) * _kHourHeight;
-      final bottom = top + (height < 72 ? 72 : height);
+      final bottom = _timelineY(
+        minuteOfDay: item.endMinute,
+        visibleStartMinute: range.startMinute,
+        topPadding: topPadding,
+      );
       return bottom > maxBottom ? bottom : maxBottom;
     });
 
     final timelineHeight = [
-      topPadding + range.hourCount * _kHourHeight + bottomPadding,
+      _timelineY(
+            minuteOfDay: range.endMinute,
+            visibleStartMinute: range.startMinute,
+            topPadding: topPadding,
+          ) +
+          bottomPadding,
       maxCardBottom + bottomPadding,
     ].reduce((a, b) => a > b ? a : b);
 
@@ -1592,7 +1608,7 @@ class _OnboardingStep4UnifiedState
         blendMode: BlendMode.dstIn,
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 220),
+          padding: const EdgeInsets.only(bottom: _kTimelineBottomPadding),
           child: SizedBox(
             height: timelineHeight,
             child: Stack(
@@ -1633,31 +1649,50 @@ class _OnboardingStep4UnifiedState
                 // Hour labels
                 ...List.generate(range.hourCount + 1, (i) {
                   final hour = (range.startHour + i) % 24;
+                  final minute = range.startMinute + i * 60;
                   final ampm = hour < 12 ? 'AM' : 'PM';
                   final displayHour = hour == 0
                       ? 12
                       : (hour > 12 ? hour - 12 : hour);
                   final label = '$displayHour $ampm';
                   return Positioned(
-                    top: topPadding + i * _kHourHeight - 10,
+                    top:
+                        _timelineY(
+                          minuteOfDay: minute,
+                          visibleStartMinute: range.startMinute,
+                          topPadding: topPadding,
+                        ) -
+                        10,
                     left: 0,
-                    width: 44,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    width: 56,
+                    height: 20,
+                    child: Stack(
                       children: [
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: OptivusColors.textSecondary,
+                        Positioned(
+                          left: 0,
+                          width: 42,
+                          child: Text(
+                            label,
+                            textAlign: TextAlign.right,
+                            maxLines: 1,
+                            overflow: TextOverflow.clip,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: OptivusColors.textSecondary,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Container(
+                        Positioned(
+                          left: 48,
+                          top: 9,
                           width: 4,
                           height: 1.5,
-                          color: _accent.withValues(alpha: 0.35),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: _accent.withValues(alpha: 0.35),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -1690,7 +1725,7 @@ class _OnboardingStep4UnifiedState
                 ...dayItems.map(
                   (item) => _buildColoredBlock(
                     item,
-                    rangeStartMinute: range.startMinute,
+                    visibleStartMinute: range.startMinute,
                     topPadding: topPadding,
                   ),
                 ),
@@ -1702,112 +1737,59 @@ class _OnboardingStep4UnifiedState
     );
   }
 
-  // ---- Minute indicators (exact copy from existing) ----
+  // ---- Minute indicators ----
   List<Widget> _buildMinuteIndicators({
     required _TimelineRange range,
     required List<ClassRoutineBlock> dayItems,
     required double topPadding,
   }) {
     final widgets = <Widget>[];
-    final boundaryMinutes = <int>{
-      for (final item in dayItems) ...[item.startMinute, item.endMinute],
-    }.where((minute) => minute % 60 != 0).toSet();
+    final boundaryMinutes =
+        (<int>{
+            for (final item in dayItems) ...[item.startMinute, item.endMinute],
+          }.where((minute) {
+            return minute % 60 != 0 &&
+                minute > range.startMinute &&
+                minute < range.endMinute;
+          }).toList())
+          ..sort();
 
-    for (
-      var minute = range.startMinute + 15;
-      minute < range.endMinute;
-      minute += 15
-    ) {
-      final minutePart = minute % 60;
-      if (minutePart == 0) continue;
-      final isHalfHour = minutePart == 30;
-      final top =
-          topPadding + ((minute - range.startMinute) / 60) * _kHourHeight;
-      final showLabel = boundaryMinutes.contains(minute);
-      widgets.add(
+    for (final minute in boundaryMinutes) {
+      final y = _timelineY(
+        minuteOfDay: minute,
+        visibleStartMinute: range.startMinute,
+        topPadding: topPadding,
+      );
+      widgets.addAll([
         Positioned(
-          top: top,
-          left: showLabel ? 2 : 34,
-          right: showLabel ? null : 16,
-          height: 1,
-          child: Row(
-            children: [
-              if (showLabel)
-                SizedBox(
-                  width: 34,
-                  child: Text(
-                    TimelineUtils.formatMinuteShort(minute),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      color: _accent.withValues(alpha: 0.62),
-                    ),
-                  ),
-                ),
-              if (showLabel) const SizedBox(width: 8),
-              Container(
-                width: showLabel ? 10 : (isHalfHour ? 12 : 7),
-                height: isHalfHour ? 1.4 : 1,
-                color: _accent.withValues(
-                  alpha: showLabel ? 0.55 : (isHalfHour ? 0.35 : 0.22),
-                ),
-              ),
-              if (showLabel)
-                Expanded(
-                  child: Container(
-                    height: 1,
-                    color: _accent.withValues(alpha: 0.18),
-                  ),
-                ),
-            ],
+          top: y - 8,
+          left: 0,
+          width: 38,
+          height: 16,
+          child: Text(
+            TimelineUtils.formatMinuteShort(minute),
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: _accent.withValues(alpha: 0.68),
+            ),
           ),
         ),
-      );
-    }
-
-    for (final minute in boundaryMinutes.where((minute) => minute % 15 != 0)) {
-      if (minute <= range.startMinute || minute >= range.endMinute) {
-        continue;
-      }
-      final top =
-          topPadding + ((minute - range.startMinute) / 60) * _kHourHeight;
-      widgets.add(
         Positioned(
-          top: top,
-          left: 2,
-          right: 16,
-          height: 1,
-          child: Row(
-            children: [
-              SizedBox(
-                width: 34,
-                child: Text(
-                  TimelineUtils.formatMinuteShort(minute),
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: _accent.withValues(alpha: 0.58),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 9,
-                height: 1,
-                color: _accent.withValues(alpha: 0.50),
-              ),
-              Expanded(
-                child: Container(
-                  height: 1,
-                  color: _accent.withValues(alpha: 0.18),
-                ),
-              ),
-            ],
+          top: y,
+          left: 44,
+          width: 18,
+          height: 1.5,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: _accent.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(99),
+            ),
           ),
         ),
-      );
+      ]);
     }
 
     return widgets;
@@ -1816,15 +1798,20 @@ class _OnboardingStep4UnifiedState
   // ---- Colored block card (exact copy from existing) ----
   Widget _buildColoredBlock(
     ClassRoutineBlock item, {
-    required int rangeStartMinute,
+    required int visibleStartMinute,
     required double topPadding,
   }) {
-    final top =
-        topPadding +
-        ((item.startMinute - rangeStartMinute) / 60) * _kHourHeight;
-    const minHeight = 72.0;
-    final calculatedHeight = (item.durationMinutes / 60) * _kHourHeight;
-    final height = calculatedHeight < minHeight ? minHeight : calculatedHeight;
+    final top = _timelineY(
+      minuteOfDay: item.startMinute,
+      visibleStartMinute: visibleStartMinute,
+      topPadding: topPadding,
+    );
+    final bottom = _timelineY(
+      minuteOfDay: item.endMinute,
+      visibleStartMinute: visibleStartMinute,
+      topPadding: topPadding,
+    );
+    final height = (bottom - top).clamp(1.0, double.infinity).toDouble();
 
     final config = _configForBlock(item);
     final baseColor = item.color ?? config.accent;
