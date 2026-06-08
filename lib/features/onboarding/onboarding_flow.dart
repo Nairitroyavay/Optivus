@@ -15,7 +15,6 @@ import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
-import 'package:optivus/features/onboarding/steps/base_timeline_step.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
@@ -546,28 +545,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   bool _backClassesJob(OnboardingDraft draft) {
-    final base = draft.baseTimeline;
-    final role = draft.lifeRole.lifeRole;
-    final classesRequired =
-        role == LifeRoleDraft.studentKey ||
-        role == LifeRoleDraft.studentWorkingKey;
-    final workRequired =
-        role == LifeRoleDraft.workingKey ||
-        role == LifeRoleDraft.studentWorkingKey ||
-        role == LifeRoleDraft.businessKey;
-    final stages = [
-      0,
-      if (classesRequired) ...[1, 2],
-      if (workRequired) ...[3, 4],
-      5,
-    ];
-    final previous = _previousInternalStage(base.classJobSetupStep, stages);
-    if (previous == null) return false;
-    _updateBaseTimelineStage(
-      onboardingClassJobStepIndex,
-      (base) => base.copyWith(classJobSetupStep: previous),
-    );
-    return true;
+    // Simplified: no internal stages, always go back to previous step.
+    return false;
   }
 
   bool _backEating(OnboardingDraft draft) {
@@ -665,39 +644,17 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         .toList(growable: false);
   }
 
-  String? _activeClassJobSectionLabel(OnboardingDraft draft) {
-    final base = draft.baseTimeline;
-    final role = draft.lifeRole.lifeRole;
-    final classesRequired =
-        role == LifeRoleDraft.studentKey ||
-        role == LifeRoleDraft.studentWorkingKey;
-    final workRequired =
-        role == LifeRoleDraft.workingKey ||
-        role == LifeRoleDraft.studentWorkingKey ||
-        role == LifeRoleDraft.businessKey;
-    final stage = base.classJobSetupStep;
-    if (classesRequired && stage <= 2) return onboardingSectionClasses;
-    if (workRequired && (!classesRequired || stage == 3 || stage == 4)) {
-      return onboardingSectionWork;
-    }
-    return null;
-  }
-
   bool _classJobActionBusy(OnboardingDraft draft, {required bool watch}) {
-    final sectionLabel = _activeClassJobSectionLabel(draft);
-    if (sectionLabel == null) return false;
-    final purpose = onboardingUploadPurposeForBaseTimelineSection(sectionLabel);
-    final uploadState = watch
-        ? ref.watch(uploadControllerProvider)
-        : ref.read(uploadControllerProvider);
     final aiState = watch
         ? ref.watch(routineImportAiControllerProvider)
         : ref.read(routineImportAiControllerProvider);
+    final uploadState = watch
+        ? ref.watch(uploadControllerProvider)
+        : ref.read(uploadControllerProvider);
     final uploadApplies =
-        purpose != null &&
-        uploadState.purpose == purpose &&
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding;
-    return aiState.isExtracting || (uploadApplies && uploadState.isBusy);
+        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
+        uploadState.isBusy;
+    return aiState.isExtracting || uploadApplies;
   }
 
   void _scheduleClassJobBusyValidation(bool busy) {
@@ -717,43 +674,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     });
   }
 
-  BaseTimelineDraft _saveAppliedScheduleBlocks({
-    required BaseTimelineDraft base,
-    required String timelineSection,
-    required String sectionLabel,
-    required List<TimelineBlockDraft> blocks,
-    required int nextStage,
-  }) {
-    final now = DateTime.now();
-    final normalizedBlocks = _normalizeSavedScheduleBlocks(
-      blocks,
-      timelineSection,
-    );
-    final pending = base.latestImportForSection(sectionLabel);
-    final nextBlocks =
-        base.blocks.where((b) => b.section != timelineSection).toList()
-          ..addAll(normalizedBlocks);
-    var nextBase = base.copyWith(
-      classJobSetupStep: nextStage,
-      blocks: nextBlocks,
-    );
-
-    if (pending != null) {
-      nextBase = nextBase.upsertPendingImport(
-        pending.copyWith(
-          updatedAt: now,
-          status: PendingFutureImportDraft.appliedStatus,
-          parsedBlocks: normalizedBlocks,
-          userVerified: true,
-          userEdited: pending.userEdited,
-          clearErrorMessage: true,
-        ),
-      );
-    }
-
-    return nextBase;
-  }
-
   Future<bool> _nextClassesJob(OnboardingDraft draft) async {
     final base = draft.baseTimeline;
     final role = draft.lifeRole.lifeRole;
@@ -766,103 +686,78 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         role == LifeRoleDraft.businessKey;
     if (!classesRequired && !workRequired) return false;
 
-    final stage = base.classJobSetupStep;
     if (_classJobActionBusy(draft, watch: false)) {
       _setInternalValidation(_classJobAiBusyMessage);
       return true;
     }
 
-    if (classesRequired && stage <= 2) {
-      final localBlocks = ref.read(onboardingClassTimelineProvider);
-      final confirmedClassBlocks = base.confirmedBlocksForSection('classes');
-      final pendingParsedBlocks =
-          base.latestImportForSection(onboardingSectionClasses)?.parsedBlocks ??
-          const <TimelineBlockDraft>[];
-      if (localBlocks.isEmpty &&
-          confirmedClassBlocks.isEmpty &&
-          pendingParsedBlocks.isEmpty) {
-        _setInternalValidation('Upload your class timetable to continue.');
-        return true;
-      }
-
-      final confirmedBlocks = localBlocks.isNotEmpty
-          ? _timelineBlocksFromLocalSchedule(localBlocks, 'classes')
-          : confirmedClassBlocks.isNotEmpty
-          ? _normalizeSavedScheduleBlocks(confirmedClassBlocks, 'classes')
-          : _normalizeSavedScheduleBlocks(pendingParsedBlocks, 'classes');
-
-      _updateBaseTimelineStage(
-        onboardingClassJobStepIndex,
-        (base) => _saveAppliedScheduleBlocks(
-          base: base,
-          timelineSection: 'classes',
-          sectionLabel: onboardingSectionClasses,
-          blocks: confirmedBlocks,
-          nextStage: workRequired ? 3 : 5,
-        ),
-      );
-      await _persistCurrentDraftAfterNavigation();
-      ref.read(onboardingClassTimelineProvider.notifier).state = const [];
-      return true;
-    }
-
-    final shouldSaveWork =
-        workRequired && (!classesRequired || stage == 3 || stage == 4);
-    if (shouldSaveWork) {
-      final localBlocks = ref.read(onboardingWorkTimelineProvider);
-      final confirmedWorkBlocks = base.confirmedBlocksForSection(
-        'job_work_business',
-      );
-      final pendingParsedBlocks =
-          base.latestImportForSection(onboardingSectionWork)?.parsedBlocks ??
-          const <TimelineBlockDraft>[];
-      if (localBlocks.isEmpty &&
-          confirmedWorkBlocks.isEmpty &&
-          pendingParsedBlocks.isEmpty) {
-        _setInternalValidation('Upload work schedule to continue.');
-        return true;
-      }
-
-      final confirmedBlocks = localBlocks.isNotEmpty
-          ? _timelineBlocksFromLocalSchedule(localBlocks, 'job_work_business')
-          : confirmedWorkBlocks.isNotEmpty
-          ? _normalizeSavedScheduleBlocks(
-              confirmedWorkBlocks,
-              'job_work_business',
-            )
-          : _normalizeSavedScheduleBlocks(
-              pendingParsedBlocks,
-              'job_work_business',
-            );
-
-      _updateBaseTimelineStage(
-        onboardingClassJobStepIndex,
-        (base) => _saveAppliedScheduleBlocks(
-          base: base,
-          timelineSection: 'job_work_business',
-          sectionLabel: onboardingSectionWork,
-          blocks: confirmedBlocks,
-          nextStage: 5,
-        ),
-      );
-      await _persistCurrentDraftAfterNavigation();
-      ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
-      return true;
-    }
-
-    final stages = [
-      0,
-      if (classesRequired) ...[1, 2],
-      if (workRequired) ...[3, 4],
-      5,
-    ];
-    final next = _nextInternalStage(stage, stages);
-    if (next == null) return false;
-    _updateBaseTimelineStage(
-      onboardingClassJobStepIndex,
-      (base) => base.copyWith(classJobSetupStep: next),
+    // Read generated blocks from unified step 4 providers
+    final localClassBlocks = ref.read(onboardingClassTimelineProvider);
+    final localWorkBlocks = ref.read(onboardingWorkTimelineProvider);
+    final confirmedClassBlocks = base.confirmedBlocksForSection('classes');
+    final confirmedWorkBlocks = base.confirmedBlocksForSection(
+      'job_work_business',
     );
-    return true;
+    final hasClassBlocks =
+        localClassBlocks.isNotEmpty || confirmedClassBlocks.isNotEmpty;
+    final hasWorkBlocks =
+        localWorkBlocks.isNotEmpty || confirmedWorkBlocks.isNotEmpty;
+
+    // Validate
+    if (classesRequired &&
+        workRequired &&
+        (!hasClassBlocks || !hasWorkBlocks)) {
+      _setInternalValidation('Generate both class and work schedules first.');
+      return true;
+    }
+    if (classesRequired && !hasClassBlocks) {
+      _setInternalValidation('Generate your class timeline first.');
+      return true;
+    }
+    if (workRequired && !hasWorkBlocks) {
+      _setInternalValidation('Generate your work timeline first.');
+      return true;
+    }
+
+    // Build all blocks to save
+    final allNewBlocks = <TimelineBlockDraft>[];
+    if (classesRequired) {
+      allNewBlocks.addAll(
+        localClassBlocks.isNotEmpty
+            ? _timelineBlocksFromLocalSchedule(localClassBlocks, 'classes')
+            : _normalizeSavedScheduleBlocks(confirmedClassBlocks, 'classes'),
+      );
+    }
+    if (workRequired) {
+      allNewBlocks.addAll(
+        localWorkBlocks.isNotEmpty
+            ? _timelineBlocksFromLocalSchedule(
+                localWorkBlocks,
+                'job_work_business',
+              )
+            : _normalizeSavedScheduleBlocks(
+                confirmedWorkBlocks,
+                'job_work_business',
+              ),
+      );
+    }
+
+    // Save all blocks to baseTimeline at once
+    _updateBaseTimelineStage(onboardingClassJobStepIndex, (base) {
+      final nextBlocks =
+          base.blocks
+              .where(
+                (b) =>
+                    b.section != 'classes' && b.section != 'job_work_business',
+              )
+              .toList()
+            ..addAll(allNewBlocks);
+      return base.copyWith(classJobSetupStep: 5, blocks: nextBlocks);
+    });
+    await _persistCurrentDraftAfterNavigation();
+
+    // Return false to let outer flow advance to step 5
+    return false;
   }
 
   Future<bool> _nextEating(OnboardingDraft draft) async {

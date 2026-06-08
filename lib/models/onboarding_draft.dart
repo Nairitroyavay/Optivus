@@ -1465,17 +1465,17 @@ class BaseTimelineDraft {
       return 'Choose your role before setting classes and work.';
     }
     if (!classesRequired && !jobRequired) return null;
+    if (classesRequired &&
+        jobRequired &&
+        (!_hasConfirmedSection('classes') ||
+            !_hasConfirmedSection('job_work_business'))) {
+      return 'Generate both class and work schedules first.';
+    }
     if (classesRequired && !_hasConfirmedSection('classes')) {
-      if (sectionNeedsImportReview('Classes')) {
-        return 'Save your class timetable to continue.';
-      }
-      return 'Add class schedule.';
+      return 'Generate your class timeline first.';
     }
     if (jobRequired && !_hasConfirmedSection('job_work_business')) {
-      if (sectionNeedsImportReview('Job / Work / Business')) {
-        return 'Save your work schedule to continue.';
-      }
-      return 'Add work schedule.';
+      return 'Generate your work timeline first.';
     }
     return null;
   }

@@ -360,10 +360,46 @@ class _OnboardingClassSetupWidgetState
   }
 
   String _pendingExtractionKey(PendingFutureImportDraft pending) {
-    final assetKey = pending.uploadedAssetR2Key?.trim().isNotEmpty == true
-        ? pending.uploadedAssetR2Key!.trim()
-        : pending.uploadedAssetId?.trim();
+    final assetKey = _uploadedAssetKey(pending);
     return '${pending.id}:${assetKey ?? pending.updatedAt.toIso8601String()}';
+  }
+
+  String? _uploadedAssetKey(PendingFutureImportDraft pending) {
+    if (pending.uploadedAssetId?.trim().isNotEmpty == true) {
+      return 'id:${pending.uploadedAssetId!.trim()}';
+    }
+    if (pending.uploadedAssetR2Key?.trim().isNotEmpty == true) {
+      return 'r2:${pending.uploadedAssetR2Key!.trim()}';
+    }
+    return null;
+  }
+
+  bool _sameUploadedAsset(
+    PendingFutureImportDraft first,
+    PendingFutureImportDraft second,
+  ) {
+    final firstAssetId = first.uploadedAssetId?.trim();
+    final secondAssetId = second.uploadedAssetId?.trim();
+    if (firstAssetId?.isNotEmpty == true && firstAssetId == secondAssetId) {
+      return true;
+    }
+    final firstR2Key = first.uploadedAssetR2Key?.trim();
+    final secondR2Key = second.uploadedAssetR2Key?.trim();
+    return firstR2Key?.isNotEmpty == true && firstR2Key == secondR2Key;
+  }
+
+  bool _uploadedAssetAlreadyHasParsedOutput(
+    BaseTimelineDraft base,
+    PendingFutureImportDraft pending,
+  ) {
+    final assetKey = _uploadedAssetKey(pending);
+    if (assetKey == null) return false;
+    return base.pendingFutureImports.any(
+      (entry) =>
+          entry.section == _config.sectionLabel &&
+          entry.parsedBlocks.isNotEmpty &&
+          _sameUploadedAsset(entry, pending),
+    );
   }
 
   bool _hasAttemptedExtraction(PendingFutureImportDraft pending) {
@@ -375,6 +411,7 @@ class _OnboardingClassSetupWidgetState
   void _scheduleClassSetupStateWork({
     required PendingFutureImportDraft? pending,
     required List<TimelineBlockDraft> confirmedBlocks,
+    required bool hasLocalBlocks,
     required bool uploadBusy,
     required bool extracting,
   }) {
@@ -384,6 +421,7 @@ class _OnboardingClassSetupWidgetState
       _triggerExtractionFromPendingIfNeeded(
         pending: pending,
         confirmedBlocks: confirmedBlocks,
+        hasLocalBlocks: hasLocalBlocks,
         uploadBusy: uploadBusy,
         extracting: extracting,
       );
@@ -395,9 +433,6 @@ class _OnboardingClassSetupWidgetState
     final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
     final confirmed = _confirmedTimelineBlocks(base);
     final pending = base.latestImportForSection(_config.sectionLabel);
-    if (localBlocks.isNotEmpty) {
-      return;
-    }
 
     final sourceBlocks = confirmed.isNotEmpty
         ? confirmed
@@ -406,9 +441,29 @@ class _OnboardingClassSetupWidgetState
 
     final blocks = _classBlocksFromTimelineDrafts(sourceBlocks);
 
-    if (blocks.isNotEmpty) {
+    if (blocks.isNotEmpty && !_sameClassBlocks(localBlocks, blocks)) {
       ref.read(_provider.notifier).state = blocks;
     }
+  }
+
+  bool _sameClassBlocks(
+    List<ClassRoutineBlock> first,
+    List<ClassRoutineBlock> second,
+  ) {
+    if (first.length != second.length) return false;
+    for (var i = 0; i < first.length; i++) {
+      final a = first[i];
+      final b = second[i];
+      if (a.id != b.id ||
+          a.subject != b.subject ||
+          a.room != b.room ||
+          a.startMinute != b.startMinute ||
+          a.endMinute != b.endMinute ||
+          a.repeatDays.join(',') != b.repeatDays.join(',')) {
+        return false;
+      }
+    }
+    return true;
   }
 
   List<ClassRoutineBlock> _restoredBlocksFromDraft() {
@@ -496,15 +551,19 @@ class _OnboardingClassSetupWidgetState
   void _triggerExtractionFromPendingIfNeeded({
     required PendingFutureImportDraft? pending,
     required List<TimelineBlockDraft> confirmedBlocks,
+    required bool hasLocalBlocks,
     required bool uploadBusy,
     required bool extracting,
   }) {
+    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
     if (pending == null ||
         confirmedBlocks.isNotEmpty ||
+        hasLocalBlocks ||
         uploadBusy ||
         extracting ||
         !pending.hasUploadedAssetReference ||
         pending.parsedBlocks.isNotEmpty ||
+        _uploadedAssetAlreadyHasParsedOutput(base, pending) ||
         _pendingStatusBlocksExtraction(pending)) {
       return;
     }
@@ -670,6 +729,7 @@ class _OnboardingClassSetupWidgetState
       _triggerExtractionFromPendingIfNeeded(
         pending: pending,
         confirmedBlocks: _confirmedTimelineBlocks(draft.baseTimeline),
+        hasLocalBlocks: ref.read(_provider).isNotEmpty,
         uploadBusy: next.isBusy,
         extracting: ref.read(routineImportAiControllerProvider).isExtracting,
       );
@@ -702,17 +762,10 @@ class _OnboardingClassSetupWidgetState
     _scheduleClassSetupStateWork(
       pending: pending,
       confirmedBlocks: confirmedBlocks,
+      hasLocalBlocks: localBlocks.isNotEmpty,
       uploadBusy: busy,
       extracting: extracting,
     );
-
-    if (busy || extracting || _activeExtractionKey != null) {
-      return _buildCenteredState(
-        _buildLoadingState(
-          busy ? 'Uploading photo...' : 'AI is reading your timetable…',
-        ),
-      );
-    }
 
     if (hasConfirmedBlocks || hasParsedBlocks || localBlocks.isNotEmpty) {
       final visibleBlocks = hasConfirmedBlocks
@@ -723,10 +776,19 @@ class _OnboardingClassSetupWidgetState
       return _buildTimelineState(visibleBlocks);
     }
 
+    if (busy || extracting || _activeExtractionKey != null) {
+      return _buildCenteredState(
+        _buildLoadingState(
+          busy ? 'Uploading photo...' : 'AI is reading your timetable…',
+        ),
+      );
+    }
+
     final canAttemptExtraction =
         pending != null &&
         pending.status == PendingFutureImportDraft.pendingStatus &&
-        !_pendingStatusBlocksExtraction(pending);
+        !_pendingStatusBlocksExtraction(pending) &&
+        !_uploadedAssetAlreadyHasParsedOutput(draft.baseTimeline, pending);
 
     if (hasUploadedAsset && canAttemptExtraction && !attemptedExtraction) {
       return _buildCenteredState(
