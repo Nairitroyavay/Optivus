@@ -143,6 +143,72 @@ List<int> repeatDaysForOnboarding4Candidate(
   return derived.toList()..sort();
 }
 
+@visibleForTesting
+bool isDisallowedOnboarding4WorkCandidate(
+  RoutineImportCandidateBlock candidate,
+) {
+  final normalized = _normalizedWorkCandidateText(candidate.title);
+  if (_hasDisallowedWorkText(normalized)) {
+    return true;
+  }
+  final snippet = candidate.sourceTextSnippet;
+  if (snippet == null || snippet.isEmpty) return false;
+  final normalizedSnippet = _normalizedWorkCandidateText(snippet);
+  if (_hasDisallowedWorkPhrase(normalizedSnippet)) return true;
+  if (_hasAllowedWorkText(normalized)) return false;
+  return _hasDisallowedWorkToken(normalizedSnippet);
+}
+
+String _normalizedWorkCandidateText(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
+bool _hasDisallowedWorkText(String normalized) {
+  if (normalized.isEmpty) return false;
+  return _hasDisallowedWorkPhrase(normalized) ||
+      _hasDisallowedWorkToken(normalized);
+}
+
+bool _hasDisallowedWorkPhrase(String normalized) {
+  return normalized.contains('rest day') ||
+      normalized.contains('no work') ||
+      normalized.contains('online course') ||
+      normalized.contains('personal habit');
+}
+
+bool _hasDisallowedWorkToken(String normalized) {
+  final tokens = normalized.split(' ').toSet();
+  return tokens.contains('gym') ||
+      tokens.contains('exercise') ||
+      tokens.contains('workout') ||
+      tokens.contains('study') ||
+      tokens.contains('reading');
+}
+
+bool _hasAllowedWorkText(String normalized) {
+  if (normalized.isEmpty) return false;
+  return normalized.contains('office work') ||
+      normalized == 'work' ||
+      normalized.contains(' work') ||
+      normalized.contains('work ') ||
+      normalized.contains('shift') ||
+      normalized.contains('client call') ||
+      normalized.contains('meeting') ||
+      normalized.contains('team sync') ||
+      normalized.contains('project work') ||
+      normalized.contains('training') ||
+      normalized.contains('freelance') ||
+      normalized.contains('business hours') ||
+      normalized.contains('commute') ||
+      normalized.contains('lunch break') ||
+      normalized == 'break';
+}
+
 List<int> _dayNumbersFromText(String text) {
   final lower = text.toLowerCase();
   final found = <int>{};
@@ -690,7 +756,7 @@ class _OnboardingStep4UnifiedState
         continue;
       }
       if (config.source == RoutineImportReviewSource.work &&
-          _isDisallowedWorkCandidate(candidate, title)) {
+          isDisallowedOnboarding4WorkCandidate(candidate)) {
         droppedNonWork++;
         continue;
       }
@@ -731,34 +797,6 @@ class _OnboardingStep4UnifiedState
       droppedNonWork: droppedNonWork,
       noRepeatDayExamples: noRepeatDayExamples,
     );
-  }
-
-  bool _isDisallowedWorkCandidate(
-    RoutineImportCandidateBlock candidate,
-    String title,
-  ) {
-    final normalized = title.trim().toLowerCase().replaceAll(
-      RegExp(r'\s+'),
-      ' ',
-    );
-    if (normalized.contains('rest day') || normalized.contains('no work')) {
-      return true;
-    }
-    final disallowedTitle = const {
-      'gym',
-      'exercise',
-      'workout',
-      'study',
-      'reading',
-      'personal habit',
-      'personal habits',
-      'gym / exercise',
-      'study / reading',
-    }.contains(normalized);
-    if (disallowedTitle) return true;
-    final snippet = candidate.sourceTextSnippet?.trim().toLowerCase();
-    if (snippet == null || snippet.isEmpty) return false;
-    return snippet.contains('rest day') || snippet.contains('no work');
   }
 
   String _candidateDayDebugLabel(RoutineImportCandidateBlock candidate) {
@@ -834,10 +872,10 @@ class _OnboardingStep4UnifiedState
   }) {
     if (!_needsBothPhotos || successfulSources.isEmpty) return null;
     if (failedSources.contains(RoutineImportReviewSource.work)) {
-      return 'Work schedule could not be read clearly. Try a clearer work photo.';
+      return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
     }
     if (failedSources.contains(RoutineImportReviewSource.classes)) {
-      return 'Class timetable could not be read clearly. Try a clearer class photo.';
+      return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
     }
     return null;
   }
@@ -866,6 +904,17 @@ class _OnboardingStep4UnifiedState
 
   List<ClassRoutineBlock> _visibleWorkBlocks(List<ClassRoutineBlock> blocks) {
     return _workRequired ? blocks : const <ClassRoutineBlock>[];
+  }
+
+  bool _hasConfirmedScheduleForRole(BaseTimelineDraft base) {
+    final hasClasses = base.confirmedBlocksForSection('classes').isNotEmpty;
+    final hasWork = base
+        .confirmedBlocksForSection('job_work_business')
+        .isNotEmpty;
+    if (_classesRequired && _workRequired) return hasClasses && hasWork;
+    if (_classesRequired) return hasClasses;
+    if (_workRequired) return hasWork;
+    return false;
   }
 
   void _clearIrrelevantProvidersForRole() {
@@ -1015,11 +1064,22 @@ class _OnboardingStep4UnifiedState
   }
 
   ScheduleSetupConfig _configForBlock(ClassRoutineBlock block) {
-    // If the block's icon matches class config, it's a class block
-    if (block.icon == ScheduleSetupConfig.classSetup.icon) {
+    final classBlocks = ref.read(onboardingClassTimelineProvider);
+    if (classBlocks.any(
+      (item) => identical(item, block) || item.id == block.id,
+    )) {
       return ScheduleSetupConfig.classSetup;
     }
-    return ScheduleSetupConfig.workSetup;
+    final workBlocks = ref.read(onboardingWorkTimelineProvider);
+    if (workBlocks.any(
+      (item) => identical(item, block) || item.id == block.id,
+    )) {
+      return ScheduleSetupConfig.workSetup;
+    }
+    if (_workRequired && !_classesRequired) {
+      return ScheduleSetupConfig.workSetup;
+    }
+    return ScheduleSetupConfig.classSetup;
   }
 
   // ---- Edit sheet ----
@@ -1404,6 +1464,7 @@ class _OnboardingStep4UnifiedState
   // ======================================================================
   @override
   Widget build(BuildContext context) {
+    final draft = ref.watch(mockOnboardingProvider).draft;
     // Watch providers so we re-build when blocks change
     final classBlocks = ref.watch(onboardingClassTimelineProvider);
     final workBlocks = ref.watch(onboardingWorkTimelineProvider);
@@ -1411,6 +1472,9 @@ class _OnboardingStep4UnifiedState
     final visibleWorkBlocks = _visibleWorkBlocks(workBlocks);
     final allBlocks = [...visibleClassBlocks, ...visibleWorkBlocks];
     final hasBlocks = allBlocks.isNotEmpty;
+    final hasConfirmedSchedule = _hasConfirmedScheduleForRole(
+      draft.baseTimeline,
+    );
     _clearIrrelevantProvidersForRole();
 
     return Column(
@@ -1419,7 +1483,9 @@ class _OnboardingStep4UnifiedState
         // ── Upload card ──
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-          child: _buildUploadCard(),
+          child: hasConfirmedSchedule
+              ? _buildSavedScheduleCard()
+              : _buildUploadCard(),
         ),
 
         const SizedBox(height: 20),
@@ -1554,6 +1620,45 @@ class _OnboardingStep4UnifiedState
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSavedScheduleCard() {
+    return OnboardingGlassCard(
+      tint: _accent.withValues(alpha: 0.07),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_circle_outline_rounded, color: _accent, size: 22),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Schedule generated',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                SizedBox(height: 5),
+                Text(
+                  'Your fixed responsibilities are ready. Edit blocks directly on the timeline.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -2364,29 +2469,33 @@ class _OnboardingStep4UnifiedState
           }).toList())
           ..sort();
 
+    var lastLabelY = double.negativeInfinity;
     for (final minute in boundaryMinutes) {
       final y = _timelineY(
         minuteOfDay: minute,
         visibleStartMinute: range.startMinute,
         topPadding: topPadding,
       );
+      final showLabel = y - lastLabelY >= 18;
+      if (showLabel) lastLabelY = y;
       widgets.addAll([
-        Positioned(
-          top: y - 8,
-          left: 0,
-          width: 38,
-          height: 16,
-          child: Text(
-            TimelineUtils.formatMinuteShort(minute),
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              color: _accent.withValues(alpha: 0.68),
+        if (showLabel)
+          Positioned(
+            top: y - 8,
+            left: 0,
+            width: 38,
+            height: 16,
+            child: Text(
+              TimelineUtils.formatMinuteShort(minute),
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: _accent.withValues(alpha: 0.68),
+              ),
             ),
           ),
-        ),
         Positioned(
           top: y,
           left: _kLeftOffset,

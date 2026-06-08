@@ -259,6 +259,7 @@ void main() {
     expect(worker, contains('Lunch Break / Break'));
     expect(worker, contains('freelance/side-work'));
     expect(worker, contains('Do not extract Gym/Exercise'));
+    expect(worker, contains('Online Course'));
     expect(worker, contains('Rest Day/No Work'));
     expect(
       worker,

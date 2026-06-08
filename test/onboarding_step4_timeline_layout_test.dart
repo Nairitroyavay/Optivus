@@ -259,6 +259,169 @@ void main() {
     expect(find.text('Class timetable'), findsNothing);
   });
 
+  testWidgets('reopened saved schedule shows generated card and timeline', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.studentWorkingKey,
+        workType: 'part_time',
+      ),
+      baseTimeline: BaseTimelineDraft(
+        blocks: [
+          _timelineBlock(
+            id: 'saved-class',
+            section: 'classes',
+            title: 'Saved Class',
+            startMinute: 9 * 60,
+            endMinute: 10 * 60,
+          ),
+          _timelineBlock(
+            id: 'saved-work',
+            section: 'job_work_business',
+            title: 'Saved Work',
+            startMinute: 10 * 60,
+            endMinute: 12 * 60,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Schedule generated'), findsOneWidget);
+    expect(
+      find.text(
+        'Your fixed responsibilities are ready. Edit blocks directly on the timeline.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Upload your class and work timetable'), findsNothing);
+    expect(find.text('Saved Class'), findsOneWidget);
+    expect(find.text('Saved Work'), findsOneWidget);
+  });
+
+  testWidgets('work block editing is routed by provider, not icon', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.workingKey,
+        workType: 'full_time',
+      ),
+      baseTimeline: const BaseTimelineDraft(),
+    );
+    final misleadingWorkBlock = _scheduleBlock(
+      id: 'client-calls',
+      title: 'Client Calls',
+      startMinute: 9 * 60,
+      endMinute: 10 * 60,
+      config: ScheduleSetupConfig.workSetup,
+      icon: ScheduleSetupConfig.classSetup.icon,
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+          onboardingWorkTimelineProvider.overrideWith(
+            (_) => [misleadingWorkBlock],
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final workBlock = find.byKey(
+      const ValueKey('onboarding-step4-block-client-calls'),
+    );
+    await tester.ensureVisible(workBlock);
+    await tester.tap(workBlock);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit Work Block'), findsOneWidget);
+    expect(find.text('Edit Class'), findsNothing);
+  });
+
+  testWidgets('nearby minute labels are not stacked unreadably', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+      baseTimeline: const BaseTimelineDraft(),
+    );
+    final classBlocks = [
+      _scheduleBlock(
+        id: 'block-310',
+        title: 'Block 310',
+        startMinute: 15 * 60 + 10,
+        endMinute: 15 * 60 + 20,
+        config: ScheduleSetupConfig.classSetup,
+      ),
+      _scheduleBlock(
+        id: 'block-315',
+        title: 'Block 315',
+        startMinute: 15 * 60 + 15,
+        endMinute: 15 * 60 + 25,
+        config: ScheduleSetupConfig.classSetup,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+          onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('3:10'), findsOneWidget);
+    expect(find.text('3:15'), findsNothing);
+    expect(find.text('3:20'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('onboarding-step4-minute-tick-910')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('onboarding-step4-minute-tick-915')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('onboarding-step4-minute-tick-920')),
+      findsOneWidget,
+    );
+  });
+
   test('class/job step validation allows overlapping hard blocks', () {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
@@ -356,6 +519,68 @@ void main() {
   );
 
   test(
+    'work candidate filter keeps job blocks and rejects personal blocks',
+    () {
+      for (final title in const [
+        'Office Work',
+        'Work',
+        'Shift',
+        'Client Calls',
+        'Meeting',
+        'Lunch Break',
+        'Freelance Project',
+        'Business Hours',
+        'Team Sync',
+        'Training Session',
+        'Commute',
+        'Break',
+      ]) {
+        expect(
+          isDisallowedOnboarding4WorkCandidate(_candidate(title: title)),
+          isFalse,
+          reason: title,
+        );
+      }
+
+      for (final title in const [
+        'Gym',
+        'Gym / Exercise',
+        'Gym/Exercise',
+        'Workout',
+        'Study',
+        'Study / Reading',
+        'Reading',
+        'Online Course',
+        'Rest Day',
+        'No Work',
+        'Personal habits',
+      ]) {
+        expect(
+          isDisallowedOnboarding4WorkCandidate(_candidate(title: title)),
+          isTrue,
+          reason: title,
+        );
+      }
+
+      expect(
+        isDisallowedOnboarding4WorkCandidate(
+          _candidate(
+            title: 'Office Work',
+            sourceTextSnippet: 'Office Work row with Gym nearby',
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        isDisallowedOnboarding4WorkCandidate(
+          _candidate(title: 'Work', sourceTextSnippet: 'No Work'),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'business class/job step validation asks for work/business timeline',
     () {
       final draft = OnboardingDraft(
@@ -380,6 +605,7 @@ ClassRoutineBlock _scheduleBlock({
   required int startMinute,
   required int endMinute,
   required ScheduleSetupConfig config,
+  IconData? icon,
 }) {
   return ClassRoutineBlock(
     id: id,
@@ -387,7 +613,7 @@ ClassRoutineBlock _scheduleBlock({
     startMinute: startMinute,
     endMinute: endMinute,
     repeatDays: const [1],
-    icon: config.icon,
+    icon: icon ?? config.icon,
     color: OptivusColors.aquaAccent,
   );
 }
@@ -412,6 +638,7 @@ TimelineBlockDraft _timelineBlock({
 }
 
 RoutineImportCandidateBlock _candidate({
+  String title = 'Office Work',
   List<int> repeatDays = const [],
   String? sourceColumnLabel,
   String? sourceRowLabel,
@@ -419,7 +646,7 @@ RoutineImportCandidateBlock _candidate({
 }) {
   return RoutineImportCandidateBlock(
     id: 'candidate',
-    title: 'Office Work',
+    title: title,
     startMinute: 9 * 60,
     endMinute: 10 * 60,
     repeatDays: repeatDays,
