@@ -242,6 +242,29 @@ void main() {
     expect(worker, contains('result.engine === "fake"'));
   });
 
+  test('routine import worker work prompt covers business schedule blocks', () {
+    final worker = File(
+      'workers/routine-import-worker/src/index.ts',
+    ).readAsStringSync();
+
+    expect(
+      worker,
+      contains('Extract every clearly timed work/business schedule item'),
+    );
+    expect(worker, contains('client calls'));
+    expect(worker, contains('freelance/side-work'));
+    expect(
+      worker,
+      contains('For weekly grid images, days are columns and times are rows.'),
+    );
+    expect(
+      worker,
+      contains(
+        'Do not ignore blocks just because they are not named exactly Work.',
+      ),
+    );
+  });
+
   test('Flutter rejects Worker response with wrong uid', () async {
     final result = await _extractWorkerResult(_resultMap(uid: 'other-uid'));
 

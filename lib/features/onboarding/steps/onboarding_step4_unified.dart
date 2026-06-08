@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -27,6 +28,22 @@ class _PhotoSlot {
     required this.asset,
     required this.label,
     required this.source,
+  });
+}
+
+class _UploadTarget {
+  final RoutineImportReviewSource source;
+  final UploadedAssetPurpose purpose;
+  final String thumbnailLabel;
+  final String title;
+  final IconData icon;
+
+  const _UploadTarget({
+    required this.source,
+    required this.purpose,
+    required this.thumbnailLabel,
+    required this.title,
+    required this.icon,
   });
 }
 
@@ -77,6 +94,27 @@ class _OnboardingStep4UnifiedState
   static const _kMinBlockHeight = 56.0;
   static const _kOverlapLaneOffset = 14.0;
   static const _kMaxOverlapLane = 2;
+  static const _classUploadTarget = _UploadTarget(
+    source: RoutineImportReviewSource.classes,
+    purpose: UploadedAssetPurpose.classTimetable,
+    thumbnailLabel: 'Class',
+    title: 'Class timetable',
+    icon: Icons.school_rounded,
+  );
+  static const _workUploadTarget = _UploadTarget(
+    source: RoutineImportReviewSource.work,
+    purpose: UploadedAssetPurpose.workSchedule,
+    thumbnailLabel: 'Work',
+    title: 'Work schedule',
+    icon: Icons.work_rounded,
+  );
+  static const _businessUploadTarget = _UploadTarget(
+    source: RoutineImportReviewSource.work,
+    purpose: UploadedAssetPurpose.workSchedule,
+    thumbnailLabel: 'Business',
+    title: 'Work/Business schedule',
+    icon: Icons.business_center_rounded,
+  );
 
   final List<_PhotoSlot> _photos = [];
   bool _isUploading = false;
@@ -100,16 +138,21 @@ class _OnboardingStep4UnifiedState
       _role == LifeRoleDraft.businessKey;
 
   bool get _needsBothPhotos => _classesRequired && _workRequired;
-  int get _maxPhotos => _needsBothPhotos ? 2 : 1;
-  bool get _hasClassPhoto =>
-      _photos.any((photo) => photo.source == RoutineImportReviewSource.classes);
-  bool get _hasWorkPhoto =>
-      _photos.any((photo) => photo.source == RoutineImportReviewSource.work);
-  bool get _hasAnyPhoto => _photos.isNotEmpty;
-  bool get _hasAllPhotos {
-    if (_needsBothPhotos) return _hasClassPhoto && _hasWorkPhoto;
-    return _photos.isNotEmpty;
+  List<_UploadTarget> get _uploadTargets {
+    if (_needsBothPhotos) {
+      return const [_classUploadTarget, _workUploadTarget];
+    }
+    if (_classesRequired) return const [_classUploadTarget];
+    if (_role == LifeRoleDraft.businessKey) {
+      return const [_businessUploadTarget];
+    }
+    return const [_workUploadTarget];
   }
+
+  int get _maxPhotos => _uploadTargets.length;
+  bool get _hasAnyPhoto => _photos.isNotEmpty;
+  bool get _hasAllPhotos =>
+      _uploadTargets.every((target) => _photoForSource(target.source) != null);
 
   bool get _canTapGenerate => _hasAnyPhoto && !_isUploading && !_isGenerating;
 
@@ -117,6 +160,9 @@ class _OnboardingStep4UnifiedState
   String get _uploadTitle {
     if (_needsBothPhotos) return 'Upload your class and work timetable';
     if (_classesRequired) return 'Upload your class timetable';
+    if (_role == LifeRoleDraft.businessKey) {
+      return 'Upload your work/business schedule';
+    }
     return 'Upload your work schedule';
   }
 
@@ -129,9 +175,37 @@ class _OnboardingStep4UnifiedState
       return 'Use a clear photo of your weekly class schedule.';
     }
     if (_role == LifeRoleDraft.businessKey) {
-      return 'Use a clear photo of your business/work schedule.';
+      return 'Use a clear photo of your work, shift, client, or business schedule.';
     }
     return 'Use a clear photo of your weekly work schedule.';
+  }
+
+  String get _loadingTitle {
+    if (_needsBothPhotos) {
+      return 'AI is reading your class and work schedules...';
+    }
+    if (_classesRequired) return 'AI is reading your class timetable...';
+    if (_role == LifeRoleDraft.businessKey) {
+      return 'AI is reading your work/business schedule...';
+    }
+    return 'AI is reading your work schedule...';
+  }
+
+  String get _emptyTimelineHint {
+    if (_needsBothPhotos) {
+      return 'Upload your class and work schedule photos and tap the arrow '
+          'to generate your weekly schedule.';
+    }
+    if (_classesRequired) {
+      return 'Upload your class timetable photo and tap the arrow '
+          'to generate your weekly schedule.';
+    }
+    if (_role == LifeRoleDraft.businessKey) {
+      return 'Upload your work/business schedule photo and tap the arrow '
+          'to generate your weekly schedule.';
+    }
+    return 'Upload your work schedule photo and tap the arrow '
+        'to generate your weekly schedule.';
   }
 
   // ---- Accent for the combined view (class-primary) ----
@@ -216,6 +290,13 @@ class _OnboardingStep4UnifiedState
   List<int> _safeRepeatDays(List<int> days) {
     final safe = days.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
     return safe.isEmpty ? const [1] : safe;
+  }
+
+  _PhotoSlot? _photoForSource(RoutineImportReviewSource source) {
+    for (final photo in _photos) {
+      if (photo.source == source) return photo;
+    }
+    return null;
   }
 
   _TimelineRange _rangeFor(List<ClassRoutineBlock> blocks) {
@@ -330,41 +411,13 @@ class _OnboardingStep4UnifiedState
   }
 
   // ---- Upload ----
-  Future<void> _pickAndUpload() async {
+  Future<void> _pickAndUpload(_UploadTarget target) async {
     if (_isUploading || _isGenerating) return;
-    if (_photos.length >= _maxPhotos || _hasAllPhotos) {
+    if (_photoForSource(target.source) != null ||
+        _photos.length >= _maxPhotos ||
+        _hasAllPhotos) {
       setState(() => _generationError = _photoLimitMessage());
       return;
-    }
-
-    // Determine which section this upload is for
-    UploadedAssetPurpose purpose;
-    String label;
-    RoutineImportReviewSource source;
-
-    if (_needsBothPhotos) {
-      if (!_hasClassPhoto) {
-        purpose = UploadedAssetPurpose.classTimetable;
-        label = 'Class';
-        source = RoutineImportReviewSource.classes;
-      } else if (!_hasWorkPhoto) {
-        purpose = UploadedAssetPurpose.workSchedule;
-        label = 'Work';
-        source = RoutineImportReviewSource.work;
-      } else {
-        setState(() {
-          _generationError = 'Only class and work timetable photos are needed.';
-        });
-        return;
-      }
-    } else if (_classesRequired) {
-      purpose = UploadedAssetPurpose.classTimetable;
-      label = 'Class';
-      source = RoutineImportReviewSource.classes;
-    } else {
-      purpose = UploadedAssetPurpose.workSchedule;
-      label = 'Work';
-      source = RoutineImportReviewSource.work;
     }
 
     setState(() {
@@ -381,7 +434,7 @@ class _OnboardingStep4UnifiedState
         .read(uploadControllerProvider.notifier)
         .startUpload(
           uid: uid,
-          purpose: purpose,
+          purpose: target.purpose,
           sourceFeature: OnboardingDraft.sourceOnboarding,
         );
 
@@ -400,7 +453,13 @@ class _OnboardingStep4UnifiedState
     }
 
     setState(() {
-      _photos.add(_PhotoSlot(asset: asset, label: label, source: source));
+      _photos.add(
+        _PhotoSlot(
+          asset: asset,
+          label: target.thumbnailLabel,
+          source: target.source,
+        ),
+      );
       _photos.sort(_comparePhotoSlots);
       _generationError = null;
       _timelineError = null;
@@ -408,8 +467,10 @@ class _OnboardingStep4UnifiedState
     _markClassJobDirty();
   }
 
-  void _removePhoto(int index) {
+  void _removePhotoForSource(RoutineImportReviewSource source) {
     if (_isUploading || _isGenerating) return;
+    final index = _photos.indexWhere((photo) => photo.source == source);
+    if (index < 0) return;
     final removed = _photos[index];
     setState(() {
       _photos.removeAt(index);
@@ -437,6 +498,9 @@ class _OnboardingStep4UnifiedState
       return 'Only class and work timetable photos are needed.';
     }
     if (_classesRequired) return 'Only one class timetable photo is allowed.';
+    if (_role == LifeRoleDraft.businessKey) {
+      return 'Only one work/business schedule photo is allowed.';
+    }
     return 'Only one work schedule photo is allowed.';
   }
 
@@ -446,12 +510,121 @@ class _OnboardingStep4UnifiedState
         .setStepDirty(onboardingClassJobStepIndex, true);
   }
 
+  ScheduleSetupConfig _configForSource(RoutineImportReviewSource source) {
+    return source == RoutineImportReviewSource.classes
+        ? ScheduleSetupConfig.classSetup
+        : ScheduleSetupConfig.workSetup;
+  }
+
+  List<ClassRoutineBlock> _blocksFromCandidates(
+    List<RoutineImportCandidateBlock> candidates,
+    ScheduleSetupConfig config,
+  ) {
+    final visibleCandidates = candidates
+        .where((candidate) {
+          final title = candidate.title.trim();
+          final repeatDays = _safeRepeatDays(candidate.repeatDays);
+          return title.isNotEmpty &&
+              candidate.startMinute < candidate.endMinute &&
+              repeatDays.isNotEmpty;
+        })
+        .toList(growable: false);
+
+    return visibleCandidates
+        .asMap()
+        .entries
+        .map(
+          (entry) => ClassRoutineBlock(
+            id: entry.value.id,
+            subject: entry.value.title.trim(),
+            room: entry.value.location?.trim() ?? '',
+            startMinute: entry.value.startMinute.clamp(0, 24 * 60 - 1),
+            endMinute: entry.value.endMinute.clamp(1, 24 * 60),
+            repeatDays: _safeRepeatDays(entry.value.repeatDays),
+            icon: config.icon,
+            color: config.colorCycle[entry.key % config.colorCycle.length],
+            hasTopTape: true,
+            hasBottomTape: true,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  void _debugLogExtraction({
+    required _PhotoSlot photo,
+    required int candidateCount,
+    required int visibleBlockCount,
+    required List<String> warnings,
+  }) {
+    if (!kDebugMode) return;
+    final warningText = warnings.isEmpty ? 'none' : warnings.join(' | ');
+    debugPrint(
+      '[Onboarding4] source=${photo.source.name} '
+      'candidates=$candidateCount visibleBlocks=$visibleBlockCount '
+      'warnings=$warningText',
+    );
+    if (photo.source == RoutineImportReviewSource.work &&
+        visibleBlockCount == 0) {
+      debugPrint(
+        '[Onboarding4] work zero result source=${photo.source.name} '
+        'uploadedAssetPurpose=${photo.asset.purpose.name} '
+        'uploadedAssetIdExists=${photo.asset.assetId.trim().isNotEmpty} '
+        'uploadedAssetR2KeyExists=${photo.asset.r2Key.trim().isNotEmpty} '
+        'warnings=$warningText rawCandidates=$candidateCount '
+        'visibleBlocks=$visibleBlockCount',
+      );
+    }
+  }
+
+  void _debugLogRoleSummary() {
+    if (!kDebugMode) return;
+    final classCount = ref.read(onboardingClassTimelineProvider).length;
+    final workCount = ref.read(onboardingWorkTimelineProvider).length;
+    debugPrint(
+      '[Onboarding4] role=${_role ?? 'unknown'} classBlocks=$classCount '
+      'workBlocks=$workCount allBlocks=${classCount + workCount}',
+    );
+  }
+
+  String? _partialFailureMessage({
+    required Set<RoutineImportReviewSource> successfulSources,
+    required Set<RoutineImportReviewSource> failedSources,
+  }) {
+    if (!_needsBothPhotos || successfulSources.isEmpty) return null;
+    if (failedSources.contains(RoutineImportReviewSource.work)) {
+      return 'Work schedule could not be read clearly. Try a clearer work photo.';
+    }
+    if (failedSources.contains(RoutineImportReviewSource.classes)) {
+      return 'Class timetable could not be read clearly. Try a clearer class photo.';
+    }
+    return null;
+  }
+
+  String _timelineErrorForFailures(Set<RoutineImportReviewSource> failures) {
+    final classFailed = failures.contains(RoutineImportReviewSource.classes);
+    final workFailed = failures.contains(RoutineImportReviewSource.work);
+    if (_needsBothPhotos && classFailed && workFailed) {
+      return 'AI could not detect class or work schedule blocks clearly.';
+    }
+    if (classFailed) {
+      return 'AI could not detect class timetable blocks clearly.';
+    }
+    if (workFailed && _role == LifeRoleDraft.businessKey) {
+      return 'AI could not detect work/business schedule blocks clearly.';
+    }
+    if (workFailed) {
+      return 'AI could not detect work schedule blocks clearly.';
+    }
+    return 'AI could not detect timetable blocks clearly.';
+  }
+
   // ---- Generation ----
   Future<void> _runGeneration() async {
     if (!_canTapGenerate) return;
     if (_needsBothPhotos && !_hasAllPhotos) {
       setState(() {
-        _generationError = 'Missing one timetable photo';
+        _generationError =
+            'Missing one timetable photo.\nPlease upload both class and work schedules.';
       });
       return;
     }
@@ -468,11 +641,12 @@ class _OnboardingStep4UnifiedState
 
     final draft = ref.read(mockOnboardingProvider).draft;
     final aiController = ref.read(routineImportAiControllerProvider.notifier);
-
-    bool anySuccess = false;
+    final successfulSources = <RoutineImportReviewSource>{};
+    final failedSources = <RoutineImportReviewSource>{};
+    final photosToProcess = [..._photos]..sort(_comparePhotoSlots);
 
     try {
-      for (final photo in _photos) {
+      for (final photo in photosToProcess) {
         if (!mounted) return;
         if (photo.source == RoutineImportReviewSource.classes) {
           ref.read(onboardingClassTimelineProvider.notifier).state = const [];
@@ -498,56 +672,35 @@ class _OnboardingStep4UnifiedState
         if (!mounted) return;
 
         final candidateCount = result?.candidates.length ?? 0;
-        if (result != null && result.candidates.isNotEmpty) {
-          final config = photo.source == RoutineImportReviewSource.classes
-              ? ScheduleSetupConfig.classSetup
-              : ScheduleSetupConfig.workSetup;
+        final warnings =
+            result?.warnings ??
+            [
+              ref.read(routineImportAiControllerProvider).errorMessage ??
+                  'No extraction result returned.',
+            ];
+        final config = _configForSource(photo.source);
+        final classBlocks = result == null
+            ? const <ClassRoutineBlock>[]
+            : _blocksFromCandidates(result.candidates, config);
 
-          final blocks = result.candidates
-              .where((c) => c.title.trim().isNotEmpty)
-              .where((c) => c.startMinute < c.endMinute)
-              .toList(growable: false);
+        _debugLogExtraction(
+          photo: photo,
+          candidateCount: candidateCount,
+          visibleBlockCount: classBlocks.length,
+          warnings: warnings,
+        );
 
-          final classBlocks = blocks
-              .asMap()
-              .entries
-              .map(
-                (entry) => ClassRoutineBlock(
-                  id: entry.value.id,
-                  subject: entry.value.title,
-                  room: entry.value.location ?? '',
-                  startMinute: entry.value.startMinute.clamp(0, 24 * 60 - 1),
-                  endMinute: entry.value.endMinute.clamp(1, 24 * 60),
-                  repeatDays: _safeRepeatDays(entry.value.repeatDays),
-                  icon: config.icon,
-                  color:
-                      config.colorCycle[entry.key % config.colorCycle.length],
-                  hasTopTape: true,
-                  hasBottomTape: true,
-                ),
-              )
-              .toList(growable: false);
-
-          debugPrint(
-            '[Onboarding4] ${photo.source.name} AI candidate count: '
-            '$candidateCount; visible blocks: ${classBlocks.length}',
-          );
-
-          if (classBlocks.isNotEmpty) {
-            anySuccess = true;
-            if (photo.source == RoutineImportReviewSource.classes) {
-              ref.read(onboardingClassTimelineProvider.notifier).state =
-                  classBlocks;
-            } else {
-              ref.read(onboardingWorkTimelineProvider.notifier).state =
-                  classBlocks;
-            }
+        if (classBlocks.isNotEmpty) {
+          successfulSources.add(photo.source);
+          if (photo.source == RoutineImportReviewSource.classes) {
+            ref.read(onboardingClassTimelineProvider.notifier).state =
+                classBlocks;
+          } else {
+            ref.read(onboardingWorkTimelineProvider.notifier).state =
+                classBlocks;
           }
         } else {
-          debugPrint(
-            '[Onboarding4] ${photo.source.name} AI candidate count: 0; '
-            'visible blocks: 0',
-          );
+          failedSources.add(photo.source);
         }
       }
     } finally {
@@ -559,10 +712,17 @@ class _OnboardingStep4UnifiedState
     }
 
     if (!mounted) return;
+    _debugLogRoleSummary();
+    final anySuccess = successfulSources.isNotEmpty;
+    final partialMessage = _partialFailureMessage(
+      successfulSources: successfulSources,
+      failedSources: failedSources,
+    );
     setState(() {
       _isGenerating = false;
+      _generationError = partialMessage;
       if (!anySuccess) {
-        _timelineError = 'AI could not detect timetable blocks clearly.';
+        _timelineError = _timelineErrorForFailures(failedSources);
       }
     });
     if (anySuccess) _markClassJobDirty();
@@ -1077,13 +1237,8 @@ class _OnboardingStep4UnifiedState
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    // Existing photo thumbnails
-                    for (var i = 0; i < _photos.length; i++)
-                      _buildPhotoThumbnail(i),
-
-                    // "Add photo" tap target
-                    if (!_hasAllPhotos && !_isUploading && !_isGenerating)
-                      _buildAddPhotoButton(),
+                    for (final target in _uploadTargets)
+                      _buildUploadTarget(target),
 
                     // Uploading indicator
                     if (_isUploading) _buildUploadingIndicator(),
@@ -1125,8 +1280,35 @@ class _OnboardingStep4UnifiedState
     );
   }
 
-  Widget _buildPhotoThumbnail(int index) {
-    final photo = _photos[index];
+  Widget _buildUploadTarget(_UploadTarget target) {
+    final photo = _photoForSource(target.source);
+    final width = _needsBothPhotos ? 118.0 : 164.0;
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            target.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              height: 1.1,
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          photo == null
+              ? _buildEmptyUploadTarget(target)
+              : _buildPhotoThumbnail(photo, target),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhotoThumbnail(_PhotoSlot photo, _UploadTarget target) {
     final previewPath = photo.asset.localPreviewPath;
     final hasPreview = previewPath != null && File(previewPath).existsSync();
 
@@ -1180,7 +1362,7 @@ class _OnboardingStep4UnifiedState
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  photo.label,
+                  target.thumbnailLabel,
                   style: const TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w900,
@@ -1199,7 +1381,7 @@ class _OnboardingStep4UnifiedState
               height: 24,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => _removePhoto(index),
+                onTap: () => _removePhotoForSource(target.source),
                 child: Container(
                   width: 22,
                   height: 22,
@@ -1231,38 +1413,42 @@ class _OnboardingStep4UnifiedState
     );
   }
 
-  Widget _buildAddPhotoButton() {
+  Widget _buildEmptyUploadTarget(_UploadTarget target) {
+    final disabled = _isUploading || _isGenerating;
     return SizedBox(
       width: 64,
       height: 64,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _pickAndUpload,
-        child: Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: Colors.white.withValues(alpha: 0.5),
-            border: Border.all(
-              color: _accent.withValues(alpha: 0.3),
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.add_photo_alternate_rounded, color: _accent, size: 24),
-              const SizedBox(height: 2),
-              Text(
-                'Upload',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
-                  color: _accent,
-                ),
+        onTap: disabled ? null : () => _pickAndUpload(target),
+        child: Opacity(
+          opacity: disabled ? 0.55 : 1,
+          child: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: Colors.white.withValues(alpha: 0.5),
+              border: Border.all(
+                color: _accent.withValues(alpha: 0.3),
+                width: 1.5,
               ),
-            ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(target.icon, color: _accent, size: 22),
+                const SizedBox(height: 2),
+                Text(
+                  'Upload',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: _accent,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1533,21 +1719,21 @@ class _OnboardingStep4UnifiedState
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'AI is reading your timetable...',
-                            style: TextStyle(
+                            _loadingTitle,
+                            style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
                               color: OptivusColors.textPrimary,
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
+                          const SizedBox(height: 4),
+                          const Text(
                             'AI is generating your timeline.',
                             style: TextStyle(
                               fontSize: 12,
@@ -1627,11 +1813,10 @@ class _OnboardingStep4UnifiedState
                     size: 36,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Upload your timetable photo and tap the arrow '
-                    'to generate your weekly schedule.',
+                  Text(
+                    _emptyTimelineHint,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: OptivusColors.textSecondary,

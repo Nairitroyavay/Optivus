@@ -675,7 +675,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return true;
     }
     if (workRequired && !hasWorkBlocks) {
-      _setInternalValidation('Generate your work timeline first.');
+      _setInternalValidation(
+        role == LifeRoleDraft.businessKey
+            ? 'Generate your work/business timeline first.'
+            : 'Generate your work timeline first.',
+      );
       return true;
     }
 

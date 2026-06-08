@@ -127,6 +127,82 @@ void main() {
     },
   );
 
+  testWidgets('Student + Working shows deterministic class/work upload targets', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.studentWorkingKey,
+        workType: 'part_time',
+      ),
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Upload your class and work timetable'), findsOneWidget);
+    expect(find.text('Class timetable'), findsOneWidget);
+    expect(find.text('Work schedule'), findsOneWidget);
+    expect(
+      find.text(
+        'Upload both class and work schedule photos before generating your timeline.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Business role uses work/business upload target only', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.businessKey,
+        businessMode: 'fixed_business',
+      ),
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Upload your work/business schedule'), findsOneWidget);
+    expect(find.text('Work/Business schedule'), findsOneWidget);
+    expect(find.text('Class timetable'), findsNothing);
+    expect(
+      find.text(
+        'Use a clear photo of your work, shift, client, or business schedule.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   test('class/job step validation allows overlapping hard blocks', () {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
@@ -158,6 +234,24 @@ void main() {
       isNull,
     );
   });
+
+  test(
+    'business class/job step validation asks for work/business timeline',
+    () {
+      final draft = OnboardingDraft(
+        lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.businessKey),
+        baseTimeline: const BaseTimelineDraft(),
+      );
+
+      expect(
+        draft.validateStep(
+          4,
+          List<bool>.filled(OnboardingDraft.stepCount, false),
+        ),
+        'Generate your work/business timeline first.',
+      );
+    },
+  );
 }
 
 ClassRoutineBlock _scheduleBlock({

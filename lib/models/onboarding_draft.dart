@@ -1475,6 +1475,9 @@ class BaseTimelineDraft {
       return 'Generate your class timeline first.';
     }
     if (jobRequired && !_hasConfirmedSection('job_work_business')) {
+      if (lifeRole == LifeRoleDraft.businessKey) {
+        return 'Generate your work/business timeline first.';
+      }
       return 'Generate your work timeline first.';
     }
     return null;
