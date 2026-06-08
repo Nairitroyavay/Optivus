@@ -251,7 +251,12 @@ void main() {
       worker,
       contains('Extract every clearly timed work/business schedule item'),
     );
-    expect(worker, contains('client calls'));
+    expect(worker, contains('Client Calls'));
+    expect(worker, contains('Office Work'));
+    expect(worker, contains('Team Sync'));
+    expect(worker, contains('Training Session'));
+    expect(worker, contains('Freelance Project'));
+    expect(worker, contains('Lunch Break / Break'));
     expect(worker, contains('freelance/side-work'));
     expect(
       worker,

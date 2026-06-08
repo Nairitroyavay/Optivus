@@ -331,9 +331,16 @@ class OnboardingDraft {
 
   FinalTimelinePreview buildFinalPreview() {
     final conflicts = baseTimeline.detectConflicts();
+    final sectionByBlockId = {
+      for (final block in baseTimeline.blocks) block.id: block.section,
+    };
     final warnings = <String>[
       for (final conflict in conflicts)
-        if (conflict.isBlocking)
+        if (conflict.isBlocking &&
+            !_isOnboardingResponsibilityOverlap(
+              sectionByBlockId[conflict.firstBlockId],
+              sectionByBlockId[conflict.secondBlockId],
+            ))
           'Resolve or accept the conflict between ${conflict.firstTitle} and ${conflict.secondTitle}.',
     ];
 
@@ -578,6 +585,12 @@ class OnboardingDraft {
                 firstWindow.startMinute < secondWindow.endMinute &&
                 firstWindow.endMinute > secondWindow.startMinute;
             if (!overlaps) continue;
+            if (_isOnboardingResponsibilityOverlap(
+              first.source,
+              second.source,
+            )) {
+              continue;
+            }
             final key =
                 '${first.id}:${second.id}:${firstWindow.day}:${firstWindow.startMinute}';
             if (!seen.add(key)) continue;
@@ -604,6 +617,20 @@ class OnboardingDraft {
       }
     }
     return warnings;
+  }
+
+  static bool _isOnboardingResponsibilityOverlap(
+    String? firstSection,
+    String? secondSection,
+  ) {
+    return _isOnboardingResponsibilitySection(firstSection) &&
+        _isOnboardingResponsibilitySection(secondSection);
+  }
+
+  static bool _isOnboardingResponsibilitySection(String? section) {
+    return section == 'classes' ||
+        section == 'job_work_business' ||
+        section == 'fixed';
   }
 
   static List<String> _capacityWarnings(List<FinalTimelineItem> items) {

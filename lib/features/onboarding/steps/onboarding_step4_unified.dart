@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/routine_import_ai_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
@@ -71,6 +72,34 @@ class _VisualTimelineBlock {
     required this.lane,
     required this.order,
   });
+}
+
+class _CandidateMappingResult {
+  final List<ClassRoutineBlock> blocks;
+  final int droppedNoTitle;
+  final int droppedInvalidTime;
+  final int droppedNoRepeatDays;
+
+  const _CandidateMappingResult({
+    required this.blocks,
+    required this.droppedNoTitle,
+    required this.droppedInvalidTime,
+    required this.droppedNoRepeatDays,
+  });
+
+  int get droppedTotal =>
+      droppedNoTitle + droppedInvalidTime + droppedNoRepeatDays;
+
+  String get filterSummary {
+    if (droppedTotal == 0) return 'none';
+    return 'noTitle=$droppedNoTitle invalidTime=$droppedInvalidTime '
+        'noRepeatDays=$droppedNoRepeatDays';
+  }
+}
+
+@visibleForTesting
+List<int> normalizeOnboarding4AiRepeatDays(List<int> days) {
+  return days.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +319,10 @@ class _OnboardingStep4UnifiedState
   List<int> _safeRepeatDays(List<int> days) {
     final safe = days.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
     return safe.isEmpty ? const [1] : safe;
+  }
+
+  List<int> _candidateRepeatDays(List<int> days) {
+    return normalizeOnboarding4AiRepeatDays(days);
   }
 
   _PhotoSlot? _photoForSource(RoutineImportReviewSource source) {
@@ -516,73 +549,103 @@ class _OnboardingStep4UnifiedState
         : ScheduleSetupConfig.workSetup;
   }
 
-  List<ClassRoutineBlock> _blocksFromCandidates(
+  _CandidateMappingResult _blocksFromCandidates(
     List<RoutineImportCandidateBlock> candidates,
     ScheduleSetupConfig config,
   ) {
-    final visibleCandidates = candidates
-        .where((candidate) {
-          final title = candidate.title.trim();
-          final repeatDays = _safeRepeatDays(candidate.repeatDays);
-          return title.isNotEmpty &&
-              candidate.startMinute < candidate.endMinute &&
-              repeatDays.isNotEmpty;
-        })
-        .toList(growable: false);
+    final blocks = <ClassRoutineBlock>[];
+    var droppedNoTitle = 0;
+    var droppedInvalidTime = 0;
+    var droppedNoRepeatDays = 0;
 
-    return visibleCandidates
-        .asMap()
-        .entries
-        .map(
-          (entry) => ClassRoutineBlock(
-            id: entry.value.id,
-            subject: entry.value.title.trim(),
-            room: entry.value.location?.trim() ?? '',
-            startMinute: entry.value.startMinute.clamp(0, 24 * 60 - 1),
-            endMinute: entry.value.endMinute.clamp(1, 24 * 60),
-            repeatDays: _safeRepeatDays(entry.value.repeatDays),
-            icon: config.icon,
-            color: config.colorCycle[entry.key % config.colorCycle.length],
-            hasTopTape: true,
-            hasBottomTape: true,
-          ),
-        )
-        .toList(growable: false);
+    for (final candidate in candidates) {
+      final title = candidate.title.trim();
+      if (title.isEmpty) {
+        droppedNoTitle++;
+        continue;
+      }
+      if (candidate.startMinute >= candidate.endMinute) {
+        droppedInvalidTime++;
+        continue;
+      }
+      final repeatDays = _candidateRepeatDays(candidate.repeatDays);
+      if (repeatDays.isEmpty) {
+        droppedNoRepeatDays++;
+        continue;
+      }
+
+      blocks.add(
+        ClassRoutineBlock(
+          id: candidate.id,
+          subject: title,
+          room: candidate.location?.trim() ?? '',
+          startMinute: candidate.startMinute.clamp(0, 24 * 60 - 1),
+          endMinute: candidate.endMinute.clamp(1, 24 * 60),
+          repeatDays: repeatDays,
+          icon: config.icon,
+          color: config.colorCycle[blocks.length % config.colorCycle.length],
+          hasTopTape: true,
+          hasBottomTape: true,
+        ),
+      );
+    }
+
+    return _CandidateMappingResult(
+      blocks: blocks,
+      droppedNoTitle: droppedNoTitle,
+      droppedInvalidTime: droppedInvalidTime,
+      droppedNoRepeatDays: droppedNoRepeatDays,
+    );
   }
 
   void _debugLogExtraction({
     required _PhotoSlot photo,
     required int candidateCount,
-    required int visibleBlockCount,
+    required _CandidateMappingResult mapping,
     required List<String> warnings,
   }) {
     if (!kDebugMode) return;
     final warningText = warnings.isEmpty ? 'none' : warnings.join(' | ');
     debugPrint(
       '[Onboarding4] source=${photo.source.name} '
-      'candidates=$candidateCount visibleBlocks=$visibleBlockCount '
-      'warnings=$warningText',
+      'rawCandidates=$candidateCount visibleBlocks=${mapping.blocks.length} '
+      'warnings=$warningText filtered=${mapping.filterSummary}',
     );
     if (photo.source == RoutineImportReviewSource.work &&
-        visibleBlockCount == 0) {
+        mapping.blocks.isEmpty) {
       debugPrint(
         '[Onboarding4] work zero result source=${photo.source.name} '
-        'uploadedAssetPurpose=${photo.asset.purpose.name} '
+        'purpose=${photo.asset.purpose.name} '
+        'workerMode=${OptivusRoutineImportAiConfig.mode.name} '
         'uploadedAssetIdExists=${photo.asset.assetId.trim().isNotEmpty} '
         'uploadedAssetR2KeyExists=${photo.asset.r2Key.trim().isNotEmpty} '
-        'warnings=$warningText rawCandidates=$candidateCount '
-        'visibleBlocks=$visibleBlockCount',
+        'warnings=$warningText rawCandidates=$candidateCount visibleCandidates=0 '
+        'filtered=${mapping.filterSummary}',
       );
     }
   }
 
+  void _debugLogExtractionStart(_PhotoSlot photo) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[Onboarding4] extracting target=${photo.label} '
+      'source=${photo.source.name} purpose=${photo.asset.purpose.name} '
+      'assetId=${photo.asset.assetId.trim().isEmpty ? 'missing' : photo.asset.assetId} '
+      'r2=${photo.asset.r2Key.trim().isEmpty ? 'missing' : 'exists'}',
+    );
+  }
+
   void _debugLogRoleSummary() {
     if (!kDebugMode) return;
-    final classCount = ref.read(onboardingClassTimelineProvider).length;
-    final workCount = ref.read(onboardingWorkTimelineProvider).length;
+    final classCount = _visibleClassBlocks(
+      ref.read(onboardingClassTimelineProvider),
+    ).length;
+    final workCount = _visibleWorkBlocks(
+      ref.read(onboardingWorkTimelineProvider),
+    ).length;
     debugPrint(
       '[Onboarding4] role=${_role ?? 'unknown'} classBlocks=$classCount '
-      'workBlocks=$workCount allBlocks=${classCount + workCount}',
+      'workBlocks=$workCount allVisible=${classCount + workCount}',
     );
   }
 
@@ -616,6 +679,28 @@ class _OnboardingStep4UnifiedState
       return 'AI could not detect work schedule blocks clearly.';
     }
     return 'AI could not detect timetable blocks clearly.';
+  }
+
+  List<ClassRoutineBlock> _visibleClassBlocks(List<ClassRoutineBlock> blocks) {
+    return _classesRequired ? blocks : const <ClassRoutineBlock>[];
+  }
+
+  List<ClassRoutineBlock> _visibleWorkBlocks(List<ClassRoutineBlock> blocks) {
+    return _workRequired ? blocks : const <ClassRoutineBlock>[];
+  }
+
+  void _clearIrrelevantProvidersForRole() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_classesRequired &&
+          ref.read(onboardingClassTimelineProvider).isNotEmpty) {
+        ref.read(onboardingClassTimelineProvider.notifier).state = const [];
+      }
+      if (!_workRequired &&
+          ref.read(onboardingWorkTimelineProvider).isNotEmpty) {
+        ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
+      }
+    });
   }
 
   // ---- Generation ----
@@ -653,6 +738,7 @@ class _OnboardingStep4UnifiedState
         } else {
           ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
         }
+        _debugLogExtractionStart(photo);
 
         final now = DateTime.now();
         final reviewDraft = RoutineImportReviewDraft(
@@ -679,25 +765,30 @@ class _OnboardingStep4UnifiedState
                   'No extraction result returned.',
             ];
         final config = _configForSource(photo.source);
-        final classBlocks = result == null
-            ? const <ClassRoutineBlock>[]
+        final mapping = result == null
+            ? const _CandidateMappingResult(
+                blocks: <ClassRoutineBlock>[],
+                droppedNoTitle: 0,
+                droppedInvalidTime: 0,
+                droppedNoRepeatDays: 0,
+              )
             : _blocksFromCandidates(result.candidates, config);
 
         _debugLogExtraction(
           photo: photo,
           candidateCount: candidateCount,
-          visibleBlockCount: classBlocks.length,
+          mapping: mapping,
           warnings: warnings,
         );
 
-        if (classBlocks.isNotEmpty) {
+        if (mapping.blocks.isNotEmpty) {
           successfulSources.add(photo.source);
           if (photo.source == RoutineImportReviewSource.classes) {
             ref.read(onboardingClassTimelineProvider.notifier).state =
-                classBlocks;
+                mapping.blocks;
           } else {
             ref.read(onboardingWorkTimelineProvider.notifier).state =
-                classBlocks;
+                mapping.blocks;
           }
         } else {
           failedSources.add(photo.source);
@@ -1136,8 +1227,11 @@ class _OnboardingStep4UnifiedState
     // Watch providers so we re-build when blocks change
     final classBlocks = ref.watch(onboardingClassTimelineProvider);
     final workBlocks = ref.watch(onboardingWorkTimelineProvider);
-    final allBlocks = [...classBlocks, ...workBlocks];
+    final visibleClassBlocks = _visibleClassBlocks(classBlocks);
+    final visibleWorkBlocks = _visibleWorkBlocks(workBlocks);
+    final allBlocks = [...visibleClassBlocks, ...visibleWorkBlocks];
     final hasBlocks = allBlocks.isNotEmpty;
+    _clearIrrelevantProvidersForRole();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

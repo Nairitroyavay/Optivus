@@ -203,6 +203,61 @@ void main() {
     );
   });
 
+  testWidgets('Working role ignores stale class provider blocks', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.workingKey,
+        workType: 'full_time',
+      ),
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+          onboardingClassTimelineProvider.overrideWith(
+            (_) => [
+              _scheduleBlock(
+                id: 'stale-class',
+                title: 'Stale Class',
+                startMinute: 9 * 60,
+                endMinute: 10 * 60,
+                config: ScheduleSetupConfig.classSetup,
+              ),
+            ],
+          ),
+          onboardingWorkTimelineProvider.overrideWith(
+            (_) => [
+              _scheduleBlock(
+                id: 'office-work',
+                title: 'Office Work',
+                startMinute: 9 * 60,
+                endMinute: 17 * 60,
+                config: ScheduleSetupConfig.workSetup,
+              ),
+            ],
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Upload your work schedule'), findsOneWidget);
+    expect(find.text('Office Work'), findsOneWidget);
+    expect(find.text('Stale Class'), findsNothing);
+    expect(find.text('Class timetable'), findsNothing);
+  });
+
   test('class/job step validation allows overlapping hard blocks', () {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
@@ -233,6 +288,50 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  test('final preview does not block class and work overlaps', () {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
+      baseTimeline: BaseTimelineDraft(
+        blocks: [
+          _timelineBlock(
+            id: 'data-structures',
+            section: 'classes',
+            title: 'Data Structures',
+            startMinute: 9 * 60,
+            endMinute: 10 * 60,
+          ),
+          _timelineBlock(
+            id: 'part-time-job',
+            section: 'job_work_business',
+            title: 'Part-Time Job',
+            startMinute: 9 * 60 + 30,
+            endMinute: 13 * 60,
+          ),
+        ],
+      ),
+    );
+
+    final preview = draft.buildFinalPreview();
+
+    expect(preview.blockingWarnings, isEmpty);
+    expect(preview.warnings.join('\n'), isNot(contains('Resolve or accept')));
+    expect(
+      draft.validateStep(
+        OnboardingDraft.lastStepIndex,
+        List<bool>.filled(OnboardingDraft.stepCount, true),
+      ),
+      isNull,
+    );
+  });
+
+  test('AI repeat-day normalization does not default empty days to Monday', () {
+    expect(normalizeOnboarding4AiRepeatDays(const []), isEmpty);
+    expect(normalizeOnboarding4AiRepeatDays(const [0, 1, 1, 3, 8]), const [
+      1,
+      3,
+    ]);
   });
 
   test(
