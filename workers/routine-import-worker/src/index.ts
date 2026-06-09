@@ -29,6 +29,23 @@ type ExtractionEngine =
   | "openai"
   | "aiVision"
   | "aiText";
+type ProviderFailureKind =
+  | "provider_model_not_found"
+  | "provider_invalid_image_payload"
+  | "provider_unauthorized"
+  | "provider_quota_exceeded"
+  | "provider_timeout"
+  | "provider_empty_candidates"
+  | "provider_unavailable"
+  | "provider_invalid_json"
+  | "provider_request_failed";
+
+type SafeProviderFailure = {
+  kind: ProviderFailureKind;
+  status?: number;
+  errorCode?: string;
+  message: string;
+};
 
 type RoutineImportExtractionResponse = {
   id: string;
@@ -475,46 +492,90 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
 
     const prompt = buildRoutineImportPrompt(args.source, "gemini");
     const model = configuredModel.replace(/^models\//, "");
+    const imageBase64 = arrayBufferToBase64(args.imageBytes);
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "x-goog-api-key": this.apiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: args.contentType,
-                      data: arrayBufferToBase64(args.imageBytes),
-                    },
-                  },
-                  { text: prompt },
-                ],
-              },
-            ],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0,
-            },
-          }),
-        },
-      );
+      let apiVersion = "v1beta";
+      let endpointPath = geminiGenerateContentPath(apiVersion, model);
+      let response = await this.fetchGenerateContent({
+        endpointPath,
+        prompt,
+        imageBase64,
+        contentType: args.contentType,
+      });
 
       if (!response.ok) {
-        return providerFallback(args, "gemini", configuredModel, "AI provider could not process the image.");
+        const firstFailure = await readProviderFailure(response);
+        if (
+          shouldRetryGeminiApiVersion(
+            model,
+            apiVersion,
+            firstFailure,
+          )
+        ) {
+          logProviderFailure({
+            provider: "gemini",
+            model: configuredModel,
+            endpointPath,
+            args,
+            base64Generated: imageBase64.length > 0,
+            failure: firstFailure,
+          });
+          apiVersion = "v1alpha";
+          endpointPath = geminiGenerateContentPath(apiVersion, model);
+          response = await this.fetchGenerateContent({
+            endpointPath,
+            prompt,
+            imageBase64,
+            contentType: args.contentType,
+          });
+        } else {
+          logProviderFailure({
+            provider: "gemini",
+            model: configuredModel,
+            endpointPath,
+            args,
+            base64Generated: imageBase64.length > 0,
+            failure: firstFailure,
+          });
+          return providerFailureFallback(
+            args,
+            "gemini",
+            configuredModel,
+            firstFailure,
+          );
+        }
+      }
+
+      if (!response.ok) {
+        const failure = await readProviderFailure(response);
+        logProviderFailure({
+          provider: "gemini",
+          model: configuredModel,
+          endpointPath,
+          args,
+          base64Generated: imageBase64.length > 0,
+          failure,
+        });
+        return providerFailureFallback(args, "gemini", configuredModel, failure);
       }
 
       let providerBody: unknown;
       try {
         providerBody = await response.json();
       } catch {
-        return providerFallback(args, "gemini", configuredModel, "AI provider returned invalid JSON.");
+        const failure: SafeProviderFailure = {
+          kind: "provider_invalid_json",
+          message: "AI provider returned invalid JSON.",
+        };
+        logProviderFailure({
+          provider: "gemini",
+          model: configuredModel,
+          endpointPath,
+          args,
+          base64Generated: imageBase64.length > 0,
+          failure,
+        });
+        return providerFailureFallback(args, "gemini", configuredModel, failure);
       }
 
       const parsed = parseAiJsonText(readProviderText(providerBody));
@@ -527,10 +588,65 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
         return unsafeAiOutputFallback(args, "gemini", configuredModel);
       }
 
-      return coerceExtractionResponse(parsed, args, "gemini", configuredModel);
-    } catch {
-      return providerFallback(args, "gemini", configuredModel, "AI provider is unavailable. Try again later.");
+      const result = coerceExtractionResponse(parsed, args, "gemini", configuredModel);
+      if (result.candidates.length === 0) {
+        return withMergedWarnings(result, ["provider_empty_candidates"]);
+      }
+      return result;
+    } catch (error) {
+      const failure: SafeProviderFailure = {
+        kind: "provider_unavailable",
+        message: error instanceof Error && error.message.trim() !== ""
+          ? safeText(error.message, "AI provider is unavailable.", 180)
+          : "AI provider is unavailable. Try again later.",
+      };
+      logProviderFailure({
+        provider: "gemini",
+        model: configuredModel,
+        endpointPath: geminiGenerateContentPath("v1beta", model),
+        args,
+        base64Generated: imageBase64.length > 0,
+        failure,
+      });
+      return providerFailureFallback(args, "gemini", configuredModel, failure);
     }
+  }
+
+  private fetchGenerateContent(options: {
+    endpointPath: string;
+    prompt: string;
+    imageBase64: string;
+    contentType: string;
+  }): Promise<Response> {
+    return fetch(
+      `https://generativelanguage.googleapis.com/${options.endpointPath}`,
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": this.apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: options.contentType,
+                    data: options.imageBase64,
+                  },
+                },
+                { text: options.prompt },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0,
+          },
+        }),
+      },
+    );
   }
 }
 
@@ -575,9 +691,9 @@ function buildRoutineImportPrompt(
 ): string {
   const sourceRules = {
     classes:
-      "Extract subjects/classes/labs/tutorials from weekly timetable tables. Short subject abbreviations such as DSD, AFL, DS, PS, STW, IND4 are valid class titles and must not be discarded as unclear by themselves. Rows or columns may contain day labels like MON, MON(1), TUE(1), WED(0), THU(0), FRI(1), Monday, Friday, Mon-Fri, or weekdays; use those labels to set repeatDays. Times may be column or row headers like 9-10, 10-11, 3.15-4.15, 4.15-5.15; convert clear ranges to startMinute/endMinute. Preserve room/location if visible in nearby cells such as C25-B-301. Use hard_block and category classBlock for clear timed class cells. Do not require the category to be named class if the source is classes and the title/time/day are clear. If only period numbers exist and exact times are missing, create flexible/unplaced low-confidence candidates.",
+      "Extract subjects/classes/labs/tutorials from weekly timetable tables. If days/times are visible in headers, extract class cells even if subjects are short abbreviations. Short subject abbreviations such as DSD, AFL, DS, PS, STW, IND4 are valid class titles and must not be discarded as unclear by themselves. If a cell has a subject and nearby room/location, create a hard_block and preserve the room/location if visible, such as C25-B-301. Rows or columns may contain day labels like MON, MON(1), TUE(1), WED(0), THU(0), FRI(1), Monday, Friday, Mon-Fri, or weekdays; parse those labels into repeatDays. Times may be column or row headers like 9-10, 10-11, 3.15-4.15, 4.15-5.15; convert clear ranges to startMinute/endMinute. Use hard_block and category classBlock for clear timed class cells. Do not require the category to be named class if the source is classes and the title/time/day are clear. Do not return empty if there are clearly visible timed class cells. If only period numbers exist and exact times are missing, create flexible/unplaced low-confidence candidates.",
     work:
-      "Extract only clearly timed work/business responsibility blocks from the image: Office Work, Work, Shift, Client Calls, Meeting, meetings, Project Work, Team Sync, Training Session, Commute, Lunch Break / Break, Freelance Project, freelance/side-work, Business Hours. Preserve the visible title and time. Use hard_block for fixed timed blocks. Use category job. Do not ignore blocks just because they are not named exactly Work. Do not import personal habit blocks like Gym/Exercise, Study/Reading, Online Course, Reading, Rest Day/No Work, or personal habits as job candidates. For weekly grid images, days are columns and times are rows. Convert each visible timed cell into one candidate with repeatDays matching the day column. Treat all clearly timed work schedule items as fixed work/business blocks unless source text clearly says rest day/no work. Use flexible tasks only for to-dos without a visible time.",
+      "Extract only clearly timed work/business responsibility blocks from the image. If days are columns and times are rows, extract visible work/business cells. Valid work/business titles include Office Work, Work, Shift, Meeting, Client Calls, Project Work, Team Sync, Team Review, Weekly Review, Training Session, Commute, Lunch Break / Break, Freelance Project, freelance/side-work, and Business Hours. Preserve the visible title and time. Use hard_block for fixed timed blocks. Use category job. Do not ignore blocks just because they are not named exactly Work. Do not import personal habit blocks like Gym/Exercise, Study/Reading, Online Course, Reading, Rest Day/No Work, or personal habits as job candidates. For weekly grid images, days are columns and times are rows. Convert each visible timed cell into one candidate with repeatDays matching the day column. Treat all clearly timed work schedule items as fixed work/business blocks unless source text clearly says rest day/no work. Do not return empty if there are clearly visible timed work cells. Use flexible tasks only for to-dos without a visible time.",
     eating:
       "Extract meal windows as blocks. Preserve breakfast/lunch/dinner/snack mealCategory. Dishes should usually go into notes or steps, not separate timeline blocks.",
     skinCare:
@@ -611,6 +727,9 @@ function buildRoutineImportPrompt(
     "- For blurry/unclear content, confidenceLabel must be low.",
     "- Add warnings for blurry image, dark image, rotated image, text too small, partial/cropped sheet, wrong source type, multiple sheets mixed, handwriting unreadable, or image too large for inline AI processing.",
     `- If the photo is too hard to read, return an empty candidates array and include this warning: ${HARD_TO_READ_WARNING}`,
+    "- Empty candidates are allowed only when no readable table/time/day/title can be identified.",
+    "- If at least one visible block has title + day + time, return that block.",
+    "- If table structure is visible but some text is imperfect, return medium/low confidence candidates with sourceRowLabel/sourceColumnLabel and validationIssues instead of returning an empty candidates array.",
     "- Keep sourceTextSnippet for every candidate.",
     "- Keep sourceRowLabel/sourceColumnLabel for table-like content.",
     "",
@@ -1046,6 +1165,143 @@ function providerFallback(
   });
 }
 
+function providerFailureFallback(
+  args: ExtractArgs,
+  engine: ExtractionEngine,
+  engineVersion: string,
+  failure: SafeProviderFailure,
+): RoutineImportExtractionResponse {
+  return fallbackResponse({
+    args,
+    engine,
+    engineVersion,
+    warning: failure.kind,
+  });
+}
+
+async function readProviderFailure(response: Response): Promise<SafeProviderFailure> {
+  let parsed: unknown;
+  let text = "";
+  try {
+    text = await response.text();
+    parsed = text.trim() === "" ? undefined : JSON.parse(text);
+  } catch {
+    parsed = undefined;
+  }
+
+  const body = record(parsed);
+  const error = record(body.error);
+  const providerCode = textValue(error.status) ??
+    textValue(error.code) ??
+    numberText(error.code) ??
+    textValue(body.error) ??
+    `http_${response.status}`;
+  const providerMessage = textValue(error.message) ??
+    textValue(body.message) ??
+    safeText(text, response.statusText || "Provider request failed.", 240);
+  const failure = classifyProviderFailure({
+    status: response.status,
+    errorCode: providerCode,
+    message: providerMessage,
+  });
+  return failure;
+}
+
+function classifyProviderFailure(input: {
+  status?: number;
+  errorCode?: string;
+  message: string;
+}): SafeProviderFailure {
+  const status = input.status;
+  const errorCode = safeText(input.errorCode, "", 80);
+  const message = safeText(input.message, "Provider request failed.", 240);
+  const normalized = `${errorCode} ${message}`.toLowerCase();
+  let kind: ProviderFailureKind = "provider_request_failed";
+  if (
+    status === 401 ||
+    status === 403 ||
+    normalized.includes("api key") ||
+    normalized.includes("permission_denied") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("forbidden")
+  ) {
+    kind = "provider_unauthorized";
+  } else if (
+    status === 404 ||
+    normalized.includes("not_found") ||
+    normalized.includes("model not found") ||
+    normalized.includes("not found for api version") ||
+    normalized.includes("not supported for generatecontent")
+  ) {
+    kind = "provider_model_not_found";
+  } else if (
+    status === 429 ||
+    normalized.includes("quota") ||
+    normalized.includes("rate limit") ||
+    normalized.includes("resource_exhausted")
+  ) {
+    kind = "provider_quota_exceeded";
+  } else if (
+    status === 408 ||
+    status === 504 ||
+    normalized.includes("timeout") ||
+    normalized.includes("deadline")
+  ) {
+    kind = "provider_timeout";
+  } else if (
+    status === 400 &&
+    (normalized.includes("image") ||
+      normalized.includes("inline") ||
+      normalized.includes("mime") ||
+      normalized.includes("base64") ||
+      normalized.includes("payload"))
+  ) {
+    kind = "provider_invalid_image_payload";
+  }
+  return {
+    kind,
+    status,
+    errorCode,
+    message,
+  };
+}
+
+function logProviderFailure(options: {
+  provider: string;
+  model: string;
+  endpointPath: string;
+  args: ExtractArgs;
+  base64Generated: boolean;
+  failure: SafeProviderFailure;
+}): void {
+  console.warn(
+    `[RoutineImportWorker] provider=${safeLogToken(options.provider)} ` +
+      `model=${safeLogToken(options.model)} ` +
+      `status=${options.failure.status ?? "n/a"} ` +
+      `errorCode=${safeLogToken(options.failure.errorCode ?? options.failure.kind)} ` +
+      `message=${safeLogText(options.failure.message)} ` +
+      `endpointPath=${safeLogToken(options.endpointPath)} ` +
+      `imageLoadedFromR2=${options.args.imageBytes.byteLength > 0} ` +
+      `contentType=${safeLogToken(options.args.contentType)} ` +
+      `bytes=${options.args.imageBytes.byteLength} ` +
+      `base64Generated=${options.base64Generated}`,
+  );
+}
+
+function geminiGenerateContentPath(apiVersion: string, model: string): string {
+  return `${apiVersion}/models/${encodeURIComponent(model)}:generateContent`;
+}
+
+function shouldRetryGeminiApiVersion(
+  model: string,
+  apiVersion: string,
+  failure: SafeProviderFailure,
+): boolean {
+  return apiVersion === "v1beta" &&
+    model.toLowerCase().startsWith("gemini-3") &&
+    failure.kind === "provider_model_not_found";
+}
+
 function inlineImageTooLargeFallback(
   args: ExtractArgs,
   engine: ExtractionEngine,
@@ -1091,6 +1347,10 @@ async function maybeRunFallbackModel(options: {
   try {
     const fallback = await options.runFallback(fallbackModel);
     if (fallbackModelFailed(fallback)) {
+      console.warn(
+        `[RoutineImportWorker] fallback model=${safeLogToken(fallbackModel)} ` +
+          `status=failed warnings=${safeLogText(fallback.warnings.join(" | "))}`,
+      );
       return withMergedWarnings(options.primary, [
         "AI fallback model could not improve extraction.",
       ]);
@@ -1186,7 +1446,8 @@ function fallbackModelFailed(result: RoutineImportExtractionResponse): boolean {
   if (result.candidates.length > 0) return false;
   return result.warnings.some((warning) => {
     const text = warning.toLowerCase();
-    return text.includes("unavailable") ||
+    return text.startsWith("provider_") ||
+      text.includes("unavailable") ||
       text.includes("could not process") ||
       text.includes("returned invalid json") ||
       text.includes("could not be safely parsed");
@@ -1658,6 +1919,12 @@ function textValue(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function numberText(value: unknown): string | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? String(value)
+    : undefined;
+}
+
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -1672,6 +1939,14 @@ function isNumber(value: unknown): value is number {
 
 function validIsoDate(value: string): boolean {
   return !Number.isNaN(Date.parse(value));
+}
+
+function safeLogToken(value: string): string {
+  return safeText(value, "unknown", 180).replace(/[\s"'`]+/g, "_");
+}
+
+function safeLogText(value: string): string {
+  return safeText(value, "none", 240).replace(/[\r\n]+/g, " ");
 }
 
 function labelForSource(source: RoutineImportReviewSource): string {

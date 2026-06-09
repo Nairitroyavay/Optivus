@@ -930,6 +930,15 @@ void main() {
         successfulSources: {RoutineImportReviewSource.classes},
         failedSources: {RoutineImportReviewSource.work},
       );
+      final detailedClassSuccessWorkFail = onboarding4PartialFailureMessage(
+        needsBothPhotos: true,
+        successfulSources: {RoutineImportReviewSource.classes},
+        failedSources: {RoutineImportReviewSource.work},
+        failureMessages: const {
+          RoutineImportReviewSource.work:
+              'Work photo is too large. Upload a smaller, clearer photo.',
+        },
+      );
       final workSuccessClassFail = onboarding4PartialFailureMessage(
         needsBothPhotos: true,
         successfulSources: {RoutineImportReviewSource.work},
@@ -943,10 +952,28 @@ void main() {
           RoutineImportReviewSource.work,
         },
       );
+      final detailedBothFail = onboarding4TimelineErrorForFailures(
+        needsBothPhotos: true,
+        role: LifeRoleDraft.studentWorkingKey,
+        failures: {
+          RoutineImportReviewSource.classes,
+          RoutineImportReviewSource.work,
+        },
+        failureMessages: const {
+          RoutineImportReviewSource.classes:
+              'AI response could not be read safely. Please try again.',
+          RoutineImportReviewSource.work:
+              'Work photo format is not supported. Please upload JPEG, PNG, or WEBP.',
+        },
+      );
 
       expect(
         classSuccessWorkFail,
         'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.',
+      );
+      expect(
+        detailedClassSuccessWorkFail,
+        'Work photo is too large. Upload a smaller, clearer photo.',
       );
       expect(
         workSuccessClassFail,
@@ -956,8 +983,106 @@ void main() {
         bothFail,
         'AI could not detect class or work schedule blocks clearly.',
       );
+      expect(
+        detailedBothFail,
+        'AI response could not be read safely. Please try again.\n'
+        'Work photo format is not supported. Please upload JPEG, PNG, or WEBP.',
+      );
     },
   );
+
+  test('Onboarding 4 source failure messages surface worker reasons', () {
+    expect(
+      onboarding4SourceFailureMessage(
+        source: RoutineImportReviewSource.classes,
+        role: LifeRoleDraft.studentWorkingKey,
+        warnings: const ['Please upload JPEG, PNG, or WEBP for now.'],
+        rawCandidateCount: null,
+        mappedBlockCount: 0,
+      ),
+      'Class photo format is not supported. Please upload JPEG, PNG, or WEBP.',
+    );
+    expect(
+      onboarding4SourceFailureMessage(
+        source: RoutineImportReviewSource.work,
+        role: LifeRoleDraft.studentWorkingKey,
+        warnings: const ['Uploaded source image was not found.'],
+        rawCandidateCount: null,
+        mappedBlockCount: 0,
+      ),
+      'Uploaded work photo could not be found. Please upload again.',
+    );
+    expect(
+      onboarding4SourceFailureMessage(
+        source: RoutineImportReviewSource.work,
+        role: LifeRoleDraft.studentWorkingKey,
+        warnings: const [
+          'AI extraction service returned invalid structured data.',
+        ],
+        rawCandidateCount: null,
+        mappedBlockCount: 0,
+      ),
+      'AI response could not be read safely. Please try again.',
+    );
+    expect(
+      onboarding4SourceFailureMessage(
+        source: RoutineImportReviewSource.work,
+        role: LifeRoleDraft.studentWorkingKey,
+        warnings: const [],
+        rawCandidateCount: 0,
+        mappedBlockCount: 0,
+      ),
+      'AI could not read blocks from the Work photo. Try a clearer image.',
+    );
+    expect(
+      onboarding4SourceFailureMessage(
+        source: RoutineImportReviewSource.classes,
+        role: LifeRoleDraft.studentWorkingKey,
+        warnings: const [],
+        rawCandidateCount: 3,
+        mappedBlockCount: 0,
+      ),
+      'AI read the Class photo, but no usable timeline blocks were found. Try a clearer image.',
+    );
+  });
+
+  test('Onboarding 4 source failure messages surface provider codes', () {
+    final cases = <List<Object>>[
+      const [
+        'provider_model_not_found',
+        'AI model is not available. Check worker model config.',
+      ],
+      const ['provider_unauthorized', 'AI key is invalid or unauthorized.'],
+      const ['provider_quota_exceeded', 'AI quota/rate limit reached.'],
+      const [
+        'provider_timeout',
+        'AI service timed out. Try again after a moment.',
+      ],
+      const [
+        'provider_invalid_image_payload',
+        'AI could not process this image format.',
+      ],
+      const ['provider_empty_candidates', 'AI returned no timetable blocks.'],
+      const [
+        'provider_request_failed',
+        'AI provider request failed. Check worker logs for the provider error.',
+      ],
+    ];
+
+    for (final entry in cases) {
+      expect(
+        onboarding4SourceFailureMessage(
+          source: RoutineImportReviewSource.classes,
+          role: LifeRoleDraft.studentWorkingKey,
+          warnings: [entry[0] as String],
+          rawCandidateCount: null,
+          mappedBlockCount: 0,
+        ),
+        entry[1],
+        reason: entry[0] as String,
+      );
+    }
+  });
 
   test(
     'Onboarding 4 mapping accepts class abbreviations with time and day',

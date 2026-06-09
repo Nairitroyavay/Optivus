@@ -10,7 +10,7 @@ MAX_IMAGE_BYTES = "15728640"
 GEMINI_INLINE_MAX_IMAGE_BYTES = "11534336"
 AI_PROVIDER = "gemini"
 AI_MODEL = "gemini-3.5-flash"
-AI_FALLBACK_MODEL = "gemini-3.1-pro-preview"
+AI_FALLBACK_MODEL = "gemini-2.5-flash"
 
 [[r2_buckets]]
 binding = "UPLOAD_BUCKET"

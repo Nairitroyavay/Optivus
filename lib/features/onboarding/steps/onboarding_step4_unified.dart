@@ -454,12 +454,17 @@ String? onboarding4PartialFailureMessage({
   required bool needsBothPhotos,
   required Set<RoutineImportReviewSource> successfulSources,
   required Set<RoutineImportReviewSource> failedSources,
+  Map<RoutineImportReviewSource, String> failureMessages = const {},
 }) {
   if (!needsBothPhotos || successfulSources.isEmpty) return null;
   if (failedSources.contains(RoutineImportReviewSource.work)) {
+    final message = failureMessages[RoutineImportReviewSource.work];
+    if (message != null && message.trim().isNotEmpty) return message;
     return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
   }
   if (failedSources.contains(RoutineImportReviewSource.classes)) {
+    final message = failureMessages[RoutineImportReviewSource.classes];
+    if (message != null && message.trim().isNotEmpty) return message;
     return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
   }
   return null;
@@ -470,22 +475,133 @@ String onboarding4TimelineErrorForFailures({
   required bool needsBothPhotos,
   required String? role,
   required Set<RoutineImportReviewSource> failures,
+  Map<RoutineImportReviewSource, String> failureMessages = const {},
 }) {
   final classFailed = failures.contains(RoutineImportReviewSource.classes);
   final workFailed = failures.contains(RoutineImportReviewSource.work);
   if (needsBothPhotos && classFailed && workFailed) {
+    final details =
+        [
+              failureMessages[RoutineImportReviewSource.classes],
+              failureMessages[RoutineImportReviewSource.work],
+            ]
+            .where((message) => message != null && message.trim().isNotEmpty)
+            .map((message) => message!.trim())
+            .toSet()
+            .toList(growable: false);
+    if (details.isNotEmpty) return details.join('\n');
     return 'AI could not detect class or work schedule blocks clearly.';
   }
   if (classFailed) {
+    final message = failureMessages[RoutineImportReviewSource.classes];
+    if (message != null && message.trim().isNotEmpty) return message;
     return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
   }
   if (workFailed && role == LifeRoleDraft.businessKey) {
+    final message = failureMessages[RoutineImportReviewSource.work];
+    if (message != null && message.trim().isNotEmpty) return message;
     return 'Work/business schedule could not be read clearly. Check the photo or upload a clearer image.';
   }
   if (workFailed) {
+    final message = failureMessages[RoutineImportReviewSource.work];
+    if (message != null && message.trim().isNotEmpty) return message;
     return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
   }
   return 'AI could not detect timetable blocks clearly.';
+}
+
+@visibleForTesting
+String onboarding4SourceFailureMessage({
+  required RoutineImportReviewSource source,
+  required String? role,
+  required List<String> warnings,
+  required int? rawCandidateCount,
+  required int mappedBlockCount,
+}) {
+  final normalizedWarnings = warnings
+      .map((warning) => warning.trim())
+      .where((warning) => warning.isNotEmpty)
+      .toList(growable: false);
+  final joined = normalizedWarnings.join(' | ').toLowerCase();
+  final photoLabel = source == RoutineImportReviewSource.classes
+      ? 'Class photo'
+      : role == LifeRoleDraft.businessKey
+      ? 'Work/business photo'
+      : 'Work photo';
+  final uploadedLabel = source == RoutineImportReviewSource.classes
+      ? 'class photo'
+      : role == LifeRoleDraft.businessKey
+      ? 'work/business photo'
+      : 'work photo';
+
+  if (joined.contains('jpeg, png, or webp') ||
+      joined.contains('invalid_source_content_type') ||
+      joined.contains('not supported') ||
+      joined.contains('unsupported')) {
+    return '$photoLabel format is not supported. Please upload JPEG, PNG, or WEBP.';
+  }
+  if (joined.contains('too large') || joined.contains('image_too_large')) {
+    return '$photoLabel is too large. Upload a smaller, clearer photo.';
+  }
+  if (joined.contains('source image was not found') ||
+      joined.contains('source_image_not_found') ||
+      joined.contains('could not be found')) {
+    return 'Uploaded $uploadedLabel could not be found. Please upload again.';
+  }
+  if (joined.contains('worker is not configured') ||
+      joined.contains('worker url') ||
+      joined.contains('not configured')) {
+    return 'AI worker is not configured for this build.';
+  }
+  if (joined.contains('provider_model_not_found')) {
+    return 'AI model is not available. Check worker model config.';
+  }
+  if (joined.contains('provider_unauthorized')) {
+    return 'AI key is invalid or unauthorized.';
+  }
+  if (joined.contains('provider_quota_exceeded')) {
+    return 'AI quota/rate limit reached.';
+  }
+  if (joined.contains('provider_timeout')) {
+    return 'AI service timed out. Try again after a moment.';
+  }
+  if (joined.contains('provider_invalid_image_payload')) {
+    return 'AI could not process this image format.';
+  }
+  if (joined.contains('provider_empty_candidates')) {
+    return 'AI returned no timetable blocks.';
+  }
+  if (joined.contains('provider_invalid_json')) {
+    return 'AI response could not be read safely. Please try again.';
+  }
+  if (joined.contains('provider_request_failed')) {
+    return 'AI provider request failed. Check worker logs for the provider error.';
+  }
+  if (joined.contains('unavailable') ||
+      joined.contains('try again later') ||
+      joined.contains('provider could not process')) {
+    return 'AI service is unavailable. Try again after a moment.';
+  }
+  if (joined.contains('invalid structured data') ||
+      joined.contains('could not be safely parsed') ||
+      joined.contains('invalid json')) {
+    return 'AI response could not be read safely. Please try again.';
+  }
+  if (rawCandidateCount == 0) {
+    return 'AI could not read blocks from the $photoLabel. Try a clearer image.';
+  }
+  if (rawCandidateCount != null &&
+      rawCandidateCount > 0 &&
+      mappedBlockCount == 0) {
+    return 'AI read the $photoLabel, but no usable timeline blocks were found. Try a clearer image.';
+  }
+  if (source == RoutineImportReviewSource.classes) {
+    return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
+  }
+  if (role == LifeRoleDraft.businessKey) {
+    return 'Work/business schedule could not be read clearly. Check the photo or upload a clearer image.';
+  }
+  return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
 }
 
 // ---------------------------------------------------------------------------
@@ -1071,7 +1187,8 @@ class _OnboardingStep4UnifiedState
     if (!kDebugMode) return;
     debugPrint(
       '[Onboarding4] aiMode=${OptivusRoutineImportAiConfig.mode.name} '
-      'workerUrlConfigured=${OptivusRoutineImportAiConfig.hasWorkerUrl}',
+      'workerUrlConfigured=${OptivusRoutineImportAiConfig.hasWorkerUrl} '
+      'workerBaseUrl=${OptivusRoutineImportAiConfig.workerBaseUrl.trim().isEmpty ? 'missing' : OptivusRoutineImportAiConfig.workerBaseUrl}',
     );
   }
 
@@ -1123,7 +1240,8 @@ class _OnboardingStep4UnifiedState
     if (result != null) {
       debugPrint(
         '[Onboarding4] RAW source=${photo.source.name} '
-        'rawCandidates=${result.candidates.length}',
+        'rawCandidates=${result.candidates.length} '
+        'engine=${result.engine} version=${result.engineVersion}',
       );
       if (result.candidates.isEmpty &&
           (photo.source == RoutineImportReviewSource.classes ||
@@ -1184,19 +1302,25 @@ class _OnboardingStep4UnifiedState
   String? _partialFailureMessage({
     required Set<RoutineImportReviewSource> successfulSources,
     required Set<RoutineImportReviewSource> failedSources,
+    Map<RoutineImportReviewSource, String> failureMessages = const {},
   }) {
     return onboarding4PartialFailureMessage(
       needsBothPhotos: _needsBothPhotos,
       successfulSources: successfulSources,
       failedSources: failedSources,
+      failureMessages: failureMessages,
     );
   }
 
-  String _timelineErrorForFailures(Set<RoutineImportReviewSource> failures) {
+  String _timelineErrorForFailures(
+    Set<RoutineImportReviewSource> failures, {
+    Map<RoutineImportReviewSource, String> failureMessages = const {},
+  }) {
     return onboarding4TimelineErrorForFailures(
       needsBothPhotos: _needsBothPhotos,
       role: _role,
       failures: failures,
+      failureMessages: failureMessages,
     );
   }
 
@@ -1351,6 +1475,7 @@ class _OnboardingStep4UnifiedState
     final aiController = ref.read(routineImportAiControllerProvider.notifier);
     final successfulSources = <RoutineImportReviewSource>{};
     final failedSources = <RoutineImportReviewSource>{};
+    final failureMessages = <RoutineImportReviewSource, String>{};
     final photosToProcess = [..._photos]..sort(_comparePhotoSlots);
     _debugLogAiMode();
 
@@ -1415,6 +1540,13 @@ class _OnboardingStep4UnifiedState
           }
         } else {
           failedSources.add(photo.source);
+          failureMessages[photo.source] = onboarding4SourceFailureMessage(
+            source: photo.source,
+            role: _role,
+            warnings: warnings,
+            rawCandidateCount: result?.candidates.length,
+            mappedBlockCount: mapping.blocks.length,
+          );
         }
       }
     } finally {
@@ -1431,12 +1563,16 @@ class _OnboardingStep4UnifiedState
     final partialMessage = _partialFailureMessage(
       successfulSources: successfulSources,
       failedSources: failedSources,
+      failureMessages: failureMessages,
     );
     setState(() {
       _isGenerating = false;
       _generationError = partialMessage;
       if (!anySuccess) {
-        _timelineError = _timelineErrorForFailures(failedSources);
+        _timelineError = _timelineErrorForFailures(
+          failedSources,
+          failureMessages: failureMessages,
+        );
       }
     });
     if (anySuccess) _markClassJobDirty();

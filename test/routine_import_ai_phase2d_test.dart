@@ -224,7 +224,7 @@ void main() {
       'workers/routine-import-worker/src/index.ts',
     ).readAsStringSync();
     final inlineDataIndex = worker.indexOf('inlineData');
-    final textPromptIndex = worker.indexOf('{ text: prompt }');
+    final textPromptIndex = worker.indexOf('{ text: options.prompt }');
 
     expect(inlineDataIndex, greaterThanOrEqualTo(0));
     expect(textPromptIndex, greaterThanOrEqualTo(0));
@@ -295,6 +295,85 @@ void main() {
     );
     expect(worker, contains('classWorkScheduleSwapPurposes'));
     expect(worker, contains('sourcePurpose.classes, sourcePurpose.work'));
+  });
+
+  test('routine import worker prompt returns partial timetable candidates', () {
+    final worker = File(
+      'workers/routine-import-worker/src/index.ts',
+    ).readAsStringSync();
+
+    expect(
+      worker,
+      contains(
+        'Empty candidates are allowed only when no readable table/time/day/title can be identified.',
+      ),
+    );
+    expect(
+      worker,
+      contains(
+        'If at least one visible block has title + day + time, return that block.',
+      ),
+    );
+    expect(
+      worker,
+      contains(
+        'If table structure is visible but some text is imperfect, return medium/low confidence candidates',
+      ),
+    );
+    expect(
+      worker,
+      contains(
+        'Do not return empty if there are clearly visible timed class cells.',
+      ),
+    );
+    expect(
+      worker,
+      contains(
+        'Do not return empty if there are clearly visible timed work cells.',
+      ),
+    );
+    expect(worker, contains('Team Review'));
+    expect(worker, contains('Weekly Review'));
+  });
+
+  test(
+    'routine import worker exposes Gemini provider failure details safely',
+    () {
+      final worker = File(
+        'workers/routine-import-worker/src/index.ts',
+      ).readAsStringSync();
+
+      expect(worker, contains('readProviderFailure'));
+      expect(worker, contains('classifyProviderFailure'));
+      expect(worker, contains('logProviderFailure'));
+      expect(worker, contains('provider_model_not_found'));
+      expect(worker, contains('provider_invalid_image_payload'));
+      expect(worker, contains('provider_unauthorized'));
+      expect(worker, contains('provider_quota_exceeded'));
+      expect(worker, contains('provider_timeout'));
+      expect(worker, contains('provider_empty_candidates'));
+      expect(worker, contains(r'status=${options.failure.status'));
+      expect(
+        worker,
+        contains(r'contentType=${safeLogToken(options.args.contentType)}'),
+      );
+      expect(worker, contains(r'bytes=${options.args.imageBytes.byteLength}'));
+      expect(worker, contains(r'base64Generated=${options.base64Generated}'));
+      expect(worker, isNot(contains('GEMINI_API_KEY=')));
+    },
+  );
+
+  test('routine import worker retries Gemini 3 models on v1alpha', () {
+    final worker = File(
+      'workers/routine-import-worker/src/index.ts',
+    ).readAsStringSync();
+
+    expect(worker, contains('shouldRetryGeminiApiVersion'));
+    expect(worker, contains('apiVersion === "v1beta"'));
+    expect(worker, contains('model.toLowerCase().startsWith("gemini-3")'));
+    expect(worker, contains('failure.kind === "provider_model_not_found"'));
+    expect(worker, contains('apiVersion = "v1alpha"'));
+    expect(worker, contains('geminiGenerateContentPath(apiVersion, model)'));
   });
 
   test('Flutter rejects Worker response with wrong uid', () async {
