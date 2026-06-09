@@ -229,6 +229,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       // If dirty or not completed, force save logic
       if (isDirty || !isCompleted) {
         final saveSuccess = await _saveStep(_currentPage);
+        if (!mounted) return;
         if (!saveSuccess) {
           return; // Stop if invalid
         }
@@ -242,8 +243,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeInOut,
       );
+      if (!mounted) return;
       await _persistCurrentDraftAfterNavigation();
     } catch (e) {
+      if (!mounted) return;
       ref
           .read(mockOnboardingProvider.notifier)
           .setValidationMessage(e.toString());
@@ -550,15 +553,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   bool _backEating(OnboardingDraft draft) {
     final base = draft.baseTimeline;
-    final path = base.eatingSetupPath;
-    final stages = path == 'has_routine'
-        ? const [0, 1, 2, 3]
-        : const [0, 1, 2, 3, 4, 5];
-    final previous = _previousInternalStage(base.eatingSetupStep, stages);
-    if (previous == null) return false;
+    if (base.eatingSetupStep <= 0) return false;
     _updateBaseTimelineStage(
       onboardingEatingStepIndex,
-      (base) => base.copyWith(eatingSetupStep: previous),
+      (base) => base.copyWith(eatingSetupStep: 0),
     );
     return true;
   }
@@ -765,69 +763,43 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return true;
     }
 
-    if (path == 'has_routine') {
-      if (stage == 1 &&
-          !_sectionHasUploadOrBlocks(base, onboardingSectionEating)) {
-        _setInternalValidation('Upload your eating routine or menu.');
+    if (path == onboardingEatingPathHasRoutine) {
+      if (!base.hasConfirmedSection('eating')) {
+        _setInternalValidation('Generate your weekly meal routine first.');
         return true;
       }
-      if (stage == 2 && !base.hasConfirmedSection('eating')) {
-        _setInternalValidation(
-          base.sectionNeedsImportReview(onboardingSectionEating)
-              ? 'Review AI draft to continue.'
-              : 'Upload your eating routine or menu.',
-        );
-        return true;
-      }
-      final next = _nextInternalStage(stage, const [1, 2, 3]);
-      if (next == null) return false;
-      _updateBaseTimelineStage(
-        onboardingEatingStepIndex,
-        (base) => base.copyWith(eatingSetupStep: next),
-      );
+      return false;
+    }
+
+    if (path != onboardingEatingPathCreate) {
+      _setInternalValidation('Choose how to set up eating.');
       return true;
     }
 
-    if (stage == 1 && base.mealPlanningGoal == null) {
-      _setInternalValidation('Choose an eating goal.');
+    final generatedBlocks = onboarding5GeneratedMealBlocks(base);
+    if (generatedBlocks.isEmpty) {
+      _setInternalValidation('Generate eating routine to continue.');
       return true;
     }
-    if (stage == 2 && base.eatingMode == null) {
-      _setInternalValidation('Choose your eating situation.');
-      return true;
-    }
-    if (stage == 3) {
-      final detailError = _eatingDetailError(base);
-      if (detailError != null) {
-        _setInternalValidation(detailError);
-        return true;
-      }
-      _updateBaseTimelineStage(
-        onboardingEatingStepIndex,
-        (base) => upsertGeneratedEatingImport(
-          base.copyWith(eatingSetupStep: 4),
-          draft.bodyBasics,
-        ),
+    _updateBaseTimelineStage(onboardingEatingStepIndex, (base) {
+      final nextBlocks =
+          base.blocks
+              .where((block) => block.section != 'eating')
+              .toList(growable: true)
+            ..addAll(generatedBlocks);
+      final nextPending = base.pendingFutureImports
+          .where((entry) => entry.section != onboardingSectionEating)
+          .toList(growable: false);
+      return base.copyWith(
+        blocks: nextBlocks,
+        pendingFutureImports: nextPending,
+        eatingSetupStep: 1,
+        eatingSetupPath: onboardingEatingPathCreate,
+        eatingMode: base.eatingMode ?? 'home',
+        mealsPerDay: base.mealsPerDay ?? 4,
       );
-      if (!mounted) return true;
-      await openOnboardingImportReview(
-        context,
-        source: onboardingImportSourceForSection(onboardingSectionEating),
-        autoRunAiOnLoad: false,
-      );
-      return true;
-    }
-    if (stage == 4 && !base.hasConfirmedSection('eating')) {
-      _setInternalValidation('Review AI draft to continue.');
-      return true;
-    }
-    final next = _nextInternalStage(stage, const [1, 2, 3, 4, 5]);
-    if (next == null) return false;
-    _updateBaseTimelineStage(
-      onboardingEatingStepIndex,
-      (base) => base.copyWith(eatingSetupStep: next),
-    );
-    return true;
+    });
+    return false;
   }
 
   Future<bool> _nextFixed(OnboardingDraft draft) async {
@@ -984,16 +956,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return base.hasConfirmedSection(sectionKey) ||
         pending?.hasUploadedAssetReference == true ||
         pending?.parsedBlocks.isNotEmpty == true;
-  }
-
-  String? _eatingDetailError(BaseTimelineDraft base) {
-    if (base.eatingMode == 'self_cook') {
-      if (base.foodType == null) return 'Choose veg, egg, or non-veg.';
-      if (base.mealBudget == null) return 'Choose meal budget.';
-      if (base.cookingAbility == null) return 'Choose cooking skill.';
-      if (base.mealsPerDay == null) return 'Choose meals per day.';
-    }
-    return null;
   }
 
   List<String> _skinProductNames(BaseTimelineDraft base) {

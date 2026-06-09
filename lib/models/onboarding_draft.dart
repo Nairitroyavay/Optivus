@@ -1015,6 +1015,7 @@ class BaseTimelineDraft {
   final int? lunchMinute;
   final int? dinnerMinute;
   final int? snackMinute;
+  final int? extraSnackMinute;
   final String? skinCareSetupPath;
   final String? skinCareProductNames;
   final bool skinCareFacePhotoSkipped;
@@ -1049,6 +1050,7 @@ class BaseTimelineDraft {
     this.lunchMinute,
     this.dinnerMinute,
     this.snackMinute,
+    this.extraSnackMinute,
     this.skinCareSetupPath,
     this.skinCareProductNames,
     this.skinCareFacePhotoSkipped = false,
@@ -1089,6 +1091,7 @@ class BaseTimelineDraft {
       lunchMinute: (map['lunchMinute'] as num?)?.toInt(),
       dinnerMinute: (map['dinnerMinute'] as num?)?.toInt(),
       snackMinute: (map['snackMinute'] as num?)?.toInt(),
+      extraSnackMinute: (map['extraSnackMinute'] as num?)?.toInt(),
       skinCareSetupPath: map['skinCareSetupPath'] as String?,
       skinCareProductNames: map['skinCareProductNames'] as String?,
       skinCareFacePhotoSkipped:
@@ -1128,6 +1131,7 @@ class BaseTimelineDraft {
     'lunchMinute': lunchMinute,
     'dinnerMinute': dinnerMinute,
     'snackMinute': snackMinute,
+    'extraSnackMinute': extraSnackMinute,
     'skinCareSetupPath': skinCareSetupPath,
     'skinCareProductNames': skinCareProductNames,
     'skinCareFacePhotoSkipped': skinCareFacePhotoSkipped,
@@ -1165,6 +1169,7 @@ class BaseTimelineDraft {
     int? lunchMinute,
     int? dinnerMinute,
     int? snackMinute,
+    int? extraSnackMinute,
     String? skinCareSetupPath,
     String? skinCareProductNames,
     bool? skinCareFacePhotoSkipped,
@@ -1236,6 +1241,9 @@ class BaseTimelineDraft {
       snackMinute: clearMealPlanning || clearSnackMinute
           ? null
           : (snackMinute ?? this.snackMinute),
+      extraSnackMinute: clearMealPlanning
+          ? null
+          : (extraSnackMinute ?? this.extraSnackMinute),
       skinCareSetupPath: clearSkinCarePlanning
           ? null
           : (skinCareSetupPath ?? this.skinCareSetupPath),
@@ -1512,17 +1520,11 @@ class BaseTimelineDraft {
 
   String? validateEatingSetup() {
     if (_hasConfirmedSection('eating')) return null;
-    if (sectionNeedsImportReview('Eating')) {
-      return 'Review AI draft to continue.';
-    }
     if (eatingSetupPath == null) {
       return 'Choose how to set up eating.';
     }
     if (eatingSetupPath == 'has_routine') {
-      return 'Upload your eating routine or menu.';
-    }
-    if (mealPlanningGoal == null || eatingMode == null) {
-      return 'Complete eating setup details.';
+      return 'Generate your weekly meal routine first.';
     }
     return 'Generate eating routine to continue.';
   }

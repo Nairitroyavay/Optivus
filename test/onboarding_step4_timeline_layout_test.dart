@@ -6,6 +6,7 @@ import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -1367,6 +1368,324 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  testWidgets('Eating setup starts with two simple choices', (tester) async {
+    final draft = OnboardingDraft(
+      currentStep: onboardingEatingStepIndex,
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: SizedBox.expand(child: OnboardingStep5())),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Eating Setup'), findsOneWidget);
+    expect(
+      find.text('Build your weekly meal routine in a simple way.'),
+      findsOneWidget,
+    );
+    expect(find.text('Yes, I have a routine/menu'), findsOneWidget);
+    expect(find.text('No, help me create one'), findsOneWidget);
+    expect(find.text('Goal'), findsNothing);
+    expect(find.text('Open review'), findsNothing);
+  });
+
+  testWidgets('Eating yes path shows inline upload timeline without review', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      currentStep: onboardingEatingStepIndex,
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: SizedBox.expand(child: OnboardingStep5())),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Yes, I have a routine/menu'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('onboarding-step5-back')), findsOneWidget);
+    expect(find.text('Upload your routine/menu'), findsOneWidget);
+    expect(
+      find.text('Add your meal timetable or weekly menu photo.'),
+      findsOneWidget,
+    );
+    expect(find.text('Set Your Weekly Meal'), findsOneWidget);
+    expect(find.text('MON'), findsOneWidget);
+    expect(find.text('SUN'), findsOneWidget);
+    expect(
+      find.text('Generate your weekly meal routine first.'),
+      findsOneWidget,
+    );
+    expect(find.text('Open review'), findsNothing);
+    expect(find.text('Review AI draft'), findsNothing);
+    expect(find.text('Eating summary'), findsNothing);
+  });
+
+  testWidgets('Eating no path shows simple meal times and weekly timeline', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      currentStep: onboardingEatingStepIndex,
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: SizedBox.expand(child: OnboardingStep5())),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('No, help me create one'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create simple meal routine'), findsOneWidget);
+    expect(find.text('Meals per day'), findsOneWidget);
+    expect(find.text('3'), findsWidgets);
+    expect(find.text('4'), findsWidgets);
+    expect(find.text('5'), findsWidgets);
+    expect(find.text('Breakfast'), findsWidgets);
+    expect(find.text('Lunch'), findsWidgets);
+    expect(find.text('Snack'), findsWidgets);
+    expect(find.text('Dinner'), findsWidgets);
+    expect(find.text('Set Your Weekly Meal'), findsOneWidget);
+    expect(find.text('Goal'), findsNothing);
+    expect(find.text('Budget'), findsNothing);
+    expect(find.text('Cooking skill'), findsNothing);
+  });
+
+  testWidgets('Eating stage back returns to choice screen', (tester) async {
+    final draft = OnboardingDraft(
+      currentStep: onboardingEatingStepIndex,
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: SizedBox.expand(child: OnboardingStep5())),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('No, help me create one'));
+    await tester.pumpAndSettle();
+    expect(find.text('Create simple meal routine'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('onboarding-step5-back')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Yes, I have a routine/menu'), findsOneWidget);
+    expect(find.text('No, help me create one'), findsOneWidget);
+    expect(find.text('Create simple meal routine'), findsNothing);
+  });
+
+  testWidgets('Eating no path saves generated blocks and advances to Fixed', (
+    tester,
+  ) async {
+    late MockOnboardingNotifier notifier;
+    final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+    completed[onboardingEatingStepIndex] = false;
+    final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
+    dirty[onboardingEatingStepIndex] = true;
+    final draft = OnboardingDraft(
+      uid: 'eating-save-user',
+      currentStep: onboardingEatingStepIndex,
+      stepCompleted: completed,
+      stepDirty: dirty,
+      baseTimeline: const BaseTimelineDraft(
+        eatingSetupPath: onboardingEatingPathCreate,
+        eatingSetupStep: 1,
+        mealsPerDay: 4,
+        breakfastMinute: 8 * 60,
+        lunchMinute: 13 * 60,
+        snackMinute: 17 * 60,
+        dinnerMinute: 20 * 60 + 30,
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith((_) {
+            notifier = MockOnboardingNotifier()..loadSeedData(draft);
+            return notifier;
+          }),
+        ],
+        child: const MaterialApp(home: OnboardingFlow()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.text('Next Step'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+
+    final nextDraft = notifier.state.draft;
+    final eatingBlocks = nextDraft.baseTimeline.confirmedBlocksForSection(
+      'eating',
+    );
+    expect(nextDraft.currentStep, onboardingFixedStepIndex);
+    expect(nextDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
+    expect(nextDraft.stepDirty[onboardingEatingStepIndex], isFalse);
+    expect(eatingBlocks.map((block) => block.title), [
+      'Breakfast',
+      'Lunch',
+      'Snack',
+      'Dinner',
+    ]);
+    expect(
+      eatingBlocks.every(
+        (block) =>
+            block.section == 'eating' &&
+            block.source == onboardingEatingGeneratedSource &&
+            block.blockType == TimelineBlockDraft.hardBlockKey &&
+            block.repeatDays.length == 7,
+      ),
+      isTrue,
+    );
+  });
+
+  testWidgets('Eating has-routine path saves AI blocks without review screen', (
+    tester,
+  ) async {
+    late MockOnboardingNotifier notifier;
+    final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+    completed[onboardingEatingStepIndex] = false;
+    final dirty = List<bool>.filled(OnboardingDraft.stepCount, false);
+    dirty[onboardingEatingStepIndex] = true;
+    final draft = OnboardingDraft(
+      uid: 'eating-ai-save-user',
+      currentStep: onboardingEatingStepIndex,
+      stepCompleted: completed,
+      stepDirty: dirty,
+      baseTimeline: BaseTimelineDraft(
+        eatingSetupPath: onboardingEatingPathHasRoutine,
+        eatingSetupStep: 1,
+        blocks: [
+          _timelineBlock(
+            id: 'ai-breakfast',
+            section: 'eating',
+            title: 'Breakfast',
+            startMinute: 8 * 60,
+            endMinute: 8 * 60 + 30,
+          ).copyWith(source: onboardingEatingAiImportSource),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith((_) {
+            notifier = MockOnboardingNotifier()..loadSeedData(draft);
+            return notifier;
+          }),
+        ],
+        child: const MaterialApp(home: OnboardingFlow()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Breakfast'), findsOneWidget);
+    expect(find.text('Open review'), findsNothing);
+
+    await tester.tap(find.text('Next Step'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+
+    final nextDraft = notifier.state.draft;
+    expect(nextDraft.currentStep, onboardingFixedStepIndex);
+    expect(nextDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
+    expect(nextDraft.stepDirty[onboardingEatingStepIndex], isFalse);
+    expect(
+      nextDraft.baseTimeline.confirmedBlocksForSection('eating').single.source,
+      onboardingEatingAiImportSource,
+    );
+  });
+
+  test('Eating AI candidates map directly to eating timeline blocks', () {
+    final blocks = onboarding5MealBlocksFromCandidates([
+      RoutineImportCandidateBlock(
+        id: 'breakfast',
+        title: 'Breakfast',
+        startMinute: 8 * 60,
+        endMinute: 8 * 60 + 30,
+        repeatDays: const [1, 3, 5],
+        blockType: TimelineBlockDraft.hardBlockKey,
+        category: 'eating',
+        hardBlock: true,
+        mealCategory: 'breakfast',
+        steps: const ['Idli', 'Sambar'],
+      ),
+      RoutineImportCandidateBlock(
+        id: 'lunch',
+        title: 'Lunch',
+        startMinute: 13 * 60,
+        endMinute: 13 * 60 + 45,
+        repeatDays: const [],
+        blockType: TimelineBlockDraft.hardBlockKey,
+        category: 'eating',
+        hardBlock: true,
+      ),
+      RoutineImportCandidateBlock(
+        id: 'bad',
+        title: '',
+        startMinute: 13 * 60,
+        endMinute: 13 * 60 + 45,
+        repeatDays: const [1],
+        blockType: TimelineBlockDraft.hardBlockKey,
+        category: 'eating',
+        hardBlock: true,
+      ),
+    ], now: DateTime.utc(2026, 6, 9));
+
+    expect(blocks.map((block) => block.title), ['Breakfast', 'Lunch']);
+    expect(blocks.first.section, 'eating');
+    expect(blocks.first.source, onboardingEatingAiImportSource);
+    expect(blocks.first.repeatDays, const [1, 3, 5]);
+    expect(blocks.first.mealCategory, 'breakfast');
+    expect(blocks.first.dishes, const ['Idli', 'Sambar']);
+    expect(blocks.last.repeatDays, onboardingEveryDay());
+    expect(blocks.last.blockType, TimelineBlockDraft.hardBlockKey);
   });
 
   test(
