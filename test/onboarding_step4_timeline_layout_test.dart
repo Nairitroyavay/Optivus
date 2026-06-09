@@ -9,6 +9,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart'
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
 
 void main() {
@@ -887,6 +888,77 @@ void main() {
     },
   );
 
+  test('combined class target maps the same class candidate as class-only', () {
+    final studentOnlyTargets = onboarding4UploadTargetsForRole(
+      LifeRoleDraft.studentKey,
+    );
+    final combinedTargets = onboarding4UploadTargetsForRole(
+      LifeRoleDraft.studentWorkingKey,
+    );
+    final candidate = _candidate(
+      title: 'AFL',
+      category: 'other',
+      sourceRowLabel: 'MON(1)',
+    );
+
+    final studentOnlyResult = mapOnboarding4Candidates(
+      candidates: [candidate],
+      config: ScheduleSetupConfig.classSetup,
+    );
+    final combinedResult = mapOnboarding4Candidates(
+      candidates: [candidate],
+      config: ScheduleSetupConfig.classSetup,
+    );
+
+    expect(studentOnlyTargets.single.source, RoutineImportReviewSource.classes);
+    expect(
+      combinedTargets
+          .firstWhere((target) => target.thumbnailLabel == 'Class')
+          .source,
+      RoutineImportReviewSource.classes,
+    );
+    expect(studentOnlyResult.blocks.map((block) => block.subject), ['AFL']);
+    expect(combinedResult.blocks.map((block) => block.subject), ['AFL']);
+    expect(combinedResult.blocks.single.repeatDays, const [1]);
+  });
+
+  test(
+    'Onboarding 4 failure messages distinguish partial and both-source failure',
+    () {
+      final classSuccessWorkFail = onboarding4PartialFailureMessage(
+        needsBothPhotos: true,
+        successfulSources: {RoutineImportReviewSource.classes},
+        failedSources: {RoutineImportReviewSource.work},
+      );
+      final workSuccessClassFail = onboarding4PartialFailureMessage(
+        needsBothPhotos: true,
+        successfulSources: {RoutineImportReviewSource.work},
+        failedSources: {RoutineImportReviewSource.classes},
+      );
+      final bothFail = onboarding4TimelineErrorForFailures(
+        needsBothPhotos: true,
+        role: LifeRoleDraft.studentWorkingKey,
+        failures: {
+          RoutineImportReviewSource.classes,
+          RoutineImportReviewSource.work,
+        },
+      );
+
+      expect(
+        classSuccessWorkFail,
+        'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.',
+      );
+      expect(
+        workSuccessClassFail,
+        'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.',
+      );
+      expect(
+        bothFail,
+        'AI could not detect class or work schedule blocks clearly.',
+      );
+    },
+  );
+
   test(
     'Onboarding 4 mapping accepts class abbreviations with time and day',
     () {
@@ -921,7 +993,11 @@ void main() {
             'Client Calls',
             'Freelance Project',
           ])
-            _candidate(title: title, sourceColumnLabel: 'Mon-Fri'),
+            _candidate(
+              title: title,
+              sourceColumnLabel: 'Mon-Fri',
+              sourceTextSnippet: '$title near Gym / Rest Day',
+            ),
           for (final title in const [
             'Gym',
             'Study',
@@ -942,6 +1018,46 @@ void main() {
       expect(result.droppedNonWork, 4);
       expect(result.droppedInvalidTime, 0);
       expect(result.droppedNoRepeatDays, 0);
+    },
+  );
+
+  test(
+    'Routine import worker invalid response reason identifies source mismatch',
+    () {
+      final raw = _workerResultMap(
+        source: 'work',
+        sourceR2Key: 'users/uid-1/onboarding/class_timetable/asset-1.jpg',
+        candidateSourceR2Key:
+            'users/uid-1/onboarding/class_timetable/asset-1.jpg',
+      );
+      final result = RoutineImportExtractionResult.fromMap(raw);
+      final reason = routineImportWorkerResponseInvalidReason(
+        result,
+        uid: 'uid-1',
+        review: _reviewDraft(),
+        raw: raw,
+      );
+
+      expect(reason, 'source mismatch');
+    },
+  );
+
+  test(
+    'Routine import worker invalid response reason identifies candidate mismatch',
+    () {
+      final raw = _workerResultMap(
+        candidateSourceR2Key:
+            'users/uid-1/onboarding/work_schedule/asset-1.jpg',
+      );
+      final result = RoutineImportExtractionResult.fromMap(raw);
+      final reason = routineImportWorkerResponseInvalidReason(
+        result,
+        uid: 'uid-1',
+        review: _reviewDraft(),
+        raw: raw,
+      );
+
+      expect(reason, 'candidate invalid at index 0: sourceR2Key mismatch');
     },
   );
 
@@ -1206,6 +1322,70 @@ RoutineImportCandidateBlock _candidate({
     sourceRowLabel: sourceRowLabel,
     sourceTextSnippet: sourceTextSnippet,
   );
+}
+
+RoutineImportReviewDraft _reviewDraft() {
+  return RoutineImportReviewDraft(
+    id: 'onboarding_classes_import_review',
+    uid: 'uid-1',
+    source: RoutineImportReviewSource.classes,
+    status: RoutineImportReviewStatus.needsReview,
+    sourceLabel: 'Classes',
+    uploadedAssetId: 'asset-1',
+    uploadedAssetR2Key: 'users/uid-1/onboarding/class_timetable/asset-1.jpg',
+    uploadedAssetStatus: 'uploaded',
+    createdAt: DateTime.utc(2026, 6, 2),
+    updatedAt: DateTime.utc(2026, 6, 2),
+  );
+}
+
+Map<String, dynamic> _workerResultMap({
+  String uid = 'uid-1',
+  String source = 'classes',
+  String sourceR2Key = 'users/uid-1/onboarding/class_timetable/asset-1.jpg',
+  String sourceAssetId = 'asset-1',
+  String? candidateSourceR2Key,
+  String? candidateSourceAssetId,
+}) {
+  return {
+    'id': 'fake-onboarding_classes_import_review',
+    'uid': uid,
+    'source': source,
+    'engine': 'fake',
+    'engineVersion': 'phase2d',
+    'sourceAssetId': sourceAssetId,
+    'sourceR2Key': sourceR2Key,
+    'rawText': 'MON 9:00 AFL',
+    'candidates': [
+      {
+        'id': 'ai_class_afl',
+        'title': 'AFL',
+        'candidateType': 'block',
+        'startMinute': 9 * 60,
+        'endMinute': 10 * 60,
+        'hasFixedTime': true,
+        'repeatDays': [1],
+        'blockType': TimelineBlockDraft.hardBlockKey,
+        'category': 'classBlock',
+        'hardBlock': true,
+        'selected': true,
+        'needsManualReview': false,
+        'confidenceScore': 0.82,
+        'confidenceLabel': 'high',
+        'validationIssues': [],
+        'sourceAssetId': candidateSourceAssetId ?? sourceAssetId,
+        'sourceR2Key': candidateSourceR2Key ?? sourceR2Key,
+        'sourceTextSnippet': 'MON 9:00 AFL',
+        'sourceRowLabel': 'MON(1)',
+        'sourceColumnLabel': '9-10',
+        'extractionEngine': 'fake',
+        'extractionVersion': 'phase2d',
+        'steps': [],
+      },
+    ],
+    'warnings': [],
+    'createdAt': DateTime.utc(2026, 6, 2, 12).toIso8601String(),
+  };
 }
 
 void _expectBlockAlignedToTicks(

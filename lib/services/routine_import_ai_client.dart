@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/routine_import_ai_config.dart';
@@ -244,7 +245,20 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
       }
 
       final result = RoutineImportExtractionResult.fromMap(body);
-      if (!_isValidResult(result, uid: uid, review: review, raw: body)) {
+      final invalidReason = routineImportWorkerResponseInvalidReason(
+        result,
+        uid: uid,
+        review: review,
+        raw: body,
+      );
+      if (invalidReason != null) {
+        _debugLogInvalidWorkerResponse(
+          reason: invalidReason,
+          uid: uid,
+          review: review,
+          raw: body,
+          result: result,
+        );
         return _fallbackResult(
           uid: uid,
           review: review,
@@ -265,6 +279,23 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
     }
   }
 
+  void _debugLogInvalidWorkerResponse({
+    required String reason,
+    required String uid,
+    required RoutineImportReviewDraft review,
+    required Map<String, dynamic> raw,
+    required RoutineImportExtractionResult result,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[RoutineImportAiClient] invalid worker response: reason=$reason '
+      'uidMatches=${result.uid == uid} source=${result.source.name} '
+      'expectedSource=${review.source.name} rawSource=${raw['source']} '
+      'hasCandidatesList=${raw['candidates'] is List} '
+      'candidateCount=${raw['candidates'] is List ? (raw['candidates'] as List).length : 'n/a'}',
+    );
+  }
+
   Uri _workerUri(String path) {
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
     return Uri.parse(
@@ -283,105 +314,117 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
       return const {};
     }
   }
+}
 
-  bool _isValidResult(
-    RoutineImportExtractionResult result, {
-    required String uid,
-    required RoutineImportReviewDraft review,
-    required Map<String, dynamic> raw,
-  }) {
-    if (_containsForbiddenField(raw)) return false;
-    if (result.id.trim().isEmpty) return false;
-    if (result.uid != uid) return false;
-    if (result.source != review.source) return false;
-    if (raw['source'] != review.source.name) return false;
-    if (!_allowedResultEngines.contains(result.engine)) return false;
-    if (!_matchesRequiredReference(
-      result.sourceR2Key,
-      review.uploadedAssetR2Key,
-    )) {
-      return false;
-    }
-    if (!_matchesRequiredReference(
-      result.sourceAssetId,
-      review.uploadedAssetId,
-    )) {
-      return false;
-    }
-
-    final rawCandidates = raw['candidates'];
-    if (rawCandidates is! List) return false;
-    if (rawCandidates.length != result.candidates.length) return false;
-
-    for (var i = 0; i < result.candidates.length; i += 1) {
-      final rawCandidate = rawCandidates[i];
-      if (rawCandidate is! Map) return false;
-      final candidate = result.candidates[i];
-      if (!_isValidCandidate(candidate, rawCandidate, review)) return false;
-    }
-    return true;
+@visibleForTesting
+String? routineImportWorkerResponseInvalidReason(
+  RoutineImportExtractionResult result, {
+  required String uid,
+  required RoutineImportReviewDraft review,
+  required Map<String, dynamic> raw,
+}) {
+  if (_containsForbiddenField(raw)) return 'forbidden field found';
+  if (result.id.trim().isEmpty) return 'missing result id';
+  if (result.uid != uid) return 'uid mismatch';
+  if (result.source != review.source) return 'source mismatch';
+  if (raw['source'] != review.source.name) return 'raw source mismatch';
+  if (!_allowedResultEngines.contains(result.engine)) return 'invalid engine';
+  if (!_matchesRequiredReference(
+    result.sourceR2Key,
+    review.uploadedAssetR2Key,
+  )) {
+    return 'sourceR2Key mismatch';
+  }
+  if (!_matchesRequiredReference(
+    result.sourceAssetId,
+    review.uploadedAssetId,
+  )) {
+    return 'sourceAssetId mismatch';
   }
 
-  bool _isValidCandidate(
-    RoutineImportCandidateBlock candidate,
-    Map<dynamic, dynamic> rawCandidate,
-    RoutineImportReviewDraft review,
-  ) {
-    if (_containsForbiddenField(rawCandidate)) return false;
-    if (candidate.id.trim().isEmpty) return false;
-    if (candidate.title.trim().isEmpty && !_hasMissingTitleIssue(candidate)) {
-      return false;
-    }
-    if (!_allowedCandidateTypeNames.contains(rawCandidate['candidateType'])) {
-      return false;
-    }
-    if (candidate.extractionEngine.trim().isEmpty) return false;
-    if (!_matchesOptionalReference(
-      candidate.sourceR2Key,
-      review.uploadedAssetR2Key,
-    )) {
-      return false;
-    }
-    if (!_matchesOptionalReference(
-      candidate.sourceAssetId,
-      review.uploadedAssetId,
-    )) {
-      return false;
-    }
-    return true;
+  final rawCandidates = raw['candidates'];
+  if (rawCandidates is! List) return 'candidates not a list';
+  if (rawCandidates.length != result.candidates.length) {
+    return 'candidate count mismatch';
   }
 
-  bool _hasMissingTitleIssue(RoutineImportCandidateBlock candidate) {
-    return candidate.validationIssues.any((issue) {
-      final normalized = issue.toLowerCase();
-      return normalized.contains('title') &&
-          (normalized.contains('missing') || normalized.contains('required'));
-    });
-  }
-
-  bool _matchesRequiredReference(String? value, String? expected) {
-    if (expected == null || expected.trim().isEmpty) return value == null;
-    return value == expected;
-  }
-
-  bool _matchesOptionalReference(String? value, String? expected) {
-    if (value == null || value.trim().isEmpty) return true;
-    return value == expected;
-  }
-
-  bool _containsForbiddenField(Object? value) {
-    if (value is Map) {
-      for (final entry in value.entries) {
-        final key = entry.key.toString();
-        if (_forbiddenWorkerFields.contains(key)) return true;
-        if (_containsForbiddenField(entry.value)) return true;
-      }
+  for (var i = 0; i < result.candidates.length; i += 1) {
+    final rawCandidate = rawCandidates[i];
+    if (rawCandidate is! Map) return 'candidate invalid at index $i: not a map';
+    final candidate = result.candidates[i];
+    final candidateReason = _workerCandidateInvalidReason(
+      candidate,
+      rawCandidate,
+      review,
+    );
+    if (candidateReason != null) {
+      return 'candidate invalid at index $i: $candidateReason';
     }
-    if (value is List) {
-      return value.any(_containsForbiddenField);
-    }
-    return false;
   }
+  return null;
+}
+
+String? _workerCandidateInvalidReason(
+  RoutineImportCandidateBlock candidate,
+  Map<dynamic, dynamic> rawCandidate,
+  RoutineImportReviewDraft review,
+) {
+  if (_containsForbiddenField(rawCandidate)) return 'forbidden field found';
+  if (candidate.id.trim().isEmpty) return 'missing candidate id';
+  if (candidate.title.trim().isEmpty && !_hasMissingTitleIssue(candidate)) {
+    return 'missing title without validation issue';
+  }
+  if (!_allowedCandidateTypeNames.contains(rawCandidate['candidateType'])) {
+    return 'invalid candidate type';
+  }
+  if (candidate.extractionEngine.trim().isEmpty) {
+    return 'missing extraction engine';
+  }
+  if (!_matchesOptionalReference(
+    candidate.sourceR2Key,
+    review.uploadedAssetR2Key,
+  )) {
+    return 'sourceR2Key mismatch';
+  }
+  if (!_matchesOptionalReference(
+    candidate.sourceAssetId,
+    review.uploadedAssetId,
+  )) {
+    return 'sourceAssetId mismatch';
+  }
+  return null;
+}
+
+bool _hasMissingTitleIssue(RoutineImportCandidateBlock candidate) {
+  return candidate.validationIssues.any((issue) {
+    final normalized = issue.toLowerCase();
+    return normalized.contains('title') &&
+        (normalized.contains('missing') || normalized.contains('required'));
+  });
+}
+
+bool _matchesRequiredReference(String? value, String? expected) {
+  if (expected == null || expected.trim().isEmpty) return value == null;
+  return value == expected;
+}
+
+bool _matchesOptionalReference(String? value, String? expected) {
+  if (value == null || value.trim().isEmpty) return true;
+  return value == expected;
+}
+
+bool _containsForbiddenField(Object? value) {
+  if (value is Map) {
+    for (final entry in value.entries) {
+      final key = entry.key.toString();
+      if (_forbiddenWorkerFields.contains(key)) return true;
+      if (_containsForbiddenField(entry.value)) return true;
+    }
+  }
+  if (value is List) {
+    return value.any(_containsForbiddenField);
+  }
+  return false;
 }
 
 const Set<String> _allowedResultEngines = {

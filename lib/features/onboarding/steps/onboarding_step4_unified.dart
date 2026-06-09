@@ -441,9 +441,51 @@ String candidateDayDebugLabel(RoutineImportCandidateBlock candidate) {
   final shortSnippet = snippet == null || snippet.isEmpty
       ? 'none'
       : (snippet.length > 80 ? '${snippet.substring(0, 80)}...' : snippet);
-  return 'title=$title row=${row?.isEmpty ?? true ? 'none' : row} '
+  return 'title=$title startMinute=${candidate.startMinute} '
+      'endMinute=${candidate.endMinute} repeatDays=${candidate.repeatDays} '
+      'row=${row?.isEmpty ?? true ? 'none' : row} '
       'column=${column?.isEmpty ?? true ? 'none' : column} '
-      'snippet=$shortSnippet';
+      'snippet=$shortSnippet category=${candidate.category} '
+      'blockType=${candidate.blockType} hasFixedTime=${candidate.hasFixedTime}';
+}
+
+@visibleForTesting
+String? onboarding4PartialFailureMessage({
+  required bool needsBothPhotos,
+  required Set<RoutineImportReviewSource> successfulSources,
+  required Set<RoutineImportReviewSource> failedSources,
+}) {
+  if (!needsBothPhotos || successfulSources.isEmpty) return null;
+  if (failedSources.contains(RoutineImportReviewSource.work)) {
+    return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
+  }
+  if (failedSources.contains(RoutineImportReviewSource.classes)) {
+    return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
+  }
+  return null;
+}
+
+@visibleForTesting
+String onboarding4TimelineErrorForFailures({
+  required bool needsBothPhotos,
+  required String? role,
+  required Set<RoutineImportReviewSource> failures,
+}) {
+  final classFailed = failures.contains(RoutineImportReviewSource.classes);
+  final workFailed = failures.contains(RoutineImportReviewSource.work);
+  if (needsBothPhotos && classFailed && workFailed) {
+    return 'AI could not detect class or work schedule blocks clearly.';
+  }
+  if (classFailed) {
+    return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
+  }
+  if (workFailed && role == LifeRoleDraft.businessKey) {
+    return 'Work/business schedule could not be read clearly. Check the photo or upload a clearer image.';
+  }
+  if (workFailed) {
+    return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
+  }
+  return 'AI could not detect timetable blocks clearly.';
 }
 
 // ---------------------------------------------------------------------------
@@ -1025,21 +1067,93 @@ class _OnboardingStep4UnifiedState
     return mapOnboarding4Candidates(candidates: candidates, config: config);
   }
 
-  void _debugLogExtraction({
+  void _debugLogAiMode() {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[Onboarding4] aiMode=${OptivusRoutineImportAiConfig.mode.name} '
+      'workerUrlConfigured=${OptivusRoutineImportAiConfig.hasWorkerUrl}',
+    );
+  }
+
+  void _debugAssertTargetRouting(_PhotoSlot photo) {
+    if (!kDebugMode) return;
+    final expectedPurpose = switch (photo.source) {
+      RoutineImportReviewSource.classes => UploadedAssetPurpose.classTimetable,
+      RoutineImportReviewSource.work => UploadedAssetPurpose.workSchedule,
+      RoutineImportReviewSource.eating => photo.purpose,
+      RoutineImportReviewSource.skinCare => photo.purpose,
+    };
+    final sourceOk =
+        photo.source == RoutineImportReviewSource.classes ||
+        photo.source == RoutineImportReviewSource.work;
+    final purposeOk = photo.purpose == expectedPurpose;
+    if (!sourceOk || !purposeOk) {
+      debugPrint(
+        '[Onboarding4] ROUTING_MISMATCH source=${photo.source.name} '
+        'purpose=${photo.purpose.name} expectedPurpose=${expectedPurpose.name}',
+      );
+    }
+  }
+
+  void _debugLogExtractionStart(_PhotoSlot photo) {
+    if (!kDebugMode) return;
+    _debugAssertTargetRouting(photo);
+    debugPrint(
+      '[Onboarding4] START source=${photo.source.name} '
+      'purpose=${photo.purpose.name} '
+      'assetId=${photo.asset.assetId.trim().isEmpty ? 'missing' : photo.asset.assetId} '
+      'r2Key=${photo.asset.r2Key.trim().isEmpty ? 'missing' : 'exists'} '
+      'contentType=${photo.asset.contentType.trim().isEmpty ? 'missing' : photo.asset.contentType}',
+    );
+  }
+
+  void _debugLogExtractionResult({
     required _PhotoSlot photo,
-    required int candidateCount,
-    required Onboarding4CandidateMappingResult mapping,
+    required RoutineImportExtractionResult? result,
+    required RoutineImportAiState controllerState,
     required List<String> warnings,
   }) {
     if (!kDebugMode) return;
     final warningText = warnings.isEmpty ? 'none' : warnings.join(' | ');
-    final status = mapping.blocks.isNotEmpty ? 'success' : 'fail';
     debugPrint(
-      '[Onboarding4] source=${photo.source.name} '
-      'status=$status rawCandidates=$candidateCount '
-      'mappedBlocks=${mapping.blocks.length} '
-      'warnings=$warningText filtered=${mapping.filterSummary}',
+      '[Onboarding4] RESULT source=${photo.source.name} '
+      'controllerStatus=${controllerState.status.name} '
+      'resultNull=${result == null} warnings=$warningText',
     );
+    if (result != null) {
+      debugPrint(
+        '[Onboarding4] RAW source=${photo.source.name} '
+        'rawCandidates=${result.candidates.length}',
+      );
+      if (result.candidates.isEmpty &&
+          (photo.source == RoutineImportReviewSource.classes ||
+              photo.source == RoutineImportReviewSource.work)) {
+        debugPrint(
+          '[Onboarding4] Worker returned 0 candidates. Check deployed worker prompt/model/image size.',
+        );
+      }
+    }
+  }
+
+  void _debugLogExtractionMapped({
+    required _PhotoSlot photo,
+    required Onboarding4CandidateMappingResult mapping,
+  }) {
+    if (!kDebugMode) return;
+    debugPrint(
+      '[Onboarding4] MAPPED source=${photo.source.name} '
+      'mappedBlocks=${mapping.blocks.length} '
+      'droppedNoTitle=${mapping.droppedNoTitle} '
+      'droppedInvalidTime=${mapping.droppedInvalidTime} '
+      'droppedNoRepeatDays=${mapping.droppedNoRepeatDays} '
+      'droppedNonWork=${mapping.droppedNonWork}',
+    );
+    if (mapping.droppedExamples.isNotEmpty) {
+      debugPrint(
+        '[Onboarding4] DROPPED source=${photo.source.name} '
+        'examples=${mapping.droppedExampleText}',
+      );
+    }
     if (mapping.blocks.isEmpty) {
       debugPrint(
         '[Onboarding4] zero mapped blocks source=${photo.source.name} '
@@ -1047,21 +1161,10 @@ class _OnboardingStep4UnifiedState
         'workerMode=${OptivusRoutineImportAiConfig.mode.name} '
         'uploadedAssetIdExists=${photo.asset.assetId.trim().isNotEmpty} '
         'uploadedAssetR2KeyExists=${photo.asset.r2Key.trim().isNotEmpty} '
-        'warnings=$warningText rawCandidates=$candidateCount mappedBlocks=0 '
         'filtered=${mapping.filterSummary} '
         'examples=${mapping.droppedExampleText}',
       );
     }
-  }
-
-  void _debugLogExtractionStart(_PhotoSlot photo) {
-    if (!kDebugMode) return;
-    debugPrint(
-      '[Onboarding4] extracting target=${photo.label} '
-      'source=${photo.source.name} purpose=${photo.purpose.name} '
-      'assetId=${photo.asset.assetId.trim().isEmpty ? 'missing' : photo.asset.assetId} '
-      'r2=${photo.asset.r2Key.trim().isEmpty ? 'missing' : 'exists'}',
-    );
   }
 
   void _debugLogRoleSummary() {
@@ -1082,32 +1185,19 @@ class _OnboardingStep4UnifiedState
     required Set<RoutineImportReviewSource> successfulSources,
     required Set<RoutineImportReviewSource> failedSources,
   }) {
-    if (!_needsBothPhotos || successfulSources.isEmpty) return null;
-    if (failedSources.contains(RoutineImportReviewSource.work)) {
-      return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
-    }
-    if (failedSources.contains(RoutineImportReviewSource.classes)) {
-      return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
-    }
-    return null;
+    return onboarding4PartialFailureMessage(
+      needsBothPhotos: _needsBothPhotos,
+      successfulSources: successfulSources,
+      failedSources: failedSources,
+    );
   }
 
   String _timelineErrorForFailures(Set<RoutineImportReviewSource> failures) {
-    final classFailed = failures.contains(RoutineImportReviewSource.classes);
-    final workFailed = failures.contains(RoutineImportReviewSource.work);
-    if (_needsBothPhotos && classFailed && workFailed) {
-      return 'AI could not detect class or work schedule blocks clearly.';
-    }
-    if (classFailed) {
-      return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
-    }
-    if (workFailed && _role == LifeRoleDraft.businessKey) {
-      return 'Work/business schedule could not be read clearly. Check the photo or upload a clearer image.';
-    }
-    if (workFailed) {
-      return 'Work schedule could not be read clearly. Check the Work photo or upload a clearer image.';
-    }
-    return 'AI could not detect timetable blocks clearly.';
+    return onboarding4TimelineErrorForFailures(
+      needsBothPhotos: _needsBothPhotos,
+      role: _role,
+      failures: failures,
+    );
   }
 
   List<ClassRoutineBlock> _visibleClassBlocks(List<ClassRoutineBlock> blocks) {
@@ -1262,6 +1352,7 @@ class _OnboardingStep4UnifiedState
     final successfulSources = <RoutineImportReviewSource>{};
     final failedSources = <RoutineImportReviewSource>{};
     final photosToProcess = [..._photos]..sort(_comparePhotoSlots);
+    _debugLogAiMode();
 
     try {
       for (final photo in photosToProcess) {
@@ -1290,13 +1381,16 @@ class _OnboardingStep4UnifiedState
         final result = await aiController.runExtraction(reviewDraft);
         if (!mounted) return;
 
-        final candidateCount = result?.candidates.length ?? 0;
+        final controllerState = ref.read(routineImportAiControllerProvider);
         final warnings =
             result?.warnings ??
-            [
-              ref.read(routineImportAiControllerProvider).errorMessage ??
-                  'No extraction result returned.',
-            ];
+            [controllerState.errorMessage ?? 'No extraction result returned.'];
+        _debugLogExtractionResult(
+          photo: photo,
+          result: result,
+          controllerState: controllerState,
+          warnings: warnings,
+        );
         final config = _configForSource(photo.source);
         final mapping = result == null
             ? const Onboarding4CandidateMappingResult(
@@ -1308,12 +1402,7 @@ class _OnboardingStep4UnifiedState
               )
             : _blocksFromCandidates(result.candidates, config);
 
-        _debugLogExtraction(
-          photo: photo,
-          candidateCount: candidateCount,
-          mapping: mapping,
-          warnings: warnings,
-        );
+        _debugLogExtractionMapped(photo: photo, mapping: mapping);
 
         if (mapping.blocks.isNotEmpty) {
           successfulSources.add(photo.source);
