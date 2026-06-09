@@ -776,29 +776,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return true;
     }
 
-    final generatedBlocks = onboarding5GeneratedMealBlocks(base);
-    if (generatedBlocks.isEmpty) {
-      _setInternalValidation('Generate eating routine to continue.');
+    final hasGeneratedMealBlocks = base
+        .confirmedBlocksForSection('eating')
+        .any((block) => block.source == onboardingEatingGeneratedSource);
+    if (!hasGeneratedMealBlocks) {
+      _setInternalValidation('Generate your meal routine first.');
       return true;
     }
-    _updateBaseTimelineStage(onboardingEatingStepIndex, (base) {
-      final nextBlocks =
-          base.blocks
-              .where((block) => block.section != 'eating')
-              .toList(growable: true)
-            ..addAll(generatedBlocks);
-      final nextPending = base.pendingFutureImports
-          .where((entry) => entry.section != onboardingSectionEating)
-          .toList(growable: false);
-      return base.copyWith(
-        blocks: nextBlocks,
-        pendingFutureImports: nextPending,
-        eatingSetupStep: 1,
-        eatingSetupPath: onboardingEatingPathCreate,
-        eatingMode: base.eatingMode ?? 'home',
-        mealsPerDay: base.mealsPerDay ?? 4,
-      );
-    });
     return false;
   }
 

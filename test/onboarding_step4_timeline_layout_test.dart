@@ -1397,6 +1397,12 @@ void main() {
     );
     expect(find.text('Yes, I have a routine/menu'), findsOneWidget);
     expect(find.text('No, help me create one'), findsOneWidget);
+    expect(
+      find.text('Generate a simple meal routine with dishes.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.check_circle_rounded), findsNothing);
+    expect(find.byIcon(Icons.circle_outlined), findsNothing);
     expect(find.text('Goal'), findsNothing);
     expect(find.text('Open review'), findsNothing);
   });
@@ -1428,10 +1434,7 @@ void main() {
 
     expect(find.byKey(const ValueKey('onboarding-step5-back')), findsOneWidget);
     expect(find.text('Upload your routine/menu'), findsOneWidget);
-    expect(
-      find.text('Add your meal timetable or weekly menu photo.'),
-      findsOneWidget,
-    );
+    expect(find.text('Add your weekly meal timetable photo.'), findsOneWidget);
     expect(find.text('Set Your Weekly Meal'), findsOneWidget);
     expect(find.text('MON'), findsOneWidget);
     expect(find.text('SUN'), findsOneWidget);
@@ -1442,9 +1445,10 @@ void main() {
     expect(find.text('Open review'), findsNothing);
     expect(find.text('Review AI draft'), findsNothing);
     expect(find.text('Eating summary'), findsNothing);
+    expect(find.text('provider_request_failed'), findsNothing);
   });
 
-  testWidgets('Eating no path shows simple meal times and weekly timeline', (
+  testWidgets('Eating no path shows compact AI meal generation controls', (
     tester,
   ) async {
     final draft = OnboardingDraft(
@@ -1470,7 +1474,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create simple meal routine'), findsOneWidget);
-    expect(find.text('Meals per day'), findsOneWidget);
+    expect(find.text('Meals'), findsOneWidget);
+    expect(find.text('Style'), findsOneWidget);
+    expect(find.text('Type'), findsOneWidget);
+    expect(find.text('India'), findsOneWidget);
+    expect(find.text('US'), findsOneWidget);
+    expect(find.text('Germany'), findsOneWidget);
+    expect(find.text('Veg'), findsOneWidget);
+    expect(find.text('Non-veg'), findsOneWidget);
+    expect(find.text('Generate meal routine'), findsOneWidget);
     expect(find.text('3'), findsWidgets);
     expect(find.text('4'), findsWidgets);
     expect(find.text('5'), findsWidgets);
@@ -1478,7 +1490,10 @@ void main() {
     expect(find.text('Lunch'), findsWidgets);
     expect(find.text('Snack'), findsWidgets);
     expect(find.text('Dinner'), findsWidgets);
-    expect(find.text('Set Your Weekly Meal'), findsOneWidget);
+    expect(
+      find.text('Generate your meal routine to preview the week.'),
+      findsOneWidget,
+    );
     expect(find.text('Goal'), findsNothing);
     expect(find.text('Budget'), findsNothing);
     expect(find.text('Cooking skill'), findsNothing);
@@ -1533,6 +1548,7 @@ void main() {
         eatingSetupPath: onboardingEatingPathCreate,
         eatingSetupStep: 1,
         mealsPerDay: 4,
+        foodType: 'veg',
         breakfastMinute: 8 * 60,
         lunchMinute: 13 * 60,
         snackMinute: 17 * 60,
@@ -1553,6 +1569,22 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.text('Next Step'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      notifier.state.validationMessage,
+      'Generate your meal routine first.',
+    );
+
+    await tester.ensureVisible(find.text('Generate meal routine'));
+    await tester.pump();
+    await tester.tap(find.text('Generate meal routine'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Set Your Weekly Meal'), findsOneWidget);
+    expect(find.text('Dal rice, Paneer sabzi, Curd'), findsOneWidget);
 
     await tester.tap(find.text('Next Step'));
     await tester.pump();
@@ -1581,6 +1613,7 @@ void main() {
       ),
       isTrue,
     );
+    expect(eatingBlocks.first.dishes, isNotEmpty);
   });
 
   testWidgets('Eating has-routine path saves AI blocks without review screen', (
@@ -1687,6 +1720,62 @@ void main() {
     expect(blocks.last.repeatDays, onboardingEveryDay());
     expect(blocks.last.blockType, TimelineBlockDraft.hardBlockKey);
   });
+
+  test(
+    'Eating generated meal setup respects style and hides provider codes',
+    () {
+      final indiaVeg = onboarding5GeneratedMealBlocks(
+        const BaseTimelineDraft(
+          mealsPerDay: 4,
+          eatingMode: 'india',
+          foodType: 'veg',
+        ),
+        now: DateTime.utc(2026, 6, 9),
+      );
+      final usMixed = onboarding5GeneratedMealBlocks(
+        const BaseTimelineDraft(
+          mealsPerDay: 4,
+          eatingMode: 'us',
+          foodType: 'mixed',
+        ),
+        now: DateTime.utc(2026, 6, 9),
+      );
+      final germanyMixed = onboarding5GeneratedMealBlocks(
+        const BaseTimelineDraft(
+          mealsPerDay: 4,
+          eatingMode: 'germany',
+          foodType: 'mixed',
+        ),
+        now: DateTime.utc(2026, 6, 9),
+      );
+
+      expect(indiaVeg.map((block) => block.source).toSet(), {
+        onboardingEatingGeneratedSource,
+      });
+      expect(indiaVeg.firstWhere((block) => block.title == 'Lunch').dishes, [
+        'Dal rice',
+        'Paneer sabzi',
+        'Curd',
+      ]);
+      expect(usMixed.firstWhere((block) => block.title == 'Lunch').dishes, [
+        'Chicken bowl',
+        'Rice',
+        'Salad',
+      ]);
+      expect(
+        germanyMixed.firstWhere((block) => block.title == 'Dinner').dishes,
+        ['Rye bread', 'Turkey slices', 'Soup'],
+      );
+      expect(
+        onboarding5FriendlyAiMessage('provider_request_failed', const []),
+        'AI is busy right now. Try again in a moment.',
+      );
+      expect(
+        onboarding5FriendlyAiMessage(null, const ['provider_empty_candidates']),
+        'AI could not read meals clearly. Try a clearer photo.',
+      );
+    },
+  );
 
   test(
     'business class/job step validation asks for work/business timeline',

@@ -1008,6 +1008,7 @@ class BaseTimelineDraft {
   final bool? shouldPlanMeals;
   final String? mealPlanningGoal;
   final String? foodType;
+  final String? foodStyleCustomText;
   final String? mealBudget;
   final String? cookingAbility;
   final int? mealsPerDay;
@@ -1043,6 +1044,7 @@ class BaseTimelineDraft {
     this.shouldPlanMeals,
     this.mealPlanningGoal,
     this.foodType,
+    this.foodStyleCustomText,
     this.mealBudget,
     this.cookingAbility,
     this.mealsPerDay,
@@ -1084,6 +1086,7 @@ class BaseTimelineDraft {
       shouldPlanMeals: map['shouldPlanMeals'] as bool?,
       mealPlanningGoal: map['mealPlanningGoal'] as String?,
       foodType: map['foodType'] as String?,
+      foodStyleCustomText: map['foodStyleCustomText'] as String?,
       mealBudget: map['mealBudget'] as String?,
       cookingAbility: map['cookingAbility'] as String?,
       mealsPerDay: (map['mealsPerDay'] as num?)?.toInt(),
@@ -1124,6 +1127,7 @@ class BaseTimelineDraft {
     'shouldPlanMeals': shouldPlanMeals,
     'mealPlanningGoal': mealPlanningGoal,
     'foodType': foodType,
+    'foodStyleCustomText': foodStyleCustomText,
     'mealBudget': mealBudget,
     'cookingAbility': cookingAbility,
     'mealsPerDay': mealsPerDay,
@@ -1162,6 +1166,7 @@ class BaseTimelineDraft {
     bool? shouldPlanMeals,
     String? mealPlanningGoal,
     String? foodType,
+    String? foodStyleCustomText,
     String? mealBudget,
     String? cookingAbility,
     int? mealsPerDay,
@@ -1226,6 +1231,9 @@ class BaseTimelineDraft {
           ? null
           : (mealPlanningGoal ?? this.mealPlanningGoal),
       foodType: clearMealPlanning ? null : (foodType ?? this.foodType),
+      foodStyleCustomText: clearMealPlanning
+          ? null
+          : (foodStyleCustomText ?? this.foodStyleCustomText),
       mealBudget: clearMealPlanning ? null : (mealBudget ?? this.mealBudget),
       cookingAbility: clearMealPlanning
           ? null
@@ -1526,7 +1534,7 @@ class BaseTimelineDraft {
     if (eatingSetupPath == 'has_routine') {
       return 'Generate your weekly meal routine first.';
     }
-    return 'Generate eating routine to continue.';
+    return 'Generate your meal routine first.';
   }
 
   String? validateFixedSchedule() {
