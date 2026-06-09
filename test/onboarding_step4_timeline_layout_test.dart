@@ -161,9 +161,162 @@ void main() {
         find.byKey(const ValueKey('onboarding-step4-menu-part-time-job')),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Edit block'));
+      expect(find.text('Edit'), findsOneWidget);
+      expect(find.text('Delete'), findsOneWidget);
+      await tester.tap(find.text('Edit'));
       await tester.pumpAndSettle();
       expect(find.text('Edit Work Block'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'overlap front and back layout exposes tappable labels without hidden text',
+    (tester) async {
+      final draft = OnboardingDraft(
+        lifeRole: const LifeRoleDraft(
+          lifeRole: LifeRoleDraft.studentWorkingKey,
+          workType: 'part_time',
+        ),
+        baseTimeline: const BaseTimelineDraft(),
+      );
+      final classBlocks = [
+        _scheduleBlock(
+          id: 'afl',
+          title: 'AFL',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+          config: ScheduleSetupConfig.classSetup,
+        ),
+        _scheduleBlock(
+          id: 'ds',
+          title: 'DS',
+          startMinute: 10 * 60,
+          endMinute: 11 * 60,
+          config: ScheduleSetupConfig.classSetup,
+        ),
+      ];
+      final workBlocks = [
+        _scheduleBlock(
+          id: 'job',
+          title: 'Job',
+          startMinute: 9 * 60,
+          endMinute: 13 * 60,
+          config: ScheduleSetupConfig.workSetup,
+        ),
+      ];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
+            onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(child: OnboardingStep4Unified()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final jobBlock = find.byKey(const ValueKey('onboarding-step4-block-job'));
+      final aflBlock = find.byKey(const ValueKey('onboarding-step4-block-afl'));
+      final dsBlock = find.byKey(const ValueKey('onboarding-step4-block-ds'));
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-front-content-afl')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-front-content-ds')),
+        findsOneWidget,
+      );
+      expect(find.text('9:00 AM - 1:00 PM'), findsNothing);
+      expect(find.textContaining('AFLunch'), findsNothing);
+
+      final jobLeft = tester.getTopLeft(jobBlock).dx;
+      final aflLeft = tester.getTopLeft(aflBlock).dx;
+      final dsLeft = tester.getTopLeft(dsBlock).dx;
+      final exposedWidth = aflLeft - jobLeft;
+      expect(exposedWidth, greaterThanOrEqualTo(58));
+      expect(exposedWidth, lessThanOrEqualTo(96));
+      expect(dsLeft, closeTo(aflLeft, 0.5));
+      expect(
+        tester.getSize(jobBlock).width,
+        greaterThan(tester.getSize(aflBlock).width),
+      );
+      expect(
+        tester.getSize(jobBlock).width,
+        greaterThan(tester.getSize(dsBlock).width),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Edit Work Block'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-front-content-job')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-back-label-afl')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-back-label-ds')),
+        findsOneWidget,
+      );
+      expect(find.text('9:00 AM - 1:00 PM'), findsOneWidget);
+      expect(find.text('9:00 AM - 10:00 AM'), findsNothing);
+      expect(find.text('10:00 AM - 11:00 AM'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-menu-job')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-menu-afl')),
+        findsNothing,
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('onboarding-step4-back-label-afl')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step4-back-label-afl')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Edit Class'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-front-content-afl')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-back-label-ds')),
+        findsOneWidget,
+      );
     },
   );
 
@@ -194,9 +347,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(tester.takeException(), isNull);
     expect(find.text('Upload your class and work timetable'), findsOneWidget);
     expect(find.text('Class timetable'), findsOneWidget);
     expect(find.text('Work schedule'), findsOneWidget);
+    expect(find.text('Set Your Weekly Schedule'), findsOneWidget);
+    expect(find.text('MON'), findsOneWidget);
+    expect(find.text('SUN'), findsOneWidget);
     final classTarget = find.byKey(
       const ValueKey('onboarding-step4-upload-target-classes'),
     );
@@ -218,8 +375,9 @@ void main() {
       tester
           .getSize(find.byKey(const ValueKey('onboarding-step4-upload-card')))
           .height,
-      lessThan(190),
+      lessThan(165),
     );
+    expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
     expect(
       find.text(
         'Upload both class and work schedule photos before generating your timeline.',
@@ -368,7 +526,7 @@ void main() {
     expect(find.text('Schedule generated'), findsOneWidget);
     expect(
       find.text(
-        'Your fixed responsibilities are ready. Edit blocks directly on the timeline.',
+        'Your fixed responsibilities are ready. Use each block menu to edit or remove it.',
       ),
       findsOneWidget,
     );
@@ -516,7 +674,9 @@ void main() {
       find.byKey(const ValueKey('onboarding-step4-menu-client-calls')),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit block'));
+    expect(find.text('Edit'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
 
     expect(find.text('Edit Work Block'), findsOneWidget);
@@ -748,7 +908,7 @@ void main() {
     },
   );
 
-  testWidgets('Next Step saves class job blocks and marks step clean', (
+  testWidgets('Next Step saves overlaps without changing focused block times', (
     tester,
   ) async {
     late MockOnboardingNotifier notifier;
@@ -778,10 +938,17 @@ void main() {
           onboardingClassTimelineProvider.overrideWith(
             (_) => [
               _scheduleBlock(
-                id: 'generated-class',
-                title: 'Generated Class',
+                id: 'afl',
+                title: 'AFL',
                 startMinute: 9 * 60,
                 endMinute: 10 * 60,
+                config: ScheduleSetupConfig.classSetup,
+              ),
+              _scheduleBlock(
+                id: 'ds',
+                title: 'DS',
+                startMinute: 10 * 60,
+                endMinute: 11 * 60,
                 config: ScheduleSetupConfig.classSetup,
               ),
             ],
@@ -789,10 +956,10 @@ void main() {
           onboardingWorkTimelineProvider.overrideWith(
             (_) => [
               _scheduleBlock(
-                id: 'generated-work',
-                title: 'Generated Work',
-                startMinute: 10 * 60,
-                endMinute: 12 * 60,
+                id: 'job',
+                title: 'Job',
+                startMinute: 9 * 60,
+                endMinute: 13 * 60,
                 config: ScheduleSetupConfig.workSetup,
               ),
             ],
@@ -804,26 +971,50 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(
+      find.byKey(const ValueKey('onboarding-step4-front-content-job')),
+      findsOneWidget,
+    );
+
     await tester.tap(find.text('Next Step'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
     final nextDraft = notifier.state.draft;
+    final savedClasses = nextDraft.baseTimeline.confirmedBlocksForSection(
+      'classes',
+    );
+    final savedWork = nextDraft.baseTimeline.confirmedBlocksForSection(
+      'job_work_business',
+    );
+    final savedAfl = savedClasses.firstWhere((block) => block.id == 'afl');
+    final savedDs = savedClasses.firstWhere((block) => block.id == 'ds');
+    final savedJob = savedWork.firstWhere((block) => block.id == 'job');
+
     expect(nextDraft.currentStep, onboardingEatingStepIndex);
     expect(nextDraft.stepCompleted[onboardingClassJobStepIndex], isTrue);
     expect(nextDraft.stepDirty[onboardingClassJobStepIndex], isFalse);
-    expect(
-      nextDraft.baseTimeline
-          .confirmedBlocksForSection('classes')
-          .map((block) => block.title),
-      contains('Generated Class'),
-    );
-    expect(
-      nextDraft.baseTimeline
-          .confirmedBlocksForSection('job_work_business')
-          .map((block) => block.title),
-      contains('Generated Work'),
-    );
+    expect(savedAfl.title, 'AFL');
+    expect(savedAfl.startMinute, 9 * 60);
+    expect(savedAfl.endMinute, 10 * 60);
+    expect(savedAfl.blockType, TimelineBlockDraft.hardBlockKey);
+    expect(savedAfl.source, 'ai_import');
+    expect(savedDs.title, 'DS');
+    expect(savedDs.startMinute, 10 * 60);
+    expect(savedDs.endMinute, 11 * 60);
+    expect(savedJob.title, 'Job');
+    expect(savedJob.startMinute, 9 * 60);
+    expect(savedJob.endMinute, 13 * 60);
+    expect(savedJob.blockType, TimelineBlockDraft.hardBlockKey);
+    expect(savedJob.source, 'ai_import');
     expect(
       nextDraft.validateStep(
         OnboardingDraft.lastStepIndex,
