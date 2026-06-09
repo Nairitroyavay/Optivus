@@ -242,6 +242,24 @@ void main() {
     expect(worker, contains('result.engine === "fake"'));
   });
 
+  test('routine import worker keeps recoverable candidates coercible', () {
+    final worker = File(
+      'workers/routine-import-worker/src/index.ts',
+    ).readAsStringSync();
+
+    expect(worker, contains('function validateExtractionShape'));
+    expect(worker, contains('candidates must be an array.'));
+    expect(worker, contains('candidates[\${index}] must be an object.'));
+    expect(worker, isNot(contains('source is invalid.')));
+    expect(worker, isNot(contains('id is missing.')));
+    expect(worker, isNot(contains('candidateType is invalid.')));
+    expect(worker, isNot(contains('repeatDays must be an array.')));
+    expect(worker, isNot(contains('startMinute must be a number.')));
+    expect(worker, isNot(contains('endMinute must be a number.')));
+    expect(worker, contains('function safeRepeatDays(value: unknown)'));
+    expect(worker, contains('if (!Array.isArray(value)) return [];'));
+  });
+
   test('routine import worker work prompt covers business schedule blocks', () {
     final worker = File(
       'workers/routine-import-worker/src/index.ts',

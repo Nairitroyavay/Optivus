@@ -835,6 +835,9 @@ function sanitizeExtractionResponse(
   },
 ): RoutineImportExtractionResponse {
   const engine = safeEngine(response.engine);
+  const candidates = Array.isArray(response.candidates)
+    ? response.candidates
+    : [];
   return {
     id: safeText(response.id, `extract-${crypto.randomUUID()}`, 128),
     uid: args.uid,
@@ -844,7 +847,7 @@ function sanitizeExtractionResponse(
     sourceAssetId: args.uploadedAssetId,
     sourceR2Key: args.objectKey,
     rawText: optionalText(response.rawText, 6000),
-    candidates: response.candidates.map((candidate, index) =>
+    candidates: candidates.map((candidate, index) =>
       sanitizeCandidate(candidate, {
         index,
         engine,
@@ -1468,9 +1471,6 @@ function validateExtractionShape(value: unknown): {
   }
 
   const body = value as Record<string, unknown>;
-  if (!isRoutineImportSource(body.source)) {
-    issues.push("source is invalid.");
-  }
   if (!Array.isArray(body.candidates)) {
     issues.push("candidates must be an array.");
   } else {
@@ -1478,30 +1478,6 @@ function validateExtractionShape(value: unknown): {
       if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
         issues.push(`candidates[${index}] must be an object.`);
         return;
-      }
-      const candidateBody = candidate as Record<string, unknown>;
-      if (typeof candidateBody.id !== "string" || candidateBody.id.trim() === "") {
-        issues.push(`candidates[${index}].id is missing.`);
-      }
-      if (typeof candidateBody.title !== "string" || candidateBody.title.trim() === "") {
-        issues.push(`candidates[${index}].title is missing.`);
-      }
-      if (!isCandidateType(candidateBody.candidateType)) {
-        issues.push(`candidates[${index}].candidateType is invalid.`);
-      }
-      if (
-        candidateBody.repeatDays !== undefined &&
-        !Array.isArray(candidateBody.repeatDays)
-      ) {
-        issues.push(`candidates[${index}].repeatDays must be an array.`);
-      }
-      if (candidateBody.hasFixedTime === true) {
-        if (!isNumber(candidateBody.startMinute)) {
-          issues.push(`candidates[${index}].startMinute must be a number.`);
-        }
-        if (!isNumber(candidateBody.endMinute)) {
-          issues.push(`candidates[${index}].endMinute must be a number.`);
-        }
       }
     });
   }
@@ -1605,11 +1581,17 @@ function safeCategory(value: unknown, source: RoutineImportReviewSource): string
   return sourceCategory[source];
 }
 
-function safeRepeatDays(value: number[]): number[] {
+function safeRepeatDays(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
   return [
     ...new Set(
       value
-        .filter((day) => Number.isFinite(day) && day >= 1 && day <= 7)
+        .filter((day): day is number =>
+          typeof day === "number" &&
+          Number.isFinite(day) &&
+          day >= 1 &&
+          day <= 7
+        )
         .map((day) => Math.floor(day)),
     ),
   ].sort((a, b) => a - b);
