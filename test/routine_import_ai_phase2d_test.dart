@@ -337,6 +337,26 @@ void main() {
   });
 
   test(
+    'routine import worker eating prompt covers hostel mess menu tables',
+    () {
+      final worker = File(
+        'workers/routine-import-worker/src/index.ts',
+      ).readAsStringSync();
+
+      expect(worker, contains('hostel/mess weekly menu tables'));
+      expect(worker, contains('rows are Monday to Sunday'));
+      expect(worker, contains('columns are Breakfast, Lunch, Snacks, Dinner'));
+      expect(worker, contains('default breakfast 450-600'));
+      expect(worker, contains('sourceRowLabel as the visible day row'));
+      expect(worker, contains('sourceColumnLabel as the visible meal column'));
+      expect(
+        worker,
+        contains('Do not return empty if a mess/menu table is visible'),
+      );
+    },
+  );
+
+  test(
     'routine import worker exposes Gemini provider failure details safely',
     () {
       final worker = File(

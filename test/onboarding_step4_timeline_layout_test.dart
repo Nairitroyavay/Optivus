@@ -7,6 +7,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -1403,6 +1404,7 @@ void main() {
     );
     expect(find.byIcon(Icons.check_circle_rounded), findsNothing);
     expect(find.byIcon(Icons.circle_outlined), findsNothing);
+    expect(find.byType(OnboardingScrollView), findsNothing);
     expect(find.text('Goal'), findsNothing);
     expect(find.text('Open review'), findsNothing);
   });
@@ -1439,6 +1441,11 @@ void main() {
     expect(find.text('MON'), findsOneWidget);
     expect(find.text('SUN'), findsOneWidget);
     expect(
+      find.byKey(const ValueKey('onboarding-step5-timeline-scroll')),
+      findsNothing,
+    );
+    expect(find.byType(OnboardingScrollView), findsNothing);
+    expect(
       find.text('Generate your weekly meal routine first.'),
       findsOneWidget,
     );
@@ -1473,7 +1480,15 @@ void main() {
     await tester.tap(find.text('No, help me create one'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create simple meal routine'), findsOneWidget);
+    expect(find.text('Create your meal intelligence'), findsOneWidget);
+    expect(
+      find.text('Body basics missing. Using a simple balanced routine.'),
+      findsOneWidget,
+    );
+    expect(find.text('Goal'), findsOneWidget);
+    expect(find.text('Gain'), findsOneWidget);
+    expect(find.text('Lose'), findsOneWidget);
+    expect(find.text('Maintain'), findsOneWidget);
     expect(find.text('Meals'), findsOneWidget);
     expect(find.text('Style'), findsOneWidget);
     expect(find.text('Type'), findsOneWidget);
@@ -1490,11 +1505,7 @@ void main() {
     expect(find.text('Lunch'), findsWidgets);
     expect(find.text('Snack'), findsWidgets);
     expect(find.text('Dinner'), findsWidgets);
-    expect(
-      find.text('Generate your meal routine to preview the week.'),
-      findsOneWidget,
-    );
-    expect(find.text('Goal'), findsNothing);
+    expect(find.byType(OnboardingScrollView), findsNothing);
     expect(find.text('Budget'), findsNothing);
     expect(find.text('Cooking skill'), findsNothing);
   });
@@ -1521,14 +1532,14 @@ void main() {
 
     await tester.tap(find.text('No, help me create one'));
     await tester.pumpAndSettle();
-    expect(find.text('Create simple meal routine'), findsOneWidget);
+    expect(find.text('Create your meal intelligence'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('onboarding-step5-back')));
     await tester.pumpAndSettle();
 
     expect(find.text('Yes, I have a routine/menu'), findsOneWidget);
     expect(find.text('No, help me create one'), findsOneWidget);
-    expect(find.text('Create simple meal routine'), findsNothing);
+    expect(find.text('Create your meal intelligence'), findsNothing);
   });
 
   testWidgets('Eating no path saves generated blocks and advances to Fixed', (
@@ -1578,13 +1589,20 @@ void main() {
       'Generate your meal routine first.',
     );
 
-    await tester.ensureVisible(find.text('Generate meal routine'));
-    await tester.pump();
     await tester.tap(find.text('Generate meal routine'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Create your meal intelligence'), findsNothing);
+    expect(
+      find.textContaining('Maintain · India · Veg · 4 meals'),
+      findsOneWidget,
+    );
+    expect(find.text('Edit'), findsOneWidget);
     expect(find.text('Set Your Weekly Meal'), findsOneWidget);
-    expect(find.text('Dal rice, Paneer sabzi, Curd'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-step5-timeline-scroll')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Next Step'));
     await tester.pump();
@@ -1722,6 +1740,68 @@ void main() {
   });
 
   test(
+    'Eating mess menu candidates derive day labels and default meal times',
+    () {
+      final mapped = mapOnboarding5MealCandidates([
+        RoutineImportCandidateBlock(
+          id: 'mon-breakfast',
+          title: 'Breakfast',
+          startMinute: 0,
+          endMinute: 0,
+          hasFixedTime: false,
+          repeatDays: const [],
+          blockType: TimelineBlockDraft.softBlockKey,
+          category: 'eating',
+          hardBlock: false,
+          mealCategory: 'breakfast',
+          sourceRowLabel: 'Monday',
+          sourceColumnLabel: 'Breakfast 7:30 AM - 10:00 AM',
+          sourceTextSnippet: 'Idli, Sambar, Chutney',
+        ),
+        RoutineImportCandidateBlock(
+          id: 'wed-snacks',
+          title: 'extra_snack',
+          startMinute: 0,
+          endMinute: 0,
+          hasFixedTime: false,
+          repeatDays: const [],
+          blockType: TimelineBlockDraft.softBlockKey,
+          category: 'eating',
+          hardBlock: false,
+          mealCategory: 'snacks',
+          sourceRowLabel: 'Wed',
+          sourceColumnLabel: 'Snacks',
+          steps: const ['Poha', 'Tea'],
+        ),
+        RoutineImportCandidateBlock(
+          id: 'no-meal-time',
+          title: 'Mess item',
+          startMinute: 0,
+          endMinute: 0,
+          hasFixedTime: false,
+          repeatDays: const [1],
+          blockType: TimelineBlockDraft.softBlockKey,
+          category: 'eating',
+          hardBlock: false,
+        ),
+      ], now: DateTime.utc(2026, 6, 9));
+
+      expect(mapped.blocks.length, 2);
+      expect(mapped.droppedNoMealTime, 1);
+      expect(mapped.blocks.first.title, 'Breakfast');
+      expect(mapped.blocks.first.repeatDays, const [1]);
+      expect(mapped.blocks.first.startMinute, 7 * 60 + 30);
+      expect(mapped.blocks.first.endMinute, 10 * 60);
+      expect(mapped.blocks.first.dishes, ['Idli', 'Sambar', 'Chutney']);
+      expect(mapped.blocks.last.title, 'Snack');
+      expect(mapped.blocks.last.repeatDays, const [3]);
+      expect(mapped.blocks.last.startMinute, 18 * 60);
+      expect(mapped.blocks.last.endMinute, 19 * 60);
+      expect(mapped.blocks.last.dishes, ['Poha', 'Tea']);
+    },
+  );
+
+  test(
     'Eating generated meal setup respects style and hides provider codes',
     () {
       final indiaVeg = onboarding5GeneratedMealBlocks(
@@ -1776,6 +1856,71 @@ void main() {
       );
     },
   );
+
+  test('Eating body context computes target calories for generated meals', () {
+    final gainDraft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.studentKey,
+        exerciseLevel: 'medium',
+      ),
+      bodyBasics: const BodyBasicsDraft(
+        ageRange: '18-24',
+        gender: 'male',
+        heightCm: 180,
+        weightKg: 70,
+      ).withEstimates(),
+      baseTimeline: const BaseTimelineDraft(
+        eatingSetupPath: onboardingEatingPathCreate,
+        eatingSetupStep: 1,
+        mealPlanningGoal: 'gain',
+        eatingMode: 'india',
+        foodType: 'veg',
+        mealsPerDay: 4,
+      ),
+    );
+    final loseDraft = gainDraft.copyWith(
+      baseTimeline: gainDraft.baseTimeline.copyWith(mealPlanningGoal: 'lose'),
+    );
+
+    final gainContext = onboarding5MealBodyContextFromDraft(gainDraft);
+    final loseContext = onboarding5MealBodyContextFromDraft(loseDraft);
+    final gainBlocks = onboarding5GeneratedMealBlocks(
+      gainDraft.baseTimeline,
+      bodyContext: gainContext,
+      now: DateTime.utc(2026, 6, 9),
+    );
+    final loseBlocks = onboarding5GeneratedMealBlocks(
+      loseDraft.baseTimeline,
+      bodyContext: loseContext,
+      now: DateTime.utc(2026, 6, 9),
+    );
+
+    expect(gainContext.hasBodyBasics, isTrue);
+    expect(gainContext.currentWeightKg, 70);
+    expect(gainContext.heightCm, 180);
+    expect(gainContext.age, 21);
+    expect(gainContext.estimatedBmr, greaterThan(1600));
+    expect(
+      gainContext.targetCalories,
+      greaterThan(gainContext.estimatedMaintenanceCalories),
+    );
+    expect(
+      loseContext.targetCalories,
+      lessThan(loseContext.estimatedMaintenanceCalories),
+    );
+    expect(gainBlocks.first.calories, isNotNull);
+    expect(gainBlocks.first.protein, isNotNull);
+    expect(gainBlocks.firstWhere((block) => block.title == 'Lunch').dishes, [
+      'Rajma rice',
+      'Paneer sabzi',
+      'Curd',
+    ]);
+    expect(loseBlocks.firstWhere((block) => block.title == 'Lunch').dishes, [
+      'Dal',
+      'Small rice',
+      'Salad',
+    ]);
+  });
 
   test(
     'business class/job step validation asks for work/business timeline',

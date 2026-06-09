@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -33,6 +35,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   String? _generationError;
   String? _createError;
   bool _creatingRoutine = false;
+  bool _editingGeneratedRoutine = false;
 
   @override
   Widget build(BuildContext context) {
@@ -42,49 +45,59 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final eatingBlocks = base.confirmedBlocksForSection('eating');
     final isChoice = base.eatingSetupStep == 0;
 
-    return Column(
+    if (isChoice) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(
+          24,
+          10,
+          24,
+          OnboardingStepShell.bottomCtaHeight + 38,
+        ),
+        child: const _EatingChoiceScreen(),
+      );
+    }
+
+    final generatedBlocks = eatingBlocks
+        .where((block) => block.source == onboardingEatingGeneratedSource)
+        .toList(growable: false);
+
+    return Stack(
       children: [
-        Expanded(
-          child: OnboardingScrollView(
-            padding: EdgeInsets.fromLTRB(24, isChoice ? 10 : 2, 24, 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (isChoice)
-                  _EatingChoiceScreen(path: path)
-                else ...[
-                  _EatingStageBackButton(onTap: _returnToChoices),
-                  const SizedBox(height: 10),
-                  if (path == onboardingEatingPathHasRoutine)
-                    _EatingUploadTimelineScreen(
-                      asset: _uploadedAsset,
-                      uploadError: _uploadError,
-                      generationError: _generationError,
-                      selectedDay: _selectedDay,
-                      blocks: eatingBlocks,
-                      onUpload: _startUpload,
-                      onRemove: _removeUploadedRoutine,
-                      onGenerate: _runAiExtraction,
-                      onDayChanged: (day) => setState(() => _selectedDay = day),
-                    )
-                  else
-                    _EatingCreateTimelineScreen(
-                      base: base,
-                      selectedDay: _selectedDay,
-                      blocks: eatingBlocks
-                          .where(
-                            (block) =>
-                                block.source == onboardingEatingGeneratedSource,
-                          )
-                          .toList(growable: false),
-                      error: _createError,
-                      isGenerating: _creatingRoutine,
-                      onGenerate: _generateCreatedRoutine,
-                      onDayChanged: (day) => setState(() => _selectedDay = day),
-                    ),
-                ],
-              ],
-            ),
+        Positioned(
+          top: 0,
+          left: 24,
+          child: _EatingStageBackButton(onTap: _returnToChoices),
+        ),
+        Positioned.fill(
+          top: 38,
+          bottom: OnboardingStepShell.bottomCtaHeight + 8,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+            child: path == onboardingEatingPathHasRoutine
+                ? _EatingUploadTimelineScreen(
+                    asset: _uploadedAsset,
+                    uploadError: _uploadError,
+                    generationError: _generationError,
+                    selectedDay: _selectedDay,
+                    blocks: eatingBlocks,
+                    onUpload: _startUpload,
+                    onRemove: _removeUploadedRoutine,
+                    onGenerate: _runAiExtraction,
+                    onDayChanged: (day) => setState(() => _selectedDay = day),
+                  )
+                : _EatingCreateTimelineScreen(
+                    base: base,
+                    selectedDay: _selectedDay,
+                    blocks: generatedBlocks,
+                    error: _createError,
+                    isGenerating: _creatingRoutine,
+                    editing: _editingGeneratedRoutine,
+                    onGenerate: _generateCreatedRoutine,
+                    onEdit: () {
+                      setState(() => _editingGeneratedRoutine = true);
+                    },
+                    onDayChanged: (day) => setState(() => _selectedDay = day),
+                  ),
           ),
         ),
       ],
@@ -92,6 +105,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   }
 
   void _returnToChoices() {
+    setState(() => _editingGeneratedRoutine = false);
     ref.read(mockOnboardingProvider.notifier).clearValidation();
     updateBaseTimelineDraft(
       ref,
@@ -157,6 +171,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       return;
     }
 
+    debugPrint(
+      '[Onboarding5] START source=eating purpose=eatingMenu '
+      'assetId=${asset.assetId} r2Key=${asset.r2Key.trim().isEmpty ? 'missing' : 'exists'} '
+      'contentType=${asset.contentType}',
+    );
+
     final now = DateTime.now();
     final uid =
         ref.read(authProvider).user?.uid ??
@@ -184,6 +204,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     if (!mounted) return;
 
     final aiState = ref.read(routineImportAiControllerProvider);
+    debugPrint(
+      '[Onboarding5] RESULT source=eating resultNull=${result == null} '
+      'warnings=${result?.warnings.join('|') ?? aiState.errorMessage ?? 'none'}',
+    );
     if (result == null) {
       setState(
         () => _generationError = onboarding5FriendlyAiMessage(
@@ -194,9 +218,19 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       return;
     }
 
-    final blocks = onboarding5MealBlocksFromCandidates(
+    debugPrint(
+      '[Onboarding5] RAW source=eating rawCandidates=${result.candidates.length}',
+    );
+    final mapped = mapOnboarding5MealCandidates(
       result.candidates,
       now: DateTime.now(),
+    );
+    final blocks = mapped.blocks;
+    debugPrint(
+      '[Onboarding5] MAPPED source=eating mappedBlocks=${mapped.blocks.length} '
+      'droppedNoTitle=${mapped.droppedNoTitle} '
+      'droppedInvalidTime=${mapped.droppedInvalidTime} '
+      'droppedNoMealTime=${mapped.droppedNoMealTime}',
     );
     if (blocks.isEmpty) {
       setState(
@@ -223,8 +257,20 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     await Future<void>.delayed(const Duration(milliseconds: 220));
     if (!mounted) return;
 
-    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
-    final blocks = onboarding5GeneratedMealBlocks(base);
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final base = draft.baseTimeline;
+    final bodyContext = onboarding5MealBodyContextFromDraft(draft);
+    debugPrint(
+      '[Onboarding5] GENERATE source=create bodyGoal=${bodyContext.bodyGoal} '
+      'hasBodyBasics=${bodyContext.hasBodyBasics} heightCm=${bodyContext.heightCm ?? "missing"} '
+      'weightKg=${bodyContext.currentWeightKg ?? "missing"} age=${bodyContext.age ?? "missing"} '
+      'bmr=${bodyContext.estimatedBmr} maintenance=${bodyContext.estimatedMaintenanceCalories} '
+      'targetCalories=${bodyContext.targetCalories}',
+    );
+    final blocks = onboarding5GeneratedMealBlocks(
+      base,
+      bodyContext: bodyContext,
+    );
     if (blocks.isEmpty) {
       setState(() {
         _creatingRoutine = false;
@@ -234,7 +280,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     }
 
     _replaceEatingBlocks(blocks);
-    setState(() => _creatingRoutine = false);
+    setState(() {
+      _creatingRoutine = false;
+      _editingGeneratedRoutine = false;
+    });
   }
 
   void _replaceEatingBlocks(List<TimelineBlockDraft> eatingBlocks) {
@@ -257,29 +306,46 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 }
 
 class _EatingChoiceScreen extends ConsumerWidget {
-  final String? path;
-
-  const _EatingChoiceScreen({required this.path});
+  const _EatingChoiceScreen();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final draft = ref.watch(mockOnboardingProvider).draft;
     void select(String value) {
       ref.read(mockOnboardingProvider.notifier).clearValidation();
       updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
         final switchedPath = base.eatingSetupPath != value;
+        final createPath = value == onboardingEatingPathCreate;
         return _clearEatingBlocks(
           base.copyWith(
             eatingSetupPath: value,
             eatingSetupStep: 1,
-            eatingMode: value == onboardingEatingPathCreate
+            eatingMode: createPath
                 ? (base.eatingMode ?? 'india')
                 : base.eatingMode,
-            foodType: value == onboardingEatingPathCreate
-                ? (base.foodType ?? 'mixed')
-                : base.foodType,
-            mealsPerDay: value == onboardingEatingPathCreate
+            mealPlanningGoal: createPath
+                ? (base.mealPlanningGoal ??
+                      onboarding5DefaultBodyGoalForDraft(draft))
+                : base.mealPlanningGoal,
+            foodType: createPath ? (base.foodType ?? 'mixed') : base.foodType,
+            mealsPerDay: createPath
                 ? (base.mealsPerDay ?? 4)
                 : base.mealsPerDay,
+            breakfastMinute: createPath
+                ? (base.breakfastMinute ?? 8 * 60)
+                : base.breakfastMinute,
+            lunchMinute: createPath
+                ? (base.lunchMinute ?? 13 * 60)
+                : base.lunchMinute,
+            snackMinute: createPath
+                ? (base.snackMinute ?? 17 * 60)
+                : base.snackMinute,
+            dinnerMinute: createPath
+                ? (base.dinnerMinute ?? 20 * 60 + 30)
+                : base.dinnerMinute,
+            extraSnackMinute: createPath
+                ? (base.extraSnackMinute ?? 11 * 60)
+                : base.extraSnackMinute,
             clearMealPlanning: value == onboardingEatingPathHasRoutine,
           ),
           clear: switchedPath,
@@ -296,7 +362,6 @@ class _EatingChoiceScreen extends ConsumerWidget {
           title: 'Yes, I have a routine/menu',
           subtitle: 'Upload a meal timetable or weekly menu.',
           icon: Icons.document_scanner_rounded,
-          selected: path == onboardingEatingPathHasRoutine,
           accent: OptivusColors.success,
           onTap: () => select(onboardingEatingPathHasRoutine),
         ),
@@ -305,7 +370,6 @@ class _EatingChoiceScreen extends ConsumerWidget {
           title: 'No, help me create one',
           subtitle: 'Generate a simple meal routine with dishes.',
           icon: Icons.auto_awesome_rounded,
-          selected: path == onboardingEatingPathCreate,
           accent: OptivusColors.roseAccent,
           onTap: () => select(onboardingEatingPathCreate),
         ),
@@ -350,7 +414,6 @@ class _EatingPathCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
-  final bool selected;
   final Color accent;
   final VoidCallback onTap;
 
@@ -358,7 +421,6 @@ class _EatingPathCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.selected,
     required this.accent,
     required this.onTap,
   });
@@ -369,10 +431,9 @@ class _EatingPathCard extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: OnboardingGlassCard(
-        selected: selected,
         padding: const EdgeInsets.all(14),
         radius: 22,
-        tint: selected ? accent.withValues(alpha: 0.08) : null,
+        tint: Colors.white.withValues(alpha: 0.08),
         child: Row(
           children: [
             Container(
@@ -425,32 +486,30 @@ class _EatingStageBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          key: const ValueKey('onboarding-step5-back'),
-          borderRadius: BorderRadius.circular(15),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.20),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.arrow_back_rounded, size: 16),
-                SizedBox(width: 4),
-                Text(
-                  'Back',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
-                ),
-              ],
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const ValueKey('onboarding-step5-back'),
+        borderRadius: BorderRadius.circular(13),
+        onTap: onTap,
+        child: Container(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.24),
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.arrow_back_rounded, size: 14),
+              SizedBox(width: 3),
+              Text(
+                'Back',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+              ),
+            ],
           ),
         ),
       ),
@@ -490,20 +549,11 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
         uploadState.purpose == UploadedAssetPurpose.eatingMenu &&
         uploadState.isBusy;
     final generating = aiState.isExtracting;
-    final status = uploadBusy
-        ? _uploadStatus(uploadState.status)
-        : generating
-        ? 'Generating timeline...'
-        : asset == null
-        ? 'No photo yet'
-        : 'Ready to generate';
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _EatingUploadCard(
           asset: asset,
-          status: status,
           busy: uploadBusy || generating,
           onUpload: onUpload,
           onRemove: onRemove,
@@ -533,7 +583,9 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
   final List<TimelineBlockDraft> blocks;
   final String? error;
   final bool isGenerating;
+  final bool editing;
   final VoidCallback onGenerate;
+  final VoidCallback onEdit;
   final ValueChanged<int> onDayChanged;
 
   const _EatingCreateTimelineScreen({
@@ -542,124 +594,194 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
     required this.blocks,
     required this.error,
     required this.isGenerating,
+    required this.editing,
     required this.onGenerate,
+    required this.onEdit,
     required this.onDayChanged,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final bodyContext = onboarding5MealBodyContextFromDraft(draft);
+    final bodyGoal = onboarding5BodyGoalForBase(base, draft);
     final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
+    final generated = blocks.isNotEmpty && !editing;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        OnboardingGlassCard(
-          tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
-          padding: const EdgeInsets.all(13),
-          radius: 22,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Create simple meal routine',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Tell AI your food style. It will build your weekly meal timeline.',
-                style: TextStyle(
-                  fontSize: 11,
-                  height: 1.3,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 11),
-              _EatingChipGroup(
-                label: 'Meals',
-                children: [
-                  for (final count in const [3, 4, 5])
-                    OnboardingChip(
-                      label: '$count',
-                      selected: mealsPerDay == count,
-                      accent: OptivusColors.roseAccent,
-                      onTap: () => _updateCreateDraft(
-                        ref,
-                        (base) => base.copyWith(mealsPerDay: count),
+        if (generated)
+          _EatingGeneratedSummaryRow(
+            bodyGoal: bodyGoal,
+            style: base.eatingMode ?? 'india',
+            eatingType: base.foodType ?? 'mixed',
+            mealsPerDay: mealsPerDay,
+            targetCalories: bodyContext.targetCalories,
+            onEdit: onEdit,
+          )
+        else
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      child: OnboardingGlassCard(
+                        tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
+                        padding: const EdgeInsets.all(12),
+                        radius: 20,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Create your meal intelligence',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            const Text(
+                              'Optivus will build a weekly meal timeline using your body goal, calorie need, food culture, and usual meal times.',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                height: 1.25,
+                                fontWeight: FontWeight.w700,
+                                color: OptivusColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _EatingBodyContextLine(
+                              hasBodyBasics: bodyContext.hasBodyBasics,
+                            ),
+                            const SizedBox(height: 9),
+                            _EatingChipGroup(
+                              label: 'Goal',
+                              children: [
+                                for (final option in const [
+                                  _EatingModeOption('gain', 'Gain'),
+                                  _EatingModeOption('lose', 'Lose'),
+                                  _EatingModeOption('maintain', 'Maintain'),
+                                ])
+                                  _EatingPreferenceChip(
+                                    label: option.label,
+                                    selected: bodyGoal == option.key,
+                                    accent: OptivusColors.roseAccent,
+                                    onTap: () => _updateCreateDraft(
+                                      ref,
+                                      (base) => base.copyWith(
+                                        mealPlanningGoal: option.key,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 7),
+                            _EatingChipGroup(
+                              label: 'Meals',
+                              children: [
+                                for (final count in const [3, 4, 5])
+                                  _EatingPreferenceChip(
+                                    label: '$count',
+                                    selected: mealsPerDay == count,
+                                    accent: OptivusColors.roseAccent,
+                                    onTap: () => _updateCreateDraft(
+                                      ref,
+                                      (base) =>
+                                          base.copyWith(mealsPerDay: count),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 7),
+                            _EatingChipGroup(
+                              label: 'Style',
+                              children: [
+                                for (final option in const [
+                                  _EatingModeOption('india', 'India'),
+                                  _EatingModeOption('us', 'US'),
+                                  _EatingModeOption('germany', 'Germany'),
+                                  _EatingModeOption('mixed', 'Mixed'),
+                                  _EatingModeOption('custom', 'Custom'),
+                                ])
+                                  _EatingPreferenceChip(
+                                    label: option.label,
+                                    selected:
+                                        (base.eatingMode ?? 'india') ==
+                                        option.key,
+                                    accent: OptivusColors.roseAccent,
+                                    onTap: () => _updateCreateDraft(
+                                      ref,
+                                      (base) =>
+                                          base.copyWith(eatingMode: option.key),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            if ((base.eatingMode ?? 'india') == 'custom') ...[
+                              const SizedBox(height: 7),
+                              _EatingCustomStyleField(base: base),
+                            ],
+                            const SizedBox(height: 7),
+                            _EatingChipGroup(
+                              label: 'Type',
+                              children: [
+                                for (final option in const [
+                                  _EatingModeOption('veg', 'Veg'),
+                                  _EatingModeOption('non_veg', 'Non-veg'),
+                                  _EatingModeOption('mixed', 'Mixed'),
+                                ])
+                                  _EatingPreferenceChip(
+                                    label: option.label,
+                                    selected:
+                                        (base.foodType ?? 'mixed') ==
+                                        option.key,
+                                    accent: OptivusColors.roseAccent,
+                                    onTap: () => _updateCreateDraft(
+                                      ref,
+                                      (base) =>
+                                          base.copyWith(foodType: option.key),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            _CompactMealTimeRows(
+                              base: base,
+                              mealsPerDay: mealsPerDay,
+                            ),
+                            const SizedBox(height: 9),
+                            _EatingGenerateRoutineButton(
+                              isGenerating: isGenerating,
+                              onTap: onGenerate,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 9),
-              _EatingChipGroup(
-                label: 'Style',
-                children: [
-                  for (final option in const [
-                    _EatingModeOption('india', 'India'),
-                    _EatingModeOption('us', 'US'),
-                    _EatingModeOption('germany', 'Germany'),
-                    _EatingModeOption('mixed', 'Mixed'),
-                    _EatingModeOption('custom', 'Custom'),
-                  ])
-                    OnboardingChip(
-                      label: option.label,
-                      selected: (base.eatingMode ?? 'india') == option.key,
-                      accent: OptivusColors.roseAccent,
-                      onTap: () => _updateCreateDraft(
-                        ref,
-                        (base) => base.copyWith(eatingMode: option.key),
-                      ),
-                    ),
-                ],
-              ),
-              if ((base.eatingMode ?? 'india') == 'custom') ...[
-                const SizedBox(height: 9),
-                _EatingCustomStyleField(base: base),
-              ],
-              const SizedBox(height: 9),
-              _EatingChipGroup(
-                label: 'Type',
-                children: [
-                  for (final option in const [
-                    _EatingModeOption('veg', 'Veg'),
-                    _EatingModeOption('non_veg', 'Non-veg'),
-                    _EatingModeOption('mixed', 'Mixed'),
-                  ])
-                    OnboardingChip(
-                      label: option.label,
-                      selected: (base.foodType ?? 'mixed') == option.key,
-                      accent: OptivusColors.roseAccent,
-                      onTap: () => _updateCreateDraft(
-                        ref,
-                        (base) => base.copyWith(foodType: option.key),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              _CompactMealTimeRows(base: base, mealsPerDay: mealsPerDay),
-              const SizedBox(height: 11),
-              _EatingGenerateRoutineButton(
-                isGenerating: isGenerating,
-                onTap: onGenerate,
-              ),
-            ],
+                  ),
+                );
+              },
+            ),
           ),
-        ),
         if (error != null) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: error!),
         ],
-        const SizedBox(height: 12),
-        if (blocks.isEmpty)
-          const _EatingCompactEmptyState()
-        else
+        if (generated) ...[
+          const SizedBox(height: 10),
           _EatingTimelineSection(
             selectedDay: selectedDay,
             blocks: blocks,
             onDayChanged: onDayChanged,
             emptyLabel: 'Generate your meal routine to preview the week.',
           ),
+        ],
       ],
     );
   }
@@ -667,7 +789,6 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
 
 class _EatingUploadCard extends StatelessWidget {
   final UploadedAsset? asset;
-  final String status;
   final bool busy;
   final VoidCallback onUpload;
   final VoidCallback onRemove;
@@ -675,7 +796,6 @@ class _EatingUploadCard extends StatelessWidget {
 
   const _EatingUploadCard({
     required this.asset,
-    required this.status,
     required this.busy,
     required this.onUpload,
     required this.onRemove,
@@ -719,18 +839,95 @@ class _EatingUploadCard extends StatelessWidget {
               _EatingGenerateButton(onTap: onGenerate, busy: busy),
             ],
           ),
-          if (status.isNotEmpty) ...[
-            const SizedBox(height: 7),
-            Text(
-              status,
+        ],
+      ),
+    );
+  }
+}
+
+class _EatingBodyContextLine extends StatelessWidget {
+  final bool hasBodyBasics;
+
+  const _EatingBodyContextLine({required this.hasBodyBasics});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      hasBodyBasics
+          ? 'Using your body basics to guide the meal routine.'
+          : 'Body basics missing. Using a simple balanced routine.',
+      style: const TextStyle(
+        fontSize: 10.5,
+        height: 1.2,
+        fontWeight: FontWeight.w800,
+        color: OptivusColors.textSecondary,
+      ),
+    );
+  }
+}
+
+class _EatingGeneratedSummaryRow extends StatelessWidget {
+  final String bodyGoal;
+  final String style;
+  final String eatingType;
+  final int mealsPerDay;
+  final int targetCalories;
+  final VoidCallback onEdit;
+
+  const _EatingGeneratedSummaryRow({
+    required this.bodyGoal,
+    required this.style,
+    required this.eatingType,
+    required this.mealsPerDay,
+    required this.targetCalories,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final summary =
+        '${_goalLabel(bodyGoal)} · ${_styleLabel(style)} · ${_typeLabel(eatingType)} · $mealsPerDay meals · ~$targetCalories kcal';
+    return OnboardingGlassCard(
+      tint: Colors.white.withValues(alpha: 0.10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      radius: 18,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              summary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 10,
-                height: 1.2,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textSecondary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
               ),
             ),
-          ],
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onEdit,
+            child: Container(
+              height: 30,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: OptivusColors.roseAccent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
+              ),
+              alignment: Alignment.center,
+              child: const Text(
+                'Edit',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.roseAccent,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -867,8 +1064,8 @@ class _EatingChipGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Wrap(
-      spacing: 7,
-      runSpacing: 7,
+      spacing: 6,
+      runSpacing: 5,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         SizedBox(
@@ -880,6 +1077,52 @@ class _EatingChipGroup extends StatelessWidget {
         ),
         ...children,
       ],
+    );
+  }
+}
+
+class _EatingPreferenceChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _EatingPreferenceChip({
+    required this.label,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.white.withValues(alpha: 0.36)
+              : Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected
+                ? Colors.white.withValues(alpha: 0.86)
+                : Colors.white.withValues(alpha: 0.42),
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? accent : OptivusColors.textPrimary,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -963,13 +1206,21 @@ class _CompactMealTimeRows extends ConsumerWidget {
       }),
     ];
 
-    return Column(
-      children: [
-        for (var i = 0; i < specs.length; i++) ...[
-          if (i > 0) const SizedBox(height: 6),
-          _CompactMealTimeRow(spec: specs[i]),
-        ],
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = math.max(120.0, (constraints.maxWidth - 8) / 2);
+        return Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            for (final spec in specs)
+              SizedBox(
+                width: itemWidth,
+                child: _CompactMealTimeRow(spec: spec),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -992,11 +1243,11 @@ class _CompactMealTimeRow extends StatelessWidget {
         spec.onChanged(onboardingMinuteFromTime(picked));
       },
       child: Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 11),
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(color: Colors.white.withValues(alpha: 0.52)),
         ),
         child: Row(
@@ -1005,22 +1256,22 @@ class _CompactMealTimeRow extends StatelessWidget {
               child: Text(
                 spec.title,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w900,
                 ),
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.32),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.48)),
               ),
               child: Text(
                 onboardingTimeLabel(spec.minute),
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.w900,
                   color: OptivusColors.roseAccent,
                 ),
@@ -1112,21 +1363,24 @@ class _EatingTimelineSection extends StatelessWidget {
             .toList(growable: false)
           ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Set Your Weekly Meal',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 9),
-        _EatingDayChips(selectedDay: selectedDay, onChanged: onDayChanged),
-        const SizedBox(height: 10),
-        if (dayBlocks.isEmpty)
-          _EatingTimelineEmptyCard(label: emptyLabel)
-        else
-          _EatingVerticalTimeline(blocks: dayBlocks),
-      ],
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Set Your Weekly Meal',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 7),
+          _EatingDayChips(selectedDay: selectedDay, onChanged: onDayChanged),
+          const SizedBox(height: 8),
+          Expanded(
+            child: dayBlocks.isEmpty
+                ? _EatingTimelineEmptyCard(label: emptyLabel)
+                : _EatingVerticalTimeline(blocks: dayBlocks),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1143,47 +1397,100 @@ class _EatingVerticalTimeline extends StatelessWidget {
     final startMinute = math.max(5 * 60, ((minStart - 45) ~/ 60) * 60);
     final endMinute = math.min(24 * 60, (((maxEnd + 75) / 60).ceil()) * 60);
     final rangeMinutes = math.max(180, endMinute - startMinute);
-    final height = (rangeMinutes * 0.56).clamp(220.0, 430.0);
-    final pxPerMinute = height / rangeMinutes;
+    const topPadding = 18.0;
+    const bottomPadding = OnboardingStepShell.bottomCtaHeight + 74;
+    const pxPerMinute = 0.82;
+    final timelineHeight = math.max(
+      rangeMinutes * pxPerMinute + topPadding + bottomPadding,
+      420.0,
+    );
 
-    return OnboardingGlassCard(
-      tint: OptivusColors.roseAccent.withValues(alpha: 0.045),
-      padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
-      radius: 22,
-      child: SizedBox(
-        height: height,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              left: 49,
-              top: 0,
-              bottom: 0,
-              width: 3,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: OptivusColors.roseAccent.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ),
-            for (var minute = startMinute; minute <= endMinute; minute += 60)
-              _EatingTimelineTick(
-                minute: minute,
-                top: (minute - startMinute) * pxPerMinute,
-              ),
-            for (final block in blocks)
-              _EatingTimelineBlock(
-                block: block,
-                top: (block.startMinute - startMinute) * pxPerMinute,
-                height: math
-                    .max(
-                      72,
-                      (block.endMinute - block.startMinute) * pxPerMinute,
-                    )
-                    .toDouble(),
-              ),
+    double yFor(int minute) =>
+        topPadding +
+        (minute - startMinute).clamp(0, rangeMinutes) * pxPerMinute;
+
+    return Container(
+      key: const ValueKey('onboarding-step5-timeline'),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.40),
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.80),
+            width: 1.5,
+          ),
+        ),
+      ),
+      child: ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Colors.white,
+            Colors.white,
+            Colors.transparent,
           ],
+          stops: [0.0, 0.045, 0.95, 1.0],
+        ).createShader(bounds),
+        blendMode: BlendMode.dstIn,
+        child: SingleChildScrollView(
+          key: const ValueKey('onboarding-step5-timeline-scroll'),
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: bottomPadding),
+          child: SizedBox(
+            height: timelineHeight,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  left: 48,
+                  width: 8,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: OptivusColors.roseAccent.withValues(alpha: 0.17),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: OptivusColors.roseAccent.withValues(alpha: 0.36),
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: OptivusColors.roseAccent.withValues(
+                            alpha: 0.15,
+                          ),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                for (final minute in _mealBoundaryMinutes(
+                  blocks,
+                  startMinute,
+                  endMinute,
+                ))
+                  _EatingMinuteIndicator(minute: minute, top: yFor(minute)),
+                for (
+                  var minute = startMinute;
+                  minute <= endMinute;
+                  minute += 60
+                )
+                  _EatingTimelineTick(minute: minute, top: yFor(minute)),
+                for (final block in blocks)
+                  _EatingTimelineBlock(
+                    block: block,
+                    top: yFor(block.startMinute),
+                    height: math.max(
+                      54.0,
+                      (block.endMinute - block.startMinute) * pxPerMinute,
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1199,44 +1506,95 @@ class _EatingTimelineTick extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      top: top - 6,
+      top: top - 10,
       left: 0,
-      right: 0,
-      child: Row(
+      width: 56,
+      height: 20,
+      child: Stack(
         children: [
-          SizedBox(
+          Positioned(
+            left: 0,
             width: 42,
             child: Text(
               _shortTimeLabel(minute),
               textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.clip,
               style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.82),
-              border: Border.all(
-                color: OptivusColors.roseAccent.withValues(alpha: 0.45),
+          Positioned(
+            left: 48,
+            top: 9,
+            width: 4,
+            height: 1.5,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: OptivusColors.roseAccent.withValues(alpha: 0.35),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 1,
-              color: Colors.white.withValues(alpha: 0.32),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EatingMinuteIndicator extends StatelessWidget {
+  final int minute;
+  final double top;
+
+  const _EatingMinuteIndicator({required this.minute, required this.top});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: top - 8,
+          left: 0,
+          width: 38,
+          height: 16,
+          child: Text(
+            _compactMinuteLabel(minute),
+            textAlign: TextAlign.right,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: OptivusColors.roseAccent.withValues(alpha: 0.68),
+            ),
+          ),
+        ),
+        Positioned(
+          top: top,
+          left: 64,
+          right: 16,
+          height: 1,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: OptivusColors.roseAccent.withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+        ),
+        Positioned(
+          top: top,
+          left: 44,
+          width: 18,
+          height: 1.5,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: OptivusColors.roseAccent.withValues(alpha: 0.48),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1262,76 +1620,135 @@ class _EatingTimelineBlock extends StatelessWidget {
 
     return Positioned(
       top: top,
-      left: 66,
-      right: 0,
+      left: 64,
+      right: 16,
       height: height,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.30),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.65)),
+          borderRadius: BorderRadius.circular(22),
+          color: Colors.white.withValues(alpha: 0.44),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              OptivusColors.roseAccent.withValues(alpha: 0.22),
+              OptivusColors.roseAccent.withValues(alpha: 0.06),
+            ],
+          ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.88),
+            width: 1.4,
+          ),
           boxShadow: [
             BoxShadow(
-              color: OptivusColors.roseAccent.withValues(alpha: 0.12),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
+              color: OptivusColors.roseAccent.withValues(alpha: 0.14),
+              blurRadius: 13,
+              offset: const Offset(0, 5),
             ),
           ],
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 4,
-              height: double.infinity,
-              decoration: BoxDecoration(
-                color: OptivusColors.roseAccent,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
                 children: [
-                  Text(
-                    block.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  Icon(
+                    _mealIcon(block.mealCategory),
+                    color: OptivusColors.roseAccent,
+                    size: height < 62 ? 14 : 17,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: OptivusColors.textSecondary,
-                    ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: height < 74
+                        ? Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _mealTitleForDisplay(block),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w900,
+                                    color: OptivusColors.ink,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              _EatingInfoChip(
+                                '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                                compact: true,
+                              ),
+                            ],
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _mealTitleForDisplay(block),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: OptivusColors.ink,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 5,
+                                children: [
+                                  _EatingInfoChip(
+                                    '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                                  ),
+                                  if (dishes.isNotEmpty)
+                                    _EatingInfoChip(dishes),
+                                ],
+                              ),
+                            ],
+                          ),
                   ),
-                  if (dishes.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      dishes,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textSecondary,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EatingInfoChip extends StatelessWidget {
+  final String label;
+  final bool compact;
+
+  const _EatingInfoChip(this.label, {this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 190),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 7 : 8,
+        vertical: compact ? 3 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.60),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: compact ? 10 : 11,
+          fontWeight: FontWeight.w800,
+          color: OptivusColors.textBody,
         ),
       ),
     );
@@ -1348,20 +1765,94 @@ class _EatingDayChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var index = 0; index < _labels.length; index++) ...[
-            if (index > 0) const SizedBox(width: 7),
-            OnboardingChip(
-              label: _labels[index],
-              selected: selectedDay == index + 1,
-              accent: OptivusColors.roseAccent,
-              onTap: () => onChanged(index + 1),
+    return SizedBox(
+      height: 42,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (var index = 0; index < _labels.length; index++)
+              SizedBox(
+                width: 50,
+                height: 42,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onChanged(index + 1),
+                  child: _EatingDayChip(
+                    label: _labels[index],
+                    selected: selectedDay == index + 1,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EatingDayChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+
+  const _EatingDayChip({required this.label, required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = selected ? 40.0 : 35.0;
+    return Center(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: (selected ? OptivusColors.roseAccent : Colors.black)
+                  .withValues(alpha: selected ? 0.07 : 0.035),
+              blurRadius: selected ? 5 : 7,
+              offset: Offset(0, selected ? 2 : 3),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: selected ? 0.60 : 0.70),
+              blurRadius: selected ? 6 : 10,
+              offset: const Offset(-2, -2),
             ),
           ],
-        ],
+        ),
+        child: ClipOval(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected
+                    ? OptivusColors.roseAccent.withValues(alpha: 0.68)
+                    : Colors.white.withValues(alpha: 0.38),
+                border: Border.all(
+                  color: selected
+                      ? OptivusColors.roseAccent.withValues(alpha: 0.42)
+                      : Colors.white.withValues(alpha: 0.72),
+                  width: selected ? 1.8 : 1.2,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: selected ? 12 : 10,
+                    fontWeight: FontWeight.w900,
+                    color: selected
+                        ? Colors.white
+                        : OptivusColors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1374,42 +1865,25 @@ class _EatingTimelineEmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingGlassCard(
-      tint: OptivusColors.roseAccent.withValues(alpha: 0.045),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 22),
-      radius: 22,
+    return SizedBox.expand(
       child: Center(
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 12,
-            height: 1.35,
-            fontWeight: FontWeight.w800,
-            color: OptivusColors.textSecondary,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 110),
+          child: OnboardingGlassCard(
+            tint: Colors.white.withValues(alpha: 0.30),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+            radius: 20,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12.5,
+                height: 1.35,
+                fontWeight: FontWeight.w800,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EatingCompactEmptyState extends StatelessWidget {
-  const _EatingCompactEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return const OnboardingGlassCard(
-      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-      radius: 20,
-      child: Text(
-        'Generate your meal routine to preview the week.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 12,
-          height: 1.35,
-          fontWeight: FontWeight.w800,
-          color: OptivusColors.textSecondary,
         ),
       ),
     );
@@ -1467,14 +1941,188 @@ class _MealTimeControl {
   const _MealTimeControl(this.title, this.minute, this.onChanged);
 }
 
+@visibleForTesting
+class Onboarding5MealBodyContext {
+  final String bodyGoal;
+  final String targetMode;
+  final double? currentWeightKg;
+  final double? heightCm;
+  final int? age;
+  final String? gender;
+  final double? bmi;
+  final int estimatedBmr;
+  final int estimatedMaintenanceCalories;
+  final int targetCalories;
+  final int mealsPerDay;
+  final String eatingType;
+  final String foodStyle;
+  final String? customFoodStyle;
+  final Map<String, int> mealTimes;
+  final String? lifestyle;
+  final bool hasBodyBasics;
+
+  const Onboarding5MealBodyContext({
+    required this.bodyGoal,
+    required this.targetMode,
+    required this.currentWeightKg,
+    required this.heightCm,
+    required this.age,
+    required this.gender,
+    required this.bmi,
+    required this.estimatedBmr,
+    required this.estimatedMaintenanceCalories,
+    required this.targetCalories,
+    required this.mealsPerDay,
+    required this.eatingType,
+    required this.foodStyle,
+    required this.customFoodStyle,
+    required this.mealTimes,
+    required this.lifestyle,
+    required this.hasBodyBasics,
+  });
+}
+
+@visibleForTesting
+class Onboarding5MealCandidateMappingResult {
+  final List<TimelineBlockDraft> blocks;
+  final int droppedNoTitle;
+  final int droppedInvalidTime;
+  final int droppedNoMealTime;
+
+  const Onboarding5MealCandidateMappingResult({
+    required this.blocks,
+    required this.droppedNoTitle,
+    required this.droppedInvalidTime,
+    required this.droppedNoMealTime,
+  });
+}
+
+@visibleForTesting
+String onboarding5DefaultBodyGoalForDraft(OnboardingDraft draft) {
+  final baseGoal = draft.baseTimeline.mealPlanningGoal;
+  final normalizedBase = _normalizedBodyGoal(baseGoal);
+  if (normalizedBase != null) return normalizedBase;
+  final goalKeys = draft.identityGoals
+      .expand((goal) => [goal.goalKey, ...goal.systemKeys])
+      .map((value) => value.toLowerCase())
+      .join(' ');
+  if (goalKeys.contains('strong_body') ||
+      goalKeys.contains('muscle') ||
+      goalKeys.contains('workout') ||
+      goalKeys.contains('protein')) {
+    return 'gain';
+  }
+  return 'maintain';
+}
+
+@visibleForTesting
+String onboarding5BodyGoalForBase(
+  BaseTimelineDraft base,
+  OnboardingDraft draft,
+) {
+  return _normalizedBodyGoal(base.mealPlanningGoal) ??
+      onboarding5DefaultBodyGoalForDraft(draft);
+}
+
+@visibleForTesting
+Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
+  OnboardingDraft draft,
+) {
+  final base = draft.baseTimeline;
+  final body = draft.bodyBasics.withEstimates();
+  final bodyGoal = onboarding5BodyGoalForBase(base, draft);
+  final weight = body.weightKg;
+  final height = body.heightCm;
+  final age = _ageFromRange(body.ageRange);
+  final hasBodyBasics =
+      weight != null &&
+      weight > 0 &&
+      height != null &&
+      height > 0 &&
+      age != null &&
+      body.gender != null;
+  final safeWeight = weight != null && weight > 0 ? weight : 70.0;
+  final safeHeight = height != null && height > 0 ? height : 170.0;
+  final safeAge = age ?? 25;
+  final bmr = _estimateBmr(
+    weightKg: safeWeight,
+    heightCm: safeHeight,
+    age: safeAge,
+    gender: body.gender,
+  );
+  final maintenance = body.calorieEstimate != null && body.calorieEstimate! > 0
+      ? body.calorieEstimate!.round()
+      : (bmr * _activityFactorForLifeRole(draft.lifeRole)).round();
+  final target = _targetCalories(
+    maintenanceCalories: maintenance,
+    bodyGoal: bodyGoal,
+    gender: body.gender,
+  );
+  final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
+
+  return Onboarding5MealBodyContext(
+    bodyGoal: bodyGoal,
+    targetMode: switch (bodyGoal) {
+      'gain' => 'mild_surplus',
+      'lose' => 'mild_deficit',
+      _ => 'maintenance',
+    },
+    currentWeightKg: weight,
+    heightCm: height,
+    age: age,
+    gender: body.gender,
+    bmi: body.bmiEstimate,
+    estimatedBmr: bmr,
+    estimatedMaintenanceCalories: maintenance,
+    targetCalories: target,
+    mealsPerDay: mealsPerDay,
+    eatingType: _normalizedEatingType(base.foodType),
+    foodStyle: _normalizedFoodStyle(base.eatingMode, base.foodStyleCustomText),
+    customFoodStyle: base.foodStyleCustomText?.trim().isEmpty == true
+        ? null
+        : base.foodStyleCustomText?.trim(),
+    mealTimes: _mealTimesForBase(base, mealsPerDay),
+    lifestyle: draft.lifeRole.lifeRole,
+    hasBodyBasics: hasBodyBasics,
+  );
+}
+
 List<TimelineBlockDraft> onboarding5GeneratedMealBlocks(
   BaseTimelineDraft base, {
   DateTime? now,
+  Onboarding5MealBodyContext? bodyContext,
 }) {
   final timestamp = now ?? DateTime.now();
-  final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
-  final style = _normalizedFoodStyle(base.eatingMode, base.foodStyleCustomText);
-  final eatingType = _normalizedEatingType(base.foodType);
+  final context =
+      bodyContext ??
+      Onboarding5MealBodyContext(
+        bodyGoal: _normalizedBodyGoal(base.mealPlanningGoal) ?? 'maintain',
+        targetMode: 'maintenance',
+        currentWeightKg: null,
+        heightCm: null,
+        age: null,
+        gender: null,
+        bmi: null,
+        estimatedBmr: 1550,
+        estimatedMaintenanceCalories: 2200,
+        targetCalories: 2200,
+        mealsPerDay: _normalizedMealsPerDay(base.mealsPerDay),
+        eatingType: _normalizedEatingType(base.foodType),
+        foodStyle: _normalizedFoodStyle(
+          base.eatingMode,
+          base.foodStyleCustomText,
+        ),
+        customFoodStyle: base.foodStyleCustomText,
+        mealTimes: _mealTimesForBase(
+          base,
+          _normalizedMealsPerDay(base.mealsPerDay),
+        ),
+        lifestyle: null,
+        hasBodyBasics: false,
+      );
+  final mealsPerDay = context.mealsPerDay;
+  final style = context.foodStyle;
+  final eatingType = context.eatingType;
   final specs = <_MealSpec>[
     _MealSpec('breakfast', 'Breakfast', base.breakfastMinute ?? 8 * 60, 30),
     if (mealsPerDay == 5)
@@ -1510,7 +2158,11 @@ List<TimelineBlockDraft> onboarding5GeneratedMealBlocks(
             style: style,
             eatingType: eatingType,
             mealId: spec.id,
+            bodyGoal: context.bodyGoal,
+            customText: context.customFoodStyle,
           ),
+          calories: _mealCalories(context.targetCalories, spec.id).toDouble(),
+          protein: _mealProtein(context, spec.id).toDouble(),
         ),
       )
       .toList(growable: false)
@@ -1521,39 +2173,329 @@ List<TimelineBlockDraft> onboarding5MealBlocksFromCandidates(
   List<RoutineImportCandidateBlock> candidates, {
   DateTime? now,
 }) {
+  return mapOnboarding5MealCandidates(candidates, now: now).blocks;
+}
+
+@visibleForTesting
+Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
+  List<RoutineImportCandidateBlock> candidates, {
+  DateTime? now,
+}) {
   final timestamp = now ?? DateTime.now();
   final blocks = <TimelineBlockDraft>[];
+  var droppedNoTitle = 0;
+  var droppedInvalidTime = 0;
+  var droppedNoMealTime = 0;
+
   for (final candidate in candidates) {
-    final title = candidate.title.trim();
-    final repeatDays =
-        candidate.repeatDays
-            .where((day) => day >= 1 && day <= 7)
-            .toSet()
-            .toList()
-          ..sort();
-    if (title.isEmpty) continue;
-    if (!candidate.hasFixedTime ||
-        candidate.startMinute >= candidate.endMinute) {
+    final mealCategory = _inferMealCategoryForCandidate(candidate);
+    final title = _mealCandidateTitle(candidate, mealCategory);
+    if (title.isEmpty) {
+      droppedNoTitle++;
       continue;
     }
+
+    final defaultTime = _defaultMealTimeForCategory(mealCategory);
+    final hasCandidateTime =
+        candidate.hasFixedTime && candidate.startMinute < candidate.endMinute;
+    final startMinute = hasCandidateTime
+        ? candidate.startMinute
+        : defaultTime?.$1;
+    final endMinute = hasCandidateTime ? candidate.endMinute : defaultTime?.$2;
+    if (startMinute == null || endMinute == null) {
+      droppedNoMealTime++;
+      continue;
+    }
+    if (startMinute < 0 || endMinute > 24 * 60 || startMinute >= endMinute) {
+      droppedInvalidTime++;
+      continue;
+    }
+
+    final repeatDays = _repeatDaysForEatingCandidate(candidate);
+    final dishes = _dishesForEatingCandidate(candidate);
     blocks.add(
       TimelineBlockDraft(
         id: 'eating-ai-${candidate.id}-${timestamp.millisecondsSinceEpoch}',
         section: 'eating',
         title: title,
-        startMinute: candidate.startMinute,
-        endMinute: candidate.endMinute,
+        startMinute: startMinute,
+        endMinute: endMinute,
         repeatDays: repeatDays.isEmpty ? onboardingEveryDay() : repeatDays,
         location: candidate.location,
         blockType: TimelineBlockDraft.hardBlockKey,
         source: onboardingEatingAiImportSource,
-        mealCategory:
-            candidate.mealCategory ?? _inferMealCategory(candidate.title),
-        dishes: candidate.steps,
+        mealCategory: mealCategory,
+        dishes: dishes,
       ),
     );
   }
-  return blocks..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  blocks.sort((a, b) {
+    final aDay = a.repeatDays.isEmpty ? 1 : a.repeatDays.first;
+    final bDay = b.repeatDays.isEmpty ? 1 : b.repeatDays.first;
+    final day = aDay.compareTo(bDay);
+    if (day != 0) return day;
+    return a.startMinute.compareTo(b.startMinute);
+  });
+  return Onboarding5MealCandidateMappingResult(
+    blocks: blocks,
+    droppedNoTitle: droppedNoTitle,
+    droppedInvalidTime: droppedInvalidTime,
+    droppedNoMealTime: droppedNoMealTime,
+  );
+}
+
+String? _normalizedBodyGoal(String? value) {
+  final lower = value?.trim().toLowerCase();
+  return switch (lower) {
+    'gain' || 'gain_weight' || 'build_muscle' || 'muscle_gain' => 'gain',
+    'lose' || 'lose_fat' || 'fat_loss' || 'weight_loss' => 'lose',
+    'maintain' || 'maintenance' || 'eat_healthier' || 'balanced' => 'maintain',
+    _ => null,
+  };
+}
+
+int? _ageFromRange(String? ageRange) {
+  return switch (ageRange?.trim()) {
+    '<18' => 17,
+    '18-24' => 21,
+    '25-34' => 30,
+    '35-44' => 40,
+    '45+' => 50,
+    _ => null,
+  };
+}
+
+int _estimateBmr({
+  required double weightKg,
+  required double heightCm,
+  required int age,
+  required String? gender,
+}) {
+  final base = 10 * weightKg + 6.25 * heightCm - 5 * age;
+  final adjustment = switch (gender) {
+    'male' => 5.0,
+    'female' => -161.0,
+    _ => -78.0,
+  };
+  return (base + adjustment).round().clamp(1100, 2600);
+}
+
+double _activityFactorForLifeRole(LifeRoleDraft lifeRole) {
+  return switch (lifeRole.exerciseLevel) {
+    'high' || 'active' => 1.45,
+    'medium' || 'moderate' => 1.35,
+    'low' || 'sedentary' => 1.25,
+    _ => 1.30,
+  };
+}
+
+int _targetCalories({
+  required int maintenanceCalories,
+  required String bodyGoal,
+  required String? gender,
+}) {
+  final safeMaintenance = maintenanceCalories.clamp(1500, 4200);
+  if (bodyGoal == 'gain') {
+    return (safeMaintenance + 300).clamp(
+      safeMaintenance,
+      safeMaintenance + 500,
+    );
+  }
+  if (bodyGoal == 'lose') {
+    final floor = gender == 'female' ? 1200 : 1400;
+    return (safeMaintenance - 350).clamp(
+      math.max(floor, (safeMaintenance * 0.75).round()),
+      safeMaintenance,
+    );
+  }
+  return safeMaintenance;
+}
+
+Map<String, int> _mealTimesForBase(BaseTimelineDraft base, int mealsPerDay) {
+  return {
+    'breakfast': base.breakfastMinute ?? 8 * 60,
+    if (mealsPerDay == 5) 'extra-snack': base.extraSnackMinute ?? 11 * 60,
+    'lunch': base.lunchMinute ?? 13 * 60,
+    if (mealsPerDay >= 4) 'snack': base.snackMinute ?? 17 * 60,
+    'dinner': base.dinnerMinute ?? 20 * 60 + 30,
+  };
+}
+
+int _mealCalories(int targetCalories, String mealId) {
+  final ratio = switch (mealId) {
+    'breakfast' => 0.23,
+    'lunch' => 0.32,
+    'snack' => 0.12,
+    'extra-snack' => 0.11,
+    'dinner' => 0.30,
+    _ => 0.20,
+  };
+  return (targetCalories * ratio).round();
+}
+
+int _mealProtein(Onboarding5MealBodyContext context, String mealId) {
+  final total = context.currentWeightKg == null
+      ? (context.targetCalories * 0.075).round()
+      : (context.currentWeightKg! *
+                (context.bodyGoal == 'gain'
+                    ? 1.8
+                    : context.bodyGoal == 'lose'
+                    ? 1.7
+                    : 1.5))
+            .round();
+  final ratio = switch (mealId) {
+    'breakfast' => 0.24,
+    'lunch' => 0.32,
+    'snack' => 0.12,
+    'extra-snack' => 0.10,
+    'dinner' => 0.30,
+    _ => 0.20,
+  };
+  return math.max(8, (total * ratio).round());
+}
+
+String _inferMealCategoryForCandidate(RoutineImportCandidateBlock candidate) {
+  for (final value in [
+    candidate.mealCategory,
+    candidate.sourceColumnLabel,
+    candidate.title,
+    candidate.category,
+    candidate.sourceTextSnippet,
+  ]) {
+    final category = _inferMealCategory(value ?? '');
+    if (category != 'meal') return category;
+  }
+  return 'meal';
+}
+
+String _mealCandidateTitle(
+  RoutineImportCandidateBlock candidate,
+  String mealCategory,
+) {
+  final title = candidate.title.trim();
+  if (title.isNotEmpty && !_looksLikeRawMealLabel(title)) return title;
+  if (mealCategory != 'meal') return _goalLabel(mealCategory);
+  return title;
+}
+
+bool _looksLikeRawMealLabel(String value) {
+  final normalized = value.trim().toLowerCase();
+  return normalized == 'extra_snack' ||
+      normalized == 'extra-snack' ||
+      normalized == 'snacks';
+}
+
+(int, int)? _defaultMealTimeForCategory(String mealCategory) {
+  return switch (mealCategory) {
+    'breakfast' => (7 * 60 + 30, 10 * 60),
+    'lunch' => (13 * 60, 15 * 60),
+    'snack' || 'extra-snack' => (18 * 60, 19 * 60),
+    'dinner' => (20 * 60, 22 * 60),
+    _ => null,
+  };
+}
+
+List<int> _repeatDaysForEatingCandidate(RoutineImportCandidateBlock candidate) {
+  final days = <int>{};
+  days.addAll(candidate.repeatDays.where((day) => day >= 1 && day <= 7));
+  for (final value in [
+    candidate.sourceRowLabel,
+    candidate.sourceColumnLabel,
+    candidate.sourceTextSnippet,
+  ]) {
+    if (value == null || value.trim().isEmpty) continue;
+    days.addAll(_dayNumbersFromText(value));
+  }
+  return days.toList()..sort();
+}
+
+List<String> _dishesForEatingCandidate(RoutineImportCandidateBlock candidate) {
+  final fromSteps = candidate.steps
+      .map((step) => step.trim())
+      .where((step) => step.isNotEmpty)
+      .toList(growable: false);
+  if (fromSteps.isNotEmpty) return fromSteps;
+
+  final snippet = candidate.sourceTextSnippet?.trim();
+  if (snippet == null || snippet.isEmpty) return const [];
+  final withoutMealWords = snippet
+      .replaceAll(
+        RegExp(r'\b(Breakfast|Lunch|Snacks?|Dinner)\b', caseSensitive: false),
+        ' ',
+      )
+      .replaceAll(
+        RegExp(
+          r'\b(Mon|Tue|Tues|Wed|Thu|Thur|Fri|Sat|Sun)(day)?\b',
+          caseSensitive: false,
+        ),
+        ' ',
+      )
+      .replaceAll(
+        RegExp(r'\d{1,2}[:.]\d{2}\s*(AM|PM)?', caseSensitive: false),
+        ' ',
+      )
+      .replaceAll(RegExp(r'\d{1,2}\s*(AM|PM)', caseSensitive: false), ' ');
+  return withoutMealWords
+      .split(RegExp(r'[,;\n|•·]+'))
+      .map((item) => item.trim())
+      .where((item) => item.length >= 2)
+      .take(6)
+      .toList(growable: false);
+}
+
+List<int> _dayNumbersFromText(String text) {
+  final lower = text
+      .toLowerCase()
+      .replaceAll(RegExp(r'[–—]'), '-')
+      .replaceAll(RegExp(r'[\(\)\[\]\{\},.:;_/]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final found = <int>{};
+  if (RegExp(r'(^|[^a-z])weekdays?($|[^a-z])').hasMatch(lower)) {
+    found.addAll(const [1, 2, 3, 4, 5]);
+  }
+  final aliases = <String, int>{
+    'mon': 1,
+    'monday': 1,
+    'tue': 2,
+    'tues': 2,
+    'tuesday': 2,
+    'wed': 3,
+    'wednesday': 3,
+    'thu': 4,
+    'thur': 4,
+    'thurs': 4,
+    'thursday': 4,
+    'fri': 5,
+    'friday': 5,
+    'sat': 6,
+    'saturday': 6,
+    'sun': 7,
+    'sunday': 7,
+  };
+  const dayToken =
+      r'monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat|sunday|sun';
+  final rangePattern = RegExp(
+    r'(^|[^a-z])(' +
+        dayToken +
+        r')\s*(?:-|to|through|thru)\s*(' +
+        dayToken +
+        r')(?=$|[^a-z])',
+  );
+  for (final match in rangePattern.allMatches(lower)) {
+    final start = aliases[match.group(2)];
+    final end = aliases[match.group(3)];
+    if (start == null || end == null || end < start) continue;
+    for (var day = start; day <= end; day++) {
+      found.add(day);
+    }
+  }
+  final tokenPattern = RegExp(r'(^|[^a-z])(' + dayToken + r')(?=$|[^a-z])');
+  for (final match in tokenPattern.allMatches(lower)) {
+    final day = aliases[match.group(2)];
+    if (day != null) found.add(day);
+  }
+  return found.toList()..sort();
 }
 
 String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
@@ -1664,23 +2606,17 @@ String _friendlyUploadMessage(String? message) {
   return value;
 }
 
-String _uploadStatus(UploadFlowStatus status) {
-  return switch (status) {
-    UploadFlowStatus.picking => 'Choosing...',
-    UploadFlowStatus.preparing => 'Preparing...',
-    UploadFlowStatus.signing => 'Securing upload...',
-    UploadFlowStatus.uploading => 'Uploading...',
-    UploadFlowStatus.savingMetadata => 'Saving...',
-    _ => 'Uploading...',
-  };
-}
-
 String _inferMealCategory(String title) {
   final lower = title.toLowerCase();
   if (lower.contains('breakfast')) return 'breakfast';
   if (lower.contains('lunch')) return 'lunch';
   if (lower.contains('dinner')) return 'dinner';
-  if (lower.contains('snack')) return 'snack';
+  if (lower.contains('extra snack') ||
+      lower.contains('extra_snack') ||
+      lower.contains('extra-snack')) {
+    return 'extra-snack';
+  }
+  if (lower.contains('snack') || lower.contains('tiffin')) return 'snack';
   return 'meal';
 }
 
@@ -1717,13 +2653,31 @@ List<String> _mealDishes({
   required String style,
   required String eatingType,
   required String mealId,
+  required String bodyGoal,
+  String? customText,
 }) {
   final isVeg = eatingType == 'veg';
+  if (bodyGoal == 'gain') {
+    return switch (style) {
+      'us' => _usGainMealDishes(mealId, isVeg: isVeg),
+      'germany' => _germanyGainMealDishes(mealId, isVeg: isVeg),
+      'custom' => _customGoalMealDishes(mealId, bodyGoal, customText),
+      _ => _indiaGainMealDishes(mealId, isVeg: isVeg),
+    };
+  }
+  if (bodyGoal == 'lose') {
+    return switch (style) {
+      'us' => _usLoseMealDishes(mealId, isVeg: isVeg),
+      'germany' => _germanyLoseMealDishes(mealId, isVeg: isVeg),
+      'custom' => _customGoalMealDishes(mealId, bodyGoal, customText),
+      _ => _indiaLoseMealDishes(mealId, isVeg: isVeg),
+    };
+  }
   return switch (style) {
     'us' => _usMealDishes(mealId, isVeg: isVeg),
     'germany' => _germanyMealDishes(mealId, isVeg: isVeg),
     'mixed' => _mixedMealDishes(mealId, isVeg: isVeg),
-    'custom' => _customMealDishes(mealId, isVeg: isVeg),
+    'custom' => _customMealDishes(mealId, isVeg: isVeg, customText: customText),
     _ => _indiaMealDishes(mealId, isVeg: isVeg),
   };
 }
@@ -1745,6 +2699,40 @@ List<String> _indiaMealDishes(String mealId, {required bool isVeg}) {
   };
 }
 
+List<String> _indiaGainMealDishes(String mealId, {required bool isVeg}) {
+  return switch (mealId) {
+    'breakfast' => ['Paneer paratha', 'Curd', 'Banana'],
+    'extra-snack' => ['Peanut chikki', 'Milk'],
+    'lunch' =>
+      isVeg
+          ? ['Rajma rice', 'Paneer sabzi', 'Curd']
+          : ['Chicken curry', 'Rice', 'Curd'],
+    'snack' => ['Chana chaat', 'Banana shake'],
+    'dinner' =>
+      isVeg
+          ? ['Roti', 'Dal makhani', 'Mixed veg']
+          : ['Roti', 'Egg curry', 'Rice'],
+    _ => ['Higher-energy simple meal'],
+  };
+}
+
+List<String> _indiaLoseMealDishes(String mealId, {required bool isVeg}) {
+  return switch (mealId) {
+    'breakfast' => ['Idli', 'Sambar', 'Fruit'],
+    'extra-snack' => ['Fruit', 'Tea'],
+    'lunch' =>
+      isVeg
+          ? ['Dal', 'Small rice', 'Salad']
+          : ['Grilled chicken', 'Small rice', 'Salad'],
+    'snack' => ['Sprouts chaat', 'Tea'],
+    'dinner' =>
+      isVeg
+          ? ['Roti', 'Mixed veg', 'Dal']
+          : ['Roti', 'Egg bhurji', 'Vegetables'],
+    _ => ['Lighter simple meal'],
+  };
+}
+
 List<String> _usMealDishes(String mealId, {required bool isVeg}) {
   return switch (mealId) {
     'breakfast' => ['Oatmeal', 'Greek yogurt', 'Berries'],
@@ -1759,6 +2747,40 @@ List<String> _usMealDishes(String mealId, {required bool isVeg}) {
           ? ['Pasta', 'Roasted vegetables']
           : ['Grilled chicken', 'Potatoes', 'Greens'],
     _ => ['Simple meal'],
+  };
+}
+
+List<String> _usGainMealDishes(String mealId, {required bool isVeg}) {
+  return switch (mealId) {
+    'breakfast' => ['Oatmeal', 'Greek yogurt', 'Peanut butter'],
+    'extra-snack' => ['Bagel', 'Cream cheese'],
+    'lunch' =>
+      isVeg
+          ? ['Bean burrito bowl', 'Avocado', 'Fruit']
+          : ['Chicken rice bowl', 'Avocado', 'Salad'],
+    'snack' => ['Trail mix', 'Protein yogurt'],
+    'dinner' =>
+      isVeg
+          ? ['Pasta', 'Lentil sauce', 'Vegetables']
+          : ['Salmon', 'Potatoes', 'Greens'],
+    _ => ['Higher-energy simple meal'],
+  };
+}
+
+List<String> _usLoseMealDishes(String mealId, {required bool isVeg}) {
+  return switch (mealId) {
+    'breakfast' => ['Oatmeal', 'Berries', 'Greek yogurt'],
+    'extra-snack' => ['Apple', 'Cottage cheese'],
+    'lunch' =>
+      isVeg
+          ? ['Veggie bowl', 'Beans', 'Salad']
+          : ['Chicken salad bowl', 'Rice', 'Fruit'],
+    'snack' => ['Yogurt', 'Fruit'],
+    'dinner' =>
+      isVeg
+          ? ['Vegetable soup', 'Whole grain toast']
+          : ['Grilled chicken', 'Vegetables'],
+    _ => ['Lighter simple meal'],
   };
 }
 
@@ -1779,6 +2801,35 @@ List<String> _germanyMealDishes(String mealId, {required bool isVeg}) {
   };
 }
 
+List<String> _germanyGainMealDishes(String mealId, {required bool isVeg}) {
+  return switch (mealId) {
+    'breakfast' => ['Muesli', 'Yogurt', 'Nut butter'],
+    'extra-snack' => ['Pretzel', 'Cheese'],
+    'lunch' =>
+      isVeg
+          ? ['Lentil stew', 'Potatoes', 'Quark']
+          : ['Chicken schnitzel', 'Potatoes', 'Salad'],
+    'snack' => ['Quark', 'Fruit', 'Nuts'],
+    'dinner' =>
+      isVeg
+          ? ['Rye bread', 'Cheese', 'Vegetable soup']
+          : ['Rye bread', 'Turkey slices', 'Soup'],
+    _ => ['Higher-energy simple meal'],
+  };
+}
+
+List<String> _germanyLoseMealDishes(String mealId, {required bool isVeg}) {
+  return switch (mealId) {
+    'breakfast' => ['Muesli', 'Yogurt', 'Fruit'],
+    'extra-snack' => ['Fruit', 'Quark'],
+    'lunch' => isVeg ? ['Lentil soup', 'Salad'] : ['Chicken salad', 'Potatoes'],
+    'snack' => ['Quark', 'Fruit'],
+    'dinner' =>
+      isVeg ? ['Vegetable soup', 'Rye bread'] : ['Turkey slices', 'Soup'],
+    _ => ['Lighter simple meal'],
+  };
+}
+
 List<String> _mixedMealDishes(String mealId, {required bool isVeg}) {
   return switch (mealId) {
     'breakfast' => ['Oats', 'Fruit', 'Yogurt'],
@@ -1796,9 +2847,14 @@ List<String> _mixedMealDishes(String mealId, {required bool isVeg}) {
   };
 }
 
-List<String> _customMealDishes(String mealId, {required bool isVeg}) {
+List<String> _customMealDishes(
+  String mealId, {
+  required bool isVeg,
+  String? customText,
+}) {
+  final prefix = customText?.trim().isNotEmpty == true ? 'Local' : 'Simple';
   return switch (mealId) {
-    'breakfast' => ['Simple local breakfast', 'Fruit'],
+    'breakfast' => ['$prefix local breakfast', 'Fruit'],
     'extra-snack' => ['Light snack'],
     'lunch' =>
       isVeg
@@ -1808,6 +2864,111 @@ List<String> _customMealDishes(String mealId, {required bool isVeg}) {
     'dinner' => isVeg ? ['Simple veg dinner'] : ['Simple dinner with protein'],
     _ => ['Simple meal'],
   };
+}
+
+List<String> _customGoalMealDishes(
+  String mealId,
+  String bodyGoal,
+  String? customText,
+) {
+  final style = customText?.trim().isNotEmpty == true
+      ? 'custom-style'
+      : 'local';
+  final descriptor = bodyGoal == 'gain' ? 'higher-energy' : 'lighter';
+  return switch (mealId) {
+    'breakfast' => ['$descriptor $style breakfast', 'Fruit'],
+    'extra-snack' => ['$descriptor snack'],
+    'lunch' => ['$descriptor $style lunch', 'Protein side'],
+    'snack' => ['$descriptor tea snack'],
+    'dinner' => ['$descriptor $style dinner'],
+    _ => ['$descriptor simple meal'],
+  };
+}
+
+String _goalLabel(String value) {
+  return switch (value) {
+    'gain' => 'Gain',
+    'lose' => 'Lose',
+    'maintain' => 'Maintain',
+    'breakfast' => 'Breakfast',
+    'lunch' => 'Lunch',
+    'snack' => 'Snack',
+    'extra-snack' => 'Extra snack',
+    'dinner' => 'Dinner',
+    _ =>
+      value
+          .replaceAll('_', ' ')
+          .replaceAll('-', ' ')
+          .trim()
+          .split(RegExp(r'\s+'))
+          .map(
+            (word) => word.isEmpty
+                ? word
+                : '${word[0].toUpperCase()}${word.substring(1)}',
+          )
+          .join(' '),
+  };
+}
+
+String _styleLabel(String value) {
+  return switch (value) {
+    'us' => 'US',
+    'germany' => 'Germany',
+    'mixed' => 'Mixed',
+    'custom' => 'Custom',
+    _ => 'India',
+  };
+}
+
+String _typeLabel(String value) {
+  return switch (value) {
+    'veg' => 'Veg',
+    'non_veg' => 'Non-veg',
+    _ => 'Mixed',
+  };
+}
+
+String _mealTitleForDisplay(TimelineBlockDraft block) {
+  final category = block.mealCategory;
+  final title = block.title.trim();
+  if (category != null && _looksLikeRawMealLabel(title)) {
+    return _goalLabel(category);
+  }
+  return title.isEmpty ? _goalLabel(category ?? 'Meal') : title;
+}
+
+IconData _mealIcon(String? category) {
+  return switch (category) {
+    'breakfast' => Icons.wb_sunny_rounded,
+    'lunch' => Icons.restaurant_rounded,
+    'snack' || 'extra-snack' => Icons.local_cafe_rounded,
+    'dinner' => Icons.nightlight_round,
+    _ => Icons.restaurant_menu_rounded,
+  };
+}
+
+List<int> _mealBoundaryMinutes(
+  List<TimelineBlockDraft> blocks,
+  int startMinute,
+  int endMinute,
+) {
+  final minutes =
+      <int>{
+          for (final block in blocks) ...[block.startMinute, block.endMinute],
+        }.where((minute) {
+          return minute % 60 != 0 && minute > startMinute && minute < endMinute;
+        }).toList()
+        ..sort();
+  return minutes;
+}
+
+String _compactMinuteLabel(int minute) {
+  final safe = minute.clamp(0, 24 * 60).toInt();
+  final hour = safe ~/ 60;
+  final m = safe % 60;
+  final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+  final suffix = hour >= 12 ? 'p' : 'a';
+  return '$displayHour:${m.toString().padLeft(2, '0')}$suffix';
 }
 
 class _MealSpec {
