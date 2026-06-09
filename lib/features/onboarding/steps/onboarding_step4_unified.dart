@@ -24,24 +24,43 @@ class _PhotoSlot {
   final UploadedAsset asset;
   final String label;
   final RoutineImportReviewSource source;
+  final UploadedAssetPurpose purpose;
 
   const _PhotoSlot({
     required this.asset,
     required this.label,
     required this.source,
+    required this.purpose,
   });
 
   _PhotoSlot copyWith({
     UploadedAsset? asset,
     String? label,
     RoutineImportReviewSource? source,
+    UploadedAssetPurpose? purpose,
   }) {
     return _PhotoSlot(
       asset: asset ?? this.asset,
       label: label ?? this.label,
       source: source ?? this.source,
+      purpose: purpose ?? this.purpose,
     );
   }
+}
+
+@visibleForTesting
+class Onboarding4UploadTargetSpec {
+  final RoutineImportReviewSource source;
+  final UploadedAssetPurpose purpose;
+  final String thumbnailLabel;
+  final String title;
+
+  const Onboarding4UploadTargetSpec({
+    required this.source,
+    required this.purpose,
+    required this.thumbnailLabel,
+    required this.title,
+  });
 }
 
 class _UploadTarget {
@@ -58,6 +77,20 @@ class _UploadTarget {
     required this.title,
     required this.icon,
   });
+
+  factory _UploadTarget.fromSpec(Onboarding4UploadTargetSpec spec) {
+    return _UploadTarget(
+      source: spec.source,
+      purpose: spec.purpose,
+      thumbnailLabel: spec.thumbnailLabel,
+      title: spec.title,
+      icon: spec.source == RoutineImportReviewSource.classes
+          ? Icons.school_rounded
+          : spec.thumbnailLabel == 'Business'
+          ? Icons.business_center_rounded
+          : Icons.work_rounded,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -88,21 +121,22 @@ class _VisualTimelineBlock {
   });
 }
 
-class _CandidateMappingResult {
+@visibleForTesting
+class Onboarding4CandidateMappingResult {
   final List<ClassRoutineBlock> blocks;
   final int droppedNoTitle;
   final int droppedInvalidTime;
   final int droppedNoRepeatDays;
   final int droppedNonWork;
-  final List<String> noRepeatDayExamples;
+  final List<String> droppedExamples;
 
-  const _CandidateMappingResult({
+  const Onboarding4CandidateMappingResult({
     required this.blocks,
     required this.droppedNoTitle,
     required this.droppedInvalidTime,
     required this.droppedNoRepeatDays,
     required this.droppedNonWork,
-    this.noRepeatDayExamples = const [],
+    this.droppedExamples = const [],
   });
 
   int get droppedTotal =>
@@ -117,8 +151,65 @@ class _CandidateMappingResult {
         'noRepeatDays=$droppedNoRepeatDays nonWork=$droppedNonWork';
   }
 
-  String get noRepeatDayExampleText =>
-      noRepeatDayExamples.isEmpty ? 'none' : noRepeatDayExamples.join(' || ');
+  String get droppedExampleText =>
+      droppedExamples.isEmpty ? 'none' : droppedExamples.join(' || ');
+}
+
+@visibleForTesting
+List<Onboarding4UploadTargetSpec> onboarding4UploadTargetsForRole(
+  String? role,
+) {
+  final classesRequired =
+      role == LifeRoleDraft.studentKey ||
+      role == LifeRoleDraft.studentWorkingKey;
+  final workRequired =
+      role == LifeRoleDraft.workingKey ||
+      role == LifeRoleDraft.studentWorkingKey ||
+      role == LifeRoleDraft.businessKey;
+  if (classesRequired && workRequired) {
+    return const [
+      Onboarding4UploadTargetSpec(
+        source: RoutineImportReviewSource.classes,
+        purpose: UploadedAssetPurpose.classTimetable,
+        thumbnailLabel: 'Class',
+        title: 'Class timetable',
+      ),
+      Onboarding4UploadTargetSpec(
+        source: RoutineImportReviewSource.work,
+        purpose: UploadedAssetPurpose.workSchedule,
+        thumbnailLabel: 'Work',
+        title: 'Work schedule',
+      ),
+    ];
+  }
+  if (classesRequired) {
+    return const [
+      Onboarding4UploadTargetSpec(
+        source: RoutineImportReviewSource.classes,
+        purpose: UploadedAssetPurpose.classTimetable,
+        thumbnailLabel: 'Class',
+        title: 'Class timetable',
+      ),
+    ];
+  }
+  if (role == LifeRoleDraft.businessKey) {
+    return const [
+      Onboarding4UploadTargetSpec(
+        source: RoutineImportReviewSource.work,
+        purpose: UploadedAssetPurpose.workSchedule,
+        thumbnailLabel: 'Business',
+        title: 'Work/Business schedule',
+      ),
+    ];
+  }
+  return const [
+    Onboarding4UploadTargetSpec(
+      source: RoutineImportReviewSource.work,
+      purpose: UploadedAssetPurpose.workSchedule,
+      thumbnailLabel: 'Work',
+      title: 'Work schedule',
+    ),
+  ];
 }
 
 @visibleForTesting
@@ -202,6 +293,8 @@ bool _hasAllowedWorkText(String normalized) {
       normalized.contains('client call') ||
       normalized.contains('meeting') ||
       normalized.contains('team sync') ||
+      normalized.contains('team review') ||
+      normalized.contains('weekly review') ||
       normalized.contains('project work') ||
       normalized.contains('training') ||
       normalized.contains('freelance') ||
@@ -212,8 +305,16 @@ bool _hasAllowedWorkText(String normalized) {
 }
 
 List<int> _dayNumbersFromText(String text) {
-  final lower = text.toLowerCase();
+  final lower = text
+      .toLowerCase()
+      .replaceAll(RegExp(r'[–—]'), '-')
+      .replaceAll(RegExp(r'[\(\)\[\]\{\},.:;_/]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
   final found = <int>{};
+  if (RegExp(r'(^|[^a-z])weekdays?($|[^a-z])').hasMatch(lower)) {
+    found.addAll(const [1, 2, 3, 4, 5]);
+  }
   final aliases = <String, int>{
     'mon': 1,
     'monday': 1,
@@ -261,6 +362,90 @@ List<int> _dayNumbersFromText(String text) {
   return found.toList()..sort();
 }
 
+@visibleForTesting
+Onboarding4CandidateMappingResult mapOnboarding4Candidates({
+  required List<RoutineImportCandidateBlock> candidates,
+  required ScheduleSetupConfig config,
+}) {
+  final blocks = <ClassRoutineBlock>[];
+  var droppedNoTitle = 0;
+  var droppedInvalidTime = 0;
+  var droppedNoRepeatDays = 0;
+  var droppedNonWork = 0;
+  final droppedExamples = <String>[];
+
+  void addExample(String reason, RoutineImportCandidateBlock candidate) {
+    if (droppedExamples.length >= 5) return;
+    droppedExamples.add('$reason ${candidateDayDebugLabel(candidate)}');
+  }
+
+  for (final candidate in candidates) {
+    final title = candidate.title.trim();
+    if (title.isEmpty) {
+      droppedNoTitle++;
+      addExample('droppedNoTitle', candidate);
+      continue;
+    }
+    if (config.source == RoutineImportReviewSource.work &&
+        isDisallowedOnboarding4WorkCandidate(candidate)) {
+      droppedNonWork++;
+      addExample('droppedNonWork', candidate);
+      continue;
+    }
+    if (candidate.startMinute >= candidate.endMinute) {
+      droppedInvalidTime++;
+      addExample('droppedInvalidTime', candidate);
+      continue;
+    }
+    final repeatDays = repeatDaysForOnboarding4Candidate(candidate);
+    if (repeatDays.isEmpty) {
+      droppedNoRepeatDays++;
+      addExample('droppedNoRepeatDays', candidate);
+      continue;
+    }
+
+    blocks.add(
+      ClassRoutineBlock(
+        id: candidate.id,
+        subject: title,
+        room: candidate.location?.trim() ?? '',
+        startMinute: candidate.startMinute.clamp(0, 24 * 60 - 1),
+        endMinute: candidate.endMinute.clamp(1, 24 * 60),
+        repeatDays: repeatDays,
+        icon: config.icon,
+        color: config.colorCycle[blocks.length % config.colorCycle.length],
+        hasTopTape: true,
+        hasBottomTape: true,
+      ),
+    );
+  }
+
+  return Onboarding4CandidateMappingResult(
+    blocks: blocks,
+    droppedNoTitle: droppedNoTitle,
+    droppedInvalidTime: droppedInvalidTime,
+    droppedNoRepeatDays: droppedNoRepeatDays,
+    droppedNonWork: droppedNonWork,
+    droppedExamples: droppedExamples,
+  );
+}
+
+@visibleForTesting
+String candidateDayDebugLabel(RoutineImportCandidateBlock candidate) {
+  final title = candidate.title.trim().isEmpty
+      ? 'untitled'
+      : candidate.title.trim();
+  final row = candidate.sourceRowLabel?.trim();
+  final column = candidate.sourceColumnLabel?.trim();
+  final snippet = candidate.sourceTextSnippet?.trim();
+  final shortSnippet = snippet == null || snippet.isEmpty
+      ? 'none'
+      : (snippet.length > 80 ? '${snippet.substring(0, 80)}...' : snippet);
+  return 'title=$title row=${row?.isEmpty ?? true ? 'none' : row} '
+      'column=${column?.isEmpty ?? true ? 'none' : column} '
+      'snippet=$shortSnippet';
+}
+
 // ---------------------------------------------------------------------------
 //  OnboardingStep4Unified — the single-screen Classes & Job widget
 // ---------------------------------------------------------------------------
@@ -283,28 +468,6 @@ class _OnboardingStep4UnifiedState
   static const _kOverlapMaxLabelWidth = 96.0;
   static const _kOverlapMinFrontWidth = 152.0;
   static const _kMaxOverlapLane = 2;
-  static const _classUploadTarget = _UploadTarget(
-    source: RoutineImportReviewSource.classes,
-    purpose: UploadedAssetPurpose.classTimetable,
-    thumbnailLabel: 'Class',
-    title: 'Class timetable',
-    icon: Icons.school_rounded,
-  );
-  static const _workUploadTarget = _UploadTarget(
-    source: RoutineImportReviewSource.work,
-    purpose: UploadedAssetPurpose.workSchedule,
-    thumbnailLabel: 'Work',
-    title: 'Work schedule',
-    icon: Icons.work_rounded,
-  );
-  static const _businessUploadTarget = _UploadTarget(
-    source: RoutineImportReviewSource.work,
-    purpose: UploadedAssetPurpose.workSchedule,
-    thumbnailLabel: 'Business',
-    title: 'Work/Business schedule',
-    icon: Icons.business_center_rounded,
-  );
-
   final List<_PhotoSlot> _photos = [];
   bool _isUploading = false;
   bool _isGenerating = false;
@@ -328,14 +491,9 @@ class _OnboardingStep4UnifiedState
 
   bool get _needsBothPhotos => _classesRequired && _workRequired;
   List<_UploadTarget> get _uploadTargets {
-    if (_needsBothPhotos) {
-      return const [_classUploadTarget, _workUploadTarget];
-    }
-    if (_classesRequired) return const [_classUploadTarget];
-    if (_role == LifeRoleDraft.businessKey) {
-      return const [_businessUploadTarget];
-    }
-    return const [_workUploadTarget];
+    return onboarding4UploadTargetsForRole(
+      _role,
+    ).map(_UploadTarget.fromSpec).toList(growable: false);
   }
 
   int get _maxPhotos => _uploadTargets.length;
@@ -357,16 +515,15 @@ class _OnboardingStep4UnifiedState
 
   String get _uploadSubtitle {
     if (_needsBothPhotos) {
-      return 'Upload both class and work schedule photos before '
-          'generating your timeline.';
+      return 'Add both photos, then generate your timeline.';
     }
     if (_classesRequired) {
-      return 'Use a clear photo of your weekly class schedule.';
+      return 'Add your weekly class timetable photo.';
     }
     if (_role == LifeRoleDraft.businessKey) {
-      return 'Use a clear photo of your work, shift, client, or business schedule.';
+      return 'Add your work, shift, or business schedule photo.';
     }
-    return 'Use a clear photo of your weekly work schedule.';
+    return 'Add your weekly work schedule photo.';
   }
 
   String get _loadingTitle {
@@ -479,10 +636,6 @@ class _OnboardingStep4UnifiedState
   List<int> _safeRepeatDays(List<int> days) {
     final safe = days.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
     return safe.isEmpty ? const [1] : safe;
-  }
-
-  List<int> _repeatDaysForCandidate(RoutineImportCandidateBlock candidate) {
-    return repeatDaysForOnboarding4Candidate(candidate);
   }
 
   _PhotoSlot? _photoForSource(RoutineImportReviewSource source) {
@@ -774,6 +927,7 @@ class _OnboardingStep4UnifiedState
           asset: asset,
           label: target.thumbnailLabel,
           source: target.source,
+          purpose: target.purpose,
         ),
       );
       _photos.sort(_comparePhotoSlots);
@@ -864,106 +1018,38 @@ class _OnboardingStep4UnifiedState
         : ScheduleSetupConfig.workSetup;
   }
 
-  _CandidateMappingResult _blocksFromCandidates(
+  Onboarding4CandidateMappingResult _blocksFromCandidates(
     List<RoutineImportCandidateBlock> candidates,
     ScheduleSetupConfig config,
   ) {
-    final blocks = <ClassRoutineBlock>[];
-    var droppedNoTitle = 0;
-    var droppedInvalidTime = 0;
-    var droppedNoRepeatDays = 0;
-    var droppedNonWork = 0;
-    final noRepeatDayExamples = <String>[];
-
-    for (final candidate in candidates) {
-      final title = candidate.title.trim();
-      if (title.isEmpty) {
-        droppedNoTitle++;
-        continue;
-      }
-      if (config.source == RoutineImportReviewSource.work &&
-          isDisallowedOnboarding4WorkCandidate(candidate)) {
-        droppedNonWork++;
-        continue;
-      }
-      if (candidate.startMinute >= candidate.endMinute) {
-        droppedInvalidTime++;
-        continue;
-      }
-      final repeatDays = _repeatDaysForCandidate(candidate);
-      if (repeatDays.isEmpty) {
-        droppedNoRepeatDays++;
-        if (noRepeatDayExamples.length < 3) {
-          noRepeatDayExamples.add(_candidateDayDebugLabel(candidate));
-        }
-        continue;
-      }
-
-      blocks.add(
-        ClassRoutineBlock(
-          id: candidate.id,
-          subject: title,
-          room: candidate.location?.trim() ?? '',
-          startMinute: candidate.startMinute.clamp(0, 24 * 60 - 1),
-          endMinute: candidate.endMinute.clamp(1, 24 * 60),
-          repeatDays: repeatDays,
-          icon: config.icon,
-          color: config.colorCycle[blocks.length % config.colorCycle.length],
-          hasTopTape: true,
-          hasBottomTape: true,
-        ),
-      );
-    }
-
-    return _CandidateMappingResult(
-      blocks: blocks,
-      droppedNoTitle: droppedNoTitle,
-      droppedInvalidTime: droppedInvalidTime,
-      droppedNoRepeatDays: droppedNoRepeatDays,
-      droppedNonWork: droppedNonWork,
-      noRepeatDayExamples: noRepeatDayExamples,
-    );
-  }
-
-  String _candidateDayDebugLabel(RoutineImportCandidateBlock candidate) {
-    final title = candidate.title.trim().isEmpty
-        ? 'untitled'
-        : candidate.title.trim();
-    final row = candidate.sourceRowLabel?.trim();
-    final column = candidate.sourceColumnLabel?.trim();
-    final snippet = candidate.sourceTextSnippet?.trim();
-    final shortSnippet = snippet == null || snippet.isEmpty
-        ? 'none'
-        : (snippet.length > 80 ? '${snippet.substring(0, 80)}...' : snippet);
-    return 'title=$title row=${row?.isEmpty ?? true ? 'none' : row} '
-        'column=${column?.isEmpty ?? true ? 'none' : column} '
-        'snippet=$shortSnippet';
+    return mapOnboarding4Candidates(candidates: candidates, config: config);
   }
 
   void _debugLogExtraction({
     required _PhotoSlot photo,
     required int candidateCount,
-    required _CandidateMappingResult mapping,
+    required Onboarding4CandidateMappingResult mapping,
     required List<String> warnings,
   }) {
     if (!kDebugMode) return;
     final warningText = warnings.isEmpty ? 'none' : warnings.join(' | ');
+    final status = mapping.blocks.isNotEmpty ? 'success' : 'fail';
     debugPrint(
       '[Onboarding4] source=${photo.source.name} '
-      'rawCandidates=$candidateCount visibleBlocks=${mapping.blocks.length} '
+      'status=$status rawCandidates=$candidateCount '
+      'mappedBlocks=${mapping.blocks.length} '
       'warnings=$warningText filtered=${mapping.filterSummary}',
     );
-    if (photo.source == RoutineImportReviewSource.work &&
-        mapping.blocks.isEmpty) {
+    if (mapping.blocks.isEmpty) {
       debugPrint(
-        '[Onboarding4] work zero result source=${photo.source.name} '
-        'purpose=${photo.asset.purpose.name} '
+        '[Onboarding4] zero mapped blocks source=${photo.source.name} '
+        'purpose=${photo.purpose.name} '
         'workerMode=${OptivusRoutineImportAiConfig.mode.name} '
         'uploadedAssetIdExists=${photo.asset.assetId.trim().isNotEmpty} '
         'uploadedAssetR2KeyExists=${photo.asset.r2Key.trim().isNotEmpty} '
-        'warnings=$warningText rawCandidates=$candidateCount visibleCandidates=0 '
+        'warnings=$warningText rawCandidates=$candidateCount mappedBlocks=0 '
         'filtered=${mapping.filterSummary} '
-        'noRepeatDayExamples=${mapping.noRepeatDayExampleText}',
+        'examples=${mapping.droppedExampleText}',
       );
     }
   }
@@ -972,7 +1058,7 @@ class _OnboardingStep4UnifiedState
     if (!kDebugMode) return;
     debugPrint(
       '[Onboarding4] extracting target=${photo.label} '
-      'source=${photo.source.name} purpose=${photo.asset.purpose.name} '
+      'source=${photo.source.name} purpose=${photo.purpose.name} '
       'assetId=${photo.asset.assetId.trim().isEmpty ? 'missing' : photo.asset.assetId} '
       'r2=${photo.asset.r2Key.trim().isEmpty ? 'missing' : 'exists'}',
     );
@@ -1213,7 +1299,7 @@ class _OnboardingStep4UnifiedState
             ];
         final config = _configForSource(photo.source);
         final mapping = result == null
-            ? const _CandidateMappingResult(
+            ? const Onboarding4CandidateMappingResult(
                 blocks: <ClassRoutineBlock>[],
                 droppedNoTitle: 0,
                 droppedInvalidTime: 0,
@@ -1799,8 +1885,7 @@ class _OnboardingStep4UnifiedState
             const SizedBox(height: 4),
             Text(
               _uploadSubtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
               style: const TextStyle(
                 fontSize: 10.5,
                 height: 1.15,
@@ -1852,7 +1937,8 @@ class _OnboardingStep4UnifiedState
   Widget _buildUploadTargetsRow() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stackTargets = _needsBothPhotos && constraints.maxWidth < 286;
+        final stackTargets = _needsBothPhotos && constraints.maxWidth < 210;
+        final pairTileWidth = constraints.maxWidth < 236 ? 72.0 : 80.0;
         final targets = _needsBothPhotos
             ? KeyedSubtree(
                 key: const ValueKey('onboarding-step4-upload-targets-pair'),
@@ -1875,6 +1961,10 @@ class _OnboardingStep4UnifiedState
                         ],
                       )
                     : Row(
+                        key: const ValueKey(
+                          'onboarding-step4-upload-targets-horizontal',
+                        ),
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           for (
@@ -1882,7 +1972,8 @@ class _OnboardingStep4UnifiedState
                             index < _uploadTargets.length;
                             index++
                           )
-                            Expanded(
+                            SizedBox(
+                              width: pairTileWidth,
                               child: Padding(
                                 padding: EdgeInsets.only(
                                   right: index == 0 ? 8 : 0,
@@ -1903,7 +1994,9 @@ class _OnboardingStep4UnifiedState
         return Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Expanded(child: targets),
+            Expanded(
+              child: Align(alignment: Alignment.centerLeft, child: targets),
+            ),
             if (_isUploading) ...[
               const SizedBox(width: 7),
               _buildUploadingIndicator(),
@@ -2025,7 +2118,7 @@ class _OnboardingStep4UnifiedState
 
   Widget _buildUploadTarget(_UploadTarget target) {
     final photo = _photoForSource(target.source);
-    final width = _needsBothPhotos ? double.infinity : 102.0;
+    final width = _needsBothPhotos ? 72.0 : 102.0;
     return SizedBox(
       key: ValueKey('onboarding-step4-upload-target-${target.source.name}'),
       width: width,
@@ -2036,10 +2129,9 @@ class _OnboardingStep4UnifiedState
           Text(
             target.title,
             textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
             style: const TextStyle(
-              fontSize: 9.5,
+              fontSize: 9,
               height: 1.05,
               fontWeight: FontWeight.w900,
               color: OptivusColors.textPrimary,

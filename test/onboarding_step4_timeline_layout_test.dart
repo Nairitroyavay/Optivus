@@ -8,6 +8,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timelin
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
+import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/app_state.dart';
 
 void main() {
@@ -320,71 +321,76 @@ void main() {
     },
   );
 
-  testWidgets('Student + Working shows deterministic class/work upload targets', (
-    tester,
-  ) async {
-    final draft = OnboardingDraft(
-      lifeRole: const LifeRoleDraft(
-        lifeRole: LifeRoleDraft.studentWorkingKey,
-        workType: 'part_time',
-      ),
-      baseTimeline: const BaseTimelineDraft(),
-    );
+  testWidgets(
+    'Student + Working shows deterministic class/work upload targets',
+    (tester) async {
+      final draft = OnboardingDraft(
+        lifeRole: const LifeRoleDraft(
+          lifeRole: LifeRoleDraft.studentWorkingKey,
+          workType: 'part_time',
+        ),
+        baseTimeline: const BaseTimelineDraft(),
+      );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
-          ),
-        ],
-        child: const MaterialApp(
-          home: Scaffold(
-            body: SizedBox.expand(child: OnboardingStep4Unified()),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: SizedBox.expand(child: OnboardingStep4Unified()),
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('Upload your class and work timetable'), findsOneWidget);
-    expect(find.text('Class timetable'), findsOneWidget);
-    expect(find.text('Work schedule'), findsOneWidget);
-    expect(find.text('Set Your Weekly Schedule'), findsOneWidget);
-    expect(find.text('MON'), findsOneWidget);
-    expect(find.text('SUN'), findsOneWidget);
-    final classTarget = find.byKey(
-      const ValueKey('onboarding-step4-upload-target-classes'),
-    );
-    final workTarget = find.byKey(
-      const ValueKey('onboarding-step4-upload-target-work'),
-    );
-    expect(classTarget, findsOneWidget);
-    expect(workTarget, findsOneWidget);
-    expect(
-      (tester.getTopLeft(classTarget).dy - tester.getTopLeft(workTarget).dy)
-          .abs(),
-      lessThan(2),
-    );
-    expect(
-      tester.getTopLeft(workTarget).dx,
-      greaterThan(tester.getTopLeft(classTarget).dx),
-    );
-    expect(
-      tester
-          .getSize(find.byKey(const ValueKey('onboarding-step4-upload-card')))
-          .height,
-      lessThan(165),
-    );
-    expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
-    expect(
-      find.text(
-        'Upload both class and work schedule photos before generating your timeline.',
-      ),
-      findsOneWidget,
-    );
-  });
+      expect(tester.takeException(), isNull);
+      expect(find.text('Upload your class and work timetable'), findsOneWidget);
+      expect(find.text('Class timetable'), findsOneWidget);
+      expect(find.text('Work schedule'), findsOneWidget);
+      expect(find.text('Set Your Weekly Schedule'), findsOneWidget);
+      expect(find.text('MON'), findsOneWidget);
+      expect(find.text('SUN'), findsOneWidget);
+      final classTarget = find.byKey(
+        const ValueKey('onboarding-step4-upload-target-classes'),
+      );
+      final workTarget = find.byKey(
+        const ValueKey('onboarding-step4-upload-target-work'),
+      );
+      expect(classTarget, findsOneWidget);
+      expect(workTarget, findsOneWidget);
+      expect(
+        (tester.getTopLeft(classTarget).dy - tester.getTopLeft(workTarget).dy)
+            .abs(),
+        lessThan(2),
+      );
+      expect(
+        tester.getTopLeft(workTarget).dx,
+        greaterThan(tester.getTopLeft(classTarget).dx),
+      );
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('onboarding-step4-upload-card')))
+            .height,
+        lessThan(165),
+      );
+      expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+      expect(
+        find.text('Add both photos, then generate your timeline.'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(
+          const ValueKey('onboarding-step4-upload-targets-horizontal'),
+        ),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('Business role uses work/business upload target only', (
     tester,
@@ -417,9 +423,7 @@ void main() {
     expect(find.text('Work/Business schedule'), findsOneWidget);
     expect(find.text('Class timetable'), findsNothing);
     expect(
-      find.text(
-        'Use a clear photo of your work, shift, client, or business schedule.',
-      ),
+      find.text('Add your work, shift, or business schedule photo.'),
       findsOneWidget,
     );
   });
@@ -828,6 +832,20 @@ void main() {
         const [2],
       );
       expect(
+        repeatDaysForOnboarding4Candidate(_candidate(sourceRowLabel: 'MON(1)')),
+        const [1],
+      );
+      expect(
+        repeatDaysForOnboarding4Candidate(_candidate(sourceRowLabel: 'TUE(1)')),
+        const [2],
+      );
+      expect(
+        repeatDaysForOnboarding4Candidate(
+          _candidate(sourceColumnLabel: 'Friday'),
+        ),
+        const [5],
+      );
+      expect(
         repeatDaysForOnboarding4Candidate(
           _candidate(sourceTextSnippet: 'Mon-Fri 9:00 Office Work'),
         ),
@@ -838,6 +856,92 @@ void main() {
         isEmpty,
       );
       expect(repeatDaysForOnboarding4Candidate(_candidate()), isEmpty);
+    },
+  );
+
+  test(
+    'Student + Working upload targets route source and purpose by target',
+    () {
+      final targets = onboarding4UploadTargetsForRole(
+        LifeRoleDraft.studentWorkingKey,
+      );
+
+      expect(targets, hasLength(2));
+      expect(targets.first.thumbnailLabel, 'Class');
+      expect(targets.first.source, RoutineImportReviewSource.classes);
+      expect(targets.first.purpose, UploadedAssetPurpose.classTimetable);
+      expect(targets.last.thumbnailLabel, 'Work');
+      expect(targets.last.source, RoutineImportReviewSource.work);
+      expect(targets.last.purpose, UploadedAssetPurpose.workSchedule);
+
+      final reversedUploadOrder = [targets.last, targets.first];
+      expect(reversedUploadOrder.first.thumbnailLabel, 'Work');
+      expect(
+        targets.firstWhere((target) => target.thumbnailLabel == 'Class').source,
+        RoutineImportReviewSource.classes,
+      );
+      expect(
+        targets.firstWhere((target) => target.thumbnailLabel == 'Work').purpose,
+        UploadedAssetPurpose.workSchedule,
+      );
+    },
+  );
+
+  test(
+    'Onboarding 4 mapping accepts class abbreviations with time and day',
+    () {
+      final result = mapOnboarding4Candidates(
+        candidates: [
+          _candidate(title: 'AFL', sourceRowLabel: 'MON(1)', category: 'other'),
+          _candidate(title: 'DS', sourceColumnLabel: 'TUE(1)'),
+          _candidate(title: 'DSD', sourceTextSnippet: 'Friday 9-10 DSD'),
+          _candidate(title: '', sourceRowLabel: 'MON'),
+          _candidate(title: 'PS'),
+        ],
+        config: ScheduleSetupConfig.classSetup,
+      );
+
+      expect(result.blocks.map((block) => block.subject), ['AFL', 'DS', 'DSD']);
+      expect(result.blocks[0].repeatDays, const [1]);
+      expect(result.blocks[1].repeatDays, const [2]);
+      expect(result.blocks[2].repeatDays, const [5]);
+      expect(result.droppedNoTitle, 1);
+      expect(result.droppedNoRepeatDays, 1);
+    },
+  );
+
+  test(
+    'Onboarding 4 mapping accepts work blocks and rejects personal blocks',
+    () {
+      final result = mapOnboarding4Candidates(
+        candidates: [
+          for (final title in const [
+            'Office Work',
+            'Lunch Break',
+            'Client Calls',
+            'Freelance Project',
+          ])
+            _candidate(title: title, sourceColumnLabel: 'Mon-Fri'),
+          for (final title in const [
+            'Gym',
+            'Study',
+            'Online Course',
+            'Rest Day',
+          ])
+            _candidate(title: title, sourceColumnLabel: 'Mon-Fri'),
+        ],
+        config: ScheduleSetupConfig.workSetup,
+      );
+
+      expect(result.blocks.map((block) => block.subject), [
+        'Office Work',
+        'Lunch Break',
+        'Client Calls',
+        'Freelance Project',
+      ]);
+      expect(result.droppedNonWork, 4);
+      expect(result.droppedInvalidTime, 0);
+      expect(result.droppedNoRepeatDays, 0);
     },
   );
 
@@ -1083,6 +1187,7 @@ TimelineBlockDraft _timelineBlock({
 
 RoutineImportCandidateBlock _candidate({
   String title = 'Office Work',
+  String category = 'job',
   List<int> repeatDays = const [],
   String? sourceColumnLabel,
   String? sourceRowLabel,
@@ -1095,7 +1200,7 @@ RoutineImportCandidateBlock _candidate({
     endMinute: 10 * 60,
     repeatDays: repeatDays,
     blockType: TimelineBlockDraft.hardBlockKey,
-    category: 'job',
+    category: category,
     hardBlock: true,
     sourceColumnLabel: sourceColumnLabel,
     sourceRowLabel: sourceRowLabel,
