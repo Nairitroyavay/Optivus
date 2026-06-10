@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 enum OptivusAiWorkerMode { disabled, fake, worker }
 
 class OptivusAiWorkersConfig {
@@ -9,6 +11,9 @@ class OptivusAiWorkersConfig {
   );
 
   static OptivusAiWorkerMode get mode {
+    if (kReleaseMode) {
+      return OptivusAiWorkerMode.worker;
+    }
     return switch (_modeName) {
       'worker' => OptivusAiWorkerMode.worker,
       'disabled' => OptivusAiWorkerMode.disabled,

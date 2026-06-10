@@ -66,7 +66,7 @@ void main() {
       baseUrl: 'https://worker.test',
       client: MockClient((request) async {
         expect(request.method, 'POST');
-        expect(request.url.path, '/v1/routine-import/extract');
+        expect(request.url.path, '/v1/routine-import/classes');
         expect(request.headers['Authorization'], 'Bearer token');
         return http.Response(jsonEncode(_resultMap()), 200);
       }),

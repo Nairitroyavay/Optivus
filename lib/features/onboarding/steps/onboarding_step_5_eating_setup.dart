@@ -263,17 +263,28 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         idToken: idToken,
         params: {
           'bodyGoal': bodyContext.bodyGoal,
-          'eatingMode': base.foodStyleCustomText,
+          'eatingMode': base.eatingMode,
           'foodType': base.foodType,
           'foodStyleCustomText': base.foodStyleCustomText,
           'mealsPerDay': base.mealsPerDay,
           'targetCalories': bodyContext.targetCalories,
+          'proteinTarget': bodyContext.proteinTarget,
           'estimatedBmr': bodyContext.estimatedBmr,
           'breakfastMinute': base.breakfastMinute,
           'lunchMinute': base.lunchMinute,
           'dinnerMinute': base.dinnerMinute,
           'snackMinute': base.snackMinute,
           'extraSnackMinute': base.extraSnackMinute,
+          'mealTimes': bodyContext.mealTimes,
+          'heightCm': bodyContext.heightCm,
+          'weightKg': bodyContext.currentWeightKg,
+          'age': bodyContext.age,
+          'gender': bodyContext.gender,
+          'bmi': bodyContext.bmi,
+          'estimatedMaintenanceCalories': bodyContext.estimatedMaintenanceCalories,
+          'targetMode': bodyContext.targetMode,
+          'lifestyle': bodyContext.lifestyle,
+          'country': bodyContext.country,
         },
       );
 
@@ -1938,12 +1949,14 @@ class Onboarding5MealBodyContext {
   final int estimatedBmr;
   final int estimatedMaintenanceCalories;
   final int targetCalories;
+  final double? proteinTarget;
   final int mealsPerDay;
   final String eatingType;
   final String foodStyle;
   final String? customFoodStyle;
   final Map<String, int> mealTimes;
   final String? lifestyle;
+  final String? country;
   final bool hasBodyBasics;
 
   const Onboarding5MealBodyContext({
@@ -1957,12 +1970,14 @@ class Onboarding5MealBodyContext {
     required this.estimatedBmr,
     required this.estimatedMaintenanceCalories,
     required this.targetCalories,
+    required this.proteinTarget,
     required this.mealsPerDay,
     required this.eatingType,
     required this.foodStyle,
     required this.customFoodStyle,
     required this.mealTimes,
     required this.lifestyle,
+    required this.country,
     required this.hasBodyBasics,
   });
 }
@@ -2060,6 +2075,7 @@ Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
     estimatedBmr: bmr,
     estimatedMaintenanceCalories: maintenance,
     targetCalories: target,
+    proteinTarget: body.proteinEstimate,
     mealsPerDay: mealsPerDay,
     eatingType: _normalizedEatingType(base.foodType),
     foodStyle: _normalizedFoodStyle(base.eatingMode, base.foodStyleCustomText),
@@ -2068,6 +2084,7 @@ Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
         : base.foodStyleCustomText?.trim(),
     mealTimes: _mealTimesForBase(base, mealsPerDay),
     lifestyle: draft.lifeRole.lifeRole,
+    country: null, // Country is not captured in the current onboarding draft
     hasBodyBasics: hasBodyBasics,
   );
 }
@@ -2091,6 +2108,7 @@ List<TimelineBlockDraft> onboarding5GeneratedMealBlocks(
         estimatedBmr: 1550,
         estimatedMaintenanceCalories: 2200,
         targetCalories: 2200,
+        proteinTarget: null,
         mealsPerDay: _normalizedMealsPerDay(base.mealsPerDay),
         eatingType: _normalizedEatingType(base.foodType),
         foodStyle: _normalizedFoodStyle(
@@ -2103,6 +2121,7 @@ List<TimelineBlockDraft> onboarding5GeneratedMealBlocks(
           _normalizedMealsPerDay(base.mealsPerDay),
         ),
         lifestyle: null,
+        country: null,
         hasBodyBasics: false,
       );
   final mealsPerDay = context.mealsPerDay;

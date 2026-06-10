@@ -217,7 +217,7 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
 
     try {
       final response = await _client.post(
-        _workerUri('/v1/routine-import/extract'),
+        _workerUri(_pathForSource(review.source)),
         headers: {
           'Authorization': 'Bearer $idToken',
           'Content-Type': 'application/json',
@@ -239,10 +239,7 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
           review: review,
           engine: 'worker',
           engineVersion: 'phase2d',
-          warning:
-              body['message'] as String? ??
-              body['error'] as String? ??
-              'AI extraction service could not process this photo.',
+          warning: _friendlyErrorMessage(response.statusCode, body),
         );
       }
 
@@ -270,7 +267,8 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
         );
       }
       return result;
-    } catch (_) {
+    } catch (e, stack) {
+      debugPrint('Worker extraction caught error: $e\n$stack');
       return _fallbackResult(
         uid: uid,
         review: review,
@@ -279,6 +277,44 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
         warning: 'AI extraction service is unavailable. Try again later.',
       );
     }
+  }
+
+  String _pathForSource(RoutineImportReviewSource source) {
+    return switch (source) {
+      RoutineImportReviewSource.classes => '/v1/routine-import/classes',
+      RoutineImportReviewSource.work => '/v1/routine-import/work',
+      RoutineImportReviewSource.eating => '/v1/routine-import/eating-photo',
+      _ => '/v1/routine-import/extract',
+    };
+  }
+
+  String _friendlyErrorMessage(int statusCode, Map<String, dynamic> body) {
+    final rawError = body['error'] as String?;
+    
+    if (statusCode == 503 || statusCode == 429 || rawError == 'provider_high_demand' || rawError == 'provider_quota_exceeded' || rawError == 'provider_request_failed') {
+      return 'AI is busy right now. Try again in a moment.';
+    }
+    if (rawError == 'provider_invalid_response') {
+      return 'AI response could not be safely read. Please try again.';
+    }
+    if (rawError == 'provider_empty_candidates' || rawError == 'no_blocks_generated') {
+      return 'AI could not read blocks from the photo. Try a clearer image.';
+    }
+    if (rawError == 'unsupported_content_type') {
+      return 'Photo format is not supported. Please upload JPEG, PNG, or WEBP.';
+    }
+    if (rawError == 'r2_image_missing') {
+      return 'Uploaded photo could not be found. Please upload again.';
+    }
+    if (rawError?.startsWith('invalid_') == true && rawError?.endsWith('_request') == true) {
+      return 'The request was invalid. Please try again.';
+    }
+    if (rawError == 'payload_too_large') {
+      return 'The uploaded file is too large.';
+    }
+    
+    // Only return a friendly fallback, do not leak raw error codes to the UI
+    return 'AI extraction service could not process this photo.';
   }
 
 

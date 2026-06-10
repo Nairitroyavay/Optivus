@@ -53,15 +53,38 @@ async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<
   try {
     const { payload } = await jwtVerify(token, firebaseJwks, { issuer: `https://securetoken.google.com/${projectId}`, audience: projectId });
     if (!payload.sub) throw new Error("No uid");
+    if (payload.email_verified !== true) {
+      throw new HttpError(403, "forbidden", "Email not verified.");
+    }
     return { uid: payload.sub };
-  } catch {
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
     throw new HttpError(401, "unauthorized", "Invalid token");
   }
 }
 
-async function readSmallJson(request: Request): Promise<any> {
+async function readSmallJson(request: Request, maxBytes = 8192): Promise<any> {
+  const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+  if (contentLength > maxBytes) {
+    throw new HttpError(413, "payload_too_large", `Payload too large. Max ${maxBytes} bytes.`);
+  }
   const clone = request.clone();
-  return await clone.json();
+  try {
+    return await clone.json();
+  } catch {
+    throw new HttpError(400, "invalid_json", "Invalid JSON body.");
+  }
+}
+
+function assertOwnedSkinCareObjectKey(uid: string, key: string): void {
+  const normalized = key.replace(/\\/g, "/");
+  if (normalized.includes("../") || normalized.includes("..\\")) {
+    throw new HttpError(403, "forbidden", "Path traversal detected.");
+  }
+  const regex = new RegExp(`^users/${uid}/onboarding/skin_care/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic)$`);
+  if (!regex.test(normalized)) {
+    throw new HttpError(403, "forbidden", "Unauthorized R2 key access.");
+  }
 }
 
 function parseAiJsonText(text: string): any {
@@ -90,25 +113,32 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
   if (!body.productPhotos || !Array.isArray(body.productPhotos) || body.productPhotos.length === 0) {
     throw new HttpError(400, "invalid_skin_care_request", "Missing product photos.");
   }
+  if (body.productPhotos.length > 10) {
+    throw new HttpError(400, "too_many_photos", "Upload your main 10 products first. You can add more later.");
+  }
 
   const provider = env.AI_PROVIDER || "gemini";
   if (provider !== "gemini") {
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported for vision.");
   }
 
-  const model = env.AI_MODEL?.trim() || "gemini-2.5-flash";
   const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+  const primaryModel = env.AI_MODEL?.trim() || "gemini-3.5-flash";
+  const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
 
   const imageParts: any[] = [];
   
   for (const photoKey of body.productPhotos) {
     if (typeof photoKey !== "string") continue;
+    assertOwnedSkinCareObjectKey(user.uid, photoKey);
     const object = await env.UPLOAD_BUCKET.get(photoKey);
     if (!object) {
       throw new HttpError(404, "r2_image_missing", `Could not find uploaded image: ${photoKey}`);
     }
     const buffer = await object.arrayBuffer();
+    if (buffer.byteLength > 15 * 1024 * 1024) {
+      throw new HttpError(413, "payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
+    }
     const contentType = object.httpMetadata?.contentType || "image/jpeg";
     imageParts.push({
       inlineData: {
@@ -141,18 +171,36 @@ Return a JSON object:
   "warnings": []
 }`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-      generationConfig: { responseMimeType: "application/json" }
-    })
-  });
+  const fetchGemini = async (model: string) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+        generationConfig: { responseMimeType: "application/json" }
+      })
+    });
+    if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
+    const json = await res.json() as any;
+    return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  };
 
-  if (!res.ok) throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
-  const json = await res.json() as any;
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  let text = "";
+  try {
+    text = await fetchGemini(primaryModel);
+  } catch (err) {
+    if (fallbackModel && fallbackModel !== primaryModel) {
+      console.warn(`[SkinCareWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+      try {
+        text = await fetchGemini(fallbackModel);
+      } catch {
+        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+      }
+    } else {
+      throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+    }
+  }
   
   const parsed = parseAiJsonText(text) || { products: [], warnings: [] };
   
@@ -202,22 +250,39 @@ Return ONLY a strict JSON object:
   let text = "";
 
   if (provider === "gemini") {
-    const model = env.AI_MODEL?.trim() || "gemini-2.5-flash";
     const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
-    
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" }
-      })
-    });
-    
-    if (!res.ok) throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
-    const json = await res.json() as any;
-    text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+    const primaryModel = env.AI_MODEL?.trim() || "gemini-3.5-flash";
+    const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
+
+    const fetchGemini = async (model: string) => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+      if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
+      const json = await res.json() as any;
+      return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+    };
+
+    try {
+      text = await fetchGemini(primaryModel);
+    } catch (err) {
+      if (fallbackModel && fallbackModel !== primaryModel) {
+        console.warn(`[SkinCareWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+        try {
+          text = await fetchGemini(fallbackModel);
+        } catch {
+          throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+        }
+      } else {
+        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+      }
+    }
   } else {
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
   }

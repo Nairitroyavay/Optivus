@@ -1657,12 +1657,10 @@ void main() {
     expect(nextDraft.currentStep, onboardingFixedStepIndex);
     expect(nextDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
     expect(nextDraft.stepDirty[onboardingEatingStepIndex], isFalse);
-    expect(eatingBlocks.map((block) => block.title), [
-      'Breakfast',
-      'Lunch',
-      'Snack',
-      'Dinner',
-    ]);
+    expect(
+      eatingBlocks.map((b) => b.title).toList(),
+      ['Breakfast', 'Lunch', 'Snack', 'Dinner'],
+    );
     expect(
       eatingBlocks.every(
         (block) =>

@@ -52,15 +52,27 @@ async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<
   try {
     const { payload } = await jwtVerify(token, firebaseJwks, { issuer: `https://securetoken.google.com/${projectId}`, audience: projectId });
     if (!payload.sub) throw new Error("No uid");
+    if (payload.email_verified !== true) {
+      throw new HttpError(403, "forbidden", "Email not verified.");
+    }
     return { uid: payload.sub };
-  } catch {
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
     throw new HttpError(401, "unauthorized", "Invalid token");
   }
 }
 
-async function readSmallJson(request: Request): Promise<any> {
+async function readSmallJson(request: Request, maxBytes = 8192): Promise<any> {
+  const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+  if (contentLength > maxBytes) {
+    throw new HttpError(413, "payload_too_large", `Payload too large. Max ${maxBytes} bytes.`);
+  }
   const clone = request.clone();
-  return await clone.json();
+  try {
+    return await clone.json();
+  } catch {
+    throw new HttpError(400, "invalid_json", "Invalid JSON body.");
+  }
 }
 
 function readOptionalString(obj: any, key: string): string | undefined {
@@ -78,11 +90,23 @@ function parseAiJsonText(text: string): any {
 
 function buildEatingGeneratePrompt(context: any): string {
   return `You are a nutrition expert generating a weekly meal routine JSON.
-Target calories: ${context.targetCalories} kcal/day.
-Body goal: ${context.bodyGoal}.
-Diet type: ${context.foodType}.
-Style: ${context.eatingMode} ${context.foodStyleCustomText ? `(${context.foodStyleCustomText})` : ""}.
-Meals per day: ${context.mealsPerDay}.
+User Context:
+- Height: ${context.heightCm ? context.heightCm + " cm" : "Unknown"}
+- Weight: ${context.weightKg ? context.weightKg + " kg" : "Unknown"}
+- Age: ${context.age ?? "Unknown"}
+- Gender: ${context.gender ?? "Unknown"}
+- BMI: ${context.bmi ?? "Unknown"}
+- Estimated BMR: ${context.estimatedBmr ? context.estimatedBmr + " kcal" : "Unknown"}
+- Maintenance Calories: ${context.estimatedMaintenanceCalories ? context.estimatedMaintenanceCalories + " kcal" : "Unknown"}
+- Target Mode: ${context.targetMode ?? "Unknown"}
+- Target Calories: ${context.targetCalories} kcal/day
+- Protein Target: ${context.proteinTarget ? context.proteinTarget + " g" : "Unknown"}
+- Body goal: ${context.bodyGoal}.
+- Diet type: ${context.foodType}.
+- Style: ${context.eatingMode} ${context.foodStyleCustomText ? `(${context.foodStyleCustomText})` : ""}.
+- Meals per day: ${context.mealsPerDay}.
+- Lifestyle: ${context.lifestyle ?? "Unknown"}
+- Country: ${context.country ?? "Unknown"}
 
 Return ONLY a JSON object containing a "candidates" array of meal blocks. Each block MUST have:
 - "title": e.g. "Breakfast"
@@ -123,6 +147,16 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     dinnerMinute: typeof body.dinnerMinute === "number" ? body.dinnerMinute : 1230,
     snackMinute: typeof body.snackMinute === "number" ? body.snackMinute : undefined,
     extraSnackMinute: typeof body.extraSnackMinute === "number" ? body.extraSnackMinute : undefined,
+    heightCm: typeof body.heightCm === "number" ? body.heightCm : undefined,
+    weightKg: typeof body.weightKg === "number" ? body.weightKg : undefined,
+    age: typeof body.age === "number" ? body.age : undefined,
+    gender: readOptionalString(body, "gender"),
+    bmi: typeof body.bmi === "number" ? body.bmi : undefined,
+    estimatedMaintenanceCalories: typeof body.estimatedMaintenanceCalories === "number" ? body.estimatedMaintenanceCalories : undefined,
+    proteinTarget: typeof body.proteinTarget === "number" ? body.proteinTarget : undefined,
+    targetMode: readOptionalString(body, "targetMode"),
+    lifestyle: readOptionalString(body, "lifestyle"),
+    country: readOptionalString(body, "country"),
   };
 
   const prompt = buildEatingGeneratePrompt(context);
@@ -130,22 +164,39 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
   let text = "";
 
   if (provider === "gemini") {
-    const model = env.AI_MODEL?.trim() || "gemini-2.5-flash";
     const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
-    
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" }
-      })
-    });
-    
-    if (!res.ok) throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
-    const json = await res.json() as any;
-    text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
+    const primaryModel = env.AI_MODEL?.trim() || "gemini-3.5-flash";
+    const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
+
+    const fetchGemini = async (model: string) => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+      if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
+      const json = await res.json() as any;
+      return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
+    };
+
+    try {
+      text = await fetchGemini(primaryModel);
+    } catch (err) {
+      if (fallbackModel && fallbackModel !== primaryModel) {
+        console.warn(`[NutritionWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+        try {
+          text = await fetchGemini(fallbackModel);
+        } catch {
+          throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+        }
+      } else {
+        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+      }
+    }
   } else {
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
   }

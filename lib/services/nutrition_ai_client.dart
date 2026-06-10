@@ -51,7 +51,7 @@ class FakeNutritionAiClient implements NutritionAiClient {
         extractionVersion: 'phase2d',
         needsManualReview: false,
         steps: const ['Oatmeal', 'Banana'],
-        mealCategory: 'Breakfast',
+        mealCategory: 'breakfast',
       ));
     }
     
@@ -74,7 +74,7 @@ class FakeNutritionAiClient implements NutritionAiClient {
         extractionVersion: 'phase2d',
         needsManualReview: false,
         steps: const ['Rice', 'Dal'],
-        mealCategory: 'Lunch',
+        mealCategory: 'lunch',
       ));
     }
 
@@ -97,7 +97,7 @@ class FakeNutritionAiClient implements NutritionAiClient {
         extractionVersion: 'phase2d',
         needsManualReview: false,
         steps: const ['Apple'],
-        mealCategory: 'Snack',
+        mealCategory: 'snack',
       ));
     }
 
@@ -120,7 +120,7 @@ class FakeNutritionAiClient implements NutritionAiClient {
         extractionVersion: 'phase2d',
         needsManualReview: false,
         steps: const ['Roti', 'Curry'],
-        mealCategory: 'Dinner',
+        mealCategory: 'dinner',
       ));
     }
 
@@ -184,9 +184,7 @@ class WorkerNutritionAiClient implements NutritionAiClient {
           engineVersion: 'phase2d',
           candidates: const [],
           warnings: [
-            body['message'] as String? ??
-            body['error'] as String? ??
-            'AI generation service could not process this request.'
+            _friendlyErrorMessage(response.statusCode, body)
           ],
           createdAt: DateTime.now(),
         );
@@ -243,5 +241,25 @@ class WorkerNutritionAiClient implements NutritionAiClient {
     } on FormatException {
       return const {};
     }
+  }
+
+  String _friendlyErrorMessage(int statusCode, Map<String, dynamic> body) {
+    final rawError = body['error'] as String?;
+    
+    if (statusCode == 503 || statusCode == 429 || rawError == 'provider_high_demand' || rawError == 'provider_quota_exceeded' || rawError == 'provider_request_failed') {
+      return 'AI is busy right now. Try again in a moment.';
+    }
+    if (rawError == 'provider_invalid_response') {
+      return 'AI response could not be safely read. Please try again.';
+    }
+    if (rawError == 'provider_empty_candidates' || rawError == 'no_blocks_generated') {
+      return 'AI could not generate an eating routine. Please try again.';
+    }
+    if (rawError?.startsWith('invalid_') == true && rawError?.endsWith('_request') == true) {
+      return 'The request was invalid. Please try again.';
+    }
+    
+    // Only return a friendly fallback, do not leak raw error codes to the UI
+    return 'AI generation service could not process this request.';
   }
 }

@@ -37,7 +37,7 @@ type ProviderFailureKind =
   | "provider_timeout"
   | "provider_empty_candidates"
   | "provider_unavailable"
-  | "provider_invalid_json"
+  | "provider_invalid_response"
   | "provider_request_failed";
 
 type SafeProviderFailure = {
@@ -212,19 +212,19 @@ async function handleExtract(request: Request, env: Env, overrideSource?: Routin
 
   const object = await requiredUploadBucket(env).get(uploadedAssetR2Key);
   if (!object) {
-    throw new HttpError(404, "source_image_not_found", "Uploaded source image was not found.");
+    throw new HttpError(404, "r2_image_missing", "Uploaded source image was not found.");
   }
 
   const maxBytes = sourceImageMaxBytes(env);
   if (typeof object.size === "number" && object.size > maxBytes) {
-    throw new HttpError(413, "image_too_large", "This photo is too large. Please upload a photo under 15 MB.");
+    throw new HttpError(413, "payload_too_large", "This photo is too large. Please upload a photo under 15 MB.");
   }
 
   const contentType = object.httpMetadata?.contentType ?? "image/jpeg";
   if (!isAllowedSourceContentType(contentType)) {
     throw new HttpError(
       400,
-      "invalid_source_content_type",
+      "unsupported_content_type",
       "Please upload JPEG, PNG, or WEBP for now.",
     );
   }
@@ -263,7 +263,7 @@ async function handleExtract(request: Request, env: Env, overrideSource?: Routin
 
   const imageBytes = await object.arrayBuffer();
   if (imageBytes.byteLength > maxBytes) {
-    throw new HttpError(413, "image_too_large", "This photo is too large. Please upload a photo under 15 MB.");
+    throw new HttpError(413, "payload_too_large", "This photo is too large. Please upload a photo under 15 MB.");
   }
   if (
     aiProviderName(env) === "gemini" &&
@@ -577,7 +577,7 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
         providerBody = await response.json();
       } catch {
         const failure: SafeProviderFailure = {
-          kind: "provider_invalid_json",
+          kind: "provider_invalid_response",
           message: "AI provider returned invalid JSON.",
         };
         logProviderFailure({
