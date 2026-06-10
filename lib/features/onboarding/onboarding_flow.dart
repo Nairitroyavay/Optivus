@@ -776,27 +776,16 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return true;
     }
 
-    if (path == onboardingEatingPathHasRoutine) {
+    if (path == onboardingEatingPathHasRoutine || path == onboardingEatingPathCreate) {
       if (!base.hasConfirmedSection('eating')) {
-        _setInternalValidation('Generate your weekly meal routine first.');
+        _setInternalValidation('Generate your meal routine first.');
         return true;
       }
       return false;
     }
 
-    if (path != onboardingEatingPathCreate) {
-      _setInternalValidation('Choose how to set up eating.');
-      return true;
-    }
-
-    final hasGeneratedMealBlocks = base
-        .confirmedBlocksForSection('eating')
-        .any((block) => block.source == onboardingEatingGeneratedSource);
-    if (!hasGeneratedMealBlocks) {
-      _setInternalValidation('Generate your meal routine first.');
-      return true;
-    }
-    return false;
+    _setInternalValidation('Choose how to set up eating.');
+    return true;
   }
 
   Future<bool> _nextFixed(OnboardingDraft draft) async {

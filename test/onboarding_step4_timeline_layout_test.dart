@@ -1034,7 +1034,7 @@ void main() {
         rawCandidateCount: 0,
         mappedBlockCount: 0,
       ),
-      'AI could not read blocks from the Work photo. Try a clearer image.',
+      'AI could not read this timetable. Please upload a clearer image and try again.',
     );
     expect(
       onboarding4SourceFailureMessage(
@@ -1044,7 +1044,7 @@ void main() {
         rawCandidateCount: 3,
         mappedBlockCount: 0,
       ),
-      'AI read the Class photo, but no usable timeline blocks were found. Try a clearer image.',
+      'AI could not read this timetable. Please upload a clearer image and try again.',
     );
   });
 
@@ -1055,19 +1055,19 @@ void main() {
         'AI model is not available. Check worker model config.',
       ],
       const ['provider_unauthorized', 'AI key is invalid or unauthorized.'],
-      const ['provider_quota_exceeded', 'AI quota/rate limit reached.'],
+      const ['provider_quota_exceeded', 'AI is busy right now. Please try again.'],
       const [
         'provider_timeout',
-        'AI service timed out. Try again after a moment.',
+        'AI import failed. Please try again.',
       ],
       const [
         'provider_invalid_image_payload',
         'AI could not process this image format.',
       ],
-      const ['provider_empty_candidates', 'AI returned no timetable blocks.'],
+      const ['provider_empty_candidates', 'AI could not read this timetable. Please upload a clearer image and try again.'],
       const [
         'provider_request_failed',
-        'AI provider request failed. Check worker logs for the provider error.',
+        'AI import failed. Please try again.',
       ],
     ];
 

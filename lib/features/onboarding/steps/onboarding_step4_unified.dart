@@ -551,7 +551,7 @@ String onboarding4SourceFailureMessage({
   if (joined.contains('worker is not configured') ||
       joined.contains('worker url') ||
       joined.contains('not configured')) {
-    return 'AI worker is not configured for this build.';
+    return 'Real AI is not configured. Missing routine import worker URL.';
   }
   if (joined.contains('provider_model_not_found')) {
     return 'AI model is not available. Check worker model config.';
@@ -559,23 +559,34 @@ String onboarding4SourceFailureMessage({
   if (joined.contains('provider_unauthorized')) {
     return 'AI key is invalid or unauthorized.';
   }
-  if (joined.contains('provider_quota_exceeded')) {
-    return 'AI quota/rate limit reached.';
+  if (joined.contains('provider_quota_exceeded') || joined.contains('provider_high_demand')) {
+    return 'AI is busy right now. Please try again.';
   }
   if (joined.contains('provider_timeout')) {
-    return 'AI service timed out. Try again after a moment.';
+    return 'AI import failed. Please try again.';
   }
   if (joined.contains('provider_invalid_image_payload')) {
     return 'AI could not process this image format.';
   }
-  if (joined.contains('provider_empty_candidates')) {
-    return 'AI returned no timetable blocks.';
+  if (joined.contains('upload a photo before running ai extraction') || joined.contains('missing photo')) {
+    if (source == RoutineImportReviewSource.classes) return 'Please upload your class timetable.';
+    if (source == RoutineImportReviewSource.work) return 'Please upload your work/job timetable.';
+    return 'Please upload your timetable.';
   }
-  if (joined.contains('provider_invalid_json')) {
-    return 'AI response could not be read safely. Please try again.';
+  if (joined.contains('upload incomplete') || joined.contains('missing r2 object') || joined.contains('r2_image_missing')) {
+    return 'Upload incomplete. Please upload again.';
+  }
+  if (joined.contains('upload failed') || joined.contains('connection')) {
+    return 'Upload failed. Please check your connection and try again.';
+  }
+  if (joined.contains('provider_empty_candidates') || joined.contains('no_blocks_generated')) {
+    return 'AI could not read this timetable. Please upload a clearer image and try again.';
+  }
+  if (joined.contains('provider_invalid_json') || joined.contains('provider_invalid_response')) {
+    return 'AI could not read this image. Please upload a clearer timetable.';
   }
   if (joined.contains('provider_request_failed')) {
-    return 'AI provider request failed. Check worker logs for the provider error.';
+    return 'AI import failed. Please try again.';
   }
   if (joined.contains('unavailable') ||
       joined.contains('try again later') ||
@@ -588,12 +599,12 @@ String onboarding4SourceFailureMessage({
     return 'AI response could not be read safely. Please try again.';
   }
   if (rawCandidateCount == 0) {
-    return 'AI could not read blocks from the $photoLabel. Try a clearer image.';
+    return 'AI could not read this timetable. Please upload a clearer image and try again.';
   }
   if (rawCandidateCount != null &&
       rawCandidateCount > 0 &&
       mappedBlockCount == 0) {
-    return 'AI read the $photoLabel, but no usable timeline blocks were found. Try a clearer image.';
+    return 'AI could not read this timetable. Please upload a clearer image and try again.';
   }
   if (source == RoutineImportReviewSource.classes) {
     return 'Class timetable could not be read clearly. Check the Class photo or upload a clearer image.';
@@ -655,11 +666,10 @@ class _OnboardingStep4UnifiedState
   }
 
   int get _maxPhotos => _uploadTargets.length;
-  bool get _hasAnyPhoto => _photos.isNotEmpty;
   bool get _hasAllPhotos =>
       _uploadTargets.every((target) => _photoForSource(target.source) != null);
 
-  bool get _canTapGenerate => _hasAnyPhoto && !_isUploading && !_isGenerating;
+  bool get _canTapGenerate => _hasAllPhotos && !_isUploading && !_isGenerating;
 
   // ---- Upload text config ----
   String get _uploadTitle {
@@ -1488,6 +1498,12 @@ class _OnboardingStep4UnifiedState
           ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
         }
         _debugLogExtractionStart(photo);
+
+        if (photo.asset.r2Key.trim().isEmpty) {
+          failedSources.add(photo.source);
+          failureMessages[photo.source] = 'Upload incomplete. Please upload again.';
+          continue;
+        }
 
         final now = DateTime.now();
         final reviewDraft = RoutineImportReviewDraft(

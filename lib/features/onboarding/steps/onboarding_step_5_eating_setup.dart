@@ -156,6 +156,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       );
       return;
     }
+    if (asset.r2Key.trim().isEmpty) {
+      setState(
+        () => _generationError = 'Upload incomplete. Please upload again.',
+      );
+      return;
+    }
 
     debugPrint(
       '[Onboarding5] START source=eating purpose=eatingMenu '
@@ -290,12 +296,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
       if (!mounted) return;
 
-      if (result.candidates.isEmpty) {
+      if (result.id.trim().isEmpty || result.uid != uid || result.candidates.isEmpty) {
         setState(() {
           _creatingRoutine = false;
           _createError = result.warnings.isNotEmpty 
               ? result.warnings.first 
-              : 'AI could not generate a routine right now.';
+              : 'AI could not generate a valid routine right now.';
         });
         return;
       }
@@ -2511,6 +2517,10 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
         .where((warning) => warning.isNotEmpty),
   ];
   final text = messages.join(' ').toLowerCase();
+  
+  if (text.contains('worker is not configured') || text.contains('worker url')) {
+    return 'Real AI is not configured. Missing routine import worker URL.';
+  }
   if (text.contains('provider_request_failed')) {
     return 'AI is busy right now. Try again in a moment.';
   }
@@ -2527,7 +2537,7 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
       text.contains('format')) {
     return 'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
   }
-  if (text.contains('provider_empty_candidates')) {
+  if (text.contains('provider_empty_candidates') || text.contains('no_blocks_generated')) {
     return 'AI could not read meals clearly. Try a clearer photo.';
   }
   if (text.contains('too large') || text.contains('image too large')) {
@@ -2540,13 +2550,13 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
     return 'AI key is invalid or unauthorized.';
   }
   if (text.contains('invalid structured') ||
-      text.contains('could not be read safely')) {
+      text.contains('could not be read safely') || text.contains('provider_invalid_json')) {
     return 'AI response could not be read safely. Please try again.';
   }
   if (messages.isNotEmpty && !messages.first.startsWith('provider_')) {
     return messages.first;
   }
-  return 'AI could not read meals clearly. Try a clearer photo.';
+  return 'AI could not read this meal routine/menu image. Please upload a clearer image and try again.';
 }
 
 BaseTimelineDraft _clearEatingBlocks(
