@@ -1424,8 +1424,29 @@ void main() {
             (_) => MockOnboardingNotifier()..loadSeedData(draft),
           ),
         ],
-        child: const MaterialApp(
-          home: Scaffold(body: SizedBox.expand(child: OnboardingStep5())),
+        child: MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                const SizedBox.expand(child: OnboardingStep5()),
+                Consumer(
+                  builder: (context, ref, child) {
+                    final draft = ref.watch(mockOnboardingProvider).draft;
+                    if (draft.baseTimeline.eatingSetupStep > 0) {
+                      return OnboardingStageBackButton(
+                        key: const ValueKey('onboarding-step5-back'),
+                        onTap: () {
+                          ref.read(mockOnboardingProvider.notifier).clearValidation();
+                          updateBaseTimelineDraft(ref, 5, (base) => base.copyWith(eatingSetupStep: 0));
+                        },
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1523,8 +1544,29 @@ void main() {
             (_) => MockOnboardingNotifier()..loadSeedData(draft),
           ),
         ],
-        child: const MaterialApp(
-          home: Scaffold(body: SizedBox.expand(child: OnboardingStep5())),
+        child: MaterialApp(
+          home: Scaffold(
+            body: Stack(
+              children: [
+                const SizedBox.expand(child: OnboardingStep5()),
+                Consumer(
+                  builder: (context, ref, child) {
+                    final draft = ref.watch(mockOnboardingProvider).draft;
+                    if (draft.baseTimeline.eatingSetupStep > 0) {
+                      return OnboardingStageBackButton(
+                        key: const ValueKey('onboarding-step5-back'),
+                        onTap: () {
+                          ref.read(mockOnboardingProvider.notifier).clearValidation();
+                          updateBaseTimelineDraft(ref, 5, (base) => base.copyWith(eatingSetupStep: 0));
+                        },
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

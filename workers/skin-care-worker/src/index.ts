@@ -1,0 +1,271 @@
+import { createRemoteJWKSet, jwtVerify } from "jose";
+
+type Env = {
+  FIREBASE_PROJECT_ID: string;
+  AI_PROVIDER?: string;
+  AI_MODEL?: string;
+  AI_FALLBACK_MODEL?: string;
+  GEMINI_API_KEY?: string;
+  ALLOWED_ORIGINS?: string;
+  UPLOAD_BUCKET: R2Bucket;
+};
+
+class HttpError extends Error {
+  status: number;
+  errorCode: string;
+  constructor(status: number, errorCode: string, message: string) {
+    super(message);
+    this.status = status;
+    this.errorCode = errorCode;
+  }
+}
+
+const firebaseJwks = createRemoteJWKSet(
+  new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
+);
+
+function corsHeaders(request: Request, env: Env): Headers {
+  const headers = new Headers();
+  headers.set("Access-Control-Allow-Origin", env.ALLOWED_ORIGINS || "*");
+  headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  headers.set("Access-Control-Max-Age", "86400");
+  return headers;
+}
+
+function jsonResponse(request: Request, env: Env, body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...Object.fromEntries(corsHeaders(request, env)), "Content-Type": "application/json" },
+  });
+}
+
+function requiredEnv(value: string | undefined, name: string): string {
+  if (!value) throw new HttpError(500, "internal_error", `Missing env var: ${name}`);
+  return value;
+}
+
+async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<{ uid: string }> {
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  if (!token) throw new HttpError(401, "unauthorized", "Missing token");
+  const projectId = requiredEnv(env.FIREBASE_PROJECT_ID, "FIREBASE_PROJECT_ID");
+  try {
+    const { payload } = await jwtVerify(token, firebaseJwks, { issuer: `https://securetoken.google.com/${projectId}`, audience: projectId });
+    if (!payload.sub) throw new Error("No uid");
+    return { uid: payload.sub };
+  } catch {
+    throw new HttpError(401, "unauthorized", "Invalid token");
+  }
+}
+
+async function readSmallJson(request: Request): Promise<any> {
+  const clone = request.clone();
+  return await clone.json();
+}
+
+function parseAiJsonText(text: string): any {
+  try {
+    const jsonStr = text.replace(/```(?:json)?\n?/g, "").replace(/```/g, "").trim();
+    return JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function handleProductAnalyze(request: Request, env: Env): Promise<Response> {
+  const user = await requireVerifiedFirebaseUser(request, env);
+  const body = await readSmallJson(request);
+
+  if (!body.productPhotos || !Array.isArray(body.productPhotos) || body.productPhotos.length === 0) {
+    throw new HttpError(400, "invalid_skin_care_request", "Missing product photos.");
+  }
+
+  const provider = env.AI_PROVIDER || "gemini";
+  if (provider !== "gemini") {
+    throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported for vision.");
+  }
+
+  const model = env.AI_MODEL?.trim() || "gemini-2.5-flash";
+  const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+
+  const imageParts: any[] = [];
+  
+  for (const photoKey of body.productPhotos) {
+    if (typeof photoKey !== "string") continue;
+    const object = await env.UPLOAD_BUCKET.get(photoKey);
+    if (!object) {
+      throw new HttpError(404, "r2_image_missing", `Could not find uploaded image: ${photoKey}`);
+    }
+    const buffer = await object.arrayBuffer();
+    const contentType = object.httpMetadata?.contentType || "image/jpeg";
+    imageParts.push({
+      inlineData: {
+        mimeType: contentType,
+        data: arrayBufferToBase64(buffer)
+      }
+    });
+  }
+
+  if (imageParts.length === 0) {
+    throw new HttpError(400, "invalid_skin_care_request", "No valid images could be loaded.");
+  }
+
+  const prompt = `You are a dermatology and skin-care expert analyzing user-uploaded product photos. 
+Identify the skin care products in the provided images.
+Return a JSON object:
+{
+  "products": [
+    {
+      "name": "Product Name",
+      "brand": "Brand",
+      "category": "cleanser | moisturizer | sunscreen | serum | toner | exfoliant | lip balm | face mask | spot treatment | unknown",
+      "keyIngredients": ["..."],
+      "possibleActives": ["..."],
+      "usageHint": "When and how to use it",
+      "warningIfAny": "Any conflicts like 'Do not mix with Retinol'",
+      "confidence": "high|medium|low"
+    }
+  ],
+  "warnings": []
+}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  });
+
+  if (!res.ok) throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+  const json = await res.json() as any;
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  
+  const parsed = parseAiJsonText(text) || { products: [], warnings: [] };
+  
+  if (!parsed.products || parsed.products.length === 0) {
+    throw new HttpError(400, "no_products_detected", "We couldn't clearly identify any skin care products in the photos.");
+  }
+
+  return jsonResponse(request, env, { 
+    products: parsed.products,
+    warnings: parsed.warnings || []
+  });
+}
+
+async function handleRoutineGenerate(request: Request, env: Env): Promise<Response> {
+  const user = await requireVerifiedFirebaseUser(request, env);
+  const body = await readSmallJson(request);
+
+  const prompt = `You are an expert dermatologist. Generate a skin-care routine.
+Skin Goal: ${body.skinGoal || "maintenance"}
+Skin Type: ${body.skinType || "unknown"}
+Routine Preference: ${body.routinePreference || "balanced"}
+Time Preference: ${body.timePreference || "morning + night"}
+Products Owned: ${JSON.stringify(body.productsFromPhoto || [])}
+Include safety warnings. E.g. avoid Retinol + AHA/BHA at the same time, sunscreen in morning.
+
+Return ONLY a strict JSON object:
+{
+  "morningRoutine": [],
+  "nightRoutine": [],
+  "weeklyRoutine": [],
+  "timelineBlocks": [
+    {
+      "title": "Morning Skin Care",
+      "section": "skinCare",
+      "startMinute": 420,
+      "endMinute": 435,
+      "repeatDays": [1,2,3,4,5,6,7],
+      "products": ["Cleanser", "Sunscreen"],
+      "steps": ["Wash face", "Apply sunscreen"],
+      "source": "ai_skin_care_setup"
+    }
+  ],
+  "warnings": []
+}`;
+
+  const provider = env.AI_PROVIDER || "gemini";
+  let text = "";
+
+  if (provider === "gemini") {
+    const model = env.AI_MODEL?.trim() || "gemini-2.5-flash";
+    const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+    
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" }
+      })
+    });
+    
+    if (!res.ok) throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+    const json = await res.json() as any;
+    text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  } else {
+    throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
+  }
+
+  const parsed = parseAiJsonText(text) || {};
+  
+  return jsonResponse(request, env, { 
+    morningRoutine: parsed.morningRoutine || [],
+    nightRoutine: parsed.nightRoutine || [],
+    weeklyRoutine: parsed.weeklyRoutine || [],
+    timelineBlocks: parsed.timelineBlocks || [],
+    warnings: parsed.warnings || []
+  });
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders(request, env) });
+    }
+
+    try {
+      const url = new URL(request.url);
+      
+      if (request.method === "GET" && url.pathname === "/health") {
+        return jsonResponse(request, env, {
+          ok: true,
+          service: "skin-care-worker",
+          projectId: env.FIREBASE_PROJECT_ID,
+          aiProvider: env.AI_PROVIDER,
+        });
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/skin-care/products/analyze") {
+        return handleProductAnalyze(request, env);
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/skin-care/routine/generate") {
+        return handleRoutineGenerate(request, env);
+      }
+
+      return jsonResponse(request, env, { error: "not_found" }, 404);
+    } catch (error) {
+      const httpError = error instanceof HttpError ? error : null;
+      if (httpError) {
+        return jsonResponse(request, env, { error: httpError.errorCode, message: httpError.message }, httpError.status);
+      }
+      return jsonResponse(request, env, { error: "internal_error", message: "An unexpected error occurred" }, 500);
+    }
+  }
+};

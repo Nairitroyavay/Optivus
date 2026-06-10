@@ -449,6 +449,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   void _onIndicatorDraggedTo(int index) => _navigateToIndicatorStep(index);
 
+  bool _showTopLeftOverlay(OnboardingDraft draft) {
+    if (_currentPage == onboardingEatingStepIndex) {
+      return draft.baseTimeline.eatingSetupStep > 0;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -510,6 +517,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         ctaLabel: ctaLabel,
         ctaEnabled: ctaEnabled,
         ctaLoading: _isNavigating,
+        topLeftOverlay: _showTopLeftOverlay(onboardingState.draft)
+            ? OnboardingStageBackButton(
+                key: Key('onboarding-step$_currentPage-back'),
+                onTap: _goToPreviousStep,
+              )
+            : null,
         child: PageView(
           controller: _pageController,
           physics: const NeverScrollableScrollPhysics(),

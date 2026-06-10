@@ -11,6 +11,7 @@ import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
@@ -51,9 +52,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           24,
           10,
           24,
-          OnboardingStepShell.bottomCtaHeight + 38,
+          0,
         ),
-        child: const _EatingChoiceScreen(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: OnboardingStepShell.bottomCtaHeight + 38),
+          child: const _EatingChoiceScreen(),
+        ),
       );
     }
 
@@ -61,56 +65,38 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         .where((block) => block.source == onboardingEatingGeneratedSource)
         .toList(growable: false);
 
-    return Stack(
-      children: [
-        Positioned(
-          top: 0,
-          left: 24,
-          child: _EatingStageBackButton(onTap: _returnToChoices),
-        ),
-        Positioned.fill(
-          top: 38,
-          bottom: OnboardingStepShell.bottomCtaHeight + 8,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
-            child: path == onboardingEatingPathHasRoutine
-                ? _EatingUploadTimelineScreen(
-                    asset: _uploadedAsset,
-                    uploadError: _uploadError,
-                    generationError: _generationError,
-                    selectedDay: _selectedDay,
-                    blocks: eatingBlocks,
-                    onUpload: _startUpload,
-                    onRemove: _removeUploadedRoutine,
-                    onGenerate: _runAiExtraction,
-                    onDayChanged: (day) => setState(() => _selectedDay = day),
-                  )
-                : _EatingCreateTimelineScreen(
-                    base: base,
-                    selectedDay: _selectedDay,
-                    blocks: generatedBlocks,
-                    error: _createError,
-                    isGenerating: _creatingRoutine,
-                    editing: _editingGeneratedRoutine,
-                    onGenerate: _generateCreatedRoutine,
-                    onEdit: () {
-                      setState(() => _editingGeneratedRoutine = true);
-                    },
-                    onDayChanged: (day) => setState(() => _selectedDay = day),
-                  ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _returnToChoices() {
-    setState(() => _editingGeneratedRoutine = false);
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
-    updateBaseTimelineDraft(
-      ref,
-      onboardingEatingStepIndex,
-      (base) => base.copyWith(eatingSetupStep: 0),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        24,
+        10,
+        24,
+        0,
+      ),
+      child: path == onboardingEatingPathHasRoutine
+          ? _EatingUploadTimelineScreen(
+              asset: _uploadedAsset,
+              uploadError: _uploadError,
+              generationError: _generationError,
+              selectedDay: _selectedDay,
+              blocks: eatingBlocks,
+              onUpload: _startUpload,
+              onRemove: _removeUploadedRoutine,
+              onGenerate: _runAiExtraction,
+              onDayChanged: (day) => setState(() => _selectedDay = day),
+            )
+          : _EatingCreateTimelineScreen(
+              base: base,
+              selectedDay: _selectedDay,
+              blocks: generatedBlocks,
+              error: _createError,
+              isGenerating: _creatingRoutine,
+              editing: _editingGeneratedRoutine,
+              onGenerate: _generateCreatedRoutine,
+              onEdit: () {
+                setState(() => _editingGeneratedRoutine = true);
+              },
+              onDayChanged: (day) => setState(() => _selectedDay = day),
+            ),
     );
   }
 
@@ -267,23 +253,69 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       'bmr=${bodyContext.estimatedBmr} maintenance=${bodyContext.estimatedMaintenanceCalories} '
       'targetCalories=${bodyContext.targetCalories}',
     );
-    final blocks = onboarding5GeneratedMealBlocks(
-      base,
-      bodyContext: bodyContext,
-    );
-    if (blocks.isEmpty) {
+    final uid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final idToken = await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+    final nutritionClient = ref.read(nutritionAiClientProvider);
+
+    try {
+      final result = await nutritionClient.generateEatingRoutine(
+        uid: uid,
+        idToken: idToken,
+        params: {
+          'bodyGoal': bodyContext.bodyGoal,
+          'eatingMode': base.foodStyleCustomText,
+          'foodType': base.foodType,
+          'foodStyleCustomText': base.foodStyleCustomText,
+          'mealsPerDay': base.mealsPerDay,
+          'targetCalories': bodyContext.targetCalories,
+          'estimatedBmr': bodyContext.estimatedBmr,
+          'breakfastMinute': base.breakfastMinute,
+          'lunchMinute': base.lunchMinute,
+          'dinnerMinute': base.dinnerMinute,
+          'snackMinute': base.snackMinute,
+          'extraSnackMinute': base.extraSnackMinute,
+        },
+      );
+
+      if (!mounted) return;
+
+      if (result.candidates.isEmpty) {
+        setState(() {
+          _creatingRoutine = false;
+          _createError = result.warnings.isNotEmpty 
+              ? result.warnings.first 
+              : 'AI could not generate a routine right now.';
+        });
+        return;
+      }
+
+      final mapped = mapOnboarding5MealCandidates(
+        result.candidates,
+        now: DateTime.now(),
+        source: onboardingEatingGeneratedSource,
+      );
+      final blocks = mapped.blocks;
+
+      if (blocks.isEmpty) {
+        setState(() {
+          _creatingRoutine = false;
+          _createError = 'Generated routine was invalid. Please try again.';
+        });
+        return;
+      }
+
+      _replaceEatingBlocks(blocks);
       setState(() {
         _creatingRoutine = false;
-        _createError = 'AI is busy right now. Try again in a moment.';
+        _editingGeneratedRoutine = false;
       });
-      return;
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _creatingRoutine = false;
+        _createError = 'Failed to connect to AI generation service. Try again later.';
+      });
     }
-
-    _replaceEatingBlocks(blocks);
-    setState(() {
-      _creatingRoutine = false;
-      _editingGeneratedRoutine = false;
-    });
   }
 
   void _replaceEatingBlocks(List<TimelineBlockDraft> eatingBlocks) {
@@ -479,43 +511,7 @@ class _EatingPathCard extends StatelessWidget {
   }
 }
 
-class _EatingStageBackButton extends StatelessWidget {
-  final VoidCallback onTap;
 
-  const _EatingStageBackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: const ValueKey('onboarding-step5-back'),
-        borderRadius: BorderRadius.circular(13),
-        onTap: onTap,
-        child: Container(
-          height: 30,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.24),
-            borderRadius: BorderRadius.circular(13),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.arrow_back_rounded, size: 14),
-              SizedBox(width: 3),
-              Text(
-                'Back',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _EatingUploadTimelineScreen extends ConsumerWidget {
   final UploadedAsset? asset;
@@ -622,19 +618,12 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
           )
         else
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return Align(
-                  alignment: Alignment.topCenter,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: constraints.maxWidth,
-                      child: OnboardingGlassCard(
-                        tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
-                        padding: const EdgeInsets.all(12),
-                        radius: 20,
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: OnboardingGlassCard(
+                tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
+                padding: const EdgeInsets.all(12),
+                radius: 20,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -765,10 +754,6 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
                       ),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
         if (error != null) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: error!),
@@ -1398,7 +1383,7 @@ class _EatingVerticalTimeline extends StatelessWidget {
     final endMinute = math.min(24 * 60, (((maxEnd + 75) / 60).ceil()) * 60);
     final rangeMinutes = math.max(180, endMinute - startMinute);
     const topPadding = 18.0;
-    const bottomPadding = OnboardingStepShell.bottomCtaHeight + 74;
+    const bottomPadding = OnboardingStepShell.bottomCtaHeight + 40;
     const pxPerMinute = 0.82;
     final timelineHeight = math.max(
       rangeMinutes * pxPerMinute + topPadding + bottomPadding,
@@ -2180,6 +2165,7 @@ List<TimelineBlockDraft> onboarding5MealBlocksFromCandidates(
 Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
   List<RoutineImportCandidateBlock> candidates, {
   DateTime? now,
+  String source = onboardingEatingAiImportSource,
 }) {
   final timestamp = now ?? DateTime.now();
   final blocks = <TimelineBlockDraft>[];
@@ -2223,7 +2209,7 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
         repeatDays: repeatDays.isEmpty ? onboardingEveryDay() : repeatDays,
         location: candidate.location,
         blockType: TimelineBlockDraft.hardBlockKey,
-        source: onboardingEatingAiImportSource,
+        source: source,
         mealCategory: mealCategory,
         dishes: dishes,
       ),

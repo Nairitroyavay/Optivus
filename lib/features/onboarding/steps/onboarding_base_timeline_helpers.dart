@@ -70,6 +70,43 @@ List<int> onboardingEveryDay() => const [1, 2, 3, 4, 5, 6, 7];
 
 List<int> onboardingWeekdays() => const [1, 2, 3, 4, 5];
 
+class OnboardingStageBackButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const OnboardingStageBackButton({super.key, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(13),
+        onTap: onTap,
+        child: Container(
+          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.24),
+            borderRadius: BorderRadius.circular(13),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.arrow_back_rounded, size: 14),
+              SizedBox(width: 3),
+              Text(
+                'Back',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 BaseTimelineDraft upsertGeneratedEatingImport(
   BaseTimelineDraft base,
   BodyBasicsDraft body,

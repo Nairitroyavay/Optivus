@@ -14,6 +14,7 @@ abstract class RoutineImportAiClient {
     required String idToken,
     required RoutineImportReviewDraft review,
   });
+
 }
 
 class FakeRoutineImportAiClient implements RoutineImportAiClient {
@@ -178,6 +179,7 @@ class FakeRoutineImportAiClient implements RoutineImportAiClient {
       ],
     };
   }
+
 }
 
 class WorkerRoutineImportAiClient implements RoutineImportAiClient {
@@ -278,6 +280,8 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
       );
     }
   }
+
+
 
   void _debugLogInvalidWorkerResponse({
     required String reason,

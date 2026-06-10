@@ -358,6 +358,7 @@ class OnboardingStepShell extends StatelessWidget {
   final String ctaLabel;
   final bool ctaEnabled;
   final bool ctaLoading;
+  final Widget? topLeftOverlay;
 
   const OnboardingStepShell({
     super.key,
@@ -377,6 +378,7 @@ class OnboardingStepShell extends StatelessWidget {
     required this.ctaLabel,
     required this.ctaEnabled,
     required this.ctaLoading,
+    this.topLeftOverlay,
   });
 
   @override
@@ -416,6 +418,11 @@ class OnboardingStepShell extends StatelessWidget {
                               alignment: Alignment.centerLeft,
                               child: SizedBox(width: 92),
                             ),
+                            if (topLeftOverlay != null)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: topLeftOverlay!,
+                              ),
                             LiquidGlassOnboardingIndicator(
                               page: pageOffset,
                               count: completedSteps.length,

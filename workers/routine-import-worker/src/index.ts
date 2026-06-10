@@ -166,6 +166,18 @@ export default {
         return handleExtract(request, env);
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/routine-import/classes") {
+        return handleExtract(request, env, "classes");
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/routine-import/work") {
+        return handleExtract(request, env, "work");
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/routine-import/eating-photo") {
+        return handleExtract(request, env, "eating");
+      }
+
       return jsonResponse(request, env, { error: "not_found" }, 404);
     } catch (error) {
       const httpError = error instanceof HttpError ? error : null;
@@ -182,11 +194,11 @@ export default {
   },
 };
 
-async function handleExtract(request: Request, env: Env): Promise<Response> {
+async function handleExtract(request: Request, env: Env, overrideSource?: RoutineImportReviewSource): Promise<Response> {
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
   const reviewId = readString(body, "reviewId");
-  const source = readSource(body, "source");
+  const source = overrideSource ?? readSource(body, "source");
   const sourceLabel = readOptionalString(body, "sourceLabel") ?? labelForSource(source);
   const uploadedAssetId = readOptionalString(body, "uploadedAssetId");
   const uploadedAssetR2Key = readString(body, "uploadedAssetR2Key");
@@ -303,6 +315,7 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
 
   return jsonResponse(request, env, sanitized);
 }
+
 
 class DisabledAiRoutineExtractor implements AiRoutineExtractor {
   async extract(args: ExtractArgs): Promise<RoutineImportExtractionResponse> {
