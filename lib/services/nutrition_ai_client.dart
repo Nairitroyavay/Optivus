@@ -21,21 +21,53 @@ class MissingConfigNutritionAiClient implements NutritionAiClient {
     required String idToken,
     required Map<String, dynamic> params,
   }) async {
-    throw const MissingConfigException('Real AI is not configured. Missing routine import worker URL.');
+    return RoutineImportExtractionResult(
+      id: 'missing-config',
+      uid: uid,
+      source: RoutineImportReviewSource.eating,
+      engine: 'disabled',
+      engineVersion: 'none',
+      candidates: const [],
+      warnings: const ['missing_worker_url'],
+      createdAt: DateTime.now(),
+    );
   }
 }
 
-final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
+enum NutritionAiClientMode {
+  worker,
+  fake,
+  disabled,
+  missingConfig,
+}
+
+final nutritionAiClientModeProvider = Provider<NutritionAiClientMode>((ref) {
   if (OptivusAiWorkersConfig.useWorker) {
     if (OptivusAiWorkersConfig.nutritionWorkerUrl.trim().isEmpty) {
-      return const MissingConfigNutritionAiClient();
+      return NutritionAiClientMode.missingConfig;
     }
-    return WorkerNutritionAiClient();
+    return NutritionAiClientMode.worker;
   }
   if (OptivusAiWorkersConfig.allowFakeAiForTestsOnly) {
-    return const FakeNutritionAiClient();
+    if (OptivusAiWorkersConfig.mode == OptivusAiWorkerMode.disabled) {
+      return NutritionAiClientMode.disabled;
+    }
+    return NutritionAiClientMode.fake;
   }
-  return const MissingConfigNutritionAiClient();
+  return NutritionAiClientMode.missingConfig;
+});
+
+final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
+  final mode = ref.watch(nutritionAiClientModeProvider);
+  switch (mode) {
+    case NutritionAiClientMode.worker:
+      return WorkerNutritionAiClient();
+    case NutritionAiClientMode.fake:
+      return const FakeNutritionAiClient();
+    case NutritionAiClientMode.disabled:
+    case NutritionAiClientMode.missingConfig:
+      return const MissingConfigNutritionAiClient();
+  }
 });
 
 
@@ -180,8 +212,15 @@ class WorkerNutritionAiClient implements NutritionAiClient {
     required Map<String, dynamic> params,
   }) async {
     if (baseUrl.trim().isEmpty) {
-      throw const MissingConfigException(
-        'Real AI is not configured. Missing nutrition worker URL.',
+      return RoutineImportExtractionResult(
+        id: 'missing-config',
+        uid: uid,
+        source: RoutineImportReviewSource.eating,
+        engine: 'worker',
+        engineVersion: 'phase2d',
+        candidates: const [],
+        warnings: const ['missing_worker_url'],
+        createdAt: DateTime.now(),
       );
     }
 

@@ -36,8 +36,9 @@ type ProviderFailureKind =
   | "provider_quota_exceeded"
   | "provider_timeout"
   | "provider_empty_candidates"
-  | "provider_unavailable"
-  | "provider_invalid_response"
+  | "network_unavailable"
+  | "provider_invalid_json"
+  | "provider_high_demand"
   | "provider_request_failed";
 
 type SafeProviderFailure = {
@@ -425,7 +426,7 @@ class VisionAiRoutineExtractor implements AiRoutineExtractor {
 
       return coerceExtractionResponse(parsed, args, "openai", model);
     } catch {
-      return providerFallback(args, "openai", model, "AI provider is unavailable. Try again later.");
+      return providerFallback(args, "openai", model, "Network unavailable. Try again later.");
     }
   }
 
@@ -608,10 +609,10 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
       return result;
     } catch (error) {
       const failure: SafeProviderFailure = {
-        kind: "provider_unavailable",
+        kind: "network_unavailable",
         message: error instanceof Error && error.message.trim() !== ""
-          ? safeText(error.message, "AI provider is unavailable.", 180)
-          : "AI provider is unavailable. Try again later.",
+          ? safeText(error.message, "Network unavailable.", 180)
+          : "Network unavailable. Try again later.",
       };
       logProviderFailure({
         provider: "gemini",
@@ -1255,8 +1256,16 @@ function classifyProviderFailure(input: {
   ) {
     kind = "provider_quota_exceeded";
   } else if (
-    status === 408 ||
+    status === 502 ||
+    status === 503 ||
     status === 504 ||
+    normalized.includes("busy") ||
+    normalized.includes("high demand") ||
+    normalized.includes("overloaded")
+  ) {
+    kind = "provider_high_demand";
+  } else if (
+    status === 408 ||
     normalized.includes("timeout") ||
     normalized.includes("deadline")
   ) {
@@ -1270,6 +1279,19 @@ function classifyProviderFailure(input: {
       normalized.includes("payload"))
   ) {
     kind = "provider_invalid_image_payload";
+  } else if (
+    normalized.includes("invalid json") ||
+    normalized.includes("json") ||
+    normalized.includes("parse") ||
+    normalized.includes("invalid response")
+  ) {
+    kind = "provider_invalid_json";
+  } else if (
+    normalized.includes("network") ||
+    normalized.includes("unavailable") ||
+    normalized.includes("fetch failed")
+  ) {
+    kind = "network_unavailable";
   }
   return {
     kind,

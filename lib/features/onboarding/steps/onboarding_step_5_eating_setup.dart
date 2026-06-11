@@ -2698,8 +2698,14 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
   ];
   final text = messages.join(' ').toLowerCase();
   
-  if (text.contains('worker is not configured') || text.contains('worker url')) {
+  if (text.contains('worker is not configured') || text.contains('worker url') || text.contains('missing_worker_url')) {
     return 'Real AI is not configured. Missing routine import worker URL.';
+  }
+  if (text.contains('network_unavailable') || text.contains('provider_unavailable') || text.contains('provider_timeout')) {
+    return 'AI service is unavailable. Try again after a moment.';
+  }
+  if (text.contains('provider_model_not_found')) {
+    return 'AI model is not available. Check worker model config.';
   }
   if (text.contains('provider_request_failed')) {
     return 'AI is busy right now. Try again in a moment.';

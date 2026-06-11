@@ -9,7 +9,7 @@ import 'package:optivus/features/routine/managers/base_timeline/screens/routine_
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/services/nutrition_ai_client.dart';
+
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/services/routine_import_ai_review_update_service.dart';
 import 'package:optivus/services/routine_import_validation_service.dart';
@@ -22,12 +22,11 @@ void main() {
   });
 
   test('Worker URL missing causes safe error in worker mode', () async {
-    expect(
-      () => WorkerRoutineImportAiClient(
-        baseUrl: '',
-      ).extract(uid: 'uid-1', idToken: 'token', review: _review()),
-      throwsA(isA<MissingConfigException>()),
-    );
+    final result = await WorkerRoutineImportAiClient(
+      baseUrl: '',
+    ).extract(uid: 'uid-1', idToken: 'token', review: _review());
+
+    expect(result.warnings, contains('missing_worker_url'));
   });
 
   test('Fake AI client returns strict RoutineImportExtractionResult', () async {

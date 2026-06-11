@@ -181,6 +181,12 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
       if (!res.ok) {
         let errJson: any = {};
         try { errJson = await res.json(); } catch {}
+        if (res.status === 401 || res.status === 403) {
+          throw new HttpError(res.status, "provider_unauthorized", "Provider unauthorized.");
+        }
+        if (res.status === 404) {
+          throw new HttpError(res.status, "provider_model_not_found", "Provider model not found.");
+        }
         if (res.status === 429) {
           throw new HttpError(429, "provider_quota_exceeded", "Provider quota exceeded.");
         }
@@ -188,11 +194,16 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
           throw new HttpError(503, "provider_high_demand", "Provider is busy or in high demand.");
         }
         if (res.status >= 400 && res.status < 500) {
-          throw new HttpError(res.status, "invalid_provider_request", "Invalid request sent to provider.");
+          throw new HttpError(res.status, "provider_request_failed", "Invalid request sent to provider.");
         }
         throw new Error(`Provider failed with status ${res.status}`);
       }
-      const json = await res.json() as any;
+      let json: any;
+      try {
+        json = await res.json() as any;
+      } catch {
+        throw new HttpError(500, "provider_invalid_json", "Provider returned invalid JSON.");
+      }
       return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
     };
 

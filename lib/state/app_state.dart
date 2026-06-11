@@ -1553,6 +1553,7 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     var nextTimeline = invalidation.timeline.copyWith(
       blocks: cleanBlocks,
       pendingFutureImports: cleanPendingImports,
+      classJobSetupStep: 0,
     );
 
     // Local Step 5 revalidation (preserve if valid, clear if invalid)
@@ -1560,6 +1561,7 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     if (eatingError != null) {
       nextTimeline = nextTimeline.copyWith(
         blocks: nextTimeline.blocks.where((block) => block.section != 'eating').toList(growable: false),
+        eatingSetupStep: 0,
       );
     }
 

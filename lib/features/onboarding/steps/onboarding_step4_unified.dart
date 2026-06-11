@@ -556,7 +556,8 @@ String onboarding4SourceFailureMessage({
   }
   if (joined.contains('worker is not configured') ||
       joined.contains('worker url') ||
-      joined.contains('not configured')) {
+      joined.contains('not configured') ||
+      joined.contains('missing_worker_url')) {
     return 'Real AI is not configured. Missing routine import worker URL.';
   }
   if (joined.contains('provider_model_not_found')) {
@@ -595,6 +596,7 @@ String onboarding4SourceFailureMessage({
     return 'AI import failed. Please try again.';
   }
   if (joined.contains('unavailable') ||
+      joined.contains('network_unavailable') ||
       joined.contains('try again later') ||
       joined.contains('provider could not process')) {
     return 'AI service is unavailable. Try again after a moment.';

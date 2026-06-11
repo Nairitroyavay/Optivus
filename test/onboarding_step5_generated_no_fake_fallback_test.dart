@@ -6,14 +6,13 @@ void main() {
     test('WorkerNutritionAiClient returns missing URL warning when baseUrl is empty instead of using fake data', () async {
       final client = WorkerNutritionAiClient(baseUrl: '');
 
-      expect(
-        () => client.generateEatingRoutine(
-          uid: 'test-user',
-          idToken: 'test-token',
-          params: {},
-        ),
-        throwsA(isA<MissingConfigException>()),
+      final result = await client.generateEatingRoutine(
+        uid: 'test-user',
+        idToken: 'test-token',
+        params: {},
       );
+
+      expect(result.warnings, contains('missing_worker_url'));
     });
   });
 }
