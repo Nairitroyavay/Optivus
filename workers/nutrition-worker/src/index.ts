@@ -233,7 +233,26 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
   const parsed = parseAiJsonText(text);
   const blocks = Array.isArray(parsed) ? parsed : (parsed as any)?.candidates ?? [];
 
-  const validBlocks = blocks.filter((b: any) => Array.isArray(b.steps) && b.steps.length > 0);
+  const genericTerms = new Set(["breakfast", "lunch", "snack", "dinner", "food", "meal", "eat", "dish"]);
+
+  const validBlocks = blocks.map((b: any) => {
+    if (!Array.isArray(b.steps)) return null;
+    const cleanSteps = b.steps
+      .map((s: any) => typeof s === "string" ? s.trim() : "")
+      .filter((s: string) => {
+        if (!s) return false;
+        const lower = s.toLowerCase();
+        return !genericTerms.has(lower);
+      });
+    
+    if (cleanSteps.length >= 2) {
+      return { ...b, steps: cleanSteps };
+    } else {
+      console.warn(`[NutritionWorker] Dropping invalid candidate ${b.title || "unknown"}. Steps: ${JSON.stringify(b.steps)}`);
+      return null;
+    }
+  }).filter(Boolean);
+
   if (validBlocks.length === 0) {
     throw new HttpError(500, "provider_empty_candidates", "AI returned no valid meals.");
   }

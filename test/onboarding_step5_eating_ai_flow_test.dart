@@ -42,7 +42,7 @@ void main() {
         const ['worker is not configured'],
       );
 
-      expect(message, 'Real AI is not configured. Missing routine import worker URL.');
+      expect(message, 'Real AI is not configured. Missing nutrition worker URL.');
     });
 
     test('onboarding5FriendlyAiMessage handles incomplete R2 upload', () {

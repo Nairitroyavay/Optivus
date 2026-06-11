@@ -13,6 +13,7 @@ import 'package:optivus/models/permission_status.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/state/mock_seed_data.dart';
 
 // ==========================================
@@ -1585,15 +1586,15 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     dirty[2] = false;
 
     // Step 4 is cleared, so it is incomplete and dirty
-    completed[4] = false;
-    dirty[4] = true;
+    completed[onboardingClassJobStepIndex] = false;
+    dirty[onboardingClassJobStepIndex] = true;
 
     // Step 5 is preserved if valid and was completed, otherwise marked incomplete/dirty
-    completed[5] = eatingError == null && completed[5];
-    dirty[5] = eatingError != null || dirty[5];
+    completed[onboardingEatingStepIndex] = eatingError == null && completed[onboardingEatingStepIndex];
+    dirty[onboardingEatingStepIndex] = eatingError != null || dirty[onboardingEatingStepIndex];
 
     // Downstream steps (> 5) are invalidated (marked incomplete and dirty)
-    for (var i = 6; i < OnboardingDraft.stepCount; i++) {
+    for (var i = onboardingEatingStepIndex + 1; i < OnboardingDraft.stepCount; i++) {
       completed[i] = false;
       dirty[i] = true;
     }

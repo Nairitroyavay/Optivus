@@ -22,11 +22,10 @@ void main() {
       );
       expect(message3, 'AI quota/rate limit reached. Try again later.');
 
-      final message4 = onboarding5FriendlyAiMessage(
-        null,
-        const ['worker is not configured'],
+      expect(
+        onboarding5FriendlyAiMessage('missing_worker_url', const []),
+        'Real AI is not configured. Missing nutrition worker URL.',
       );
-      expect(message4, 'Real AI is not configured. Missing routine import worker URL.');
     });
   });
 }

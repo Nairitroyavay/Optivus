@@ -304,9 +304,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       if (result.id.trim().isEmpty || result.uid != uid || result.candidates.isEmpty) {
         setState(() {
           _creatingRoutine = false;
-          _createError = result.warnings.isNotEmpty 
-              ? result.warnings.first 
-              : 'AI could not generate a valid routine right now.';
+          _createError = onboarding5FriendlyAiMessage(
+            null,
+            result.warnings.isNotEmpty ? result.warnings : ['no_blocks_generated'],
+          );
         });
         return;
       }
@@ -338,13 +339,13 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       if (!mounted) return;
       setState(() {
         _creatingRoutine = false;
-        _createError = e.message;
+        _createError = onboarding5FriendlyAiMessage(e.message, const []);
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _creatingRoutine = false;
-        _createError = 'Failed to connect to AI generation service. Try again later.';
+        _createError = onboarding5FriendlyAiMessage(null, ['provider_unavailable']);
       });
     }
   }
@@ -1510,43 +1511,75 @@ class EatingTimelineLayout {
 }
 
 double calculateRequiredBlockHeight({
+  required BuildContext context,
   required String title,
   required List<String> dishes,
   required String timeLabel,
   required double blockWidth,
 }) {
   final allDishes = dishes.map((d) => d.trim()).where((d) => d.isNotEmpty).toList();
-  const double titleRowHeight = 20.0;
+  const double titleRowHeight = 22.0;
   const double spacingBeforeWrap = 5.0;
-  const double verticalPadding = 16.0;
+  const double verticalPadding = 20.0; // SafeArea padding inside block
 
   final List<String> labels = [timeLabel, ...allDishes];
-  final double wrapWidth = math.max(50.0, blockWidth - 24.0);
-  final double wrapHeight = _calculateWrapHeight(labels, wrapWidth, 6.0, 5.0, 23.0);
+  // Match actual layout:
+  // block width - padding(12*2) - icon(17) - sizedBox(8) = blockWidth - 49.0
+  final double wrapWidth = math.max(50.0, blockWidth - 49.0);
+  final double wrapHeight = _calculateWrapHeight(context, labels, wrapWidth, 6.0, 5.0);
   
-  final double estimatedHeight = verticalPadding + titleRowHeight + spacingBeforeWrap + wrapHeight;
-  return math.max(74.0, estimatedHeight);
+  // Padding(8*2) + title(22 approx) + spacing(5) + buffer(10)
+  final double estimatedHeight = verticalPadding + titleRowHeight + spacingBeforeWrap + wrapHeight + 10.0;
+  // Increase cap to 450 to ensure 6-dish tests pass without overflow
+  return math.min(450.0, math.max(74.0, estimatedHeight));
 }
 
-double _calculateWrapHeight(List<String> labels, double wrapWidth, double spacing, double runSpacing, double chipHeight) {
+double _calculateWrapHeight(
+  BuildContext context,
+  List<String> labels,
+  double wrapWidth,
+  double spacing,
+  double runSpacing,
+) {
   if (labels.isEmpty) return 0.0;
+  final TextScaler textScaler = MediaQuery.textScalerOf(context);
+  final TextDirection textDirection = Directionality.of(context);
   double currentX = 0.0;
-  int rows = 1;
+  double currentY = 0.0;
+  double rowHeight = 0.0;
+
   for (int i = 0; i < labels.length; i++) {
     final label = labels[i];
-    final double chipWidth = math.min(wrapWidth, 16.0 + label.length * 6.8);
-    if (i == 0) {
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout(maxWidth: math.max(10.0, wrapWidth - 16.0));
+    
+    final double chipWidth = textPainter.width + 16.0;
+    final double chipHeight = textPainter.height + 8.0;
+
+    if (currentX == 0) {
       currentX = chipWidth;
+      rowHeight = chipHeight;
     } else {
       if (currentX + spacing + chipWidth <= wrapWidth) {
         currentX += spacing + chipWidth;
+        rowHeight = math.max(rowHeight, chipHeight);
       } else {
-        rows++;
+        currentY += rowHeight + runSpacing;
         currentX = chipWidth;
+        rowHeight = chipHeight;
       }
     }
   }
-  return rows * chipHeight + (rows - 1) * runSpacing;
+  return currentY + rowHeight;
 }
 
 class _EatingVerticalTimeline extends StatelessWidget {
@@ -1573,6 +1606,7 @@ class _EatingVerticalTimeline extends StatelessWidget {
         for (final block in blocks) {
           final normalHeight = (block.endMinute - block.startMinute) * pxPerMinute;
           final requiredHeight = calculateRequiredBlockHeight(
+            context: context,
             title: _mealTitleForDisplay(block),
             dishes: block.dishes,
             timeLabel: '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
@@ -1952,16 +1986,114 @@ class _EatingTimelineBlock extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 5),
-                          Wrap(
-                            spacing: 6,
-                            runSpacing: 5,
-                            children: [
-                              _EatingInfoChip(
-                                '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                              ),
-                              for (final dish in allDishes)
-                                _EatingInfoChip(dish),
-                            ],
+                          Expanded(
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final textScaler = MediaQuery.textScalerOf(context);
+                                final textDirection = Directionality.of(context);
+                                final wrapWidth = constraints.maxWidth;
+                                final availableHeight = constraints.maxHeight;
+
+                                final List<String> labels = [
+                                  '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                                  ...allDishes,
+                                ];
+
+                                List<Widget> children = [];
+                                double currentX = 0.0;
+                                double currentY = 0.0;
+                                double rowHeight = 0.0;
+                                int visibleCount = 0;
+                                bool overflowed = false;
+
+                                for (int i = 0; i < labels.length; i++) {
+                                  final label = labels[i];
+                                  final textPainter = TextPainter(
+                                    text: TextSpan(
+                                      text: label,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    textDirection: textDirection,
+                                    textScaler: textScaler,
+                                  )..layout(maxWidth: math.max(10.0, wrapWidth - 16.0));
+
+                                  final chipWidth = textPainter.width + 16.0;
+                                  final chipHeight = textPainter.height + 8.0;
+
+                                  double nextX;
+                                  double nextY;
+                                  double nextRowHeight;
+
+                                  if (currentX == 0) {
+                                    nextX = chipWidth;
+                                    nextY = currentY;
+                                    nextRowHeight = chipHeight;
+                                  } else {
+                                    if (currentX + 6.0 + chipWidth <= wrapWidth) {
+                                      nextX = currentX + 6.0 + chipWidth;
+                                      nextY = currentY;
+                                      nextRowHeight = math.max(rowHeight, chipHeight);
+                                    } else {
+                                      nextY = currentY + rowHeight + 5.0;
+                                      nextX = chipWidth;
+                                      nextRowHeight = chipHeight;
+                                    }
+                                  }
+
+                                  if (nextY + nextRowHeight > availableHeight) {
+                                    overflowed = true;
+                                    break;
+                                  }
+
+                                  currentX = nextX;
+                                  currentY = nextY;
+                                  rowHeight = nextRowHeight;
+                                  visibleCount++;
+                                }
+
+                                if (overflowed && visibleCount < labels.length) {
+                                  final int toShow = math.max(1, visibleCount - 1);
+                                  for (int i = 0; i < toShow; i++) {
+                                    children.add(_EatingInfoChip(labels[i]));
+                                  }
+                                  final remaining = labels.length - toShow;
+                                  children.add(
+                                    GestureDetector(
+                                      onTap: () => _showEatingBlockDetails(context, block),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: OptivusColors.roseAccent.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: OptivusColors.roseAccent.withValues(alpha: 0.5)),
+                                        ),
+                                        child: Text(
+                                          '+$remaining more',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w900,
+                                            color: OptivusColors.roseAccent,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  for (final label in labels) {
+                                    children.add(_EatingInfoChip(label));
+                                  }
+                                }
+
+                                return Wrap(
+                                  spacing: 6,
+                                  runSpacing: 5,
+                                  children: children,
+                                );
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -1996,8 +2128,6 @@ class _EatingInfoChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w800,
@@ -2699,7 +2829,7 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
   final text = messages.join(' ').toLowerCase();
   
   if (text.contains('worker is not configured') || text.contains('worker url') || text.contains('missing_worker_url')) {
-    return 'Real AI is not configured. Missing routine import worker URL.';
+    return 'Real AI is not configured. Missing nutrition worker URL.';
   }
   if (text.contains('network_unavailable') || text.contains('provider_unavailable') || text.contains('provider_timeout')) {
     return 'AI service is unavailable. Try again after a moment.';
