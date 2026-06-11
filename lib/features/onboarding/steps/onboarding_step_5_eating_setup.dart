@@ -226,10 +226,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     );
     if (blocks.isEmpty) {
       setState(
-        () => _generationError = onboarding5FriendlyAiMessage(
-          aiState.errorMessage,
-          result.warnings,
-        ),
+        () => _generationError = mapped.droppedNoDishes > 0
+            ? 'AI did not return specific dishes. Please upload a clearer photo.'
+            : onboarding5FriendlyAiMessage(
+                aiState.errorMessage,
+                result.warnings,
+              ),
       );
       return;
     }
@@ -316,7 +318,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       if (blocks.isEmpty) {
         setState(() {
           _creatingRoutine = false;
-          _createError = 'Generated routine was invalid. Please try again.';
+          _createError = mapped.droppedNoDishes > 0
+              ? 'AI did not return specific dishes. Please try again.'
+              : 'Generated routine was invalid. Please try again.';
         });
         return;
       }
@@ -1995,11 +1999,14 @@ class Onboarding5MealCandidateMappingResult {
   final int droppedInvalidTime;
   final int droppedNoMealTime;
 
+  final int droppedNoDishes;
+
   const Onboarding5MealCandidateMappingResult({
     required this.blocks,
     required this.droppedNoTitle,
     required this.droppedInvalidTime,
     required this.droppedNoMealTime,
+    required this.droppedNoDishes,
   });
 }
 
@@ -2095,89 +2102,7 @@ Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
   );
 }
 
-List<TimelineBlockDraft> onboarding5GeneratedMealBlocks(
-  BaseTimelineDraft base, {
-  DateTime? now,
-  Onboarding5MealBodyContext? bodyContext,
-}) {
-  final timestamp = now ?? DateTime.now();
-  final context =
-      bodyContext ??
-      Onboarding5MealBodyContext(
-        bodyGoal: _normalizedBodyGoal(base.mealPlanningGoal) ?? 'maintain',
-        targetMode: 'maintenance',
-        currentWeightKg: null,
-        heightCm: null,
-        age: null,
-        gender: null,
-        bmi: null,
-        estimatedBmr: 1550,
-        estimatedMaintenanceCalories: 2200,
-        targetCalories: 2200,
-        proteinTarget: null,
-        mealsPerDay: _normalizedMealsPerDay(base.mealsPerDay),
-        eatingType: _normalizedEatingType(base.foodType),
-        foodStyle: _normalizedFoodStyle(
-          base.eatingMode,
-          base.foodStyleCustomText,
-        ),
-        customFoodStyle: base.foodStyleCustomText,
-        mealTimes: _mealTimesForBase(
-          base,
-          _normalizedMealsPerDay(base.mealsPerDay),
-        ),
-        lifestyle: null,
-        country: null,
-        hasBodyBasics: false,
-      );
-  final mealsPerDay = context.mealsPerDay;
-  final style = context.foodStyle;
-  final eatingType = context.eatingType;
-  final specs = <_MealSpec>[
-    _MealSpec('breakfast', 'Breakfast', base.breakfastMinute ?? 8 * 60, 30),
-    if (mealsPerDay == 5)
-      _MealSpec(
-        'extra-snack',
-        'Extra snack',
-        base.extraSnackMinute ?? 11 * 60,
-        20,
-      ),
-    _MealSpec('lunch', 'Lunch', base.lunchMinute ?? 13 * 60, 45),
-    if (mealsPerDay >= 4)
-      _MealSpec('snack', 'Snack', base.snackMinute ?? 17 * 60, 20),
-    _MealSpec('dinner', 'Dinner', base.dinnerMinute ?? 20 * 60 + 30, 45),
-  ];
 
-  return specs
-      .where((spec) => spec.startMinute >= 0 && spec.startMinute < 24 * 60)
-      .map(
-        (spec) => TimelineBlockDraft(
-          id: 'eating-${spec.id}-${timestamp.millisecondsSinceEpoch}',
-          section: 'eating',
-          title: spec.title,
-          startMinute: spec.startMinute,
-          endMinute: (spec.startMinute + spec.durationMinutes).clamp(
-            1,
-            24 * 60,
-          ),
-          repeatDays: onboardingEveryDay(),
-          blockType: TimelineBlockDraft.hardBlockKey,
-          source: onboardingEatingGeneratedSource,
-          mealCategory: spec.id,
-          dishes: _mealDishes(
-            style: style,
-            eatingType: eatingType,
-            mealId: spec.id,
-            bodyGoal: context.bodyGoal,
-            customText: context.customFoodStyle,
-          ),
-          calories: _mealCalories(context.targetCalories, spec.id).toDouble(),
-          protein: _mealProtein(context, spec.id).toDouble(),
-        ),
-      )
-      .toList(growable: false)
-    ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
-}
 
 List<TimelineBlockDraft> onboarding5MealBlocksFromCandidates(
   List<RoutineImportCandidateBlock> candidates, {
@@ -2197,6 +2122,7 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
   var droppedNoTitle = 0;
   var droppedInvalidTime = 0;
   var droppedNoMealTime = 0;
+  var droppedNoDishes = 0;
 
   for (final candidate in candidates) {
     final mealCategory = _inferMealCategoryForCandidate(candidate);
@@ -2224,6 +2150,12 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
 
     final repeatDays = _repeatDaysForEatingCandidate(candidate);
     final dishes = _dishesForEatingCandidate(candidate);
+
+    if (dishes.isEmpty) {
+      droppedNoDishes++;
+      continue;
+    }
+
     blocks.add(
       TimelineBlockDraft(
         id: 'eating-ai-${candidate.id}-${timestamp.millisecondsSinceEpoch}',
@@ -2252,6 +2184,7 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
     droppedNoTitle: droppedNoTitle,
     droppedInvalidTime: droppedInvalidTime,
     droppedNoMealTime: droppedNoMealTime,
+    droppedNoDishes: droppedNoDishes,
   );
 }
 
@@ -2332,38 +2265,7 @@ Map<String, int> _mealTimesForBase(BaseTimelineDraft base, int mealsPerDay) {
   };
 }
 
-int _mealCalories(int targetCalories, String mealId) {
-  final ratio = switch (mealId) {
-    'breakfast' => 0.23,
-    'lunch' => 0.32,
-    'snack' => 0.12,
-    'extra-snack' => 0.11,
-    'dinner' => 0.30,
-    _ => 0.20,
-  };
-  return (targetCalories * ratio).round();
-}
 
-int _mealProtein(Onboarding5MealBodyContext context, String mealId) {
-  final total = context.currentWeightKg == null
-      ? (context.targetCalories * 0.075).round()
-      : (context.currentWeightKg! *
-                (context.bodyGoal == 'gain'
-                    ? 1.8
-                    : context.bodyGoal == 'lose'
-                    ? 1.7
-                    : 1.5))
-            .round();
-  final ratio = switch (mealId) {
-    'breakfast' => 0.24,
-    'lunch' => 0.32,
-    'snack' => 0.12,
-    'extra-snack' => 0.10,
-    'dinner' => 0.30,
-    _ => 0.20,
-  };
-  return math.max(8, (total * ratio).round());
-}
 
 String _inferMealCategoryForCandidate(RoutineImportCandidateBlock candidate) {
   for (final value in [
@@ -2664,241 +2566,7 @@ String _normalizedEatingType(String? value) {
   };
 }
 
-List<String> _mealDishes({
-  required String style,
-  required String eatingType,
-  required String mealId,
-  required String bodyGoal,
-  String? customText,
-}) {
-  final isVeg = eatingType == 'veg';
-  if (bodyGoal == 'gain') {
-    return switch (style) {
-      'us' => _usGainMealDishes(mealId, isVeg: isVeg),
-      'germany' => _germanyGainMealDishes(mealId, isVeg: isVeg),
-      'custom' => _customGoalMealDishes(mealId, bodyGoal, customText),
-      _ => _indiaGainMealDishes(mealId, isVeg: isVeg),
-    };
-  }
-  if (bodyGoal == 'lose') {
-    return switch (style) {
-      'us' => _usLoseMealDishes(mealId, isVeg: isVeg),
-      'germany' => _germanyLoseMealDishes(mealId, isVeg: isVeg),
-      'custom' => _customGoalMealDishes(mealId, bodyGoal, customText),
-      _ => _indiaLoseMealDishes(mealId, isVeg: isVeg),
-    };
-  }
-  return switch (style) {
-    'us' => _usMealDishes(mealId, isVeg: isVeg),
-    'germany' => _germanyMealDishes(mealId, isVeg: isVeg),
-    'mixed' => _mixedMealDishes(mealId, isVeg: isVeg),
-    'custom' => _customMealDishes(mealId, isVeg: isVeg, customText: customText),
-    _ => _indiaMealDishes(mealId, isVeg: isVeg),
-  };
-}
 
-List<String> _indiaMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Idli', 'Sambar', 'Fruit'],
-    'extra-snack' => ['Poha cup', 'Tea'],
-    'lunch' =>
-      isVeg
-          ? ['Dal rice', 'Paneer sabzi', 'Curd']
-          : ['Chicken curry', 'Rice', 'Salad'],
-    'snack' => ['Chana chaat', 'Tea'],
-    'dinner' =>
-      isVeg
-          ? ['Roti', 'Mixed veg', 'Dal']
-          : ['Roti', 'Egg curry', 'Vegetables'],
-    _ => ['Simple meal'],
-  };
-}
-
-List<String> _indiaGainMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Paneer paratha', 'Curd', 'Banana'],
-    'extra-snack' => ['Peanut chikki', 'Milk'],
-    'lunch' =>
-      isVeg
-          ? ['Rajma rice', 'Paneer sabzi', 'Curd']
-          : ['Chicken curry', 'Rice', 'Curd'],
-    'snack' => ['Chana chaat', 'Banana shake'],
-    'dinner' =>
-      isVeg
-          ? ['Roti', 'Dal makhani', 'Mixed veg']
-          : ['Roti', 'Egg curry', 'Rice'],
-    _ => ['Higher-energy simple meal'],
-  };
-}
-
-List<String> _indiaLoseMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Idli', 'Sambar', 'Fruit'],
-    'extra-snack' => ['Fruit', 'Tea'],
-    'lunch' =>
-      isVeg
-          ? ['Dal', 'Small rice', 'Salad']
-          : ['Grilled chicken', 'Small rice', 'Salad'],
-    'snack' => ['Sprouts chaat', 'Tea'],
-    'dinner' =>
-      isVeg
-          ? ['Roti', 'Mixed veg', 'Dal']
-          : ['Roti', 'Egg bhurji', 'Vegetables'],
-    _ => ['Lighter simple meal'],
-  };
-}
-
-List<String> _usMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Oatmeal', 'Greek yogurt', 'Berries'],
-    'extra-snack' => ['Apple', 'Peanut butter'],
-    'lunch' =>
-      isVeg
-          ? ['Veggie wrap', 'Soup', 'Fruit']
-          : ['Chicken bowl', 'Rice', 'Salad'],
-    'snack' => ['Trail mix', 'Yogurt'],
-    'dinner' =>
-      isVeg
-          ? ['Pasta', 'Roasted vegetables']
-          : ['Grilled chicken', 'Potatoes', 'Greens'],
-    _ => ['Simple meal'],
-  };
-}
-
-List<String> _usGainMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Oatmeal', 'Greek yogurt', 'Peanut butter'],
-    'extra-snack' => ['Bagel', 'Cream cheese'],
-    'lunch' =>
-      isVeg
-          ? ['Bean burrito bowl', 'Avocado', 'Fruit']
-          : ['Chicken rice bowl', 'Avocado', 'Salad'],
-    'snack' => ['Trail mix', 'Protein yogurt'],
-    'dinner' =>
-      isVeg
-          ? ['Pasta', 'Lentil sauce', 'Vegetables']
-          : ['Salmon', 'Potatoes', 'Greens'],
-    _ => ['Higher-energy simple meal'],
-  };
-}
-
-List<String> _usLoseMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Oatmeal', 'Berries', 'Greek yogurt'],
-    'extra-snack' => ['Apple', 'Cottage cheese'],
-    'lunch' =>
-      isVeg
-          ? ['Veggie bowl', 'Beans', 'Salad']
-          : ['Chicken salad bowl', 'Rice', 'Fruit'],
-    'snack' => ['Yogurt', 'Fruit'],
-    'dinner' =>
-      isVeg
-          ? ['Vegetable soup', 'Whole grain toast']
-          : ['Grilled chicken', 'Vegetables'],
-    _ => ['Lighter simple meal'],
-  };
-}
-
-List<String> _germanyMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Muesli', 'Yogurt', 'Fruit'],
-    'extra-snack' => ['Pretzel', 'Cheese'],
-    'lunch' =>
-      isVeg
-          ? ['Kartoffelsalat', 'Lentil soup']
-          : ['Chicken schnitzel', 'Potatoes', 'Salad'],
-    'snack' => ['Quark', 'Fruit'],
-    'dinner' =>
-      isVeg
-          ? ['Bread', 'Cheese', 'Vegetable soup']
-          : ['Rye bread', 'Turkey slices', 'Soup'],
-    _ => ['Simple meal'],
-  };
-}
-
-List<String> _germanyGainMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Muesli', 'Yogurt', 'Nut butter'],
-    'extra-snack' => ['Pretzel', 'Cheese'],
-    'lunch' =>
-      isVeg
-          ? ['Lentil stew', 'Potatoes', 'Quark']
-          : ['Chicken schnitzel', 'Potatoes', 'Salad'],
-    'snack' => ['Quark', 'Fruit', 'Nuts'],
-    'dinner' =>
-      isVeg
-          ? ['Rye bread', 'Cheese', 'Vegetable soup']
-          : ['Rye bread', 'Turkey slices', 'Soup'],
-    _ => ['Higher-energy simple meal'],
-  };
-}
-
-List<String> _germanyLoseMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Muesli', 'Yogurt', 'Fruit'],
-    'extra-snack' => ['Fruit', 'Quark'],
-    'lunch' => isVeg ? ['Lentil soup', 'Salad'] : ['Chicken salad', 'Potatoes'],
-    'snack' => ['Quark', 'Fruit'],
-    'dinner' =>
-      isVeg ? ['Vegetable soup', 'Rye bread'] : ['Turkey slices', 'Soup'],
-    _ => ['Lighter simple meal'],
-  };
-}
-
-List<String> _mixedMealDishes(String mealId, {required bool isVeg}) {
-  return switch (mealId) {
-    'breakfast' => ['Oats', 'Fruit', 'Yogurt'],
-    'extra-snack' => ['Nuts', 'Fruit'],
-    'lunch' =>
-      isVeg
-          ? ['Rice bowl', 'Beans', 'Vegetables']
-          : ['Rice bowl', 'Chicken', 'Vegetables'],
-    'snack' => ['Sandwich', 'Tea'],
-    'dinner' =>
-      isVeg
-          ? ['Roti or bread', 'Vegetable curry']
-          : ['Lean protein', 'Rice', 'Salad'],
-    _ => ['Simple meal'],
-  };
-}
-
-List<String> _customMealDishes(
-  String mealId, {
-  required bool isVeg,
-  String? customText,
-}) {
-  final prefix = customText?.trim().isNotEmpty == true ? 'Local' : 'Simple';
-  return switch (mealId) {
-    'breakfast' => ['$prefix local breakfast', 'Fruit'],
-    'extra-snack' => ['Light snack'],
-    'lunch' =>
-      isVeg
-          ? ['Local veg meal', 'Rice or bread']
-          : ['Local protein meal', 'Rice or bread'],
-    'snack' => ['Tea snack'],
-    'dinner' => isVeg ? ['Simple veg dinner'] : ['Simple dinner with protein'],
-    _ => ['Simple meal'],
-  };
-}
-
-List<String> _customGoalMealDishes(
-  String mealId,
-  String bodyGoal,
-  String? customText,
-) {
-  final style = customText?.trim().isNotEmpty == true
-      ? 'custom-style'
-      : 'local';
-  final descriptor = bodyGoal == 'gain' ? 'higher-energy' : 'lighter';
-  return switch (mealId) {
-    'breakfast' => ['$descriptor $style breakfast', 'Fruit'],
-    'extra-snack' => ['$descriptor snack'],
-    'lunch' => ['$descriptor $style lunch', 'Protein side'],
-    'snack' => ['$descriptor tea snack'],
-    'dinner' => ['$descriptor $style dinner'],
-    _ => ['$descriptor simple meal'],
-  };
-}
 
 String _goalLabel(String value) {
   return switch (value) {
@@ -2986,11 +2654,4 @@ String _compactMinuteLabel(int minute) {
   return '$displayHour:${m.toString().padLeft(2, '0')}$suffix';
 }
 
-class _MealSpec {
-  final String id;
-  final String title;
-  final int startMinute;
-  final int durationMinutes;
 
-  const _MealSpec(this.id, this.title, this.startMinute, this.durationMinutes);
-}
