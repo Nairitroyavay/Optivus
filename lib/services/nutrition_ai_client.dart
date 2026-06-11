@@ -6,6 +6,9 @@ import 'package:optivus/models/routine_import_review.dart';
 
 final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
   if (OptivusAiWorkersConfig.useWorker) {
+    if (OptivusAiWorkersConfig.nutritionWorkerUrl.trim().isEmpty) {
+      throw StateError('OPTIVUS_NUTRITION_WORKER_URL is missing. Please configure it.');
+    }
     return WorkerNutritionAiClient();
   }
   return const FakeNutritionAiClient();
@@ -184,7 +187,7 @@ class WorkerNutritionAiClient implements NutritionAiClient {
           engineVersion: 'phase2d',
           candidates: const [],
           warnings: [
-            _friendlyErrorMessage(response.statusCode, body)
+            body['error'] as String? ?? 'provider_request_failed'
           ],
           createdAt: DateTime.now(),
         );
@@ -243,23 +246,5 @@ class WorkerNutritionAiClient implements NutritionAiClient {
     }
   }
 
-  String _friendlyErrorMessage(int statusCode, Map<String, dynamic> body) {
-    final rawError = body['error'] as String?;
-    
-    if (statusCode == 503 || statusCode == 429 || rawError == 'provider_high_demand' || rawError == 'provider_quota_exceeded' || rawError == 'provider_request_failed') {
-      return 'AI is busy right now. Try again in a moment.';
-    }
-    if (rawError == 'provider_invalid_response') {
-      return 'AI response could not be safely read. Please try again.';
-    }
-    if (rawError == 'provider_empty_candidates' || rawError == 'no_blocks_generated') {
-      return 'AI could not generate an eating routine. Please try again.';
-    }
-    if (rawError?.startsWith('invalid_') == true && rawError?.endsWith('_request') == true) {
-      return 'The request was invalid. Please try again.';
-    }
-    
-    // Only return a friendly fallback, do not leak raw error codes to the UI
-    return 'AI generation service could not process this request.';
-  }
+
 }

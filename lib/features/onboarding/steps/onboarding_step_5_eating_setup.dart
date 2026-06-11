@@ -216,6 +216,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final mapped = mapOnboarding5MealCandidates(
       result.candidates,
       now: DateTime.now(),
+      baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
     );
     final blocks = mapped.blocks;
     debugPrint(
@@ -312,6 +313,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         result.candidates,
         now: DateTime.now(),
         source: onboardingEatingGeneratedSource,
+        baseTimeline: draft.baseTimeline,
       );
       final blocks = mapped.blocks;
 
@@ -1406,10 +1408,7 @@ class _EatingVerticalTimeline extends StatelessWidget {
     const topPadding = 18.0;
     const bottomPadding = OnboardingStepShell.bottomCtaHeight + 40;
     const pxPerMinute = 0.82;
-    final timelineHeight = math.max(
-      rangeMinutes * pxPerMinute + topPadding + bottomPadding,
-      420.0,
-    );
+    final timelineHeight = rangeMinutes * pxPerMinute + topPadding + bottomPadding;
 
     double yFor(int minute) =>
         topPadding +
@@ -1489,10 +1488,7 @@ class _EatingVerticalTimeline extends StatelessWidget {
                   _EatingTimelineBlock(
                     block: block,
                     top: yFor(block.startMinute),
-                    height: math.max(
-                      54.0,
-                      (block.endMinute - block.startMinute) * pxPerMinute,
-                    ),
+                    height: (block.endMinute - block.startMinute) * pxPerMinute,
                   ),
               ],
             ),
@@ -1605,6 +1601,89 @@ class _EatingMinuteIndicator extends StatelessWidget {
   }
 }
 
+void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) => Container(
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(_mealIcon(block.mealCategory), color: OptivusColors.roseAccent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _mealTitleForDisplay(block),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: OptivusColors.ink.withValues(alpha: 0.6),
+              ),
+            ),
+            if (block.dishes.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'Menu / Dishes',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: OptivusColors.roseAccent,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final dish in block.dishes)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: OptivusColors.roseAccent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        dish,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.ink,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _EatingTimelineBlock extends StatelessWidget {
   final TimelineBlockDraft block;
   final double top;
@@ -1618,108 +1697,125 @@ class _EatingTimelineBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dishes = block.dishes
+    final allDishes = block.dishes
         .map((dish) => dish.trim())
         .where((dish) => dish.isNotEmpty)
-        .take(3)
-        .join(', ');
+        .toList();
+    final visibleDishes = allDishes.take(3).toList();
+    final hiddenCount = allDishes.length - visibleDishes.length;
+
+    final isSuperCompact = height < 32;
+    final isCompact = height >= 32 && height < 74;
 
     return Positioned(
       top: top,
       left: 64,
       right: 16,
-      height: height,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          color: Colors.white.withValues(alpha: 0.44),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              OptivusColors.roseAccent.withValues(alpha: 0.22),
-              OptivusColors.roseAccent.withValues(alpha: 0.06),
+      height: math.max(26.0, height),
+      child: GestureDetector(
+        onTap: () => _showEatingBlockDetails(context, block),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(isSuperCompact ? 12 : 22),
+            color: Colors.white.withValues(alpha: 0.44),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                OptivusColors.roseAccent.withValues(alpha: 0.22),
+                OptivusColors.roseAccent.withValues(alpha: 0.06),
+              ],
+            ),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.88),
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: OptivusColors.roseAccent.withValues(alpha: 0.14),
+                blurRadius: 13,
+                offset: const Offset(0, 5),
+              ),
             ],
           ),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.88),
-            width: 1.4,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: OptivusColors.roseAccent.withValues(alpha: 0.14),
-              blurRadius: 13,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(22),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    _mealIcon(block.mealCategory),
-                    color: OptivusColors.roseAccent,
-                    size: height < 62 ? 14 : 17,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(isSuperCompact ? 12 : 22),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: SingleChildScrollView(
+                physics: const NeverScrollableScrollPhysics(),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: isSuperCompact ? 4 : 8,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: height < 74
-                        ? Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _mealTitleForDisplay(block),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w900,
-                                    color: OptivusColors.ink,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              _EatingInfoChip(
-                                '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                                compact: true,
-                              ),
-                            ],
-                          )
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _mealTitleForDisplay(block),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w900,
-                                  color: OptivusColors.ink,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Wrap(
-                                spacing: 6,
-                                runSpacing: 5,
+                  child: Row(
+                    crossAxisAlignment: isCompact || isSuperCompact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _mealIcon(block.mealCategory),
+                        color: OptivusColors.roseAccent,
+                        size: isSuperCompact ? 12 : (height < 62 ? 14 : 17),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: isSuperCompact || isCompact
+                            ? Row(
                                 children: [
+                                  Expanded(
+                                    child: Text(
+                                      _mealTitleForDisplay(block),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: isSuperCompact ? 11 : 12.5,
+                                        fontWeight: FontWeight.w900,
+                                        color: OptivusColors.ink,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
                                   _EatingInfoChip(
                                     '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                                    compact: true,
                                   ),
-                                  if (dishes.isNotEmpty)
-                                    _EatingInfoChip(dishes),
+                                ],
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _mealTitleForDisplay(block),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w900,
+                                      color: OptivusColors.ink,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 5,
+                                    children: [
+                                      _EatingInfoChip(
+                                        '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                                      ),
+                                      for (final dish in visibleDishes)
+                                        _EatingInfoChip(dish),
+                                      if (hiddenCount > 0)
+                                        _EatingInfoChip('+$hiddenCount more'),
+                                    ],
+                                  ),
                                 ],
                               ),
-                            ],
-                          ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -1738,7 +1834,7 @@ class _EatingInfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(maxWidth: 190),
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.5),
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 7 : 8,
         vertical: compact ? 3 : 4,
@@ -1749,7 +1845,7 @@ class _EatingInfoChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        maxLines: 1,
+        maxLines: compact ? 1 : 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontSize: compact ? 10 : 11,
@@ -2108,7 +2204,7 @@ List<TimelineBlockDraft> onboarding5MealBlocksFromCandidates(
   List<RoutineImportCandidateBlock> candidates, {
   DateTime? now,
 }) {
-  return mapOnboarding5MealCandidates(candidates, now: now).blocks;
+  return mapOnboarding5MealCandidates(candidates, now: now, baseTimeline: null).blocks;
 }
 
 @visibleForTesting
@@ -2116,6 +2212,7 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
   List<RoutineImportCandidateBlock> candidates, {
   DateTime? now,
   String source = onboardingEatingAiImportSource,
+  BaseTimelineDraft? baseTimeline,
 }) {
   final timestamp = now ?? DateTime.now();
   final blocks = <TimelineBlockDraft>[];
@@ -2133,12 +2230,36 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
     }
 
     final defaultTime = _defaultMealTimeForCategory(mealCategory);
+    
+    int? overrideStart;
+    int? overrideEnd;
+    if (baseTimeline != null) {
+      if (mealCategory == 'breakfast' && baseTimeline.breakfastMinute != null) {
+        overrideStart = baseTimeline.breakfastMinute;
+        overrideEnd = overrideStart! + 30;
+      } else if (mealCategory == 'lunch' && baseTimeline.lunchMinute != null) {
+        overrideStart = baseTimeline.lunchMinute;
+        overrideEnd = overrideStart! + 45;
+      } else if (mealCategory == 'snack' && baseTimeline.snackMinute != null) {
+        overrideStart = baseTimeline.snackMinute;
+        overrideEnd = overrideStart! + 20;
+      } else if (mealCategory == 'extra-snack' && baseTimeline.extraSnackMinute != null) {
+        overrideStart = baseTimeline.extraSnackMinute;
+        overrideEnd = overrideStart! + 20;
+      } else if (mealCategory == 'dinner' && baseTimeline.dinnerMinute != null) {
+        overrideStart = baseTimeline.dinnerMinute;
+        overrideEnd = overrideStart! + 45;
+      }
+    }
+
     final hasCandidateTime =
         candidate.hasFixedTime && candidate.startMinute < candidate.endMinute;
     final startMinute = hasCandidateTime
         ? candidate.startMinute
-        : defaultTime?.$1;
-    final endMinute = hasCandidateTime ? candidate.endMinute : defaultTime?.$2;
+        : (overrideStart ?? defaultTime?.$1);
+    final endMinute = hasCandidateTime 
+        ? candidate.endMinute 
+        : (overrideEnd ?? defaultTime?.$2);
     if (startMinute == null || endMinute == null) {
       droppedNoMealTime++;
       continue;
@@ -2323,37 +2444,43 @@ List<int> _repeatDaysForEatingCandidate(RoutineImportCandidateBlock candidate) {
 }
 
 List<String> _dishesForEatingCandidate(RoutineImportCandidateBlock candidate) {
-  final fromSteps = candidate.steps
-      .map((step) => step.trim())
-      .where((step) => step.isNotEmpty)
-      .toList(growable: false);
-  if (fromSteps.isNotEmpty) return fromSteps;
+  final dishes = <String>{};
+  dishes.addAll(
+    candidate.steps.map((s) => s.trim()).where((s) => s.isNotEmpty),
+  );
 
-  final snippet = candidate.sourceTextSnippet?.trim();
-  if (snippet == null || snippet.isEmpty) return const [];
-  final withoutMealWords = snippet
-      .replaceAll(
-        RegExp(r'\b(Breakfast|Lunch|Snacks?|Dinner)\b', caseSensitive: false),
-        ' ',
-      )
-      .replaceAll(
-        RegExp(
-          r'\b(Mon|Tue|Tues|Wed|Thu|Thur|Fri|Sat|Sun)(day)?\b',
-          caseSensitive: false,
-        ),
-        ' ',
-      )
-      .replaceAll(
-        RegExp(r'\d{1,2}[:.]\d{2}\s*(AM|PM)?', caseSensitive: false),
-        ' ',
-      )
-      .replaceAll(RegExp(r'\d{1,2}\s*(AM|PM)', caseSensitive: false), ' ');
-  return withoutMealWords
-      .split(RegExp(r'[,;\n|•·]+'))
-      .map((item) => item.trim())
-      .where((item) => item.length >= 2)
-      .take(6)
-      .toList(growable: false);
+  void extractFromRawText(String? text) {
+    if (text == null || text.trim().isEmpty) return;
+    final withoutMealWords = text
+        .replaceAll(
+          RegExp(r'\b(Breakfast|Lunch|Brunch|Supper|Snacks?|Dinner)\b', caseSensitive: false),
+          ' ',
+        )
+        .replaceAll(
+          RegExp(
+            r'\b(Mon|Tue|Tues|Wed|Thu|Thur|Fri|Sat|Sun)(day)?\b',
+            caseSensitive: false,
+          ),
+          ' ',
+        )
+        .replaceAll(
+          RegExp(r'\d{1,2}[:.]\d{2}\s*(AM|PM)?', caseSensitive: false),
+          ' ',
+        )
+        .replaceAll(RegExp(r'\d{1,2}\s*(AM|PM)', caseSensitive: false), ' ');
+    final items = withoutMealWords
+        .split(RegExp(r'[,;\n|•·]+'))
+        .map((item) => item.trim())
+        .where((item) => item.length >= 2);
+    dishes.addAll(items);
+  }
+
+  extractFromRawText(candidate.sourceTextSnippet);
+  extractFromRawText(candidate.notes);
+  extractFromRawText(candidate.sourceColumnLabel);
+  extractFromRawText(candidate.title);
+
+  return dishes.toList();
 }
 
 List<int> _dayNumbersFromText(String text) {
@@ -2448,7 +2575,7 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('not found') || text.contains('r2_image_missing')) {
     return 'Uploaded meal photo could not be found. Please upload again.';
   }
-  if (text.contains('unauthorized') || text.contains('invalid key')) {
+  if (text.contains('unauthorized') || text.contains('invalid key') || text.contains('invalid_api_key')) {
     return 'AI key is invalid or unauthorized.';
   }
   if (text.contains('invalid structured') ||

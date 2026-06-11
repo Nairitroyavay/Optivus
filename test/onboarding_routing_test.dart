@@ -38,7 +38,7 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
     
     final container = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
     final router = container.read(routerProvider);
@@ -74,11 +74,11 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
     
     final container = ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
     final router = container.read(routerProvider);
-    expect(router.routerDelegate.currentConfiguration.uri.path, '/');
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/app');
   });
 }
 

@@ -7,7 +7,7 @@ class OptivusAiWorkersConfig {
 
   static const String _modeName = String.fromEnvironment(
     'OPTIVUS_AI_WORKERS_MODE',
-    defaultValue: 'fake',
+    defaultValue: 'worker',
   );
 
   static OptivusAiWorkerMode get mode {
@@ -15,9 +15,9 @@ class OptivusAiWorkersConfig {
       return OptivusAiWorkerMode.worker;
     }
     return switch (_modeName) {
-      'worker' => OptivusAiWorkerMode.worker,
+      'fake' => OptivusAiWorkerMode.fake,
       'disabled' => OptivusAiWorkerMode.disabled,
-      _ => OptivusAiWorkerMode.fake,
+      _ => OptivusAiWorkerMode.worker,
     };
   }
 

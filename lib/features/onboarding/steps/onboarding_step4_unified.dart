@@ -271,7 +271,8 @@ bool _hasDisallowedWorkPhrase(String normalized) {
   return normalized.contains('rest day') ||
       normalized.contains('no work') ||
       normalized.contains('online course') ||
-      normalized.contains('personal habit');
+      normalized.contains('personal habit') ||
+      normalized.contains('habit');
 }
 
 bool _hasDisallowedWorkToken(String normalized) {
@@ -995,6 +996,13 @@ class _OnboardingStep4UnifiedState
       if (aFront != bFront) {
         return aFront ? 1 : -1;
       }
+      
+      final aDuration = a.block.endMinute - a.block.startMinute;
+      final bDuration = b.block.endMinute - b.block.startMinute;
+      if (aDuration != bDuration) {
+        return bDuration.compareTo(aDuration);
+      }
+
       if (!aFront && a.hasOverlap && b.hasOverlap) {
         final laneCompare = b.lane.compareTo(a.lane);
         if (laneCompare != 0) return laneCompare;

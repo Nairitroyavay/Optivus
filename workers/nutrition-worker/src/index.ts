@@ -178,7 +178,20 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
           generationConfig: { responseMimeType: "application/json" }
         })
       });
-      if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
+      if (!res.ok) {
+        let errJson: any = {};
+        try { errJson = await res.json(); } catch {}
+        if (res.status === 429) {
+          throw new HttpError(429, "provider_quota_exceeded", "Provider quota exceeded.");
+        }
+        if (res.status === 503 || res.status === 502 || res.status === 504) {
+          throw new HttpError(503, "provider_high_demand", "Provider is busy or in high demand.");
+        }
+        if (res.status >= 400 && res.status < 500) {
+          throw new HttpError(res.status, "invalid_provider_request", "Invalid request sent to provider.");
+        }
+        throw new Error(`Provider failed with status ${res.status}`);
+      }
       const json = await res.json() as any;
       return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
     };
@@ -186,14 +199,19 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     try {
       text = await fetchGemini(primaryModel);
     } catch (err) {
+      if (err instanceof HttpError && err.status === 429) {
+        throw err; // DO NOT fallback on quota exceeded
+      }
       if (fallbackModel && fallbackModel !== primaryModel) {
         console.warn(`[NutritionWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
         try {
           text = await fetchGemini(fallbackModel);
-        } catch {
+        } catch (fallbackErr) {
+          if (fallbackErr instanceof HttpError) throw fallbackErr;
           throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
         }
       } else {
+        if (err instanceof HttpError) throw err;
         throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
       }
     }
@@ -204,10 +222,15 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
   const parsed = parseAiJsonText(text);
   const blocks = Array.isArray(parsed) ? parsed : (parsed as any)?.candidates ?? [];
 
+  const validBlocks = blocks.filter((b: any) => Array.isArray(b.steps) && b.steps.length > 0);
+  if (validBlocks.length === 0) {
+    throw new HttpError(500, "provider_empty_candidates", "AI returned no valid meals.");
+  }
+
   return jsonResponse(request, env, { 
     id: `eat-gen-${Date.now()}`,
     uid: user.uid,
-    candidates: blocks 
+    candidates: validBlocks 
   });
 }
 

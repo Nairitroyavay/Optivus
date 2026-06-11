@@ -239,7 +239,7 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
           review: review,
           engine: 'worker',
           engineVersion: 'phase2d',
-          warning: _friendlyErrorMessage(response.statusCode, body),
+          warning: body['error'] as String? ?? 'provider_request_failed',
         );
       }
 
@@ -288,34 +288,7 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
     };
   }
 
-  String _friendlyErrorMessage(int statusCode, Map<String, dynamic> body) {
-    final rawError = body['error'] as String?;
-    
-    if (statusCode == 503 || statusCode == 429 || rawError == 'provider_high_demand' || rawError == 'provider_quota_exceeded' || rawError == 'provider_request_failed') {
-      return 'AI is busy right now. Try again in a moment.';
-    }
-    if (rawError == 'provider_invalid_response') {
-      return 'AI response could not be safely read. Please try again.';
-    }
-    if (rawError == 'provider_empty_candidates' || rawError == 'no_blocks_generated') {
-      return 'AI could not read blocks from the photo. Try a clearer image.';
-    }
-    if (rawError == 'unsupported_content_type') {
-      return 'Photo format is not supported. Please upload JPEG, PNG, or WEBP.';
-    }
-    if (rawError == 'r2_image_missing') {
-      return 'Uploaded photo could not be found. Please upload again.';
-    }
-    if (rawError?.startsWith('invalid_') == true && rawError?.endsWith('_request') == true) {
-      return 'The request was invalid. Please try again.';
-    }
-    if (rawError == 'payload_too_large') {
-      return 'The uploaded file is too large.';
-    }
-    
-    // Only return a friendly fallback, do not leak raw error codes to the UI
-    return 'AI extraction service could not process this photo.';
-  }
+
 
 
 
@@ -491,12 +464,17 @@ const Set<String> _forbiddenWorkerFields = {
 };
 
 final routineImportAiClientProvider = Provider<RoutineImportAiClient>((ref) {
+  if (OptivusRoutineImportAiConfig.mode == OptivusRoutineImportAiMode.worker) {
+    if (OptivusRoutineImportAiConfig.workerBaseUrl.trim().isEmpty) {
+      throw StateError('OPTIVUS_ROUTINE_IMPORT_WORKER_URL is missing. Please configure it.');
+    }
+    return WorkerRoutineImportAiClient();
+  }
   return switch (OptivusRoutineImportAiConfig.mode) {
     OptivusRoutineImportAiMode.disabled => const FakeRoutineImportAiClient(
       disabled: true,
     ),
-    OptivusRoutineImportAiMode.worker => WorkerRoutineImportAiClient(),
-    OptivusRoutineImportAiMode.fake => const FakeRoutineImportAiClient(),
+    _ => const FakeRoutineImportAiClient(),
   };
 });
 

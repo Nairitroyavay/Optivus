@@ -10,6 +10,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
+import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
@@ -1616,6 +1617,7 @@ void main() {
             notifier = MockOnboardingNotifier()..loadSeedData(draft);
             return notifier;
           }),
+          nutritionAiClientProvider.overrideWithValue(const FakeNutritionAiClient()),
         ],
         child: const MaterialApp(home: OnboardingFlow()),
       ),
@@ -1756,6 +1758,7 @@ void main() {
         blockType: TimelineBlockDraft.hardBlockKey,
         category: 'eating',
         hardBlock: true,
+        steps: const ['Lunch item'],
       ),
       RoutineImportCandidateBlock(
         id: 'bad',
@@ -1800,7 +1803,7 @@ void main() {
         ),
         RoutineImportCandidateBlock(
           id: 'wed-snacks',
-          title: 'extra_snack',
+          title: 'Snacks',
           startMinute: 0,
           endMinute: 0,
           hasFixedTime: false,

@@ -411,41 +411,45 @@ class OnboardingStepShell extends StatelessWidget {
                       height: headerHeight,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Stack(
-                          alignment: Alignment.center,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: SizedBox(width: 92),
+                            SizedBox(
+                              width: 32,
+                              child: topLeftOverlay != null
+                                  ? Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: topLeftOverlay!,
+                                    )
+                                  : null,
                             ),
-                            if (topLeftOverlay != null)
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: topLeftOverlay!,
+                            Expanded(
+                              child: Center(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: LiquidGlassOnboardingIndicator(
+                                    page: pageOffset,
+                                    count: completedSteps.length,
+                                    completedSteps: completedSteps,
+                                    onDotTap: onDotTap,
+                                    onDragTarget: onIndicatorDraggedTo,
+                                  ),
+                                ),
                               ),
-                            LiquidGlassOnboardingIndicator(
-                              page: pageOffset,
-                              count: completedSteps.length,
-                              completedSteps: completedSteps,
-                              onDotTap: onDotTap,
-                              onDragTarget: onIndicatorDraggedTo,
                             ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: SizedBox(
-                                width: 92,
-                                child: showSave
-                                    ? Align(
-                                        alignment: Alignment.centerRight,
-                                        child: OnboardingSaveButton(
-                                          isSaving: isSaving,
-                                          isSaved: isSaved,
-                                          enabled: saveEnabled,
-                                          onTap: onSave,
-                                        ),
-                                      )
-                                    : const SizedBox.shrink(),
-                              ),
+                            SizedBox(
+                              width: 32,
+                              child: showSave
+                                  ? Align(
+                                      alignment: Alignment.centerRight,
+                                      child: OnboardingSaveButton(
+                                        isSaving: isSaving,
+                                        isSaved: isSaved,
+                                        enabled: saveEnabled,
+                                        onTap: onSave,
+                                      ),
+                                    )
+                                  : const SizedBox.shrink(),
                             ),
                           ],
                         ),

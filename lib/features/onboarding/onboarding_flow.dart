@@ -188,6 +188,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       );
 
       final savedDraft = ref.read(mockOnboardingProvider).draft;
+      
+      if (step == 2 && savedDraft.baseTimeline.roleChangeWarnings != null && savedDraft.baseTimeline.roleChangeWarnings!.isNotEmpty) {
+        _invalidateDownstreamStages(2);
+      }
+
       await ref.read(onboardingRepositoryProvider).saveDraft(savedDraft);
 
       return true;
@@ -365,6 +370,23 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return lastCompleted;
   }
 
+  void _invalidateDownstreamStages(int fromStep) {
+    final onboardingState = ref.read(mockOnboardingProvider);
+    final completed = List<bool>.from(onboardingState.stepCompleted);
+    var changed = false;
+    for (var i = fromStep + 1; i <= OnboardingDraft.lastStepIndex; i++) {
+      if (completed[i]) {
+        completed[i] = false;
+        changed = true;
+      }
+    }
+    if (changed) {
+      for (var i = fromStep + 1; i <= OnboardingDraft.lastStepIndex; i++) {
+        ref.read(mockOnboardingProvider.notifier).setStepCompleted(i, completed[i]);
+      }
+    }
+  }
+
   Future<void> _navigateToIndicatorStep(int index) async {
     final onboardingState = ref.read(mockOnboardingProvider);
     final boundedIndex = index.clamp(
@@ -400,6 +422,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             'Use Next Step to unlock the next onboarding step.',
           );
       return;
+    }
+
+    if (!isBackward) {
+      for (var i = _currentPage; i < boundedIndex; i++) {
+        final error = onboardingState.draft.validateStep(i, onboardingState.stepCompleted);
+        if (error != null) {
+          ref.read(mockOnboardingProvider.notifier).setValidationMessage(
+            'Please complete earlier steps before skipping ahead.',
+          );
+          return;
+        }
+      }
     }
 
     _currentPage = boundedIndex;

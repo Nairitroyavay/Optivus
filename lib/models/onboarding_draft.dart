@@ -1194,6 +1194,8 @@ class BaseTimelineDraft {
     bool clearSkinCareSkinType = false,
     bool clearSkinCareProblems = false,
     bool clearSkinCarePlanning = false,
+    bool clearClassData = false,
+    bool clearWorkData = false,
   }) {
     return BaseTimelineDraft(
       blocks: blocks ?? this.blocks,
@@ -1273,7 +1275,13 @@ class BaseTimelineDraft {
           ? null
           : (skinCarePreference ?? this.skinCarePreference),
       skinCareSkipped: skinCareSkipped ?? this.skinCareSkipped,
-      pendingFutureImports: pendingFutureImports ?? this.pendingFutureImports,
+      pendingFutureImports: (clearClassData || clearWorkData)
+          ? (pendingFutureImports ?? this.pendingFutureImports).where((entry) {
+              if (clearClassData && entry.section == 'classes') return false;
+              if (clearWorkData && entry.section == 'job_work_business') return false;
+              return true;
+            }).toList(growable: false)
+          : (pendingFutureImports ?? this.pendingFutureImports),
       acceptedConflictKeys: acceptedConflictKeys ?? this.acceptedConflictKeys,
       roleChangeWarnings: clearRoleChangeWarnings
           ? const []
@@ -1491,6 +1499,8 @@ class BaseTimelineDraft {
         acceptedConflictKeys: nextAcceptedKeys,
         roleChangeWarnings: warnings,
         clearBusinessPlanning: !businessEnabled,
+        clearClassData: !classesEnabled,
+        clearWorkData: !jobEnabled,
       ),
       warnings: warnings,
     );

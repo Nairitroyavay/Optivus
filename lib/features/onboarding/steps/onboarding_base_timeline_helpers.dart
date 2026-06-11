@@ -83,24 +83,15 @@ class OnboardingStageBackButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(13),
         onTap: onTap,
         child: Container(
-          height: 30,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.24),
             borderRadius: BorderRadius.circular(13),
             border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
           ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.arrow_back_rounded, size: 14),
-              SizedBox(width: 3),
-              Text(
-                'Back',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900),
-              ),
-            ],
-          ),
+          child: const Icon(Icons.arrow_back_rounded, size: 18),
         ),
       ),
     );
