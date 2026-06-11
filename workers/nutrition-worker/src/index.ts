@@ -114,20 +114,20 @@ Return ONLY a JSON object containing a "candidates" array of meal blocks. Each b
 - "endMinute": integer (minutes from midnight)
 - "repeatDays": array of integers 1-7 (1=Monday)
 - "mealCategory": "breakfast", "lunch", "snack", or "dinner"
-- "steps": array of strings (the dishes)
+- "steps": array of strings containing actual, specific dish names. Do NOT output generic meal names like "Breakfast", "Lunch", "Snack", or "Food" in the steps array. Each steps array MUST contain at least 2 distinct specific dishes (e.g. ["Oatmeal with Almonds", "Fresh Apple Slice"]).
 - "blockType": "soft_block"
 - "candidateType": "block"
 - "confidenceScore": 0.95
 
-Schedule meals around these times:
-Breakfast: ${context.breakfastMinute}
-Lunch: ${context.lunchMinute}
-Dinner: ${context.dinnerMinute}
-${context.snackMinute ? `Snack: ${context.snackMinute}` : ""}
-${context.extraSnackMinute ? `Extra Snack: ${context.extraSnackMinute}` : ""}
+You MUST schedule the generated meals EXACTLY at these requested start times (minutes from midnight):
+- Breakfast start: ${context.breakfastMinute}
+- Lunch start: ${context.lunchMinute}
+- Dinner start: ${context.dinnerMinute}
+${context.snackMinute ? `- Snack start: ${context.snackMinute}` : ""}
+${context.extraSnackMinute ? `- Extra Snack start: ${context.extraSnackMinute}` : ""}
 
 For each day (1 to 7), generate the required meals. Vary the dishes slightly by day to match the specified Diet Type and Style.
-Output format exactly: { "candidates": [ { "title": "Breakfast", "startMinute": 480, "endMinute": 510, "repeatDays": [1,2,3,4,5,6,7], "mealCategory": "breakfast", "steps": ["Oatmeal", "Apple"], "blockType": "soft_block", "candidateType": "block" } ] }`;
+Output format exactly: { "candidates": [ { "title": "Breakfast", "startMinute": 480, "endMinute": 510, "repeatDays": [1,2,3,4,5,6,7], "mealCategory": "breakfast", "steps": ["Oatmeal with Almonds", "Fresh Apple Slice"], "blockType": "soft_block", "candidateType": "block" } ] }`;
 }
 
 async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<Response> {

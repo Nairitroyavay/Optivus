@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
+import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/state/auth_state.dart';
 
 enum RoutineImportAiStatus { idle, extracting, extracted, failed }
@@ -76,6 +77,8 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
         result: result,
       );
       return result;
+    } on MissingConfigException catch (e) {
+      return _fail(e.message);
     } catch (_) {
       return _fail('AI extraction failed. Try again later.');
     }

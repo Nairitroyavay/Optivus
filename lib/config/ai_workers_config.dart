@@ -5,6 +5,8 @@ enum OptivusAiWorkerMode { disabled, fake, worker }
 class OptivusAiWorkersConfig {
   const OptivusAiWorkersConfig._();
 
+  static bool allowFakeAiForTestsOnly = false;
+
   static const String _modeName = String.fromEnvironment(
     'OPTIVUS_AI_WORKERS_MODE',
     defaultValue: 'worker',

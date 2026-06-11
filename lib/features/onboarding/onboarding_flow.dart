@@ -189,7 +189,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
       final savedDraft = ref.read(mockOnboardingProvider).draft;
       
-      if (step == 2 && savedDraft.baseTimeline.roleChangeWarnings != null && savedDraft.baseTimeline.roleChangeWarnings!.isNotEmpty) {
+      if (step == 2 && savedDraft.baseTimeline.roleChangeWarnings.isNotEmpty) {
         _invalidateDownstreamStages(2);
       }
 

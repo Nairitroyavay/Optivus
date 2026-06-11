@@ -4,15 +4,40 @@ import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
 import 'package:optivus/models/routine_import_review.dart';
 
+class MissingConfigException implements Exception {
+  final String message;
+  const MissingConfigException(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class MissingConfigNutritionAiClient implements NutritionAiClient {
+  const MissingConfigNutritionAiClient();
+
+  @override
+  Future<RoutineImportExtractionResult> generateEatingRoutine({
+    required String uid,
+    required String idToken,
+    required Map<String, dynamic> params,
+  }) async {
+    throw const MissingConfigException('Real AI is not configured. Missing routine import worker URL.');
+  }
+}
+
 final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
   if (OptivusAiWorkersConfig.useWorker) {
     if (OptivusAiWorkersConfig.nutritionWorkerUrl.trim().isEmpty) {
-      throw StateError('OPTIVUS_NUTRITION_WORKER_URL is missing. Please configure it.');
+      return const MissingConfigNutritionAiClient();
     }
     return WorkerNutritionAiClient();
   }
-  return const FakeNutritionAiClient();
+  if (OptivusAiWorkersConfig.allowFakeAiForTestsOnly) {
+    return const FakeNutritionAiClient();
+  }
+  return const MissingConfigNutritionAiClient();
 });
+
 
 abstract class NutritionAiClient {
   Future<RoutineImportExtractionResult> generateEatingRoutine({
@@ -155,15 +180,8 @@ class WorkerNutritionAiClient implements NutritionAiClient {
     required Map<String, dynamic> params,
   }) async {
     if (baseUrl.trim().isEmpty) {
-      return RoutineImportExtractionResult(
-        id: 'worker-gen-missing-url',
-        uid: uid,
-        source: RoutineImportReviewSource.eating,
-        engine: 'worker',
-        engineVersion: 'phase2d',
-        candidates: const [],
-        warnings: const ['Nutrition AI worker is not configured.'],
-        createdAt: DateTime.now(),
+      throw const MissingConfigException(
+        'Real AI is not configured. Missing nutrition worker URL.',
       );
     }
 

@@ -2,8 +2,10 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/ai_workers_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
@@ -332,6 +334,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         _creatingRoutine = false;
         _editingGeneratedRoutine = false;
       });
+    } on MissingConfigException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _creatingRoutine = false;
+        _createError = e.message;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -580,6 +588,27 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
               ? null
               : onGenerate,
         ),
+        if (kDebugMode) ...[
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: OptivusColors.roseAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'DEBUG: AI Mode = ${OptivusAiWorkersConfig.mode.name.toUpperCase()}',
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ],
         if (uploadError != null || generationError != null) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: uploadError ?? generationError!),
@@ -1393,6 +1422,133 @@ class _EatingTimelineSection extends StatelessWidget {
   }
 }
 
+class StretchedSegment {
+  final int startMinute;
+  final int endMinute;
+  final double extraStretch;
+
+  const StretchedSegment({
+    required this.startMinute,
+    required this.endMinute,
+    required this.extraStretch,
+  });
+}
+
+class EatingTimelineLayout {
+  final int startMinute;
+  final int endMinute;
+  final double pxPerMinute;
+  final double topPadding;
+  final List<StretchedSegment> mergedSegments;
+  final double totalExtraStretch;
+
+  EatingTimelineLayout({
+    required this.startMinute,
+    required int rangeMinutes,
+    required this.pxPerMinute,
+    required this.topPadding,
+    required List<StretchedSegment> segments,
+  })  : endMinute = startMinute + rangeMinutes,
+        mergedSegments = _mergeSegments(segments),
+        totalExtraStretch = _calculateTotalStretch(segments);
+
+  static List<StretchedSegment> _mergeSegments(List<StretchedSegment> segments) {
+    if (segments.isEmpty) return [];
+    final sorted = List<StretchedSegment>.from(segments)
+      ..sort((a, b) {
+        final cmp = a.startMinute.compareTo(b.startMinute);
+        if (cmp != 0) return cmp;
+        return a.endMinute.compareTo(b.endMinute);
+      });
+
+    final List<StretchedSegment> merged = [];
+    var current = sorted[0];
+
+    for (int i = 1; i < sorted.length; i++) {
+      final next = sorted[i];
+      if (next.startMinute <= current.endMinute) {
+        final newStart = current.startMinute;
+        final newEnd = math.max(current.endMinute, next.endMinute);
+        final newExtraStretch = current.extraStretch + next.extraStretch;
+        current = StretchedSegment(
+          startMinute: newStart,
+          endMinute: newEnd,
+          extraStretch: newExtraStretch,
+        );
+      } else {
+        merged.add(current);
+        current = next;
+      }
+    }
+    merged.add(current);
+    return merged;
+  }
+
+  static double _calculateTotalStretch(List<StretchedSegment> segments) {
+    final merged = _mergeSegments(segments);
+    return merged.fold<double>(0.0, (sum, seg) => sum + seg.extraStretch);
+  }
+
+  double yFor(num minute) {
+    final double m = minute.toDouble();
+    final double baseClamped = m.clamp(startMinute.toDouble(), endMinute.toDouble());
+    final double normalY = topPadding + (baseClamped - startMinute) * pxPerMinute;
+    
+    double stretch = 0.0;
+    for (final seg in mergedSegments) {
+      if (m <= seg.startMinute) {
+        continue;
+      } else if (m >= seg.endMinute) {
+        stretch += seg.extraStretch;
+      } else {
+        final double fraction = (m - seg.startMinute) / (seg.endMinute - seg.startMinute);
+        stretch += fraction * seg.extraStretch;
+      }
+    }
+    return normalY + stretch;
+  }
+}
+
+double calculateRequiredBlockHeight({
+  required String title,
+  required List<String> dishes,
+  required String timeLabel,
+  required double blockWidth,
+}) {
+  final allDishes = dishes.map((d) => d.trim()).where((d) => d.isNotEmpty).toList();
+  const double titleRowHeight = 20.0;
+  const double spacingBeforeWrap = 5.0;
+  const double verticalPadding = 16.0;
+
+  final List<String> labels = [timeLabel, ...allDishes];
+  final double wrapWidth = math.max(50.0, blockWidth - 24.0);
+  final double wrapHeight = _calculateWrapHeight(labels, wrapWidth, 6.0, 5.0, 23.0);
+  
+  final double estimatedHeight = verticalPadding + titleRowHeight + spacingBeforeWrap + wrapHeight;
+  return math.max(74.0, estimatedHeight);
+}
+
+double _calculateWrapHeight(List<String> labels, double wrapWidth, double spacing, double runSpacing, double chipHeight) {
+  if (labels.isEmpty) return 0.0;
+  double currentX = 0.0;
+  int rows = 1;
+  for (int i = 0; i < labels.length; i++) {
+    final label = labels[i];
+    final double chipWidth = math.min(wrapWidth, 16.0 + label.length * 6.8);
+    if (i == 0) {
+      currentX = chipWidth;
+    } else {
+      if (currentX + spacing + chipWidth <= wrapWidth) {
+        currentX += spacing + chipWidth;
+      } else {
+        rows++;
+        currentX = chipWidth;
+      }
+    }
+  }
+  return rows * chipHeight + (rows - 1) * runSpacing;
+}
+
 class _EatingVerticalTimeline extends StatelessWidget {
   final List<TimelineBlockDraft> blocks;
 
@@ -1408,93 +1564,122 @@ class _EatingVerticalTimeline extends StatelessWidget {
     const topPadding = 18.0;
     const bottomPadding = OnboardingStepShell.bottomCtaHeight + 40;
     const pxPerMinute = 0.82;
-    final timelineHeight = rangeMinutes * pxPerMinute + topPadding + bottomPadding;
 
-    double yFor(int minute) =>
-        topPadding +
-        (minute - startMinute).clamp(0, rangeMinutes) * pxPerMinute;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final blockWidth = constraints.maxWidth - 64 - 16;
 
-    return Container(
-      key: const ValueKey('onboarding-step5-timeline'),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.40),
-        border: Border(
-          top: BorderSide(
-            color: Colors.white.withValues(alpha: 0.80),
-            width: 1.5,
-          ),
-        ),
-      ),
-      child: ShaderMask(
-        shaderCallback: (bounds) => const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.transparent,
-            Colors.white,
-            Colors.white,
-            Colors.transparent,
-          ],
-          stops: [0.0, 0.045, 0.95, 1.0],
-        ).createShader(bounds),
-        blendMode: BlendMode.dstIn,
-        child: SingleChildScrollView(
-          key: const ValueKey('onboarding-step5-timeline-scroll'),
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: bottomPadding),
-          child: SizedBox(
-            height: timelineHeight,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  top: 0,
-                  bottom: 0,
-                  left: 48,
-                  width: 8,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: OptivusColors.roseAccent.withValues(alpha: 0.17),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: OptivusColors.roseAccent.withValues(alpha: 0.36),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: OptivusColors.roseAccent.withValues(
-                            alpha: 0.15,
-                          ),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                for (final minute in _mealBoundaryMinutes(
-                  blocks,
-                  startMinute,
-                  endMinute,
-                ))
-                  _EatingMinuteIndicator(minute: minute, top: yFor(minute)),
-                for (
-                  var minute = startMinute;
-                  minute <= endMinute;
-                  minute += 60
-                )
-                  _EatingTimelineTick(minute: minute, top: yFor(minute)),
-                for (final block in blocks)
-                  _EatingTimelineBlock(
-                    block: block,
-                    top: yFor(block.startMinute),
-                    height: (block.endMinute - block.startMinute) * pxPerMinute,
-                  ),
-              ],
+        final List<StretchedSegment> segments = [];
+        for (final block in blocks) {
+          final normalHeight = (block.endMinute - block.startMinute) * pxPerMinute;
+          final requiredHeight = calculateRequiredBlockHeight(
+            title: _mealTitleForDisplay(block),
+            dishes: block.dishes,
+            timeLabel: '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+            blockWidth: blockWidth,
+          );
+          if (requiredHeight > normalHeight) {
+            segments.add(StretchedSegment(
+              startMinute: block.startMinute,
+              endMinute: block.endMinute,
+              extraStretch: requiredHeight - normalHeight,
+            ));
+          }
+        }
+
+        final layout = EatingTimelineLayout(
+          startMinute: startMinute,
+          rangeMinutes: rangeMinutes,
+          pxPerMinute: pxPerMinute,
+          topPadding: topPadding,
+          segments: segments,
+        );
+
+        final timelineHeight = rangeMinutes * pxPerMinute + topPadding + bottomPadding + layout.totalExtraStretch;
+
+        return Container(
+          key: const ValueKey('onboarding-step5-timeline'),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.40),
+            border: Border(
+              top: BorderSide(
+                color: Colors.white.withValues(alpha: 0.80),
+                width: 1.5,
+              ),
             ),
           ),
-        ),
-      ),
+          child: ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.transparent,
+                Colors.white,
+                Colors.white,
+                Colors.transparent,
+              ],
+              stops: [0.0, 0.045, 0.95, 1.0],
+            ).createShader(bounds),
+            blendMode: BlendMode.dstIn,
+            child: SingleChildScrollView(
+              key: const ValueKey('onboarding-step5-timeline-scroll'),
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: bottomPadding),
+              child: SizedBox(
+                height: timelineHeight,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      left: 48,
+                      width: 8,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: OptivusColors.roseAccent.withValues(alpha: 0.17),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: OptivusColors.roseAccent.withValues(alpha: 0.36),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: OptivusColors.roseAccent.withValues(
+                                alpha: 0.15,
+                              ),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    for (final minute in _mealBoundaryMinutes(
+                      blocks,
+                      startMinute,
+                      endMinute,
+                    ))
+                      _EatingMinuteIndicator(minute: minute, top: layout.yFor(minute)),
+                    for (
+                      var minute = startMinute;
+                      minute <= endMinute;
+                      minute += 60
+                    )
+                      _EatingTimelineTick(minute: minute, top: layout.yFor(minute)),
+                    for (final block in blocks)
+                      _EatingTimelineBlock(
+                        block: block,
+                        top: layout.yFor(block.startMinute),
+                        height: layout.yFor(block.endMinute) - layout.yFor(block.startMinute),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1701,23 +1886,18 @@ class _EatingTimelineBlock extends StatelessWidget {
         .map((dish) => dish.trim())
         .where((dish) => dish.isNotEmpty)
         .toList();
-    final visibleDishes = allDishes.take(3).toList();
-    final hiddenCount = allDishes.length - visibleDishes.length;
-
-    final isSuperCompact = height < 32;
-    final isCompact = height >= 32 && height < 74;
 
     return Positioned(
       top: top,
       left: 64,
       right: 16,
-      height: math.max(26.0, height),
+      height: height,
       child: GestureDetector(
         onTap: () => _showEatingBlockDetails(context, block),
         behavior: HitTestBehavior.opaque,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(isSuperCompact ? 12 : 22),
+            borderRadius: BorderRadius.circular(22),
             color: Colors.white.withValues(alpha: 0.44),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -1740,81 +1920,53 @@ class _EatingTimelineBlock extends StatelessWidget {
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(isSuperCompact ? 12 : 22),
+            borderRadius: BorderRadius.circular(22),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: SingleChildScrollView(
-                physics: const NeverScrollableScrollPhysics(),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: isSuperCompact ? 4 : 8,
-                  ),
-                  child: Row(
-                    crossAxisAlignment: isCompact || isSuperCompact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        _mealIcon(block.mealCategory),
-                        color: OptivusColors.roseAccent,
-                        size: isSuperCompact ? 12 : (height < 62 ? 14 : 17),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: isSuperCompact || isCompact
-                            ? Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      _mealTitleForDisplay(block),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: isSuperCompact ? 11 : 12.5,
-                                        fontWeight: FontWeight.w900,
-                                        color: OptivusColors.ink,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  _EatingInfoChip(
-                                    '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                                    compact: true,
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _mealTitleForDisplay(block),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w900,
-                                      color: OptivusColors.ink,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 5,
-                                    children: [
-                                      _EatingInfoChip(
-                                        '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                                      ),
-                                      for (final dish in visibleDishes)
-                                        _EatingInfoChip(dish),
-                                      if (hiddenCount > 0)
-                                        _EatingInfoChip('+$hiddenCount more'),
-                                    ],
-                                  ),
-                                ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      _mealIcon(block.mealCategory),
+                      color: OptivusColors.roseAccent,
+                      size: 17,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _mealTitleForDisplay(block),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 5,
+                            children: [
+                              _EatingInfoChip(
+                                '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
                               ),
+                              for (final dish in allDishes)
+                                _EatingInfoChip(dish),
+                            ],
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1827,17 +1979,16 @@ class _EatingTimelineBlock extends StatelessWidget {
 
 class _EatingInfoChip extends StatelessWidget {
   final String label;
-  final bool compact;
 
-  const _EatingInfoChip(this.label, {this.compact = false});
+  const _EatingInfoChip(this.label);
 
   @override
   Widget build(BuildContext context) {
     return Container(
       constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.5),
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? 7 : 8,
-        vertical: compact ? 3 : 4,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 4,
       ),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.60),
@@ -1845,10 +1996,10 @@ class _EatingInfoChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        maxLines: compact ? 1 : 2,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: compact ? 10 : 11,
+        style: const TextStyle(
+          fontSize: 11,
           fontWeight: FontWeight.w800,
           color: OptivusColors.textBody,
         ),
@@ -2558,7 +2709,8 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
   }
   if (text.contains('provider_quota_exceeded') ||
       text.contains('quota') ||
-      text.contains('rate limit')) {
+      text.contains('rate limit') ||
+      text.contains('rate_limit')) {
     return 'AI quota/rate limit reached. Try again later.';
   }
   if (text.contains('unsupported_content_type') ||

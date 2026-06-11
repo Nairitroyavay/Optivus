@@ -7,6 +7,7 @@ import 'package:optivus/config/routine_import_ai_config.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/services/nutrition_ai_client.dart';
 
 abstract class RoutineImportAiClient {
   Future<RoutineImportExtractionResult> extract({
@@ -206,12 +207,8 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
       );
     }
     if (baseUrl.trim().isEmpty) {
-      return _fallbackResult(
-        uid: uid,
-        review: review,
-        engine: 'worker',
-        engineVersion: 'phase2d',
-        warning: 'Routine import AI worker is not configured.',
+      throw const MissingConfigException(
+        'Real AI is not configured. Missing routine import worker URL.',
       );
     }
 
@@ -463,19 +460,35 @@ const Set<String> _forbiddenWorkerFields = {
   'localPreviewPath',
 };
 
+class MissingConfigRoutineImportAiClient implements RoutineImportAiClient {
+  const MissingConfigRoutineImportAiClient();
+
+  @override
+  Future<RoutineImportExtractionResult> extract({
+    required String uid,
+    required String idToken,
+    required RoutineImportReviewDraft review,
+  }) async {
+    throw const MissingConfigException('Real AI is not configured. Missing routine import worker URL.');
+  }
+}
+
 final routineImportAiClientProvider = Provider<RoutineImportAiClient>((ref) {
   if (OptivusRoutineImportAiConfig.mode == OptivusRoutineImportAiMode.worker) {
     if (OptivusRoutineImportAiConfig.workerBaseUrl.trim().isEmpty) {
-      throw StateError('OPTIVUS_ROUTINE_IMPORT_WORKER_URL is missing. Please configure it.');
+      return const MissingConfigRoutineImportAiClient();
     }
     return WorkerRoutineImportAiClient();
   }
-  return switch (OptivusRoutineImportAiConfig.mode) {
-    OptivusRoutineImportAiMode.disabled => const FakeRoutineImportAiClient(
-      disabled: true,
-    ),
-    _ => const FakeRoutineImportAiClient(),
-  };
+  if (OptivusRoutineImportAiConfig.allowFakeAiForTestsOnly) {
+    return switch (OptivusRoutineImportAiConfig.mode) {
+      OptivusRoutineImportAiMode.disabled => const FakeRoutineImportAiClient(
+        disabled: true,
+      ),
+      _ => const FakeRoutineImportAiClient(),
+    };
+  }
+  return const MissingConfigRoutineImportAiClient();
 });
 
 bool _missingPhoto(RoutineImportReviewDraft review) {

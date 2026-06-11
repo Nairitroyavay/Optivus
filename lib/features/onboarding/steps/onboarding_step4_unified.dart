@@ -393,6 +393,11 @@ Onboarding4CandidateMappingResult mapOnboarding4Candidates({
       addExample('droppedNonWork', candidate);
       continue;
     }
+    if (!candidate.hasFixedTime) {
+      droppedInvalidTime++;
+      addExample('droppedNoFixedTime', candidate);
+      continue;
+    }
     if (candidate.startMinute >= candidate.endMinute) {
       droppedInvalidTime++;
       addExample('droppedInvalidTime', candidate);
@@ -645,6 +650,7 @@ class _OnboardingStep4UnifiedState
   String? _timelineError;
   int _day = 0; // 0=Mon … 6=Sun
   bool _didInitFromDraft = false;
+  String? _initializedRole;
   String? _frontBlockId;
 
   // ---- Role helpers ----
@@ -737,8 +743,16 @@ class _OnboardingStep4UnifiedState
 
   // ---- Init from draft ----
   void _initFromDraft() {
-    if (_didInitFromDraft) return;
+    final currentRole = ref.read(mockOnboardingProvider).draft.lifeRole.lifeRole;
+    if (_didInitFromDraft && _initializedRole == currentRole) return;
+
+    if (_didInitFromDraft && _initializedRole != currentRole) {
+      ref.read(onboardingClassTimelineProvider.notifier).state = const [];
+      ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
+    }
+
     _didInitFromDraft = true;
+    _initializedRole = currentRole;
 
     final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
 
@@ -2150,6 +2164,25 @@ class _OnboardingStep4UnifiedState
             if (_canSwapClassWorkPhotos) ...[
               const SizedBox(height: 6),
               _buildSwapControl(),
+            ],
+
+            if (kDebugMode) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: OptivusColors.aquaAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'DEBUG: AI Mode = ${OptivusRoutineImportAiConfig.mode.name.toUpperCase()}',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+              ),
             ],
 
             // Generation error

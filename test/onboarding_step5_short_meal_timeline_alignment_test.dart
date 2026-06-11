@@ -9,6 +9,8 @@ void main() {
   testWidgets('Onboarding 5 Eating Setup short meal block renders without errors', (tester) async {
     final draft = OnboardingDraft(
       baseTimeline: BaseTimelineDraft(
+        eatingSetupStep: 1,
+        eatingSetupPath: 'has_routine',
         blocks: [
           TimelineBlockDraft(
             id: 'short-snack',
@@ -55,7 +57,7 @@ void main() {
     expect(find.text('Apple'), findsOneWidget);
     expect(find.text('Dinner'), findsOneWidget);
     expect(find.text('Steak'), findsOneWidget);
-    expect(find.text('10:00 AM'), findsOneWidget); // Start time
-    expect(find.text('6:00 PM'), findsOneWidget);
+    expect(find.text('10:00 AM - 10:05 AM'), findsOneWidget); // Start time
+    expect(find.text('6:00 PM - 8:00 PM'), findsOneWidget);
   });
 }

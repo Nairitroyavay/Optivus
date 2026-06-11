@@ -1539,6 +1539,30 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
 
   List<String> updateLifeRoleSelection(String roleKey) {
     final invalidation = state.draft.baseTimeline.invalidateForRole(roleKey);
+
+    // Clear class and work blocks from the timeline (Step 4 is invalidated)
+    final cleanBlocks = invalidation.timeline.blocks.where((block) {
+      return block.section != 'classes' && block.section != 'job_work_business';
+    }).toList(growable: false);
+
+    // Clear pending future imports for classes and work
+    final cleanPendingImports = invalidation.timeline.pendingFutureImports.where((entry) {
+      return entry.section != 'classes' && entry.section != 'job_work_business';
+    }).toList(growable: false);
+
+    var nextTimeline = invalidation.timeline.copyWith(
+      blocks: cleanBlocks,
+      pendingFutureImports: cleanPendingImports,
+    );
+
+    // Local Step 5 revalidation (preserve if valid, clear if invalid)
+    final eatingError = nextTimeline.validateEatingSetup();
+    if (eatingError != null) {
+      nextTimeline = nextTimeline.copyWith(
+        blocks: nextTimeline.blocks.where((block) => block.section != 'eating').toList(growable: false),
+      );
+    }
+
     final nextDraft = state.draft.copyWith(
       lifeRole: state.draft.lifeRole.copyWith(
         lifeRole: roleKey,
@@ -1547,12 +1571,36 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
             roleKey != LifeRoleDraft.studentWorkingKey,
         clearBusinessMode: roleKey != LifeRoleDraft.businessKey,
       ),
-      baseTimeline: invalidation.timeline,
+      baseTimeline: nextTimeline,
       clearFinalPreview: true,
     );
-    final dirty = _setStepValue(nextDraft.stepDirty, 2, true);
+
+    final completed = List<bool>.from(state.draft.stepCompleted);
+    final dirty = List<bool>.from(state.draft.stepDirty);
+
+    // Step 2 is role selection. Since we just updated it, it is completed.
+    completed[2] = true;
+    dirty[2] = false;
+
+    // Step 4 is cleared, so it is incomplete and dirty
+    completed[4] = false;
+    dirty[4] = true;
+
+    // Step 5 is preserved if valid and was completed, otherwise marked incomplete/dirty
+    completed[5] = eatingError == null && completed[5];
+    dirty[5] = eatingError != null || dirty[5];
+
+    // Downstream steps (> 5) are invalidated (marked incomplete and dirty)
+    for (var i = 6; i < OnboardingDraft.stepCount; i++) {
+      completed[i] = false;
+      dirty[i] = true;
+    }
+
     state = state.copyWith(
-      draft: nextDraft.copyWith(stepDirty: dirty),
+      draft: nextDraft.copyWith(
+        stepCompleted: completed,
+        stepDirty: dirty,
+      ),
       validationMessage: invalidation.warnings.isEmpty
           ? null
           : invalidation.warnings.join(' '),

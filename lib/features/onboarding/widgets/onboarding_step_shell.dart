@@ -29,7 +29,12 @@ class LiquidGlassOnboardingIndicator extends StatefulWidget {
 class _LiquidGlassOnboardingIndicatorState
     extends State<LiquidGlassOnboardingIndicator> {
   static const double _dotD = 5.0;
-  static const double _gap = 11.0;
+  double get _gap {
+    final width = MediaQuery.sizeOf(context).width;
+    if (width < 360) return 6.0;
+    if (width < 400) return 8.0;
+    return 11.0;
+  }
   static const double _pillH = 12.0;
   static const double _pillW = 18.0;
   static const double _padH = 9.0;

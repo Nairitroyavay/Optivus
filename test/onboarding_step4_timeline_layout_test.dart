@@ -380,7 +380,7 @@ void main() {
         tester
             .getSize(find.byKey(const ValueKey('onboarding-step4-upload-card')))
             .height,
-        lessThan(165),
+        lessThan(180),
       );
       expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
       expect(

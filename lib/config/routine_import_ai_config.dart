@@ -1,7 +1,11 @@
+import 'package:flutter/foundation.dart';
+
 enum OptivusRoutineImportAiMode { disabled, fake, worker }
 
 class OptivusRoutineImportAiConfig {
   const OptivusRoutineImportAiConfig._();
+
+  static bool allowFakeAiForTestsOnly = false;
 
   static const String _modeName = String.fromEnvironment(
     'OPTIVUS_ROUTINE_IMPORT_AI_MODE',
@@ -14,6 +18,9 @@ class OptivusRoutineImportAiConfig {
   );
 
   static OptivusRoutineImportAiMode get mode {
+    if (kReleaseMode) {
+      return OptivusRoutineImportAiMode.worker;
+    }
     return switch (_modeName) {
       'worker' => OptivusRoutineImportAiMode.worker,
       'disabled' => OptivusRoutineImportAiMode.disabled,

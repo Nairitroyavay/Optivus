@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:go_router/go_router.dart';
 import 'package:optivus/core/router/app_router.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -83,7 +82,7 @@ void main() {
 }
 
 class MockAuthNotifier extends StateNotifier<AuthState> implements AuthNotifier {
-  MockAuthNotifier(AuthState state) : super(state);
+  MockAuthNotifier(super.state);
 
   @override
   Future<void> checkEmailVerification() async {}
