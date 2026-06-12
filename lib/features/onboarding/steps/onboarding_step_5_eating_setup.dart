@@ -1831,11 +1831,12 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
               children: [
                 Icon(_mealIcon(block.mealCategory), color: OptivusColors.roseAccent),
                 const SizedBox(width: 12),
@@ -1897,6 +1898,7 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
             ],
             const SizedBox(height: 16),
           ],
+        ),
         ),
       ),
     ),

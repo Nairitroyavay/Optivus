@@ -578,7 +578,7 @@ class GeminiAiRoutineExtractor implements AiRoutineExtractor {
         providerBody = await response.json();
       } catch {
         const failure: SafeProviderFailure = {
-          kind: "provider_invalid_response",
+          kind: "provider_invalid_json",
           message: "AI provider returned invalid JSON.",
         };
         logProviderFailure({
