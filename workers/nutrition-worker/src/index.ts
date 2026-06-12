@@ -165,7 +165,7 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
 
   if (provider === "gemini") {
     const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-    const primaryModel = env.AI_MODEL?.trim() || "gemini-3.5-flash";
+    const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
     const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
 
     const fetchGemini = async (model: string) => {

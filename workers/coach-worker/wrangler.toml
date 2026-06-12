@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 FIREBASE_PROJECT_ID = "optivus-lifeos"
 AI_PROVIDER = "gemini"
-AI_MODEL = "gemini-3.5-flash"
+AI_MODEL = "gemini-2.5-flash-lite"
 AI_FALLBACK_MODEL = "gemini-2.5-flash"
 
 [observability]
