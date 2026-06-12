@@ -751,6 +751,10 @@ class _OnboardingStep4UnifiedState
     if (_didInitFromDraft && _initializedRole != currentRole) {
       ref.read(onboardingClassTimelineProvider.notifier).state = const [];
       ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
+      _photos.clear();
+      _generationError = null;
+      _timelineError = null;
+      _frontBlockId = null;
     }
 
     _didInitFromDraft = true;
@@ -2054,6 +2058,20 @@ class _OnboardingStep4UnifiedState
   // ======================================================================
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(
+      mockOnboardingProvider.select((s) => s.draft.lifeRole.lifeRole),
+      (previous, current) {
+        if (_didInitFromDraft && _initializedRole != current) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() {
+              _initFromDraft();
+            });
+          });
+        }
+      },
+    );
+
     final draft = ref.watch(mockOnboardingProvider).draft;
     // Watch providers so we re-build when blocks change
     final classBlocks = ref.watch(onboardingClassTimelineProvider);
