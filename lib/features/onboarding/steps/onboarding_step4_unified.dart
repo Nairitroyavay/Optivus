@@ -16,6 +16,37 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
+import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
+
+@visibleForTesting
+const onboarding4ClassLoadingMessages = [
+  'Reading your timetable photo…',
+  'Finding days and time slots…',
+  'Detecting class names and rooms…',
+  'Checking weekly repeat classes…',
+  'Building your class timeline…',
+  'Almost ready…',
+];
+
+@visibleForTesting
+const onboarding4WorkLoadingMessages = [
+  'Reading your work schedule…',
+  'Finding work days and time blocks…',
+  'Checking start and end times…',
+  'Filtering out personal habits…',
+  'Building your work timeline…',
+  'Almost ready…',
+];
+
+@visibleForTesting
+const onboarding4CombinedLoadingMessages = [
+  'Reading your class timetable…',
+  'Reading your work schedule…',
+  'Separating class and work blocks…',
+  'Checking weekly repeat days…',
+  'Merging both timelines safely…',
+  'Almost ready…',
+];
 
 // ---------------------------------------------------------------------------
 // Photo slot model — tracks one uploaded photo with its label & section.
@@ -701,17 +732,6 @@ class _OnboardingStep4UnifiedState
       return 'Add your work, shift, or business schedule photo.';
     }
     return 'Add your weekly work schedule photo.';
-  }
-
-  String get _loadingTitle {
-    if (_needsBothPhotos) {
-      return 'AI is reading your class and work schedules...';
-    }
-    if (_classesRequired) return 'AI is reading your class timetable...';
-    if (_role == LifeRoleDraft.businessKey) {
-      return 'AI is reading your work/business schedule...';
-    }
-    return 'AI is reading your work schedule...';
   }
 
   String get _emptyTimelineHint {
@@ -2813,53 +2833,23 @@ class _OnboardingStep4UnifiedState
   Widget _buildTimelineArea(List<ClassRoutineBlock> allBlocks, bool hasBlocks) {
     // Generating state: show AI reading message
     if (_isGenerating) {
+      List<String> loadingMessages;
+      if (_needsBothPhotos) {
+        loadingMessages = onboarding4CombinedLoadingMessages;
+      } else if (_classesRequired) {
+        loadingMessages = onboarding4ClassLoadingMessages;
+      } else {
+        loadingMessages = onboarding4WorkLoadingMessages;
+      }
+
       return SizedBox.expand(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 96),
-              child: OnboardingGlassCard(
-                tint: _accent.withValues(alpha: 0.07),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: _accent,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _loadingTitle,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900,
-                              color: OptivusColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'AI is generating your timeline.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: OptivusColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            child: AiThinkingCard(
+              messages: loadingMessages,
+              accent: _accent,
+              isActive: _isGenerating,
             ),
           ),
         ),

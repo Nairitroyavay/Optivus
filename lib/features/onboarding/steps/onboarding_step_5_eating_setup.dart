@@ -18,6 +18,27 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
+import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
+
+@visibleForTesting
+const onboarding5MealPhotoLoadingMessages = [
+  'Reading your meal photo…',
+  'Identifying dishes and portions…',
+  'Checking meal timing…',
+  'Organizing dishes into your timeline…',
+  'Building your eating schedule…',
+  'Almost ready…',
+];
+
+@visibleForTesting
+const onboarding5GeneratedMealLoadingMessages = [
+  'Understanding your meal preferences…',
+  'Planning meals around your day…',
+  'Balancing dishes across the week…',
+  'Checking snack timing…',
+  'Building your weekly eating timeline…',
+  'Almost ready…',
+];
 
 const String onboardingEatingPathHasRoutine = 'has_routine';
 const String onboardingEatingPathCreate = 'create';
@@ -593,6 +614,15 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
               : onGenerate,
         ),
 
+        if (generating) ...[
+          const SizedBox(height: 14),
+          AiThinkingCard(
+            messages: onboarding5MealPhotoLoadingMessages,
+            accent: OptivusColors.roseAccent,
+            isActive: generating,
+          ),
+        ],
+
         if (uploadError != null || generationError != null) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: uploadError ?? generationError!),
@@ -785,6 +815,14 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
                               isGenerating: isGenerating,
                               onTap: onGenerate,
                             ),
+                            if (isGenerating) ...[
+                              const SizedBox(height: 14),
+                              AiThinkingCard(
+                                messages: onboarding5GeneratedMealLoadingMessages,
+                                accent: OptivusColors.roseAccent,
+                                isActive: isGenerating,
+                              ),
+                            ],
                           ],
                         ),
                       ),
