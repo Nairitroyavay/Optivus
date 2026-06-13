@@ -186,6 +186,13 @@ void main() {
       );
       final classBlocks = [
         _scheduleBlock(
+          id: 'ps',
+          title: 'PS',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+          config: ScheduleSetupConfig.classSetup,
+        ),
+        _scheduleBlock(
           id: 'afl',
           title: 'AFL',
           startMinute: 10 * 60,
@@ -210,6 +217,11 @@ void main() {
           config: ScheduleSetupConfig.workSetup,
         ),
       ];
+
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(
         ProviderScope(
@@ -236,6 +248,10 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(
         find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+        findsWidgets, // Now multiple segments
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-front-content-ps')),
         findsOneWidget,
       );
       expect(
@@ -248,7 +264,7 @@ void main() {
       );
       expect(find.text('9:00 AM - 12:00 PM'), findsNothing);
       expect(find.textContaining('AFLice'), findsNothing);
-      expect(find.text('Office'), findsOneWidget); // Back label
+      expect(find.text('Office'), findsWidgets); // Back label segments
       expect(find.text('C25-B-108'), findsOneWidget); // Room
 
       final jobLeft = tester.getTopLeft(jobBlock).dx;
@@ -268,11 +284,11 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
       );
       await tester.pump();
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
       );
       await tester.pumpAndSettle();
 
@@ -280,6 +296,10 @@ void main() {
       expect(find.text('Edit Work Block'), findsNothing);
       expect(
         find.byKey(const ValueKey('onboarding-step4-front-content-job')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-back-label-ps')),
         findsOneWidget,
       );
       expect(
@@ -291,6 +311,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('9:00 AM - 12:00 PM'), findsOneWidget);
+      expect(find.text('9:00 AM - 10:00 AM'), findsNothing);
       expect(find.text('10:00 AM - 11:00 AM'), findsNothing);
       expect(find.text('11:00 AM - 12:00 PM'), findsNothing);
       expect(
@@ -303,11 +324,11 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('onboarding-step4-back-label-afl')),
+        find.byKey(const ValueKey('onboarding-step4-back-label-afl')).first,
       );
       await tester.pump();
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-step4-back-label-afl')),
+        find.byKey(const ValueKey('onboarding-step4-back-label-afl')).first,
       );
       await tester.pumpAndSettle();
 
@@ -319,6 +340,10 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+        findsWidgets, // Now segments
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step4-back-label-ps')),
         findsOneWidget,
       );
       expect(
@@ -1409,10 +1434,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     await tester.ensureVisible(
-      find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+      find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
     );
     await tester.tap(
-      find.byKey(const ValueKey('onboarding-step4-back-label-job')),
+      find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));

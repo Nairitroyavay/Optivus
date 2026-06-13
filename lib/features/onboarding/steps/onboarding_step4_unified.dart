@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -136,6 +137,13 @@ class _TimelineRange {
   int get startMinute => startHour * 60;
   int get endMinute => endHour * 60;
   int get hourCount => (endHour - startHour).clamp(1, 24);
+}
+
+class _BackLabelSegment {
+  final double top;
+  final double height;
+  
+  _BackLabelSegment(this.top, this.height);
 }
 
 class _VisualTimelineBlock {
@@ -3241,6 +3249,52 @@ class _OnboardingStep4UnifiedState
     return widgets;
   }
 
+  List<_BackLabelSegment> _backLabelSegmentsFor(
+    _VisualTimelineBlock backVisual,
+    List<_VisualTimelineBlock> visualBlocks,
+    int visibleStartMinute,
+    double topPadding,
+  ) {
+    final backTop = _timelineY(
+      minuteOfDay: backVisual.block.startMinute,
+      visibleStartMinute: visibleStartMinute,
+      topPadding: topPadding,
+    );
+    final segments = <_BackLabelSegment>[];
+
+    for (final candidate in visualBlocks) {
+      if (candidate == backVisual) continue;
+      if (_visualsOverlap(backVisual, candidate) && _isFrontVisual(candidate, visualBlocks)) {
+        final segmentStartMinute = math.max(
+          backVisual.block.startMinute,
+          candidate.block.startMinute,
+        );
+
+        final segmentEndMinute = math.min(
+          backVisual.block.endMinute,
+          candidate.block.endMinute,
+        );
+
+        final segmentTop = _timelineY(
+              minuteOfDay: segmentStartMinute,
+              visibleStartMinute: visibleStartMinute,
+              topPadding: topPadding,
+            ) -
+            backTop;
+        final segmentBottom = _timelineY(
+              minuteOfDay: segmentEndMinute,
+              visibleStartMinute: visibleStartMinute,
+              topPadding: topPadding,
+            ) -
+            backTop;
+        final segmentHeight = math.max(28.0, segmentBottom - segmentTop);
+
+        segments.add(_BackLabelSegment(segmentTop, segmentHeight));
+      }
+    }
+    return segments;
+  }
+
   // ---- Colored block card ----
   Widget _buildColoredBlock(
     _VisualTimelineBlock visual, {
@@ -3267,24 +3321,15 @@ class _OnboardingStep4UnifiedState
     final baseColor = item.color ?? config.accent;
     final backLabelInset = _backLabelInsetForVisual(visual);
 
-    double? backLabelTopOffset;
-    double? backLabelHeight;
+    List<_BackLabelSegment>? backSegments;
 
     if (isBackOverlap) {
-      for (final candidate in visualBlocks) {
-        if (candidate == visual) continue;
-        if (_visualsOverlap(visual, candidate) && _isFrontVisual(candidate, visualBlocks)) {
-          final candidateTop = _timelineY(
-            minuteOfDay: candidate.block.startMinute,
-            visibleStartMinute: visibleStartMinute,
-            topPadding: topPadding,
-          );
-          final candidateHeight = _blockDurationHeight(candidate.block);
-          backLabelTopOffset = candidateTop - top;
-          backLabelHeight = candidateHeight;
-          break;
-        }
-      }
+      backSegments = _backLabelSegmentsFor(
+        visual,
+        visualBlocks,
+        visibleStartMinute,
+        topPadding,
+      );
     }
 
     return Positioned(
@@ -3358,8 +3403,7 @@ class _OnboardingStep4UnifiedState
                               exposedLabelWidth: exposedLabelWidth,
                               labelInset: backLabelInset,
                               tiny: tiny,
-                              topOffset: backLabelTopOffset,
-                              segmentHeight: backLabelHeight,
+                              segments: backSegments,
                             )
                           : compact
                           ? KeyedSubtree(
@@ -3472,56 +3516,55 @@ class _OnboardingStep4UnifiedState
     final iconSize = tiny ? 8.0 : 16.0;
     final menuSize = tiny ? 6.0 : 16.0;
     final fontSize = tiny ? 8.0 : 13.0;
-    final isNarrow = cardWidth < 140;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Icon(item.icon ?? config.icon, color: baseColor, size: iconSize),
-        SizedBox(width: tiny ? 5 : 7),
-        Expanded(
-          child: Text(
-            item.subject,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w900,
-              color: const Color(0xFF0F111A),
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+        Row(
+          children: [
+            Icon(item.icon ?? config.icon, color: baseColor, size: iconSize),
+            SizedBox(width: tiny ? 5 : 6),
+            Expanded(
+              child: Text(
+                item.subject,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w900,
+                  color: const Color(0xFF0F111A),
+                ),
+              ),
             ),
-          ),
+            if (showMenu && cardWidth > 170) ...[
+              const SizedBox(width: 6),
+              _buildBlockMenuButton(
+                item,
+                color: OptivusColors.textSecondary,
+                size: menuSize,
+              ),
+            ],
+          ],
         ),
-        if (!tiny && !isNarrow) ...[
-          const SizedBox(width: 6),
-          Flexible(
-            flex: 0,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: cardWidth * 0.4),
-              child: _buildBlockInfoChip(
+        if (!tiny) const SizedBox(height: 5),
+        if (!tiny)
+          Wrap(
+            spacing: 5,
+            runSpacing: 4,
+            children: [
+              _buildBlockInfoChip(
                 _formatRange(item.startMinute, item.endMinute),
                 compact: true,
               ),
-            ),
-          ),
-          if (item.room.isNotEmpty) ...[
-            const SizedBox(width: 4),
-            Flexible(
-              flex: 0,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: cardWidth * 0.25),
-                child: _buildBlockInfoChip(item.room, compact: true),
-              ),
-            ),
-          ],
-          const SizedBox(width: 4),
-        ],
-        if (showMenu && !isNarrow)
-          _buildBlockMenuButton(
-            item,
-            color: OptivusColors.textSecondary,
-            size: menuSize,
+              if (item.room.isNotEmpty && cardWidth > 180)
+                _buildBlockInfoChip(item.room, compact: true),
+            ],
           ),
       ],
+    ),
     );
   }
 
@@ -3532,73 +3575,84 @@ class _OnboardingStep4UnifiedState
     required double exposedLabelWidth,
     required double labelInset,
     required bool tiny,
-    double? topOffset,
-    double? segmentHeight,
+    List<_BackLabelSegment>? segments,
   }) {
     final stripWidth = exposedLabelWidth.clamp(70.0, 96.0);
 
-    Widget content = Align(
-      alignment: Alignment.centerLeft,
-      child: ClipRect(
-        child: SizedBox(
-          key: ValueKey('onboarding-step4-back-label-${item.id}'),
-          width: stripWidth,
-          child: Padding(
-            padding: EdgeInsets.only(left: labelInset, right: 6),
-            child: Row(
-              children: [
-                Container(
-                  width: tiny ? 16 : 18,
-                  height: tiny ? 16 : 18,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: baseColor.withValues(alpha: 0.16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      width: 1,
+    Widget buildLabelContent() {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: ClipRect(
+          child: SizedBox(
+            key: ValueKey('onboarding-step4-back-label-${item.id}'),
+            width: stripWidth,
+            child: Padding(
+              padding: EdgeInsets.only(left: labelInset, right: 6),
+              child: Row(
+                children: [
+                  Container(
+                    width: tiny ? 16 : 18,
+                    height: tiny ? 16 : 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: baseColor.withValues(alpha: 0.16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      item.icon ?? config.icon,
+                      color: baseColor,
+                      size: tiny ? 9 : 11,
                     ),
                   ),
-                  child: Icon(
-                    item.icon ?? config.icon,
-                    color: baseColor,
-                    size: tiny ? 9 : 11,
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    _shortBackLabel(item),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: tiny ? 9 : 11,
-                      height: 1,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.ink,
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      _shortBackLabel(item),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: tiny ? 9 : 11,
+                        height: 1,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.ink,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
 
-    if (topOffset != null && segmentHeight != null) {
+    if (segments != null && segments.isNotEmpty) {
       return Stack(
         children: [
-          Positioned(
-            top: topOffset,
-            height: segmentHeight,
-            left: 0,
-            width: stripWidth,
-            child: content,
-          ),
+          for (final segment in segments)
+            Positioned(
+              top: segment.top,
+              height: segment.height,
+              left: 0,
+              width: stripWidth,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _frontBlockId = item.id),
+                child: buildLabelContent(),
+              ),
+            ),
         ],
       );
     }
-    return content;
+    
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => setState(() => _frontBlockId = item.id),
+      child: buildLabelContent(),
+    );
   }
 
   String _shortBackLabel(ClassRoutineBlock item) {
