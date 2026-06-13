@@ -71,6 +71,7 @@ class _AiThinkingCardState extends State<AiThinkingCard>
 
     _messageTimer = Timer.periodic(widget.messageInterval, (_) {
       if (!mounted) return;
+      if (widget.messages.isEmpty) return;
       setState(() {
         _currentIndex = (_currentIndex + 1) % widget.messages.length;
       });
@@ -116,7 +117,7 @@ class _AiThinkingCardState extends State<AiThinkingCard>
 
     final currentMessage = widget.messages.isNotEmpty 
         ? widget.messages[_currentIndex] 
-        : '';
+        : 'AI is thinking...';
 
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 110),

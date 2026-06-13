@@ -107,6 +107,10 @@ void main() {
       expect(find.text(onboarding5GeneratedMealLoadingMessages.first), findsOneWidget);
       expect(find.text('AI is generating your timeline.'), findsNothing);
 
+      // Verify message rotation
+      await tester.pump(const Duration(milliseconds: 2100));
+      expect(find.text(onboarding5GeneratedMealLoadingMessages[1]), findsOneWidget);
+
       // Force cleanup of timers inside AiThinkingCard before test ends
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 500));
@@ -128,13 +132,7 @@ void main() {
               (ref) => MockOnboardingNotifier()..loadSeedData(draft),
             ),
             routineImportAiControllerProvider.overrideWith(
-              (ref) {
-                final c = RoutineImportAiController(ref, FakeDelayedRoutineImportAiClient());
-                // Set extracting state directly to simulate upload extraction
-                // since we don't want to mock the whole photo upload process again here
-                c.state = c.state.copyWith(status: RoutineImportAiStatus.extracting);
-                return c;
-              },
+              (ref) => MockExtractingRoutineImportAiController(ref, FakeDelayedRoutineImportAiClient()),
             ),
           ],
           child: const MaterialApp(
@@ -152,11 +150,21 @@ void main() {
       expect(find.text(onboarding5MealPhotoLoadingMessages.first), findsOneWidget);
       expect(find.text('AI is reading your meal photo…'), findsNothing);
 
+      // Verify message rotation
+      await tester.pump(const Duration(milliseconds: 2100));
+      expect(find.text(onboarding5MealPhotoLoadingMessages[1]), findsOneWidget);
+
       // Force cleanup
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 500));
     });
   });
+}
+
+class MockExtractingRoutineImportAiController extends RoutineImportAiController {
+  MockExtractingRoutineImportAiController(super.ref, super.client) {
+    state = const RoutineImportAiState(status: RoutineImportAiStatus.extracting);
+  }
 }
 
 class FakeDelayedNutritionAiClient implements NutritionAiClient {

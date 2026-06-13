@@ -1,8 +1,12 @@
+// ---------------------------------------------------------------------------
+// LEGACY CODE: This file contains the old split UI for class and work
+// setup. It has been replaced by onboarding_step4_unified.dart.
+// Kept for reference but is currently unused.
+// ---------------------------------------------------------------------------
+
 import 'dart:async';
 import 'dart:ui';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -782,7 +786,7 @@ class _OnboardingClassSetupWidgetState
     if (busy || extracting || _activeExtractionKey != null) {
       return _buildCenteredState(
         _buildLoadingState(
-          busy ? 'Uploading photo...' : 'AI is reading your timetable…',
+          busy ? 'Uploading photo...' : 'Processing your timetable…',
         ),
       );
     }
@@ -795,7 +799,7 @@ class _OnboardingClassSetupWidgetState
 
     if (hasUploadedAsset && canAttemptExtraction && !attemptedExtraction) {
       return _buildCenteredState(
-        _buildLoadingState('AI is reading your timetable…'),
+        _buildLoadingState('Processing your timetable…'),
       );
     }
 

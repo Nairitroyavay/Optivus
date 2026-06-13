@@ -171,6 +171,12 @@ void main() {
       expect(find.byType(AiThinkingCard), findsOneWidget);
       expect(find.text(onboarding4ClassLoadingMessages.first), findsOneWidget);
       expect(find.text('AI is reading your class timetable…'), findsNothing);
+      expect(find.text('AI is generating your timeline'), findsNothing);
+      expect(find.text('AI is reading your work schedule'), findsNothing);
+
+      // Verify message rotation
+      await tester.pump(const Duration(milliseconds: 2100));
+      expect(find.text(onboarding4ClassLoadingMessages[1]), findsOneWidget);
 
       // Force cleanup
       await tester.pumpWidget(const SizedBox());

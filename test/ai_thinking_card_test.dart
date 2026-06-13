@@ -114,11 +114,12 @@ void main() {
 
     testWidgets('does not overflow on small width', (tester) async {
       final oldSize = tester.view.physicalSize;
+      final oldDpr = tester.view.devicePixelRatio;
       tester.view.physicalSize = const Size(200, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
         tester.view.physicalSize = oldSize;
-        tester.view.devicePixelRatio = 3.0;
+        tester.view.devicePixelRatio = oldDpr;
       });
 
       await tester.pumpWidget(
@@ -227,6 +228,22 @@ void main() {
       );
 
       expect(find.textContaining('DEBUG'), findsNothing);
+    });
+
+    testWidgets('shows safe fallback message when messages list is empty', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AiThinkingCard(
+              messages: [],
+              accent: OptivusColors.aquaAccent,
+              isActive: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('AI is thinking...'), findsOneWidget);
     });
   });
 }
