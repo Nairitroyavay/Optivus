@@ -188,24 +188,25 @@ void main() {
         _scheduleBlock(
           id: 'afl',
           title: 'AFL',
-          startMinute: 9 * 60,
-          endMinute: 10 * 60,
+          startMinute: 10 * 60,
+          endMinute: 11 * 60,
+          room: 'C25-B-108',
           config: ScheduleSetupConfig.classSetup,
         ),
         _scheduleBlock(
           id: 'ds',
           title: 'DS',
-          startMinute: 10 * 60,
-          endMinute: 11 * 60,
+          startMinute: 11 * 60,
+          endMinute: 12 * 60,
           config: ScheduleSetupConfig.classSetup,
         ),
       ];
       final workBlocks = [
         _scheduleBlock(
           id: 'job',
-          title: 'Job',
+          title: 'Office Work',
           startMinute: 9 * 60,
-          endMinute: 13 * 60,
+          endMinute: 12 * 60,
           config: ScheduleSetupConfig.workSetup,
         ),
       ];
@@ -245,8 +246,10 @@ void main() {
         find.byKey(const ValueKey('onboarding-step4-front-content-ds')),
         findsOneWidget,
       );
-      expect(find.text('9:00 AM - 1:00 PM'), findsNothing);
-      expect(find.textContaining('AFLunch'), findsNothing);
+      expect(find.text('9:00 AM - 12:00 PM'), findsNothing);
+      expect(find.textContaining('AFLice'), findsNothing);
+      expect(find.text('Office'), findsOneWidget); // Back label
+      expect(find.text('C25-B-108'), findsOneWidget); // Room
 
       final jobLeft = tester.getTopLeft(jobBlock).dx;
       final aflLeft = tester.getTopLeft(aflBlock).dx;
@@ -287,9 +290,9 @@ void main() {
         find.byKey(const ValueKey('onboarding-step4-back-label-ds')),
         findsOneWidget,
       );
-      expect(find.text('9:00 AM - 1:00 PM'), findsOneWidget);
-      expect(find.text('9:00 AM - 10:00 AM'), findsNothing);
+      expect(find.text('9:00 AM - 12:00 PM'), findsOneWidget);
       expect(find.text('10:00 AM - 11:00 AM'), findsNothing);
+      expect(find.text('11:00 AM - 12:00 PM'), findsNothing);
       expect(
         find.byKey(const ValueKey('onboarding-step4-menu-job')),
         findsOneWidget,
@@ -1958,6 +1961,7 @@ ClassRoutineBlock _scheduleBlock({
   required int endMinute,
   required ScheduleSetupConfig config,
   IconData? icon,
+  String room = '',
 }) {
   return ClassRoutineBlock(
     id: id,
@@ -1967,6 +1971,7 @@ ClassRoutineBlock _scheduleBlock({
     repeatDays: const [1],
     icon: icon ?? config.icon,
     color: OptivusColors.aquaAccent,
+    room: room,
   );
 }
 

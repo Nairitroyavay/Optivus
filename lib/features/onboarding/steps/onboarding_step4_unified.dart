@@ -3267,6 +3267,26 @@ class _OnboardingStep4UnifiedState
     final baseColor = item.color ?? config.accent;
     final backLabelInset = _backLabelInsetForVisual(visual);
 
+    double? backLabelTopOffset;
+    double? backLabelHeight;
+
+    if (isBackOverlap) {
+      for (final candidate in visualBlocks) {
+        if (candidate == visual) continue;
+        if (_visualsOverlap(visual, candidate) && _isFrontVisual(candidate, visualBlocks)) {
+          final candidateTop = _timelineY(
+            minuteOfDay: candidate.block.startMinute,
+            visibleStartMinute: visibleStartMinute,
+            topPadding: topPadding,
+          );
+          final candidateHeight = _blockDurationHeight(candidate.block);
+          backLabelTopOffset = candidateTop - top;
+          backLabelHeight = candidateHeight;
+          break;
+        }
+      }
+    }
+
     return Positioned(
       top: top,
       left: _leftForVisual(visual, visualBlocks, exposedLabelWidth),
@@ -3338,6 +3358,8 @@ class _OnboardingStep4UnifiedState
                               exposedLabelWidth: exposedLabelWidth,
                               labelInset: backLabelInset,
                               tiny: tiny,
+                              topOffset: backLabelTopOffset,
+                              segmentHeight: backLabelHeight,
                             )
                           : compact
                           ? KeyedSubtree(
@@ -3410,7 +3432,7 @@ class _OnboardingStep4UnifiedState
                 ),
               ),
             ),
-            if (showMenu)
+            if (showMenu && !isNarrow)
               _buildBlockMenuButton(
                 item,
                 color: OptivusColors.textSecondary,
@@ -3419,16 +3441,20 @@ class _OnboardingStep4UnifiedState
           ],
         ),
         const SizedBox(height: 6),
-        if (isNarrow)
-          _buildBlockInfoChip(timeStr, compact: exactHeight < 84)
-        else
+        if (isNarrow) ...[
+          _buildBlockInfoChip(timeStr, compact: exactHeight < 84),
+          if (item.room.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            _buildBlockInfoChip(item.room, compact: exactHeight < 84),
+          ],
+        ] else
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
               _buildBlockInfoChip(timeStr, compact: exactHeight < 84),
-              if (showSecondaryChips && item.room.isNotEmpty)
-                _buildBlockInfoChip(item.room),
+              if (item.room.isNotEmpty)
+                _buildBlockInfoChip(item.room, compact: exactHeight < 84),
             ],
           ),
       ],
@@ -3477,9 +3503,19 @@ class _OnboardingStep4UnifiedState
               ),
             ),
           ),
+          if (item.room.isNotEmpty) ...[
+            const SizedBox(width: 4),
+            Flexible(
+              flex: 0,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: cardWidth * 0.25),
+                child: _buildBlockInfoChip(item.room, compact: true),
+              ),
+            ),
+          ],
           const SizedBox(width: 4),
         ],
-        if (showMenu)
+        if (showMenu && !isNarrow)
           _buildBlockMenuButton(
             item,
             color: OptivusColors.textSecondary,
@@ -3496,10 +3532,12 @@ class _OnboardingStep4UnifiedState
     required double exposedLabelWidth,
     required double labelInset,
     required bool tiny,
+    double? topOffset,
+    double? segmentHeight,
   }) {
-    final stripWidth = exposedLabelWidth.clamp(64.0, 96.0);
+    final stripWidth = exposedLabelWidth.clamp(70.0, 96.0);
 
-    return Align(
+    Widget content = Align(
       alignment: Alignment.centerLeft,
       child: ClipRect(
         child: SizedBox(
@@ -3546,14 +3584,30 @@ class _OnboardingStep4UnifiedState
         ),
       ),
     );
+
+    if (topOffset != null && segmentHeight != null) {
+      return Stack(
+        children: [
+          Positioned(
+            top: topOffset,
+            height: segmentHeight,
+            left: 0,
+            width: stripWidth,
+            child: content,
+          ),
+        ],
+      );
+    }
+    return content;
   }
 
   String _shortBackLabel(ClassRoutineBlock item) {
     final raw = item.subject.trim();
+    final lower = raw.toLowerCase();
 
     if (_isWorkBlock(item)) {
-      if (raw.toLowerCase().contains('office')) return 'Office';
-      if (raw.toLowerCase().contains('work')) return 'Job';
+      if (lower.contains('office')) return 'Office';
+      if (lower.contains('work') || lower.contains('job')) return 'Job';
       return raw.length <= 8 ? raw : 'Job';
     }
 
