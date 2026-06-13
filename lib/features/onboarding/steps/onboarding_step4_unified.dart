@@ -657,6 +657,8 @@ String onboarding4SourceFailureMessage({
 // ---------------------------------------------------------------------------
 //  OnboardingStep4Unified — the single-screen Classes & Job widget
 // ---------------------------------------------------------------------------
+// Removed unused _OverlapRenderMode
+
 class OnboardingStep4Unified extends ConsumerStatefulWidget {
   const OnboardingStep4Unified({super.key});
 
@@ -672,7 +674,7 @@ class _OnboardingStep4UnifiedState
   static const _kLeftOffset = 64.0;
   static const _kMinTimelineAreaHeight = 320.0;
   static const _kTimelineBottomPadding = 280.0;
-  static const _kOverlapMinLabelWidth = 58.0;
+  static const _kOverlapMinLabelWidth = 70.0;
   static const _kOverlapMaxLabelWidth = 96.0;
   static const _kOverlapMinFrontWidth = 152.0;
   static const _kMaxOverlapLane = 2;
@@ -2329,23 +2331,23 @@ class _OnboardingStep4UnifiedState
                 size: 22,
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Schedule generated',
-                      style: TextStyle(
+                      _needsBothPhotos ? 'Class and work schedule generated' : (_classesRequired ? 'Class schedule generated' : 'Work schedule generated'),
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
                         color: OptivusColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 5),
+                    const SizedBox(height: 5),
                     Text(
-                      'Your fixed responsibilities are ready. Use each block menu to edit or remove it.',
-                      style: TextStyle(
+                      _needsBothPhotos ? 'Your class and work blocks are ready. Use each block menu to edit or remove them.' : 'Your fixed responsibilities are ready. Use each block menu to edit or remove it.',
+                      style: const TextStyle(
                         fontSize: 12,
                         height: 1.35,
                         fontWeight: FontWeight.w700,
@@ -3281,58 +3283,66 @@ class _OnboardingStep4UnifiedState
               borderRadius: BorderRadius.circular(24),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isBackOverlap
-                        ? 8
-                        : tiny
-                        ? 8
-                        : compact
-                        ? 12
-                        : 14,
-                    vertical: isBackOverlap
-                        ? 5
-                        : tiny
-                        ? 1
-                        : compact
-                        ? 7
-                        : 10,
-                  ),
-                  child: isBackOverlap
-                      ? _buildBackOverlapBlockContent(
-                          item: item,
-                          config: config,
-                          baseColor: baseColor,
-                          exposedLabelWidth: exposedLabelWidth,
-                          labelInset: backLabelInset,
-                          tiny: tiny,
-                        )
-                      : compact
-                      ? KeyedSubtree(
-                          key: ValueKey(
-                            'onboarding-step4-front-content-${item.id}',
-                          ),
-                          child: _buildCompactBlockContent(
-                            item: item,
-                            config: config,
-                            baseColor: baseColor,
-                            showMenu: true,
-                            tiny: tiny,
-                          ),
-                        )
-                      : KeyedSubtree(
-                          key: ValueKey(
-                            'onboarding-step4-front-content-${item.id}',
-                          ),
-                          child: _buildRegularBlockContent(
-                            item: item,
-                            config: config,
-                            baseColor: baseColor,
-                            exactHeight: exactHeight,
-                            showSecondaryChips: showSecondaryChips,
-                            showMenu: true,
-                          ),
-                        ),
+                child: LayoutBuilder(
+                  builder: (context, cardConstraints) {
+                    final cardWidth = cardConstraints.maxWidth;
+                    
+                    return Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isBackOverlap
+                            ? 8
+                            : tiny
+                            ? 8
+                            : compact
+                            ? 12
+                            : 14,
+                        vertical: isBackOverlap
+                            ? 5
+                            : tiny
+                            ? 1
+                            : compact
+                            ? 7
+                            : 10,
+                      ),
+                      child: isBackOverlap
+                          ? _buildBackOverlapBlockContent(
+                              item: item,
+                              config: config,
+                              baseColor: baseColor,
+                              exposedLabelWidth: exposedLabelWidth,
+                              labelInset: backLabelInset,
+                              tiny: tiny,
+                            )
+                          : compact
+                          ? KeyedSubtree(
+                              key: ValueKey(
+                                'onboarding-step4-front-content-${item.id}',
+                              ),
+                              child: _buildCompactBlockContent(
+                                item: item,
+                                config: config,
+                                baseColor: baseColor,
+                                showMenu: true,
+                                tiny: tiny,
+                                cardWidth: cardWidth,
+                              ),
+                            )
+                          : KeyedSubtree(
+                              key: ValueKey(
+                                'onboarding-step4-front-content-${item.id}',
+                              ),
+                              child: _buildRegularBlockContent(
+                                item: item,
+                                config: config,
+                                baseColor: baseColor,
+                                exactHeight: exactHeight,
+                                showSecondaryChips: showSecondaryChips,
+                                showMenu: true,
+                                cardWidth: cardWidth,
+                              ),
+                            ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -3349,7 +3359,11 @@ class _OnboardingStep4UnifiedState
     required double exactHeight,
     required bool showSecondaryChips,
     required bool showMenu,
+    required double cardWidth,
   }) {
+    final timeStr = _formatRange(item.startMinute, item.endMinute);
+    final isNarrow = cardWidth < 140;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -3379,18 +3393,18 @@ class _OnboardingStep4UnifiedState
           ],
         ),
         const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            _buildBlockInfoChip(
-              _formatRange(item.startMinute, item.endMinute),
-              compact: exactHeight < 84,
-            ),
-            if (showSecondaryChips && item.room.isNotEmpty)
-              _buildBlockInfoChip(item.room),
-          ],
-        ),
+        if (isNarrow)
+          _buildBlockInfoChip(timeStr, compact: exactHeight < 84)
+        else
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildBlockInfoChip(timeStr, compact: exactHeight < 84),
+              if (showSecondaryChips && item.room.isNotEmpty)
+                _buildBlockInfoChip(item.room),
+            ],
+          ),
       ],
     );
   }
@@ -3401,10 +3415,13 @@ class _OnboardingStep4UnifiedState
     required Color baseColor,
     required bool showMenu,
     required bool tiny,
+    required double cardWidth,
   }) {
     final iconSize = tiny ? 8.0 : 16.0;
     final menuSize = tiny ? 6.0 : 16.0;
     final fontSize = tiny ? 8.0 : 13.0;
+    final isNarrow = cardWidth < 140;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -3422,12 +3439,12 @@ class _OnboardingStep4UnifiedState
             ),
           ),
         ),
-        if (!tiny) ...[
+        if (!tiny && !isNarrow) ...[
           const SizedBox(width: 6),
           Flexible(
             flex: 0,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 132),
+              constraints: BoxConstraints(maxWidth: cardWidth * 0.4),
               child: _buildBlockInfoChip(
                 _formatRange(item.startMinute, item.endMinute),
                 compact: true,
@@ -3454,21 +3471,17 @@ class _OnboardingStep4UnifiedState
     required double labelInset,
     required bool tiny,
   }) {
-    final labelWidth = (exposedLabelWidth - labelInset - 14)
-        .clamp(42.0, 96.0)
-        .toDouble();
+    final stripWidth = exposedLabelWidth.clamp(64.0, 96.0);
+
     return Align(
       alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: EdgeInsets.only(left: labelInset),
+      child: ClipRect(
         child: SizedBox(
           key: ValueKey('onboarding-step4-back-label-${item.id}'),
-          width: labelWidth,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
+          width: stripWidth,
+          child: Padding(
+            padding: EdgeInsets.only(left: labelInset, right: 6),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: tiny ? 16 : 18,
@@ -3488,10 +3501,9 @@ class _OnboardingStep4UnifiedState
                   ),
                 ),
                 const SizedBox(width: 5),
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: labelWidth - 23),
+                Expanded(
                   child: Text(
-                    item.subject,
+                    _shortBackLabel(item),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -3508,6 +3520,23 @@ class _OnboardingStep4UnifiedState
         ),
       ),
     );
+  }
+
+  String _shortBackLabel(ClassRoutineBlock item) {
+    final raw = item.subject.trim();
+
+    if (_isWorkBlock(item)) {
+      if (raw.toLowerCase().contains('office')) return 'Office';
+      if (raw.toLowerCase().contains('work')) return 'Job';
+      return raw.length <= 8 ? raw : 'Job';
+    }
+
+    return raw.length <= 8 ? raw : raw.split(' ').first;
+  }
+
+  bool _isWorkBlock(ClassRoutineBlock item) {
+    final config = _configForBlock(item);
+    return config.source == RoutineImportReviewSource.work;
   }
 
   Widget _buildBlockInfoChip(String text, {bool compact = false}) {

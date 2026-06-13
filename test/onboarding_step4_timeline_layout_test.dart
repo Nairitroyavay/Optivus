@@ -79,7 +79,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('Data Structures'), findsOneWidget);
-      expect(find.text('Part-Time Job'), findsOneWidget);
+      expect(find.text('Job'), findsOneWidget);
       expect(find.text('3:15'), findsOneWidget);
       expect(find.text('4:15'), findsOneWidget);
       expect(find.text('4:45'), findsOneWidget);
@@ -531,10 +531,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Schedule generated'), findsOneWidget);
+    expect(find.text('Class and work schedule generated'), findsOneWidget);
     expect(
       find.text(
-        'Your fixed responsibilities are ready. Use each block menu to edit or remove it.',
+        'Your class and work blocks are ready. Use each block menu to edit or remove them.',
       ),
       findsOneWidget,
     );
@@ -601,7 +601,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Schedule generated'), findsOneWidget);
+      expect(find.text('Class and work schedule generated'), findsOneWidget);
       await tester.tap(find.text('Replace schedule'));
       await tester.pumpAndSettle();
       expect(find.text('Replace saved schedule?'), findsOneWidget);
