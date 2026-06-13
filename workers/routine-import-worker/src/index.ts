@@ -113,7 +113,7 @@ type VerifiedUser = {
 
 const SOURCE_IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 const GEMINI_INLINE_MAX_IMAGE_BYTES = 11 * 1024 * 1024;
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 const INLINE_IMAGE_TOO_LARGE_WARNING =
   "This photo is saved, but it is too large for AI extraction. Please upload a sharper photo under 11 MB or use manual review.";
 const HARD_TO_READ_WARNING =
