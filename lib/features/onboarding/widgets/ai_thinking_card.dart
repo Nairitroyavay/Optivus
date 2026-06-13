@@ -72,9 +72,7 @@ class _AiThinkingCardState extends State<AiThinkingCard>
     _messageTimer = Timer.periodic(widget.messageInterval, (_) {
       if (!mounted) return;
       setState(() {
-        if (_currentIndex < widget.messages.length - 1) {
-          _currentIndex++;
-        }
+        _currentIndex = (_currentIndex + 1) % widget.messages.length;
       });
     });
 

@@ -5,9 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+
 import 'package:optivus/models/routine_import_review.dart';
-import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/routine_import_ai_state.dart';
+import 'package:optivus/services/nutrition_ai_client.dart';
+import 'package:optivus/services/routine_import_ai_client.dart';
 
 void main() {
   group('Onboarding Step 5 Eating AI Flow Logic', () {
@@ -108,6 +111,51 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 500));
     });
+
+    testWidgets('shows AiThinkingCard during meal photo upload extraction', (tester) async {
+      final draft = OnboardingDraft(
+        lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+        baseTimeline: const BaseTimelineDraft(
+          eatingSetupPath: onboardingEatingPathHasRoutine,
+          eatingSetupStep: 1, // upload photo step
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (ref) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            routineImportAiControllerProvider.overrideWith(
+              (ref) {
+                final c = RoutineImportAiController(ref, FakeDelayedRoutineImportAiClient());
+                // Set extracting state directly to simulate upload extraction
+                // since we don't want to mock the whole photo upload process again here
+                c.state = c.state.copyWith(status: RoutineImportAiStatus.extracting);
+                return c;
+              },
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: OnboardingStep5(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // Verify the thinking card appears instead of old static text
+      expect(find.byType(AiThinkingCard), findsOneWidget);
+      expect(find.text(onboarding5MealPhotoLoadingMessages.first), findsOneWidget);
+      expect(find.text('AI is reading your meal photo…'), findsNothing);
+
+      // Force cleanup
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 500));
+    });
   });
 }
 
@@ -118,7 +166,17 @@ class FakeDelayedNutritionAiClient implements NutritionAiClient {
     required String idToken,
     required Map<String, dynamic> params,
   }) async {
-    // Hang forever
-    return Completer<RoutineImportExtractionResult>().future;
+    return Completer<RoutineImportExtractionResult>().future; // Hang forever
+  }
+}
+
+class FakeDelayedRoutineImportAiClient implements RoutineImportAiClient {
+  @override
+  Future<RoutineImportExtractionResult> extract({
+    required String uid,
+    required String idToken,
+    required RoutineImportReviewDraft review,
+  }) async {
+    return Completer<RoutineImportExtractionResult>().future; // Hang forever
   }
 }

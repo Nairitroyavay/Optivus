@@ -1,6 +1,20 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
+import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
+import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/services/routine_import_ai_client.dart';
+import 'package:optivus/services/uploads/image_prepare_service.dart';
+import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
+import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/routine_import_ai_state.dart';
+import 'package:optivus/state/upload_state.dart';
 
 void main() {
   group('Onboarding Step 4 AI Flow Logic', () {
@@ -106,4 +120,126 @@ void main() {
       expect(message, 'Upload incomplete. Please upload again.');
     });
   });
+
+  group('Onboarding Step 4 AI Loading UI', () {
+    testWidgets('shows AiThinkingCard during class timetable extraction', (tester) async {
+      final draft = OnboardingDraft(
+        lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (ref) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            uploadControllerProvider.overrideWith(
+              (ref) => MockUploadController(
+                assetRepository: DummyAssetRepo(),
+                authRepository: DummyAuthRepo(),
+                imagePrepareService: DummyImageService(),
+                r2UploadClient: DummyR2Client(),
+              ),
+            ),
+            routineImportAiControllerProvider.overrideWith(
+              (ref) => MockRoutineImportAiController(ref, FakeDelayedRoutineImportAiClient()),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(
+              body: OnboardingStep4Unified(),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+
+      // Tap to upload class photo (via the school icon inside the upload button)
+      final uploadCard = find.byIcon(Icons.school_rounded);
+      expect(uploadCard, findsOneWidget);
+      await tester.tap(uploadCard);
+      await tester.pumpAndSettle();
+
+      // Now tap Generate timeline (arrow button)
+      final generateButton = find.byIcon(Icons.arrow_upward_rounded);
+      expect(generateButton, findsOneWidget);
+      await tester.tap(generateButton);
+      await tester.pump();
+
+      // Verify the thinking card appears
+      expect(find.byType(AiThinkingCard), findsOneWidget);
+      expect(find.text(onboarding4ClassLoadingMessages.first), findsOneWidget);
+      expect(find.text('AI is reading your class timetable…'), findsNothing);
+
+      // Force cleanup
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 500));
+    });
+  });
+}
+
+class FakeDelayedRoutineImportAiClient implements RoutineImportAiClient {
+  @override
+  Future<RoutineImportExtractionResult> extract({
+    required String uid,
+    required String idToken,
+    required RoutineImportReviewDraft review,
+  }) async {
+    return Completer<RoutineImportExtractionResult>().future; // Hang forever
+  }
+}
+
+class MockUploadController extends UploadController {
+  MockUploadController({
+    required super.assetRepository,
+    required super.authRepository,
+    required super.imagePrepareService,
+    required super.r2UploadClient,
+  });
+
+  @override
+  Future<UploadedAsset?> startUpload({
+    required String uid,
+    required UploadedAssetPurpose purpose,
+    required String sourceFeature,
+  }) async {
+    return UploadedAsset(
+      assetId: 'test_asset_${purpose.name}',
+      ownerUid: uid,
+      r2Key: 'test/key.jpg',
+      fileName: 'photo.jpg',
+      purpose: purpose,
+      sourceFeature: sourceFeature,
+      sizeBytes: 100,
+      contentType: 'image/jpeg',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      status: UploadedAssetStatus.uploaded,
+    );
+  }
+}
+
+class DummyAssetRepo implements UploadedAssetRepository {
+  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+class DummyAuthRepo implements AuthRepository {
+  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+class DummyImageService implements ImagePrepareService {
+  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+class DummyR2Client implements R2UploadClient {
+  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class MockRoutineImportAiController extends RoutineImportAiController {
+  MockRoutineImportAiController(super.ref, super.client);
+
+  @override
+  Future<RoutineImportExtractionResult?> runExtraction(RoutineImportReviewDraft review) async {
+    state = const RoutineImportAiState(status: RoutineImportAiStatus.extracting);
+    // Hang forever so _isGenerating stays true
+    return Completer<RoutineImportExtractionResult>().future;
+  }
 }

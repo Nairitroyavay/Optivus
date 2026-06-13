@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:ui';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
@@ -970,36 +973,10 @@ class _OnboardingClassSetupWidgetState
   }
 
   Widget _buildLoadingState(String message) {
-    return OnboardingGlassCard(
-      tint: _config.accent.withValues(alpha: 0.07),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: _config.accent,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return AiThinkingCard(
+      messages: [message],
+      accent: _config.accent,
+      isActive: true,
     );
   }
 

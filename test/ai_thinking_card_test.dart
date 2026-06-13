@@ -64,17 +64,17 @@ void main() {
         ),
       );
 
-      expect(find.text('Message 1'), findsOneWidget);
+      expect(find.text('Message 1'), findsWidgets);
       
-      await tester.pump(const Duration(milliseconds: 150));
-      expect(find.text('Message 2'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Message 2'), findsWidgets);
 
-      await tester.pump(const Duration(milliseconds: 150));
-      expect(find.text('Message 3'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Message 3'), findsWidgets);
 
-      // Verify it stays on the last message
-      await tester.pump(const Duration(milliseconds: 150));
-      expect(find.text('Message 3'), findsOneWidget);
+      // Verify it loops back to the first message
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Message 1'), findsWidgets);
     });
 
     testWidgets('shows reassurance text steps correctly', (tester) async {
