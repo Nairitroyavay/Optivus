@@ -753,6 +753,32 @@ class _OnboardingStep4UnifiedState
         'to generate your weekly schedule.';
   }
 
+  String get _generatedScheduleTitle {
+    if (_needsBothPhotos) {
+      return 'Class and work schedule generated';
+    }
+    if (_classesRequired) {
+      return 'Class schedule generated';
+    }
+    if (_workRequired) {
+      return 'Work schedule generated';
+    }
+    return 'Schedule generated';
+  }
+
+  String get _generatedScheduleBody {
+    if (_needsBothPhotos) {
+      return 'Your class and work blocks are ready. Use each block menu to edit or remove them.';
+    }
+    if (_classesRequired) {
+      return 'Your weekly class timeline is ready. Use each block menu to edit or remove it.';
+    }
+    if (_workRequired) {
+      return 'Your weekly work timeline is ready. Use each block menu to edit or remove it.';
+    }
+    return 'Your weekly schedule is ready. Use each block menu to edit or remove it.';
+  }
+
   // ---- Accent for the combined view (class-primary) ----
   Color get _accent => OptivusColors.aquaAccent;
 
@@ -2337,7 +2363,7 @@ class _OnboardingStep4UnifiedState
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      _needsBothPhotos ? 'Class and work schedule generated' : (_classesRequired ? 'Class schedule generated' : 'Work schedule generated'),
+                      _generatedScheduleTitle,
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
@@ -2346,7 +2372,7 @@ class _OnboardingStep4UnifiedState
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      _needsBothPhotos ? 'Your class and work blocks are ready. Use each block menu to edit or remove them.' : 'Your fixed responsibilities are ready. Use each block menu to edit or remove it.',
+                      _generatedScheduleBody,
                       style: const TextStyle(
                         fontSize: 12,
                         height: 1.35,
@@ -3290,7 +3316,7 @@ class _OnboardingStep4UnifiedState
                     return Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: isBackOverlap
-                            ? 8
+                            ? 0
                             : tiny
                             ? 8
                             : compact

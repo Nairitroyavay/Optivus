@@ -543,6 +543,92 @@ void main() {
     expect(find.text('Saved Work'), findsOneWidget);
   });
 
+  testWidgets('student only generated card shows correct copy', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+      baseTimeline: BaseTimelineDraft(
+        blocks: [
+          _timelineBlock(
+            id: 'saved-class',
+            section: 'classes',
+            title: 'Saved Class',
+            startMinute: 9 * 60,
+            endMinute: 10 * 60,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Class schedule generated'), findsOneWidget);
+    expect(
+      find.text(
+        'Your weekly class timeline is ready. Use each block menu to edit or remove it.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('work only generated card shows correct copy', (
+    tester,
+  ) async {
+    final draft = OnboardingDraft(
+      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.workingKey, workType: 'full_time'),
+      baseTimeline: BaseTimelineDraft(
+        blocks: [
+          _timelineBlock(
+            id: 'saved-work',
+            section: 'job_work_business',
+            title: 'Saved Work',
+            startMinute: 9 * 60,
+            endMinute: 17 * 60,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(child: OnboardingStep4Unified()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Work schedule generated'), findsOneWidget);
+    expect(
+      find.text(
+        'Your weekly work timeline is ready. Use each block menu to edit or remove it.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'Replace schedule clears current role blocks and upload returns',
     (tester) async {
