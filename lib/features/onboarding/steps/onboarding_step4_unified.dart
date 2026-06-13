@@ -2186,24 +2186,7 @@ class _OnboardingStep4UnifiedState
               _buildSwapControl(),
             ],
 
-            if (kDebugMode) ...[
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: OptivusColors.aquaAccent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'DEBUG: AI Mode = ${OptivusRoutineImportAiConfig.mode.name.toUpperCase()}',
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
+
 
             // Generation error
             if (_generationError != null) ...[

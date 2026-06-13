@@ -141,6 +141,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   }
 
   Future<void> _runAiExtraction() async {
+    if (kDebugMode) {
+      debugPrint('[Onboarding5] AI mode: ${OptivusAiWorkersConfig.mode.name.toUpperCase()}');
+    }
     final asset = _uploadedAsset;
     setState(() => _generationError = null);
     ref.read(mockOnboardingProvider.notifier).clearValidation();
@@ -589,27 +592,7 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
               ? null
               : onGenerate,
         ),
-        if (kDebugMode) ...[
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: OptivusColors.roseAccent.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                'DEBUG: AI Mode = ${OptivusAiWorkersConfig.mode.name.toUpperCase()}',
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  color: OptivusColors.textPrimary,
-                ),
-              ),
-            ),
-          ),
-        ],
+
         if (uploadError != null || generationError != null) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: uploadError ?? generationError!),
