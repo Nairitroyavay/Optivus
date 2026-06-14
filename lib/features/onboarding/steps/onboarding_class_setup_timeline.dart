@@ -786,7 +786,7 @@ class _OnboardingClassSetupWidgetState
     if (busy || extracting || _activeExtractionKey != null) {
       return _buildCenteredState(
         _buildLoadingState(
-          busy ? 'Uploading photo...' : 'Processing your timetable…',
+          busy ? 'Uploading photo' : 'Processing your timetable',
         ),
       );
     }
@@ -799,7 +799,7 @@ class _OnboardingClassSetupWidgetState
 
     if (hasUploadedAsset && canAttemptExtraction && !attemptedExtraction) {
       return _buildCenteredState(
-        _buildLoadingState('Processing your timetable…'),
+        _buildLoadingState('Processing your timetable'),
       );
     }
 

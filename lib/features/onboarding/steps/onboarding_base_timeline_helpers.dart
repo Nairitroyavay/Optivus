@@ -572,7 +572,7 @@ class OnboardingUploadReviewCard extends ConsumerWidget {
             runSpacing: 8,
             children: [
               OnboardingActionPill(
-                label: busy ? 'Uploading...' : 'Upload photo',
+                label: busy ? 'Uploading photo' : 'Upload photo',
                 icon: busy ? Icons.hourglass_top_rounded : Icons.upload_rounded,
                 accent: accent,
                 selected: true,
@@ -616,12 +616,12 @@ class OnboardingUploadReviewCard extends ConsumerWidget {
     }
     if (applies && uploadState.isBusy) {
       return switch (uploadState.status) {
-        UploadFlowStatus.picking => 'Choosing photo...',
-        UploadFlowStatus.preparing => 'Preparing photo...',
-        UploadFlowStatus.signing => 'Preparing secure upload...',
-        UploadFlowStatus.uploading => 'Uploading photo...',
-        UploadFlowStatus.savingMetadata => 'Saving upload reference...',
-        _ => 'Uploading photo...',
+        UploadFlowStatus.picking => 'Choosing photo',
+        UploadFlowStatus.preparing => 'Preparing photo',
+        UploadFlowStatus.signing => 'Preparing secure upload',
+        UploadFlowStatus.uploading => 'Uploading photo',
+        UploadFlowStatus.savingMetadata => 'Saving upload reference',
+        _ => 'Uploading photo',
       };
     }
     if (pending?.hasUploadedAssetReference == true) {

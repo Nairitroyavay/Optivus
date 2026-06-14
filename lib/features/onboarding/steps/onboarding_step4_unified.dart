@@ -20,33 +20,63 @@ import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
 @visibleForTesting
-const onboarding4ClassLoadingMessages = [
-  'Reading your timetable photo…',
-  'Finding days and time slots…',
-  'Detecting class names and rooms…',
-  'Checking weekly repeat classes…',
-  'Building your class timeline…',
-  'Almost ready…',
+const onboarding4ClassLoadingStages = [
+  AiThinkingStage(
+    title: 'Reading the timetable layout',
+    detail: 'Checking rows, columns, days, and time slots.',
+  ),
+  AiThinkingStage(
+    title: 'Finding classes and rooms',
+    detail: 'Looking for subject names, room numbers, and repeat patterns.',
+  ),
+  AiThinkingStage(
+    title: 'Checking weekly structure',
+    detail: 'Matching blocks to the right days without changing your times.',
+  ),
+  AiThinkingStage(
+    title: 'Preparing your class timeline',
+    detail: 'Building clean blocks for review on the schedule.',
+  ),
 ];
 
 @visibleForTesting
-const onboarding4WorkLoadingMessages = [
-  'Reading your work schedule…',
-  'Finding work days and time blocks…',
-  'Checking start and end times…',
-  'Filtering out personal habits…',
-  'Building your work timeline…',
-  'Almost ready…',
+const onboarding4WorkLoadingStages = [
+  AiThinkingStage(
+    title: 'Reading the work schedule',
+    detail: 'Finding work days, shifts, and fixed time blocks.',
+  ),
+  AiThinkingStage(
+    title: 'Separating work from personal items',
+    detail: 'Keeping schedule blocks and ignoring habits or notes.',
+  ),
+  AiThinkingStage(
+    title: 'Checking start and end times',
+    detail: 'Making sure each block fits the weekly timeline.',
+  ),
+  AiThinkingStage(
+    title: 'Preparing your work timeline',
+    detail: 'Building clean work blocks for review.',
+  ),
 ];
 
 @visibleForTesting
-const onboarding4CombinedLoadingMessages = [
-  'Reading your class timetable…',
-  'Reading your work schedule…',
-  'Separating class and work blocks…',
-  'Checking weekly repeat days…',
-  'Merging both timelines safely…',
-  'Almost ready…',
+const onboarding4CombinedLoadingStages = [
+  AiThinkingStage(
+    title: 'Reading both photos',
+    detail: 'Checking class and work schedules separately.',
+  ),
+  AiThinkingStage(
+    title: 'Finding class and work blocks',
+    detail: 'Keeping subject names, rooms, shifts, and time ranges clear.',
+  ),
+  AiThinkingStage(
+    title: 'Checking overlaps safely',
+    detail: 'Preserving original times while preparing the visual timeline.',
+  ),
+  AiThinkingStage(
+    title: 'Merging your weekly schedule',
+    detail: 'Placing both timelines together without changing your data.',
+  ),
 ];
 
 // ---------------------------------------------------------------------------
@@ -2869,13 +2899,13 @@ class _OnboardingStep4UnifiedState
   Widget _buildTimelineArea(List<ClassRoutineBlock> allBlocks, bool hasBlocks) {
     // Generating state: show AI reading message
     if (_isGenerating) {
-      List<String> loadingMessages;
+      List<AiThinkingStage> loadingStages;
       if (_needsBothPhotos) {
-        loadingMessages = onboarding4CombinedLoadingMessages;
+        loadingStages = onboarding4CombinedLoadingStages;
       } else if (_classesRequired) {
-        loadingMessages = onboarding4ClassLoadingMessages;
+        loadingStages = onboarding4ClassLoadingStages;
       } else {
-        loadingMessages = onboarding4WorkLoadingMessages;
+        loadingStages = onboarding4WorkLoadingStages;
       }
 
       return SizedBox.expand(
@@ -2883,7 +2913,7 @@ class _OnboardingStep4UnifiedState
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: AiThinkingCard(
-              messages: loadingMessages,
+              stages: loadingStages,
               accent: _accent,
               isActive: _isGenerating,
             ),

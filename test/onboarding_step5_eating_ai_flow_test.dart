@@ -104,12 +104,12 @@ void main() {
 
       // Now it should be generating
       expect(find.byType(AiThinkingCard), findsOneWidget);
-      expect(find.text(onboarding5GeneratedMealLoadingMessages.first), findsOneWidget);
+      expect(find.text(onboarding5GeneratedMealLoadingStages.first.title), findsOneWidget);
       expect(find.text('AI is generating your timeline.'), findsNothing);
 
       // Verify message rotation
-      await tester.pump(const Duration(milliseconds: 2100));
-      expect(find.text(onboarding5GeneratedMealLoadingMessages[1]), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.text(onboarding5GeneratedMealLoadingStages[1].title), findsOneWidget);
 
       // Force cleanup of timers inside AiThinkingCard before test ends
       await tester.pumpWidget(const SizedBox());
@@ -147,12 +147,12 @@ void main() {
 
       // Verify the thinking card appears instead of old static text
       expect(find.byType(AiThinkingCard), findsOneWidget);
-      expect(find.text(onboarding5MealPhotoLoadingMessages.first), findsOneWidget);
+      expect(find.text(onboarding5MealPhotoLoadingStages.first.title), findsOneWidget);
       expect(find.text('AI is reading your meal photo…'), findsNothing);
 
       // Verify message rotation
-      await tester.pump(const Duration(milliseconds: 2100));
-      expect(find.text(onboarding5MealPhotoLoadingMessages[1]), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.text(onboarding5MealPhotoLoadingStages[1].title), findsOneWidget);
 
       // Force cleanup
       await tester.pumpWidget(const SizedBox());

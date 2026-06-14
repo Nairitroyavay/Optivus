@@ -5,18 +5,18 @@ import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
 void main() {
   group('AiThinkingCard', () {
-    const testMessages = [
-      'Message 1',
-      'Message 2',
-      'Message 3',
+    const testStages = [
+      AiThinkingStage(title: 'Stage 1', detail: 'Detail 1'),
+      AiThinkingStage(title: 'Stage 2', detail: 'Detail 2'),
+      AiThinkingStage(title: 'Stage 3', detail: 'Detail 3'),
     ];
 
-    testWidgets('shows first message immediately when active', (tester) async {
+    testWidgets('shows first stage immediately', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: true,
             ),
@@ -24,95 +24,88 @@ void main() {
         ),
       );
 
-      expect(find.text('Message 1'), findsOneWidget);
-      expect(find.text('Message 2'), findsNothing);
+      expect(find.text('Stage 1'), findsOneWidget);
+      expect(find.text('Detail 1'), findsOneWidget);
+      expect(find.text('Stage 2'), findsNothing);
     });
 
-    testWidgets('rotates to second message after one interval', (tester) async {
+    testWidgets('progresses to next stage after interval', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              messageInterval: Duration(milliseconds: 100),
+              stageInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Message 1'), findsOneWidget);
+      expect(find.text('Stage 1'), findsOneWidget);
       
-      // Advance time by 1 interval
       await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(milliseconds: 600));
 
-      expect(find.text('Message 2'), findsOneWidget);
+      expect(find.text('Stage 2'), findsOneWidget);
+      expect(find.text('Detail 2'), findsOneWidget);
     });
 
-    testWidgets('cycles through all messages', (tester) async {
+    testWidgets('does not loop back to first stage after final stage', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              messageInterval: Duration(milliseconds: 100),
+              stageInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Message 1'), findsWidgets);
+      expect(find.text('Stage 1'), findsOneWidget);
       
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Message 2'), findsWidgets);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Stage 2'), findsOneWidget);
 
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Message 3'), findsWidgets);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Stage 3'), findsOneWidget);
 
-      // Verify it loops back to the first message
+      // Verify it stays on the last stage
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Message 1'), findsWidgets);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Stage 3'), findsOneWidget);
+      expect(find.text('Stage 1'), findsNothing);
     });
 
-    testWidgets('shows reassurance text steps correctly', (tester) async {
+    testWidgets('shows long-wait helper only after configured delay', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              reassuranceInterval: Duration(milliseconds: 100),
+              stageInterval: Duration(seconds: 1), // slow progression
             ),
           ),
         ),
       );
 
-      // Initial state (0-5s)
-      expect(find.text('This usually takes a few moments.'), findsOneWidget);
+      // Initial state (0s)
+      expect(find.text('Large images can take a little longer. Keep this screen open.'), findsNothing);
 
-      // Advance past 6 ticks (6s)
-      await tester.pump(const Duration(milliseconds: 650));
-      expect(
-          find.text(
-              'Still reading the details — timetable and meal photos can take longer.'),
-          findsOneWidget);
-
-      // Advance past 12 ticks (12s)
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('AI is checking the structure carefully.'),
-          findsOneWidget);
-
-      // Advance past 20 ticks (20s)
-      await tester.pump(const Duration(milliseconds: 800));
-      expect(find.text('Almost there. Please don\'t close the app.'),
-          findsOneWidget);
+      // Advance past 15 seconds
+      await tester.pump(const Duration(seconds: 16));
+      expect(find.text('Large images can take a little longer. Keep this screen open.'), findsOneWidget);
     });
 
-    testWidgets('does not overflow on small width', (tester) async {
+    testWidgets('does not overflow at 200px width', (tester) async {
       final oldSize = tester.view.physicalSize;
       final oldDpr = tester.view.devicePixelRatio;
       tester.view.physicalSize = const Size(200, 800);
@@ -128,8 +121,11 @@ void main() {
             body: SizedBox(
               width: 200,
               child: AiThinkingCard(
-                messages: [
-                  'This is a very long message that should wrap softly without any overflow errors in the widget tree.',
+                stages: [
+                  AiThinkingStage(
+                    title: 'This is a very long title that should wrap safely',
+                    detail: 'This is a very long detail that should also wrap safely without any overflow exceptions.',
+                  ),
                 ],
                 accent: OptivusColors.aquaAccent,
                 isActive: true,
@@ -139,102 +135,87 @@ void main() {
         ),
       );
 
-      // Wait for layout and check for exceptions
       await tester.pump();
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('resets message index on isActive false->true', (tester) async {
+    testWidgets('resets to first stage when inactive then active again', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: false,
-              messageInterval: Duration(milliseconds: 100),
+              stageInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Message 1'), findsNothing);
+      expect(find.text('Stage 1'), findsNothing);
 
       // Rebuild with isActive: true
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              messageInterval: Duration(milliseconds: 100),
+              stageInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Message 1'), findsOneWidget);
+      expect(find.text('Stage 1'), findsOneWidget);
 
-      // Advance to message 2
+      // Advance to stage 2
       await tester.pump(const Duration(milliseconds: 150));
-      expect(find.text('Message 2'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.text('Stage 2'), findsOneWidget);
 
       // Rebuild with isActive: false
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: false,
-              messageInterval: Duration(milliseconds: 100),
+              stageInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
       
-      expect(find.text('Message 2'), findsNothing);
+      expect(find.text('Stage 2'), findsNothing);
 
       // Rebuild with isActive: true again
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
+              stages: testStages,
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              messageInterval: Duration(milliseconds: 100),
+              stageInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      // Should reset to first message
-      expect(find.text('Message 1'), findsOneWidget);
+      // Should reset to first stage
+      expect(find.text('Stage 1'), findsOneWidget);
     });
 
-    testWidgets('no visible DEBUG text is present', (tester) async {
+    testWidgets('shows safe fallback message when stages list is empty', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              messages: testMessages,
-              accent: OptivusColors.aquaAccent,
-              isActive: true,
-            ),
-          ),
-        ),
-      );
-
-      expect(find.textContaining('DEBUG'), findsNothing);
-    });
-
-    testWidgets('shows safe fallback message when messages list is empty', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: AiThinkingCard(
+              stages: [],
               messages: [],
               accent: OptivusColors.aquaAccent,
               isActive: true,
@@ -243,7 +224,7 @@ void main() {
         ),
       );
 
-      expect(find.text('AI is thinking...'), findsOneWidget);
+      expect(find.text('Processing'), findsOneWidget);
     });
   });
 }

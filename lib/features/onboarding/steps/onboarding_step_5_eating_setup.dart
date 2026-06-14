@@ -21,23 +21,43 @@ import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
 @visibleForTesting
-const onboarding5MealPhotoLoadingMessages = [
-  'Reading your meal photo…',
-  'Identifying dishes and portions…',
-  'Checking meal timing…',
-  'Organizing dishes into your timeline…',
-  'Building your eating schedule…',
-  'Almost ready…',
+const onboarding5MealPhotoLoadingStages = [
+  AiThinkingStage(
+    title: 'Reading the meal photo',
+    detail: 'Looking for dishes, meal names, and timing clues.',
+  ),
+  AiThinkingStage(
+    title: 'Identifying dishes',
+    detail: 'Keeping each visible food item in the meal block.',
+  ),
+  AiThinkingStage(
+    title: 'Checking meal timing',
+    detail: 'Matching dishes to breakfast, lunch, snacks, or dinner.',
+  ),
+  AiThinkingStage(
+    title: 'Preparing your eating timeline',
+    detail: 'Building meal blocks with dishes and time ranges.',
+  ),
 ];
 
 @visibleForTesting
-const onboarding5GeneratedMealLoadingMessages = [
-  'Understanding your meal preferences…',
-  'Planning meals around your day…',
-  'Balancing dishes across the week…',
-  'Checking snack timing…',
-  'Building your weekly eating timeline…',
-  'Almost ready…',
+const onboarding5GeneratedMealLoadingStages = [
+  AiThinkingStage(
+    title: 'Understanding your preferences',
+    detail: 'Using your selected mode, routine, and daily needs.',
+  ),
+  AiThinkingStage(
+    title: 'Planning meals around your day',
+    detail: 'Balancing meals and snacks across realistic time blocks.',
+  ),
+  AiThinkingStage(
+    title: 'Choosing dishes for each block',
+    detail: 'Adding concrete dish names instead of empty placeholders.',
+  ),
+  AiThinkingStage(
+    title: 'Preparing your weekly eating timeline',
+    detail: 'Building meal blocks you can edit before continuing.',
+  ),
 ];
 
 const String onboardingEatingPathHasRoutine = 'has_routine';
@@ -617,7 +637,7 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
         if (generating) ...[
           const SizedBox(height: 14),
           AiThinkingCard(
-            messages: onboarding5MealPhotoLoadingMessages,
+            stages: onboarding5MealPhotoLoadingStages,
             accent: OptivusColors.roseAccent,
             isActive: generating,
           ),
@@ -818,7 +838,7 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
                             if (isGenerating) ...[
                               const SizedBox(height: 14),
                               AiThinkingCard(
-                                messages: onboarding5GeneratedMealLoadingMessages,
+                                stages: onboarding5GeneratedMealLoadingStages,
                                 accent: OptivusColors.roseAccent,
                                 isActive: isGenerating,
                               ),
