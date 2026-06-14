@@ -248,7 +248,7 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(
         find.byKey(const ValueKey('onboarding-step4-back-label-job')),
-        findsWidgets, // Now multiple segments
+        findsOneWidget,
       );
       expect(
         find.byKey(const ValueKey('onboarding-step4-front-content-ps')),
@@ -264,7 +264,7 @@ void main() {
       );
       expect(find.text('9:00 AM - 12:00 PM'), findsNothing);
       expect(find.textContaining('AFLice'), findsNothing);
-      expect(find.text('Office'), findsWidgets); // Back label segments
+      expect(find.text('Office'), findsOneWidget); // Only one back label now
       expect(find.text('C25-B-108'), findsOneWidget); // Room
 
       final jobLeft = tester.getTopLeft(jobBlock).dx;
@@ -284,11 +284,11 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
       );
       await tester.pump();
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
+        find.byKey(const ValueKey('onboarding-step4-back-label-job')),
       );
       await tester.pumpAndSettle();
 
@@ -324,11 +324,11 @@ void main() {
       );
 
       await tester.ensureVisible(
-        find.byKey(const ValueKey('onboarding-step4-back-label-afl')).first,
+        find.byKey(const ValueKey('onboarding-step4-back-label-afl')),
       );
       await tester.pump();
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-step4-back-label-afl')).first,
+        find.byKey(const ValueKey('onboarding-step4-back-label-afl')),
       );
       await tester.pumpAndSettle();
 
@@ -340,7 +340,7 @@ void main() {
       );
       expect(
         find.byKey(const ValueKey('onboarding-step4-back-label-job')),
-        findsWidgets, // Now segments
+        findsOneWidget,
       );
       expect(
         find.byKey(const ValueKey('onboarding-step4-back-label-ps')),
@@ -1434,10 +1434,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     await tester.ensureVisible(
-      find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
+      find.byKey(const ValueKey('onboarding-step4-back-label-job')),
     );
     await tester.tap(
-      find.byKey(const ValueKey('onboarding-step4-back-label-job')).first,
+      find.byKey(const ValueKey('onboarding-step4-back-label-job')),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
@@ -1977,6 +1977,70 @@ void main() {
       );
     },
   );
+
+  testWidgets('Bottom CTA clearance allows scrolling past last block', (
+    tester,
+  ) async {
+    final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+    completed[onboardingClassJobStepIndex] = false;
+    final draft = OnboardingDraft(
+      currentStep: onboardingClassJobStepIndex,
+      stepCompleted: completed,
+      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.workingKey, workType: 'full_time'),
+      baseTimeline: const BaseTimelineDraft(),
+    );
+    final workBlocks = [
+      _scheduleBlock(
+        id: 'late-shift',
+        title: 'Late Shift',
+        startMinute: 22 * 60, // 10 PM
+        endMinute: 24 * 60,   // Midnight
+        config: ScheduleSetupConfig.workSetup,
+      ),
+    ];
+
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+          onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
+        ],
+        child: const MaterialApp(
+          home: OnboardingFlow(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    final lateBlock = find.byKey(const ValueKey('onboarding-step4-block-late-shift'));
+    await tester.ensureVisible(lateBlock);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Drag up to see if we can scroll past the block (verifying bottom padding exists)
+    await tester.drag(lateBlock, const Offset(0, -350));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(lateBlock, findsOneWidget);
+
+    final ctaButton = find.text('Next Step');
+    expect(ctaButton, findsOneWidget);
+
+    // The block should be positioned visually higher than the CTA's top
+    // Because we scrolled to the bottom and added 420px padding.
+    final blockBottom = tester.getBottomRight(lateBlock).dy;
+    final ctaTop = tester.getTopLeft(ctaButton).dy;
+    
+    expect(blockBottom, lessThan(ctaTop));
+  });
 }
 
 ClassRoutineBlock _scheduleBlock({

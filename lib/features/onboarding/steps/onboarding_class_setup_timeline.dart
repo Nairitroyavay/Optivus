@@ -978,7 +978,8 @@ class _OnboardingClassSetupWidgetState
 
   Widget _buildLoadingState(String message) {
     return AiThinkingCard(
-      messages: [message],
+      title: message,
+      detail: '',
       accent: _config.accent,
       isActive: true,
     );

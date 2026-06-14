@@ -19,65 +19,6 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
-@visibleForTesting
-const onboarding4ClassLoadingStages = [
-  AiThinkingStage(
-    title: 'Reading the timetable layout',
-    detail: 'Checking rows, columns, days, and time slots.',
-  ),
-  AiThinkingStage(
-    title: 'Finding classes and rooms',
-    detail: 'Looking for subject names, room numbers, and repeat patterns.',
-  ),
-  AiThinkingStage(
-    title: 'Checking weekly structure',
-    detail: 'Matching blocks to the right days without changing your times.',
-  ),
-  AiThinkingStage(
-    title: 'Preparing your class timeline',
-    detail: 'Building clean blocks for review on the schedule.',
-  ),
-];
-
-@visibleForTesting
-const onboarding4WorkLoadingStages = [
-  AiThinkingStage(
-    title: 'Reading the work schedule',
-    detail: 'Finding work days, shifts, and fixed time blocks.',
-  ),
-  AiThinkingStage(
-    title: 'Separating work from personal items',
-    detail: 'Keeping schedule blocks and ignoring habits or notes.',
-  ),
-  AiThinkingStage(
-    title: 'Checking start and end times',
-    detail: 'Making sure each block fits the weekly timeline.',
-  ),
-  AiThinkingStage(
-    title: 'Preparing your work timeline',
-    detail: 'Building clean work blocks for review.',
-  ),
-];
-
-@visibleForTesting
-const onboarding4CombinedLoadingStages = [
-  AiThinkingStage(
-    title: 'Reading both photos',
-    detail: 'Checking class and work schedules separately.',
-  ),
-  AiThinkingStage(
-    title: 'Finding class and work blocks',
-    detail: 'Keeping subject names, rooms, shifts, and time ranges clear.',
-  ),
-  AiThinkingStage(
-    title: 'Checking overlaps safely',
-    detail: 'Preserving original times while preparing the visual timeline.',
-  ),
-  AiThinkingStage(
-    title: 'Merging your weekly schedule',
-    detail: 'Placing both timelines together without changing your data.',
-  ),
-];
 
 // ---------------------------------------------------------------------------
 // Photo slot model — tracks one uploaded photo with its label & section.
@@ -711,7 +652,7 @@ class _OnboardingStep4UnifiedState
   static const _kPixelsPerMinute = _kHourHeight / 60.0;
   static const _kLeftOffset = 64.0;
   static const _kMinTimelineAreaHeight = 320.0;
-  static const _kTimelineBottomPadding = 280.0;
+  static const _kTimelineBottomPadding = 420.0;
   static const _kOverlapMinLabelWidth = 70.0;
   static const _kOverlapMaxLabelWidth = 96.0;
   static const _kOverlapMinFrontWidth = 152.0;
@@ -789,6 +730,26 @@ class _OnboardingStep4UnifiedState
     }
     return 'Upload your work schedule photo and tap the arrow '
         'to generate your weekly schedule.';
+  }
+
+  String get _aiLoadingTitle {
+    if (_needsBothPhotos) {
+      return 'AI is building your class and work timeline';
+    }
+    if (_classesRequired) {
+      return 'AI is reading your class timetable';
+    }
+    return 'AI is reading your work schedule';
+  }
+
+  String get _aiLoadingDetail {
+    if (_needsBothPhotos) {
+      return 'Keeping class and work blocks separate before merging';
+    }
+    if (_classesRequired) {
+      return 'Looking for subjects, rooms, days, and time blocks';
+    }
+    return 'Checking for shifts, fixed times, and weekly patterns';
   }
 
   String get _generatedScheduleTitle {
@@ -2899,21 +2860,13 @@ class _OnboardingStep4UnifiedState
   Widget _buildTimelineArea(List<ClassRoutineBlock> allBlocks, bool hasBlocks) {
     // Generating state: show AI reading message
     if (_isGenerating) {
-      List<AiThinkingStage> loadingStages;
-      if (_needsBothPhotos) {
-        loadingStages = onboarding4CombinedLoadingStages;
-      } else if (_classesRequired) {
-        loadingStages = onboarding4ClassLoadingStages;
-      } else {
-        loadingStages = onboarding4WorkLoadingStages;
-      }
-
       return SizedBox.expand(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: AiThinkingCard(
-              stages: loadingStages,
+              title: _aiLoadingTitle,
+              detail: _aiLoadingDetail,
               accent: _accent,
               isActive: _isGenerating,
             ),
@@ -3322,7 +3275,23 @@ class _OnboardingStep4UnifiedState
         segments.add(_BackLabelSegment(segmentTop, segmentHeight));
       }
     }
-    return segments;
+
+    if (segments.isEmpty) return const [];
+
+    // Pick the best segment: prefer >= 44px height, then largest height, then earliest
+    segments.sort((a, b) {
+      final aGood = a.height >= 44;
+      final bGood = b.height >= 44;
+      if (aGood && !bGood) return -1;
+      if (!aGood && bGood) return 1;
+
+      final heightCmp = b.height.compareTo(a.height);
+      if (heightCmp != 0) return heightCmp;
+
+      return a.top.compareTo(b.top);
+    });
+
+    return [segments.first];
   }
 
   // ---- Colored block card ----
@@ -3519,7 +3488,7 @@ class _OnboardingStep4UnifiedState
           _buildBlockInfoChip(timeStr, compact: exactHeight < 84),
           if (item.room.isNotEmpty) ...[
             const SizedBox(height: 4),
-            _buildBlockInfoChip(item.room, compact: exactHeight < 84),
+            _buildBlockInfoChip(item.room, compact: exactHeight < 84, maxWidth: cardWidth),
           ],
         ] else
           Wrap(
@@ -3528,7 +3497,7 @@ class _OnboardingStep4UnifiedState
             children: [
               _buildBlockInfoChip(timeStr, compact: exactHeight < 84),
               if (item.room.isNotEmpty)
-                _buildBlockInfoChip(item.room, compact: exactHeight < 84),
+                _buildBlockInfoChip(item.room, compact: exactHeight < 84, maxWidth: cardWidth),
             ],
           ),
       ],
@@ -3589,8 +3558,8 @@ class _OnboardingStep4UnifiedState
                 _formatRange(item.startMinute, item.endMinute),
                 compact: true,
               ),
-              if (item.room.isNotEmpty && cardWidth > 180)
-                _buildBlockInfoChip(item.room, compact: true),
+              if (item.room.isNotEmpty)
+                _buildBlockInfoChip(item.room, compact: true, maxWidth: cardWidth),
             ],
           ),
       ],
@@ -3703,7 +3672,25 @@ class _OnboardingStep4UnifiedState
     return config.source == RoutineImportReviewSource.work;
   }
 
-  Widget _buildBlockInfoChip(String text, {bool compact = false}) {
+  Widget _buildBlockInfoChip(String text, {bool compact = false, double? maxWidth}) {
+    Widget content = Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontSize: compact ? 10 : 11,
+        fontWeight: FontWeight.w800,
+        color: OptivusColors.textBody,
+      ),
+    );
+
+    if (maxWidth != null) {
+      content = ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: math.max(20, maxWidth - 24)),
+        child: content,
+      );
+    }
+
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 7 : 8,
@@ -3713,16 +3700,7 @@ class _OnboardingStep4UnifiedState
         color: Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: compact ? 10 : 11,
-          fontWeight: FontWeight.w800,
-          color: OptivusColors.textBody,
-        ),
-      ),
+      child: content,
     );
   }
 }

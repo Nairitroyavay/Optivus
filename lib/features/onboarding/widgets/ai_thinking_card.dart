@@ -3,36 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 
-class AiThinkingStage {
+class AiThinkingCard extends StatefulWidget {
   final String title;
   final String detail;
-  final IconData? icon;
-
-  const AiThinkingStage({
-    required this.title,
-    required this.detail,
-    this.icon,
-  });
-}
-
-class AiThinkingCard extends StatefulWidget {
-  final List<AiThinkingStage> stages;
-  final List<String>? messages;
-  final String title;
-  final String statusLabel;
   final Color accent;
   final bool isActive;
-  final Duration stageInterval;
+  final Duration dotInterval;
+  final Duration firstLongWaitDelay;
+  final Duration secondLongWaitDelay;
 
   const AiThinkingCard({
     super.key,
-    this.stages = const [],
-    this.messages,
-    this.title = 'Building your timeline',
-    this.statusLabel = 'Working',
+    required this.title,
+    required this.detail,
     required this.accent,
     required this.isActive,
-    this.stageInterval = const Duration(seconds: 4),
+    this.dotInterval = const Duration(milliseconds: 500),
+    this.firstLongWaitDelay = const Duration(seconds: 10),
+    this.secondLongWaitDelay = const Duration(seconds: 20),
   });
 
   @override
@@ -41,27 +29,16 @@ class AiThinkingCard extends StatefulWidget {
 
 class _AiThinkingCardState extends State<AiThinkingCard>
     with SingleTickerProviderStateMixin {
-  int _currentStageIndex = 0;
+  int _dotCount = 0;
   int _elapsedSeconds = 0;
-  Timer? _stageTimer;
-  Timer? _reassuranceTimer;
+  Timer? _dotTimer;
+  Timer? _elapsedTimer;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
-  late final List<AiThinkingStage> _effectiveStages;
 
   @override
   void initState() {
     super.initState();
-    if (widget.stages.isNotEmpty) {
-      _effectiveStages = widget.stages;
-    } else if (widget.messages != null && widget.messages!.isNotEmpty) {
-      _effectiveStages = widget.messages!
-          .map((m) => AiThinkingStage(title: m, detail: ''))
-          .toList();
-    } else {
-      _effectiveStages = [const AiThinkingStage(title: 'Processing', detail: '')];
-    }
-
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2500),
@@ -92,21 +69,18 @@ class _AiThinkingCardState extends State<AiThinkingCard>
   void _resetAndStartTimers() {
     _cancelTimers();
     setState(() {
-      _currentStageIndex = 0;
+      _dotCount = 1;
       _elapsedSeconds = 0;
     });
 
-    _stageTimer = Timer.periodic(widget.stageInterval, (_) {
+    _dotTimer = Timer.periodic(widget.dotInterval, (_) {
       if (!mounted) return;
-      if (_effectiveStages.isEmpty) return;
-      if (_currentStageIndex < _effectiveStages.length - 1) {
-        setState(() {
-          _currentStageIndex++;
-        });
-      }
+      setState(() {
+        _dotCount = (_dotCount % 4) + 1;
+      });
     });
 
-    _reassuranceTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       setState(() {
         _elapsedSeconds++;
@@ -115,10 +89,10 @@ class _AiThinkingCardState extends State<AiThinkingCard>
   }
 
   void _cancelTimers() {
-    _stageTimer?.cancel();
-    _stageTimer = null;
-    _reassuranceTimer?.cancel();
-    _reassuranceTimer = null;
+    _dotTimer?.cancel();
+    _dotTimer = null;
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
   }
 
   @override
@@ -166,122 +140,22 @@ class _AiThinkingCardState extends State<AiThinkingCard>
     );
   }
 
-  Widget _buildTopRow() {
-    return Row(
-      children: [
-        _buildAnimatedOrb(),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            widget.title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.textPrimary,
-            ),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: widget.accent.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: widget.accent.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Text(
-            widget.statusLabel,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w900,
-              color: widget.accent,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMiddleContent() {
-    if (_effectiveStages.isEmpty) return const SizedBox.shrink();
-    final currentStage = _effectiveStages[_currentStageIndex];
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 600),
-      child: Column(
-        key: ValueKey<int>(_currentStageIndex),
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (currentStage.icon != null) ...[
-                Icon(currentStage.icon, size: 14, color: OptivusColors.textPrimary),
-                const SizedBox(width: 6),
-              ],
-              Expanded(
-                child: Text(
-                  currentStage.title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: OptivusColors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (currentStage.detail.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              currentStage.detail,
-              style: const TextStyle(
-                 fontSize: 12,
-                 fontWeight: FontWeight.w600,
-                 color: OptivusColors.textSecondary,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomRail() {
-    if (_effectiveStages.isEmpty) return const SizedBox.shrink();
-    return Row(
-      children: List.generate(_effectiveStages.length, (index) {
-        final isActive = index <= _currentStageIndex;
-        return Expanded(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 600),
-            margin: EdgeInsets.only(right: index == _effectiveStages.length - 1 ? 0 : 4),
-            height: 4,
-            decoration: BoxDecoration(
-              color: isActive 
-                  ? widget.accent 
-                  : OptivusColors.textSecondary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(2),
-              boxShadow: isActive ? [
-                BoxShadow(
-                  color: widget.accent.withValues(alpha: 0.4),
-                  blurRadius: 4,
-                ),
-              ] : null,
-            ),
-          ),
-        );
-      }),
-    );
-  }
-
   Widget _buildDelayHint() {
-    if (_elapsedSeconds < 15) return const SizedBox.shrink();
+    if (_elapsedSeconds < widget.firstLongWaitDelay.inSeconds) {
+      return const SizedBox.shrink();
+    }
+    
+    final hint = _elapsedSeconds < widget.secondLongWaitDelay.inSeconds
+        ? 'Detailed photos can take a little longer'
+        : 'Still working. Keep this screen open';
+
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 500),
         child: Text(
-          'Large images can take a little longer. Keep this screen open.',
+          hint,
+          key: ValueKey(hint),
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
@@ -296,6 +170,8 @@ class _AiThinkingCardState extends State<AiThinkingCard>
   Widget build(BuildContext context) {
     if (!widget.isActive) return const SizedBox.shrink();
 
+    final dots = '.' * _dotCount;
+
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 200),
       child: OnboardingGlassCard(
@@ -306,11 +182,39 @@ class _AiThinkingCardState extends State<AiThinkingCard>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildTopRow(),
-              const SizedBox(height: 16),
-              _buildMiddleContent(),
-              const SizedBox(height: 16),
-              _buildBottomRail(),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildAnimatedOrb(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${widget.title}$dots',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: OptivusColors.textPrimary,
+                          ),
+                        ),
+                        if (widget.detail.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.detail,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: OptivusColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               _buildDelayHint(),
             ],
           ),

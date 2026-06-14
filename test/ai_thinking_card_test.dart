@@ -5,18 +5,13 @@ import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
 void main() {
   group('AiThinkingCard', () {
-    const testStages = [
-      AiThinkingStage(title: 'Stage 1', detail: 'Detail 1'),
-      AiThinkingStage(title: 'Stage 2', detail: 'Detail 2'),
-      AiThinkingStage(title: 'Stage 3', detail: 'Detail 3'),
-    ];
-
-    testWidgets('shows first stage immediately', (tester) async {
+    testWidgets('Shows title immediately', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: true,
             ),
@@ -24,88 +19,169 @@ void main() {
         ),
       );
 
-      expect(find.text('Stage 1'), findsOneWidget);
-      expect(find.text('Detail 1'), findsOneWidget);
-      expect(find.text('Stage 2'), findsNothing);
+      expect(find.textContaining('Test Title'), findsOneWidget);
     });
 
-    testWidgets('progresses to next stage after interval', (tester) async {
+    testWidgets('Shows detail immediately', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              stageInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Stage 1'), findsOneWidget);
-      
-      await tester.pump(const Duration(milliseconds: 150));
-      await tester.pump(const Duration(milliseconds: 600));
-
-      expect(find.text('Stage 2'), findsOneWidget);
-      expect(find.text('Detail 2'), findsOneWidget);
+      expect(find.text('Test Detail'), findsOneWidget);
     });
 
-    testWidgets('does not loop back to first stage after final stage', (tester) async {
+    testWidgets('Animated dots appear after title', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              stageInterval: Duration(milliseconds: 100),
+              dotInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Stage 1'), findsOneWidget);
-      
+      expect(find.text('Test Title.'), findsOneWidget);
+    });
+
+    testWidgets('Dot count changes after interval', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AiThinkingCard(
+              title: 'Test Title',
+              detail: 'Test Detail',
+              accent: OptivusColors.aquaAccent,
+              isActive: true,
+              dotInterval: Duration(milliseconds: 100),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Test Title.'), findsOneWidget);
       await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Stage 2'), findsOneWidget);
-
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Stage 3'), findsOneWidget);
-
-      // Verify it stays on the last stage
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Stage 3'), findsOneWidget);
-      expect(find.text('Stage 1'), findsNothing);
+      expect(find.text('Test Title..'), findsOneWidget);
     });
 
-    testWidgets('shows long-wait helper only after configured delay', (tester) async {
+    testWidgets('Dot count cycles from 1 to 4', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              stageInterval: Duration(seconds: 1), // slow progression
+              dotInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      // Initial state (0s)
-      expect(find.text('Large images can take a little longer. Keep this screen open.'), findsNothing);
-
-      // Advance past 15 seconds
-      await tester.pump(const Duration(seconds: 16));
-      expect(find.text('Large images can take a little longer. Keep this screen open.'), findsOneWidget);
+      expect(find.text('Test Title.'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Test Title..'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Test Title...'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Test Title....'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Test Title.'), findsOneWidget);
     });
 
-    testWidgets('does not overflow at 200px width', (tester) async {
+    testWidgets('Long-wait helper appears after the configured delay', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AiThinkingCard(
+              title: 'Test Title',
+              detail: 'Test Detail',
+              accent: OptivusColors.aquaAccent,
+              isActive: true,
+              firstLongWaitDelay: Duration(seconds: 1),
+              secondLongWaitDelay: Duration(seconds: 2),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Detailed photos can take a little longer'), findsNothing);
+      expect(find.text('Still working. Keep this screen open'), findsNothing);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Detailed photos can take a little longer'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Still working. Keep this screen open'), findsOneWidget);
+    });
+
+    testWidgets('No progress line exists', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AiThinkingCard(
+              title: 'Test Title',
+              detail: 'Test Detail',
+              accent: OptivusColors.aquaAccent,
+              isActive: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+    });
+
+    testWidgets('No CircularProgressIndicator exists', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AiThinkingCard(
+              title: 'Test Title',
+              detail: 'Test Detail',
+              accent: OptivusColors.aquaAccent,
+              isActive: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('No fake percentage or step count appears', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AiThinkingCard(
+              title: 'Test Title',
+              detail: 'Test Detail',
+              accent: OptivusColors.aquaAccent,
+              isActive: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.textContaining('%'), findsNothing);
+      expect(find.textContaining('Step'), findsNothing);
+    });
+
+    testWidgets('No overflow at 200px width', (tester) async {
       final oldSize = tester.view.physicalSize;
       final oldDpr = tester.view.devicePixelRatio;
       tester.view.physicalSize = const Size(200, 800);
@@ -121,12 +197,8 @@ void main() {
             body: SizedBox(
               width: 200,
               child: AiThinkingCard(
-                stages: [
-                  AiThinkingStage(
-                    title: 'This is a very long title that should wrap safely',
-                    detail: 'This is a very long detail that should also wrap safely without any overflow exceptions.',
-                  ),
-                ],
+                title: 'This is a very long title that should wrap safely',
+                detail: 'This is a very long detail that should also wrap safely without any overflow exceptions.',
                 accent: OptivusColors.aquaAccent,
                 isActive: true,
               ),
@@ -139,92 +211,72 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('resets to first stage when inactive then active again', (tester) async {
+    testWidgets('Dots reset when inactive then active again', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: false,
-              stageInterval: Duration(milliseconds: 100),
+              dotInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Stage 1'), findsNothing);
+      expect(find.textContaining('Test Title'), findsNothing);
 
-      // Rebuild with isActive: true
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              stageInterval: Duration(milliseconds: 100),
+              dotInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      expect(find.text('Stage 1'), findsOneWidget);
+      expect(find.text('Test Title.'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Test Title..'), findsOneWidget);
 
-      // Advance to stage 2
-      await tester.pump(const Duration(milliseconds: 150));
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.text('Stage 2'), findsOneWidget);
-
-      // Rebuild with isActive: false
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: false,
-              stageInterval: Duration(milliseconds: 100),
+              dotInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
-      
-      expect(find.text('Stage 2'), findsNothing);
 
-      // Rebuild with isActive: true again
+      expect(find.textContaining('Test Title'), findsNothing);
+
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: AiThinkingCard(
-              stages: testStages,
+              title: 'Test Title',
+              detail: 'Test Detail',
               accent: OptivusColors.aquaAccent,
               isActive: true,
-              stageInterval: Duration(milliseconds: 100),
+              dotInterval: Duration(milliseconds: 100),
             ),
           ),
         ),
       );
 
-      // Should reset to first stage
-      expect(find.text('Stage 1'), findsOneWidget);
-    });
-
-    testWidgets('shows safe fallback message when stages list is empty', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: AiThinkingCard(
-              stages: [],
-              messages: [],
-              accent: OptivusColors.aquaAccent,
-              isActive: true,
-            ),
-          ),
-        ),
-      );
-
-      expect(find.text('Processing'), findsOneWidget);
+      expect(find.text('Test Title.'), findsOneWidget);
     });
   });
 }

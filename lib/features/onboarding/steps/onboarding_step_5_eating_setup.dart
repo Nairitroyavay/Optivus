@@ -20,45 +20,6 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
-@visibleForTesting
-const onboarding5MealPhotoLoadingStages = [
-  AiThinkingStage(
-    title: 'Reading the meal photo',
-    detail: 'Looking for dishes, meal names, and timing clues.',
-  ),
-  AiThinkingStage(
-    title: 'Identifying dishes',
-    detail: 'Keeping each visible food item in the meal block.',
-  ),
-  AiThinkingStage(
-    title: 'Checking meal timing',
-    detail: 'Matching dishes to breakfast, lunch, snacks, or dinner.',
-  ),
-  AiThinkingStage(
-    title: 'Preparing your eating timeline',
-    detail: 'Building meal blocks with dishes and time ranges.',
-  ),
-];
-
-@visibleForTesting
-const onboarding5GeneratedMealLoadingStages = [
-  AiThinkingStage(
-    title: 'Understanding your preferences',
-    detail: 'Using your selected mode, routine, and daily needs.',
-  ),
-  AiThinkingStage(
-    title: 'Planning meals around your day',
-    detail: 'Balancing meals and snacks across realistic time blocks.',
-  ),
-  AiThinkingStage(
-    title: 'Choosing dishes for each block',
-    detail: 'Adding concrete dish names instead of empty placeholders.',
-  ),
-  AiThinkingStage(
-    title: 'Preparing your weekly eating timeline',
-    detail: 'Building meal blocks you can edit before continuing.',
-  ),
-];
 
 const String onboardingEatingPathHasRoutine = 'has_routine';
 const String onboardingEatingPathCreate = 'create';
@@ -637,7 +598,8 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
         if (generating) ...[
           const SizedBox(height: 14),
           AiThinkingCard(
-            stages: onboarding5MealPhotoLoadingStages,
+            title: 'AI is reading your meal photo',
+            detail: 'Looking for dishes, portions, and meal timing',
             accent: OptivusColors.roseAccent,
             isActive: generating,
           ),
@@ -838,7 +800,8 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
                             if (isGenerating) ...[
                               const SizedBox(height: 14),
                               AiThinkingCard(
-                                stages: onboarding5GeneratedMealLoadingStages,
+                                title: 'AI is creating your weekly meal plan',
+                                detail: 'Planning meals around your daily routine',
                                 accent: OptivusColors.roseAccent,
                                 isActive: isGenerating,
                               ),
