@@ -190,6 +190,7 @@ void main() {
           title: 'PS',
           startMinute: 9 * 60,
           endMinute: 10 * 60,
+          room: 'C25-B-109',
           config: ScheduleSetupConfig.classSetup,
         ),
         _scheduleBlock(
@@ -205,6 +206,7 @@ void main() {
           title: 'DS',
           startMinute: 11 * 60,
           endMinute: 12 * 60,
+          room: 'C25-B-108',
           config: ScheduleSetupConfig.classSetup,
         ),
       ];
@@ -265,7 +267,9 @@ void main() {
       expect(find.text('9:00 AM - 12:00 PM'), findsNothing);
       expect(find.textContaining('AFLice'), findsNothing);
       expect(find.text('Office'), findsOneWidget); // Only one back label now
-      expect(find.text('C25-B-108'), findsOneWidget); // Room
+      expect(find.text('C25-B-108'), findsNWidgets(2)); // AFL and DS
+      expect(find.text('C25-B-109'), findsOneWidget); // PS
+      expect(find.text('C25-'), findsNothing); // Ensure no badly cut chip
 
       final jobLeft = tester.getTopLeft(jobBlock).dx;
       final aflLeft = tester.getTopLeft(aflBlock).dx;
@@ -2038,8 +2042,51 @@ void main() {
     // Because we scrolled to the bottom and added 420px padding.
     final blockBottom = tester.getBottomRight(lateBlock).dy;
     final ctaTop = tester.getTopLeft(ctaButton).dy;
-    
     expect(blockBottom, lessThan(ctaTop));
+  });
+
+  test('Candidate mapping preserves room', () {
+    final candidate = RoutineImportCandidateBlock(
+      id: '1',
+      title: 'AFL',
+      startMinute: 600,
+      endMinute: 660,
+      hasFixedTime: true,
+      repeatDays: [1, 2],
+      blockType: 'class',
+      category: 'class',
+      hardBlock: true,
+      selected: true,
+      needsManualReview: false,
+      candidateType: RoutineImportCandidateType.block,
+      validationIssues: [],
+      extractionEngine: 'fake',
+      location: 'C25-B-108',
+    );
+
+    final room = extractRoomLabelFromOnboarding4Candidate(candidate);
+    expect(room, 'C25-B-108');
+
+    final candidateSnippet = RoutineImportCandidateBlock(
+      id: '2',
+      title: 'DS',
+      startMinute: 660,
+      endMinute: 720,
+      hasFixedTime: true,
+      repeatDays: [1, 2],
+      blockType: 'class',
+      category: 'class',
+      hardBlock: true,
+      selected: true,
+      needsManualReview: false,
+      candidateType: RoutineImportCandidateType.block,
+      validationIssues: [],
+      extractionEngine: 'fake',
+      sourceTextSnippet: 'DS Lab 2',
+    );
+
+    final roomSnippet = extractRoomLabelFromOnboarding4Candidate(candidateSnippet);
+    expect(roomSnippet, 'Lab 2');
   });
 }
 

@@ -247,6 +247,38 @@ List<int> repeatDaysForOnboarding4Candidate(
 }
 
 @visibleForTesting
+String? extractRoomLabelFromOnboarding4Candidate(
+  RoutineImportCandidateBlock candidate,
+) {
+  final loc = candidate.location?.trim();
+  if (loc != null && loc.isNotEmpty) {
+    final upperLoc = loc.toUpperCase();
+    if (!['AFL', 'DS', 'PS', 'STW', 'IND4'].contains(upperLoc)) {
+      return loc;
+    }
+  }
+
+  final roomRegExp = RegExp(
+    r'\b(?:[A-Z]{1,3}\d{1,3}-[A-Z0-9-]+|Room\s*\d+[A-Z]?|Lab\s*\d+[A-Z]?|[A-Z]{1,3}-\d+)\b',
+    caseSensitive: false,
+  );
+
+  for (final text in [
+    candidate.sourceTextSnippet,
+    candidate.sourceColumnLabel,
+    candidate.sourceRowLabel,
+  ]) {
+    if (text == null || text.trim().isEmpty) continue;
+    final match = roomRegExp.firstMatch(text);
+    if (match != null) {
+      return match.group(0);
+    }
+  }
+
+  return loc?.isNotEmpty == true ? loc : null;
+}
+
+@visibleForTesting
 bool isDisallowedOnboarding4WorkCandidate(
   RoutineImportCandidateBlock candidate,
 ) {
@@ -424,7 +456,7 @@ Onboarding4CandidateMappingResult mapOnboarding4Candidates({
       ClassRoutineBlock(
         id: candidate.id,
         subject: title,
-        room: candidate.location?.trim() ?? '',
+        room: extractRoomLabelFromOnboarding4Candidate(candidate) ?? '',
         startMinute: candidate.startMinute.clamp(0, 24 * 60 - 1),
         endMinute: candidate.endMinute.clamp(1, 24 * 60),
         repeatDays: repeatDays,
