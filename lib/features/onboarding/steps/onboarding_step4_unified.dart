@@ -3346,7 +3346,6 @@ class _OnboardingStep4UnifiedState
     final height = exactHeight;
     final compact = height < 92;
     final tiny = height < 42;
-    final showSecondaryChips = !compact && height >= 96;
 
     final config = _configForBlock(item);
     final baseColor = item.color ?? config.accent;
@@ -3448,6 +3447,7 @@ class _OnboardingStep4UnifiedState
                                 showMenu: true,
                                 tiny: tiny,
                                 cardWidth: cardWidth,
+                                exactHeight: exactHeight,
                               ),
                             )
                           : KeyedSubtree(
@@ -3459,7 +3459,6 @@ class _OnboardingStep4UnifiedState
                                 config: config,
                                 baseColor: baseColor,
                                 exactHeight: exactHeight,
-                                showSecondaryChips: showSecondaryChips,
                                 showMenu: true,
                                 cardWidth: cardWidth,
                               ),
@@ -3479,13 +3478,14 @@ class _OnboardingStep4UnifiedState
     required ClassRoutineBlock item,
     required ScheduleSetupConfig config,
     required Color baseColor,
-    required double exactHeight,
-    required bool showSecondaryChips,
     required bool showMenu,
+    required double exactHeight,
     required double cardWidth,
   }) {
     final timeStr = _formatRange(item.startMinute, item.endMinute);
     final isNarrow = cardWidth < 140;
+    final roomLabel = _displayRoomForBlock(item);
+    final compactChips = exactHeight < 84;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3517,19 +3517,19 @@ class _OnboardingStep4UnifiedState
         ),
         const SizedBox(height: 6),
         if (isNarrow) ...[
-          _buildBlockInfoChip(timeStr, compact: exactHeight < 84),
-          if (item.room.isNotEmpty) ...[
+          _buildBlockInfoChip(timeStr, compact: compactChips),
+          if (roomLabel != null && !_isWorkBlock(item)) ...[
             const SizedBox(height: 4),
-            _buildBlockInfoChip(item.room, compact: exactHeight < 84, maxWidth: cardWidth),
+            _buildRoomBadge(roomLabel, compact: compactChips, availableWidth: cardWidth, tiny: false),
           ],
         ] else
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              _buildBlockInfoChip(timeStr, compact: exactHeight < 84),
-              if (item.room.isNotEmpty)
-                _buildBlockInfoChip(item.room, compact: exactHeight < 84, maxWidth: cardWidth),
+              _buildBlockInfoChip(timeStr, compact: compactChips),
+              if (roomLabel != null && !_isWorkBlock(item))
+                _buildRoomBadge(roomLabel, compact: compactChips, availableWidth: cardWidth, tiny: false),
             ],
           ),
       ],
@@ -3543,59 +3543,152 @@ class _OnboardingStep4UnifiedState
     required bool showMenu,
     required bool tiny,
     required double cardWidth,
+    required double exactHeight,
+  }) {
+    if (_isWorkBlock(item)) {
+      return _buildCompactWorkBlockContent(
+        item: item,
+        config: config,
+        baseColor: baseColor,
+        showMenu: showMenu,
+        tiny: tiny,
+        cardWidth: cardWidth,
+        exactHeight: exactHeight,
+      );
+    }
+
+    final roomLabel = _displayRoomForBlock(item);
+    final timeStr = _formatRange(item.startMinute, item.endMinute);
+    final allowMenu = showMenu && cardWidth >= 220;
+    final showTime = exactHeight >= 56;
+    final roomInFirstRow = cardWidth >= 165;
+
+    Widget firstRow = Row(
+      children: [
+        Icon(item.icon ?? config.icon, color: baseColor, size: tiny ? 10 : 15),
+        SizedBox(width: tiny ? 4 : 6),
+        Flexible(
+          flex: 3,
+          child: Text(
+            item.subject,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: tiny ? 10 : 13,
+              fontWeight: FontWeight.w900,
+              color: const Color(0xFF0F111A),
+            ),
+          ),
+        ),
+        if (roomInFirstRow && roomLabel != null) ...[
+          const SizedBox(width: 6),
+          Flexible(
+            flex: 4,
+            child: _buildRoomBadge(
+              roomLabel,
+              compact: true,
+              availableWidth: cardWidth,
+              tiny: tiny,
+            ),
+          ),
+        ],
+        if (allowMenu) ...[
+          const SizedBox(width: 6),
+          _buildBlockMenuButton(
+            item,
+            color: OptivusColors.textSecondary,
+            size: tiny ? 12 : 16,
+          ),
+        ],
+      ],
+    );
+
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.topLeft,
+      child: SizedBox(
+        width: math.max(10, cardWidth - 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            firstRow,
+            if (!roomInFirstRow && roomLabel != null) ...[
+              const SizedBox(height: 5),
+              _buildRoomBadge(roomLabel, compact: true, availableWidth: cardWidth, tiny: tiny),
+            ],
+            if (showTime) const SizedBox(height: 5),
+            if (showTime) _buildBlockInfoChip(timeStr, compact: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactWorkBlockContent({
+    required ClassRoutineBlock item,
+    required ScheduleSetupConfig config,
+    required Color baseColor,
+    required bool showMenu,
+    required bool tiny,
+    required double cardWidth,
+    required double exactHeight,
   }) {
     final iconSize = tiny ? 8.0 : 16.0;
     final menuSize = tiny ? 6.0 : 16.0;
     final fontSize = tiny ? 8.0 : 13.0;
+    final showTime = exactHeight >= 56;
 
-    return SingleChildScrollView(
-      physics: const NeverScrollableScrollPhysics(),
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.topLeft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-        Row(
-          children: [
-            Icon(item.icon ?? config.icon, color: baseColor, size: iconSize),
-            SizedBox(width: tiny ? 5 : 6),
-            Expanded(
-              child: Text(
-                item.subject,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xFF0F111A),
+          Row(
+            children: [
+              Icon(item.icon ?? config.icon, color: baseColor, size: iconSize),
+              SizedBox(width: tiny ? 5 : 6),
+              SizedBox(
+                width: math.max(10, cardWidth - 40),
+                child: Text(
+                  item.subject,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF0F111A),
+                  ),
                 ),
               ),
-            ),
-            if (showMenu && cardWidth > 170) ...[
-              const SizedBox(width: 6),
-              _buildBlockMenuButton(
-                item,
-                color: OptivusColors.textSecondary,
-                size: menuSize,
-              ),
-            ],
-          ],
-        ),
-        if (!tiny) const SizedBox(height: 5),
-        if (!tiny)
-          Wrap(
-            spacing: 5,
-            runSpacing: 4,
-            children: [
-              _buildBlockInfoChip(
-                _formatRange(item.startMinute, item.endMinute),
-                compact: true,
-              ),
-              if (item.room.isNotEmpty)
-                _buildBlockInfoChip(item.room, compact: true, maxWidth: cardWidth),
+              if (showMenu && cardWidth > 170) ...[
+                const SizedBox(width: 6),
+                _buildBlockMenuButton(
+                  item,
+                  color: OptivusColors.textSecondary,
+                  size: menuSize,
+                ),
+              ],
             ],
           ),
-      ],
-    ),
+          if (!tiny && showTime) const SizedBox(height: 5),
+          if (!tiny && showTime)
+            Wrap(
+              spacing: 5,
+              runSpacing: 4,
+              children: [
+                _buildBlockInfoChip(
+                  _formatRange(item.startMinute, item.endMinute),
+                  compact: true,
+                ),
+                if (item.room.isNotEmpty)
+                  _buildBlockInfoChip(item.room, compact: true, maxWidth: cardWidth),
+              ],
+            ),
+        ],
+      ),
     );
   }
 
@@ -3733,6 +3826,90 @@ class _OnboardingStep4UnifiedState
         borderRadius: BorderRadius.circular(8),
       ),
       child: content,
+    );
+  }
+
+  String? _displayRoomForBlock(ClassRoutineBlock item) {
+    var room = item.room.trim();
+    
+    // Clean up trailing dashes or punctuation that the AI might have left
+    room = room.replaceAll(RegExp(r'[-.,\s]+$'), '');
+    
+    final lower = room.toLowerCase();
+    if (lower.isEmpty ||
+        lower == 'blank' ||
+        lower == 'none' ||
+        lower == 'n/a' ||
+        lower == 'na' ||
+        lower == 'null') {
+      return null;
+    }
+    
+    return room;
+  }
+
+  String _roomDisplayText(
+    String room, {
+    required double cardWidth,
+    required bool compact,
+    required bool tiny,
+  }) {
+    final normalized = room.trim();
+    if (normalized.isEmpty) return normalized;
+
+    // Normal and medium cards must show full room.
+    if (!tiny || cardWidth >= 150) {
+      return normalized;
+    }
+
+    // Only extremely tiny cards may compact.
+    final match = RegExp(r'^([A-Z]+\d+)', caseSensitive: false)
+        .firstMatch(normalized);
+    return match?.group(1)?.toUpperCase() ?? normalized;
+  }
+
+  Widget _buildRoomBadge(
+    String room, {
+    required bool compact,
+    required double availableWidth,
+    required bool tiny,
+  }) {
+    final display = _roomDisplayText(
+      room,
+      cardWidth: availableWidth,
+      compact: compact,
+      tiny: tiny,
+    );
+    final fontSize = compact ? 10.0 : 11.0;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: availableWidth.clamp(72.0, 140.0),
+      ),
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 6 : 8,
+          vertical: compact ? 2 : 4,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            display,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w900,
+              color: OptivusColors.textBody,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

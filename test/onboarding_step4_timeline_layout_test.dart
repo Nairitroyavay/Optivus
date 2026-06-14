@@ -2088,6 +2088,112 @@ void main() {
     final roomSnippet = extractRoomLabelFromOnboarding4Candidate(candidateSnippet);
     expect(roomSnippet, 'Lab 2');
   });
+
+  testWidgets('Compact front class block shows room beside subject without overflow', (WidgetTester tester) async {
+    final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+    completed[onboardingClassJobStepIndex] = false;
+    final draft = OnboardingDraft(
+      currentStep: onboardingClassJobStepIndex,
+      stepCompleted: completed,
+      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey, workType: 'full_time'),
+      baseTimeline: const BaseTimelineDraft(),
+    );
+
+    final classBlocks = [
+      _scheduleBlock(
+        id: 'ps',
+        title: 'PS',
+        startMinute: 9 * 60,
+        endMinute: 10 * 60,
+        room: 'C25-A-109',
+        config: ScheduleSetupConfig.classSetup,
+      ),
+      _scheduleBlock(
+        id: 'afl',
+        title: 'AFL',
+        startMinute: 10 * 60,
+        endMinute: 11 * 60,
+        room: 'C25-B-108',
+        config: ScheduleSetupConfig.classSetup,
+      ),
+      _scheduleBlock(
+        id: 'ds',
+        title: 'DS',
+        startMinute: 11 * 60,
+        endMinute: 12 * 60,
+        room: 'C25-B-108',
+        config: ScheduleSetupConfig.classSetup,
+      ),
+      _scheduleBlock(
+        id: 'ind4',
+        title: 'IND4',
+        startMinute: 12 * 60,
+        endMinute: 13 * 60,
+        room: 'C25-B-109',
+        config: ScheduleSetupConfig.classSetup,
+      ),
+    ];
+
+    final workBlocks = [
+      _scheduleBlock(
+        id: 'office',
+        title: 'Office Work',
+        startMinute: 9 * 60,
+        endMinute: 12 * 60,
+        config: ScheduleSetupConfig.workSetup,
+      ),
+      _scheduleBlock(
+        id: 'job',
+        title: 'Job',
+        startMinute: 12 * 60,
+        endMinute: 15 * 60,
+        config: ScheduleSetupConfig.workSetup,
+      ),
+    ];
+
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mockOnboardingProvider.overrideWith(
+            (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+          onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
+          onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
+        ],
+        child: const MaterialApp(
+          home: OnboardingFlow(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    // The front class blocks are extremely compact (height ~ 60)
+    // Their room numbers must still be visible beside the subject
+    expect(find.text('PS'), findsOneWidget);
+    expect(find.text('C25-A-109'), findsOneWidget);
+    
+    expect(find.text('AFL'), findsOneWidget);
+    expect(find.text('C25-B-108'), findsNWidgets(2)); // AFL and DS
+    expect(find.text('DS'), findsOneWidget);
+    
+    expect(find.text('IND4'), findsOneWidget);
+    expect(find.text('C25-B-109'), findsOneWidget);
+
+    // The back/down overlap label is just "Office", no room
+    expect(find.text('Office'), findsWidgets);
+    
+    // There shouldn't be any truncated versions
+    expect(find.text('C25-'), findsNothing);
+
+    // Menu may be hidden for very narrow spaces, but RenderFlex shouldn't crash
+    expect(tester.takeException(), isNull);
+  });
 }
 
 ClassRoutineBlock _scheduleBlock({
