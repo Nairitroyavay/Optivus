@@ -492,6 +492,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_currentPage == onboardingEatingStepIndex) {
       return draft.baseTimeline.eatingSetupStep > 0;
     }
+    if (_currentPage == onboardingSkinCareStepIndex) {
+      return draft.baseTimeline.skinCareSetupStep > 0;
+    }
     return false;
   }
 
@@ -617,22 +620,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   bool _backSkinCare(OnboardingDraft draft) {
     final base = draft.baseTimeline;
-    if (base.skinCareSkipped) {
-      _updateBaseTimelineStage(
-        onboardingSkinCareStepIndex,
-        (base) => base.copyWith(skinCareSkipped: false, skinCareSetupStep: 0),
-      );
-      return true;
+
+    if (base.skinCareSetupStep <= 0) {
+      return false;
     }
-    final stages = base.skinCareSetupPath == 'has_products'
-        ? const [0, 1, 2, 3]
-        : const [0, 1, 2, 3, 4, 5, 6, 7];
-    final previous = _previousInternalStage(base.skinCareSetupStep, stages);
-    if (previous == null) return false;
+
     _updateBaseTimelineStage(
       onboardingSkinCareStepIndex,
-      (base) => base.copyWith(skinCareSetupStep: previous),
+      (base) => base.copyWith(
+        skinCareSetupStep: 0,
+        // keep saved answers/blocks unless user explicitly clears them
+      ),
     );
+
     return true;
   }
 
@@ -820,14 +820,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   Future<bool> _nextSkinCare(OnboardingDraft draft) async {
     final base = draft.baseTimeline;
-    if (base.skinCareSkipped) return false;
-    final stage = base.skinCareSetupStep;
-    final path = base.skinCareSetupPath;
-    if (stage == 0) {
-      if (path == null) {
-        _setInternalValidation('Choose skincare setup or skip.');
+
+    if (base.skinCareSetupStep == 0) {
+      if (base.skinCareSetupPath == null && !base.skinCareSkipped) {
+        _setInternalValidation('Choose skin care setup or skip.');
         return true;
       }
+
       _updateBaseTimelineStage(
         onboardingSkinCareStepIndex,
         (base) => base.copyWith(skinCareSetupStep: 1),
@@ -835,90 +834,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return true;
     }
 
-    if (path == 'has_products') {
-      if (stage == 1) {
-        if (_skinProductNames(base).isNotEmpty) {
-          _updateBaseTimelineStage(
-            onboardingSkinCareStepIndex,
-            (base) => upsertGeneratedSkinCareImport(
-              base.copyWith(skinCareSetupStep: 2),
-            ),
-          );
-          if (!mounted) return true;
-          await openOnboardingImportReview(
-            context,
-            source: onboardingImportSourceForSection(onboardingSectionSkinCare),
-            autoRunAiOnLoad: false,
-          );
-          return true;
-        }
-        if (!_sectionHasUploadOrBlocks(base, onboardingSectionSkinCare)) {
-          _setInternalValidation(
-            'Add product photo or product names, or skip.',
-          );
-          return true;
-        }
-      }
-      if (stage == 2 && !base.hasConfirmedSection('skin_care')) {
-        _setInternalValidation('Review AI draft to continue.');
-        return true;
-      }
-      final next = _nextInternalStage(stage, const [1, 2, 3]);
-      if (next == null) return false;
-      _updateBaseTimelineStage(
-        onboardingSkinCareStepIndex,
-        (base) => base.copyWith(skinCareSetupStep: next),
-      );
-      return true;
-    }
-
-    if (stage == 1 &&
-        !base.skinCareFacePhotoSkipped &&
-        !_sectionHasUploadOrBlocks(base, onboardingSectionSkinCare)) {
-      _setInternalValidation('Upload face photo or skip photo.');
-      return true;
-    }
-    if (stage == 2 && base.skinCareSkinType == null) {
-      _setInternalValidation('Choose your skin type.');
-      return true;
-    }
-    if (stage == 3 && base.skinCareProblems.isEmpty) {
-      _setInternalValidation('Choose skin problems or None.');
-      return true;
-    }
-    if (stage == 4 && base.skinCareBudget == null) {
-      _setInternalValidation('Choose skin care budget.');
-      return true;
-    }
-    if (stage == 5) {
-      if (base.skinCarePreference == null) {
-        _setInternalValidation('Choose simple, minimal, or advanced.');
-        return true;
-      }
-      _updateBaseTimelineStage(
-        onboardingSkinCareStepIndex,
-        (base) =>
-            upsertGeneratedSkinCareImport(base.copyWith(skinCareSetupStep: 6)),
-      );
-      if (!mounted) return true;
-      await openOnboardingImportReview(
-        context,
-        source: onboardingImportSourceForSection(onboardingSectionSkinCare),
-        autoRunAiOnLoad: false,
-      );
-      return true;
-    }
-    if (stage == 6 && !base.hasConfirmedSection('skin_care')) {
-      _setInternalValidation('Review AI draft to continue.');
-      return true;
-    }
-    final next = _nextInternalStage(stage, const [1, 2, 3, 4, 5, 6, 7]);
-    if (next == null) return false;
-    _updateBaseTimelineStage(
-      onboardingSkinCareStepIndex,
-      (base) => base.copyWith(skinCareSetupStep: next),
-    );
-    return true;
+    return false;
   }
 
   void _setInternalValidation(String message) {
@@ -940,34 +856,4 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     ref.read(mockOnboardingProvider.notifier).setStepDirty(stepIndex, true);
   }
 
-  int? _nextInternalStage(int current, List<int> stages) {
-    for (final stage in stages) {
-      if (stage > current) return stage;
-    }
-    return null;
-  }
-
-  int? _previousInternalStage(int current, List<int> stages) {
-    for (var i = stages.length - 1; i >= 0; i--) {
-      if (stages[i] < current) return stages[i];
-    }
-    return null;
-  }
-
-  bool _sectionHasUploadOrBlocks(BaseTimelineDraft base, String sectionLabel) {
-    final sectionKey = onboardingTimelineSectionKey(sectionLabel);
-    final pending = base.latestImportForSection(sectionLabel);
-    return base.hasConfirmedSection(sectionKey) ||
-        pending?.hasUploadedAssetReference == true ||
-        pending?.parsedBlocks.isNotEmpty == true;
-  }
-
-  List<String> _skinProductNames(BaseTimelineDraft base) {
-    return base.skinCareProductNames
-            ?.split(RegExp(r'[\n,]+'))
-            .map((item) => item.trim())
-            .where((item) => item.isNotEmpty)
-            .toList(growable: false) ??
-        const [];
-  }
 }

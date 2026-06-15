@@ -1590,17 +1590,9 @@ class BaseTimelineDraft {
   }
 
   String? validateSkinCareSetup() {
-    if (skinCareSkipped || _hasConfirmedSection('skin_care')) return null;
-    if (sectionNeedsImportReview('Skin Care')) {
-      return 'Review AI draft to continue.';
-    }
-    if (skinCareSetupPath == null) {
-      return 'Choose skincare setup or skip.';
-    }
-    if (skinCareSetupPath == 'has_products') {
-      return 'Add product photo or product names, or skip.';
-    }
-    return 'Complete skin care questions or skip.';
+    if (skinCareSkipped) return null;
+    if (_hasConfirmedSection('skin_care')) return null;
+    return 'Build skin care routine or skip.';
   }
 
   String? validateForRole(String? lifeRole) {

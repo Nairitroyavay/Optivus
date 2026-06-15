@@ -121,7 +121,7 @@ BaseTimelineDraft upsertGeneratedEatingImport(
 BaseTimelineDraft upsertGeneratedSkinCareImport(BaseTimelineDraft base) {
   final now = DateTime.now();
   final existing = base.latestImportForSection(onboardingSectionSkinCare);
-  final blocks = _generatedSkinCareBlocks(base, now);
+  final blocks = generatedSkinCareBlocks(base, now);
   final entry = PendingFutureImportDraft(
     id: onboardingImportId(onboardingSectionSkinCare, 'ai_generated'),
     section: onboardingSectionSkinCare,
@@ -227,7 +227,7 @@ String _mealTitle(BaseTimelineDraft base, String slot) {
   return '$slot - $goal meal';
 }
 
-List<TimelineBlockDraft> _generatedSkinCareBlocks(
+List<TimelineBlockDraft> generatedSkinCareBlocks(
   BaseTimelineDraft base,
   DateTime now,
 ) {

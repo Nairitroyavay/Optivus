@@ -12,145 +12,245 @@ class OnboardingStep7 extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(mockOnboardingProvider).draft.baseTimeline;
-    final blocks = base.confirmedBlocksForSection('skin_care');
+    final isChoice = base.skinCareSetupStep == 0;
 
-    return OnboardingStepBody(
-      title: 'Skin Care Setup',
-      subtitle: 'Optional routine setup. Skip now or build a simple system.',
-      accent: const Color(0xFF63B885),
-      children: [
-        if (base.skinCareSkipped)
-          const _SkippedCard()
-        else if (base.skinCareSetupStep == 0)
-          _SkinPathQuestion(base: base)
-        else if (base.skinCareSetupPath == 'has_products')
-          _HasProductsPath(step: base.skinCareSetupStep, blocks: blocks)
-        else
-          _NoProductsPath(
-            step: base.skinCareSetupStep,
-            base: base,
-            blocks: blocks,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SkinCareHeader(),
+          const SizedBox(height: 18),
+          Expanded(
+            child: isChoice
+                ? const SingleChildScrollView(child: _SkinCareChoiceScreen())
+                : _SkinCareSelectedModeScreen(base: base),
           ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _SkinPathQuestion extends ConsumerWidget {
-  final BaseTimelineDraft base;
-
-  const _SkinPathQuestion({required this.base});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    void select(String path) {
-      updateBaseTimelineDraft(
-        ref,
-        onboardingSkinCareStepIndex,
-        (base) => base.copyWith(
-          skinCareSetupPath: path,
-          skinCareSetupStep: 0,
-          skinCareSkipped: false,
-          clearSkinCarePlanning: path == 'has_products' ? false : false,
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        OnboardingChoiceTile(
-          title: 'Yes, I have products',
-          subtitle: 'Upload product photo or type names, then review routine.',
-          icon: Icons.spa_rounded,
-          selected: base.skinCareSetupPath == 'has_products',
-          accent: const Color(0xFF63B885),
-          onTap: () => select('has_products'),
-        ),
-        const SizedBox(height: 12),
-        OnboardingChoiceTile(
-          title: 'No',
-          subtitle: 'Answer skin type, concerns, budget, and preference.',
-          icon: Icons.face_retouching_natural_rounded,
-          selected: base.skinCareSetupPath == 'no_products',
-          accent: OptivusColors.brandAccent,
-          onTap: () => select('no_products'),
-        ),
-        const SizedBox(height: 12),
-        OnboardingChoiceTile(
-          title: 'Skip skin care',
-          subtitle: 'Skin care is optional and can be set later.',
-          icon: Icons.skip_next_rounded,
-          selected: false,
-          accent: OptivusColors.success,
-          onTap: () => updateBaseTimelineDraft(
-            ref,
-            onboardingSkinCareStepIndex,
-            (base) =>
-                base.copyWith(skinCareSkipped: true, skinCareSetupStep: 7),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HasProductsPath extends StatelessWidget {
-  final int step;
-  final List<TimelineBlockDraft> blocks;
-
-  const _HasProductsPath({required this.step, required this.blocks});
+class _SkinCareHeader extends StatelessWidget {
+  const _SkinCareHeader();
 
   @override
   Widget build(BuildContext context) {
-    if (step <= 1) return const _ProductInputStage();
-    if (step == 2) return _SkinReview(blocks: blocks);
-    return _SkinSummary(blocks: blocks);
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Skin Care',
+          style: TextStyle(
+            fontSize: 26,
+            height: 1.05,
+            fontWeight: FontWeight.w900,
+            color: OptivusColors.textPrimary,
+          ),
+        ),
+        SizedBox(height: 7),
+        Text(
+          'Face and skin routine setup.',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            fontWeight: FontWeight.w700,
+            color: OptivusColors.textSecondary,
+          ),
+        ),
+      ],
+    );
   }
 }
 
-class _NoProductsPath extends StatelessWidget {
-  final int step;
-  final BaseTimelineDraft base;
-  final List<TimelineBlockDraft> blocks;
+class _SkinCareChoiceScreen extends ConsumerWidget {
+  const _SkinCareChoiceScreen();
 
-  const _NoProductsPath({
-    required this.step,
-    required this.base,
-    required this.blocks,
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    void select(String value) {
+      ref.read(mockOnboardingProvider.notifier).clearValidation();
+      updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+        final isSkip = value == 'skip';
+        return base.copyWith(
+          skinCareSetupPath: value,
+          skinCareSetupStep: 1,
+          skinCareSkipped: isSkip,
+        );
+      });
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SkinCarePathCard(
+          title: 'I have products',
+          subtitle: 'Type product names to build a routine.',
+          icon: Icons.spa_rounded,
+          accent: OptivusColors.roseAccent,
+          onTap: () => select('has_products'),
+        ),
+        const SizedBox(height: 12),
+        _SkinCarePathCard(
+          title: 'Build routine for me',
+          subtitle: 'Answer skin details to generate a routine.',
+          icon: Icons.face_retouching_natural_rounded,
+          accent: OptivusColors.purpleAccent,
+          onTap: () => select('no_products'),
+        ),
+        const SizedBox(height: 12),
+        _SkinCarePathCard(
+          title: 'Skip',
+          subtitle: 'Skin care will be skipped for now.',
+          icon: Icons.skip_next_rounded,
+          accent: OptivusColors.textSecondary,
+          onTap: () => select('skip'),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkinCarePathCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _SkinCarePathCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.accent,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (step <= 1) return _FacePhotoStage(base: base);
-    if (step == 2) return _SkinTypeStage(base: base);
-    if (step == 3) return _ProblemsStage(base: base);
-    if (step == 4) return _BudgetStage(base: base);
-    if (step == 5) return _PreferenceStage(base: base);
-    if (step == 6) return _SkinReview(blocks: blocks);
-    return _SkinSummary(blocks: blocks);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: OnboardingGlassCard(
+        padding: const EdgeInsets.all(14),
+        radius: 22,
+        tint: Colors.white.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.48),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+              ),
+              child: Icon(icon, color: accent, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
-class _ProductInputStage extends ConsumerStatefulWidget {
-  const _ProductInputStage();
+class _SkinCareSelectedModeScreen extends ConsumerWidget {
+  final BaseTimelineDraft base;
+
+  const _SkinCareSelectedModeScreen({required this.base});
 
   @override
-  ConsumerState<_ProductInputStage> createState() => _ProductInputStageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (base.skinCareSkipped || base.skinCareSetupPath == 'skip') {
+      return const _SkipModeScreen();
+    }
+    
+    final blocks = base.confirmedBlocksForSection('skin_care');
+    
+    if (base.skinCareSetupPath == 'has_products') {
+      return _HasProductsModeScreen(base: base, blocks: blocks);
+    }
+    
+    return _NoProductsModeScreen(base: base, blocks: blocks);
+  }
 }
 
-class _ProductInputStageState extends ConsumerState<_ProductInputStage> {
+class _SkipModeScreen extends StatelessWidget {
+  const _SkipModeScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        OnboardingGlassCard(
+          tint: OptivusColors.textSecondary.withValues(alpha: 0.08),
+          child: const Row(
+            children: [
+              Icon(Icons.skip_next_rounded, color: OptivusColors.textSecondary),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Skin care will be skipped for now.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HasProductsModeScreen extends ConsumerStatefulWidget {
+  final BaseTimelineDraft base;
+  final List<TimelineBlockDraft> blocks;
+
+  const _HasProductsModeScreen({required this.base, required this.blocks});
+
+  @override
+  ConsumerState<_HasProductsModeScreen> createState() => _HasProductsModeScreenState();
+}
+
+class _HasProductsModeScreenState extends ConsumerState<_HasProductsModeScreen> {
   late final TextEditingController _controller;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(
-      text: ref
-          .read(mockOnboardingProvider)
-          .draft
-          .baseTimeline
-          .skinCareProductNames,
-    );
+    _controller = TextEditingController(text: widget.base.skinCareProductNames);
   }
 
   @override
@@ -161,359 +261,297 @@ class _ProductInputStageState extends ConsumerState<_ProductInputStage> {
 
   @override
   Widget build(BuildContext context) {
+    final generated = widget.blocks.isNotEmpty;
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const OnboardingUploadReviewCard(
-          sectionLabel: onboardingSectionSkinCare,
-          title: 'Upload product photo',
-          subtitle:
-              'Use this if product names are visible. You can also type names below.',
-          stepIndex: onboardingSkinCareStepIndex,
-          accent: Color(0xFF63B885),
-        ),
-        const SizedBox(height: 12),
-        OnboardingTextInputCard(
-          controller: _controller,
-          title: 'Or write product names',
-          hint: 'Cleanser, moisturizer, sunscreen, serum...',
-          accent: const Color(0xFF63B885),
-          minLines: 3,
-          onChanged: (value) => updateBaseTimelineDraft(
-            ref,
-            onboardingSkinCareStepIndex,
-            (base) => base.copyWith(skinCareProductNames: value),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FacePhotoStage extends ConsumerWidget {
-  final BaseTimelineDraft base;
-
-  const _FacePhotoStage({required this.base});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      children: [
-        OnboardingGlassCard(
-          tint: const Color(0xFFE9F8DA).withValues(alpha: 0.36),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Face photo',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Optional. You can skip photo and use typed skin details.',
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OnboardingActionPill(
-                    label: base.skinCareFacePhotoSkipped
-                        ? 'Photo skipped'
-                        : 'Skip photo',
-                    icon: Icons.visibility_off_rounded,
-                    accent: OptivusColors.success,
-                    selected: base.skinCareFacePhotoSkipped,
-                    compact: true,
-                    onTap: () => updateBaseTimelineDraft(
-                      ref,
-                      onboardingSkinCareStepIndex,
-                      (base) => base.copyWith(skinCareFacePhotoSkipped: true),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        const OnboardingUploadReviewCard(
-          sectionLabel: onboardingSectionSkinCare,
-          title: 'Optional photo upload',
-          subtitle:
-              'If you upload, review will still be required before blocks are saved.',
-          stepIndex: onboardingSkinCareStepIndex,
-          accent: Color(0xFF63B885),
-        ),
-      ],
-    );
-  }
-}
-
-class _SkinTypeStage extends ConsumerWidget {
-  final BaseTimelineDraft base;
-
-  const _SkinTypeStage({required this.base});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _SkinChipCard(
-      title: 'Skin type',
-      children:
-          const [
-                _Option('oily', 'Oily'),
-                _Option('dry', 'Dry'),
-                _Option('combination', 'Combination'),
-                _Option('not_sure', 'Not sure'),
-              ]
-              .map(
-                (option) => OnboardingChip(
-                  label: option.label,
-                  selected: base.skinCareSkinType == option.key,
-                  accent: const Color(0xFF63B885),
-                  onTap: () => updateBaseTimelineDraft(
-                    ref,
-                    onboardingSkinCareStepIndex,
-                    (base) => base.copyWith(skinCareSkinType: option.key),
-                  ),
-                ),
-              )
-              .toList(),
-    );
-  }
-}
-
-class _ProblemsStage extends ConsumerWidget {
-  final BaseTimelineDraft base;
-
-  const _ProblemsStage({required this.base});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    const problems = [
-      _Option('pimples', 'Pimples/acne'),
-      _Option('dark_spots', 'Dark spots'),
-      _Option('tan', 'Tan'),
-      _Option('dryness', 'Dryness'),
-      _Option('oiliness', 'Oiliness'),
-      _Option('none', 'None'),
-    ];
-    return _SkinChipCard(
-      title: 'Problems',
-      children: problems
-          .map(
-            (problem) => OnboardingChip(
-              label: problem.label,
-              selected: base.skinCareProblems.contains(problem.key),
-              accent: const Color(0xFF63B885),
-              onTap: () {
-                final next = {...base.skinCareProblems};
-                if (problem.key == 'none') {
-                  next
-                    ..clear()
-                    ..add('none');
-                } else {
-                  next.remove('none');
-                  next.contains(problem.key)
-                      ? next.remove(problem.key)
-                      : next.add(problem.key);
-                }
-                updateBaseTimelineDraft(
-                  ref,
-                  onboardingSkinCareStepIndex,
-                  (base) => base.copyWith(skinCareProblems: next.toList()),
-                );
-              },
-            ),
+        if (generated)
+          _SkinCareGeneratedSummaryRow(
+            blocks: widget.blocks,
+            accent: OptivusColors.roseAccent,
           )
-          .toList(),
-    );
-  }
-}
-
-class _BudgetStage extends ConsumerWidget {
-  final BaseTimelineDraft base;
-
-  const _BudgetStage({required this.base});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _SkinChipCard(
-      title: 'Budget',
-      children:
-          const [
-                _Option('low', 'Low'),
-                _Option('medium', 'Medium'),
-                _Option('high', 'High'),
-              ]
-              .map(
-                (option) => OnboardingChip(
-                  label: option.label,
-                  selected: base.skinCareBudget == option.key,
-                  accent: const Color(0xFF63B885),
-                  onTap: () => updateBaseTimelineDraft(
-                    ref,
-                    onboardingSkinCareStepIndex,
-                    (base) => base.copyWith(skinCareBudget: option.key),
-                  ),
-                ),
-              )
-              .toList(),
-    );
-  }
-}
-
-class _PreferenceStage extends ConsumerWidget {
-  final BaseTimelineDraft base;
-
-  const _PreferenceStage({required this.base});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Column(
-      children: [
-        _SkinChipCard(
-          title: 'Preference',
-          children:
-              const [
-                    _Option('simple', 'Simple'),
-                    _Option('minimal', 'Minimal'),
-                    _Option('advanced', 'Advanced'),
-                  ]
-                  .map(
-                    (option) => OnboardingChip(
-                      label: option.label,
-                      selected: base.skinCarePreference == option.key,
-                      accent: const Color(0xFF63B885),
-                      onTap: () => updateBaseTimelineDraft(
-                        ref,
-                        onboardingSkinCareStepIndex,
-                        (base) => base.copyWith(skinCarePreference: option.key),
+        else
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: OnboardingGlassCard(
+                tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
+                padding: const EdgeInsets.all(12),
+                radius: 20,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'I have products',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  )
-                  .toList(),
-        ),
-        const SizedBox(height: 12),
-        OnboardingGlassCard(
-          tint: const Color(0xFFE9F8DA).withValues(alpha: 0.36),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Suggested set',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _suggestedSet(base).join('\n'),
-                style: const TextStyle(
-                  fontSize: 12,
-                  height: 1.45,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
+                    const SizedBox(height: 10),
+                    OnboardingTextInputCard(
+                      controller: _controller,
+                      title: 'Product names',
+                      hint: 'Cleanser, moisturizer, sunscreen...',
+                      accent: OptivusColors.roseAccent,
+                      minLines: 3,
+                      onChanged: (value) => updateBaseTimelineDraft(
+                        ref,
+                        onboardingSkinCareStepIndex,
+                        (base) => base.copyWith(skinCareProductNames: value),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    OnboardingActionPill(
+                      label: 'Build skin routine',
+                      icon: Icons.auto_awesome_rounded,
+                      accent: OptivusColors.roseAccent,
+                      selected: true,
+                      onTap: () {
+                        ref.read(mockOnboardingProvider.notifier).clearValidation();
+                        final newBlocks = generatedSkinCareBlocks(widget.base, DateTime.now());
+                        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+                          final nextBlocks = base.blocks
+                              .where((b) => b.section != 'skin_care')
+                              .toList()..addAll(newBlocks);
+                          return base.copyWith(blocks: nextBlocks);
+                        });
+                      },
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
       ],
     );
   }
 }
 
-class _SkinReview extends StatelessWidget {
+class _NoProductsModeScreen extends ConsumerWidget {
+  final BaseTimelineDraft base;
   final List<TimelineBlockDraft> blocks;
 
-  const _SkinReview({required this.blocks});
+  const _NoProductsModeScreen({required this.base, required this.blocks});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final generated = blocks.isNotEmpty;
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        OnboardingGlassCard(
-          tint: const Color(0xFFE9F8DA).withValues(alpha: 0.42),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Review skin care routine',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                blocks.isEmpty
-                    ? 'Open review, approve/edit routine blocks, then apply.'
-                    : 'Skin care blocks are saved from review.',
-                style: const TextStyle(
-                  fontSize: 12,
-                  height: 1.4,
-                  fontWeight: FontWeight.w700,
-                  color: OptivusColors.textSecondary,
+        if (generated)
+          _SkinCareGeneratedSummaryRow(
+            blocks: blocks,
+            accent: OptivusColors.purpleAccent,
+          )
+        else
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: OnboardingGlassCard(
+                tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
+                padding: const EdgeInsets.all(12),
+                radius: 20,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Build routine for me',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _SkinCareChipGroup(
+                      label: 'Skin Type',
+                      children: [
+                        for (final option in const [
+                          _SkinOption('oily', 'Oily'),
+                          _SkinOption('dry', 'Dry'),
+                          _SkinOption('combination', 'Combination'),
+                          _SkinOption('not_sure', 'Not sure'),
+                        ])
+                          _SkinCarePreferenceChip(
+                            label: option.label,
+                            selected: base.skinCareSkinType == option.key,
+                            accent: OptivusColors.purpleAccent,
+                            onTap: () => updateBaseTimelineDraft(
+                              ref,
+                              onboardingSkinCareStepIndex,
+                              (base) => base.copyWith(skinCareSkinType: option.key),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _SkinCareChipGroup(
+                      label: 'Concerns',
+                      children: [
+                        for (final option in const [
+                          _SkinOption('pimples', 'Acne'),
+                          _SkinOption('dark_spots', 'Spots'),
+                          _SkinOption('tan', 'Tan'),
+                          _SkinOption('dryness', 'Dryness'),
+                          _SkinOption('oiliness', 'Oiliness'),
+                          _SkinOption('none', 'None'),
+                        ])
+                          _SkinCarePreferenceChip(
+                            label: option.label,
+                            selected: base.skinCareProblems.contains(option.key),
+                            accent: OptivusColors.purpleAccent,
+                            onTap: () {
+                              final next = {...base.skinCareProblems};
+                              if (option.key == 'none') {
+                                next..clear()..add('none');
+                              } else {
+                                next.remove('none');
+                                next.contains(option.key)
+                                    ? next.remove(option.key)
+                                    : next.add(option.key);
+                              }
+                              updateBaseTimelineDraft(
+                                ref,
+                                onboardingSkinCareStepIndex,
+                                (base) => base.copyWith(skinCareProblems: next.toList()),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _SkinCareChipGroup(
+                      label: 'Budget',
+                      children: [
+                        for (final option in const [
+                          _SkinOption('low', 'Low'),
+                          _SkinOption('medium', 'Medium'),
+                          _SkinOption('high', 'High'),
+                        ])
+                          _SkinCarePreferenceChip(
+                            label: option.label,
+                            selected: base.skinCareBudget == option.key,
+                            accent: OptivusColors.purpleAccent,
+                            onTap: () => updateBaseTimelineDraft(
+                              ref,
+                              onboardingSkinCareStepIndex,
+                              (base) => base.copyWith(skinCareBudget: option.key),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _SkinCareChipGroup(
+                      label: 'Preference',
+                      children: [
+                        for (final option in const [
+                          _SkinOption('simple', 'Simple'),
+                          _SkinOption('minimal', 'Minimal'),
+                          _SkinOption('advanced', 'Advanced'),
+                        ])
+                          _SkinCarePreferenceChip(
+                            label: option.label,
+                            selected: base.skinCarePreference == option.key,
+                            accent: OptivusColors.purpleAccent,
+                            onTap: () => updateBaseTimelineDraft(
+                              ref,
+                              onboardingSkinCareStepIndex,
+                              (base) => base.copyWith(skinCarePreference: option.key),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    OnboardingActionPill(
+                      label: 'Build skin routine',
+                      icon: Icons.auto_awesome_rounded,
+                      accent: OptivusColors.purpleAccent,
+                      selected: true,
+                      onTap: () {
+                        ref.read(mockOnboardingProvider.notifier).clearValidation();
+                        final newBlocks = generatedSkinCareBlocks(base, DateTime.now());
+                        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+                          final nextBlocks = base.blocks
+                              .where((b) => b.section != 'skin_care')
+                              .toList()..addAll(newBlocks);
+                          return base.copyWith(blocks: nextBlocks);
+                        });
+                      },
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              OnboardingActionPill(
-                label: blocks.isEmpty ? 'Open review' : 'Reopen review',
-                icon: Icons.rate_review_rounded,
-                accent: const Color(0xFF63B885),
-                selected: true,
-                onTap: () => openOnboardingImportReview(
-                  context,
-                  source: onboardingImportSourceForSection(
-                    onboardingSectionSkinCare,
-                  ),
-                  autoRunAiOnLoad: false,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        _DayHintReview(blocks: blocks),
       ],
     );
   }
 }
 
-class _SkinSummary extends StatelessWidget {
+class _SkinCareGeneratedSummaryRow extends ConsumerWidget {
   final List<TimelineBlockDraft> blocks;
+  final Color accent;
 
-  const _SkinSummary({required this.blocks});
-
-  @override
-  Widget build(BuildContext context) {
-    return _DayHintReview(blocks: blocks);
-  }
-}
-
-class _SkippedCard extends StatelessWidget {
-  const _SkippedCard();
+  const _SkinCareGeneratedSummaryRow({required this.blocks, required this.accent});
 
   @override
-  Widget build(BuildContext context) {
-    return OnboardingGlassCard(
-      tint: OptivusColors.success.withValues(alpha: 0.08),
-      child: const Row(
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Icon(
-            Icons.check_circle_outline_rounded,
-            color: OptivusColors.success,
+          OnboardingGlassCard(
+            tint: accent.withValues(alpha: 0.12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            radius: 20,
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.4),
+                  ),
+                  child: Icon(Icons.check_rounded, color: accent, size: 18),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Routine built',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                ),
+                OnboardingActionPill(
+                  label: 'Rebuild',
+                  icon: Icons.refresh_rounded,
+                  accent: accent,
+                  compact: true,
+                  onTap: () => updateBaseTimelineDraft(
+                    ref,
+                    onboardingSkinCareStepIndex,
+                    (base) => base.copyWith(
+                      blocks: base.blocks.where((b) => b.section != 'skin_care').toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          SizedBox(width: 10),
+          const SizedBox(height: 14),
           Expanded(
-            child: Text(
-              'Skin care skipped for now.',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.success,
-              ),
+            child: OnboardingMiniBlockList(
+              title: 'Skin care routine',
+              blocks: blocks,
+              accent: accent,
+              emptyLabel: 'No blocks generated.',
             ),
           ),
         ],
@@ -522,65 +560,76 @@ class _SkippedCard extends StatelessWidget {
   }
 }
 
-class _DayHintReview extends StatelessWidget {
-  final List<TimelineBlockDraft> blocks;
+class _SkinCareChipGroup extends StatelessWidget {
+  final String label;
+  final List<Widget> children;
 
-  const _DayHintReview({required this.blocks});
+  const _SkinCareChipGroup({required this.label, required this.children});
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingMiniBlockList(
-      title: 'Skin care blocks',
-      blocks: blocks,
-      accent: const Color(0xFF63B885),
-      emptyLabel: 'No skin care blocks applied yet.',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            color: OptivusColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, runSpacing: 8, children: children),
+      ],
     );
   }
 }
 
-class _SkinChipCard extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
+class _SkinCarePreferenceChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
 
-  const _SkinChipCard({required this.title, required this.children});
+  const _SkinCarePreferenceChip({
+    required this.label,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return OnboardingGlassCard(
-      tint: const Color(0xFFE9F8DA).withValues(alpha: 0.38),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? accent : OptivusColors.textSecondary.withValues(alpha: 0.3),
+            width: 1.5,
           ),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, runSpacing: 8, children: children),
-        ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+            color: selected ? Colors.white : OptivusColors.textPrimary,
+          ),
+        ),
       ),
     );
   }
 }
 
-List<String> _suggestedSet(BaseTimelineDraft base) {
-  final simple =
-      base.skinCarePreference == 'simple' ||
-      base.skinCarePreference == 'minimal';
-  return [
-    'Gentle cleanser',
-    'Light moisturizer',
-    'Sunscreen SPF 30',
-    if (!simple && base.skinCareProblems.contains('pimples'))
-      'Acne spot treatment',
-    if (!simple && base.skinCareProblems.contains('dark_spots'))
-      'Dark spot serum',
-  ];
-}
-
-class _Option {
+class _SkinOption {
   final String key;
   final String label;
 
-  const _Option(this.key, this.label);
+  const _SkinOption(this.key, this.label);
 }
