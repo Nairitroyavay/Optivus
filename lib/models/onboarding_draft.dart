@@ -1024,6 +1024,7 @@ class BaseTimelineDraft {
   final List<String> skinCareProblems;
   final String? skinCareBudget;
   final String? skinCarePreference;
+  final int skinCareDesiredApplicationsPerDay;
   final bool skinCareSkipped;
   final List<PendingFutureImportDraft> pendingFutureImports;
   final List<String> acceptedConflictKeys;
@@ -1060,6 +1061,7 @@ class BaseTimelineDraft {
     this.skinCareProblems = const [],
     this.skinCareBudget,
     this.skinCarePreference,
+    this.skinCareDesiredApplicationsPerDay = 2,
     this.skinCareSkipped = false,
     this.pendingFutureImports = const [],
     this.acceptedConflictKeys = const [],
@@ -1103,6 +1105,9 @@ class BaseTimelineDraft {
       skinCareProblems: _readStringList(map['skinCareProblems']),
       skinCareBudget: map['skinCareBudget'] as String?,
       skinCarePreference: map['skinCarePreference'] as String?,
+      skinCareDesiredApplicationsPerDay: _readSkinCareDesiredApplicationsPerDay(
+        map['skinCareDesiredApplicationsPerDay'],
+      ),
       skinCareSkipped: map['skinCareSkipped'] as bool? ?? false,
       pendingFutureImports: _readPendingFutureImports(
         map['pendingFutureImports'],
@@ -1143,6 +1148,7 @@ class BaseTimelineDraft {
     'skinCareProblems': skinCareProblems,
     'skinCareBudget': skinCareBudget,
     'skinCarePreference': skinCarePreference,
+    'skinCareDesiredApplicationsPerDay': skinCareDesiredApplicationsPerDay,
     'skinCareSkipped': skinCareSkipped,
     'pendingFutureImports': pendingFutureImports
         .map((entry) => entry.toMap())
@@ -1182,6 +1188,7 @@ class BaseTimelineDraft {
     List<String>? skinCareProblems,
     String? skinCareBudget,
     String? skinCarePreference,
+    int? skinCareDesiredApplicationsPerDay,
     bool? skinCareSkipped,
     List<PendingFutureImportDraft>? pendingFutureImports,
     List<String>? acceptedConflictKeys,
@@ -1274,13 +1281,25 @@ class BaseTimelineDraft {
       skinCarePreference: clearSkinCarePlanning
           ? null
           : (skinCarePreference ?? this.skinCarePreference),
+      skinCareDesiredApplicationsPerDay: clearSkinCarePlanning
+          ? 2
+          : _normalizeSkinCareDesiredApplicationsPerDay(
+              skinCareDesiredApplicationsPerDay ??
+                  this.skinCareDesiredApplicationsPerDay,
+            ),
       skinCareSkipped: skinCareSkipped ?? this.skinCareSkipped,
       pendingFutureImports: (clearClassData || clearWorkData)
-          ? (pendingFutureImports ?? this.pendingFutureImports).where((entry) {
-              if (clearClassData && entry.section == 'classes') return false;
-              if (clearWorkData && entry.section == 'job_work_business') return false;
-              return true;
-            }).toList(growable: false)
+          ? (pendingFutureImports ?? this.pendingFutureImports)
+                .where((entry) {
+                  if (clearClassData && entry.section == 'classes') {
+                    return false;
+                  }
+                  if (clearWorkData && entry.section == 'job_work_business') {
+                    return false;
+                  }
+                  return true;
+                })
+                .toList(growable: false)
           : (pendingFutureImports ?? this.pendingFutureImports),
       acceptedConflictKeys: acceptedConflictKeys ?? this.acceptedConflictKeys,
       roleChangeWarnings: clearRoleChangeWarnings
@@ -1549,8 +1568,12 @@ class BaseTimelineDraft {
 
   String? validateFixedSchedule() {
     final fixedBlocks = blocks.where((b) => b.section == 'fixed').toList();
-    final sleep = blocks.where((b) => b.id == BaseTimelineDraft.fixedSleepId).toList();
-    final bath = blocks.where((b) => b.id == BaseTimelineDraft.fixedBathId).toList();
+    final sleep = blocks
+        .where((b) => b.id == BaseTimelineDraft.fixedSleepId)
+        .toList();
+    final bath = blocks
+        .where((b) => b.id == BaseTimelineDraft.fixedBathId)
+        .toList();
 
     if (sleep.isEmpty) return 'Set sleep time.';
     if (bath.isEmpty) return 'Set bath time.';
@@ -1570,7 +1593,8 @@ class BaseTimelineDraft {
     }
 
     for (final fixedBlock in fixedBlocks) {
-      if (fixedBlock.id != BaseTimelineDraft.fixedSleepId && fixedBlock.id != BaseTimelineDraft.fixedBathId) {
+      if (fixedBlock.id != BaseTimelineDraft.fixedSleepId &&
+          fixedBlock.id != BaseTimelineDraft.fixedBathId) {
         if (fixedBlock.title.trim().isEmpty) {
           return 'Fixed block name is required.';
         }
@@ -1581,7 +1605,17 @@ class BaseTimelineDraft {
       if (fixedBlock.blockType != TimelineBlockDraft.hardBlockKey) {
         return 'Fixed blocks must be non-negotiable.';
       }
-      final repeatsEveryDay = fixedBlock.repeatDays.toSet().containsAll(const [1, 2, 3, 4, 5, 6, 7]) && fixedBlock.repeatDays.length == 7;
+      final repeatsEveryDay =
+          fixedBlock.repeatDays.toSet().containsAll(const [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+          ]) &&
+          fixedBlock.repeatDays.length == 7;
       if (!repeatsEveryDay) {
         return 'Fixed blocks must repeat every day.';
       }
@@ -1945,6 +1979,7 @@ class TimelineBlockDraft {
   final double? calories;
   final double? protein;
   final List<String> skincareProducts;
+  final List<String> skincareSteps;
 
   const TimelineBlockDraft({
     required this.id,
@@ -1964,6 +1999,7 @@ class TimelineBlockDraft {
     this.calories,
     this.protein,
     this.skincareProducts = const [],
+    this.skincareSteps = const [],
   });
 
   factory TimelineBlockDraft.fromMap(Map<String, dynamic> map) {
@@ -1985,6 +2021,7 @@ class TimelineBlockDraft {
       calories: (map['calories'] as num?)?.toDouble(),
       protein: (map['protein'] as num?)?.toDouble(),
       skincareProducts: _readStringList(map['skincareProducts']),
+      skincareSteps: _readStringList(map['skincareSteps']),
     );
   }
 
@@ -2006,6 +2043,7 @@ class TimelineBlockDraft {
     'calories': calories,
     'protein': protein,
     'skincareProducts': skincareProducts,
+    'skincareSteps': skincareSteps,
   };
 
   TimelineBlockDraft copyWith({
@@ -2026,6 +2064,7 @@ class TimelineBlockDraft {
     double? calories,
     double? protein,
     List<String>? skincareProducts,
+    List<String>? skincareSteps,
   }) {
     return TimelineBlockDraft(
       id: id ?? this.id,
@@ -2046,6 +2085,7 @@ class TimelineBlockDraft {
       calories: calories ?? this.calories,
       protein: protein ?? this.protein,
       skincareProducts: skincareProducts ?? this.skincareProducts,
+      skincareSteps: skincareSteps ?? this.skincareSteps,
     );
   }
 
@@ -2611,6 +2651,24 @@ List<T> _readList<T>(
 List<String> _readStringList(Object? value) {
   return (value as List?)?.map((item) => item.toString()).toList() ??
       <String>[];
+}
+
+int _readSkinCareDesiredApplicationsPerDay(Object? value) {
+  if (value is num) {
+    return _normalizeSkinCareDesiredApplicationsPerDay(value.toInt());
+  }
+  if (value is String) {
+    return _normalizeSkinCareDesiredApplicationsPerDay(
+      int.tryParse(value.trim()) ?? 2,
+    );
+  }
+  return 2;
+}
+
+int _normalizeSkinCareDesiredApplicationsPerDay(int value) {
+  if (value <= 2) return 2;
+  if (value >= 4) return 4;
+  return 3;
 }
 
 DateTime? _readDateTime(Object? value) {

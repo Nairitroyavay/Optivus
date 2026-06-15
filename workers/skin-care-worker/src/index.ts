@@ -217,6 +217,10 @@ Return a JSON object:
 async function handleRoutineGenerate(request: Request, env: Env): Promise<Response> {
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
+  const desiredApplicationsPerDay = Math.min(
+    4,
+    Math.max(2, Number.parseInt(String(body.desiredApplicationsPerDay || "2"), 10) || 2)
+  );
 
   const imageParts: any[] = [];
   
@@ -241,18 +245,35 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
     }
   }
 
-  const prompt = `You are an expert dermatologist. Generate a skin-care routine.
+  const prompt = `You are an expert dermatologist. Generate skin-care routine plans. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
 Skin Type: ${body.skinType || "unknown"}
 Main Problem: ${body.mainProblem || "none"}
 Budget: ${body.budget || "medium"}
 Routine Preference: ${body.routinePreference || "balanced"}
+Desired Applications Per Day: ${desiredApplicationsPerDay}
 Products Owned (from photo): ${JSON.stringify(body.productsFromPhoto || [])}
 Typed Products: ${JSON.stringify(body.typedProductNames || [])}
-Include safety warnings. E.g. avoid Retinol + AHA/BHA at the same time, sunscreen in morning.
+For owned products, build the steps from the uploaded/typed products when possible.
+Include safety warnings. E.g. avoid Retinol + AHA/BHA in the same routine block, sunscreen in morning when appropriate.
 If a face photo is provided, use it to personalize the routine and suggested products.
+Return exactly ${desiredApplicationsPerDay} routinePlans unless there is a safety reason not to.
+Use slot labels from: morning, midday, afternoon, night, custom.
+For 2/day prefer morning + night.
+For 3/day prefer morning + midday/afternoon + night.
+For 4/day prefer morning + midday + afternoon + night.
 
-Return ONLY a strict JSON object. MUST ALWAYS include timelineBlocks when successful:
+Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks may be included only for compatibility; Flutter will ignore all start/end times:
 {
+  "routinePlans": [
+    {
+      "slotLabel": "morning",
+      "title": "Morning Skin Care",
+      "steps": ["Face wash", "Vitamin C", "Sunscreen"],
+      "productNames": ["Cleanser Name", "Vitamin C Serum Name", "Sunscreen Name"],
+      "warnings": [],
+      "repeatDays": [1,2,3,4,5,6,7]
+    }
+  ],
   "morningRoutine": [],
   "nightRoutine": [],
   "weeklyRoutine": [],
@@ -261,8 +282,8 @@ Return ONLY a strict JSON object. MUST ALWAYS include timelineBlocks when succes
     {
       "title": "Morning Skin Care",
       "section": "skin_care",
-      "startMinute": 420,
-      "endMinute": 435,
+      "startMinute": 0,
+      "endMinute": 15,
       "repeatDays": [1,2,3,4,5,6,7],
       "products": ["Cleanser", "Sunscreen"],
       "steps": ["Wash face", "Apply sunscreen"],
@@ -314,12 +335,42 @@ Return ONLY a strict JSON object. MUST ALWAYS include timelineBlocks when succes
   }
 
   const parsed = parseAiJsonText(text) || {};
+  const routinePlans = Array.isArray(parsed.routinePlans)
+    ? parsed.routinePlans
+    : Array.isArray(parsed.plans)
+      ? parsed.plans
+      : [];
+  const compatibilityStartForSlot = (slotLabel: string | undefined, index: number): number => {
+    const slot = String(slotLabel || "").toLowerCase();
+    if (slot === "morning") return 7 * 60;
+    if (slot === "midday" || slot === "noon" || slot === "lunch") return 13 * 60;
+    if (slot === "afternoon") return 16 * 60;
+    if (slot === "night" || slot === "evening" || slot === "bedtime") return 21 * 60;
+    return [7 * 60, 13 * 60, 16 * 60, 21 * 60][Math.min(index, 3)];
+  };
+  const compatibilityTimelineBlocks = Array.isArray(parsed.timelineBlocks)
+    ? parsed.timelineBlocks
+    : routinePlans.map((plan: any, index: number) => {
+        const startMinute = compatibilityStartForSlot(plan?.slotLabel, index);
+        return {
+          title: plan?.title || `${plan?.slotLabel || "Custom"} Skin Care`,
+          section: "skin_care",
+          startMinute,
+          endMinute: startMinute + 15,
+          repeatDays: Array.isArray(plan?.repeatDays) ? plan.repeatDays : [1, 2, 3, 4, 5, 6, 7],
+          products: Array.isArray(plan?.productNames) ? plan.productNames : [],
+          steps: Array.isArray(plan?.steps) ? plan.steps : [],
+          source: "ai_skin_care_setup",
+          id: `skin-care-plan-${index + 1}`
+        };
+      });
   
   return jsonResponse(request, env, { 
+    routinePlans,
     morningRoutine: parsed.morningRoutine || [],
     nightRoutine: parsed.nightRoutine || [],
     weeklyRoutine: parsed.weeklyRoutine || [],
-    timelineBlocks: parsed.timelineBlocks || [],
+    timelineBlocks: compatibilityTimelineBlocks,
     suggestedProducts: parsed.suggestedProducts || [],
     warnings: parsed.warnings || []
   });

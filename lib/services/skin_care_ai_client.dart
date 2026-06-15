@@ -28,7 +28,52 @@ class SkinCareAiProductResult {
   }
 }
 
+class SkinCareRoutinePlan {
+  final String slotLabel;
+  final String title;
+  final List<String> steps;
+  final List<String> productNames;
+  final List<String> warnings;
+  final List<int> repeatDays;
+
+  const SkinCareRoutinePlan({
+    required this.slotLabel,
+    required this.title,
+    required this.steps,
+    required this.productNames,
+    this.warnings = const [],
+    this.repeatDays = const [],
+  });
+
+  factory SkinCareRoutinePlan.fromMap(Map<String, dynamic> map) {
+    return SkinCareRoutinePlan(
+      slotLabel: _stringValue(
+        map['slotLabel'] ?? map['slot'] ?? map['timeOfDay'],
+      ).toLowerCase().trim(),
+      title: _stringValue(map['title'] ?? map['name']).trim(),
+      steps: _stringListFromValue(
+        map['steps'] ?? map['orderedSteps'] ?? map['instructions'],
+      ),
+      productNames: _stringListFromValue(
+        map['productNames'] ?? map['products'] ?? map['skincareProducts'],
+      ),
+      warnings: _stringListFromValue(map['warnings'] ?? map['warningIfAny']),
+      repeatDays: _repeatDaysFromValue(map['repeatDays'] ?? map['days']),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'slotLabel': slotLabel,
+    'title': title,
+    'steps': steps,
+    'productNames': productNames,
+    'warnings': warnings,
+    'repeatDays': repeatDays,
+  };
+}
+
 class SkinCareAiRoutineResult {
+  final List<SkinCareRoutinePlan> routinePlans;
   final List<dynamic> morningRoutine;
   final List<dynamic> nightRoutine;
   final List<dynamic> weeklyRoutine;
@@ -40,6 +85,7 @@ class SkinCareAiRoutineResult {
   bool get hasError => errorMessage != null;
 
   const SkinCareAiRoutineResult({
+    this.routinePlans = const [],
     required this.morningRoutine,
     required this.nightRoutine,
     required this.weeklyRoutine,
@@ -51,6 +97,7 @@ class SkinCareAiRoutineResult {
 
   factory SkinCareAiRoutineResult.error(String msg) {
     return SkinCareAiRoutineResult(
+      routinePlans: [],
       morningRoutine: [],
       nightRoutine: [],
       weeklyRoutine: [],
@@ -108,11 +155,49 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
     required String idToken,
     required Map<String, dynamic> params,
   }) async {
-    return const SkinCareAiRoutineResult(
+    final desired =
+        (params['desiredApplicationsPerDay'] is num
+                ? (params['desiredApplicationsPerDay'] as num).toInt()
+                : 2)
+            .clamp(2, 4)
+            .toInt();
+    const allPlans = [
+      SkinCareRoutinePlan(
+        slotLabel: 'morning',
+        title: 'Morning Skin Care',
+        steps: ['Cleanse face', 'Apply sunscreen'],
+        productNames: ['Fake Cleanser', 'Sunscreen'],
+      ),
+      SkinCareRoutinePlan(
+        slotLabel: 'midday',
+        title: 'Midday Skin Care',
+        steps: ['Refresh skin', 'Reapply sunscreen'],
+        productNames: ['Sunscreen'],
+      ),
+      SkinCareRoutinePlan(
+        slotLabel: 'afternoon',
+        title: 'Afternoon Skin Care',
+        steps: ['Reapply sunscreen'],
+        productNames: ['Sunscreen'],
+      ),
+      SkinCareRoutinePlan(
+        slotLabel: 'night',
+        title: 'Night Skin Care',
+        steps: ['Cleanse face', 'Apply moisturizer'],
+        productNames: ['Fake Cleanser', 'Moisturizer'],
+      ),
+    ];
+    final plans = desired == 2
+        ? [allPlans.first, allPlans.last]
+        : desired == 3
+        ? [allPlans[0], allPlans[1], allPlans[3]]
+        : allPlans;
+    return SkinCareAiRoutineResult(
+      routinePlans: plans,
       morningRoutine: ["Fake Cleanser", "Sunscreen"],
       nightRoutine: ["Fake Cleanser", "Moisturizer"],
       weeklyRoutine: [],
-      timelineBlocks: [
+      timelineBlocks: const [
         <String, dynamic>{
           "id": "skincare-1",
           "section": "skin_care",
@@ -231,8 +316,10 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       final tB = body['timelineBlocks'];
       final sP = body['suggestedProducts'];
       final warnings = body['warnings'];
+      final plans = body['routinePlans'] ?? body['plans'];
 
       return SkinCareAiRoutineResult(
+        routinePlans: _routinePlansFromValue(plans, fallbackBlocks: tB),
         morningRoutine: mR is List ? mR : [],
         nightRoutine: nR is List ? nR : [],
         weeklyRoutine: wR is List ? wR : [],
@@ -305,4 +392,91 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     }
     return 'AI service could not process this request.';
   }
+}
+
+List<SkinCareRoutinePlan> _routinePlansFromValue(
+  dynamic value, {
+  dynamic fallbackBlocks,
+}) {
+  final rawPlans = value is List ? value : const [];
+  final plans = rawPlans
+      .whereType<Map>()
+      .map(
+        (item) => SkinCareRoutinePlan.fromMap(Map<String, dynamic>.from(item)),
+      )
+      .where((plan) => plan.title.isNotEmpty || plan.steps.isNotEmpty)
+      .toList(growable: false);
+  if (plans.isNotEmpty) return plans;
+
+  final rawBlocks = fallbackBlocks is List ? fallbackBlocks : const [];
+  return rawBlocks
+      .whereType<Map>()
+      .map(
+        (item) => SkinCareRoutinePlan.fromMap(Map<String, dynamic>.from(item)),
+      )
+      .where((plan) => plan.title.isNotEmpty || plan.steps.isNotEmpty)
+      .toList(growable: false);
+}
+
+String _stringValue(dynamic value) => value == null ? '' : value.toString();
+
+List<String> _stringListFromValue(dynamic value) {
+  if (value == null) return const [];
+  if (value is String) {
+    return _dedupeStrings(
+      value
+          .split(RegExp(r'[\n,]+'))
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty),
+    );
+  }
+  if (value is List) {
+    return _dedupeStrings(value.map(_stringFromRoutineItem));
+  }
+  final single = _stringFromRoutineItem(value).trim();
+  return single.isEmpty ? const [] : [single];
+}
+
+String _stringFromRoutineItem(dynamic value) {
+  if (value == null) return '';
+  if (value is String) return value.trim();
+  if (value is Map) {
+    final map = Map<String, dynamic>.from(value);
+    for (final key in const [
+      'instruction',
+      'step',
+      'text',
+      'name',
+      'productName',
+      'product',
+    ]) {
+      final text = _stringValue(map[key]).trim();
+      if (text.isNotEmpty) return text;
+    }
+  }
+  return value.toString().trim();
+}
+
+List<int> _repeatDaysFromValue(dynamic value) {
+  final raw = value is List ? value : const [];
+  final days =
+      raw
+          .map((item) => item is num ? item.toInt() : int.tryParse('$item'))
+          .whereType<int>()
+          .where((day) => day >= 1 && day <= 7)
+          .toSet()
+          .toList()
+        ..sort();
+  return days;
+}
+
+List<String> _dedupeStrings(Iterable<String> values) {
+  final seen = <String>{};
+  final result = <String>[];
+  for (final raw in values) {
+    final value = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (value.isEmpty) continue;
+    if (seen.add(value.toLowerCase())) result.add(value);
+  }
+  return result;
 }
