@@ -446,6 +446,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // With the new UX, the setup card is hidden when a routine exists.
+    // We must tap 'Rebuild' first to clear the old routine.
+    await tester.tap(find.text('Rebuild'));
+    await tester.pumpAndSettle();
+
     await tester.enterText(
       find.byKey(const ValueKey('onboarding-step7-product-names-field')),
       'Cleanser',
