@@ -180,6 +180,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           if (step == 3) {
             return draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
           }
+          if (step == onboardingFixedStepIndex) {
+            return draft.copyWith(
+              baseTimeline: draft.baseTimeline.withRequiredFixedBlocks(),
+            );
+          }
           if (step == OnboardingDraft.lastStepIndex) {
             return draft.copyWith(finalPreview: draft.buildFinalPreview());
           }
@@ -608,18 +613,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return true;
   }
 
-  bool _backFixed(OnboardingDraft draft) {
-    final previous = _previousInternalStage(
-      draft.baseTimeline.fixedScheduleSetupStep,
-      const [0, 1, 2, 3, 4, 5],
-    );
-    if (previous == null) return false;
-    _updateBaseTimelineStage(
-      onboardingFixedStepIndex,
-      (base) => base.copyWith(fixedScheduleSetupStep: previous),
-    );
-    return true;
-  }
+  bool _backFixed(OnboardingDraft draft) => false;
 
   bool _backSkinCare(OnboardingDraft draft) {
     final base = draft.baseTimeline;
@@ -822,17 +816,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return true;
   }
 
-  Future<bool> _nextFixed(OnboardingDraft draft) async {
-    final stage = draft.baseTimeline.fixedScheduleSetupStep;
-    final next = _nextInternalStage(stage, const [0, 1, 2, 3, 4, 5]);
-    if (next == null) return false;
-    _updateBaseTimelineStage(
-      onboardingFixedStepIndex,
-      (base) =>
-          base.withRequiredFixedBlocks().copyWith(fixedScheduleSetupStep: next),
-    );
-    return true;
-  }
+  Future<bool> _nextFixed(OnboardingDraft draft) async => false;
 
   Future<bool> _nextSkinCare(OnboardingDraft draft) async {
     final base = draft.baseTimeline;
