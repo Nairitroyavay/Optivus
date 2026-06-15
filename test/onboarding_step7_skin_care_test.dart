@@ -6,7 +6,6 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/state/app_state.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 
 void main() {
   Widget buildTestWidget({
@@ -15,13 +14,11 @@ void main() {
   }) {
     return ProviderScope(
       overrides: [
-        mockOnboardingProvider.overrideWith(
-          (ref) {
-            final notifier = MockOnboardingNotifier();
-            notifier.loadSeedData(draft);
-            return notifier;
-          },
-        ),
+        mockOnboardingProvider.overrideWith((ref) {
+          final notifier = MockOnboardingNotifier();
+          notifier.loadSeedData(draft);
+          return notifier;
+        }),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -65,6 +62,10 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Build routine for me'), findsOneWidget);
+      expect(find.text('Face photo'), findsNothing);
+      expect(find.text('Optional photo upload'), findsNothing);
+      expect(find.text('Review skin care routine'), findsNothing);
+      expect(find.text('Open review'), findsNothing);
     }
   });
 
@@ -75,17 +76,34 @@ void main() {
     expect(find.byIcon(Icons.check_circle_outline_rounded), findsNothing);
     expect(find.byIcon(Icons.circle_outlined), findsNothing);
 
-    final fileContent = File('lib/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart').readAsStringSync();
+    final fileContent = File(
+      'lib/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart',
+    ).readAsStringSync();
     expect(fileContent.contains('Color(0xFF63B885)'), isFalse);
+    expect(fileContent.contains('Icons.check_circle_outline_rounded'), isFalse);
+    expect(fileContent.contains('Icons.circle_outlined'), isFalse);
   });
 
   testWidgets('Test 4: no full page scroll', (tester) async {
     await tester.pumpWidget(buildTestWidget());
     await tester.pumpAndSettle();
-    
+
+    expect(find.byType(SingleChildScrollView), findsNothing);
+
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: const OnboardingDraft(
+          currentStep: 7,
+          baseTimeline: BaseTimelineDraft(
+            skinCareSetupStep: 1,
+            skinCareSetupPath: 'no_products',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
     final finder = find.byType(SingleChildScrollView);
-    final singleChildScrollViews = tester.widgetList<SingleChildScrollView>(finder);
-    
     final headerFinder = find.text('Skin Care');
     final ancestor = find.ancestor(of: headerFinder, matching: finder);
     expect(ancestor, findsNothing);
@@ -93,19 +111,60 @@ void main() {
 
   testWidgets('Test 5: Back logic matches Eating', (tester) async {
     await tester.pumpWidget(buildTestWidget(pumpFlow: true));
-    await tester.pump(const Duration(seconds: 1)); 
+    await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Build routine for me'));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('Build routine for me'), findsOneWidget);
-    expect(find.text('Build skin routine'), findsOneWidget);
+    var container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingFlow)),
+    );
+    expect(container.read(mockOnboardingProvider).draft.currentStep, 7);
+    expect(
+      container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .skinCareSetupStep,
+      0,
+    );
+    expect(find.text('Build skin routine'), findsNothing);
 
-    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.tap(find.text('Next Step'));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Build skin routine'), findsOneWidget);
+    expect(
+      container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .skinCareSetupStep,
+      1,
+    );
+
+    await tester.tap(find.byKey(const Key('onboarding-step7-back')));
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('Build skin routine'), findsNothing);
     expect(find.text('I have products'), findsOneWidget);
+    expect(container.read(mockOnboardingProvider).draft.currentStep, 7);
+    expect(
+      container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .skinCareSetupStep,
+      0,
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pump(const Duration(seconds: 1));
+
+    container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingFlow)),
+    );
+    expect(container.read(mockOnboardingProvider).draft.currentStep, 6);
   });
 
   testWidgets('Test 6: Next without choice', (tester) async {
@@ -126,8 +185,30 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pump(const Duration(seconds: 1));
 
+    var container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingFlow)),
+    );
+    expect(
+      container.read(mockOnboardingProvider).draft.baseTimeline.skinCareSkipped,
+      isTrue,
+    );
+
+    await tester.tap(find.text('Next Step'));
+    await tester.pump(const Duration(seconds: 1));
+
     expect(find.text('Skin care will be skipped for now.'), findsOneWidget);
-    
+    container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingFlow)),
+    );
+    expect(
+      container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .skinCareSetupStep,
+      1,
+    );
+
     await tester.tap(find.text('Next Step'));
     for (int i = 0; i < 5; i++) {
       await tester.pump(const Duration(seconds: 1));
@@ -143,7 +224,13 @@ void main() {
     await tester.tap(find.text('I have products'));
     await tester.pump(const Duration(seconds: 1));
 
-    await tester.enterText(find.byType(TextField), 'Cleanser, moisturizer, sunscreen');
+    await tester.tap(find.text('Next Step'));
+    await tester.pump(const Duration(seconds: 1));
+
+    await tester.enterText(
+      find.byType(TextField),
+      'Cleanser, moisturizer, sunscreen',
+    );
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pump(const Duration(seconds: 1));
 
@@ -155,6 +242,18 @@ void main() {
 
     expect(find.text('Morning skin care'), findsOneWidget);
     expect(find.text('Night skin care'), findsOneWidget);
+    var container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingFlow)),
+    );
+    expect(
+      container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care')
+          .length,
+      greaterThanOrEqualTo(2),
+    );
 
     await tester.tap(find.text('Next Step'));
     for (int i = 0; i < 5; i++) {
@@ -171,9 +270,14 @@ void main() {
     await tester.tap(find.text('Build routine for me'));
     await tester.pump(const Duration(seconds: 1));
 
+    await tester.tap(find.text('Next Step'));
+    await tester.pump(const Duration(seconds: 1));
+
     await tester.tap(find.text('Combination'));
     await tester.tap(find.text('Acne'));
+    await tester.ensureVisible(find.text('Medium'));
     await tester.tap(find.text('Medium'));
+    await tester.ensureVisible(find.text('Minimal'));
     await tester.tap(find.text('Minimal'));
     await tester.pump(const Duration(seconds: 1));
 
@@ -185,6 +289,16 @@ void main() {
 
     expect(find.text('Morning skin care'), findsOneWidget);
     expect(find.text('Night skin care'), findsOneWidget);
+    var container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingFlow)),
+    );
+    final skinBlocks = container
+        .read(mockOnboardingProvider)
+        .draft
+        .baseTimeline
+        .confirmedBlocksForSection('skin_care');
+    expect(skinBlocks, isNotEmpty);
+    expect(skinBlocks.expand((block) => block.skincareProducts), isNotEmpty);
 
     await tester.tap(find.text('Next Step'));
     for (int i = 0; i < 5; i++) {
@@ -199,6 +313,9 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Build routine for me'));
+    await tester.pump(const Duration(seconds: 1));
+
+    await tester.tap(find.text('Next Step'));
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Next Step'));
@@ -218,10 +335,37 @@ void main() {
       repeatDays: [1, 2, 3, 4, 5, 6, 7],
       blockType: TimelineBlockDraft.softBlockKey,
     );
+    const classBlock = TimelineBlockDraft(
+      id: 'class_block',
+      section: 'classes',
+      title: 'Math',
+      startMinute: 540,
+      endMinute: 600,
+      repeatDays: [1, 3, 5],
+      blockType: TimelineBlockDraft.hardBlockKey,
+    );
+    const workBlock = TimelineBlockDraft(
+      id: 'work_block',
+      section: 'job_work_business',
+      title: 'Work',
+      startMinute: 600,
+      endMinute: 720,
+      repeatDays: [2, 4],
+      blockType: TimelineBlockDraft.hardBlockKey,
+    );
+    const fixedBlock = TimelineBlockDraft(
+      id: 'fixed_block',
+      section: 'fixed',
+      title: 'Commute',
+      startMinute: 780,
+      endMinute: 810,
+      repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      blockType: TimelineBlockDraft.hardBlockKey,
+    );
     final draft = OnboardingDraft(
       currentStep: 7,
       baseTimeline: const BaseTimelineDraft(
-        blocks: [eatingBlock],
+        blocks: [classBlock, workBlock, eatingBlock, fixedBlock],
       ),
     );
 
@@ -232,13 +376,21 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Next Step'));
+    await tester.pump(const Duration(seconds: 1));
+
+    await tester.tap(find.text('Next Step'));
     for (int i = 0; i < 5; i++) {
       await tester.pump(const Duration(seconds: 1));
     }
 
     final context = tester.element(find.text('Drop Bad Habits'));
-    final notifier = ProviderScope.containerOf(context).read(mockOnboardingProvider);
-    expect(notifier.draft.baseTimeline.blocks.contains(eatingBlock), isTrue);
+    final state = ProviderScope.containerOf(
+      context,
+    ).read(mockOnboardingProvider);
+    final nonSkinBlocks = state.draft.baseTimeline.blocks
+        .where((block) => block.section != 'skin_care')
+        .toList(growable: false);
+    expect(nonSkinBlocks, [classBlock, workBlock, eatingBlock, fixedBlock]);
   });
 
   testWidgets('Test 12: restore/rebuild', (tester) async {
@@ -266,5 +418,13 @@ void main() {
 
     expect(find.text('Morning skin care'), findsOneWidget);
     expect(find.text('Routine built'), findsOneWidget);
+    final context = tester.element(find.text('Routine built'));
+    final state = ProviderScope.containerOf(
+      context,
+    ).read(mockOnboardingProvider);
+    expect(
+      state.draft.baseTimeline.confirmedBlocksForSection('skin_care').length,
+      1,
+    );
   });
 }
