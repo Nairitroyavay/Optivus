@@ -148,6 +148,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       children: [
         // Fixed Header
         Padding(
+          key: const Key('onboarding-step6-header'),
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
           child: Row(
             children: [
@@ -176,6 +177,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                 ),
               ),
               IconButton(
+                key: const Key('onboarding-step6-add-button'),
                 onPressed: _showAddDialog,
                 icon: const Icon(Icons.add_rounded),
                 style: IconButton.styleFrom(
@@ -255,6 +257,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
     );
 
     return Container(
+      key: const Key('onboarding-step6-timeline'),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.4),
         border: Border(
@@ -280,6 +283,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
         },
         blendMode: BlendMode.dstIn,
         child: SingleChildScrollView(
+          key: const Key('onboarding-step6-timeline-scroll'),
           controller: _scrollController,
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.only(bottom: _kTimelineBottomPadding),
@@ -290,6 +294,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
               children: [
                 // Vertical rail
                 Positioned(
+                  key: const Key('onboarding-step6-rail'),
                   top: 0,
                   bottom: 0,
                   left: 48,
@@ -378,6 +383,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                     right: 16,
                     height: h,
                     child: GestureDetector(
+                      key: Key('onboarding-step6-block-${originalBlock.id}'),
                       onTap: () {
                         setState(() => _frontBlockId = block.id);
                       },

@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_6_fixed_schedule.dart';
+import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 
 void main() {
   ProviderContainer makeContainer({OnboardingDraft? draft}) {
@@ -56,7 +61,7 @@ void main() {
     final headerFinder = find.text('Fixed Schedule');
     expect(headerFinder, findsOneWidget);
     
-    final scrollable = find.byType(SingleChildScrollView).first;
+    final scrollable = find.byKey(const ValueKey('onboarding-step6-timeline-scroll'));
     expect(scrollable, findsOneWidget);
 
     // Ensure the header is not found inside the scrollable content
@@ -76,12 +81,12 @@ void main() {
     
     final sleep = fixedBlocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedSleepId);
     expect(sleep.blockType, TimelineBlockDraft.hardBlockKey);
-    expect(sleep.repeatDays.length, 7);
+    expect(sleep.repeatDays, [1, 2, 3, 4, 5, 6, 7]);
     expect(sleep.crossesMidnight, isTrue);
 
     final bath = fixedBlocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedBathId);
     expect(bath.blockType, TimelineBlockDraft.hardBlockKey);
-    expect(bath.repeatDays.length, 7);
+    expect(bath.repeatDays, [1, 2, 3, 4, 5, 6, 7]);
   });
 
   testWidgets('Test 4: edit Sleep time only', (tester) async {
@@ -114,12 +119,14 @@ void main() {
 
     final draft = container.read(mockOnboardingProvider).draft;
     final sleep = draft.baseTimeline.blocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedSleepId);
+    expect(sleep.id, BaseTimelineDraft.fixedSleepId);
     expect(sleep.title, 'Sleep');
     expect(sleep.startMinute, 22 * 60);
     expect(sleep.endMinute, 6 * 60);
-    expect(sleep.blockType, TimelineBlockDraft.hardBlockKey);
-    expect(sleep.repeatDays.length, 7);
     expect(sleep.section, 'fixed');
+    expect(sleep.blockType, TimelineBlockDraft.hardBlockKey);
+    expect(sleep.repeatDays, [1, 2, 3, 4, 5, 6, 7]);
+    expect(sleep.crossesMidnight, isTrue);
   });
 
   testWidgets('Test 5: Sleep equal time blocked', (tester) async {
@@ -170,11 +177,14 @@ void main() {
 
     final draft = container.read(mockOnboardingProvider).draft;
     final bath = draft.baseTimeline.blocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedBathId);
+    expect(bath.id, BaseTimelineDraft.fixedBathId);
     expect(bath.title, 'Bath');
     expect(bath.startMinute, 8 * 60);
     expect(bath.endMinute, 8 * 60 + 30);
+    expect(bath.section, 'fixed');
     expect(bath.blockType, TimelineBlockDraft.hardBlockKey);
-    expect(bath.repeatDays.length, 7);
+    expect(bath.repeatDays, [1, 2, 3, 4, 5, 6, 7]);
+    expect(bath.crossesMidnight, isFalse);
   });
 
   testWidgets('Test 7: invalid Bath blocked', (tester) async {
@@ -224,8 +234,9 @@ void main() {
     final custom = draft.baseTimeline.blocks.last;
     expect(custom.section, 'fixed');
     expect(custom.blockType, TimelineBlockDraft.hardBlockKey);
-    expect(custom.repeatDays.length, 7);
+    expect(custom.repeatDays, [1, 2, 3, 4, 5, 6, 7]);
     expect(custom.source, OnboardingDraft.sourceOnboarding);
+    expect(custom.crossesMidnight, isFalse);
   });
 
   testWidgets('Test 9: custom validation', (tester) async {
@@ -365,7 +376,7 @@ void main() {
       'Fixed blocks must repeat every day.'
     );
   });
-  testWidgets('Test 12: Next Step advances directly', (tester) async {
+  testWidgets('Step 6 Next Step saves and advances directly to Step 7', (tester) async {
     final draft = const OnboardingDraft().copyWith(
       baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
       currentStep: 6,
@@ -376,6 +387,8 @@ void main() {
         mockOnboardingProvider.overrideWith(
           (_) => MockOnboardingNotifier()..loadSeedData(draft),
         ),
+        authProvider.overrideWith((ref) => FakeAuthNotifier()),
+        onboardingRepositoryProvider.overrideWithValue(FakeOnboardingRepository()),
       ],
     );
 
@@ -384,16 +397,78 @@ void main() {
         container: container,
         child: const MaterialApp(
           home: Scaffold(
-            body: OnboardingStep6(),
+            body: OnboardingFlow(),
           ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 100));
     
-    // Actually we can't easily test OnboardingFlow next step without routing setup
-    // But we can verify _nextFixed returns false if we call it directly,
-    // though the user wants to tap Next Step on Step 6 if possible.
+    // We should be on Step 6
+    expect(find.text('Fixed Schedule'), findsOneWidget);
+    
+    // Tap Next Step
+    await tester.tap(find.text('Next Step'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final newDraft = container.read(mockOnboardingProvider).draft;
+    expect(newDraft.currentStep, 7);
+    expect(newDraft.stepCompleted[6], isTrue);
+    expect(newDraft.stepDirty[6], isFalse);
+  });
+
+  testWidgets('Step 6 invalid fixed schedule blocks Next Step', (tester) async {
+    // Sleep start == end
+    final invalidSleepBlocks = const BaseTimelineDraft().withRequiredFixedBlocks().blocks.map((b) {
+      if (b.id == BaseTimelineDraft.fixedSleepId) {
+        return b.copyWith(startMinute: 10 * 60, endMinute: 10 * 60);
+      }
+      return b;
+    }).toList();
+
+    final draft = const OnboardingDraft().copyWith(
+      baseTimeline: const BaseTimelineDraft().copyWith(blocks: invalidSleepBlocks),
+      currentStep: 6,
+      stepCompleted: List.generate(15, (i) => i < 6),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        mockOnboardingProvider.overrideWith(
+          (_) => MockOnboardingNotifier()..loadSeedData(draft),
+        ),
+        authProvider.overrideWith((ref) => FakeAuthNotifier()),
+        onboardingRepositoryProvider.overrideWithValue(FakeOnboardingRepository()),
+      ],
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: OnboardingFlow(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 100));
+    
+    // We should be on Step 6
+    expect(find.text('Fixed Schedule'), findsOneWidget);
+    
+    // Tap Next Step
+    await tester.tap(find.text('Next Step'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final newDraft = container.read(mockOnboardingProvider).draft;
+    expect(newDraft.currentStep, 6);
+    expect(find.text('Sleep and wake time cannot be the same.'), findsOneWidget);
+    expect(newDraft.stepCompleted[6], isFalse);
   });
 
   testWidgets('Test 14: restore/rebuild persistence', (tester) async {
@@ -443,3 +518,32 @@ void main() {
     expect(custom.length, 1);
   });
 }
+
+class FakeAuthNotifier extends StateNotifier<AuthState> implements AuthNotifier {
+  FakeAuthNotifier() : super(const AuthState(
+    user: AuthUser(uid: 'test-uid', email: 'test@example.com', emailVerified: true),
+    status: AuthFlowStatus.signedInOnboardingIncomplete,
+  ));
+  @override Future<void> checkEmailVerification() async {}
+  @override Future<void> login(String email, String password) async {}
+  @override Future<void> logout() async {}
+  @override Future<void> markOnboardingComplete(AuthUser user) async {}
+  @override Future<void> markOnboardingIncomplete(AuthUser user) async {}
+  Future<void> refreshProfile() async {}
+  Future<void> register(String email, String password) async {}
+  @override Future<void> sendPasswordResetEmail(String email) async {}
+  @override Future<void> resendEmailVerification() async {}
+  @override Future<void> retryBackendRestore() async {}
+  @override Future<void> signup(String name, String email, String password) async {}
+}
+
+class FakeOnboardingRepository implements OnboardingRepository {
+  @override Future<void> saveDraft(OnboardingDraft draft) async {}
+  Future<OnboardingDraft?> getDraft(String uid) async => null;
+  Future<void> deleteDraft(String uid) async {}
+  @override Future<void> completeOnboarding({required OnboardingCompletionBundle bundle, required OnboardingDraft finalDraft}) async {}
+  @override Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid) async => null;
+  @override Future<OnboardingDraft?> fetchDraft(String uid) async => null;
+  @override Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) async {}
+}
+
