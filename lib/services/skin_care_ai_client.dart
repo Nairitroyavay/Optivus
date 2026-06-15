@@ -14,7 +14,7 @@ class SkinCareAiProductResult {
   final List<dynamic> products;
   final List<String> warnings;
   final String? errorMessage;
-  
+
   bool get hasError => errorMessage != null;
 
   const SkinCareAiProductResult({
@@ -22,7 +22,7 @@ class SkinCareAiProductResult {
     this.warnings = const [],
     this.errorMessage,
   });
-  
+
   factory SkinCareAiProductResult.error(String msg) {
     return SkinCareAiProductResult(products: [], errorMessage: msg);
   }
@@ -36,7 +36,7 @@ class SkinCareAiRoutineResult {
   final List<String> suggestedProducts;
   final List<String> warnings;
   final String? errorMessage;
-  
+
   bool get hasError => errorMessage != null;
 
   const SkinCareAiRoutineResult({
@@ -48,7 +48,7 @@ class SkinCareAiRoutineResult {
     this.warnings = const [],
     this.errorMessage,
   });
-  
+
   factory SkinCareAiRoutineResult.error(String msg) {
     return SkinCareAiRoutineResult(
       morningRoutine: [],
@@ -85,7 +85,9 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
     required List<String> productPhotos,
   }) async {
     if (productPhotos.length > 10) {
-      return SkinCareAiProductResult.error('Upload your main 10 products first. You can add more later.');
+      return SkinCareAiProductResult.error(
+        'Upload your main 10 products first. You can add more later.',
+      );
     }
     return const SkinCareAiProductResult(
       products: [
@@ -93,8 +95,8 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
           "name": "Fake Cleanser",
           "brand": "Fake Brand",
           "category": "cleanser",
-          "confidence": "high"
-        }
+          "confidence": "high",
+        },
       ],
       warnings: [],
     );
@@ -110,7 +112,7 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
       morningRoutine: ["Fake Cleanser", "Sunscreen"],
       nightRoutine: ["Fake Cleanser", "Moisturizer"],
       weeklyRoutine: [],
-      timelineBlocks: const [
+      timelineBlocks: [
         <String, dynamic>{
           "id": "skincare-1",
           "section": "skin_care",
@@ -119,7 +121,7 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
           "endMinute": 435,
           "blockType": "soft_block",
           "repeatDays": <int>[1, 2, 3, 4, 5, 6, 7],
-          "skincareProducts": <String>["Fake Cleanser", "Sunscreen"]
+          "skincareProducts": <String>["Fake Cleanser", "Sunscreen"],
         },
         <String, dynamic>{
           "id": "skincare-2",
@@ -129,8 +131,8 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
           "endMinute": 1335,
           "blockType": "soft_block",
           "repeatDays": <int>[1, 2, 3, 4, 5, 6, 7],
-          "skincareProducts": <String>["Fake Cleanser", "Moisturizer"]
-        }
+          "skincareProducts": <String>["Fake Cleanser", "Moisturizer"],
+        },
       ],
       suggestedProducts: ["Suggested Cleanser", "Suggested Moisturizer"],
       warnings: [],
@@ -153,10 +155,12 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     required List<String> productPhotos,
   }) async {
     if (productPhotos.length > 10) {
-      return SkinCareAiProductResult.error('Upload your main 10 products first. You can add more later.');
+      return SkinCareAiProductResult.error(
+        'Upload your main 10 products first. You can add more later.',
+      );
     }
     if (baseUrl.trim().isEmpty) {
-      return SkinCareAiProductResult.error('Skin Care AI worker is not configured.');
+      return SkinCareAiProductResult.error('missing_worker_url');
     }
 
     try {
@@ -170,9 +174,11 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
         body: jsonEncode({'productPhotos': productPhotos}),
       );
       final body = _jsonObject(response.body);
-      
+
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        return SkinCareAiProductResult.error(_friendlyErrorMessage(response.statusCode, body));
+        return SkinCareAiProductResult.error(
+          _friendlyErrorMessage(response.statusCode, body),
+        );
       }
 
       final products = body['products'];
@@ -180,10 +186,14 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
 
       return SkinCareAiProductResult(
         products: products is List ? products : [],
-        warnings: warnings is List ? warnings.map((e) => e.toString()).toList() : [],
+        warnings: warnings is List
+            ? warnings.map((e) => e.toString()).toList()
+            : [],
       );
     } catch (_) {
-      return SkinCareAiProductResult.error('AI skin care service is unavailable. Try again later.');
+      return SkinCareAiProductResult.error(
+        'AI skin care service is unavailable. Try again later.',
+      );
     }
   }
 
@@ -194,7 +204,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     required Map<String, dynamic> params,
   }) async {
     if (baseUrl.trim().isEmpty) {
-      return SkinCareAiRoutineResult.error('Skin Care AI worker is not configured.');
+      return SkinCareAiRoutineResult.error('missing_worker_url');
     }
 
     try {
@@ -208,9 +218,11 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
         body: jsonEncode(params),
       );
       final body = _jsonObject(response.body);
-      
+
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        return SkinCareAiRoutineResult.error(_friendlyErrorMessage(response.statusCode, body));
+        return SkinCareAiRoutineResult.error(
+          _friendlyErrorMessage(response.statusCode, body),
+        );
       }
 
       final mR = body['morningRoutine'];
@@ -225,17 +237,25 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
         nightRoutine: nR is List ? nR : [],
         weeklyRoutine: wR is List ? wR : [],
         timelineBlocks: tB is List ? tB : [],
-        suggestedProducts: sP is List ? sP.map((e) => e.toString()).toList() : [],
-        warnings: warnings is List ? warnings.map((e) => e.toString()).toList() : [],
+        suggestedProducts: sP is List
+            ? sP.map((e) => e.toString()).toList()
+            : [],
+        warnings: warnings is List
+            ? warnings.map((e) => e.toString()).toList()
+            : [],
       );
     } catch (_) {
-      return SkinCareAiRoutineResult.error('AI skin care service is unavailable. Try again later.');
+      return SkinCareAiRoutineResult.error(
+        'AI skin care service is unavailable. Try again later.',
+      );
     }
   }
 
   Uri _workerUri(String path) {
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
-    return Uri.parse('${baseUrl.trim().replaceFirst(RegExp(r'/+\$'), '')}/$normalizedPath');
+    return Uri.parse(
+      '${baseUrl.trim().replaceFirst(RegExp(r'/+$'), '')}/$normalizedPath',
+    );
   }
 
   Map<String, dynamic> _jsonObject(String source) {
@@ -252,8 +272,12 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
 
   String _friendlyErrorMessage(int statusCode, Map<String, dynamic> body) {
     final rawError = body['error'] as String?;
-    
-    if (statusCode == 503 || statusCode == 429 || rawError == 'provider_high_demand' || rawError == 'provider_quota_exceeded' || rawError == 'provider_request_failed') {
+
+    if (statusCode == 503 ||
+        statusCode == 429 ||
+        rawError == 'provider_high_demand' ||
+        rawError == 'provider_quota_exceeded' ||
+        rawError == 'provider_request_failed') {
       return 'AI is busy right now. Try again in a moment.';
     }
     if (rawError == 'too_many_photos') {
@@ -262,7 +286,8 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     if (rawError == 'provider_invalid_response') {
       return 'AI response could not be safely read. Please try again.';
     }
-    if (rawError == 'provider_empty_candidates' || rawError == 'no_blocks_generated') {
+    if (rawError == 'provider_empty_candidates' ||
+        rawError == 'no_blocks_generated') {
       return 'AI could not read the product from the photo. Try a clearer image.';
     }
     if (rawError == 'unsupported_content_type') {
@@ -271,7 +296,8 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     if (rawError == 'r2_image_missing') {
       return 'Uploaded photo could not be found. Please upload again.';
     }
-    if (rawError?.startsWith('invalid_') == true && rawError?.endsWith('_request') == true) {
+    if (rawError?.startsWith('invalid_') == true &&
+        rawError?.endsWith('_request') == true) {
       return 'The request was invalid. Please try again.';
     }
     if (rawError == 'payload_too_large') {

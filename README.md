@@ -15,3 +15,13 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Local AI Workers
+
+Run Skin Care AI with the worker URL defined:
+
+```sh
+flutter run \
+  --dart-define=OPTIVUS_AI_WORKERS_MODE=worker \
+  --dart-define=OPTIVUS_SKIN_CARE_WORKER_URL=<skin-care-worker-url>
+```

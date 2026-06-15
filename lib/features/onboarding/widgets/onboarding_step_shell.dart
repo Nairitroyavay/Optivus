@@ -35,6 +35,7 @@ class _LiquidGlassOnboardingIndicatorState
     if (width < 400) return 8.0;
     return 11.0;
   }
+
   static const double _pillH = 12.0;
   static const double _pillW = 18.0;
   static const double _padH = 9.0;
@@ -388,11 +389,11 @@ class OnboardingStepShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset: false,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -505,7 +506,14 @@ class OnboardingStepShell extends StatelessWidget {
                               ),
                             ),
                     ),
-                    Expanded(child: child),
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          bottom: MediaQuery.viewInsetsOf(context).bottom,
+                        ),
+                        child: child,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -514,46 +522,51 @@ class OnboardingStepShell extends StatelessWidget {
               left: 0,
               right: 0,
               bottom: 0,
-              child: AnimatedPadding(
+              child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                padding: EdgeInsets.only(bottom: viewInsets.bottom),
-                child: SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 14),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        LiquidBlobButton(
-                          label: ctaLabel,
-                          onPressed: onNext,
-                          isLoading: ctaLoading,
-                          enabled: ctaEnabled,
-                          fullWidth: true,
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeOutCubic,
+                child: keyboardOpen
+                    ? const SizedBox.shrink(
+                        key: ValueKey('onboarding-cta-hidden-for-keyboard'),
+                      )
+                    : SafeArea(
+                        key: const ValueKey('onboarding-cta-visible'),
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 14),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              LiquidBlobButton(
+                                label: ctaLabel,
+                                onPressed: onNext,
+                                isLoading: ctaLoading,
+                                enabled: ctaEnabled,
+                                fullWidth: true,
+                              ),
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOutCubic,
+                                child: currentPage == 0
+                                    ? const Padding(
+                                        padding: EdgeInsets.only(top: 12),
+                                        child: Text(
+                                          'By continuing, you agree to our Terms & Policy',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: Color(0xFF6F737C),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ],
+                          ),
                         ),
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
-                          child: currentPage == 0
-                              ? const Padding(
-                                  padding: EdgeInsets.only(top: 12),
-                                  child: Text(
-                                    'By continuing, you agree to our Terms & Policy',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: Color(0xFF6F737C),
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                      ),
               ),
             ),
           ],

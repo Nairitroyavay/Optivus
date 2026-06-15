@@ -247,7 +247,7 @@ Main Problem: ${body.mainProblem || "none"}
 Budget: ${body.budget || "medium"}
 Routine Preference: ${body.routinePreference || "balanced"}
 Products Owned (from photo): ${JSON.stringify(body.productsFromPhoto || [])}
-Typed Products: ${body.typedProductNames || "none"}
+Typed Products: ${JSON.stringify(body.typedProductNames || [])}
 Include safety warnings. E.g. avoid Retinol + AHA/BHA at the same time, sunscreen in morning.
 If a face photo is provided, use it to personalize the routine and suggested products.
 
