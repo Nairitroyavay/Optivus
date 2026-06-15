@@ -1548,8 +1548,44 @@ class BaseTimelineDraft {
   }
 
   String? validateFixedSchedule() {
-    if (!_hasSleepBlock(blocks)) return 'Set sleep and wake time.';
-    if (!_hasBathBlock(blocks)) return 'Set bath time.';
+    final fixedBlocks = blocks.where((b) => b.section == 'fixed').toList();
+    final sleep = blocks.where((b) => b.id == BaseTimelineDraft.fixedSleepId).toList();
+    final bath = blocks.where((b) => b.id == BaseTimelineDraft.fixedBathId).toList();
+
+    if (sleep.isEmpty) return 'Set sleep time.';
+    if (bath.isEmpty) return 'Set bath time.';
+
+    final sleepBlock = sleep.first;
+    if (sleepBlock.startMinute == sleepBlock.endMinute) {
+      return 'Sleep and wake time cannot be the same.';
+    }
+
+    final bathBlock = bath.first;
+    if (bathBlock.endMinute <= bathBlock.startMinute) {
+      return 'Bath end time must be after bath start time.';
+    }
+
+    if (sleepBlock.section != 'fixed' || bathBlock.section != 'fixed') {
+      return 'Fixed blocks must be in the fixed section.';
+    }
+
+    for (final fixedBlock in fixedBlocks) {
+      if (fixedBlock.id != BaseTimelineDraft.fixedSleepId && fixedBlock.id != BaseTimelineDraft.fixedBathId) {
+        if (fixedBlock.title.trim().isEmpty) {
+          return 'Fixed block name is required.';
+        }
+        if (fixedBlock.endMinute <= fixedBlock.startMinute) {
+          return 'End time must be after start time.';
+        }
+      }
+      if (fixedBlock.blockType != TimelineBlockDraft.hardBlockKey) {
+        return 'Fixed blocks must be non-negotiable.';
+      }
+      final repeatsEveryDay = fixedBlock.repeatDays.toSet().containsAll(const [1, 2, 3, 4, 5, 6, 7]) && fixedBlock.repeatDays.length == 7;
+      if (!repeatsEveryDay) {
+        return 'Fixed blocks must repeat every day.';
+      }
+    }
     return null;
   }
 

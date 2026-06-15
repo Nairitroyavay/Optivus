@@ -70,18 +70,45 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       final base = draft.baseTimeline;
       final existingBlocks = base.blocks.where((b) => b.section != 'fixed').toList();
       
-      final fixedBlocks = blocks.map((b) => TimelineBlockDraft(
-        id: b.id,
-        section: 'fixed',
-        title: b.subject,
-        startMinute: b.startMinute,
-        endMinute: b.endMinute,
-        repeatDays: b.repeatDays,
-        location: b.room,
-        blockType: TimelineBlockDraft.hardBlockKey,
-        source: OnboardingDraft.sourceOnboarding,
-        crossesMidnight: b.endMinute <= b.startMinute,
-      )).toList();
+      final fixedBlocks = blocks.map((b) {
+        if (b.id == BaseTimelineDraft.fixedSleepId) {
+          return TimelineBlockDraft(
+            id: b.id,
+            section: 'fixed',
+            title: 'Sleep',
+            startMinute: b.startMinute,
+            endMinute: b.endMinute,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.hardBlockKey,
+            source: OnboardingDraft.sourceOnboarding,
+            crossesMidnight: b.endMinute < b.startMinute,
+          );
+        } else if (b.id == BaseTimelineDraft.fixedBathId) {
+          return TimelineBlockDraft(
+            id: b.id,
+            section: 'fixed',
+            title: 'Bath',
+            startMinute: b.startMinute,
+            endMinute: b.endMinute,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.hardBlockKey,
+            source: OnboardingDraft.sourceOnboarding,
+            crossesMidnight: false,
+          );
+        }
+        return TimelineBlockDraft(
+          id: b.id,
+          section: 'fixed',
+          title: b.subject,
+          startMinute: b.startMinute,
+          endMinute: b.endMinute,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          location: b.room,
+          blockType: TimelineBlockDraft.hardBlockKey,
+          source: OnboardingDraft.sourceOnboarding,
+          crossesMidnight: false,
+        );
+      }).toList();
 
       existingBlocks.addAll(fixedBlocks);
       
@@ -491,9 +518,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
     _showEditDialog(
       ClassRoutineBlock(
         id: 'fixed_${DateTime.now().millisecondsSinceEpoch}',
-        subject: '',
-        startMinute: 9 * 60,
-        endMinute: 10 * 60,
+        subject: 'Fixed Block',
+        startMinute: 20 * 60,
+        endMinute: 20 * 60 + 30,
         repeatDays: const [1, 2, 3, 4, 5, 6, 7],
       ),
       isNew: true,
@@ -553,7 +580,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isNew ? 'Add Fixed Block' : 'Edit ${item.subject}',
+                              isNew ? 'Add fixed block' : (isSleep ? 'Edit Sleep' : (isBath ? 'Edit Bath' : 'Edit fixed block')),
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w900,
@@ -591,7 +618,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                               controller: subjectCtrl,
                               enabled: !isMandatory,
                               decoration: InputDecoration(
-                                labelText: 'Block Name',
+                                labelText: 'Fixed block name',
                                 filled: true,
                                 fillColor: Colors.white,
                                 border: OutlineInputBorder(
@@ -599,7 +626,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                   borderSide: BorderSide.none,
                                 ),
                               ),
-                              validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                              validator: (v) => v == null || v.trim().isEmpty ? 'Fixed block name is required.' : null,
                             ),
                             const SizedBox(height: 12),
                             Row(
@@ -609,7 +636,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     key: const ValueKey('start_time_input'),
                                     controller: startTimeCtrl,
                                     decoration: InputDecoration(
-                                      labelText: isSleep ? 'Sleep Time' : 'Start Time',
+                                      labelText: isSleep ? 'Sleep time' : (isBath ? 'Bath start' : 'Start time'),
                                       filled: true,
                                       fillColor: Colors.white,
                                       border: OutlineInputBorder(
@@ -626,7 +653,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     key: const ValueKey('end_time_input'),
                                     controller: endTimeCtrl,
                                     decoration: InputDecoration(
-                                      labelText: isSleep ? 'Wake Time' : 'End Time',
+                                      labelText: isSleep ? 'Wake time' : (isBath ? 'Bath end' : 'End time'),
                                       filled: true,
                                       fillColor: Colors.white,
                                       border: OutlineInputBorder(
@@ -664,11 +691,15 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     
                                     String? error;
                                     if (subject.isEmpty) {
-                                      error = 'Title is required.';
+                                      error = 'Fixed block name is required.';
                                     } else if (parsedStart == null) {
                                       error = 'Invalid start time.';
                                     } else if (parsedEnd == null) {
                                       error = 'Invalid end time.';
+                                    } else if (isSleep && parsedStart == parsedEnd) {
+                                      error = 'Sleep and wake time cannot be the same.';
+                                    } else if (isBath && parsedEnd <= parsedStart) {
+                                      error = 'Bath end time must be after bath start time.';
                                     } else if (!isSleep && parsedEnd <= parsedStart) {
                                       error = 'End time must be after start time.';
                                     } else if (!isSleep && parsedEnd - parsedStart > 12 * 60) {
@@ -681,9 +712,10 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     }
 
                                     final updated = item.copyWith(
-                                      subject: subject,
+                                      subject: isSleep ? 'Sleep' : (isBath ? 'Bath' : subject),
                                       startMinute: parsedStart,
                                       endMinute: parsedEnd,
+                                      repeatDays: const [1, 2, 3, 4, 5, 6, 7],
                                     );
 
                                     final draft = ref.read(mockOnboardingProvider).draft;
