@@ -6,6 +6,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/services/skin_care_ai_client.dart';
 
 void main() {
   Widget buildTestWidget({
@@ -19,6 +20,7 @@ void main() {
           notifier.loadSeedData(draft);
           return notifier;
         }),
+        skinCareAiClientProvider.overrideWithValue(const FakeSkinCareAiClient()),
       ],
       child: MaterialApp(
         home: Scaffold(
@@ -126,22 +128,9 @@ void main() {
           .draft
           .baseTimeline
           .skinCareSetupStep,
-      0,
-    );
-    expect(find.text('Build skin routine'), findsNothing);
-
-    await tester.tap(find.text('Next Step'));
-    await tester.pump(const Duration(seconds: 1));
-
-    expect(find.text('Build skin routine'), findsOneWidget);
-    expect(
-      container
-          .read(mockOnboardingProvider)
-          .draft
-          .baseTimeline
-          .skinCareSetupStep,
       1,
     );
+    expect(find.text('Build skin routine'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('onboarding-step7-back')));
     await tester.pump(const Duration(seconds: 1));
@@ -193,9 +182,6 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.text('Next Step'));
-    await tester.pump(const Duration(seconds: 1));
-
     expect(find.text('Skin care will be skipped for now.'), findsOneWidget);
     container = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingFlow)),
@@ -218,13 +204,14 @@ void main() {
   });
 
   testWidgets('Test 8: build routine from products', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
     await tester.pumpWidget(buildTestWidget(pumpFlow: true));
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('I have products'));
-    await tester.pump(const Duration(seconds: 1));
-
-    await tester.tap(find.text('Next Step'));
     await tester.pump(const Duration(seconds: 1));
 
     await tester.enterText(
@@ -236,15 +223,15 @@ void main() {
 
     final btnFinder = find.text('Build skin routine');
     await tester.ensureVisible(btnFinder);
-    await tester.pump(const Duration(seconds: 1));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(btnFinder);
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('Morning skin care'), findsOneWidget);
     expect(find.text('Night skin care'), findsOneWidget);
-    var container = ProviderScope.containerOf(
-      tester.element(find.byType(OnboardingFlow)),
-    );
+
     expect(
       container
           .read(mockOnboardingProvider)
@@ -264,26 +251,29 @@ void main() {
   });
 
   testWidgets('Test 9: build routine from skin details', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
     await tester.pumpWidget(buildTestWidget(pumpFlow: true));
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Build routine for me'));
     await tester.pump(const Duration(seconds: 1));
 
-    await tester.tap(find.text('Next Step'));
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Combination'));
     await tester.tap(find.text('Acne'));
     await tester.ensureVisible(find.text('Medium'));
     await tester.tap(find.text('Medium'));
-    await tester.ensureVisible(find.text('Minimal'));
-    await tester.tap(find.text('Minimal'));
     await tester.pump(const Duration(seconds: 1));
 
     final btnFinder = find.text('Build skin routine');
     await tester.ensureVisible(btnFinder);
-    await tester.pump(const Duration(seconds: 1));
+    for (int i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await tester.tap(btnFinder);
     await tester.pump(const Duration(seconds: 1));
 
@@ -316,13 +306,9 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Next Step'));
-    await tester.pump(const Duration(seconds: 1));
-
-    await tester.tap(find.text('Next Step'));
     await tester.pump(const Duration(seconds: 2));
 
-    expect(find.text('Build routine for me'), findsOneWidget);
-    expect(find.text('Build skin care routine or skip.'), findsOneWidget);
+    expect(find.text('Generate a routine before moving to the next step.'), findsOneWidget);
   });
 
   testWidgets('Test 11: data safety', (tester) async {
@@ -373,9 +359,6 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Skip'));
-    await tester.pump(const Duration(seconds: 1));
-
-    await tester.tap(find.text('Next Step'));
     await tester.pump(const Duration(seconds: 1));
 
     await tester.tap(find.text('Next Step'));

@@ -33,6 +33,7 @@ class SkinCareAiRoutineResult {
   final List<dynamic> nightRoutine;
   final List<dynamic> weeklyRoutine;
   final List<dynamic> timelineBlocks;
+  final List<String> suggestedProducts;
   final List<String> warnings;
   final String? errorMessage;
   
@@ -43,6 +44,7 @@ class SkinCareAiRoutineResult {
     required this.nightRoutine,
     required this.weeklyRoutine,
     required this.timelineBlocks,
+    this.suggestedProducts = const [],
     this.warnings = const [],
     this.errorMessage,
   });
@@ -53,6 +55,7 @@ class SkinCareAiRoutineResult {
       nightRoutine: [],
       weeklyRoutine: [],
       timelineBlocks: [],
+      suggestedProducts: [],
       errorMessage: msg,
     );
   }
@@ -107,7 +110,29 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
       morningRoutine: ["Fake Cleanser", "Sunscreen"],
       nightRoutine: ["Fake Cleanser", "Moisturizer"],
       weeklyRoutine: [],
-      timelineBlocks: [],
+      timelineBlocks: const [
+        <String, dynamic>{
+          "id": "skincare-1",
+          "section": "skin_care",
+          "title": "Morning skin care",
+          "startMinute": 420,
+          "endMinute": 435,
+          "blockType": "soft_block",
+          "repeatDays": <int>[1, 2, 3, 4, 5, 6, 7],
+          "skincareProducts": <String>["Fake Cleanser", "Sunscreen"]
+        },
+        <String, dynamic>{
+          "id": "skincare-2",
+          "section": "skin_care",
+          "title": "Night skin care",
+          "startMinute": 1320,
+          "endMinute": 1335,
+          "blockType": "soft_block",
+          "repeatDays": <int>[1, 2, 3, 4, 5, 6, 7],
+          "skincareProducts": <String>["Fake Cleanser", "Moisturizer"]
+        }
+      ],
+      suggestedProducts: ["Suggested Cleanser", "Suggested Moisturizer"],
       warnings: [],
     );
   }
@@ -192,6 +217,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       final nR = body['nightRoutine'];
       final wR = body['weeklyRoutine'];
       final tB = body['timelineBlocks'];
+      final sP = body['suggestedProducts'];
       final warnings = body['warnings'];
 
       return SkinCareAiRoutineResult(
@@ -199,6 +225,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
         nightRoutine: nR is List ? nR : [],
         weeklyRoutine: wR is List ? wR : [],
         timelineBlocks: tB is List ? tB : [],
+        suggestedProducts: sP is List ? sP.map((e) => e.toString()).toList() : [],
         warnings: warnings is List ? warnings.map((e) => e.toString()).toList() : [],
       );
     } catch (_) {

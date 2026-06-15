@@ -1,4 +1,6 @@
-import 'dart:io';
+import sys
+
+content = """import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,11 +9,10 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
-import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
-import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
+import 'package:optivus/features/onboarding/steps/ai_thinking_card.dart';
 
 class OnboardingStep7 extends ConsumerWidget {
   const OnboardingStep7({super.key});
@@ -304,14 +305,9 @@ class _HasProductsModeScreenState extends ConsumerState<_HasProductsModeScreen> 
       _uploadError = null;
     });
     try {
-      final uid = ref.read(authProvider).user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
       await ref
           .read(uploadControllerProvider.notifier)
-          .startUpload(
-            uid: uid,
-            sourceFeature: OnboardingDraft.sourceOnboarding,
-            purpose: UploadedAssetPurpose.skinCare,
-          );
+          .startUpload(purpose: UploadedAssetPurpose.skinCareProducts);
     } catch (_) {}
 
     final uploadState = ref.read(uploadControllerProvider);
@@ -339,9 +335,9 @@ class _HasProductsModeScreenState extends ConsumerState<_HasProductsModeScreen> 
     });
 
     try {
-      final user = ref.read(authProvider).user;
-      final idToken = await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-      final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+      final user = ref.read(firebaseUserProvider).value;
+      final idToken = await user?.getIdToken() ?? '';
+      final uid = user?.uid ?? 'test-uid';
       final client = ref.read(skinCareAiClientProvider);
 
       List<String> photoProducts = [];
@@ -349,10 +345,10 @@ class _HasProductsModeScreenState extends ConsumerState<_HasProductsModeScreen> 
         final analysis = await client.analyzeProducts(
           uid: uid,
           idToken: idToken,
-          productPhotos: [_uploadedAsset!.r2Key!],
+          assetKey: _uploadedAsset!.r2Key!,
         );
-        if (!analysis.hasError && analysis.products.isNotEmpty) {
-          photoProducts = analysis.products.cast<String>();
+        if (!analysis.hasError && analysis.detectedProducts != null) {
+          photoProducts = analysis.detectedProducts!.cast<String>();
         }
       }
 
@@ -377,14 +373,9 @@ class _HasProductsModeScreenState extends ConsumerState<_HasProductsModeScreen> 
         return;
       }
 
-      final List<TimelineBlockDraft> newBlocks = result.timelineBlocks
-          .map((b) => TimelineBlockDraft.fromMap(b as Map<String, dynamic>))
-          .toList();
+      final newBlocks = result.timelineBlocks.map((b) => TimelineBlockDraft.fromJson(b)).toList();
       updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-        final List<TimelineBlockDraft> nextBlocks = base.blocks
-            .where((b) => b.section != 'skin_care')
-            .toList()
-          ..addAll(newBlocks);
+        final nextBlocks = base.blocks.where((b) => b.section != 'skin_care').toList()..addAll(newBlocks);
         return base.copyWith(
           blocks: nextBlocks,
           skinCareProductNames: _controller.text,
@@ -395,8 +386,7 @@ class _HasProductsModeScreenState extends ConsumerState<_HasProductsModeScreen> 
       setState(() {
         _generating = false;
       });
-    } catch (e, st) {
-      debugPrint('Error generating routine (Products): $e\n$st');
+    } catch (e) {
       setState(() {
         _generating = false;
         _generationError = 'Something went wrong. Please try again.';
@@ -475,12 +465,7 @@ class _HasProductsModeScreenState extends ConsumerState<_HasProductsModeScreen> 
         ],
         const SizedBox(height: 12),
         if (_generating)
-          AiThinkingCard(
-            title: 'Skin Care',
-            detail: 'Building routine...',
-            accent: OptivusColors.roseAccent,
-            isActive: true,
-          )
+          const AiThinkingCard(section: 'Skin Care', label: 'Building routine...')
         else if (generated)
           _SkinCareTimelineSection(
             selectedDay: _selectedDay,
@@ -518,14 +503,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   Future<void> _startUpload() async {
     setState(() => _uploadError = null);
     try {
-      final uid = ref.read(authProvider).user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
       await ref
           .read(uploadControllerProvider.notifier)
-          .startUpload(
-            uid: uid,
-            sourceFeature: OnboardingDraft.sourceOnboarding,
-            purpose: UploadedAssetPurpose.skinCare,
-          );
+          .startUpload(purpose: UploadedAssetPurpose.skinCareProducts);
     } catch (_) {}
 
     final uploadState = ref.read(uploadControllerProvider);
@@ -551,9 +531,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     });
 
     try {
-      final user = ref.read(authProvider).user;
-      final idToken = await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-      final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+      final user = ref.read(firebaseUserProvider).value;
+      final idToken = await user?.getIdToken() ?? '';
+      final uid = user?.uid ?? 'test-uid';
       final client = ref.read(skinCareAiClientProvider);
 
       final result = await client.generateRoutine(
@@ -576,14 +556,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         return;
       }
 
-      final List<TimelineBlockDraft> newBlocks = result.timelineBlocks
-          .map((b) => TimelineBlockDraft.fromMap(b as Map<String, dynamic>))
-          .toList();
+      final newBlocks = result.timelineBlocks.map((b) => TimelineBlockDraft.fromJson(b)).toList();
       updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-        final List<TimelineBlockDraft> nextBlocks = base.blocks
-            .where((b) => b.section != 'skin_care')
-            .toList()
-          ..addAll(newBlocks);
+        final nextBlocks = base.blocks.where((b) => b.section != 'skin_care').toList()..addAll(newBlocks);
         return base.copyWith(
           blocks: nextBlocks,
           skinCareSkipped: false,
@@ -809,12 +784,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         ],
         const SizedBox(height: 12),
         if (_generating)
-          AiThinkingCard(
-            title: 'Skin Care',
-            detail: 'Building routine...',
-            accent: OptivusColors.purpleAccent,
-            isActive: true,
-          )
+          const AiThinkingCard(section: 'Skin Care', label: 'Building routine...')
         else if (generated)
           Expanded(
             child: Column(
@@ -1006,12 +976,7 @@ class _SkinCareTimelineSection extends StatelessWidget {
           Expanded(
             child: dayBlocks.isEmpty
                 ? _SkinCareTimelineEmptyCard(label: emptyLabel)
-                : OnboardingMiniBlockList(
-                    title: 'Skin care routine',
-                    blocks: dayBlocks,
-                    accent: accent,
-                    emptyLabel: emptyLabel,
-                  ),
+                : OnboardingBaseTimeline(blocks: dayBlocks),
           ),
         ],
       ),
@@ -1187,3 +1152,7 @@ class _SkinOption {
 
   const _SkinOption(this.key, this.label);
 }
+"""
+
+with open("/Users/roy/optivus2/Optivus/lib/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart", "w") as f:
+    f.write(content)

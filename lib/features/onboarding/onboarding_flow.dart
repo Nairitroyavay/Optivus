@@ -820,21 +820,20 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   Future<bool> _nextSkinCare(OnboardingDraft draft) async {
     final base = draft.baseTimeline;
-
-    if (base.skinCareSetupStep == 0) {
-      if (base.skinCareSetupPath == null && !base.skinCareSkipped) {
-        _setInternalValidation('Choose skin care setup or skip.');
-        return true;
-      }
-
-      _updateBaseTimelineStage(
-        onboardingSkinCareStepIndex,
-        (base) => base.copyWith(skinCareSetupStep: 1),
-      );
+    if (base.skinCareSkipped) return false;
+    
+    if (base.skinCareSetupPath == null) {
+      _setInternalValidation('Choose skin care setup or skip.');
       return true;
     }
 
-    return false;
+    final blocks = base.confirmedBlocksForSection('skin_care');
+    if (blocks.isNotEmpty) return false;
+    
+    _setInternalValidation(
+      'Generate a routine before moving to the next step.',
+    );
+    return true;
   }
 
   void _setInternalValidation(String message) {

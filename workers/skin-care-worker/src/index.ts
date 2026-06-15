@@ -218,23 +218,49 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
 
-  const prompt = `You are an expert dermatologist. Generate a skin-care routine.
-Skin Goal: ${body.skinGoal || "maintenance"}
-Skin Type: ${body.skinType || "unknown"}
-Routine Preference: ${body.routinePreference || "balanced"}
-Time Preference: ${body.timePreference || "morning + night"}
-Products Owned: ${JSON.stringify(body.productsFromPhoto || [])}
-Include safety warnings. E.g. avoid Retinol + AHA/BHA at the same time, sunscreen in morning.
+  const imageParts: any[] = [];
+  
+  if (body.facePhotoR2Key && typeof body.facePhotoR2Key === "string") {
+    try {
+      assertOwnedSkinCareObjectKey(user.uid, body.facePhotoR2Key);
+      const object = await env.UPLOAD_BUCKET.get(body.facePhotoR2Key);
+      if (object) {
+        const buffer = await object.arrayBuffer();
+        if (buffer.byteLength <= 15 * 1024 * 1024) {
+          const contentType = object.httpMetadata?.contentType || "image/jpeg";
+          imageParts.push({
+            inlineData: {
+              mimeType: contentType,
+              data: arrayBufferToBase64(buffer)
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("[SkinCareWorker] Failed to load face photo:", err);
+    }
+  }
 
-Return ONLY a strict JSON object:
+  const prompt = `You are an expert dermatologist. Generate a skin-care routine.
+Skin Type: ${body.skinType || "unknown"}
+Main Problem: ${body.mainProblem || "none"}
+Budget: ${body.budget || "medium"}
+Routine Preference: ${body.routinePreference || "balanced"}
+Products Owned (from photo): ${JSON.stringify(body.productsFromPhoto || [])}
+Typed Products: ${body.typedProductNames || "none"}
+Include safety warnings. E.g. avoid Retinol + AHA/BHA at the same time, sunscreen in morning.
+If a face photo is provided, use it to personalize the routine and suggested products.
+
+Return ONLY a strict JSON object. MUST ALWAYS include timelineBlocks when successful:
 {
   "morningRoutine": [],
   "nightRoutine": [],
   "weeklyRoutine": [],
+  "suggestedProducts": ["Product Name 1", "Product Name 2"],
   "timelineBlocks": [
     {
       "title": "Morning Skin Care",
-      "section": "skinCare",
+      "section": "skin_care",
       "startMinute": 420,
       "endMinute": 435,
       "repeatDays": [1,2,3,4,5,6,7],
@@ -260,7 +286,7 @@ Return ONLY a strict JSON object:
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
           generationConfig: { responseMimeType: "application/json" }
         })
       });
@@ -294,6 +320,7 @@ Return ONLY a strict JSON object:
     nightRoutine: parsed.nightRoutine || [],
     weeklyRoutine: parsed.weeklyRoutine || [],
     timelineBlocks: parsed.timelineBlocks || [],
+    suggestedProducts: parsed.suggestedProducts || [],
     warnings: parsed.warnings || []
   });
 }
