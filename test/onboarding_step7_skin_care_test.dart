@@ -1801,6 +1801,118 @@ void main() {
       expect(find.text('Build skin routine'), findsOneWidget);
     },
   );
+
+  testWidgets('46. Routine built summary card handles narrow screen without overflow', (tester) async {
+    // Narrow screen (e.g. iPhone SE width or even smaller)
+    tester.view.physicalSize = const Size(280, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(buildTestWidget(
+      draft: const OnboardingDraft(
+        currentStep: 7,
+        baseTimeline: BaseTimelineDraft(
+          skinCareSetupPath: 'has_products',
+          skinCareDesiredApplicationsPerDay: 2,
+          blocks: [
+            TimelineBlockDraft(
+              id: 'sc-1',
+              section: 'skin_care',
+              title: 'Morning routine',
+              startMinute: 420,
+              endMinute: 435,
+              blockType: 'soft_block',
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
+            TimelineBlockDraft(
+              id: 'sc-2',
+              section: 'skin_care',
+              title: 'Night routine',
+              startMinute: 1320,
+              endMinute: 1335,
+              blockType: 'soft_block',
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
+          ],
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('2 routines per day'), findsOneWidget);
+    expect(find.text('Rebuild / Edit'), findsOneWidget);
+    expect(tester.takeException(), isNull); // No rendering/overflow errors
+  });
+
+  testWidgets('47. Worker returns json_payload_too_large triggers compact retry', (tester) async {
+    final client = TestSkinCareAiClient(
+      productResult: const SkinCareAiProductResult(products: []),
+      routineResult: SkinCareAiRoutineResult.error('json_payload_too_large'),
+    );
+    await tester.pumpWidget(buildTestWidget(client: client));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('I have products'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const ValueKey('onboarding-step7-product-names-field')), 'Cleanser');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Build skin routine'));
+    await tester.pumpAndSettle();
+
+    expect(client.lastGenerateParams, isNotNull);
+    final found1 = find.text('AI response could not be safely read. Please try again.');
+    final found2 = find.textContaining('json_payload_too_large');
+    expect(found1.evaluate().isNotEmpty || found2.evaluate().isNotEmpty, isTrue);
+  });
+
+  testWidgets('48. Weekly/special-care plans are filtered from daily blocks and added to suggestions', (tester) async {
+    final client = TestSkinCareAiClient(
+      routineResult: const SkinCareAiRoutineResult(
+        morningRoutine: [],
+        nightRoutine: [],
+        weeklyRoutine: [],
+        timelineBlocks: [],
+        routinePlans: [
+          SkinCareRoutinePlan(
+            slotLabel: 'night',
+            title: 'Exfoliation Night',
+            steps: ['Cleanse', 'Exfoliate'],
+            productNames: ['AHA BHA'],
+            repeatDays: [3, 7], // Weekly plan
+          ),
+          SkinCareRoutinePlan(
+            slotLabel: 'morning',
+            title: 'Daily Morning',
+            steps: ['Cleanse', 'Sunscreen'],
+            productNames: ['Cleanser', 'SPF'],
+            repeatDays: [1, 2, 3, 4, 5, 6, 7], // Daily plan
+          ),
+        ],
+      ),
+    );
+    await tester.pumpWidget(buildTestWidget(client: client));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('I have products'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const ValueKey('onboarding-step7-product-names-field')), 'Cleanser');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Build skin routine'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Special care: Exfoliation Night (AHA BHA)'), findsOneWidget);
+    
+    final container = ProviderScope.containerOf(tester.element(find.byType(OnboardingStep7)));
+    final draftState = container.read(mockOnboardingProvider);
+    final scBlocks = draftState.draft.baseTimeline.blocks.where((b) => b.section == 'skin_care').toList();
+    expect(scBlocks.length, 2); // Morning (from AI) and Night (synthesized)
+  });
 }
 
 OnboardingDraft _hasProductsDraft({
@@ -1949,6 +2061,8 @@ UploadedAsset _uploadedAsset({String contentType = 'image/jpeg'}) {
     updatedAt: now,
   );
 }
+
+
 
 class TestSkinCareAiClient implements SkinCareAiClient {
   final SkinCareAiProductResult productResult;

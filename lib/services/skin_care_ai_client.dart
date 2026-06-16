@@ -149,6 +149,40 @@ class SkinCareDetectedProduct {
     'warningIfAny': warningIfAny,
     'confidence': confidence,
   };
+
+  Map<String, dynamic> toCompactRoutinePayload() {
+    final map = <String, dynamic>{};
+    if (name.isNotEmpty) map['name'] = _truncate(name, 50);
+    if (brand.isNotEmpty) map['brand'] = _truncate(brand, 50);
+    if (category.isNotEmpty) map['category'] = _truncate(category, 30);
+    
+    if (keyIngredients.isNotEmpty) {
+      map['keyIngredients'] = keyIngredients
+          .take(5)
+          .map((e) => _truncate(e, 30))
+          .toList(growable: false);
+    }
+    if (possibleActives.isNotEmpty) {
+      map['possibleActives'] = possibleActives
+          .take(5)
+          .map((e) => _truncate(e, 30))
+          .toList(growable: false);
+    }
+    if (usageHint.isNotEmpty) {
+      map['usageHint'] = _truncate(usageHint, 100);
+    }
+    if (warningIfAny.isNotEmpty) {
+      map['warningIfAny'] = _truncate(warningIfAny, 100);
+    }
+    if (confidence.isNotEmpty) map['confidence'] = confidence;
+
+    return map;
+  }
+
+  static String _truncate(String value, int maxLength) {
+    if (value.length <= maxLength) return value;
+    return '${value.substring(0, maxLength - 3)}...';
+  }
 }
 
 class SkinCareRoutinePlan {

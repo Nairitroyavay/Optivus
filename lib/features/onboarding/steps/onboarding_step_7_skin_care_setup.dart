@@ -11,6 +11,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/state/app_state.dart';
@@ -842,7 +843,7 @@ class _HasProductsModeScreenState
         return;
       }
 
-      final result = await client.generateRoutine(
+      var result = await client.generateRoutine(
         uid: uid,
         idToken: idToken,
         params: {
@@ -858,6 +859,27 @@ class _HasProductsModeScreenState
           'routinePreference': 'balanced',
         },
       );
+
+      if (result.hasError && result.errorMessage?.contains('json_payload_too_large') == true) {
+        if (kDebugMode) debugPrint('[Onboarding7] Payload too large, retrying with compact payload...');
+        result = await client.generateRoutine(
+          uid: uid,
+          idToken: idToken,
+          params: {
+            'productsFromPhoto': photoProductDetails
+                .map((product) => product.toCompactRoutinePayload())
+                .toList(),
+            'photoProductNames': photoProductNames,
+            'typedProductNames': typedProductNames,
+            'desiredApplicationsPerDay': desiredApplicationsPerDay,
+            'skinType': 'unknown',
+            'mainProblem': 'none',
+            'budget': 'medium',
+            'routinePreference': 'balanced',
+          },
+        );
+      }
+
       if (kDebugMode) {
         debugPrint(
           '[Onboarding7] routine-generate status='
@@ -883,9 +905,19 @@ class _HasProductsModeScreenState
         return;
       }
 
+      final dailyPlans = <SkinCareRoutinePlan>[];
+      final specialPlans = <SkinCareRoutinePlan>[];
+      for (final p in routinePlans) {
+        if (p.repeatDays.isNotEmpty && p.repeatDays.length < 7) {
+          specialPlans.add(p);
+        } else {
+          dailyPlans.add(p);
+        }
+      }
+
       final schedule = onboarding7ScheduleSkinCareRoutine(
         baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
-        routinePlans: routinePlans,
+        routinePlans: dailyPlans,
         desiredApplicationsPerDay: desiredApplicationsPerDay,
         fallbackProductNames: allProductNames,
         fallbackProductDetails: photoProductDetails,
@@ -914,9 +946,16 @@ class _HasProductsModeScreenState
         );
       });
 
+      final combinedSuggestions = [
+        ...result.suggestedProducts,
+        for (final p in specialPlans)
+          'Special care: ${p.title.trim().isNotEmpty ? p.title : p.slotLabel} (${p.productNames.join(', ')})',
+      ];
+
       if (!mounted) return;
       setState(() {
         _generating = false;
+        _suggestedProducts = combinedSuggestions;
       });
     } catch (e, st) {
       debugPrint('Error generating routine (Products): $e\n$st');
@@ -2101,7 +2140,7 @@ class _SkinCareTimelineSection extends ConsumerWidget {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 7),
-          _SkinCareDayChips(
+          OnboardingDayChips(
             selectedDay: selectedDay,
             onChanged: onDayChanged,
             accent: accent,
@@ -2109,7 +2148,7 @@ class _SkinCareTimelineSection extends ConsumerWidget {
           const SizedBox(height: 8),
           Expanded(
             child: dayBlocks.isEmpty
-                ? _SkinCareTimelineEmptyCard(label: emptyLabel)
+                ? OnboardingTimelineEmptyCard(label: emptyLabel)
                 : _SkinCareVerticalTimeline(
                     blocks: dayBlocks,
                     accent: accent,
@@ -2127,179 +2166,7 @@ class _SkinCareTimelineSection extends ConsumerWidget {
   }
 }
 
-class _SkinCareDayChips extends StatelessWidget {
-  final int selectedDay;
-  final ValueChanged<int> onChanged;
-  final Color accent;
 
-  const _SkinCareDayChips({
-    required this.selectedDay,
-    required this.onChanged,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(7, (index) {
-            final dayName = [
-              'MON',
-              'TUE',
-              'WED',
-              'THU',
-              'FRI',
-              'SAT',
-              'SUN',
-            ][index];
-            final dayIndex = index + 1; // 1-indexed for repeatDays
-            final isSelected = selectedDay == dayIndex;
-            return SizedBox(
-              width: 52,
-              height: 46,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onChanged(dayIndex),
-                child: _SkinCareDayChip(
-                  label: dayName,
-                  selected: isSelected,
-                  accent: accent,
-                ),
-              ),
-            );
-          }),
-        ),
-      ),
-    );
-  }
-}
-
-class _SkinCareDayChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final Color accent;
-
-  const _SkinCareDayChip({
-    required this.label,
-    required this.selected,
-    required this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final size = selected ? 42.0 : 36.0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 5),
-      child: Center(
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: (selected ? accent : Colors.black).withValues(
-                  alpha: selected ? 0.07 : 0.035,
-                ),
-                blurRadius: selected ? 5 : 7,
-                spreadRadius: 0,
-                offset: Offset(0, selected ? 2 : 3),
-              ),
-              BoxShadow(
-                color: Colors.white.withValues(alpha: selected ? 0.60 : 0.70),
-                blurRadius: selected ? 6 : 10,
-                offset: const Offset(-2, -2),
-              ),
-            ],
-          ),
-          child: ClipOval(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: selected
-                      ? accent.withValues(alpha: 0.68)
-                      : Colors.white.withValues(alpha: 0.38),
-                  border: Border.all(
-                    color: selected
-                        ? accent.withValues(alpha: 0.42)
-                        : Colors.white.withValues(alpha: 0.72),
-                    width: selected ? 1.8 : 1.2,
-                  ),
-                ),
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Positioned(
-                      top: 4,
-                      left: 9,
-                      right: 9,
-                      height: 10,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(99),
-                          color: Colors.white.withValues(alpha: 0.46),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: selected ? 12 : 10,
-                        fontWeight: FontWeight.w900,
-                        color: selected
-                            ? Colors.white
-                            : OptivusColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SkinCareTimelineEmptyCard extends StatelessWidget {
-  final String label;
-
-  const _SkinCareTimelineEmptyCard({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox.expand(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 110),
-          child: OnboardingGlassCard(
-            tint: Colors.white.withValues(alpha: 0.30),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-            radius: 20,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12.5,
-                height: 1.35,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 Future<void> _showSkinCareBlockEditSheet(
   BuildContext context,
@@ -2310,6 +2177,12 @@ Future<void> _showSkinCareBlockEditSheet(
   final titleCtrl = TextEditingController(text: block.title);
   final startTimeCtrl = TextEditingController(
     text: onboardingTimeLabel(block.startMinute),
+  );
+  final productsCtrl = TextEditingController(
+    text: block.skincareProducts.join('\n'),
+  );
+  final stepsCtrl = TextEditingController(
+    text: block.skincareSteps.join('\n'),
   );
   final selectedDays = <int>{
     ...block.repeatDays.where((day) => day >= 1 && day <= 7),
@@ -2334,6 +2207,17 @@ Future<void> _showSkinCareBlockEditSheet(
               final parsedStart = _parseClockMinute(startTimeCtrl.text);
               final title = titleCtrl.text.trim();
               final repeatDays = selectedDays.toList()..sort();
+              final parsedProducts = productsCtrl.text
+                  .split('\n')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+              final parsedSteps = stepsCtrl.text
+                  .split('\n')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+
               if (title.isEmpty) {
                 setError('Routine title is required.');
                 return null;
@@ -2355,6 +2239,8 @@ Future<void> _showSkinCareBlockEditSheet(
                 startMinute: parsedStart,
                 endMinute: parsedStart + onboarding7SkinCareDurationMinutes,
                 repeatDays: repeatDays,
+                skincareProducts: parsedProducts,
+                skincareSteps: parsedSteps,
               );
             }
 
@@ -2543,6 +2429,42 @@ Future<void> _showSkinCareBlockEditSheet(
                                   value == null || value.trim().isEmpty
                                   ? 'Required'
                                   : null,
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              key: const ValueKey(
+                                'onboarding-step7-edit-products-field',
+                              ),
+                              controller: productsCtrl,
+                              minLines: 2,
+                              maxLines: 4,
+                              decoration: InputDecoration(
+                                labelText: 'Products (one per line)',
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              key: const ValueKey(
+                                'onboarding-step7-edit-steps-field',
+                              ),
+                              controller: stepsCtrl,
+                              minLines: 2,
+                              maxLines: 4,
+                              decoration: InputDecoration(
+                                labelText: 'Steps (one per line)',
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 18),
                             Row(
@@ -3251,50 +3173,11 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
                           ),
 
                           ...List.generate(range.hourCount + 1, (i) {
-                            final hour = (range.startHour + i) % 24;
                             final minute = range.startMinute + i * 60;
-                            final ampm = hour < 12 ? 'AM' : 'PM';
-                            final displayHour = hour == 0
-                                ? 12
-                                : (hour > 12 ? hour - 12 : hour);
-                            final label = '$displayHour $ampm';
-                            return Positioned(
-                              top: layout.yFor(minute) - 10,
-                              left: 0,
-                              width: 56,
-                              height: 20,
-                              child: Stack(
-                                children: [
-                                  Positioned(
-                                    left: 0,
-                                    width: 42,
-                                    child: Text(
-                                      label,
-                                      textAlign: TextAlign.right,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.clip,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: OptivusColors.textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    left: 48,
-                                    top: 9,
-                                    width: 4,
-                                    height: 1.5,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: widget.accent.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            return OnboardingTimelineTick(
+                              minute: minute,
+                              top: layout.yFor(minute),
+                              accent: widget.accent,
                             );
                           }),
 

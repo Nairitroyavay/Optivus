@@ -174,6 +174,47 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+async function callGeminiWithFallback(prompt: string, imageParts: any[], env: Env): Promise<string> {
+  const provider = env.AI_PROVIDER || "gemini";
+  if (provider !== "gemini") {
+    throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
+  }
+
+  const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
+  const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
+  const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
+
+  const fetchGemini = async (model: string) => {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+        generationConfig: { responseMimeType: "application/json" }
+      })
+    });
+    if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
+    const json = await res.json() as any;
+    return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  };
+
+  try {
+    return await fetchGemini(primaryModel);
+  } catch (err) {
+    if (fallbackModel && fallbackModel !== primaryModel) {
+      console.warn(`[SkinCareWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+      try {
+        return await fetchGemini(fallbackModel);
+      } catch {
+        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+      }
+    } else {
+      throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+    }
+  }
+}
+
 async function handleProductAnalyze(request: Request, env: Env): Promise<Response> {
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
@@ -184,15 +225,6 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
   if (body.productPhotos.length > 10) {
     throw new HttpError(400, "too_many_photos", "Upload your main 10 products first. You can add more later.");
   }
-
-  const provider = env.AI_PROVIDER || "gemini";
-  if (provider !== "gemini") {
-    throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported for vision.");
-  }
-
-  const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-  const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
-  const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
 
   const imageParts: any[] = [];
   
@@ -239,36 +271,7 @@ Return a JSON object:
   "warnings": []
 }`;
 
-  const fetchGemini = async (model: string) => {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-        generationConfig: { responseMimeType: "application/json" }
-      })
-    });
-    if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
-    const json = await res.json() as any;
-    return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-  };
-
-  let text = "";
-  try {
-    text = await fetchGemini(primaryModel);
-  } catch (err) {
-    if (fallbackModel && fallbackModel !== primaryModel) {
-      console.warn(`[SkinCareWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
-      try {
-        text = await fetchGemini(fallbackModel);
-      } catch {
-        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
-      }
-    } else {
-      throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
-    }
-  }
+  const text = await callGeminiWithFallback(prompt, imageParts, env);
   
   const parsed = parseAiJsonText(text);
   if (!parsed) {
@@ -368,46 +371,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   "warnings": []
 }`;
 
-  const provider = env.AI_PROVIDER || "gemini";
-  let text = "";
-
-  if (provider === "gemini") {
-    const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-    const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
-    const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
-
-    const fetchGemini = async (model: string) => {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
-      if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
-      const json = await res.json() as any;
-      return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-    };
-
-    try {
-      text = await fetchGemini(primaryModel);
-    } catch (err) {
-      if (fallbackModel && fallbackModel !== primaryModel) {
-        console.warn(`[SkinCareWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
-        try {
-          text = await fetchGemini(fallbackModel);
-        } catch {
-          throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
-        }
-      } else {
-        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
-      }
-    }
-  } else {
-    throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
-  }
+  const text = await callGeminiWithFallback(prompt, imageParts, env);
 
   const parsed = parseAiJsonText(text);
   if (!parsed) {

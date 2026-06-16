@@ -846,7 +846,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       );
       if (hasFullDailyRoutine) return false;
       _setInternalValidation(
-        'Generate your full daily skin-care routine first.',
+        'Build your routine first. You need $desired skin-care blocks each day.',
       );
       return true;
     }

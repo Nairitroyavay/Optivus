@@ -10,6 +10,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -1414,414 +1415,20 @@ class _EatingTimelineSection extends StatelessWidget {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 7),
-          _EatingDayChips(selectedDay: selectedDay, onChanged: onDayChanged),
+          OnboardingDayChips(selectedDay: selectedDay, onChanged: onDayChanged),
           const SizedBox(height: 8),
           Expanded(
             child: dayBlocks.isEmpty
-                ? _EatingTimelineEmptyCard(label: emptyLabel)
-                : _EatingVerticalTimeline(blocks: dayBlocks),
+                ? OnboardingTimelineEmptyCard(label: emptyLabel)
+                : OnboardingVerticalTimeline(
+                    blocks: dayBlocks,
+                    blockBuilder: (context, block) => _EatingTimelineBlock(block: block),
+                  ),
           ),
         ],
       ),
     );
-  }
-}
-
-class StretchedSegment {
-  final int startMinute;
-  final int endMinute;
-  final double extraStretch;
-
-  const StretchedSegment({
-    required this.startMinute,
-    required this.endMinute,
-    required this.extraStretch,
-  });
-}
-
-class EatingTimelineLayout {
-  final int startMinute;
-  final int endMinute;
-  final double pxPerMinute;
-  final double topPadding;
-  final List<StretchedSegment> mergedSegments;
-  final double totalExtraStretch;
-
-  EatingTimelineLayout({
-    required this.startMinute,
-    required int rangeMinutes,
-    required this.pxPerMinute,
-    required this.topPadding,
-    required List<StretchedSegment> segments,
-  })  : endMinute = startMinute + rangeMinutes,
-        mergedSegments = _mergeSegments(segments),
-        totalExtraStretch = _calculateTotalStretch(segments);
-
-  static List<StretchedSegment> _mergeSegments(List<StretchedSegment> segments) {
-    if (segments.isEmpty) return [];
-    final sorted = List<StretchedSegment>.from(segments)
-      ..sort((a, b) {
-        final cmp = a.startMinute.compareTo(b.startMinute);
-        if (cmp != 0) return cmp;
-        return a.endMinute.compareTo(b.endMinute);
-      });
-
-    final List<StretchedSegment> merged = [];
-    var current = sorted[0];
-
-    for (int i = 1; i < sorted.length; i++) {
-      final next = sorted[i];
-      if (next.startMinute <= current.endMinute) {
-        final newStart = current.startMinute;
-        final newEnd = math.max(current.endMinute, next.endMinute);
-        final newExtraStretch = current.extraStretch + next.extraStretch;
-        current = StretchedSegment(
-          startMinute: newStart,
-          endMinute: newEnd,
-          extraStretch: newExtraStretch,
-        );
-      } else {
-        merged.add(current);
-        current = next;
-      }
-    }
-    merged.add(current);
-    return merged;
-  }
-
-  static double _calculateTotalStretch(List<StretchedSegment> segments) {
-    final merged = _mergeSegments(segments);
-    return merged.fold<double>(0.0, (sum, seg) => sum + seg.extraStretch);
-  }
-
-  double yFor(num minute) {
-    final double m = minute.toDouble();
-    final double baseClamped = m.clamp(startMinute.toDouble(), endMinute.toDouble());
-    final double normalY = topPadding + (baseClamped - startMinute) * pxPerMinute;
-    
-    double stretch = 0.0;
-    for (final seg in mergedSegments) {
-      if (m <= seg.startMinute) {
-        continue;
-      } else if (m >= seg.endMinute) {
-        stretch += seg.extraStretch;
-      } else {
-        final double fraction = (m - seg.startMinute) / (seg.endMinute - seg.startMinute);
-        stretch += fraction * seg.extraStretch;
-      }
-    }
-    return normalY + stretch;
-  }
-}
-
-double calculateRequiredBlockHeight({
-  required BuildContext context,
-  required String title,
-  required List<String> dishes,
-  required String timeLabel,
-  required double blockWidth,
-}) {
-  final allDishes = dishes.map((d) => d.trim()).where((d) => d.isNotEmpty).toList();
-  const double titleRowHeight = 22.0;
-  const double spacingBeforeWrap = 5.0;
-  const double verticalPadding = 20.0; // SafeArea padding inside block
-
-  final List<String> labels = [timeLabel, ...allDishes];
-  // Match actual layout:
-  // block width - padding(12*2) - icon(17) - sizedBox(8) = blockWidth - 49.0
-  final double wrapWidth = math.max(50.0, blockWidth - 49.0);
-  final double wrapHeight = _calculateWrapHeight(context, labels, wrapWidth, 6.0, 5.0);
-  
-  // Padding(8*2) + title(22 approx) + spacing(5) + buffer(10)
-  final double estimatedHeight = verticalPadding + titleRowHeight + spacingBeforeWrap + wrapHeight + 10.0;
-  // Increase cap to 450 to ensure 6-dish tests pass without overflow
-  return math.min(450.0, math.max(74.0, estimatedHeight));
-}
-
-double _calculateWrapHeight(
-  BuildContext context,
-  List<String> labels,
-  double wrapWidth,
-  double spacing,
-  double runSpacing,
-) {
-  if (labels.isEmpty) return 0.0;
-  final TextScaler textScaler = MediaQuery.textScalerOf(context);
-  final TextDirection textDirection = Directionality.of(context);
-  double currentX = 0.0;
-  double currentY = 0.0;
-  double rowHeight = 0.0;
-
-  for (int i = 0; i < labels.length; i++) {
-    final label = labels[i];
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      textDirection: textDirection,
-      textScaler: textScaler,
-    )..layout(maxWidth: math.max(10.0, wrapWidth - 16.0));
-    
-    final double chipWidth = textPainter.width + 16.0;
-    final double chipHeight = textPainter.height + 8.0;
-
-    if (currentX == 0) {
-      currentX = chipWidth;
-      rowHeight = chipHeight;
-    } else {
-      if (currentX + spacing + chipWidth <= wrapWidth) {
-        currentX += spacing + chipWidth;
-        rowHeight = math.max(rowHeight, chipHeight);
-      } else {
-        currentY += rowHeight + runSpacing;
-        currentX = chipWidth;
-        rowHeight = chipHeight;
-      }
-    }
-  }
-  return currentY + rowHeight;
-}
-
-class _EatingVerticalTimeline extends StatelessWidget {
-  final List<TimelineBlockDraft> blocks;
-
-  const _EatingVerticalTimeline({required this.blocks});
-
-  @override
-  Widget build(BuildContext context) {
-    final minStart = blocks.map((block) => block.startMinute).reduce(math.min);
-    final maxEnd = blocks.map((block) => block.endMinute).reduce(math.max);
-    final startMinute = math.max(5 * 60, ((minStart - 45) ~/ 60) * 60);
-    final endMinute = math.min(24 * 60, (((maxEnd + 75) / 60).ceil()) * 60);
-    final rangeMinutes = math.max(180, endMinute - startMinute);
-    const topPadding = 18.0;
-    const bottomPadding = OnboardingStepShell.bottomCtaHeight + 40;
-    const pxPerMinute = 0.82;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final blockWidth = constraints.maxWidth - 64 - 16;
-
-        final List<StretchedSegment> segments = [];
-        for (final block in blocks) {
-          final normalHeight = (block.endMinute - block.startMinute) * pxPerMinute;
-          final requiredHeight = calculateRequiredBlockHeight(
-            context: context,
-            title: _mealTitleForDisplay(block),
-            dishes: block.dishes,
-            timeLabel: '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-            blockWidth: blockWidth,
-          );
-          if (requiredHeight > normalHeight) {
-            segments.add(StretchedSegment(
-              startMinute: block.startMinute,
-              endMinute: block.endMinute,
-              extraStretch: requiredHeight - normalHeight,
-            ));
-          }
-        }
-
-        final layout = EatingTimelineLayout(
-          startMinute: startMinute,
-          rangeMinutes: rangeMinutes,
-          pxPerMinute: pxPerMinute,
-          topPadding: topPadding,
-          segments: segments,
-        );
-
-        final timelineHeight = rangeMinutes * pxPerMinute + topPadding + bottomPadding + layout.totalExtraStretch;
-
-        return Container(
-          key: const ValueKey('onboarding-step5-timeline'),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.40),
-            border: Border(
-              top: BorderSide(
-                color: Colors.white.withValues(alpha: 0.80),
-                width: 1.5,
-              ),
-            ),
-          ),
-          child: ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Colors.transparent,
-                Colors.white,
-                Colors.white,
-                Colors.transparent,
-              ],
-              stops: [0.0, 0.045, 0.95, 1.0],
-            ).createShader(bounds),
-            blendMode: BlendMode.dstIn,
-            child: SingleChildScrollView(
-              key: const ValueKey('onboarding-step5-timeline-scroll'),
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: bottomPadding),
-              child: SizedBox(
-                height: timelineHeight,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      left: 48,
-                      width: 8,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: OptivusColors.roseAccent.withValues(alpha: 0.17),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: OptivusColors.roseAccent.withValues(alpha: 0.36),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: OptivusColors.roseAccent.withValues(
-                                alpha: 0.15,
-                              ),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    for (final minute in _mealBoundaryMinutes(
-                      blocks,
-                      startMinute,
-                      endMinute,
-                    ))
-                      _EatingMinuteIndicator(minute: minute, top: layout.yFor(minute)),
-                    for (
-                      var minute = startMinute;
-                      minute <= endMinute;
-                      minute += 60
-                    )
-                      _EatingTimelineTick(minute: minute, top: layout.yFor(minute)),
-                    for (final block in blocks)
-                      _EatingTimelineBlock(
-                        block: block,
-                        top: layout.yFor(block.startMinute),
-                        height: layout.yFor(block.endMinute) - layout.yFor(block.startMinute),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _EatingTimelineTick extends StatelessWidget {
-  final int minute;
-  final double top;
-
-  const _EatingTimelineTick({required this.minute, required this.top});
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      top: top - 10,
-      left: 0,
-      width: 56,
-      height: 20,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            width: 42,
-            child: Text(
-              _shortTimeLabel(minute),
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              overflow: TextOverflow.clip,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-          ),
-          Positioned(
-            left: 48,
-            top: 9,
-            width: 4,
-            height: 1.5,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: OptivusColors.roseAccent.withValues(alpha: 0.35),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EatingMinuteIndicator extends StatelessWidget {
-  final int minute;
-  final double top;
-
-  const _EatingMinuteIndicator({required this.minute, required this.top});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          top: top - 8,
-          left: 0,
-          width: 38,
-          height: 16,
-          child: Text(
-            _compactMinuteLabel(minute),
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              color: OptivusColors.roseAccent.withValues(alpha: 0.68),
-            ),
-          ),
-        ),
-        Positioned(
-          top: top,
-          left: 64,
-          right: 16,
-          height: 1,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: OptivusColors.roseAccent.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        ),
-        Positioned(
-          top: top,
-          left: 44,
-          width: 18,
-          height: 1.5,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: OptivusColors.roseAccent.withValues(alpha: 0.48),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  } }
 }
 
 void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
@@ -1911,13 +1518,9 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
 
 class _EatingTimelineBlock extends StatelessWidget {
   final TimelineBlockDraft block;
-  final double top;
-  final double height;
 
   const _EatingTimelineBlock({
     required this.block,
-    required this.top,
-    required this.height,
   });
 
   @override
@@ -1927,13 +1530,8 @@ class _EatingTimelineBlock extends StatelessWidget {
         .where((dish) => dish.isNotEmpty)
         .toList();
 
-    return Positioned(
-      top: top,
-      left: 64,
-      right: 16,
-      height: height,
-      child: GestureDetector(
-        onTap: () => _showEatingBlockDetails(context, block),
+    return GestureDetector(
+      onTap: () => _showEatingBlockDetails(context, block),
         behavior: HitTestBehavior.opaque,
         child: Container(
           decoration: BoxDecoration(
@@ -2063,7 +1661,7 @@ class _EatingTimelineBlock extends StatelessWidget {
                                 if (overflowed && visibleCount < labels.length) {
                                   final int toShow = math.max(1, visibleCount - 1);
                                   for (int i = 0; i < toShow; i++) {
-                                    children.add(_EatingInfoChip(labels[i]));
+                                    children.add(OnboardingInfoChip(labels[i]));
                                   }
                                   final remaining = labels.length - toShow;
                                   children.add(
@@ -2089,7 +1687,7 @@ class _EatingTimelineBlock extends StatelessWidget {
                                   );
                                 } else {
                                   for (final label in labels) {
-                                    children.add(_EatingInfoChip(label));
+                                    children.add(OnboardingInfoChip(label));
                                   }
                                 }
 
@@ -2115,169 +1713,7 @@ class _EatingTimelineBlock extends StatelessWidget {
   }
 }
 
-class _EatingInfoChip extends StatelessWidget {
-  final String label;
 
-  const _EatingInfoChip(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.5),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.60),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: OptivusColors.textBody,
-        ),
-      ),
-    );
-  }
-}
-
-class _EatingDayChips extends StatelessWidget {
-  final int selectedDay;
-  final ValueChanged<int> onChanged;
-
-  const _EatingDayChips({required this.selectedDay, required this.onChanged});
-
-  static const _labels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 42,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (var index = 0; index < _labels.length; index++)
-              SizedBox(
-                width: 50,
-                height: 42,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onChanged(index + 1),
-                  child: _EatingDayChip(
-                    label: _labels[index],
-                    selected: selectedDay == index + 1,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EatingDayChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-
-  const _EatingDayChip({required this.label, required this.selected});
-
-  @override
-  Widget build(BuildContext context) {
-    final size = selected ? 40.0 : 35.0;
-    return Center(
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutCubic,
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: (selected ? OptivusColors.roseAccent : Colors.black)
-                  .withValues(alpha: selected ? 0.07 : 0.035),
-              blurRadius: selected ? 5 : 7,
-              offset: Offset(0, selected ? 2 : 3),
-            ),
-            BoxShadow(
-              color: Colors.white.withValues(alpha: selected ? 0.60 : 0.70),
-              blurRadius: selected ? 6 : 10,
-              offset: const Offset(-2, -2),
-            ),
-          ],
-        ),
-        child: ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: selected
-                    ? OptivusColors.roseAccent.withValues(alpha: 0.68)
-                    : Colors.white.withValues(alpha: 0.38),
-                border: Border.all(
-                  color: selected
-                      ? OptivusColors.roseAccent.withValues(alpha: 0.42)
-                      : Colors.white.withValues(alpha: 0.72),
-                  width: selected ? 1.8 : 1.2,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: selected ? 12 : 10,
-                    fontWeight: FontWeight.w900,
-                    color: selected
-                        ? Colors.white
-                        : OptivusColors.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EatingTimelineEmptyCard extends StatelessWidget {
-  final String label;
-
-  const _EatingTimelineEmptyCard({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox.expand(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 110),
-          child: OnboardingGlassCard(
-            tint: Colors.white.withValues(alpha: 0.30),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
-            radius: 20,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 12.5,
-                height: 1.35,
-                fontWeight: FontWeight.w800,
-                color: OptivusColors.textSecondary,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _EatingInlineMessage extends StatelessWidget {
   final String message;

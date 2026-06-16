@@ -931,3 +931,157 @@ class _BlockRow extends StatelessWidget {
     );
   }
 }
+
+class StretchedSegment {
+  final int startMinute;
+  final int endMinute;
+  final double extraStretch;
+
+  const StretchedSegment({
+    required this.startMinute,
+    required this.endMinute,
+    required this.extraStretch,
+  });
+}
+
+class OnboardingTimelineLayout {
+  final int startMinute;
+  final int endMinute;
+  final double pxPerMinute;
+  final double topPadding;
+  final List<StretchedSegment> mergedSegments;
+  final double totalExtraStretch;
+
+  OnboardingTimelineLayout({
+    required this.startMinute,
+    required int rangeMinutes,
+    required this.pxPerMinute,
+    required this.topPadding,
+    required List<StretchedSegment> segments,
+  })  : endMinute = startMinute + rangeMinutes,
+        mergedSegments = _mergeSegments(segments),
+        totalExtraStretch = _calculateTotalStretch(segments);
+
+  static List<StretchedSegment> _mergeSegments(List<StretchedSegment> segments) {
+    if (segments.isEmpty) return [];
+    final sorted = List<StretchedSegment>.from(segments)
+      ..sort((a, b) {
+        final cmp = a.startMinute.compareTo(b.startMinute);
+        if (cmp != 0) return cmp;
+        return a.endMinute.compareTo(b.endMinute);
+      });
+
+    final List<StretchedSegment> merged = [];
+    var current = sorted[0];
+
+    for (int i = 1; i < sorted.length; i++) {
+      final next = sorted[i];
+      if (next.startMinute <= current.endMinute) {
+        final newStart = current.startMinute;
+        final newEnd = math.max(current.endMinute, next.endMinute);
+        final newExtraStretch = current.extraStretch + next.extraStretch;
+        current = StretchedSegment(
+          startMinute: newStart,
+          endMinute: newEnd,
+          extraStretch: newExtraStretch,
+        );
+      } else {
+        merged.add(current);
+        current = next;
+      }
+    }
+    merged.add(current);
+    return merged;
+  }
+
+  static double _calculateTotalStretch(List<StretchedSegment> segments) {
+    final merged = _mergeSegments(segments);
+    return merged.fold<double>(0.0, (sum, seg) => sum + seg.extraStretch);
+  }
+
+  double yFor(num minute) {
+    final double m = minute.toDouble();
+    final double baseClamped = m.clamp(startMinute.toDouble(), endMinute.toDouble());
+    final double normalY = topPadding + (baseClamped - startMinute) * pxPerMinute;
+    
+    double stretch = 0.0;
+    for (final seg in mergedSegments) {
+      if (m <= seg.startMinute) {
+        continue;
+      } else if (m >= seg.endMinute) {
+        stretch += seg.extraStretch;
+      } else {
+        final double fraction = (m - seg.startMinute) / (seg.endMinute - seg.startMinute);
+        stretch += fraction * seg.extraStretch;
+      }
+    }
+    return normalY + stretch;
+  }
+}
+
+double calculateRequiredBlockHeight({
+  required BuildContext context,
+  required double titleRowHeight,
+  required List<String> items,
+  required String timeLabel,
+  required double blockWidth,
+}) {
+  final allItems = items.map((d) => d.trim()).where((d) => d.isNotEmpty).toList();
+  const double spacingBeforeWrap = 5.0;
+  const double verticalPadding = 20.0; // SafeArea padding inside block
+
+  final List<String> labels = [timeLabel, ...allItems];
+  final double wrapWidth = math.max(50.0, blockWidth - 49.0);
+  final double wrapHeight = _calculateWrapHeight(context, labels, wrapWidth, 6.0, 5.0);
+  
+  final double estimatedHeight = verticalPadding + titleRowHeight + spacingBeforeWrap + wrapHeight + 10.0;
+  return math.min(450.0, math.max(74.0, estimatedHeight));
+}
+
+double _calculateWrapHeight(
+  BuildContext context,
+  List<String> labels,
+  double wrapWidth,
+  double spacing,
+  double runSpacing,
+) {
+  if (labels.isEmpty) return 0.0;
+  final TextScaler textScaler = MediaQuery.textScalerOf(context);
+  final TextDirection textDirection = Directionality.of(context);
+  double currentX = 0.0;
+  double currentY = 0.0;
+  double rowHeight = 0.0;
+
+  for (int i = 0; i < labels.length; i++) {
+    final label = labels[i];
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout(maxWidth: math.max(10.0, wrapWidth - 16.0));
+    
+    final double chipWidth = textPainter.width + 16.0;
+    final double chipHeight = textPainter.height + 8.0;
+
+    if (currentX == 0) {
+      currentX = chipWidth;
+      rowHeight = chipHeight;
+    } else {
+      if (currentX + spacing + chipWidth <= wrapWidth) {
+        currentX += spacing + chipWidth;
+        rowHeight = math.max(rowHeight, chipHeight);
+      } else {
+        currentY += rowHeight + runSpacing;
+        currentX = chipWidth;
+        rowHeight = chipHeight;
+      }
+    }
+  }
+  return currentY + rowHeight;
+}

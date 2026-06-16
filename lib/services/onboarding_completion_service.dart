@@ -78,8 +78,11 @@ class OnboardingCompletionService {
     if (base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true ||
         base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true ||
         base.skinCareProductPhotoStatus?.trim().isNotEmpty == true) {
-      final createdAt = base.skinCareProductPhotoCreatedAt ?? DateTime.now();
-      final updatedAt = base.skinCareProductPhotoUpdatedAt ?? createdAt;
+      final fallbackCreatedAt = draft.createdAt ?? DateTime.now();
+      final fallbackUpdatedAt = draft.updatedAt ?? fallbackCreatedAt;
+      
+      final createdAt = base.skinCareProductPhotoCreatedAt ?? fallbackCreatedAt;
+      final updatedAt = base.skinCareProductPhotoUpdatedAt ?? fallbackUpdatedAt;
       addReference(
         OnboardingUploadedAssetReference(
           id: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
