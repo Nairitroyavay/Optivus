@@ -87,10 +87,16 @@ function assertOwnedSkinCareObjectKey(uid: string, key: string): void {
   }
 }
 
-function supportedGeminiImageContentType(contentType: string | undefined): string {
+function supportedGeminiImageContentType(contentType: string | undefined, objectKey?: string): string {
   const normalized = (contentType || "").split(";")[0].trim().toLowerCase();
   if (normalized === "image/jpeg" || normalized === "image/png" || normalized === "image/webp") {
     return normalized;
+  }
+  const key = (objectKey || "").split("?")[0].toLowerCase();
+  if (!normalized) {
+    if (key.endsWith(".jpg") || key.endsWith(".jpeg")) return "image/jpeg";
+    if (key.endsWith(".png")) return "image/png";
+    if (key.endsWith(".webp")) return "image/webp";
   }
   throw new HttpError(415, "unsupported_content_type", "This photo format is not supported. Please upload JPEG, PNG, or WEBP.");
 }
@@ -143,7 +149,7 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
     if (!object) {
       throw new HttpError(404, "r2_image_missing", `Could not find uploaded image: ${photoKey}`);
     }
-    const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType);
+    const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType, photoKey);
     const buffer = await object.arrayBuffer();
     if (buffer.byteLength > 15 * 1024 * 1024) {
       throw new HttpError(413, "payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
@@ -210,7 +216,10 @@ Return a JSON object:
     }
   }
   
-  const parsed = parseAiJsonText(text) || { products: [], warnings: [] };
+  const parsed = parseAiJsonText(text);
+  if (!parsed) {
+    throw new HttpError(502, "provider_invalid_json", "AI response could not be read safely. Please try again.");
+  }
   
   if (!parsed.products || parsed.products.length === 0) {
     throw new HttpError(400, "no_products_detected", "We couldn't clearly identify any skin care products in the photos.");
@@ -237,7 +246,7 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
       assertOwnedSkinCareObjectKey(user.uid, body.facePhotoR2Key);
       const object = await env.UPLOAD_BUCKET.get(body.facePhotoR2Key);
       if (object) {
-        const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType);
+        const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType, body.facePhotoR2Key);
         const buffer = await object.arrayBuffer();
         if (buffer.byteLength > 15 * 1024 * 1024) {
           throw new HttpError(413, "payload_too_large", `Image ${body.facePhotoR2Key} exceeds 15MB limit.`);
@@ -262,9 +271,11 @@ Budget: ${body.budget || "medium"}
 Routine Preference: ${body.routinePreference || "balanced"}
 Desired Applications Per Day: ${desiredApplicationsPerDay}
 Products Owned (from photo): ${JSON.stringify(body.productsFromPhoto || [])}
+Photo Product Names (fallback/display only): ${JSON.stringify(body.photoProductNames || [])}
 Typed Products: ${JSON.stringify(body.typedProductNames || [])}
-For owned products, build the steps from the uploaded/typed products when possible.
-Include safety warnings. E.g. avoid Retinol + AHA/BHA in the same routine block, sunscreen in morning when appropriate.
+For owned products, use the structured photo metadata whenever available. Pay attention to category, keyIngredients, possibleActives, usageHint, warningIfAny, and confidence.
+Use product categories and ingredient/active metadata to identify product roles, especially sunscreen. A product may be sunscreen if category is sunscreen, name mentions UV/sun/SPF, ingredients/actives mention UV filters, or warnings/usage imply sun protection.
+Use warningIfAny and possibleActives to avoid unsafe conflicts. E.g. avoid Retinol + AHA/BHA in the same routine block, sunscreen in morning when appropriate.
 If a face photo is provided, use it to personalize the routine and suggested products.
 Return exactly ${desiredApplicationsPerDay} routinePlans unless there is a safety reason not to.
 Use slot labels from: morning, midday, afternoon, night, custom.
@@ -344,7 +355,10 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
   }
 
-  const parsed = parseAiJsonText(text) || {};
+  const parsed = parseAiJsonText(text);
+  if (!parsed) {
+    throw new HttpError(502, "provider_invalid_json", "AI response could not be read safely. Please try again.");
+  }
   const routinePlans = Array.isArray(parsed.routinePlans)
     ? parsed.routinePlans
     : Array.isArray(parsed.plans)
@@ -405,11 +419,11 @@ export default {
       }
 
       if (request.method === "POST" && url.pathname === "/v1/skin-care/products/analyze") {
-        return handleProductAnalyze(request, env);
+        return await handleProductAnalyze(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/skin-care/routine/generate") {
-        return handleRoutineGenerate(request, env);
+        return await handleRoutineGenerate(request, env);
       }
 
       return jsonResponse(request, env, { error: "not_found" }, 404);

@@ -37,7 +37,11 @@ List<String> onboarding7SplitTypedProductNames(String? value) {
 @visibleForTesting
 List<String> onboarding7ExtractPhotoProductNames(List<dynamic> products) {
   return _dedupeSkinCareNames(
-    products.map(_skinCareNameFromProduct).where((name) => name.isNotEmpty),
+    products
+        .map(SkinCareDetectedProduct.fromValue)
+        .where((product) => product.hasMeaningfulData)
+        .map((product) => product.displayName)
+        .where((name) => name.isNotEmpty),
   );
 }
 
@@ -274,6 +278,18 @@ bool _isSupportedSkinCareImageContentType(String contentType) {
       normalized == 'image/webp';
 }
 
+String _skinCareImageContentTypeFromR2Key(String r2Key) {
+  final key = r2Key.split('?').first.toLowerCase();
+  if (key.endsWith('.jpg') || key.endsWith('.jpeg')) return 'image/jpeg';
+  if (key.endsWith('.png')) return 'image/png';
+  if (key.endsWith('.webp')) return 'image/webp';
+  if (key.endsWith('.heic')) return 'image/heic';
+  if (key.endsWith('.heif')) return 'image/heif';
+  if (key.endsWith('.gif')) return 'image/gif';
+  if (key.endsWith('.pdf')) return 'application/pdf';
+  return '';
+}
+
 UploadedAsset? _skinCareProductPhotoAssetFromDraft(OnboardingDraft draft) {
   final base = draft.baseTimeline;
   final r2Key = base.skinCareProductPhotoR2Key?.trim();
@@ -288,7 +304,7 @@ UploadedAsset? _skinCareProductPhotoAssetFromDraft(OnboardingDraft draft) {
     sourceFeature: OnboardingDraft.sourceOnboarding,
     purpose: UploadedAssetPurpose.skinCare,
     fileName: fileName ?? 'skin-care-products',
-    contentType: '',
+    contentType: _skinCareImageContentTypeFromR2Key(r2Key),
     sizeBytes: 0,
     r2Key: r2Key,
     status: uploadedAssetStatusFromString(
@@ -376,14 +392,25 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
       updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
         final isSkip = value == 'skip';
         final switchedPath = base.skinCareSetupPath != value;
-        final blocks = switchedPath && !isSkip
+        final clearProductData =
+            isSkip ||
+            (switchedPath && base.skinCareSetupPath == 'has_products');
+        final clearNoProductsData =
+            isSkip || (switchedPath && base.skinCareSetupPath == 'no_products');
+        final blocks = switchedPath || isSkip
             ? base.blocks.where((b) => b.section != 'skin_care').toList()
             : base.blocks;
         return base.copyWith(
           blocks: blocks,
           skinCareSetupPath: value,
-          skinCareSetupStep: isSkip ? 1 : 1, // Immediately set to 1
+          skinCareSetupStep: 1,
           skinCareSkipped: isSkip,
+          clearSkinCareProductNames: clearProductData,
+          clearSkinCareProductPhoto: clearProductData,
+          clearSkinCareSkinType: clearNoProductsData,
+          clearSkinCareProblems: clearNoProductsData,
+          clearSkinCareBudget: clearNoProductsData,
+          clearSkinCarePreference: clearNoProductsData,
         );
       });
     }
@@ -748,7 +775,8 @@ class _HasProductsModeScreenState
           .baseTimeline
           .skinCareDesiredApplicationsPerDay;
 
-      List<String> photoProducts = [];
+      List<SkinCareDetectedProduct> photoProductDetails = [];
+      List<String> photoProductNames = [];
       if (asset != null) {
         final analysis = await client.analyzeProducts(
           uid: uid,
@@ -776,14 +804,15 @@ class _HasProductsModeScreenState
             return;
           }
         } else {
-          photoProducts = onboarding7ExtractPhotoProductNames(
+          photoProductDetails = analysis.detectedProducts;
+          photoProductNames = onboarding7ExtractPhotoProductNames(
             analysis.products,
           );
         }
       }
 
       final allProductNames = onboarding7MergeProductNames(
-        photoProducts,
+        photoProductNames,
         typedProductNames,
       );
       if (allProductNames.isEmpty) {
@@ -800,7 +829,10 @@ class _HasProductsModeScreenState
         uid: uid,
         idToken: idToken,
         params: {
-          'productsFromPhoto': photoProducts,
+          'productsFromPhoto': photoProductDetails
+              .map((product) => product.toMap())
+              .toList(),
+          'photoProductNames': photoProductNames,
           'typedProductNames': typedProductNames,
           'desiredApplicationsPerDay': desiredApplicationsPerDay,
           'skinType': 'unknown',
@@ -839,6 +871,7 @@ class _HasProductsModeScreenState
         routinePlans: routinePlans,
         desiredApplicationsPerDay: desiredApplicationsPerDay,
         fallbackProductNames: allProductNames,
+        fallbackProductDetails: photoProductDetails,
       );
       if (schedule.hasError || schedule.blocks.isEmpty) {
         if (!mounted) return;
@@ -894,137 +927,166 @@ class _HasProductsModeScreenState
             : null);
     final busy = uploadBusy || _generating;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_generating)
+    final setupCard = _HasProductsSetupCard(
+      controller: _controller,
+      asset: effectiveAsset,
+      tileHeight: _setupTileHeight,
+      desiredApplicationsPerDay: widget.base.skinCareDesiredApplicationsPerDay,
+      uploadBusy: uploadBusy,
+      uploadStatusLabel: uploadBusy
+          ? _skinCareUploadStatusLabel(uploadState.status)
+          : null,
+      busy: busy,
+      generating: _generating,
+      onUpload: busy ? null : _startUpload,
+      onRemove: busy ? null : _removeUploadedAsset,
+      onGenerate: busy ? null : _generate,
+      onFrequencyChanged: busy
+          ? null
+          : (value) => updateBaseTimelineDraft(
+              ref,
+              onboardingSkinCareStepIndex,
+              (base) => base.copyWith(
+                skinCareDesiredApplicationsPerDay: value,
+                skinCareSkipped: false,
+              ),
+            ),
+      onChanged: (value) => updateBaseTimelineDraft(
+        ref,
+        onboardingSkinCareStepIndex,
+        (base) =>
+            base.copyWith(skinCareProductNames: value, skinCareSkipped: false),
+      ),
+    );
+    final message = uploadError ?? _generationError;
+
+    if (_generating) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           AiThinkingCard(
             title: 'Skin Care AI',
             detail: 'Building your routine from product names and labels',
             accent: OptivusColors.roseAccent,
             isActive: true,
-          )
-        else if (!generated)
-          _HasProductsSetupCard(
-            controller: _controller,
-            asset: effectiveAsset,
-            tileHeight: _setupTileHeight,
-            desiredApplicationsPerDay:
-                widget.base.skinCareDesiredApplicationsPerDay,
-            uploadBusy: uploadBusy,
-            uploadStatusLabel: uploadBusy
-                ? _skinCareUploadStatusLabel(uploadState.status)
-                : null,
-            busy: busy,
-            generating: _generating,
-            onUpload: busy ? null : _startUpload,
-            onRemove: busy ? null : _removeUploadedAsset,
-            onGenerate: busy ? null : _generate,
-            onFrequencyChanged: busy
-                ? null
-                : (value) => updateBaseTimelineDraft(
-                    ref,
-                    onboardingSkinCareStepIndex,
-                    (base) => base.copyWith(
-                      skinCareDesiredApplicationsPerDay: value,
-                      skinCareSkipped: false,
+          ),
+          if (message != null) ...[
+            const SizedBox(height: 10),
+            _SkinCareInlineMessage(message: message),
+          ],
+        ],
+      );
+    }
+
+    if (!generated) {
+      return SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.only(
+          bottom:
+              OnboardingStepShell.bottomCtaHeight +
+              MediaQuery.viewInsetsOf(context).bottom +
+              40,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            setupCard,
+            if (message != null) ...[
+              const SizedBox(height: 10),
+              _SkinCareInlineMessage(message: message),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: OnboardingGlassCard(
+                tint: OptivusColors.roseAccent.withValues(alpha: 0.12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                radius: 20,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.white.withValues(alpha: 0.4),
+                      ),
+                      child: const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: OptivusColors.roseAccent,
+                        size: 18,
+                      ),
                     ),
-                  ),
-            onChanged: (value) => updateBaseTimelineDraft(
-              ref,
-              onboardingSkinCareStepIndex,
-              (base) => base.copyWith(
-                skinCareProductNames: value,
-                skinCareSkipped: false,
-              ),
-            ),
-          )
-        else
-          Row(
-            children: [
-              Expanded(
-                child: OnboardingGlassCard(
-                  tint: OptivusColors.roseAccent.withValues(alpha: 0.12),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  radius: 20,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.white.withValues(alpha: 0.4),
-                        ),
-                        child: const Icon(
-                          Icons.auto_awesome_rounded,
-                          color: OptivusColors.roseAccent,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Routine built',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                color: OptivusColors.textPrimary,
-                              ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Routine built',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textPrimary,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${widget.base.skinCareDesiredApplicationsPerDay} routines per day',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      OnboardingActionPill(
-                        label: 'Rebuild / Edit',
-                        icon: Icons.refresh_rounded,
-                        accent: OptivusColors.roseAccent,
-                        compact: true,
-                        onTap: () => updateBaseTimelineDraft(
-                          ref,
-                          onboardingSkinCareStepIndex,
-                          (base) => base.copyWith(
-                            blocks: base.blocks
-                                .where((b) => b.section != 'skin_care')
-                                .toList(),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${widget.base.skinCareDesiredApplicationsPerDay} routines per day',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: OptivusColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OnboardingActionPill(
+                      label: 'Rebuild / Edit',
+                      icon: Icons.refresh_rounded,
+                      accent: OptivusColors.roseAccent,
+                      compact: true,
+                      onTap: () => updateBaseTimelineDraft(
+                        ref,
+                        onboardingSkinCareStepIndex,
+                        (base) => base.copyWith(
+                          blocks: base.blocks
+                              .where((b) => b.section != 'skin_care')
+                              .toList(),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        if (uploadError != null || _generationError != null) ...[
+            ),
+          ],
+        ),
+        if (message != null) ...[
           const SizedBox(height: 10),
-          _SkinCareInlineMessage(message: uploadError ?? _generationError!),
+          _SkinCareInlineMessage(message: message),
         ],
-        if (!_generating && generated) ...[
-          const SizedBox(height: 12),
-          _SkinCareTimelineSection(
-            selectedDay: _selectedDay,
-            blocks: widget.blocks,
-            onDayChanged: (d) => setState(() => _selectedDay = d),
-            emptyLabel: 'Build your skin-care routine first.',
-            accent: OptivusColors.roseAccent,
-          ),
-        ],
+        const SizedBox(height: 12),
+        _SkinCareTimelineSection(
+          selectedDay: _selectedDay,
+          blocks: widget.blocks,
+          onDayChanged: (d) => setState(() => _selectedDay = d),
+          emptyLabel: 'Build your skin-care routine first.',
+          accent: OptivusColors.roseAccent,
+        ),
       ],
     );
   }
@@ -1237,62 +1299,73 @@ class _SkinCareFrequencySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(
-          child: Text(
-            'How many times per day?',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              color: OptivusColors.textPrimary,
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.34),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.70)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final option in const [2, 3, 4])
-                GestureDetector(
-                  key: ValueKey('onboarding-step7-frequency-$option'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onChanged == null ? null : () => onChanged!(option),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOutCubic,
-                    width: 34,
-                    height: 30,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: value == option
-                          ? OptivusColors.roseAccent
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Text(
-                      '$option',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: value == option
-                            ? Colors.white
-                            : OptivusColors.textSecondary,
-                      ),
-                    ),
+    const label = Text(
+      'How many times per day?',
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w900,
+        color: OptivusColors.textPrimary,
+      ),
+    );
+    final selector = Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.70)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final option in const [2, 3, 4])
+            GestureDetector(
+              key: ValueKey('onboarding-step7-frequency-$option'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onChanged == null ? null : () => onChanged!(option),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                width: 34,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: value == option
+                      ? OptivusColors.roseAccent
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Text(
+                  '$option',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: value == option
+                        ? Colors.white
+                        : OptivusColors.textSecondary,
                   ),
                 ),
-            ],
-          ),
-        ),
-      ],
+              ),
+            ),
+        ],
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 280) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [label, const SizedBox(height: 8), selector],
+          );
+        }
+        return Row(
+          children: [
+            const Expanded(child: label),
+            const SizedBox(width: 10),
+            selector,
+          ],
+        );
+      },
     );
   }
 }
@@ -1335,34 +1408,46 @@ class _SkinCareGenerateRoutineButton extends StatelessWidget {
                   ]
                 : null,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (busy)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              else
-                Icon(
-                  Icons.auto_awesome_rounded,
-                  color: enabled ? Colors.white : OptivusColors.textSecondary,
-                  size: 20,
-                ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  color: enabled ? Colors.white : OptivusColors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (busy)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    else
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        color: enabled
+                            ? Colors.white
+                            : OptivusColors.textSecondary,
+                        size: 20,
+                      ),
+                    const SizedBox(width: 8),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: enabled
+                            ? Colors.white
+                            : OptivusColors.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -1802,6 +1887,7 @@ class _SkinCarePhotoTarget extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = asset?.localPreviewPath;
     final showFile = preview != null && File(preview).existsSync();
+    final fileName = asset?.fileName.trim();
 
     return GestureDetector(
       key: const ValueKey('onboarding-step7-photo-tile'),
@@ -1840,6 +1926,27 @@ class _SkinCarePhotoTarget extends StatelessWidget {
                               fontWeight: FontWeight.w900,
                             ),
                           ),
+                          if (asset != null &&
+                              fileName != null &&
+                              fileName.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Text(
+                                fileName,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: OptivusColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
               ),
@@ -2016,7 +2123,7 @@ class _SkinCareDayChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(

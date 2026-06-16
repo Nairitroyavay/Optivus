@@ -88,6 +88,12 @@ void main() {
       expect(imports[2].uploadedAssetId, 'skin-asset');
       expect(imports[2].uploadedAssetR2Key, contains('skin_care'));
       expect(imports[2].uploadedAssetStatus, 'uploaded');
+      expect(roundTrip.baseTimeline.skinCareProductPhotoAssetId, 'skin-asset');
+      expect(
+        roundTrip.baseTimeline.skinCareProductPhotoR2Key,
+        contains('skin_care'),
+      );
+      expect(roundTrip.baseTimeline.skinCareProductPhotoStatus, 'uploaded');
     },
   );
 
@@ -104,7 +110,14 @@ void main() {
     expect(references, hasLength(3));
     expect(references.map((item) => item['id']), contains('classes_photo'));
     expect(references.map((item) => item['id']), contains('eating_photo'));
-    expect(references.map((item) => item['id']), contains('skin_photo'));
+    expect(references.map((item) => item['id']), contains('skin-asset'));
+    final skinReference = references.singleWhere(
+      (item) => item['uploadedAssetId'] == 'skin-asset',
+    );
+    expect(skinReference['section'], 'skin_care');
+    expect(skinReference['mode'], 'has_products');
+    expect(skinReference['uploadedAssetR2Key'], contains('skin_care'));
+    expect(skinReference['uploadedAssetStatus'], 'uploaded');
     expect(
       references.any((item) => item.containsKey('uploadPlaceholderPath')),
       isFalse,
@@ -124,6 +137,8 @@ void main() {
       saved.baseTimeline.pendingFutureImports.first.uploadedAssetId,
       'class-asset',
     );
+    expect(saved.baseTimeline.skinCareProductPhotoAssetId, 'skin-asset');
+    expect(saved.baseTimeline.skinCareProductPhotoR2Key, contains('skin_care'));
   });
 
   test(
@@ -164,6 +179,12 @@ void main() {
       expect(savedDraft!.onboardingCompleted, isTrue);
       expect(savedBundle, isNotNull);
       expect(savedBundle!.uploadedAssetReferences, hasLength(3));
+      expect(
+        savedBundle.uploadedAssetReferences
+            .singleWhere((entry) => entry.uploadedAssetId == 'skin-asset')
+            .mode,
+        'has_products',
+      );
     },
   );
 
@@ -331,6 +352,10 @@ OnboardingDraft _draftWithUploadReferences() {
     uid: 'phase2b-user',
     currentStep: 4,
     baseTimeline: BaseTimelineDraft(
+      skinCareProductPhotoAssetId: 'skin-asset',
+      skinCareProductPhotoR2Key:
+          'users/phase2b-user/onboarding/skin_care/skin-asset.jpg',
+      skinCareProductPhotoStatus: 'uploaded',
       pendingFutureImports: [
         PendingFutureImportDraft(
           id: 'classes_photo',

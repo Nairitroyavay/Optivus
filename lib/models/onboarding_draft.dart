@@ -1217,6 +1217,8 @@ class BaseTimelineDraft {
     bool clearSkinCareProductPhoto = false,
     bool clearSkinCareSkinType = false,
     bool clearSkinCareProblems = false,
+    bool clearSkinCareBudget = false,
+    bool clearSkinCarePreference = false,
     bool clearSkinCarePlanning = false,
     bool clearClassData = false,
     bool clearWorkData = false,
@@ -1304,10 +1306,10 @@ class BaseTimelineDraft {
       skinCareProblems: clearSkinCarePlanning || clearSkinCareProblems
           ? const []
           : (skinCareProblems ?? this.skinCareProblems),
-      skinCareBudget: clearSkinCarePlanning
+      skinCareBudget: clearSkinCarePlanning || clearSkinCareBudget
           ? null
           : (skinCareBudget ?? this.skinCareBudget),
-      skinCarePreference: clearSkinCarePlanning
+      skinCarePreference: clearSkinCarePlanning || clearSkinCarePreference
           ? null
           : (skinCarePreference ?? this.skinCarePreference),
       skinCareDesiredApplicationsPerDay: clearSkinCarePlanning

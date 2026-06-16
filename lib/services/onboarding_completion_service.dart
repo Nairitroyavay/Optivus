@@ -57,26 +57,65 @@ class OnboardingCompletionService {
   static List<OnboardingUploadedAssetReference> _uploadedAssetReferences(
     OnboardingDraft draft,
   ) {
-    return draft.baseTimeline.pendingFutureImports
-        .where(
-          (entry) =>
-              entry.uploadedAssetId != null ||
-              entry.uploadedAssetR2Key != null ||
-              entry.uploadedAssetStatus != null,
-        )
-        .map(
-          (entry) => OnboardingUploadedAssetReference(
-            id: entry.id,
-            section: entry.section,
-            mode: entry.mode,
-            uploadedAssetId: entry.uploadedAssetId,
-            uploadedAssetR2Key: entry.uploadedAssetR2Key,
-            uploadedAssetStatus: entry.uploadedAssetStatus,
-            createdAt: entry.createdAt,
-            updatedAt: entry.updatedAt,
-          ),
-        )
-        .toList(growable: false);
+    final references = <OnboardingUploadedAssetReference>[];
+    final seen = <String>{};
+
+    void addReference(OnboardingUploadedAssetReference reference) {
+      final assetId = reference.uploadedAssetId?.trim().toLowerCase() ?? '';
+      final r2Key = reference.uploadedAssetR2Key?.trim().toLowerCase() ?? '';
+      final key = assetId.isNotEmpty || r2Key.isNotEmpty
+          ? 'asset:$assetId|$r2Key'
+          : [
+              reference.id.trim().toLowerCase(),
+              reference.section.trim().toLowerCase(),
+              reference.mode.trim().toLowerCase(),
+            ].join('\u001f');
+      if (!seen.add(key)) return;
+      references.add(reference);
+    }
+
+    final base = draft.baseTimeline;
+    if (base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true ||
+        base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true ||
+        base.skinCareProductPhotoStatus?.trim().isNotEmpty == true) {
+      final now = DateTime.now();
+      addReference(
+        OnboardingUploadedAssetReference(
+          id: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
+              ? base.skinCareProductPhotoAssetId!.trim()
+              : 'skin_care_product_photo',
+          section: 'skin_care',
+          mode: 'has_products',
+          uploadedAssetId: base.skinCareProductPhotoAssetId,
+          uploadedAssetR2Key: base.skinCareProductPhotoR2Key,
+          uploadedAssetStatus: base.skinCareProductPhotoStatus,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+    }
+
+    for (final entry in base.pendingFutureImports) {
+      if (entry.uploadedAssetId == null &&
+          entry.uploadedAssetR2Key == null &&
+          entry.uploadedAssetStatus == null) {
+        continue;
+      }
+      addReference(
+        OnboardingUploadedAssetReference(
+          id: entry.id,
+          section: entry.section,
+          mode: entry.mode,
+          uploadedAssetId: entry.uploadedAssetId,
+          uploadedAssetR2Key: entry.uploadedAssetR2Key,
+          uploadedAssetStatus: entry.uploadedAssetStatus,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        ),
+      );
+    }
+
+    return references;
   }
 
   static List<RoutineItem> _scheduleRoutineItems(
@@ -85,33 +124,33 @@ class OnboardingCompletionService {
     List<FinalTimelineItem> previewItems,
   ) {
     // Generate base routines
-    final scheduled = baseBlocks
-        .map((b) {
-          final blockType = _routineBlockTypeForDraft(b.blockType);
-          return RoutineItem(
-            id: b.id,
-            userId: draft.uid,
-            title: b.title,
-            startMinute: b.startMinute,
-            endMinute: b.endMinute,
-            crossesMidnight: b.crossesMidnight,
-            endsNextDay: b.endsNextDay,
-            repeatDays: b.repeatDays,
-            blockType: blockType,
-            category: _categoryForTimelineSource(b.section, blockType),
-            source: RoutineSource.onboarding,
-            priority: _priorityForBlockType(blockType),
-            hardBlock: blockType == RoutineBlockType.hardBlock,
-            location: b.location,
-            mealCategory: b.mealCategory,
-            dishes: b.dishes,
-            caloriesEstimate: b.calories,
-            proteinEstimate: b.protein,
-            steps: b.skincareProducts,
-            skincareProducts: b.skincareProducts,
-          );
-        })
-        .toList();
+    final scheduled = baseBlocks.map((b) {
+      final blockType = _routineBlockTypeForDraft(b.blockType);
+      return RoutineItem(
+        id: b.id,
+        userId: draft.uid,
+        title: b.title,
+        startMinute: b.startMinute,
+        endMinute: b.endMinute,
+        crossesMidnight: b.crossesMidnight,
+        endsNextDay: b.endsNextDay,
+        repeatDays: b.repeatDays,
+        blockType: blockType,
+        category: _categoryForTimelineSource(b.section, blockType),
+        source: RoutineSource.onboarding,
+        priority: _priorityForBlockType(blockType),
+        hardBlock: blockType == RoutineBlockType.hardBlock,
+        location: b.location,
+        mealCategory: b.mealCategory,
+        dishes: b.dishes,
+        caloriesEstimate: b.calories,
+        proteinEstimate: b.protein,
+        steps: b.skincareSteps.isNotEmpty
+            ? b.skincareSteps
+            : b.skincareProducts,
+        skincareProducts: b.skincareProducts,
+      );
+    }).toList();
 
     // Group the preview items by priority / flexible status
     // Hard blocks are already added. Now we place flexible tasks carefully.
@@ -237,9 +276,10 @@ class OnboardingCompletionService {
       'bad_habit_check_in' => RoutineCategory.badHabit,
       'money' || 'money_task' => RoutineCategory.finance,
       'fixed' => RoutineCategory.fixed,
-      _ => blockType == RoutineBlockType.checkIn
-          ? RoutineCategory.health
-          : RoutineCategory.fixed,
+      _ =>
+        blockType == RoutineBlockType.checkIn
+            ? RoutineCategory.health
+            : RoutineCategory.fixed,
     };
   }
 

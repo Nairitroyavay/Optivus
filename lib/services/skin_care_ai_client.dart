@@ -24,6 +24,10 @@ class SkinCareAiProductResult {
   final String? errorMessage;
 
   bool get hasError => errorMessage != null;
+  List<SkinCareDetectedProduct> get detectedProducts => products
+      .map(SkinCareDetectedProduct.fromValue)
+      .where((product) => product.hasMeaningfulData)
+      .toList(growable: false);
 
   const SkinCareAiProductResult({
     required this.products,
@@ -34,6 +38,98 @@ class SkinCareAiProductResult {
   factory SkinCareAiProductResult.error(String msg) {
     return SkinCareAiProductResult(products: [], errorMessage: msg);
   }
+}
+
+class SkinCareDetectedProduct {
+  final String name;
+  final String brand;
+  final String category;
+  final List<String> keyIngredients;
+  final List<String> possibleActives;
+  final String usageHint;
+  final String warningIfAny;
+  final String confidence;
+
+  const SkinCareDetectedProduct({
+    this.name = '',
+    this.brand = '',
+    this.category = '',
+    this.keyIngredients = const [],
+    this.possibleActives = const [],
+    this.usageHint = '',
+    this.warningIfAny = '',
+    this.confidence = '',
+  });
+
+  factory SkinCareDetectedProduct.fromValue(dynamic value) {
+    if (value is String) {
+      return SkinCareDetectedProduct(name: value.trim());
+    }
+    if (value is! Map) return const SkinCareDetectedProduct();
+    return SkinCareDetectedProduct.fromMap(Map<String, dynamic>.from(value));
+  }
+
+  factory SkinCareDetectedProduct.fromMap(Map<String, dynamic> map) {
+    return SkinCareDetectedProduct(
+      name: _stringValue(map['name']).trim(),
+      brand: _stringValue(map['brand']).trim(),
+      category: _stringValue(map['category']).trim(),
+      keyIngredients: _stringListFromValue(
+        map['keyIngredients'] ?? map['ingredients'],
+      ),
+      possibleActives: _stringListFromValue(
+        map['possibleActives'] ?? map['actives'],
+      ),
+      usageHint: _stringValue(map['usageHint'] ?? map['usage']).trim(),
+      warningIfAny: _stringValue(
+        map['warningIfAny'] ?? map['warning'] ?? map['warnings'],
+      ).trim(),
+      confidence: _stringValue(map['confidence']).trim(),
+    );
+  }
+
+  bool get hasMeaningfulData =>
+      name.isNotEmpty ||
+      brand.isNotEmpty ||
+      category.isNotEmpty ||
+      keyIngredients.isNotEmpty ||
+      possibleActives.isNotEmpty ||
+      usageHint.isNotEmpty ||
+      warningIfAny.isNotEmpty;
+
+  String get displayName {
+    final cleanName = name.trim();
+    final cleanBrand = brand.trim();
+    if (cleanName.isEmpty) return cleanBrand;
+    if (cleanBrand.isEmpty ||
+        cleanName.toLowerCase().contains(cleanBrand.toLowerCase())) {
+      return cleanName;
+    }
+    return '$cleanBrand $cleanName';
+  }
+
+  List<String> get searchableFields => [
+    displayName,
+    name,
+    brand,
+    category,
+    ...keyIngredients,
+    ...possibleActives,
+    usageHint,
+    warningIfAny,
+    confidence,
+  ];
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'brand': brand,
+    'category': category,
+    'keyIngredients': keyIngredients,
+    'possibleActives': possibleActives,
+    'usageHint': usageHint,
+    'warningIfAny': warningIfAny,
+    'confidence': confidence,
+  };
 }
 
 class SkinCareRoutinePlan {

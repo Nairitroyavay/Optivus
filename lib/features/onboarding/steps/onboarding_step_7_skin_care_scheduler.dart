@@ -75,6 +75,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   required List<SkinCareRoutinePlan> routinePlans,
   required int desiredApplicationsPerDay,
   List<String> fallbackProductNames = const [],
+  List<SkinCareDetectedProduct> fallbackProductDetails = const [],
   DateTime? now,
 }) {
   final desired = onboarding7NormalizeDesiredApplications(
@@ -92,6 +93,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
     routinePlans: routinePlans,
     desiredApplicationsPerDay: desired,
     fallbackProductNames: fallbackProductNames,
+    fallbackProductDetails: fallbackProductDetails,
   );
   if (adaptedPlans.hasError || adaptedPlans.plans.length < desired) {
     return Onboarding7SkinCareScheduleResult(
@@ -195,6 +197,19 @@ int onboarding7NormalizeDesiredApplications(int value) {
   if (value <= 2) return 2;
   if (value >= 4) return 4;
   return 3;
+}
+
+@visibleForTesting
+int onboarding7RoutineCountForDay(List<TimelineBlockDraft> blocks, int day) {
+  return blocks
+      .where(
+        (block) =>
+            block.section == 'skin_care' &&
+            !block.needsTimeConfirmation &&
+            block.title.trim().isNotEmpty &&
+            block.repeatDays.contains(day),
+      )
+      .length;
 }
 
 @visibleForTesting
@@ -307,6 +322,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   required List<SkinCareRoutinePlan> routinePlans,
   required int desiredApplicationsPerDay,
   List<String> fallbackProductNames = const [],
+  List<SkinCareDetectedProduct> fallbackProductDetails = const [],
 }) {
   final desired = onboarding7NormalizeDesiredApplications(
     desiredApplicationsPerDay,
@@ -328,10 +344,12 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   final selected = <SkinCareRoutinePlan>[];
   final productBasis = _dedupeStrings([
     ...fallbackProductNames,
+    for (final product in fallbackProductDetails) product.displayName,
     for (final plan in routinePlans) ...plan.productNames,
   ]);
   final textBasis = _dedupeStrings([
     ...productBasis,
+    for (final product in fallbackProductDetails) ...product.searchableFields,
     for (final plan in routinePlans) ...plan.steps,
   ]);
 
@@ -351,6 +369,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       title: spec.title,
       productBasis: productBasis,
       textBasis: textBasis,
+      productDetails: fallbackProductDetails,
     );
     if (generated == null) {
       return Onboarding7RoutinePlanAdaptationResult(
@@ -566,7 +585,17 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
   required String title,
   required List<String> productBasis,
   required List<String> textBasis,
+  required List<SkinCareDetectedProduct> productDetails,
 }) {
+  final sunscreenDetails = productDetails
+      .where(_productLooksLikeSunscreen)
+      .toList(growable: false);
+  final cleanserDetails = productDetails
+      .where(_productLooksLikeCleanser)
+      .toList(growable: false);
+  final moisturizerDetails = productDetails
+      .where(_productLooksLikeMoisturizer)
+      .toList(growable: false);
   final sunscreenProducts = productBasis
       .where((item) => _looksLikeSunscreen(item))
       .toList(growable: false);
@@ -577,12 +606,15 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
       .where((item) => _looksLikeMoisturizer(item))
       .toList(growable: false);
   final hasSunscreen =
+      sunscreenDetails.isNotEmpty ||
       sunscreenProducts.isNotEmpty ||
       textBasis.any((item) => _looksLikeSunscreen(item));
   final hasCleanser =
+      cleanserDetails.isNotEmpty ||
       cleanserProducts.isNotEmpty ||
       textBasis.any((item) => _looksLikeCleanser(item));
   final hasMoisturizer =
+      moisturizerDetails.isNotEmpty ||
       moisturizerProducts.isNotEmpty ||
       textBasis.any((item) => _looksLikeMoisturizer(item));
 
@@ -592,9 +624,11 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
       slotLabel: slot,
       title: title,
       steps: const ['Refresh skin', 'Reapply sunscreen'],
-      productNames: sunscreenProducts.isEmpty
-          ? const ['Sunscreen']
-          : sunscreenProducts,
+      productNames: _dedupeStrings([
+        for (final product in sunscreenDetails) product.displayName,
+        ...sunscreenProducts,
+        if (sunscreenDetails.isEmpty && sunscreenProducts.isEmpty) 'Sunscreen',
+      ]),
     );
   }
 
@@ -605,8 +639,11 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
       title: title,
       steps: [if (hasCleanser) 'Cleanse face', 'Apply sunscreen'],
       productNames: _dedupeStrings([
+        if (cleanserDetails.isNotEmpty) cleanserDetails.first.displayName,
         if (cleanserProducts.isNotEmpty) cleanserProducts.first,
-        if (sunscreenProducts.isEmpty) 'Sunscreen' else sunscreenProducts.first,
+        if (sunscreenDetails.isNotEmpty) sunscreenDetails.first.displayName,
+        if (sunscreenProducts.isNotEmpty) sunscreenProducts.first,
+        if (sunscreenDetails.isEmpty && sunscreenProducts.isEmpty) 'Sunscreen',
       ]),
     );
   }
@@ -621,7 +658,9 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
         if (hasMoisturizer) 'Apply moisturizer',
       ],
       productNames: _dedupeStrings([
+        if (cleanserDetails.isNotEmpty) cleanserDetails.first.displayName,
         if (cleanserProducts.isNotEmpty) cleanserProducts.first,
+        if (moisturizerDetails.isNotEmpty) moisturizerDetails.first.displayName,
         if (moisturizerProducts.isNotEmpty) moisturizerProducts.first,
       ]),
     );
@@ -638,7 +677,16 @@ String _missingSlotMessage(String slot) {
 
 bool _looksLikeSunscreen(String value) {
   final lower = value.toLowerCase();
-  return lower.contains('sunscreen') || lower.contains('spf');
+  return lower.contains('sunscreen') ||
+      lower.contains('spf') ||
+      lower.contains('sun cream') ||
+      lower.contains('suncream') ||
+      lower.contains('sunblock') ||
+      lower.contains('uv') ||
+      lower.contains('pa++++') ||
+      lower.contains('pa ++++') ||
+      lower.contains('uv filter') ||
+      lower.contains('uv-filter');
 }
 
 bool _looksLikeCleanser(String value) {
@@ -646,6 +694,9 @@ bool _looksLikeCleanser(String value) {
   return lower.contains('cleanser') ||
       lower.contains('face wash') ||
       lower.contains('wash face') ||
+      lower.contains('cleansing gel') ||
+      lower.contains('cleansing foam') ||
+      lower.contains('micellar') ||
       lower.contains('cleanse');
 }
 
@@ -653,7 +704,27 @@ bool _looksLikeMoisturizer(String value) {
   final lower = value.toLowerCase();
   return lower.contains('moistur') ||
       lower.contains('cream') ||
-      lower.contains('lotion');
+      lower.contains('lotion') ||
+      lower.contains('barrier repair') ||
+      lower.contains('gel cream');
+}
+
+bool _productLooksLikeSunscreen(SkinCareDetectedProduct product) {
+  return product.category.trim().toLowerCase() == 'sunscreen' ||
+      product.searchableFields.any(_looksLikeSunscreen);
+}
+
+bool _productLooksLikeCleanser(SkinCareDetectedProduct product) {
+  final category = product.category.trim().toLowerCase();
+  return category == 'cleanser' ||
+      product.searchableFields.any(_looksLikeCleanser);
+}
+
+bool _productLooksLikeMoisturizer(SkinCareDetectedProduct product) {
+  final category = product.category.trim().toLowerCase();
+  return category == 'moisturizer' ||
+      category == 'moisturiser' ||
+      product.searchableFields.any(_looksLikeMoisturizer);
 }
 
 List<String> _dedupeStrings(Iterable<String> values) {

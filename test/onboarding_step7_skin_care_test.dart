@@ -886,8 +886,135 @@ void main() {
     },
   );
 
+  testWidgets(
+    '20. Product metadata sunscreen supports 3 routines without sunscreen name',
+    (tester) async {
+      final asset = _uploadedAsset();
+      final client = TestSkinCareAiClient(
+        productResult: const SkinCareAiProductResult(
+          products: [
+            {
+              'name': 'UV Aqua Gel',
+              'category': 'sunscreen',
+              'possibleActives': ['UV filters'],
+            },
+          ],
+        ),
+        routineResult: _routineResultWithGenericTwoPlans(),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            uid: 'uid-1',
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          uploadController: TestUploadController(result: asset),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Gentle Cleanser',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+      final midday = blocks.singleWhere(
+        (block) => block.skincareSlotLabel == 'midday',
+      );
+      final productsFromPhoto =
+          client.lastGenerateParams?['productsFromPhoto'] as List<dynamic>;
+
+      expect(blocks, hasLength(3));
+      expect(midday.skincareProducts, contains('UV Aqua Gel'));
+      expect(midday.skincareSteps, contains('Reapply sunscreen'));
+      expect(productsFromPhoto.single['category'], 'sunscreen');
+      expect(productsFromPhoto.single['possibleActives'], ['UV filters']);
+    },
+  );
+
+  testWidgets(
+    '21. Product metadata sunscreen supports 4 routines without sunscreen name',
+    (tester) async {
+      final asset = _uploadedAsset();
+      final client = TestSkinCareAiClient(
+        productResult: const SkinCareAiProductResult(
+          products: [
+            {
+              'name': 'UV Aqua Gel',
+              'category': 'sunscreen',
+              'possibleActives': ['UV filters'],
+            },
+          ],
+        ),
+        routineResult: _routineResultWithGenericTwoPlans(),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            uid: 'uid-1',
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          uploadController: TestUploadController(result: asset),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Gentle Cleanser',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+
+      expect(blocks, hasLength(4));
+      expect(
+        blocks
+            .singleWhere((block) => block.skincareSlotLabel == 'midday')
+            .skincareProducts,
+        contains('UV Aqua Gel'),
+      );
+      expect(
+        blocks
+            .singleWhere((block) => block.skincareSlotLabel == 'afternoon')
+            .skincareProducts,
+        contains('UV Aqua Gel'),
+      );
+    },
+  );
+
   test(
-    '20. Different occupied weekdays produce grouped blocks with different repeatDays',
+    '22. Different occupied weekdays produce grouped blocks with correct daily routine count',
     () {
       const bath = TimelineBlockDraft(
         id: BaseTimelineDraft.fixedBathId,
@@ -916,6 +1043,7 @@ void main() {
       );
 
       expect(result.errorMessage, isNull);
+      expect(result.blocks.length, greaterThan(3));
       final middayBlocks = result.blocks
           .where((block) => block.skincareSlotLabel == 'midday')
           .toList();
@@ -932,11 +1060,22 @@ void main() {
             .repeatDays,
         [2, 3, 4, 5, 6, 7],
       );
+      for (final day in onboarding7EveryDay) {
+        expect(onboarding7RoutineCountForDay(result.blocks, day), 3);
+      }
+      final draft = _hasProductsDraft(blocks: result.blocks);
+      expect(
+        draft.validateStep(
+          7,
+          List<bool>.filled(OnboardingDraft.stepCount, true),
+        ),
+        isNull,
+      );
     },
   );
 
   testWidgets(
-    '21. No real bath blocks generation and creates no skin-care blocks',
+    '23. No real bath blocks generation and creates no skin-care blocks',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: _routineResultWithPlanCount(2),
@@ -969,7 +1108,7 @@ void main() {
   );
 
   testWidgets(
-    '22. Uploaded product photo persists after rebuild and R2 key is used',
+    '24. Uploaded product photo persists after rebuild and R2 key is used',
     (tester) async {
       final asset = _uploadedAsset();
       final firstClient = TestSkinCareAiClient(
@@ -1022,7 +1161,69 @@ void main() {
   );
 
   testWidgets(
-    '23. Visual stretch lane logic keeps close edit buttons reachable',
+    '25. Restored product photo states validate content type and show filename',
+    (tester) async {
+      final jpgClient = TestSkinCareAiClient(
+        productResult: const SkinCareAiProductResult(
+          products: [
+            {'name': 'Cleanser'},
+            {'name': 'Sunscreen SPF 50'},
+          ],
+        ),
+        routineResult: _routineResultWithPlanCount(2),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            productPhotoAssetId: 'skin-asset',
+            productPhotoR2Key:
+                'users/uid-1/onboarding/skin_care/restored-products.jpg',
+            productPhotoStatus: 'uploaded',
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: jpgClient,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Photo uploaded'), findsOneWidget);
+      expect(find.text('restored-products.jpg'), findsOneWidget);
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+      expect(jpgClient.analyzeCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            productPhotoAssetId: 'skin-asset',
+            productPhotoR2Key:
+                'users/uid-1/onboarding/skin_care/restored-products.heic',
+            productPhotoStatus: 'uploaded',
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: jpgClient,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Photo uploaded'), findsOneWidget);
+      expect(find.text('restored-products.heic'), findsOneWidget);
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'This photo format is not supported. Please upload JPEG, PNG, or WEBP.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    '26. Visual stretch lane logic keeps close edit buttons reachable',
     (tester) async {
       await tester.pumpWidget(
         buildTestWidget(
@@ -1078,7 +1279,7 @@ void main() {
   );
 
   testWidgets(
-    '24. Missing worker config without override does not create fake blocks',
+    '27. Missing worker config without override does not create fake blocks',
     (tester) async {
       await tester.pumpWidget(
         buildTestWidget(
@@ -1115,7 +1316,7 @@ void main() {
     },
   );
 
-  testWidgets('25. Unsupported uploaded image type shows friendly error', (
+  testWidgets('28. Unsupported uploaded image type shows friendly error', (
     tester,
   ) async {
     final asset = _uploadedAsset(contentType: 'image/heic');
@@ -1142,7 +1343,7 @@ void main() {
     );
   });
 
-  testWidgets('26. Upload busy generate button has readable state', (
+  testWidgets('29. Upload busy generate button has readable state', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -1161,6 +1362,145 @@ void main() {
 
     expect(find.text('Uploading photo...'), findsOneWidget);
   });
+
+  testWidgets('30. Switching product mode to skip clears product fields', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildTestWidget(draft: _choiceDraftWithProductData()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Skip'));
+    await tester.pumpAndSettle();
+
+    final base = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    ).read(mockOnboardingProvider).draft.baseTimeline;
+    expect(base.skinCareSkipped, isTrue);
+    expect(base.skinCareProductNames, isNull);
+    expect(base.skinCareProductPhotoAssetId, isNull);
+    expect(base.skinCareProductPhotoR2Key, isNull);
+    expect(base.blocks.where((block) => block.section == 'skin_care'), isEmpty);
+  });
+
+  testWidgets(
+    '31. Switching product mode to build-for-me clears product fields',
+    (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(draft: _choiceDraftWithProductData()),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Build routine for me'));
+      await tester.pumpAndSettle();
+
+      final base = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      ).read(mockOnboardingProvider).draft.baseTimeline;
+      expect(base.skinCareSetupPath, 'no_products');
+      expect(base.skinCareProductNames, isNull);
+      expect(base.skinCareProductPhotoAssetId, isNull);
+      expect(base.skinCareProductPhotoR2Key, isNull);
+      expect(
+        base.blocks.where((block) => block.section == 'skin_care'),
+        isEmpty,
+      );
+    },
+  );
+
+  testWidgets('32. Reselecting same product mode preserves current input', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildTestWidget(draft: _choiceDraftWithProductData()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('I have products'));
+    await tester.pumpAndSettle();
+
+    final base = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    ).read(mockOnboardingProvider).draft.baseTimeline;
+    expect(base.skinCareSetupPath, 'has_products');
+    expect(base.skinCareProductNames, 'Cleanser');
+    expect(base.skinCareProductPhotoAssetId, 'skin-asset');
+    expect(base.skinCareProductPhotoR2Key, contains('skin-asset.jpg'));
+  });
+
+  testWidgets(
+    '33. Pre-generation products mode scrolls safely with keyboard and message',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 560);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith((ref) {
+              final notifier = MockOnboardingNotifier();
+              notifier.loadSeedData(_hasProductsDraft());
+              notifier.setValidationMessage(
+                'Upload your product photo or type product names first.',
+              );
+              return notifier;
+            }),
+            skinCareAiClientProvider.overrideWithValue(
+              const FakeSkinCareAiClient(),
+            ),
+            uploadControllerProvider.overrideWith(
+              (ref) => TestUploadController(),
+            ),
+          ],
+          child: MaterialApp(
+            home: MediaQuery(
+              data: const MediaQueryData(
+                size: Size(320, 560),
+                viewInsets: EdgeInsets.only(bottom: 260),
+              ),
+              child: OnboardingStepShell(
+                currentPage: 7,
+                pageOffset: 7,
+                completedSteps: List<bool>.filled(
+                  OnboardingDraft.stepCount,
+                  false,
+                ),
+                validationMessage:
+                    'Upload your product photo or type product names first.',
+                onDotTap: (_) {},
+                onIndicatorDraggedTo: (_) {},
+                onNext: () {},
+                onSave: null,
+                showSave: false,
+                isSaving: false,
+                isSaved: false,
+                saveEnabled: true,
+                ctaLabel: 'Next Step',
+                ctaEnabled: true,
+                ctaLoading: false,
+                child: const OnboardingStep7(),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Next Step'), findsNothing);
+      final scrollable = find.descendant(
+        of: find.byType(OnboardingStep7),
+        matching: find.byType(Scrollable),
+      );
+      expect(scrollable, findsWidgets);
+      await tester.drag(scrollable.first, const Offset(0, -260));
+      await tester.pumpAndSettle();
+      expect(find.text('Build skin routine'), findsOneWidget);
+    },
+  );
 }
 
 OnboardingDraft _hasProductsDraft({
@@ -1183,6 +1523,56 @@ OnboardingDraft _hasProductsDraft({
       skinCareProductPhotoStatus: productPhotoStatus,
       blocks: blocks,
     ),
+  );
+}
+
+OnboardingDraft _choiceDraftWithProductData() {
+  return OnboardingDraft(
+    uid: 'uid-1',
+    currentStep: 7,
+    baseTimeline: const BaseTimelineDraft(
+      skinCareSetupStep: 0,
+      skinCareSetupPath: 'has_products',
+      skinCareProductNames: 'Cleanser',
+      skinCareProductPhotoAssetId: 'skin-asset',
+      skinCareProductPhotoR2Key:
+          'users/uid-1/onboarding/skin_care/skin-asset.jpg',
+      skinCareProductPhotoStatus: 'uploaded',
+      blocks: [
+        TimelineBlockDraft(
+          id: 'skin-old',
+          section: 'skin_care',
+          title: 'Old Skin Care',
+          startMinute: 455,
+          endMinute: 470,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.softBlockKey,
+        ),
+      ],
+    ),
+  );
+}
+
+SkinCareAiRoutineResult _routineResultWithGenericTwoPlans() {
+  return const SkinCareAiRoutineResult(
+    routinePlans: [
+      SkinCareRoutinePlan(
+        slotLabel: 'morning',
+        title: 'Morning Skin Care',
+        steps: ['Face wash'],
+        productNames: ['Gentle Cleanser'],
+      ),
+      SkinCareRoutinePlan(
+        slotLabel: 'night',
+        title: 'Night Skin Care',
+        steps: ['Face wash'],
+        productNames: ['Gentle Cleanser'],
+      ),
+    ],
+    morningRoutine: [],
+    nightRoutine: [],
+    weeklyRoutine: [],
+    timelineBlocks: [],
   );
 }
 
