@@ -1034,6 +1034,7 @@ class BaseTimelineDraft {
   final List<PendingFutureImportDraft> pendingFutureImports;
   final List<String> acceptedConflictKeys;
   final List<String> roleChangeWarnings;
+  final List<String> skinCareSpecialCareNotes;
 
   const BaseTimelineDraft({
     this.blocks = const [],
@@ -1076,6 +1077,7 @@ class BaseTimelineDraft {
     this.pendingFutureImports = const [],
     this.acceptedConflictKeys = const [],
     this.roleChangeWarnings = const [],
+    this.skinCareSpecialCareNotes = const [],
   });
 
   factory BaseTimelineDraft.fromMap(Map<String, dynamic> map) {
@@ -1134,6 +1136,7 @@ class BaseTimelineDraft {
       ),
       acceptedConflictKeys: _readStringList(map['acceptedConflictKeys']),
       roleChangeWarnings: _readStringList(map['roleChangeWarnings']),
+      skinCareSpecialCareNotes: _readStringList(map['skinCareSpecialCareNotes']),
     );
   }
 
@@ -1182,6 +1185,7 @@ class BaseTimelineDraft {
         .toList(),
     'acceptedConflictKeys': acceptedConflictKeys,
     'roleChangeWarnings': roleChangeWarnings,
+    'skinCareSpecialCareNotes': skinCareSpecialCareNotes,
   };
 
   BaseTimelineDraft copyWith({
@@ -1225,6 +1229,7 @@ class BaseTimelineDraft {
     List<PendingFutureImportDraft>? pendingFutureImports,
     List<String>? acceptedConflictKeys,
     List<String>? roleChangeWarnings,
+    List<String>? skinCareSpecialCareNotes,
     bool clearMealPlanning = false,
     bool clearBusinessPlanning = false,
     bool clearRoleChangeWarnings = false,
@@ -1362,6 +1367,7 @@ class BaseTimelineDraft {
       roleChangeWarnings: clearRoleChangeWarnings
           ? const []
           : (roleChangeWarnings ?? this.roleChangeWarnings),
+      skinCareSpecialCareNotes: skinCareSpecialCareNotes ?? this.skinCareSpecialCareNotes,
     );
   }
 
@@ -1683,9 +1689,11 @@ class BaseTimelineDraft {
   String? validateSkinCareSetup() {
     if (skinCareSkipped) return null;
     if (skinCareSetupPath == 'has_products') {
-      return hasFullDailySkinCareRoutine()
-          ? null
-          : 'Generate your full daily skin-care routine first.';
+      final desired = _normalizeSkinCareDesiredApplicationsPerDay(
+        skinCareDesiredApplicationsPerDay,
+      );
+      final msg = _missingSkinCareRoutineMessage(desired);
+      return msg;
     }
     if (_hasConfirmedSection('skin_care')) return null;
     return 'Build skin care routine or skip.';
@@ -1771,10 +1779,25 @@ class BaseTimelineDraft {
     final desired = _normalizeSkinCareDesiredApplicationsPerDay(
       skinCareDesiredApplicationsPerDay,
     );
-    for (final day in const [1, 2, 3, 4, 5, 6, 7]) {
-      if (_skinCareRoutineCountForDay(day) < desired) return false;
+    return _missingSkinCareRoutineMessage(desired) == null;
+  }
+
+  String? _missingSkinCareRoutineMessage(int desired) {
+    final hasAny = blocks.any((b) => b.section == 'skin_care');
+    if (!hasAny) {
+      return 'Generate your full daily skin-care routine first.';
     }
-    return true;
+    
+    for (final day in const [1, 2, 3, 4, 5, 6, 7]) {
+      final missing = desired - _skinCareRoutineCountForDay(day);
+      if (missing > 0) {
+        final noun = missing == 1 ? 'routine' : 'routines';
+        return 'Missing $missing $noun on ${[
+          'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
+        ][day - 1]}. Rebuild or add blocks to complete your schedule.';
+      }
+    }
+    return null;
   }
 
   int _skinCareRoutineCountForDay(int day) {

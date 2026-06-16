@@ -238,8 +238,9 @@ class SkinCareAiRoutineResult {
   final List<String> suggestedProducts;
   final List<String> warnings;
   final String? errorMessage;
+  final String? errorCode;
 
-  bool get hasError => errorMessage != null;
+  bool get hasError => errorMessage != null || errorCode != null;
 
   const SkinCareAiRoutineResult({
     this.routinePlans = const [],
@@ -250,9 +251,10 @@ class SkinCareAiRoutineResult {
     this.suggestedProducts = const [],
     this.warnings = const [],
     this.errorMessage,
+    this.errorCode,
   });
 
-  factory SkinCareAiRoutineResult.error(String msg) {
+  factory SkinCareAiRoutineResult.error(String msg, {String? errorCode}) {
     return SkinCareAiRoutineResult(
       routinePlans: [],
       morningRoutine: [],
@@ -261,6 +263,7 @@ class SkinCareAiRoutineResult {
       timelineBlocks: [],
       suggestedProducts: [],
       errorMessage: msg,
+      errorCode: errorCode,
     );
   }
 }
@@ -490,12 +493,14 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       final body = _jsonObject(response.body);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        final rawError = body['error'] as String?;
         return SkinCareAiRoutineResult.error(
           _friendlyErrorMessage(
             response.statusCode,
             body,
             endpoint: _SkinCareWorkerEndpoint.routineGenerate,
           ),
+          errorCode: rawError,
         );
       }
 

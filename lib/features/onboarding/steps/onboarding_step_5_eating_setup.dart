@@ -1428,7 +1428,7 @@ class _EatingTimelineSection extends StatelessWidget {
         ],
       ),
     );
-  } }
+  }
 }
 
 void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
@@ -1708,7 +1708,6 @@ class _EatingTimelineBlock extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -2394,12 +2393,7 @@ String _inferMealCategory(String title) {
   return 'meal';
 }
 
-String _shortTimeLabel(int minute) {
-  final hour = (minute ~/ 60) % 24;
-  final suffix = hour >= 12 ? 'PM' : 'AM';
-  final display = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-  return '$display $suffix';
-}
+
 
 String _normalizedFoodStyle(String? value, String? customText) {
   final style = value?.trim().toLowerCase();
@@ -2487,28 +2481,6 @@ IconData _mealIcon(String? category) {
   };
 }
 
-List<int> _mealBoundaryMinutes(
-  List<TimelineBlockDraft> blocks,
-  int startMinute,
-  int endMinute,
-) {
-  final minutes =
-      <int>{
-          for (final block in blocks) ...[block.startMinute, block.endMinute],
-        }.where((minute) {
-          return minute % 60 != 0 && minute > startMinute && minute < endMinute;
-        }).toList()
-        ..sort();
-  return minutes;
-}
 
-String _compactMinuteLabel(int minute) {
-  final safe = minute.clamp(0, 24 * 60).toInt();
-  final hour = safe ~/ 60;
-  final m = safe % 60;
-  final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-  final suffix = hour >= 12 ? 'p' : 'a';
-  return '$displayHour:${m.toString().padLeft(2, '0')}$suffix';
-}
 
 

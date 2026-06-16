@@ -21,6 +21,66 @@ class Onboarding7SkinCareScheduleResult {
 }
 
 @visibleForTesting
+bool onboarding7IsSpecialCarePlan(SkinCareRoutinePlan plan) {
+  final content = [
+    plan.title,
+    plan.slotLabel,
+    ...plan.steps,
+    ...plan.productNames,
+    ...plan.warnings,
+  ].join(' ').toLowerCase();
+
+  final specialTerms = [
+    'retinol',
+    'retinal',
+    'tretinoin',
+    'adapalene',
+    'exfoliant',
+    'exfoliate',
+    'peeling',
+    'peel',
+    'aha',
+    'bha',
+    'glycolic',
+    'lactic',
+    'salicylic',
+    'mandelic',
+    'benzoyl peroxide',
+    'strong active',
+  ];
+
+  return specialTerms.any((term) => content.contains(term));
+}
+
+class Onboarding7PartitionedPlans {
+  final List<SkinCareRoutinePlan> dailyPlans;
+  final List<SkinCareRoutinePlan> specialCarePlans;
+
+  const Onboarding7PartitionedPlans({
+    required this.dailyPlans,
+    required this.specialCarePlans,
+  });
+}
+
+Onboarding7PartitionedPlans onboarding7PartitionRoutinePlans(List<SkinCareRoutinePlan> plans) {
+  final dailyPlans = <SkinCareRoutinePlan>[];
+  final specialCarePlans = <SkinCareRoutinePlan>[];
+
+  for (final plan in plans) {
+    if (onboarding7IsSpecialCarePlan(plan)) {
+      specialCarePlans.add(plan);
+    } else {
+      dailyPlans.add(plan);
+    }
+  }
+
+  return Onboarding7PartitionedPlans(
+    dailyPlans: dailyPlans,
+    specialCarePlans: specialCarePlans,
+  );
+}
+
+@visibleForTesting
 class Onboarding7RoutinePlanAdaptationResult {
   final List<SkinCareRoutinePlan> plans;
   final String? errorMessage;
@@ -172,10 +232,10 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
         plan.productNames.isEmpty ? fallbackProductNames : plan.productNames,
       );
       final steps = _dedupeStrings(plan.steps);
-      if (products.isEmpty && steps.isEmpty) {
+      if (products.isEmpty) {
         return const Onboarding7SkinCareScheduleResult(
           blocks: [],
-          errorMessage: 'AI did not return enough safe routine steps.',
+          errorMessage: 'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
         );
       }
       scheduledSingles.add(
@@ -606,7 +666,7 @@ SkinCareRoutinePlan _planForSlot(
 }
 
 bool _meaningfulRoutinePlan(SkinCareRoutinePlan plan) {
-  return plan.steps.isNotEmpty || plan.productNames.isNotEmpty;
+  return plan.productNames.isNotEmpty;
 }
 
 SkinCareRoutinePlan? _generatedPlanForMissingSlot({
@@ -699,10 +759,7 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
 }
 
 String _missingSlotMessage(String slot) {
-  if (slot == 'midday' || slot == 'afternoon' || slot == 'morning') {
-    return 'Add a sunscreen product so this routine can be safely scheduled $slot.';
-  }
-  return 'AI did not return enough safe products to build a night routine.';
+  return 'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.';
 }
 
 bool _looksLikeSunscreen(String value) {

@@ -623,6 +623,7 @@ class _HasProductsModeScreenState
   bool _generating = false;
   String? _generationError;
   int _selectedDay = DateTime.now().weekday;
+  List<String> _suggestedProducts = [];
 
   @override
   void initState() {
@@ -860,7 +861,7 @@ class _HasProductsModeScreenState
         },
       );
 
-      if (result.hasError && result.errorMessage?.contains('json_payload_too_large') == true) {
+      if (result.hasError && result.errorCode == 'json_payload_too_large') {
         if (kDebugMode) debugPrint('[Onboarding7] Payload too large, retrying with compact payload...');
         result = await client.generateRoutine(
           uid: uid,
@@ -876,6 +877,7 @@ class _HasProductsModeScreenState
             'mainProblem': 'none',
             'budget': 'medium',
             'routinePreference': 'balanced',
+            'compact': true,
           },
         );
       }
@@ -898,7 +900,7 @@ class _HasProductsModeScreenState
         setState(() {
           _generating = false;
           _generationError = onboarding7FriendlyAiMessage(
-            result.errorMessage,
+            result.errorCode == 'json_payload_too_large' ? 'json_payload_too_large' : result.errorMessage,
             result.warnings,
           );
         });
@@ -908,7 +910,8 @@ class _HasProductsModeScreenState
       final dailyPlans = <SkinCareRoutinePlan>[];
       final specialPlans = <SkinCareRoutinePlan>[];
       for (final p in routinePlans) {
-        if (p.repeatDays.isNotEmpty && p.repeatDays.length < 7) {
+        if ((p.repeatDays.isNotEmpty && p.repeatDays.length < 7) ||
+            onboarding7IsSpecialCarePlan(p)) {
           specialPlans.add(p);
         } else {
           dailyPlans.add(p);
@@ -1071,46 +1074,56 @@ class _HasProductsModeScreenState
                   vertical: 12,
                 ),
                 radius: 20,
-                child: Row(
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        color: Colors.white.withValues(alpha: 0.4),
-                      ),
-                      child: const Icon(
-                        Icons.auto_awesome_rounded,
-                        color: OptivusColors.roseAccent,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Routine built',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              color: OptivusColors.textPrimary,
-                            ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.white.withValues(alpha: 0.4),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${widget.base.skinCareDesiredApplicationsPerDay} routines per day',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: OptivusColors.textSecondary,
-                            ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: OptivusColors.roseAccent,
+                            size: 18,
                           ),
-                        ],
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              'Routine built',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${widget.base.skinCareDesiredApplicationsPerDay} routines per day',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: OptivusColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
                     OnboardingActionPill(
                       label: 'Rebuild / Edit',
                       icon: Icons.refresh_rounded,
@@ -1132,6 +1145,18 @@ class _HasProductsModeScreenState
             ),
           ],
         ),
+        if (_suggestedProducts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(
+              'Suggested: ${_suggestedProducts.join(", ")}',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.roseAccent,
+              ),
+            ),
+          ),
         if (message != null) ...[
           const SizedBox(height: 10),
           _SkinCareInlineMessage(message: message),
@@ -1595,7 +1620,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         setState(() {
           _generating = false;
           _generationError = onboarding7FriendlyAiMessage(
-            result.errorMessage,
+            result.errorCode == 'json_payload_too_large' ? 'json_payload_too_large' : result.errorMessage,
             result.warnings,
           );
         });
@@ -1832,31 +1857,38 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                     vertical: 12,
                   ),
                   radius: 20,
-                  child: Row(
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10),
-                          color: Colors.white.withValues(alpha: 0.4),
-                        ),
-                        child: const Icon(
-                          Icons.auto_awesome_rounded,
-                          color: OptivusColors.purpleAccent,
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Routine built',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            color: OptivusColors.textPrimary,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              color: Colors.white.withValues(alpha: 0.4),
+                            ),
+                            child: const Icon(
+                              Icons.auto_awesome_rounded,
+                              color: OptivusColors.purpleAccent,
+                              size: 18,
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Routine built',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w900,
+                              color: OptivusColors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                       OnboardingActionPill(
                         label: 'Rebuild',
@@ -2149,15 +2181,32 @@ class _SkinCareTimelineSection extends ConsumerWidget {
           Expanded(
             child: dayBlocks.isEmpty
                 ? OnboardingTimelineEmptyCard(label: emptyLabel)
-                : _SkinCareVerticalTimeline(
+                : OnboardingVerticalTimeline(
+                    key: const ValueKey('onboarding-step7-full-timeline'),
                     blocks: dayBlocks,
                     accent: accent,
-                    onEditRequested: (block) => _showSkinCareBlockEditSheet(
-                      context,
-                      ref,
-                      block,
-                      accent,
+                    requiredHeightBuilder: (context, block, blockWidth) =>
+                        _calculateRequiredSkinCareBlockHeight(
+                      context: context,
+                      block: block,
+                      timeLabel: TimelineUtils.formatTimeRange(
+                        block.startMinute,
+                        block.endMinute,
+                      ),
+                      blockWidth: blockWidth,
                     ),
+                    blockBuilder: (ctx, block) {
+                      return _SkinCareBlockCard(
+                        item: block,
+                        baseColor: accent,
+                        onEditRequested: () => _showSkinCareBlockEditSheet(
+                          context,
+                          ref,
+                          block,
+                          accent,
+                        ),
+                      );
+                    },
                   ),
           ),
         ],
@@ -2620,124 +2669,6 @@ int? _parseClockMinute(String value) {
   return hour * 60 + minute;
 }
 
-class _TimelineRange {
-  final int startHour;
-  final int endHour;
-
-  const _TimelineRange({required this.startHour, required this.endHour});
-
-  int get startMinute => startHour * 60;
-  int get endMinute => endHour * 60;
-  int get hourCount => (endHour - startHour).clamp(1, 24);
-}
-
-class _VisualSkinCareBlock {
-  final TimelineBlockDraft block;
-  final int lane;
-  final int order;
-  final bool hasOverlap;
-  final double visualTop;
-  final double visualBottom;
-
-  const _VisualSkinCareBlock({
-    required this.block,
-    required this.lane,
-    required this.order,
-    required this.hasOverlap,
-    required this.visualTop,
-    required this.visualBottom,
-  });
-}
-
-class _SkinCareStretchedSegment {
-  final int startMinute;
-  final int endMinute;
-  final double extraStretch;
-
-  const _SkinCareStretchedSegment({
-    required this.startMinute,
-    required this.endMinute,
-    required this.extraStretch,
-  });
-}
-
-class _SkinCareTimelineLayout {
-  final int startMinute;
-  final int endMinute;
-  final double pxPerMinute;
-  final double topPadding;
-  final List<_SkinCareStretchedSegment> mergedSegments;
-  final double totalExtraStretch;
-
-  _SkinCareTimelineLayout({
-    required this.startMinute,
-    required int rangeMinutes,
-    required this.pxPerMinute,
-    required this.topPadding,
-    required List<_SkinCareStretchedSegment> segments,
-  }) : endMinute = startMinute + rangeMinutes,
-       mergedSegments = _mergeSegments(segments),
-       totalExtraStretch = _calculateTotalStretch(segments);
-
-  static List<_SkinCareStretchedSegment> _mergeSegments(
-    List<_SkinCareStretchedSegment> segments,
-  ) {
-    if (segments.isEmpty) return const [];
-    final sorted = List<_SkinCareStretchedSegment>.from(segments)
-      ..sort((a, b) {
-        final startCompare = a.startMinute.compareTo(b.startMinute);
-        if (startCompare != 0) return startCompare;
-        return a.endMinute.compareTo(b.endMinute);
-      });
-    final merged = <_SkinCareStretchedSegment>[];
-    var current = sorted.first;
-    for (var i = 1; i < sorted.length; i += 1) {
-      final next = sorted[i];
-      if (next.startMinute <= current.endMinute) {
-        current = _SkinCareStretchedSegment(
-          startMinute: current.startMinute,
-          endMinute: math.max(current.endMinute, next.endMinute),
-          extraStretch: current.extraStretch + next.extraStretch,
-        );
-      } else {
-        merged.add(current);
-        current = next;
-      }
-    }
-    merged.add(current);
-    return merged;
-  }
-
-  static double _calculateTotalStretch(
-    List<_SkinCareStretchedSegment> segments,
-  ) {
-    return _mergeSegments(
-      segments,
-    ).fold<double>(0, (sum, segment) => sum + segment.extraStretch);
-  }
-
-  double yFor(num minute) {
-    final m = minute.toDouble();
-    final clamped = m.clamp(startMinute.toDouble(), endMinute.toDouble());
-    final normalY = topPadding + (clamped - startMinute) * pxPerMinute;
-    var stretch = 0.0;
-    for (final segment in mergedSegments) {
-      if (m <= segment.startMinute) {
-        continue;
-      }
-      if (m >= segment.endMinute) {
-        stretch += segment.extraStretch;
-      } else {
-        final fraction =
-            (m - segment.startMinute) /
-            (segment.endMinute - segment.startMinute);
-        stretch += fraction * segment.extraStretch;
-      }
-    }
-    return normalY + stretch;
-  }
-}
-
 double _calculateRequiredSkinCareBlockHeight({
   required BuildContext context,
   required TimelineBlockDraft block,
@@ -2764,18 +2695,15 @@ double _calculateRequiredSkinCareBlockHeight({
     text: timeLabel,
     style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
     width: contentWidth,
+    maxLines: 1,
   );
   if (steps.isNotEmpty) {
-    height += 8.0;
+    height += 7.0;
     for (var i = 0; i < steps.length; i += 1) {
       height += _measureTextHeight(
         context: context,
         text: '${i + 1}. ${steps[i]}',
-        style: const TextStyle(
-          fontSize: 11.5,
-          height: 1.25,
-          fontWeight: FontWeight.w800,
-        ),
+        style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800),
         width: contentWidth,
         maxLines: 3,
       );
@@ -2792,7 +2720,7 @@ double _calculateRequiredSkinCareBlockHeight({
       maxLines: 3,
     );
   }
-  height += 30.0;
+  height += 40.0;
   return math.min(430.0, math.max(110.0, height));
 }
 
@@ -2823,469 +2751,25 @@ List<String> _skinCareInstructionLines(TimelineBlockDraft block) {
       .toList(growable: false);
 }
 
-class _SkinCareVerticalTimeline extends StatefulWidget {
-  final List<TimelineBlockDraft> blocks;
-  final Color accent;
-  final ValueChanged<TimelineBlockDraft>? onEditRequested;
+class _SkinCareBlockCard extends StatelessWidget {
+  final TimelineBlockDraft item;
+  final Color baseColor;
+  final VoidCallback? onEditRequested;
 
-  const _SkinCareVerticalTimeline({
-    required this.blocks,
-    required this.accent,
+  const _SkinCareBlockCard({
+    required this.item,
+    required this.baseColor,
     this.onEditRequested,
   });
 
   @override
-  State<_SkinCareVerticalTimeline> createState() =>
-      _SkinCareVerticalTimelineState();
-}
-
-class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
-  static const double _kMinTimelineAreaHeight = 300.0;
-  static const double _kPixelsPerMinute = 1.35;
-  static const int _kMaxOverlapLane = 3;
-  static const double _kLeftOffset = 64.0;
-  static const double _kTimelineBottomPadding =
-      OnboardingStepShell.bottomCtaHeight + 40;
-
-  String? _frontBlockId;
-
-  int _compareBlocksByTime(TimelineBlockDraft a, TimelineBlockDraft b) {
-    final startCompare = a.startMinute.compareTo(b.startMinute);
-    if (startCompare != 0) return startCompare;
-    final endCompare = a.endMinute.compareTo(b.endMinute);
-    if (endCompare != 0) return endCompare;
-    return a.title.compareTo(b.title);
-  }
-
-  bool _blocksVisuallyOverlap(
-    TimelineBlockDraft a,
-    TimelineBlockDraft b,
-    _SkinCareTimelineLayout layout,
-  ) {
-    final aTop = layout.yFor(a.startMinute);
-    final aBottom = layout.yFor(a.endMinute);
-    final bTop = layout.yFor(b.startMinute);
-    final bBottom = layout.yFor(b.endMinute);
-    return aTop < bBottom && aBottom > bTop;
-  }
-
-  double _blockDurationHeight(TimelineBlockDraft item) {
-    final durationMinutes = (item.endMinute - item.startMinute)
-        .clamp(1, 24 * 60)
-        .toInt();
-    return durationMinutes * _kPixelsPerMinute;
-  }
-
-  List<_VisualSkinCareBlock> _visualBlocksFor(
-    List<TimelineBlockDraft> dayItems,
-    _SkinCareTimelineLayout layout,
-  ) {
-    final sorted = [...dayItems]..sort(_compareBlocksByTime);
-    final active = <_VisualSkinCareBlock>[];
-    final visualBlocks = <_VisualSkinCareBlock>[];
-
-    for (final block in sorted) {
-      active.removeWhere(
-        (entry) => !_blocksVisuallyOverlap(block, entry.block, layout),
-      );
-
-      final usedLanes = active.map((entry) => entry.lane).toSet();
-      var lane = 0;
-      while (usedLanes.contains(lane) && lane < _kMaxOverlapLane) {
-        lane++;
-      }
-      if (usedLanes.contains(lane)) {
-        lane = _kMaxOverlapLane;
-      }
-
-      final visual = _VisualSkinCareBlock(
-        block: block,
-        lane: lane,
-        order: visualBlocks.length,
-        hasOverlap: dayItems.any(
-          (other) =>
-              other.id != block.id &&
-              _blocksVisuallyOverlap(block, other, layout),
-        ),
-        visualTop: layout.yFor(block.startMinute),
-        visualBottom: layout.yFor(block.endMinute),
-      );
-      active.add(visual);
-      visualBlocks.add(visual);
-    }
-
-    return visualBlocks;
-  }
-
-  _TimelineRange _rangeFor(List<TimelineBlockDraft> items) {
-    if (items.isEmpty) {
-      return const _TimelineRange(startHour: 7, endHour: 22);
-    }
-    final minStart = items.map((e) => e.startMinute).reduce(math.min);
-    final maxEnd = items.map((e) => e.endMinute).reduce(math.max);
-
-    final startHour = math.max(0, (minStart ~/ 60) - 1);
-    final endHour = math.min(24, ((maxEnd + 59) ~/ 60) + 1);
-
-    return _TimelineRange(startHour: startHour, endHour: endHour);
-  }
-
-  bool _isFrontVisual(
-    _VisualSkinCareBlock visual,
-    List<_VisualSkinCareBlock> visualBlocks,
-  ) {
-    if (!visual.hasOverlap) return true;
-    if (_frontBlockId != null) return visual.block.id == _frontBlockId;
-    final overlapping = visualBlocks
-        .where((v) => _visualsOverlap(visual, v))
-        .toList();
-    if (overlapping.isEmpty) return true;
-    final first = overlapping.reduce((a, b) => a.order < b.order ? a : b);
-    return visual == first;
-  }
-
-  bool _visualsOverlap(_VisualSkinCareBlock a, _VisualSkinCareBlock b) {
-    return a.visualTop < b.visualBottom && a.visualBottom > b.visualTop;
-  }
-
-  double _overlapExposedLabelWidth(double availableWidth) {
-    final timelineWidth = availableWidth - _kLeftOffset - 16;
-    if (timelineWidth < 180) return 36.0;
-    if (timelineWidth < 240) return 42.0;
-    return 48.0;
-  }
-
-  double _leftForVisual(
-    _VisualSkinCareBlock visual,
-    List<_VisualSkinCareBlock> visualBlocks,
-    double exposedLabelWidth,
-  ) {
-    final baseLeft = _kLeftOffset;
-    if (!visual.hasOverlap) return baseLeft;
-
-    final isFront = _isFrontVisual(visual, visualBlocks);
-    if (isFront) {
-      final hasOverlappingBacks = visualBlocks.any(
-        (v) =>
-            _visualsOverlap(visual, v) &&
-            v != visual &&
-            !_isFrontVisual(v, visualBlocks),
-      );
-      return baseLeft + (hasOverlappingBacks ? exposedLabelWidth : 0.0);
-    }
-
-    final overlapping = visualBlocks
-        .where((v) => _visualsOverlap(visual, v))
-        .toList();
-    final orderedBacks =
-        overlapping.where((v) => !_isFrontVisual(v, visualBlocks)).toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
-    final backIndex = orderedBacks.indexOf(visual);
-    if (backIndex == -1) return baseLeft;
-
-    final totalBacks = orderedBacks.length;
-    final maxLabelWidth = 48.0;
-    final actualLabelWidth = (exposedLabelWidth / math.max(1, totalBacks - 1))
-        .clamp(12.0, maxLabelWidth);
-
-    return baseLeft + (backIndex * actualLabelWidth);
-  }
-
-  double _rightForVisual(
-    _VisualSkinCareBlock visual,
-    List<_VisualSkinCareBlock> visualBlocks,
-  ) {
-    if (!visual.hasOverlap) return 16.0;
-    final isFront = _isFrontVisual(visual, visualBlocks);
-    if (isFront) return 16.0;
-
-    final frontBlock = visualBlocks.firstWhere(
-      (v) => _visualsOverlap(visual, v) && _isFrontVisual(v, visualBlocks),
-      orElse: () => visual,
-    );
-
-    if (frontBlock == visual) return 16.0;
-
-    final overlapping = visualBlocks
-        .where((v) => _visualsOverlap(visual, v))
-        .toList();
-    final orderedBacks =
-        overlapping.where((v) => !_isFrontVisual(v, visualBlocks)).toList()
-          ..sort((a, b) => a.order.compareTo(b.order));
-    final backIndex = orderedBacks.indexOf(visual);
-    final totalBacks = orderedBacks.length;
-    final insetPerBack = 12.0;
-
-    final stackInset = (totalBacks - 1 - backIndex) * insetPerBack;
-    return 16.0 + 8.0 + stackInset;
-  }
-
-  List<_VisualSkinCareBlock> _paintOrderedBlocks(
-    List<_VisualSkinCareBlock> visualBlocks,
-  ) {
-    final painted = [...visualBlocks];
-    painted.sort((a, b) {
-      final aFront = _isFrontVisual(a, visualBlocks);
-      final bFront = _isFrontVisual(b, visualBlocks);
-      if (aFront && !bFront) return 1;
-      if (!aFront && bFront) return -1;
-      return a.order.compareTo(b.order);
-    });
-    return painted;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final dayItems = [...widget.blocks]..sort(_compareBlocksByTime);
-    final range = _rangeFor(widget.blocks);
-    const topPadding = 18.0;
-    const bottomPadding = _kTimelineBottomPadding;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final height =
-            constraints.maxHeight.isFinite && constraints.maxHeight > 0
-            ? constraints.maxHeight
-            : _kMinTimelineAreaHeight;
-
-        return SizedBox(
-          height: height,
-          child: Container(
-            key: const ValueKey('onboarding-step7-full-timeline'),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.4),
-              border: Border(
-                top: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  width: 1.5,
-                ),
-              ),
-            ),
-            child: ShaderMask(
-              shaderCallback: (Rect bounds) {
-                return const LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.white,
-                    Colors.white,
-                    Colors.transparent,
-                  ],
-                  stops: [0.0, 0.05, 0.95, 1.0],
-                ).createShader(bounds);
-              },
-              blendMode: BlendMode.dstIn,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.only(bottom: _kTimelineBottomPadding),
-                child: LayoutBuilder(
-                  builder: (context, scrollConstraints) {
-                    final exposedLabelWidth = _overlapExposedLabelWidth(
-                      scrollConstraints.maxWidth,
-                    );
-                    final blockWidth = math.max(
-                      80.0,
-                      scrollConstraints.maxWidth -
-                          _kLeftOffset -
-                          16.0 -
-                          exposedLabelWidth,
-                    );
-                    final segments = <_SkinCareStretchedSegment>[];
-                    for (final block in dayItems) {
-                      final normalHeight = _blockDurationHeight(block);
-                      final requiredHeight =
-                          _calculateRequiredSkinCareBlockHeight(
-                            context: context,
-                            block: block,
-                            timeLabel: TimelineUtils.formatTimeRange(
-                              block.startMinute,
-                              block.endMinute,
-                            ),
-                            blockWidth: blockWidth,
-                          );
-                      if (requiredHeight > normalHeight) {
-                        segments.add(
-                          _SkinCareStretchedSegment(
-                            startMinute: block.startMinute,
-                            endMinute: block.endMinute,
-                            extraStretch: requiredHeight - normalHeight,
-                          ),
-                        );
-                      }
-                    }
-                    final layout = _SkinCareTimelineLayout(
-                      startMinute: range.startMinute,
-                      rangeMinutes: range.endMinute - range.startMinute,
-                      pxPerMinute: _kPixelsPerMinute,
-                      topPadding: topPadding,
-                      segments: segments,
-                    );
-                    final visualBlocks = _visualBlocksFor(dayItems, layout);
-                    final paintedBlocks = _paintOrderedBlocks(visualBlocks);
-                    final maxCardBottom = dayItems.fold<double>(0, (
-                      maxBottom,
-                      item,
-                    ) {
-                      final bottom = layout.yFor(item.endMinute);
-                      return bottom > maxBottom ? bottom : maxBottom;
-                    });
-                    final timelineHeight = [
-                      layout.yFor(range.endMinute) + bottomPadding,
-                      maxCardBottom + bottomPadding,
-                    ].reduce((a, b) => a > b ? a : b);
-
-                    return SizedBox(
-                      height: timelineHeight,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          Positioned(
-                            top: 0,
-                            bottom: 0,
-                            left: 48,
-                            width: 8,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: widget.accent.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: widget.accent.withValues(alpha: 0.40),
-                                  width: 1.2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: widget.accent.withValues(
-                                      alpha: 0.18,
-                                    ),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          ..._buildMinuteIndicators(
-                            range: range,
-                            dayItems: dayItems,
-                            layout: layout,
-                          ),
-
-                          ...List.generate(range.hourCount + 1, (i) {
-                            final minute = range.startMinute + i * 60;
-                            return OnboardingTimelineTick(
-                              minute: minute,
-                              top: layout.yFor(minute),
-                              accent: widget.accent,
-                            );
-                          }),
-
-                          ...paintedBlocks.map(
-                            (visual) => _buildColoredBlock(
-                              visual,
-                              visualBlocks: visualBlocks,
-                              layout: layout,
-                              exposedLabelWidth: exposedLabelWidth,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  List<Widget> _buildMinuteIndicators({
-    required _TimelineRange range,
-    required List<TimelineBlockDraft> dayItems,
-    required _SkinCareTimelineLayout layout,
-  }) {
-    final widgets = <Widget>[];
-    final boundaryMinutes =
-        (<int>{
-            for (final item in dayItems) ...[item.startMinute, item.endMinute],
-          }.where((minute) {
-            return minute % 60 != 0 &&
-                minute > range.startMinute &&
-                minute < range.endMinute;
-          }).toList())
-          ..sort();
-
-    var lastLabelY = double.negativeInfinity;
-    for (final minute in boundaryMinutes) {
-      final y = layout.yFor(minute);
-      final showLabel = y - lastLabelY >= 18;
-      if (showLabel) lastLabelY = y;
-      widgets.addAll([
-        if (showLabel)
-          Positioned(
-            top: y - 8,
-            left: 0,
-            width: 38,
-            height: 16,
-            child: Text(
-              TimelineUtils.formatMinuteShort(minute),
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: widget.accent.withValues(alpha: 0.68),
-              ),
-            ),
-          ),
-        Positioned(
-          top: y,
-          left: _kLeftOffset,
-          right: 16,
-          height: 1,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: widget.accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        ),
-        Positioned(
-          top: y,
-          left: 44,
-          width: 18,
-          height: 1.5,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: widget.accent.withValues(alpha: 0.48),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        ),
-      ]);
-    }
-    return widgets;
-  }
-
-  Widget _buildColoredBlock(
-    _VisualSkinCareBlock visual, {
-    required List<_VisualSkinCareBlock> visualBlocks,
-    required _SkinCareTimelineLayout layout,
-    required double exposedLabelWidth,
-  }) {
-    final item = visual.block;
-    final isFront = _isFrontVisual(visual, visualBlocks);
-    final isBackOverlap = visual.hasOverlap && !isFront;
-    final top = visual.visualTop;
-    final exactHeight = _blockDurationHeight(item);
-    final height = math.max(exactHeight, visual.visualBottom - top);
-    final compact = height < 92;
-    final tiny = height < 42;
-    final baseColor = widget.accent;
-    final instructionLines = _skinCareInstructionLines(item);
+    final instructionLines = [
+       if (item.skincareSteps.isNotEmpty)
+         ...item.skincareSteps.map((i) => i.trim()).where((i) => i.isNotEmpty)
+       else
+         ...item.skincareProducts.map((i) => i.trim()).where((i) => i.isNotEmpty)
+    ];
     final productNames = item.skincareProducts
         .map((product) => product.trim())
         .where((product) => product.isNotEmpty)
@@ -3295,196 +2779,126 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
       item.endMinute,
     );
 
-    return Positioned(
-      top: top,
-      left: _leftForVisual(visual, visualBlocks, exposedLabelWidth),
-      right: _rightForVisual(visual, visualBlocks),
-      height: height,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          setState(() => _frontBlockId = item.id);
-        },
-        child: SizedBox.expand(
-          child: Container(
-            key: ValueKey('onboarding-step7-block-${item.id}'),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              color: Colors.white.withValues(
-                alpha: visual.hasOverlap ? (isFront ? 0.72 : 0.58) : 0.42,
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  baseColor.withValues(alpha: isFront ? 0.26 : 0.18),
-                  baseColor.withValues(alpha: isFront ? 0.08 : 0.04),
-                ],
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: isFront ? 0.96 : 0.82),
-                width: isFront ? 1.6 : 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: baseColor.withValues(alpha: isFront ? 0.18 : 0.09),
-                  blurRadius: isFront ? 14 : 10,
-                  offset: Offset(0, isFront ? 5 : 3),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: LayoutBuilder(
-                  builder: (context, cardConstraints) {
-                    return Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isBackOverlap
-                            ? 0
-                            : tiny
-                            ? 8
-                            : compact
-                            ? 12
-                            : 14,
-                        vertical: isBackOverlap
-                            ? 5
-                            : tiny
-                            ? 1
-                            : compact
-                            ? 7
-                            : 10,
+    return Container(
+      key: ValueKey('onboarding-step7-block-${item.id}'),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        color: Colors.white.withValues(alpha: 0.72),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            baseColor.withValues(alpha: 0.26),
+            baseColor.withValues(alpha: 0.08),
+          ],
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.96),
+          width: 1.6,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: baseColor.withValues(alpha: 0.18),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.face_retouching_natural_rounded,
+                        color: baseColor,
+                        size: 15,
                       ),
-                      child: isBackOverlap
-                          ? Center(
-                              child: RotatedBox(
-                                quarterTurns: 3,
-                                child: Text(
-                                  item.title,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                    color: baseColor.withValues(alpha: 0.7),
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.max,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.face_retouching_natural_rounded,
-                                      color: baseColor,
-                                      size: tiny ? 10 : 15,
-                                    ),
-                                    SizedBox(width: tiny ? 4 : 8),
-                                    Expanded(
-                                      child: Text(
-                                        item.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: tiny ? 10 : 13,
-                                          fontWeight: FontWeight.w900,
-                                          color: const Color(0xFF0F111A),
-                                        ),
-                                      ),
-                                    ),
-                                    if (widget.onEditRequested != null) ...[
-                                      const SizedBox(width: 4),
-                                      SizedBox(
-                                        width: 28,
-                                        height: 28,
-                                        child: IconButton(
-                                          key: ValueKey(
-                                            'onboarding-step7-edit-${item.id}',
-                                          ),
-                                          tooltip: 'Edit',
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(
-                                            minWidth: 28,
-                                            minHeight: 28,
-                                          ),
-                                          iconSize: 16,
-                                          color: baseColor,
-                                          onPressed: () =>
-                                              widget.onEditRequested!(item),
-                                          icon: const Icon(
-                                            Icons.more_horiz_rounded,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                if (!tiny) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    timeLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: compact ? 10 : 10.5,
-                                      fontWeight: FontWeight.w800,
-                                      color: baseColor.withValues(alpha: 0.82),
-                                    ),
-                                  ),
-                                  if (instructionLines.isNotEmpty) ...[
-                                    const SizedBox(height: 7),
-                                    for (
-                                      var i = 0;
-                                      i < instructionLines.length;
-                                      i += 1
-                                    )
-                                      Padding(
-                                        padding: EdgeInsets.only(
-                                          bottom:
-                                              i == instructionLines.length - 1
-                                              ? 0
-                                              : 4,
-                                        ),
-                                        child: Text(
-                                          '${i + 1}. ${instructionLines[i]}',
-                                          key: ValueKey(
-                                            'onboarding-step7-step-${item.id}-$i',
-                                          ),
-                                          maxLines: 3,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: compact ? 10.5 : 11.5,
-                                            fontWeight: FontWeight.w800,
-                                            color: OptivusColors.textPrimary
-                                                .withValues(alpha: 0.86),
-                                            height: 1.24,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                  if (productNames.isNotEmpty) ...[
-                                    const SizedBox(height: 7),
-                                    Text(
-                                      productNames.join(', '),
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: compact ? 10 : 10.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: OptivusColors.textSecondary,
-                                        height: 1.25,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ],
-                            ),
-                    );
-                  },
-                ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF0F111A),
+                          ),
+                        ),
+                      ),
+                      if (onEditRequested != null) ...[
+                        const SizedBox(width: 4),
+                        SizedBox(
+                          width: 28,
+                          height: 28,
+                          child: IconButton(
+                            key: ValueKey('onboarding-step7-edit-${item.id}'),
+                            tooltip: 'Edit',
+                            padding: EdgeInsets.zero,
+                            onPressed: onEditRequested,
+                            icon: const Icon(Icons.more_horiz_rounded),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    timeLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: baseColor.withValues(alpha: 0.82),
+                    ),
+                  ),
+                  if (instructionLines.isNotEmpty) ...[
+                    const SizedBox(height: 7),
+                    for (var i = 0; i < instructionLines.length; i += 1)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: i == instructionLines.length - 1 ? 0 : 4,
+                        ),
+                        child: Text(
+                          '${i + 1}. ${instructionLines[i]}',
+                          key: ValueKey('onboarding-step7-step-${item.id}-$i'),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color: OptivusColors.textPrimary.withValues(alpha: 0.86),
+                            height: 1.24,
+                          ),
+                        ),
+                      ),
+                  ],
+                  if (productNames.isNotEmpty) ...[
+                    const SizedBox(height: 7),
+                    Text(
+                      productNames.join(', '),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.textSecondary,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

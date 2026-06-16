@@ -149,12 +149,16 @@ class OnboardingTimelineEmptyCard extends StatelessWidget {
 class OnboardingVerticalTimeline extends StatelessWidget {
   final List<TimelineBlockDraft> blocks;
   final Widget Function(BuildContext, TimelineBlockDraft) blockBuilder;
+  final List<String> Function(TimelineBlockDraft)? stretchItemsBuilder;
+  final double Function(BuildContext, TimelineBlockDraft, double)? requiredHeightBuilder;
   final Color accent;
 
   const OnboardingVerticalTimeline({
     super.key,
     required this.blocks,
     required this.blockBuilder,
+    this.stretchItemsBuilder,
+    this.requiredHeightBuilder,
     this.accent = OptivusColors.roseAccent,
   });
 
@@ -192,14 +196,15 @@ class OnboardingVerticalTimeline extends StatelessWidget {
           final normalHeight = (block.endMinute - block.startMinute) * pxPerMinute;
           // To keep it generic, we use a fixed estimated required height or pass items directly
           // For now, let's assume all generic blocks need to evaluate their items
-          final items = [...block.dishes, ...block.products, ...block.steps];
-          final requiredHeight = calculateRequiredBlockHeight(
-            context: context,
-            titleRowHeight: 22.0,
-            items: items,
-            timeLabel: '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-            blockWidth: blockWidth,
-          );
+          final requiredHeight = requiredHeightBuilder != null 
+              ? requiredHeightBuilder!(context, block, blockWidth)
+              : calculateRequiredBlockHeight(
+                  context: context,
+                  titleRowHeight: 22.0,
+                  items: stretchItemsBuilder?.call(block) ?? block.dishes,
+                  timeLabel: '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                  blockWidth: blockWidth,
+                );
           if (requiredHeight > normalHeight) {
             segments.add(StretchedSegment(
               startMinute: block.startMinute,
@@ -340,7 +345,7 @@ class OnboardingTimelineTick extends StatelessWidget {
               overflow: TextOverflow.clip,
               style: const TextStyle(
                 fontSize: 10,
-                fontWeight: 700,
+                fontWeight: FontWeight.w700,
                 height: 1.1,
                 color: OptivusColors.textSecondary,
               ),

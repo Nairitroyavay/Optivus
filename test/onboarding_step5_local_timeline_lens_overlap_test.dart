@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 
 void main() {
-  group('EatingTimelineLayout Monotonicity & Lens Tests', () {
+  group('OnboardingTimelineLayout Monotonicity & Lens Tests', () {
     test('without stretching, ticks map linearly and monotonically', () {
-      final layout = EatingTimelineLayout(
+      final layout = OnboardingTimelineLayout(
         startMinute: 480, // 8:00 AM
         rangeMinutes: 720, // 12 hours
         pxPerMinute: 1.0,
@@ -23,7 +23,7 @@ void main() {
     });
 
     test('single stretched segment increases local height and is monotonic', () {
-      final layout = EatingTimelineLayout(
+      final layout = OnboardingTimelineLayout(
         startMinute: 480, // 8:00 AM
         rangeMinutes: 720,
         pxPerMinute: 1.0,
@@ -52,7 +52,7 @@ void main() {
       // Segment 1: 600 - 620, extra: 50
       // Segment 2: 615 - 635, extra: 30
       // Union: 600 - 635, combined extra: 80
-      final layout = EatingTimelineLayout(
+      final layout = OnboardingTimelineLayout(
         startMinute: 480,
         rangeMinutes: 720,
         pxPerMinute: 1.0,
@@ -77,7 +77,7 @@ void main() {
       // Segment 1: 600 - 620, extra: 50
       // Segment 2: 620 - 640, extra: 40
       // Union: 600 - 640, combined extra: 90
-      final layout = EatingTimelineLayout(
+      final layout = OnboardingTimelineLayout(
         startMinute: 480,
         rangeMinutes: 720,
         pxPerMinute: 1.0,
