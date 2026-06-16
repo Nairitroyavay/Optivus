@@ -7,6 +7,17 @@ import 'package:optivus/services/skin_care_ai_client.dart';
 const int onboarding7SkinCareDurationMinutes = 15;
 
 const List<int> onboarding7EveryDay = [1, 2, 3, 4, 5, 6, 7];
+const String _noRoutineMessage =
+    'AI could not build a routine from these products. Try typing the product names clearly.';
+const String _unsafeFrequencyMessage =
+    'These products may not safely support this many daily routines. Try fewer routines or add more basic products.';
+const List<String> _schedulableSlotLabels = [
+  'morning',
+  'midday',
+  'afternoon',
+  'night',
+];
+const List<String> _daytimeSlotLabels = ['morning', 'midday', 'afternoon'];
 
 class Onboarding7SkinCareScheduleResult {
   final List<TimelineBlockDraft> blocks;
@@ -22,34 +33,18 @@ class Onboarding7SkinCareScheduleResult {
 
 @visibleForTesting
 bool onboarding7IsSpecialCarePlan(SkinCareRoutinePlan plan) {
-  final content = [
+  final fields = [
     plan.title,
     plan.slotLabel,
     ...plan.steps,
     ...plan.productNames,
     ...plan.warnings,
-  ].join(' ').toLowerCase();
-
-  final specialTerms = [
-    'retinol',
-    'retinal',
-    'tretinoin',
-    'adapalene',
-    'exfoliant',
-    'exfoliate',
-    'peeling',
-    'peel',
-    'aha',
-    'bha',
-    'glycolic',
-    'lactic',
-    'salicylic',
-    'mandelic',
-    'benzoyl peroxide',
-    'strong active',
   ];
 
-  return specialTerms.any((term) => content.contains(term));
+  if (!fields.any(_looksLikeStrongActive)) {
+    return false;
+  }
+  return !_planExplicitlyAllowsDailyStrongActive(plan);
 }
 
 class Onboarding7PartitionedPlans {
@@ -80,6 +75,25 @@ Onboarding7PartitionedPlans onboarding7PartitionRoutinePlans(
     dailyPlans: dailyPlans,
     specialCarePlans: specialCarePlans,
   );
+}
+
+List<String> onboarding7MissingBasicProductNotes({
+  required List<String> productNames,
+  required List<SkinCareDetectedProduct> productDetails,
+}) {
+  final ownedProducts = _ownedProductCatalogFromBasis(
+    productNames: productNames,
+    productDetails: productDetails,
+  );
+  if (ownedProducts.isEmpty) return const [];
+  return [
+    if (!ownedProducts.hasMoisturizer)
+      'No moisturizer detected. You can still use your current products, but adding moisturizer may improve night routine balance.',
+    if (!ownedProducts.hasSunscreen)
+      'No sunscreen detected. Consider adding SPF for daytime protection.',
+    if (!ownedProducts.hasCleanser)
+      'No cleanser detected. Add a cleanser if you want a complete cleanse step.',
+  ];
 }
 
 @visibleForTesting
@@ -120,20 +134,95 @@ class _ScheduleWindow {
   });
 }
 
-class _SlotProducts {
-  final List<String> sunscreens;
-  final List<String> cleansers;
-  final List<String> moisturizers;
+class _OwnedProduct {
+  final String name;
+  final String category;
+  final List<String> searchableFields;
 
-  const _SlotProducts({
-    required this.sunscreens,
-    required this.cleansers,
-    required this.moisturizers,
+  const _OwnedProduct({
+    required this.name,
+    required this.category,
+    required this.searchableFields,
   });
 
-  String? get sunscreen => sunscreens.firstOrNull;
-  String? get cleanser => cleansers.firstOrNull;
-  String? get moisturizer => moisturizers.firstOrNull;
+  bool get isSunscreen =>
+      category == 'sunscreen' || searchableFields.any(_looksLikeSunscreen);
+  bool get isCleanser =>
+      category == 'cleanser' || searchableFields.any(_looksLikeCleanser);
+  bool get isMoisturizer =>
+      category == 'moisturizer' ||
+      category == 'moisturiser' ||
+      searchableFields.any(_looksLikeMoisturizer);
+  bool get isSerum => searchableFields.any(_looksLikeSerum);
+  bool get isStrongActive => searchableFields.any(_looksLikeStrongActive);
+}
+
+class _OwnedProductCatalog {
+  final List<_OwnedProduct> products;
+
+  const _OwnedProductCatalog(this.products);
+
+  bool get isEmpty => products.isEmpty;
+  bool get hasSunscreen => products.any((product) => product.isSunscreen);
+  bool get hasCleanser => products.any((product) => product.isCleanser);
+  bool get hasMoisturizer => products.any((product) => product.isMoisturizer);
+  _OwnedProduct? get sunscreen =>
+      _firstWhereOrNull(products, (product) => product.isSunscreen);
+
+  _OwnedProduct? match(String value) {
+    final query = _normalizedProductKey(value);
+    if (query.isEmpty) return null;
+    if (_isGenericProductName(value)) {
+      return _matchByCategory(value);
+    }
+
+    for (final product in products) {
+      final nameKey = _normalizedProductKey(product.name);
+      if (nameKey == query) return product;
+    }
+    for (final product in products) {
+      final nameKey = _normalizedProductKey(product.name);
+      if (query.length >= 4 &&
+          (nameKey.contains(query) || query.contains(nameKey))) {
+        return product;
+      }
+    }
+    for (final product in products) {
+      if (product.searchableFields
+          .map(_normalizedProductKey)
+          .where((field) => field.isNotEmpty)
+          .any((field) => field == query || field.contains(query))) {
+        return product;
+      }
+    }
+
+    final lower = value.toLowerCase();
+    return _matchByCategory(lower);
+  }
+
+  _OwnedProduct? _matchByCategory(String value) {
+    final lower = value.toLowerCase();
+    if (_looksLikeSunscreen(lower)) {
+      return _preferredProduct((product) => product.isSunscreen);
+    }
+    if (_looksLikeCleanser(lower)) {
+      return _preferredProduct((product) => product.isCleanser);
+    }
+    if (_looksLikeMoisturizer(lower)) {
+      return _preferredProduct((product) => product.isMoisturizer);
+    }
+    if (_looksLikeSerum(lower)) {
+      return _preferredProduct((product) => product.isSerum);
+    }
+    return null;
+  }
+
+  _OwnedProduct? _preferredProduct(bool Function(_OwnedProduct) test) {
+    return _firstWhereOrNull(products, (product) {
+          return test(product) && !_isGenericProductName(product.name);
+        }) ??
+        _firstWhereOrNull(products, test);
+  }
 }
 
 @visibleForTesting
@@ -195,7 +284,12 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
 
   for (var index = 0; index < desired; index += 1) {
     final plan = adaptedPlans.plans[index];
-    final spec = slotSpecs[index];
+    final spec = _skinCareSlotSpecForLabel(
+      plan.slotLabel,
+      fallbackSpec: slotSpecs[index],
+      bathBlock: bathBlock,
+      wakingRange: wakingRange,
+    );
     final repeatDays = forceEveryDay
         ? onboarding7EveryDay
         : _safeRepeatDays(plan.repeatDays);
@@ -209,7 +303,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
         );
       }
 
-      final afterBath = index == 0;
+      final afterBath = spec.slotLabel == 'morning';
       final minStart = afterBath
           ? math.max(wakingRange.startMinute, bathWindow.endMinute + 5)
           : wakingRange.startMinute;
@@ -254,7 +348,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
         return const Onboarding7SkinCareScheduleResult(
           blocks: [],
           errorMessage:
-              'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
+              'AI could not build a routine from these products. Try typing the product names clearly.',
         );
       }
       scheduledSingles.add(
@@ -445,21 +539,17 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   );
   final unused = sourcePlans.toList();
   final selectedBySlot = <String, SkinCareRoutinePlan>{};
-  final productBasis = _dedupeStrings([
-    ...fallbackProductNames,
-    for (final product in fallbackProductDetails) product.fallbackLabel,
-    for (final plan in sourcePlans) ...plan.productNames,
-  ]);
-  final slotProducts = _slotProductsFromBasis(
-    productBasis: productBasis,
+  final ownedProducts = _ownedProductCatalogFromBasis(
+    productNames: fallbackProductNames,
     productDetails: fallbackProductDetails,
   );
+  var hasUsableSunscreenIntent = false;
   var usableDailyPlanCount = 0;
 
-  if (sourcePlans.isEmpty) {
+  if (sourcePlans.isEmpty || ownedProducts.isEmpty) {
     return Onboarding7RoutinePlanAdaptationResult(
       plans: const [],
-      errorMessage: _missingSlotMessage('daily'),
+      errorMessage: _noRoutineMessage,
     );
   }
 
@@ -467,58 +557,115 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
     final slot = targetSlots[index];
     final spec = slotSpecs[index];
     final matchIndex = unused.indexWhere(
-      (plan) =>
-          _slotCompatible(plan.slotLabel, slot, targetSlots: targetSlots) &&
-          _planHasUsableDailyIntentForSlot(plan, slot),
+      (plan) => _slotCompatible(plan.slotLabel, slot, targetSlots: targetSlots),
     );
     if (matchIndex >= 0) {
       final rawPlan = unused.removeAt(matchIndex);
-      final selectedPlan = _slotSafePlanForSlot(
+      final selectedPlan = _ownedProductPlanForSlot(
         plan: rawPlan,
         slot: slot,
         title: spec.title,
-        slotProducts: slotProducts,
+        ownedProducts: ownedProducts,
       );
-      if (selectedPlan == null) {
-        return Onboarding7RoutinePlanAdaptationResult(
-          plans: selectedBySlot.values.toList(growable: false),
-          errorMessage: _missingSlotMessage(slot),
-        );
+      if (selectedPlan != null) {
+        hasUsableSunscreenIntent =
+            hasUsableSunscreenIntent ||
+            _planUsesSunscreen(selectedPlan, ownedProducts);
+        usableDailyPlanCount += 1;
+        selectedBySlot[slot] = selectedPlan;
       }
+    }
+  }
+
+  if (usableDailyPlanCount == 0) {
+    for (final rawPlan in unused.toList(growable: false)) {
+      final slot = _canonicalSlotLabel(rawPlan.slotLabel);
+      if (!_schedulableSlotLabels.contains(slot) ||
+          selectedBySlot.containsKey(slot)) {
+        continue;
+      }
+      final selectedPlan = _ownedProductPlanForSlot(
+        plan: rawPlan,
+        slot: slot,
+        title: _titleForSlot(slot),
+        ownedProducts: ownedProducts,
+      );
+      if (selectedPlan == null) continue;
+      unused.remove(rawPlan);
+      hasUsableSunscreenIntent =
+          hasUsableSunscreenIntent ||
+          _planUsesSunscreen(selectedPlan, ownedProducts);
       usableDailyPlanCount += 1;
       selectedBySlot[slot] = selectedPlan;
+      break;
     }
   }
 
   if (usableDailyPlanCount == 0) {
     return Onboarding7RoutinePlanAdaptationResult(
       plans: const [],
-      errorMessage: _missingSlotMessage('daily'),
+      errorMessage: _noRoutineMessage,
     );
   }
 
-  final selected = <SkinCareRoutinePlan>[];
-  for (var index = 0; index < targetSlots.length; index += 1) {
-    final slot = targetSlots[index];
-    final spec = slotSpecs[index];
-    final selectedPlan = selectedBySlot[slot];
-    if (selectedPlan != null) {
-      selected.add(selectedPlan);
+  for (final rawPlan in unused.toList(growable: false)) {
+    if (selectedBySlot.length >= desired) break;
+    final slot = _canonicalSlotLabel(rawPlan.slotLabel);
+    if (!_schedulableSlotLabels.contains(slot) ||
+        selectedBySlot.containsKey(slot)) {
       continue;
     }
-
-    final generated = _generatedPlanForMissingSlot(
+    final selectedPlan = _ownedProductPlanForSlot(
+      plan: rawPlan,
       slot: slot,
-      title: spec.title,
-      slotProducts: slotProducts,
+      title: _titleForSlot(slot),
+      ownedProducts: ownedProducts,
     );
-    if (generated == null) {
-      return Onboarding7RoutinePlanAdaptationResult(
-        plans: selected,
-        errorMessage: _missingSlotMessage(slot),
-      );
-    }
-    selected.add(generated);
+    if (selectedPlan == null) continue;
+    unused.remove(rawPlan);
+    hasUsableSunscreenIntent =
+        hasUsableSunscreenIntent ||
+        _planUsesSunscreen(selectedPlan, ownedProducts);
+    selectedBySlot[slot] = selectedPlan;
+  }
+
+  for (var index = 0; index < targetSlots.length; index += 1) {
+    if (selectedBySlot.length >= desired) break;
+    final slot = targetSlots[index];
+    if (selectedBySlot.containsKey(slot)) continue;
+    if (!_daytimeSlotLabels.contains(slot)) continue;
+
+    final generated = _generatedSunscreenPlanForMissingDaytimeSlot(
+      slot: slot,
+      title: slotSpecs[index].title,
+      ownedProducts: ownedProducts,
+      hasUsableSunscreenIntent: hasUsableSunscreenIntent,
+    );
+    if (generated == null) continue;
+    selectedBySlot[slot] = generated;
+  }
+
+  for (final slot in _daytimeSlotLabels) {
+    if (selectedBySlot.length >= desired) break;
+    if (selectedBySlot.containsKey(slot)) continue;
+    final generated = _generatedSunscreenPlanForMissingDaytimeSlot(
+      slot: slot,
+      title: _titleForSlot(slot),
+      ownedProducts: ownedProducts,
+      hasUsableSunscreenIntent: hasUsableSunscreenIntent,
+    );
+    if (generated == null) continue;
+    selectedBySlot[slot] = generated;
+  }
+
+  final selected = _orderedSelectedPlans(
+    selectedBySlot,
+  ).take(desired).toList(growable: false);
+  if (selected.length < desired) {
+    return Onboarding7RoutinePlanAdaptationResult(
+      plans: selected,
+      errorMessage: _unsafeFrequencyMessage,
+    );
   }
   return Onboarding7RoutinePlanAdaptationResult(plans: selected);
 }
@@ -690,12 +837,46 @@ Onboarding7WakingRange _wakingRangeForSleep(TimelineBlockDraft? sleepBlock) {
   return const Onboarding7WakingRange(startMinute: 6 * 60, endMinute: 23 * 60);
 }
 
+Onboarding7SkinCareSlotSpec _skinCareSlotSpecForLabel(
+  String rawSlot, {
+  required Onboarding7SkinCareSlotSpec fallbackSpec,
+  required TimelineBlockDraft? bathBlock,
+  required Onboarding7WakingRange wakingRange,
+}) {
+  final slot = _canonicalSlotLabel(rawSlot);
+  final firstStart = (bathBlock?.endMinute ?? wakingRange.startMinute) + 5;
+  final nightStart = math.min(21 * 60, wakingRange.endMinute - 45);
+  return switch (slot) {
+    'morning' => Onboarding7SkinCareSlotSpec(
+      slotLabel: 'morning',
+      title: 'Morning Skin Care',
+      preferredStartMinute: firstStart,
+    ),
+    'midday' => const Onboarding7SkinCareSlotSpec(
+      slotLabel: 'midday',
+      title: 'Midday Skin Care',
+      preferredStartMinute: 13 * 60,
+    ),
+    'afternoon' => const Onboarding7SkinCareSlotSpec(
+      slotLabel: 'afternoon',
+      title: 'Afternoon Skin Care',
+      preferredStartMinute: 16 * 60,
+    ),
+    'night' => Onboarding7SkinCareSlotSpec(
+      slotLabel: 'night',
+      title: 'Night Skin Care',
+      preferredStartMinute: nightStart,
+    ),
+    _ => fallbackSpec,
+  };
+}
+
 bool _slotCompatible(
   String rawSlot,
   String targetSlot, {
   required List<String> targetSlots,
 }) {
-  final slot = rawSlot.toLowerCase().trim();
+  final slot = _canonicalSlotLabel(rawSlot);
   if (slot.isEmpty || slot == 'custom') return false;
   if (slot == targetSlot) return true;
   if (targetSlot == 'midday') {
@@ -713,6 +894,42 @@ bool _slotCompatible(
   return false;
 }
 
+String _canonicalSlotLabel(String rawSlot) {
+  final slot = rawSlot.toLowerCase().trim().replaceAll('-', '_');
+  return switch (slot) {
+    'am' || 'after_bath' => 'morning',
+    'noon' || 'lunch' => 'midday',
+    'evening' || 'pm' || 'bedtime' => 'night',
+    _ => slot,
+  };
+}
+
+String _titleForSlot(String slot) {
+  return switch (slot) {
+    'morning' => 'Morning Skin Care',
+    'midday' => 'Midday Skin Care',
+    'afternoon' => 'Afternoon Skin Care',
+    'night' => 'Night Skin Care',
+    _ => 'Skin Care',
+  };
+}
+
+List<SkinCareRoutinePlan> _orderedSelectedPlans(
+  Map<String, SkinCareRoutinePlan> selectedBySlot,
+) {
+  final ordered = <SkinCareRoutinePlan>[];
+  for (final slot in _schedulableSlotLabels) {
+    final plan = selectedBySlot[slot];
+    if (plan != null) ordered.add(plan);
+  }
+  for (final entry in selectedBySlot.entries) {
+    if (!_schedulableSlotLabels.contains(entry.key)) {
+      ordered.add(entry.value);
+    }
+  }
+  return ordered;
+}
+
 SkinCareRoutinePlan _planForSlot(
   SkinCareRoutinePlan plan,
   String slot,
@@ -728,213 +945,181 @@ SkinCareRoutinePlan _planForSlot(
   );
 }
 
-SkinCareRoutinePlan? _slotSafePlanForSlot({
+SkinCareRoutinePlan? _ownedProductPlanForSlot({
   required SkinCareRoutinePlan plan,
   required String slot,
   required String title,
-  required _SlotProducts slotProducts,
+  required _OwnedProductCatalog ownedProducts,
 }) {
   final normalized = _planForSlot(plan, slot, title);
-  return _normalizedPlanForSlot(
-    plan: normalized,
-    slot: slot,
-    title: title,
-    slotProducts: slotProducts,
+  final matchedProducts = _matchedOwnedProductsForPlan(
+    normalized,
+    ownedProducts,
   );
-}
+  if (matchedProducts == null || matchedProducts.isEmpty) return null;
+  if (_planUsesOnlyNightSunscreen(normalized, matchedProducts)) return null;
+  if (_planRepeatsStrongActive(normalized, matchedProducts)) return null;
 
-bool _planHasUsableDailyIntentForSlot(SkinCareRoutinePlan plan, String slot) {
-  final categories = _dailyRoutineIntentCategories(plan);
-  return switch (slot) {
-    'morning' =>
-      categories.contains('cleanser') || categories.contains('sunscreen'),
-    'midday' || 'afternoon' => categories.contains('sunscreen'),
-    'night' =>
-      categories.contains('cleanser') || categories.contains('moisturizer'),
-    _ => false,
-  };
-}
-
-Set<String> _dailyRoutineIntentCategories(SkinCareRoutinePlan plan) {
-  final categories = <String>{};
-  for (final product in plan.productNames) {
-    final lower = product.toLowerCase();
-    final isSunscreen = _looksLikeSunscreen(lower);
-    if (isSunscreen) categories.add('sunscreen');
-    if (_looksLikeCleanser(lower)) categories.add('cleanser');
-    if (!isSunscreen && _looksLikeMoisturizer(lower)) {
-      categories.add('moisturizer');
-    }
-  }
-  for (final step in plan.steps) {
-    final lower = step.toLowerCase();
-    if (_looksLikeSunscreen(lower) || lower.contains('sun protection')) {
-      categories.add('sunscreen');
-    }
-    if (_looksLikeCleanser(lower)) categories.add('cleanser');
-    if (_stepMentionsMoisturizer(lower)) categories.add('moisturizer');
-  }
-  return categories;
-}
-
-SkinCareRoutinePlan? _generatedPlanForMissingSlot({
-  required String slot,
-  required String title,
-  required _SlotProducts slotProducts,
-}) {
-  return _normalizedPlanForSlot(
-    slot: slot,
-    title: title,
-    slotProducts: slotProducts,
-  );
-}
-
-SkinCareRoutinePlan? _normalizedPlanForSlot({
-  SkinCareRoutinePlan? plan,
-  required String slot,
-  required String title,
-  required _SlotProducts slotProducts,
-}) {
-  final cleanser = slotProducts.cleanser;
-  final sunscreen = slotProducts.sunscreen;
-  final moisturizer = slotProducts.moisturizer;
-  final requiredProducts = switch (slot) {
-    'morning' =>
-      cleanser != null && sunscreen != null ? [cleanser, sunscreen] : null,
-    'midday' || 'afternoon' => sunscreen != null ? [sunscreen] : null,
-    'night' =>
-      cleanser != null && moisturizer != null ? [cleanser, moisturizer] : null,
-    _ => null,
-  };
-  if (requiredProducts == null) return null;
-
-  final requiredSteps = switch (slot) {
-    'morning' => const ['Cleanse face', 'Apply sunscreen'],
-    'midday' || 'afternoon' => const ['Reapply sunscreen'],
-    'night' => const ['Cleanse face', 'Apply moisturizer'],
-    _ => const <String>[],
-  };
-
-  final extraSteps = _safeExtraStepsForSlot(
-    slot: slot,
-    steps: plan?.steps ?? const [],
-    requiredSteps: requiredSteps,
-  );
   return SkinCareRoutinePlan(
     slotLabel: slot,
-    title: plan?.title.trim().isNotEmpty == true ? plan!.title.trim() : title,
-    steps: _dedupeStrings([...requiredSteps, ...extraSteps]),
-    productNames: _dedupeStrings(requiredProducts),
-    warnings: plan?.warnings ?? const [],
-    repeatDays: plan?.repeatDays ?? const [],
+    title: normalized.title.trim().isEmpty ? title : normalized.title.trim(),
+    steps: _safeStepsForPlan(normalized),
+    productNames: _dedupeStrings(
+      matchedProducts.map((product) => product.name),
+    ),
+    warnings: normalized.warnings,
+    repeatDays: normalized.repeatDays,
   );
 }
 
-_SlotProducts _slotProductsFromBasis({
-  required List<String> productBasis,
+List<_OwnedProduct>? _matchedOwnedProductsForPlan(
+  SkinCareRoutinePlan plan,
+  _OwnedProductCatalog ownedProducts,
+) {
+  final matched = <_OwnedProduct>[];
+  if (plan.productNames.isNotEmpty) {
+    for (final productName in plan.productNames) {
+      final product = ownedProducts.match(productName);
+      if (product == null) return null;
+      matched.add(product);
+    }
+    return _dedupeOwnedProducts(matched);
+  }
+
+  if (!_hasMeaningfulRoutineStep(plan.steps)) return null;
+  for (final step in plan.steps) {
+    final product = _ownedProductForStep(step, ownedProducts);
+    if (product != null) matched.add(product);
+  }
+  return matched.isEmpty ? null : _dedupeOwnedProducts(matched);
+}
+
+bool _hasMeaningfulRoutineStep(List<String> steps) {
+  return steps
+      .map((step) => step.trim())
+      .where((step) => step.isNotEmpty)
+      .any((step) => !_stepLooksLikeUnsafeSpecialCare(step));
+}
+
+_OwnedProduct? _ownedProductForStep(
+  String step,
+  _OwnedProductCatalog ownedProducts,
+) {
+  final lower = step.toLowerCase();
+  if (_looksLikeSunscreen(lower) || lower.contains('sun protection')) {
+    return ownedProducts.sunscreen;
+  }
+  if (_looksLikeCleanser(lower)) {
+    return _firstWhereOrNull(ownedProducts.products, (product) {
+      return product.isCleanser;
+    });
+  }
+  if (_stepMentionsMoisturizer(lower)) {
+    return _firstWhereOrNull(ownedProducts.products, (product) {
+      return product.isMoisturizer;
+    });
+  }
+  if (_looksLikeSerum(lower)) {
+    return _firstWhereOrNull(ownedProducts.products, (product) {
+      return product.isSerum;
+    });
+  }
+  return null;
+}
+
+bool _planUsesOnlyNightSunscreen(
+  SkinCareRoutinePlan plan,
+  List<_OwnedProduct> products,
+) {
+  return plan.slotLabel == 'night' &&
+      products.isNotEmpty &&
+      products.every((product) => product.isSunscreen);
+}
+
+bool _planRepeatsStrongActive(
+  SkinCareRoutinePlan plan,
+  List<_OwnedProduct> products,
+) {
+  if (_planExplicitlyAllowsDailyStrongActive(plan)) return false;
+  if (!products.any((product) => product.isStrongActive)) return false;
+  final repeatDays = _safeRepeatDays(plan.repeatDays);
+  return repeatDays.length >= 7;
+}
+
+bool _planUsesSunscreen(
+  SkinCareRoutinePlan plan,
+  _OwnedProductCatalog ownedProducts,
+) {
+  return plan.productNames
+      .map(ownedProducts.match)
+      .whereType<_OwnedProduct>()
+      .any((product) => product.isSunscreen);
+}
+
+SkinCareRoutinePlan? _generatedSunscreenPlanForMissingDaytimeSlot({
+  required String slot,
+  required String title,
+  required _OwnedProductCatalog ownedProducts,
+  required bool hasUsableSunscreenIntent,
+}) {
+  if (!hasUsableSunscreenIntent || !_daytimeSlotLabels.contains(slot)) {
+    return null;
+  }
+  final sunscreen = ownedProducts.sunscreen;
+  if (sunscreen == null) return null;
+  return SkinCareRoutinePlan(
+    slotLabel: slot,
+    title: title,
+    steps: [slot == 'morning' ? 'Apply sunscreen' : 'Reapply sunscreen'],
+    productNames: [sunscreen.name],
+  );
+}
+
+_OwnedProductCatalog _ownedProductCatalogFromBasis({
+  required List<String> productNames,
   required List<SkinCareDetectedProduct> productDetails,
 }) {
-  final sunscreenDetails = productDetails
-      .where(_productLooksLikeSunscreen)
-      .toList(growable: false);
-  final cleanserDetails = productDetails
-      .where(_productLooksLikeCleanser)
-      .toList(growable: false);
-  final moisturizerDetails = productDetails
-      .where(_productLooksLikeMoisturizer)
-      .toList(growable: false);
-  final sunscreenProducts = productBasis
-      .where((item) => _looksLikeSunscreen(item))
-      .toList(growable: false);
-  final cleanserProducts = productBasis
-      .where((item) => _looksLikeCleanser(item))
-      .toList(growable: false);
-  final moisturizerProducts = productBasis
-      .where((item) => _looksLikeMoisturizer(item))
-      .toList(growable: false);
-  return _SlotProducts(
-    sunscreens: _dedupeStrings([
-      for (final product in sunscreenDetails) product.fallbackLabel,
-      ...sunscreenProducts,
-    ]),
-    cleansers: _dedupeStrings([
-      if (cleanserDetails.isNotEmpty) cleanserDetails.first.fallbackLabel,
-      if (cleanserProducts.isNotEmpty) cleanserProducts.first,
-    ]),
-    moisturizers: _dedupeStrings([
-      if (moisturizerDetails.isNotEmpty) moisturizerDetails.first.fallbackLabel,
-      if (moisturizerProducts.isNotEmpty) moisturizerProducts.first,
-    ]),
+  final entries = <_OwnedProduct>[
+    for (final product in productDetails)
+      if (product.fallbackLabel.trim().isNotEmpty)
+        _OwnedProduct(
+          name: product.fallbackLabel.trim(),
+          category: product.category.trim().toLowerCase(),
+          searchableFields: _dedupeStrings(product.searchableFields),
+        ),
+    for (final name in productNames)
+      if (name.trim().isNotEmpty)
+        _OwnedProduct(
+          name: name.trim(),
+          category: _categoryForProductName(name),
+          searchableFields: [name.trim()],
+        ),
+  ];
+
+  final seen = <String>{};
+  return _OwnedProductCatalog(
+    entries
+        .where((entry) {
+          return seen.add(_normalizedProductKey(entry.name));
+        })
+        .toList(growable: false),
   );
 }
 
-List<String> _safeExtraStepsForSlot({
-  required String slot,
-  required List<String> steps,
-  required List<String> requiredSteps,
-}) {
-  final requiredKeys = requiredSteps.map(_stepKey).toSet();
-  final extras = <String>[];
-  for (final raw in steps) {
+List<String> _safeStepsForPlan(SkinCareRoutinePlan plan) {
+  final steps = <String>[];
+  final allowStrongActive = _planExplicitlyAllowsDailyStrongActive(plan);
+  for (final raw in plan.steps) {
     final step = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (step.isEmpty) continue;
-    final key = _stepKey(step);
-    if (requiredKeys.contains(key)) continue;
-    if (_stepLooksLikeSpecialCare(step)) continue;
-    if (_stepConflictsWithSlot(step, slot)) continue;
-    extras.add(step);
+    if (!allowStrongActive && _stepLooksLikeUnsafeSpecialCare(step)) continue;
+    steps.add(step);
   }
-  return _dedupeStrings(extras);
+  return _dedupeStrings(steps);
 }
 
-String _stepKey(String value) {
-  final lower = value.toLowerCase();
-  if (lower.contains('cleanse') ||
-      lower.contains('cleanser') ||
-      lower.contains('face wash')) {
-    return 'cleanse';
-  }
-  if (_stepMentionsMoisturizer(lower)) return 'moisturizer';
-  if (_looksLikeSunscreen(lower) || lower.contains('sun protection')) {
-    return 'sunscreen';
-  }
-  return lower.replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
-}
-
-bool _stepLooksLikeSpecialCare(String value) {
-  final lower = value.toLowerCase();
-  return lower.contains('retinol') ||
-      lower.contains('retinal') ||
-      lower.contains('tretinoin') ||
-      lower.contains('adapalene') ||
-      lower.contains('exfoliant') ||
-      lower.contains('exfoliate') ||
-      lower.contains('peeling') ||
-      lower.contains('peel') ||
-      lower.contains('aha') ||
-      lower.contains('bha') ||
-      lower.contains('glycolic') ||
-      lower.contains('lactic') ||
-      lower.contains('salicylic') ||
-      lower.contains('mandelic') ||
-      lower.contains('benzoyl peroxide');
-}
-
-bool _stepConflictsWithSlot(String value, String slot) {
-  final lower = value.toLowerCase();
-  if (slot == 'midday' || slot == 'afternoon') {
-    return lower.contains('cleanse') ||
-        lower.contains('cleanser') ||
-        lower.contains('face wash') ||
-        _stepMentionsMoisturizer(lower);
-  }
-  if (slot == 'night') {
-    return _looksLikeSunscreen(lower) || lower.contains('sun protection');
-  }
-  if (slot == 'morning') {
-    return lower.contains('reapply') || _stepMentionsMoisturizer(lower);
-  }
-  return false;
+bool _stepLooksLikeUnsafeSpecialCare(String value) {
+  return _looksLikeStrongActive(value);
 }
 
 bool _stepMentionsMoisturizer(String value) {
@@ -944,8 +1129,66 @@ bool _stepMentionsMoisturizer(String value) {
       _looksLikeMoisturizer(lower);
 }
 
-String _missingSlotMessage(String slot) {
-  return 'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.';
+String _categoryForProductName(String value) {
+  final lower = value.toLowerCase();
+  if (_looksLikeSunscreen(lower)) return 'sunscreen';
+  if (_looksLikeCleanser(lower)) return 'cleanser';
+  if (_looksLikeMoisturizer(lower)) return 'moisturizer';
+  if (_looksLikeSerum(lower)) return 'serum';
+  return '';
+}
+
+String _normalizedProductKey(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
+bool _isGenericProductName(String value) {
+  final key = _normalizedProductKey(value);
+  return const {
+    'sunscreen',
+    'spf',
+    'cleanser',
+    'face wash',
+    'moisturizer',
+    'moisturiser',
+    'serum',
+  }.contains(key);
+}
+
+List<_OwnedProduct> _dedupeOwnedProducts(Iterable<_OwnedProduct> products) {
+  final seen = <String>{};
+  final result = <_OwnedProduct>[];
+  for (final product in products) {
+    if (seen.add(_normalizedProductKey(product.name))) {
+      result.add(product);
+    }
+  }
+  return result;
+}
+
+T? _firstWhereOrNull<T>(Iterable<T> values, bool Function(T value) test) {
+  for (final value in values) {
+    if (test(value)) return value;
+  }
+  return null;
+}
+
+bool _planExplicitlyAllowsDailyStrongActive(SkinCareRoutinePlan plan) {
+  final content = [
+    plan.title,
+    ...plan.steps,
+    ...plan.productNames,
+    ...plan.warnings,
+  ].join(' ').toLowerCase();
+  return content.contains('safe daily') ||
+      content.contains('safe for daily') ||
+      content.contains('safe to use daily') ||
+      content.contains('daily safe') ||
+      content.contains('daily use is safe');
 }
 
 bool _looksLikeSunscreen(String value) {
@@ -988,23 +1231,31 @@ bool _looksLikeMoisturizer(String value) {
       lower.contains('barrier repair');
 }
 
-bool _productLooksLikeSunscreen(SkinCareDetectedProduct product) {
-  return product.category.trim().toLowerCase() == 'sunscreen' ||
-      product.searchableFields.any(_looksLikeSunscreen);
+bool _looksLikeSerum(String value) {
+  final lower = value.toLowerCase();
+  return lower.contains('serum') ||
+      lower.contains('ampoule') ||
+      lower.contains('essence');
 }
 
-bool _productLooksLikeCleanser(SkinCareDetectedProduct product) {
-  final category = product.category.trim().toLowerCase();
-  return category == 'cleanser' ||
-      product.searchableFields.any(_looksLikeCleanser);
-}
-
-bool _productLooksLikeMoisturizer(SkinCareDetectedProduct product) {
-  final category = product.category.trim().toLowerCase();
-  if (_productLooksLikeSunscreen(product)) return false;
-  return category == 'moisturizer' ||
-      category == 'moisturiser' ||
-      product.searchableFields.any(_looksLikeMoisturizer);
+bool _looksLikeStrongActive(String value) {
+  final lower = value.toLowerCase();
+  return lower.contains('retinol') ||
+      lower.contains('retinal') ||
+      lower.contains('tretinoin') ||
+      lower.contains('adapalene') ||
+      lower.contains('exfoliant') ||
+      lower.contains('exfoliate') ||
+      lower.contains('peeling') ||
+      lower.contains('peel') ||
+      lower.contains('aha') ||
+      lower.contains('bha') ||
+      lower.contains('glycolic') ||
+      lower.contains('lactic') ||
+      lower.contains('salicylic') ||
+      lower.contains('mandelic') ||
+      lower.contains('benzoyl peroxide') ||
+      lower.contains('strong active');
 }
 
 List<String> _dedupeStrings(Iterable<String> values) {

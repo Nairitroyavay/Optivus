@@ -176,7 +176,7 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
     return 'Skin care AI is unavailable right now. Please try again later.';
   }
   if (text.contains('no_products_detected')) {
-    return 'AI could not read products from the photo. Try a clearer image or type product names.';
+    return 'AI could not read your products. Type product names or upload a clearer product photo.';
   }
   if (text.contains('unsupported_content_type') ||
       text.contains('content type') ||
@@ -984,7 +984,7 @@ class _HasProductsModeScreenState
         setState(() {
           _generating = false;
           _generationError =
-              'AI could not read products from the photo. Try a clearer image or type product names.';
+              'AI could not read your products. Type product names or upload a clearer product photo.';
         });
         return;
       }
@@ -1050,14 +1050,19 @@ class _HasProductsModeScreenState
         if (!mounted) return;
         setState(() {
           _generating = false;
-          _generationError =
-              didCompactPayloadRetry &&
-                  result.errorCode == 'json_payload_too_large'
-              ? onboarding7CompactPayloadFinalMessage
-              : onboarding7FriendlyAiMessage(
-                  result.errorMessage,
-                  result.warnings,
-                );
+          if (routinePlans.isEmpty && !result.hasError) {
+            _generationError =
+                'AI could not build a routine from these products. Try typing the product names clearly.';
+          } else {
+            _generationError =
+                didCompactPayloadRetry &&
+                    result.errorCode == 'json_payload_too_large'
+                ? onboarding7CompactPayloadFinalMessage
+                : onboarding7FriendlyAiMessage(
+                    result.errorMessage,
+                    result.warnings,
+                  );
+          }
         });
         return;
       }
@@ -1065,6 +1070,18 @@ class _HasProductsModeScreenState
       final partitioned = onboarding7PartitionRoutinePlans(routinePlans);
       final dailyPlans = partitioned.dailyPlans;
       final specialPlans = partitioned.specialCarePlans;
+      final missingProductNotes = onboarding7MissingBasicProductNotes(
+        productNames: allProductNames,
+        productDetails: photoProductDetails,
+      );
+      final specialCareNotes = onboarding7SpecialCareNotesFromAiResult(
+        suggestedProducts: [
+          ...result.suggestedProducts,
+          ...missingProductNotes,
+        ],
+        weeklyRoutine: result.weeklyRoutine,
+        specialCarePlans: specialPlans,
+      );
 
       final schedule = onboarding7ScheduleSkinCareRoutine(
         baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
@@ -1075,21 +1092,24 @@ class _HasProductsModeScreenState
         forceEveryDay: true,
       );
       if (schedule.hasError || schedule.blocks.isEmpty) {
+        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+          return base.copyWith(
+            blocks: base.blocks.where((b) => b.section != 'skin_care').toList(),
+            skinCareProductNames: _controller.text,
+            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+            skinCareSkipped: false,
+            skinCareSpecialCareNotes: specialCareNotes,
+          );
+        });
         if (!mounted) return;
         setState(() {
           _generating = false;
           _generationError =
               schedule.errorMessage ??
-              'AI returned an empty routine. Please try again.';
+              'AI could not build a routine from these products. Try typing the product names clearly.';
         });
         return;
       }
-
-      final specialCareNotes = onboarding7SpecialCareNotesFromAiResult(
-        suggestedProducts: result.suggestedProducts,
-        weeklyRoutine: result.weeklyRoutine,
-        specialCarePlans: specialPlans,
-      );
 
       updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
         final List<TimelineBlockDraft> nextBlocks =
