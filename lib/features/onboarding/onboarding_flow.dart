@@ -841,13 +841,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       final desired = onboarding7NormalizeDesiredApplications(
         base.skinCareDesiredApplicationsPerDay,
       );
-      final hasFullDailyRoutine = onboarding7EveryDay.every(
-        (day) => onboarding7RoutineCountForDay(blocks, day) >= desired,
-      );
-      if (hasFullDailyRoutine) return false;
-      _setInternalValidation(
-        'Build your routine first. You need $desired skin-care blocks each day.',
-      );
+      final missingMessage = onboarding7MissingRoutineMessage(blocks, desired);
+      if (missingMessage == null) return false;
+      _setInternalValidation(missingMessage);
       return true;
     }
     if (blocks.isNotEmpty) return false;

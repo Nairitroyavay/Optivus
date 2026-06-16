@@ -1136,7 +1136,9 @@ class BaseTimelineDraft {
       ),
       acceptedConflictKeys: _readStringList(map['acceptedConflictKeys']),
       roleChangeWarnings: _readStringList(map['roleChangeWarnings']),
-      skinCareSpecialCareNotes: _readStringList(map['skinCareSpecialCareNotes']),
+      skinCareSpecialCareNotes: _readStringList(
+        map['skinCareSpecialCareNotes'],
+      ),
     );
   }
 
@@ -1367,7 +1369,9 @@ class BaseTimelineDraft {
       roleChangeWarnings: clearRoleChangeWarnings
           ? const []
           : (roleChangeWarnings ?? this.roleChangeWarnings),
-      skinCareSpecialCareNotes: skinCareSpecialCareNotes ?? this.skinCareSpecialCareNotes,
+      skinCareSpecialCareNotes: clearSkinCarePlanning
+          ? const []
+          : (skinCareSpecialCareNotes ?? this.skinCareSpecialCareNotes),
     );
   }
 
@@ -1783,18 +1787,10 @@ class BaseTimelineDraft {
   }
 
   String? _missingSkinCareRoutineMessage(int desired) {
-    final hasAny = blocks.any((b) => b.section == 'skin_care');
-    if (!hasAny) {
-      return 'Generate your full daily skin-care routine first.';
-    }
-    
     for (final day in const [1, 2, 3, 4, 5, 6, 7]) {
-      final missing = desired - _skinCareRoutineCountForDay(day);
-      if (missing > 0) {
-        final noun = missing == 1 ? 'routine' : 'routines';
-        return 'Missing $missing $noun on ${[
-          'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'
-        ][day - 1]}. Rebuild or add blocks to complete your schedule.';
+      final count = _skinCareRoutineCountForDay(day);
+      if (count < desired) {
+        return '${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day - 1]} has $count of $desired skin-care routines. Add or restore one routine.';
       }
     }
     return null;

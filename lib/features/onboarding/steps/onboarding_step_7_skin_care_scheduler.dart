@@ -62,7 +62,9 @@ class Onboarding7PartitionedPlans {
   });
 }
 
-Onboarding7PartitionedPlans onboarding7PartitionRoutinePlans(List<SkinCareRoutinePlan> plans) {
+Onboarding7PartitionedPlans onboarding7PartitionRoutinePlans(
+  List<SkinCareRoutinePlan> plans,
+) {
   final dailyPlans = <SkinCareRoutinePlan>[];
   final specialCarePlans = <SkinCareRoutinePlan>[];
 
@@ -150,7 +152,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   }
 
   final adaptedPlans = onboarding7AdaptRoutinePlansForSchedule(
-    routinePlans: routinePlans,
+    routinePlans: onboarding7PartitionRoutinePlans(routinePlans).dailyPlans,
     desiredApplicationsPerDay: desired,
     fallbackProductNames: fallbackProductNames,
     fallbackProductDetails: fallbackProductDetails,
@@ -235,7 +237,8 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
       if (products.isEmpty) {
         return const Onboarding7SkinCareScheduleResult(
           blocks: [],
-          errorMessage: 'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
+          errorMessage:
+              'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
         );
       }
       scheduledSingles.add(
@@ -279,6 +282,20 @@ int onboarding7RoutineCountForDay(List<TimelineBlockDraft> blocks, int day) {
             block.repeatDays.contains(day),
       )
       .length;
+}
+
+String? onboarding7MissingRoutineMessage(
+  List<TimelineBlockDraft> blocks,
+  int desired,
+) {
+  final normalizedDesired = onboarding7NormalizeDesiredApplications(desired);
+  for (final day in onboarding7EveryDay) {
+    final count = onboarding7RoutineCountForDay(blocks, day);
+    if (count < normalizedDesired) {
+      return '${_dayName(day)} has $count of $normalizedDesired skin-care routines. Add or restore one routine.';
+    }
+  }
+  return null;
 }
 
 @visibleForTesting
@@ -393,6 +410,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   List<String> fallbackProductNames = const [],
   List<SkinCareDetectedProduct> fallbackProductDetails = const [],
 }) {
+  final sourcePlans = onboarding7PartitionRoutinePlans(routinePlans).dailyPlans;
   final desired = onboarding7NormalizeDesiredApplications(
     desiredApplicationsPerDay,
   );
@@ -409,17 +427,12 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       endMinute: 23 * 60,
     ),
   );
-  final unused = routinePlans.toList();
+  final unused = sourcePlans.toList();
   final selected = <SkinCareRoutinePlan>[];
   final productBasis = _dedupeStrings([
     ...fallbackProductNames,
     for (final product in fallbackProductDetails) product.fallbackLabel,
-    for (final plan in routinePlans) ...plan.productNames,
-  ]);
-  final textBasis = _dedupeStrings([
-    ...productBasis,
-    for (final product in fallbackProductDetails) ...product.searchableFields,
-    for (final plan in routinePlans) ...plan.steps,
+    for (final plan in sourcePlans) ...plan.productNames,
   ]);
 
   for (var index = 0; index < targetSlots.length; index += 1) {
@@ -431,12 +444,17 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
     if (matchIndex >= 0) {
       final rawPlan = unused.removeAt(matchIndex);
       final selectedPlan = _meaningfulRoutinePlan(rawPlan)
-          ? _planForSlot(rawPlan, slot, spec.title)
+          ? _slotSafePlanForSlot(
+              plan: rawPlan,
+              slot: slot,
+              title: spec.title,
+              productBasis: productBasis,
+              productDetails: fallbackProductDetails,
+            )
           : _generatedPlanForMissingSlot(
               slot: slot,
               title: spec.title,
               productBasis: productBasis,
-              textBasis: textBasis,
               productDetails: fallbackProductDetails,
             );
       if (selectedPlan == null) {
@@ -453,7 +471,6 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       slot: slot,
       title: spec.title,
       productBasis: productBasis,
-      textBasis: textBasis,
       productDetails: fallbackProductDetails,
     );
     if (generated == null) {
@@ -669,11 +686,40 @@ bool _meaningfulRoutinePlan(SkinCareRoutinePlan plan) {
   return plan.productNames.isNotEmpty;
 }
 
+SkinCareRoutinePlan? _slotSafePlanForSlot({
+  required SkinCareRoutinePlan plan,
+  required String slot,
+  required String title,
+  required List<String> productBasis,
+  required List<SkinCareDetectedProduct> productDetails,
+}) {
+  final normalized = _planForSlot(plan, slot, title);
+  if (_planIsSlotSafe(normalized, slot)) return normalized;
+  return _generatedPlanForMissingSlot(
+    slot: slot,
+    title: title,
+    productBasis: productBasis,
+    productDetails: productDetails,
+  );
+}
+
+bool _planIsSlotSafe(SkinCareRoutinePlan plan, String slot) {
+  final products = plan.productNames;
+  if (products.isEmpty) return false;
+  final hasSunscreen = products.any(_looksLikeSunscreen);
+  final hasCleanser = products.any(_looksLikeCleanser);
+  final hasMoisturizer = products.any(_looksLikeMoisturizer);
+
+  if (slot == 'morning') return hasSunscreen;
+  if (slot == 'midday' || slot == 'afternoon') return hasSunscreen;
+  if (slot == 'night') return hasCleanser || hasMoisturizer;
+  return products.isNotEmpty;
+}
+
 SkinCareRoutinePlan? _generatedPlanForMissingSlot({
   required String slot,
   required String title,
   required List<String> productBasis,
-  required List<String> textBasis,
   required List<SkinCareDetectedProduct> productDetails,
 }) {
   final sunscreenDetails = productDetails
@@ -695,17 +741,10 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
       .where((item) => _looksLikeMoisturizer(item))
       .toList(growable: false);
   final hasSunscreen =
-      sunscreenDetails.isNotEmpty ||
-      sunscreenProducts.isNotEmpty ||
-      textBasis.any((item) => _looksLikeSunscreen(item));
-  final hasCleanser =
-      cleanserDetails.isNotEmpty ||
-      cleanserProducts.isNotEmpty ||
-      textBasis.any((item) => _looksLikeCleanser(item));
+      sunscreenDetails.isNotEmpty || sunscreenProducts.isNotEmpty;
+  final hasCleanser = cleanserDetails.isNotEmpty || cleanserProducts.isNotEmpty;
   final hasMoisturizer =
-      moisturizerDetails.isNotEmpty ||
-      moisturizerProducts.isNotEmpty ||
-      textBasis.any((item) => _looksLikeMoisturizer(item));
+      moisturizerDetails.isNotEmpty || moisturizerProducts.isNotEmpty;
 
   if (slot == 'midday' || slot == 'afternoon') {
     if (!hasSunscreen) return null;

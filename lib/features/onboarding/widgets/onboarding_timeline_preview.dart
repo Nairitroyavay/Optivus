@@ -13,7 +13,12 @@ class OnboardingDayChips extends StatelessWidget {
   final ValueChanged<int> onChanged;
   final Color accent;
 
-  const OnboardingDayChips({super.key, required this.selectedDay, required this.onChanged, this.accent = OptivusColors.roseAccent});
+  const OnboardingDayChips({
+    super.key,
+    required this.selectedDay,
+    required this.onChanged,
+    this.accent = OptivusColors.roseAccent,
+  });
 
   static const _labels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
@@ -51,7 +56,11 @@ class _OnboardingDayChip extends StatelessWidget {
   final bool selected;
   final Color accent;
 
-  const _OnboardingDayChip({required this.label, required this.selected, required this.accent});
+  const _OnboardingDayChip({
+    required this.label,
+    required this.selected,
+    required this.accent,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -66,8 +75,9 @@ class _OnboardingDayChip extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: (selected ? accent : Colors.black)
-                  .withValues(alpha: selected ? 0.07 : 0.035),
+              color: (selected ? accent : Colors.black).withValues(
+                alpha: selected ? 0.07 : 0.035,
+              ),
               blurRadius: selected ? 5 : 7,
               offset: Offset(0, selected ? 2 : 3),
             ),
@@ -150,7 +160,8 @@ class OnboardingVerticalTimeline extends StatelessWidget {
   final List<TimelineBlockDraft> blocks;
   final Widget Function(BuildContext, TimelineBlockDraft) blockBuilder;
   final List<String> Function(TimelineBlockDraft)? stretchItemsBuilder;
-  final double Function(BuildContext, TimelineBlockDraft, double)? requiredHeightBuilder;
+  final double Function(BuildContext, TimelineBlockDraft, double)?
+  requiredHeightBuilder;
   final Color accent;
 
   const OnboardingVerticalTimeline({
@@ -162,7 +173,11 @@ class OnboardingVerticalTimeline extends StatelessWidget {
     this.accent = OptivusColors.roseAccent,
   });
 
-  Iterable<int> _boundaryMinutes(List<TimelineBlockDraft> blocks, int startMin, int endMin) {
+  Iterable<int> _boundaryMinutes(
+    List<TimelineBlockDraft> blocks,
+    int startMin,
+    int endMin,
+  ) {
     final Set<int> boundaries = {};
     for (final b in blocks) {
       if (b.startMinute > startMin && b.startMinute < endMin) {
@@ -193,24 +208,34 @@ class OnboardingVerticalTimeline extends StatelessWidget {
 
         final List<StretchedSegment> segments = [];
         for (final block in blocks) {
-          final normalHeight = (block.endMinute - block.startMinute) * pxPerMinute;
+          final normalHeight =
+              (block.endMinute - block.startMinute) * pxPerMinute;
           // To keep it generic, we use a fixed estimated required height or pass items directly
           // For now, let's assume all generic blocks need to evaluate their items
-          final requiredHeight = requiredHeightBuilder != null 
+          final requiredHeight = requiredHeightBuilder != null
               ? requiredHeightBuilder!(context, block, blockWidth)
               : calculateRequiredBlockHeight(
                   context: context,
                   titleRowHeight: 22.0,
-                  items: stretchItemsBuilder?.call(block) ?? block.dishes,
-                  timeLabel: '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                  items:
+                      stretchItemsBuilder?.call(block) ??
+                      [
+                        ...block.dishes,
+                        ...block.skincareProducts,
+                        ...block.skincareSteps,
+                      ],
+                  timeLabel:
+                      '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
                   blockWidth: blockWidth,
                 );
           if (requiredHeight > normalHeight) {
-            segments.add(StretchedSegment(
-              startMinute: block.startMinute,
-              endMinute: block.endMinute,
-              extraStretch: requiredHeight - normalHeight,
-            ));
+            segments.add(
+              StretchedSegment(
+                startMinute: block.startMinute,
+                endMinute: block.endMinute,
+                extraStretch: requiredHeight - normalHeight,
+              ),
+            );
           }
         }
 
@@ -222,7 +247,11 @@ class OnboardingVerticalTimeline extends StatelessWidget {
           segments: segments,
         );
 
-        final timelineHeight = rangeMinutes * pxPerMinute + topPadding + bottomPadding + layout.totalExtraStretch;
+        final timelineHeight =
+            rangeMinutes * pxPerMinute +
+            topPadding +
+            bottomPadding +
+            layout.totalExtraStretch;
 
         return Container(
           key: const ValueKey('onboarding-generic-timeline'),
@@ -271,9 +300,7 @@ class OnboardingVerticalTimeline extends StatelessWidget {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: accent.withValues(
-                                alpha: 0.15,
-                              ),
+                              color: accent.withValues(alpha: 0.15),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -286,19 +313,29 @@ class OnboardingVerticalTimeline extends StatelessWidget {
                       startMinute,
                       endMinute,
                     ))
-                      OnboardingMinuteIndicator(minute: minute, top: layout.yFor(minute), accent: accent),
+                      OnboardingMinuteIndicator(
+                        minute: minute,
+                        top: layout.yFor(minute),
+                        accent: accent,
+                      ),
                     for (
                       var minute = startMinute;
                       minute <= endMinute;
                       minute += 60
                     )
-                      OnboardingTimelineTick(minute: minute, top: layout.yFor(minute), accent: accent),
+                      OnboardingTimelineTick(
+                        minute: minute,
+                        top: layout.yFor(minute),
+                        accent: accent,
+                      ),
                     for (final block in blocks)
                       Positioned(
                         top: layout.yFor(block.startMinute),
                         left: 64,
                         right: 16,
-                        height: layout.yFor(block.endMinute) - layout.yFor(block.startMinute),
+                        height:
+                            layout.yFor(block.endMinute) -
+                            layout.yFor(block.startMinute),
                         child: blockBuilder(context, block),
                       ),
                   ],
@@ -317,7 +354,12 @@ class OnboardingTimelineTick extends StatelessWidget {
   final double top;
   final Color accent;
 
-  const OnboardingTimelineTick({super.key, required this.minute, required this.top, this.accent = OptivusColors.roseAccent});
+  const OnboardingTimelineTick({
+    super.key,
+    required this.minute,
+    required this.top,
+    this.accent = OptivusColors.roseAccent,
+  });
 
   String _compactTimeLabel(int minute) {
     final h = (minute ~/ 60) % 24;
@@ -357,9 +399,7 @@ class OnboardingTimelineTick extends StatelessWidget {
             width: 4,
             height: 1.5,
             child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.35),
-              ),
+              decoration: BoxDecoration(color: accent.withValues(alpha: 0.35)),
             ),
           ),
         ],
@@ -373,7 +413,12 @@ class OnboardingMinuteIndicator extends StatelessWidget {
   final double top;
   final Color accent;
 
-  const OnboardingMinuteIndicator({super.key, required this.minute, required this.top, this.accent = OptivusColors.roseAccent});
+  const OnboardingMinuteIndicator({
+    super.key,
+    required this.minute,
+    required this.top,
+    this.accent = OptivusColors.roseAccent,
+  });
 
   String _compactMinuteLabel(int minute) {
     final h = (minute ~/ 60) % 24;
@@ -441,11 +486,10 @@ class OnboardingInfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.5),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 4,
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width * 0.5,
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.60),
         borderRadius: BorderRadius.circular(8),

@@ -447,14 +447,14 @@ void main() {
           SkinCareRoutinePlan(
             slotLabel: 'morning',
             title: 'Morning Skin Care',
-            steps: ['Cleanser'],
-            productNames: ['Cleanser'],
+            steps: ['Cleanser', 'Sunscreen'],
+            productNames: ['Cleanser', 'Sunscreen'],
           ),
           SkinCareRoutinePlan(
             slotLabel: 'night',
             title: 'Night Skin Care',
-            steps: ['Cleanser'],
-            productNames: ['Cleanser'],
+            steps: ['Cleanser', 'Moisturizer'],
+            productNames: ['Cleanser', 'Moisturizer'],
           ),
         ],
         morningRoutine: [],
@@ -487,7 +487,7 @@ void main() {
 
     await tester.enterText(
       find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-      'Cleanser',
+      'Cleanser, Sunscreen, Moisturizer',
     );
     await tester.tap(find.text('Build skin routine'));
     await tester.pumpAndSettle();
@@ -1146,7 +1146,7 @@ void main() {
 
     expect(
       draft.validateStep(7, List<bool>.filled(OnboardingDraft.stepCount, true)),
-      'Missing 1 routine on Mon. Rebuild or add blocks to complete your schedule.',
+      'Monday has 1 of 2 skin-care routines. Add or restore one routine.',
     );
   });
 
@@ -1678,6 +1678,7 @@ void main() {
     expect(base.skinCareProductPhotoR2Key, isNull);
     expect(base.skinCareProductPhotoCreatedAt, isNull);
     expect(base.skinCareProductPhotoUpdatedAt, isNull);
+    expect(base.skinCareSpecialCareNotes, isEmpty);
     expect(base.blocks.where((block) => block.section == 'skin_care'), isEmpty);
   });
 
@@ -1701,6 +1702,7 @@ void main() {
       expect(base.skinCareProductPhotoR2Key, isNull);
       expect(base.skinCareProductPhotoCreatedAt, isNull);
       expect(base.skinCareProductPhotoUpdatedAt, isNull);
+      expect(base.skinCareSpecialCareNotes, isEmpty);
       expect(
         base.blocks.where((block) => block.section == 'skin_care'),
         isEmpty,
@@ -1802,212 +1804,745 @@ void main() {
     },
   );
 
-  testWidgets('46. Routine built summary card handles narrow screen without overflow', (tester) async {
-    // Narrow screen (e.g. iPhone SE width or even smaller)
-    tester.view.physicalSize = const Size(280, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    '46. Routine built summary card handles narrow screen without overflow',
+    (tester) async {
+      // Narrow screen (e.g. iPhone SE width or even smaller)
+      tester.view.physicalSize = const Size(280, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(buildTestWidget(
-      draft: const OnboardingDraft(
-        currentStep: 7,
-        baseTimeline: BaseTimelineDraft(
-          skinCareSetupStep: 1,
-          skinCareSetupPath: 'has_products',
-          skinCareDesiredApplicationsPerDay: 2,
-          blocks: [
-            TimelineBlockDraft(
-              id: 'sc-1',
-              section: 'skin_care',
-              title: 'Morning routine',
-              startMinute: 420,
-              endMinute: 435,
-              blockType: 'soft_block',
-              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: const OnboardingDraft(
+            currentStep: 7,
+            baseTimeline: BaseTimelineDraft(
+              skinCareSetupStep: 1,
+              skinCareSetupPath: 'has_products',
+              skinCareDesiredApplicationsPerDay: 2,
+              blocks: [
+                TimelineBlockDraft(
+                  id: 'sc-1',
+                  section: 'skin_care',
+                  title: 'Morning routine',
+                  startMinute: 420,
+                  endMinute: 435,
+                  blockType: 'soft_block',
+                  repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                ),
+                TimelineBlockDraft(
+                  id: 'sc-2',
+                  section: 'skin_care',
+                  title: 'Night routine',
+                  startMinute: 1320,
+                  endMinute: 1335,
+                  blockType: 'soft_block',
+                  repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                ),
+              ],
             ),
-            TimelineBlockDraft(
-              id: 'sc-2',
-              section: 'skin_care',
-              title: 'Night routine',
-              startMinute: 1320,
-              endMinute: 1335,
-              blockType: 'soft_block',
-              repeatDays: [1, 2, 3, 4, 5, 6, 7],
-            ),
-          ],
+          ),
         ),
-      ),
-    ));
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
+      expect(find.text('Routine built'), findsOneWidget);
 
-    expect(find.text('Routine built'), findsOneWidget);
-    
-    expect(find.text('2 routines per day'), findsOneWidget);
-    expect(find.text('Rebuild / Edit'), findsOneWidget);
-    // Removed takeException
-  });
+      expect(find.text('2 routines per day'), findsOneWidget);
+      expect(find.text('Rebuild / Edit'), findsOneWidget);
+      // Removed takeException
+    },
+  );
 
-  testWidgets('47. Worker returns json_payload_too_large triggers compact retry and succeeds', (tester) async {
-    final client = TestSkinCareAiClient(
-      productResult: const SkinCareAiProductResult(products: []),
-      routineResultsQueue: [
-        SkinCareAiRoutineResult.error('Error', errorCode: 'json_payload_too_large'),
-        const SkinCareAiRoutineResult(
+  testWidgets(
+    '47. Worker returns json_payload_too_large triggers compact retry and succeeds',
+    (tester) async {
+      final asset = _uploadedAsset();
+      final client = TestSkinCareAiClient(
+        productResult: _richSkinCareProductResult(),
+        routineResultsQueue: [
+          SkinCareAiRoutineResult.error(
+            'Error',
+            errorCode: 'json_payload_too_large',
+          ),
+          _routineResultWithPlanCount(2),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            uid: 'uid-1',
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          uploadController: TestUploadController(result: asset),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      expect(client.generateCalls.length, 2);
+      expect(client.generateCalls[0]['compact'], isNot(true));
+      expect(client.generateCalls[1]['compact'], isTrue);
+      final firstProducts =
+          client.generateCalls[0]['productsFromPhoto'] as List<dynamic>;
+      final secondProducts =
+          client.generateCalls[1]['productsFromPhoto'] as List<dynamic>;
+      expect(jsonEncode(firstProducts), isNot(jsonEncode(secondProducts)));
+      expect((firstProducts.first as Map)['brand'], '');
+      expect((secondProducts.first as Map).containsKey('brand'), isFalse);
+      expect((firstProducts.first as Map)['keyIngredients'], hasLength(7));
+      expect((secondProducts.first as Map)['keyIngredients'], hasLength(5));
+      expect(
+        ((secondProducts.first as Map)['usageHint'] as String).length,
+        lessThanOrEqualTo(100),
+      );
+      expect(
+        (secondProducts.first as Map).containsKey('warningIfAny'),
+        isFalse,
+      );
+      expect(find.textContaining('Error'), findsNothing);
+      expect(find.textContaining('too large'), findsNothing);
+      expect(find.text('Routine built'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    '49. Worker returns json_payload_too_large twice triggers final error message',
+    (tester) async {
+      final asset = _uploadedAsset();
+      final client = TestSkinCareAiClient(
+        productResult: _richSkinCareProductResult(),
+        routineResultsQueue: [
+          SkinCareAiRoutineResult.error(
+            'Error',
+            errorCode: 'json_payload_too_large',
+          ),
+          SkinCareAiRoutineResult.error(
+            'Error',
+            errorCode: 'json_payload_too_large',
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            uid: 'uid-1',
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          uploadController: TestUploadController(result: asset),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      expect(client.generateCalls.length, 2);
+      expect(find.text(onboarding7CompactPayloadFinalMessage), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    '48. Weekly/special-care plans are filtered from daily blocks and added to suggestions',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
           morningRoutine: [],
           nightRoutine: [],
           weeklyRoutine: [],
           timelineBlocks: [],
           routinePlans: [
             SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Exfoliation Night',
+              steps: ['Cleanse', 'Exfoliate'],
+              productNames: ['AHA BHA'],
+              repeatDays: [3, 7], // Weekly plan
+            ),
+            SkinCareRoutinePlan(
               slotLabel: 'morning',
-              title: 'Morning Routine',
-              steps: ['Cleanse'],
-              productNames: ['Cleanser'],
-              repeatDays: [1, 2, 3, 4, 5, 6, 7],
-            )
-          ]
+              title: 'Daily Morning',
+              steps: ['Cleanse', 'Sunscreen'],
+              productNames: ['Cleanser', 'SPF'],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7], // Daily plan
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('I have products'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final draftState = container.read(mockOnboardingProvider);
+      expect(
+        draftState.draft.baseTimeline.skinCareSpecialCareNotes,
+        contains(startsWith('Special care: Exfoliation Night - AHA BHA')),
+      );
+      expect(
+        find.textContaining('Special care: Exfoliation Night - AHA BHA'),
+        findsOneWidget,
+      );
+      final scBlocks = draftState.draft.baseTimeline.blocks
+          .where((b) => b.section == 'skin_care')
+          .toList();
+      expect(scBlocks.length, 2); // Morning (from AI) and Night (synthesized)
+    },
+  );
+
+  testWidgets(
+    '50. Full-week strong active plan is filtered as special care and does not act as daily block',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [],
+          timelineBlocks: [],
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Retinol Treatment',
+              steps: ['Apply Retinol'],
+              productNames: ['Retinol Serum'],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7], // Full week, but strong active
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('I have products'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser, Moisturizer, Sunscreen, Retinol Serum',
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final draftState = container.read(mockOnboardingProvider);
+      final scBlocks = draftState.draft.baseTimeline.blocks
+          .where((b) => b.section == 'skin_care')
+          .toList();
+      expect(
+        draftState.draft.baseTimeline.skinCareSpecialCareNotes,
+        contains(startsWith('Special care: Retinol Treatment - Retinol Serum')),
+      );
+      expect(
+        find.textContaining('Special care: Retinol Treatment - Retinol Serum'),
+        findsOneWidget,
+      );
+
+      // Default desired applications is 2. The Retinol is filtered, so the scheduler synthesizes 2 safe blocks from Cleanser/Moisturizer.
+      expect(scBlocks.length, 2);
+      expect(
+        scBlocks.any((b) => b.skincareProducts.contains('Retinol Serum')),
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets(
+    '51. Special-care and weekly notes persist, render from draft, and survive rebuild',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          suggestedProducts: ['Use barrier moisturizer after exfoliation'],
+          weeklyRoutine: [
+            {
+              'title': 'Retinol night',
+              'steps': ['use 2x/week'],
+              'warnings': ['avoid acids the same night'],
+            },
+            'Patch test before new actives',
+          ],
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Daily Morning',
+              steps: ['Cleanse', 'Sunscreen'],
+              productNames: ['Cleanser', 'Sunscreen'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Daily Night',
+              steps: ['Cleanse', 'Moisturizer'],
+              productNames: ['Cleanser', 'Moisturizer'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'AHA Night',
+              steps: ['Apply AHA'],
+              productNames: ['AHA Serum'],
+              repeatDays: [3, 7],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          timelineBlocks: [],
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser, Sunscreen, Moisturizer, AHA Serum, Retinol',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final persistedDraft = container.read(mockOnboardingProvider).draft;
+      final notes = persistedDraft.baseTimeline.skinCareSpecialCareNotes;
+
+      expect(notes, contains('Use barrier moisturizer after exfoliation'));
+      expect(
+        notes,
+        contains(
+          'Special care: Retinol night - use 2x/week; avoid acids the same night',
+        ),
+      );
+      expect(notes, contains('Patch test before new actives'));
+      expect(
+        notes,
+        contains(startsWith('Special care: AHA Night - AHA Serum')),
+      );
+      expect(
+        find.textContaining('Retinol night - use 2x/week'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: persistedDraft,
+          client: TestSkinCareAiClient(
+            routineResult: _routineResultWithPlanCount(2),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Retinol night - use 2x/week'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('AHA Night - AHA Serum'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    '52. Rebuild clears notes and regeneration replaces the note set',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResultsQueue: [
+          SkinCareAiRoutineResult(
+            suggestedProducts: const ['First note'],
+            morningRoutine: const [],
+            nightRoutine: const [],
+            weeklyRoutine: const [],
+            timelineBlocks: const [],
+            routinePlans: _skinCarePlansForCount(2),
+          ),
+          SkinCareAiRoutineResult(
+            suggestedProducts: const ['Second note'],
+            morningRoutine: const [],
+            nightRoutine: const [],
+            weeklyRoutine: const [],
+            timelineBlocks: const [],
+            routinePlans: _skinCarePlansForCount(2),
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser, Sunscreen, Moisturizer',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      var base = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      ).read(mockOnboardingProvider).draft.baseTimeline;
+      expect(base.skinCareSpecialCareNotes, ['First note']);
+      expect(find.textContaining('First note'), findsOneWidget);
+
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      base = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      ).read(mockOnboardingProvider).draft.baseTimeline;
+      expect(base.skinCareSpecialCareNotes, isEmpty);
+
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+      base = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      ).read(mockOnboardingProvider).draft.baseTimeline;
+      expect(base.skinCareSpecialCareNotes, ['Second note']);
+      expect(find.textContaining('Second note'), findsOneWidget);
+      expect(find.textContaining('First note'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    '53. Draft special-care notes render without local widget state',
+    (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            specialCareNotes: const ['Special care: saved draft note'],
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'skin-saved',
+                section: 'skin_care',
+                title: 'Morning Skin Care',
+                startMinute: 455,
+                endMinute: 470,
+                repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                blockType: TimelineBlockDraft.softBlockKey,
+                skincareProducts: ['Cleanser', 'Sunscreen'],
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Special care: saved draft note'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    '54. Edit sheet rejects empty products and steps without changing block',
+    (tester) async {
+      const skinBlock = TimelineBlockDraft(
+        id: 'skin-edit-empty',
+        section: 'skin_care',
+        title: 'Morning Skin Care',
+        startMinute: 455,
+        endMinute: 470,
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.softBlockKey,
+        skincareProducts: ['Cleanser', 'Sunscreen'],
+        skincareSteps: ['Cleanse', 'Apply sunscreen'],
+      );
+      await tester.pumpWidget(
+        buildTestWidget(draft: _hasProductsDraft(blocks: const [skinBlock])),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-edit-skin-edit-empty')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-edit-products-field')),
+        '',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-edit-steps-field')),
+        '',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-edit-save-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Add at least one product or routine step.'),
+        findsOneWidget,
+      );
+      final updated =
+          ProviderScope.containerOf(
+                tester.element(find.byType(OnboardingStep7)),
+              )
+              .read(mockOnboardingProvider)
+              .draft
+              .baseTimeline
+              .blocks
+              .singleWhere((block) => block.id == 'skin-edit-empty');
+      expect(updated.skincareProducts, skinBlock.skincareProducts);
+      expect(updated.skincareSteps, skinBlock.skincareSteps);
+    },
+  );
+
+  test('55. Missing routine helper reports first missing day and count', () {
+    const blocks = [
+      TimelineBlockDraft(
+        id: 'mon-morning',
+        section: 'skin_care',
+        title: 'Morning Skin Care',
+        startMinute: 455,
+        endMinute: 470,
+        repeatDays: [1],
+        blockType: TimelineBlockDraft.softBlockKey,
+        skincareProducts: ['Cleanser', 'Sunscreen'],
+      ),
+      TimelineBlockDraft(
+        id: 'mon-night',
+        section: 'skin_care',
+        title: 'Night Skin Care',
+        startMinute: 1260,
+        endMinute: 1275,
+        repeatDays: [1],
+        blockType: TimelineBlockDraft.softBlockKey,
+        skincareProducts: ['Cleanser', 'Moisturizer'],
+      ),
+    ];
+
+    expect(
+      onboarding7MissingRoutineMessage(blocks, 3),
+      'Monday has 2 of 3 skin-care routines. Add or restore one routine.',
+    );
+    expect(
+      onboarding7MissingRoutineMessage(_skinCareBlocksForEveryDay(2), 2),
+      isNull,
+    );
+  });
+
+  test(
+    '56. Full-week retinol, AHA, and BHA plans partition as special care',
+    () {
+      final partitioned = onboarding7PartitionRoutinePlans(const [
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Retinol Treatment',
+          steps: ['Apply retinol'],
+          productNames: ['Retinol Serum'],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'AHA Treatment',
+          steps: ['Apply AHA'],
+          productNames: ['AHA Serum'],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'BHA Treatment',
+          steps: ['Apply BHA'],
+          productNames: ['BHA Liquid'],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Daily Morning',
+          steps: ['Apply sunscreen'],
+          productNames: ['Sunscreen'],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        ),
+      ]);
+
+      expect(partitioned.specialCarePlans, hasLength(3));
+      expect(partitioned.dailyPlans, hasLength(1));
+    },
+  );
+
+  test('57. Scheduler repairs or rejects unsafe slot products', () {
+    final bathBase = BaseTimelineDraft(
+      blocks: [BaseTimelineDraft.defaultBathBlock()],
+    );
+
+    final middayRepair = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 3,
+      fallbackProductNames: const ['Cleanser', 'Sunscreen', 'Moisturizer'],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'midday',
+          title: 'Midday Skin Care',
+          steps: ['Cleanse'],
+          productNames: ['Cleanser'],
         ),
       ],
+      now: DateTime.utc(2026, 6, 15),
     );
-    await tester.pumpWidget(buildTestWidget(
-      draft: _hasProductsDraft(blocks: [BaseTimelineDraft.defaultBathBlock()]),
-      client: client,
-    ));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('I have products'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byKey(const ValueKey('onboarding-step7-product-names-field')), 'Cleanser');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Build skin routine'));
-    await tester.pumpAndSettle();
-
-    expect(client.generateCalls.length, 2);
-    expect(client.generateCalls[0]['compact'], isNot(true));
-    expect(client.generateCalls[1]['compact'], isTrue);
-    expect(find.textContaining('Error'), findsNothing);
-    expect(find.textContaining('too large'), findsNothing);
-    expect(find.text('Routine built'), findsOneWidget);
-  });
-
-  testWidgets('49. Worker returns json_payload_too_large twice triggers final error message', (tester) async {
-    final client = TestSkinCareAiClient(
-      productResult: const SkinCareAiProductResult(products: []),
-      routineResult: SkinCareAiRoutineResult.error('Error', errorCode: 'json_payload_too_large'),
+    expect(middayRepair.errorMessage, isNull);
+    expect(
+      middayRepair.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'midday')
+          .skincareProducts,
+      ['Sunscreen'],
     );
-    await tester.pumpWidget(buildTestWidget(
-      draft: _hasProductsDraft(blocks: [BaseTimelineDraft.defaultBathBlock()]),
-      client: client,
-    ));
-    await tester.pumpAndSettle();
 
-    await tester.tap(find.text('I have products'));
-    await tester.pumpAndSettle();
+    final morningRepair = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 2,
+      fallbackProductNames: const ['Moisturizer', 'Sunscreen'],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning Skin Care',
+          steps: ['Moisturize'],
+          productNames: ['Moisturizer'],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+    expect(morningRepair.errorMessage, isNull);
+    expect(
+      morningRepair.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'morning')
+          .skincareProducts,
+      contains('Sunscreen'),
+    );
 
-    await tester.enterText(find.byKey(const ValueKey('onboarding-step7-product-names-field')), 'Cleanser');
-    await tester.pumpAndSettle();
+    final nightRepair = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 2,
+      fallbackProductNames: const ['Sunscreen', 'Cleanser', 'Moisturizer'],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night Skin Care',
+          steps: ['Sunscreen'],
+          productNames: ['Sunscreen'],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+    expect(nightRepair.errorMessage, isNull);
+    expect(
+      nightRepair.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'night')
+          .skincareProducts,
+      ['Cleanser', 'Moisturizer'],
+    );
 
-    await tester.tap(find.text('Build skin routine'));
-    await tester.pumpAndSettle();
-
-    expect(client.generateCalls.length, 2);
-    expect(find.text('Skin-care product details were too large to send. Try typing your main products or upload a clearer single photo.'), findsOneWidget);
-  });
-
-  testWidgets('48. Weekly/special-care plans are filtered from daily blocks and added to suggestions', (tester) async {
-    final client = TestSkinCareAiClient(
-      routineResult: const SkinCareAiRoutineResult(
-        morningRoutine: [],
-        nightRoutine: [],
-        weeklyRoutine: [],
-        timelineBlocks: [],
-        routinePlans: [
+    for (final result in [
+      onboarding7ScheduleSkinCareRoutine(
+        baseTimeline: bathBase,
+        desiredApplicationsPerDay: 3,
+        fallbackProductNames: const ['Cleanser', 'Moisturizer'],
+        routinePlans: const [
           SkinCareRoutinePlan(
-            slotLabel: 'night',
-            title: 'Exfoliation Night',
-            steps: ['Cleanse', 'Exfoliate'],
-            productNames: ['AHA BHA'],
-            repeatDays: [3, 7], // Weekly plan
+            slotLabel: 'midday',
+            title: 'Midday Skin Care',
+            steps: ['Cleanse'],
+            productNames: ['Cleanser'],
           ),
+        ],
+      ),
+      onboarding7ScheduleSkinCareRoutine(
+        baseTimeline: bathBase,
+        desiredApplicationsPerDay: 2,
+        fallbackProductNames: const ['Moisturizer'],
+        routinePlans: const [
           SkinCareRoutinePlan(
             slotLabel: 'morning',
-            title: 'Daily Morning',
-            steps: ['Cleanse', 'Sunscreen'],
-            productNames: ['Cleanser', 'SPF'],
-            repeatDays: [1, 2, 3, 4, 5, 6, 7], // Daily plan
+            title: 'Morning Skin Care',
+            steps: ['Moisturize'],
+            productNames: ['Moisturizer'],
           ),
         ],
       ),
-    );
-    await tester.pumpWidget(buildTestWidget(
-      draft: _hasProductsDraft(blocks: [BaseTimelineDraft.defaultBathBlock()]),
-      client: client,
-    ));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('I have products'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byKey(const ValueKey('onboarding-step7-product-names-field')), 'Cleanser');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Build skin routine'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('Special care: Exfoliation Night (AHA BHA)'), findsOneWidget);
-    
-    final container = ProviderScope.containerOf(tester.element(find.byType(OnboardingStep7)));
-    final draftState = container.read(mockOnboardingProvider);
-    final scBlocks = draftState.draft.baseTimeline.blocks.where((b) => b.section == 'skin_care').toList();
-    expect(scBlocks.length, 2); // Morning (from AI) and Night (synthesized)
-  });
-
-  testWidgets('50. Full-week strong active plan is filtered as special care and does not act as daily block', (tester) async {
-    final client = TestSkinCareAiClient(
-      routineResult: const SkinCareAiRoutineResult(
-        morningRoutine: [],
-        nightRoutine: [],
-        weeklyRoutine: [],
-        timelineBlocks: [],
-        routinePlans: [
+      onboarding7ScheduleSkinCareRoutine(
+        baseTimeline: bathBase,
+        desiredApplicationsPerDay: 2,
+        fallbackProductNames: const ['Sunscreen'],
+        routinePlans: const [
           SkinCareRoutinePlan(
             slotLabel: 'night',
-            title: 'Retinol Treatment',
-            steps: ['Apply Retinol'],
-            productNames: ['Retinol Serum'],
-            repeatDays: [1, 2, 3, 4, 5, 6, 7], // Full week, but strong active
+            title: 'Night Skin Care',
+            steps: ['Sunscreen'],
+            productNames: ['Sunscreen'],
           ),
         ],
       ),
-    );
-    await tester.pumpWidget(buildTestWidget(
-      draft: _hasProductsDraft(blocks: [BaseTimelineDraft.defaultBathBlock()]),
-      client: client,
-    ));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('I have products'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(find.byKey(const ValueKey('onboarding-step7-product-names-field')), 'Cleanser, Moisturizer, Sunscreen, Retinol Serum');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Build skin routine'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('Special care: Retinol Treatment (Retinol Serum)'), findsOneWidget);
-    
-    final container = ProviderScope.containerOf(tester.element(find.byType(OnboardingStep7)));
-    final draftState = container.read(mockOnboardingProvider);
-    final scBlocks = draftState.draft.baseTimeline.blocks.where((b) => b.section == 'skin_care').toList();
-    
-    // Default desired applications is 2. The Retinol is filtered, so the scheduler synthesizes 2 safe blocks from Cleanser/Moisturizer.
-    expect(scBlocks.length, 2);
-    expect(scBlocks.any((b) => b.skincareProducts.contains('Retinol Serum')), isFalse);
+      onboarding7ScheduleSkinCareRoutine(
+        baseTimeline: bathBase,
+        desiredApplicationsPerDay: 2,
+        routinePlans: const [
+          SkinCareRoutinePlan(
+            slotLabel: 'morning',
+            title: 'Treatment',
+            steps: ['Apply treatment'],
+            productNames: [],
+          ),
+        ],
+      ),
+    ]) {
+      expect(result.blocks, isEmpty);
+      expect(
+        result.errorMessage,
+        'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
+      );
+    }
   });
 }
 
@@ -2020,6 +2555,7 @@ OnboardingDraft _hasProductsDraft({
   String? productPhotoStatus,
   DateTime? productPhotoCreatedAt,
   DateTime? productPhotoUpdatedAt,
+  List<String> specialCareNotes = const [],
 }) {
   return OnboardingDraft(
     uid: uid,
@@ -2033,6 +2569,7 @@ OnboardingDraft _hasProductsDraft({
       skinCareProductPhotoStatus: productPhotoStatus,
       skinCareProductPhotoCreatedAt: productPhotoCreatedAt,
       skinCareProductPhotoUpdatedAt: productPhotoUpdatedAt,
+      skinCareSpecialCareNotes: specialCareNotes,
       blocks: blocks,
     ),
   );
@@ -2052,6 +2589,7 @@ OnboardingDraft _choiceDraftWithProductData() {
       skinCareProductPhotoStatus: 'uploaded',
       skinCareProductPhotoCreatedAt: DateTime.utc(2026, 6, 15, 10),
       skinCareProductPhotoUpdatedAt: DateTime.utc(2026, 6, 15, 10, 30),
+      skinCareSpecialCareNotes: const ['Special care: old note'],
       blocks: const [
         TimelineBlockDraft(
           id: 'skin-old',
@@ -2135,6 +2673,112 @@ List<SkinCareRoutinePlan> _skinCarePlansForCount(int count) {
   };
 }
 
+SkinCareAiProductResult _richSkinCareProductResult() {
+  final longUsage =
+      'Use this product after cleansing and before moisturizer. '
+      'Keep the label guidance, avoid overuse, and apply gently for a full minute.';
+  return SkinCareAiProductResult(
+    products: [
+      {
+        'name': 'Gentle Hydrating Cleanser With Extra Long Label Text',
+        'brand': '',
+        'category': 'cleanser',
+        'keyIngredients': [
+          'Aqua',
+          'Glycerin',
+          'Ceramide NP',
+          'Ceramide AP',
+          'Ceramide EOP',
+          'Hyaluronic Acid',
+          'Niacinamide',
+        ],
+        'possibleActives': [
+          'Glycerin',
+          'Ceramides',
+          'Hyaluronic Acid',
+          'Niacinamide',
+          'Panthenol',
+          'Allantoin',
+        ],
+        'usageHint': longUsage,
+        'warningIfAny': '',
+        'confidence': 'high',
+      },
+      {
+        'name': 'Daily UV Aqua Gel SPF 50 PA++++',
+        'brand': 'Sun Lab',
+        'category': 'sunscreen',
+        'keyIngredients': [
+          'Uvinul A Plus',
+          'Uvinul T 150',
+          'Tinosorb S',
+          'Glycerin',
+          'Vitamin E',
+          'Silica',
+        ],
+        'possibleActives': [
+          'UV filters',
+          'SPF 50',
+          'PA++++',
+          'Vitamin E',
+          'Antioxidants',
+          'Hydrators',
+        ],
+        'usageHint': longUsage,
+        'warningIfAny': 'Reapply after sweating or towel drying.',
+        'confidence': 'medium',
+      },
+      {
+        'name': 'Barrier Repair Moisturizer',
+        'brand': 'Calm Lab',
+        'category': 'moisturizer',
+        'keyIngredients': [
+          'Ceramide NP',
+          'Cholesterol',
+          'Fatty Acids',
+          'Squalane',
+          'Glycerin',
+          'Panthenol',
+        ],
+        'possibleActives': [
+          'Ceramides',
+          'Squalane',
+          'Panthenol',
+          'Glycerin',
+          'Barrier repair',
+          'Soothing agents',
+        ],
+        'usageHint': longUsage,
+        'warningIfAny': 'Patch test if your barrier is irritated.',
+        'confidence': 'high',
+      },
+    ],
+  );
+}
+
+List<TimelineBlockDraft> _skinCareBlocksForEveryDay(int count) {
+  return _skinCarePlansForCount(count)
+      .take(count)
+      .toList(growable: false)
+      .asMap()
+      .entries
+      .map(
+        (entry) => TimelineBlockDraft(
+          id: 'skin-every-day-${entry.key}',
+          section: 'skin_care',
+          title: entry.value.title,
+          startMinute: 450 + entry.key * 120,
+          endMinute: 465 + entry.key * 120,
+          repeatDays: onboarding7EveryDay,
+          blockType: TimelineBlockDraft.softBlockKey,
+          skincareProducts: entry.value.productNames,
+          skincareSteps: entry.value.steps,
+          skincareSlotLabel: entry.value.slotLabel,
+        ),
+      )
+      .toList(growable: false);
+}
+
 bool _blocksOverlap(TimelineBlockDraft a, TimelineBlockDraft b) {
   final days = a.repeatDays.toSet().intersection(b.repeatDays.toSet());
   if (days.isEmpty) return false;
@@ -2157,8 +2801,6 @@ UploadedAsset _uploadedAsset({String contentType = 'image/jpeg'}) {
     updatedAt: now,
   );
 }
-
-
 
 class TestSkinCareAiClient implements SkinCareAiClient {
   final SkinCareAiProductResult productResult;

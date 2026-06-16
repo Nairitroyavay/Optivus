@@ -22,6 +22,9 @@ import 'package:optivus/services/skin_care_ai_client.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
 const String onboardingSkinCareGeneratedSource = 'ai_skin_care_setup';
+const String onboarding7CompactPayloadFinalMessage =
+    'AI read too much product detail. Try typing only your main products or upload a clearer single photo.';
+const int _onboarding7SpecialCareNoteMaxLength = 180;
 
 @visibleForTesting
 List<String> onboarding7SplitTypedProductNames(String? value) {
@@ -52,6 +55,19 @@ List<String> onboarding7MergeProductNames(
   List<String> typedProducts,
 ) {
   return _dedupeSkinCareNames([...photoProducts, ...typedProducts]);
+}
+
+@visibleForTesting
+List<String> onboarding7SpecialCareNotesFromAiResult({
+  required Iterable<String> suggestedProducts,
+  required Iterable<dynamic> weeklyRoutine,
+  required Iterable<SkinCareRoutinePlan> specialCarePlans,
+}) {
+  return _dedupeSkinCareNames([
+    ...suggestedProducts.map(_capSkinCareNote),
+    ...weeklyRoutine.map(_weeklyRoutineNoteFromValue),
+    ...specialCarePlans.map(_specialCareNoteFromPlan),
+  ]);
 }
 
 @visibleForTesting
@@ -211,6 +227,133 @@ String _skinCareNameFromProduct(dynamic item) {
     return '$brand $name';
   }
   return '';
+}
+
+String _weeklyRoutineNoteFromValue(dynamic item) {
+  if (item is String) return _capSkinCareNote(item);
+  if (item is! Map) return '';
+
+  final map = Map<String, dynamic>.from(item);
+  final title = _firstTextValue(map, const ['title', 'name']).trim();
+  final products = _readNoteParts(map['products'] ?? map['productNames']);
+  final steps = _readNoteParts(
+    map['steps'] ?? map['orderedSteps'] ?? map['instructions'],
+  );
+  final warnings = _readNoteParts(map['warnings'] ?? map['warningIfAny']);
+  final detailParts = _dedupeSkinCareNames([
+    ...products,
+    ...steps,
+    ...warnings,
+  ]);
+
+  if (title.isNotEmpty && detailParts.isNotEmpty) {
+    return _capSkinCareNote('Special care: $title - ${detailParts.join('; ')}');
+  }
+  if (title.isNotEmpty) return _capSkinCareNote('Special care: $title');
+  if (detailParts.isNotEmpty) {
+    return _capSkinCareNote('Special care: ${detailParts.join('; ')}');
+  }
+  return '';
+}
+
+String _specialCareNoteFromPlan(SkinCareRoutinePlan plan) {
+  final title = plan.title.trim().isNotEmpty
+      ? plan.title.trim()
+      : plan.slotLabel.trim();
+  final detailParts = _dedupeSkinCareNames([
+    ...plan.productNames,
+    ...plan.steps,
+    ...plan.warnings,
+    if (plan.repeatDays.isNotEmpty && plan.repeatDays.length < 7)
+      'repeat ${_repeatDaysLabel(plan.repeatDays)}',
+  ]);
+
+  if (title.isNotEmpty && detailParts.isNotEmpty) {
+    return _capSkinCareNote('Special care: $title - ${detailParts.join('; ')}');
+  }
+  if (title.isNotEmpty) return _capSkinCareNote('Special care: $title');
+  if (detailParts.isNotEmpty) {
+    return _capSkinCareNote('Special care: ${detailParts.join('; ')}');
+  }
+  return '';
+}
+
+String _firstTextValue(Map<String, dynamic> map, Iterable<String> keys) {
+  for (final key in keys) {
+    final value = _stringValue(map[key]).trim();
+    if (value.isNotEmpty) return value;
+  }
+  return '';
+}
+
+List<String> _readNoteParts(dynamic value) {
+  if (value == null) return const [];
+  if (value is String) {
+    return value
+        .split(RegExp(r'[\n,]+'))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+  if (value is List) {
+    return value
+        .map((item) {
+          if (item is Map) {
+            final map = Map<String, dynamic>.from(item);
+            return _firstTextValue(map, const [
+              'title',
+              'name',
+              'productName',
+              'product',
+              'instruction',
+              'step',
+              'text',
+              'warning',
+            ]);
+          }
+          return _stringValue(item).trim();
+        })
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+  if (value is Map) {
+    final text = _firstTextValue(Map<String, dynamic>.from(value), const [
+      'title',
+      'name',
+      'productName',
+      'product',
+      'instruction',
+      'step',
+      'text',
+      'warning',
+    ]);
+    return text.isEmpty ? const [] : [text];
+  }
+  final text = _stringValue(value).trim();
+  return text.isEmpty ? const [] : [text];
+}
+
+String _capSkinCareNote(String value) {
+  final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
+  if (normalized.length <= _onboarding7SpecialCareNoteMaxLength) {
+    return normalized;
+  }
+  return '${normalized.substring(0, _onboarding7SpecialCareNoteMaxLength - 3)}...';
+}
+
+String _repeatDaysLabel(List<int> days) {
+  const labels = {
+    1: 'Mon',
+    2: 'Tue',
+    3: 'Wed',
+    4: 'Thu',
+    5: 'Fri',
+    6: 'Sat',
+    7: 'Sun',
+  };
+  final normalized =
+      days.where((day) => labels.containsKey(day)).toSet().toList()..sort();
+  return normalized.map((day) => labels[day]!).join('/');
 }
 
 List<String> _skinCareNamesFromValue(dynamic value) {
@@ -416,6 +559,9 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
           skinCareSetupPath: value,
           skinCareSetupStep: 1,
           skinCareSkipped: isSkip,
+          skinCareSpecialCareNotes: clearProductData
+              ? const []
+              : base.skinCareSpecialCareNotes,
           clearSkinCareProductNames: clearProductData,
           clearSkinCareProductPhoto: clearProductData,
           clearSkinCareSkinType: clearNoProductsData,
@@ -623,7 +769,6 @@ class _HasProductsModeScreenState
   bool _generating = false;
   String? _generationError;
   int _selectedDay = DateTime.now().weekday;
-  List<String> _suggestedProducts = [];
 
   @override
   void initState() {
@@ -861,8 +1006,14 @@ class _HasProductsModeScreenState
         },
       );
 
+      var didCompactPayloadRetry = false;
       if (result.hasError && result.errorCode == 'json_payload_too_large') {
-        if (kDebugMode) debugPrint('[Onboarding7] Payload too large, retrying with compact payload...');
+        didCompactPayloadRetry = true;
+        if (kDebugMode) {
+          debugPrint(
+            '[Onboarding7] Payload too large, retrying with compact payload...',
+          );
+        }
         result = await client.generateRoutine(
           uid: uid,
           idToken: idToken,
@@ -899,24 +1050,21 @@ class _HasProductsModeScreenState
         if (!mounted) return;
         setState(() {
           _generating = false;
-          _generationError = onboarding7FriendlyAiMessage(
-            result.errorCode == 'json_payload_too_large' ? 'json_payload_too_large' : result.errorMessage,
-            result.warnings,
-          );
+          _generationError =
+              didCompactPayloadRetry &&
+                  result.errorCode == 'json_payload_too_large'
+              ? onboarding7CompactPayloadFinalMessage
+              : onboarding7FriendlyAiMessage(
+                  result.errorMessage,
+                  result.warnings,
+                );
         });
         return;
       }
 
-      final dailyPlans = <SkinCareRoutinePlan>[];
-      final specialPlans = <SkinCareRoutinePlan>[];
-      for (final p in routinePlans) {
-        if ((p.repeatDays.isNotEmpty && p.repeatDays.length < 7) ||
-            onboarding7IsSpecialCarePlan(p)) {
-          specialPlans.add(p);
-        } else {
-          dailyPlans.add(p);
-        }
-      }
+      final partitioned = onboarding7PartitionRoutinePlans(routinePlans);
+      final dailyPlans = partitioned.dailyPlans;
+      final specialPlans = partitioned.specialCarePlans;
 
       final schedule = onboarding7ScheduleSkinCareRoutine(
         baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
@@ -937,6 +1085,12 @@ class _HasProductsModeScreenState
         return;
       }
 
+      final specialCareNotes = onboarding7SpecialCareNotesFromAiResult(
+        suggestedProducts: result.suggestedProducts,
+        weeklyRoutine: result.weeklyRoutine,
+        specialCarePlans: specialPlans,
+      );
+
       updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
         final List<TimelineBlockDraft> nextBlocks =
             base.blocks.where((b) => b.section != 'skin_care').toList()
@@ -946,19 +1100,13 @@ class _HasProductsModeScreenState
           skinCareProductNames: _controller.text,
           skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
           skinCareSkipped: false,
+          skinCareSpecialCareNotes: specialCareNotes,
         );
       });
-
-      final combinedSuggestions = [
-        ...result.suggestedProducts,
-        for (final p in specialPlans)
-          'Special care: ${p.title.trim().isNotEmpty ? p.title : p.slotLabel} (${p.productNames.join(', ')})',
-      ];
 
       if (!mounted) return;
       setState(() {
         _generating = false;
-        _suggestedProducts = combinedSuggestions;
       });
     } catch (e, st) {
       debugPrint('Error generating routine (Products): $e\n$st');
@@ -1101,29 +1249,29 @@ class _HasProductsModeScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Routine built',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w900,
-                                color: OptivusColors.textPrimary,
+                            children: [
+                              const Text(
+                                'Routine built',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: OptivusColors.textPrimary,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${widget.base.skinCareDesiredApplicationsPerDay} routines per day',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: OptivusColors.textSecondary,
+                              const SizedBox(height: 2),
+                              Text(
+                                '${widget.base.skinCareDesiredApplicationsPerDay} routines per day',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: OptivusColors.textSecondary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                     OnboardingActionPill(
                       label: 'Rebuild / Edit',
                       icon: Icons.refresh_rounded,
@@ -1136,6 +1284,7 @@ class _HasProductsModeScreenState
                           blocks: base.blocks
                               .where((b) => b.section != 'skin_care')
                               .toList(),
+                          skinCareSpecialCareNotes: const [],
                         ),
                       ),
                     ),
@@ -1145,11 +1294,11 @@ class _HasProductsModeScreenState
             ),
           ],
         ),
-        if (_suggestedProducts.isNotEmpty)
+        if (widget.base.skinCareSpecialCareNotes.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Text(
-              'Suggested: ${_suggestedProducts.join(", ")}',
+              'Suggested: ${widget.base.skinCareSpecialCareNotes.join(", ")}',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
@@ -1620,7 +1769,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         setState(() {
           _generating = false;
           _generationError = onboarding7FriendlyAiMessage(
-            result.errorCode == 'json_payload_too_large' ? 'json_payload_too_large' : result.errorMessage,
+            result.errorCode == 'json_payload_too_large'
+                ? 'json_payload_too_large'
+                : result.errorMessage,
             result.warnings,
           );
         });
@@ -2187,14 +2338,14 @@ class _SkinCareTimelineSection extends ConsumerWidget {
                     accent: accent,
                     requiredHeightBuilder: (context, block, blockWidth) =>
                         _calculateRequiredSkinCareBlockHeight(
-                      context: context,
-                      block: block,
-                      timeLabel: TimelineUtils.formatTimeRange(
-                        block.startMinute,
-                        block.endMinute,
-                      ),
-                      blockWidth: blockWidth,
-                    ),
+                          context: context,
+                          block: block,
+                          timeLabel: TimelineUtils.formatTimeRange(
+                            block.startMinute,
+                            block.endMinute,
+                          ),
+                          blockWidth: blockWidth,
+                        ),
                     blockBuilder: (ctx, block) {
                       return _SkinCareBlockCard(
                         item: block,
@@ -2215,8 +2366,6 @@ class _SkinCareTimelineSection extends ConsumerWidget {
   }
 }
 
-
-
 Future<void> _showSkinCareBlockEditSheet(
   BuildContext context,
   WidgetRef ref,
@@ -2230,9 +2379,7 @@ Future<void> _showSkinCareBlockEditSheet(
   final productsCtrl = TextEditingController(
     text: block.skincareProducts.join('\n'),
   );
-  final stepsCtrl = TextEditingController(
-    text: block.skincareSteps.join('\n'),
-  );
+  final stepsCtrl = TextEditingController(text: block.skincareSteps.join('\n'));
   final selectedDays = <int>{
     ...block.repeatDays.where((day) => day >= 1 && day <= 7),
   };
@@ -2281,6 +2428,10 @@ Future<void> _showSkinCareBlockEditSheet(
               }
               if (repeatDays.isEmpty) {
                 setError('Select at least one repeat day.');
+                return null;
+              }
+              if (parsedProducts.isEmpty && parsedSteps.isEmpty) {
+                setError('Add at least one product or routine step.');
                 return null;
               }
               return block.copyWith(
@@ -2643,6 +2794,8 @@ Future<void> _showSkinCareBlockEditSheet(
   } finally {
     titleCtrl.dispose();
     startTimeCtrl.dispose();
+    productsCtrl.dispose();
+    stepsCtrl.dispose();
   }
 }
 
@@ -2765,10 +2918,12 @@ class _SkinCareBlockCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final instructionLines = [
-       if (item.skincareSteps.isNotEmpty)
-         ...item.skincareSteps.map((i) => i.trim()).where((i) => i.isNotEmpty)
-       else
-         ...item.skincareProducts.map((i) => i.trim()).where((i) => i.isNotEmpty)
+      if (item.skincareSteps.isNotEmpty)
+        ...item.skincareSteps.map((i) => i.trim()).where((i) => i.isNotEmpty)
+      else
+        ...item.skincareProducts
+            .map((i) => i.trim())
+            .where((i) => i.isNotEmpty),
     ];
     final productNames = item.skincareProducts
         .map((product) => product.trim())
@@ -2878,7 +3033,9 @@ class _SkinCareBlockCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w800,
-                            color: OptivusColors.textPrimary.withValues(alpha: 0.86),
+                            color: OptivusColors.textPrimary.withValues(
+                              alpha: 0.86,
+                            ),
                             height: 1.24,
                           ),
                         ),
