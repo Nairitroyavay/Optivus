@@ -107,6 +107,9 @@ List<TimelineBlockDraft> onboarding7TimelineBlocksFromWorkerBlocks(
         source: onboardingSkinCareGeneratedSource,
         skincareProducts: products,
         skincareSteps: steps,
+        skincareSlotLabel: _stringValue(
+          map['slotLabel'] ?? map['slot'] ?? map['timeOfDay'],
+        ).trim(),
       ),
     );
   }
@@ -135,6 +138,12 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
   ];
   final text = messages.join(' ').toLowerCase();
 
+  if (text.contains('worker_mode_disabled')) {
+    if (kDebugMode) {
+      return 'Real AI is not configured. Enable worker mode with --dart-define=OPTIVUS_AI_WORKERS_MODE=worker and set --dart-define=OPTIVUS_SKIN_CARE_WORKER_URL=<skin-care-worker-url>.';
+    }
+    return 'Skin care AI is unavailable right now. Please try again later.';
+  }
   if (text.contains('missing_worker_url') ||
       text.contains('worker url') ||
       text.contains('worker is not configured') ||
@@ -255,6 +264,41 @@ String _skinCareUploadStatusLabel(UploadFlowStatus status) {
     UploadFlowStatus.savingMetadata => 'Saving...',
     _ => 'Uploading...',
   };
+}
+
+bool _isSupportedSkinCareImageContentType(String contentType) {
+  final normalized = contentType.trim().toLowerCase();
+  if (normalized.isEmpty) return true;
+  return normalized == 'image/jpeg' ||
+      normalized == 'image/png' ||
+      normalized == 'image/webp';
+}
+
+UploadedAsset? _skinCareProductPhotoAssetFromDraft(OnboardingDraft draft) {
+  final base = draft.baseTimeline;
+  final r2Key = base.skinCareProductPhotoR2Key?.trim();
+  if (r2Key == null || r2Key.isEmpty) return null;
+  final now = DateTime.fromMillisecondsSinceEpoch(0);
+  final fileName = r2Key.split('/').where((part) => part.isNotEmpty).lastOrNull;
+  return UploadedAsset(
+    assetId: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
+        ? base.skinCareProductPhotoAssetId!.trim()
+        : r2Key,
+    ownerUid: draft.uid,
+    sourceFeature: OnboardingDraft.sourceOnboarding,
+    purpose: UploadedAssetPurpose.skinCare,
+    fileName: fileName ?? 'skin-care-products',
+    contentType: '',
+    sizeBytes: 0,
+    r2Key: r2Key,
+    status: uploadedAssetStatusFromString(
+      base.skinCareProductPhotoStatus?.trim().isNotEmpty == true
+          ? base.skinCareProductPhotoStatus
+          : 'uploaded',
+    ),
+    createdAt: now,
+    updatedAt: now,
+  );
 }
 
 class OnboardingStep7 extends ConsumerWidget {
@@ -584,6 +628,18 @@ class _HasProductsModeScreenState
 
     final latestUploadState = ref.read(uploadControllerProvider);
     final latestAsset = asset ?? latestUploadState.asset;
+    if (latestAsset != null) {
+      updateBaseTimelineDraft(
+        ref,
+        onboardingSkinCareStepIndex,
+        (base) => base.copyWith(
+          skinCareProductPhotoAssetId: latestAsset.assetId,
+          skinCareProductPhotoR2Key: latestAsset.r2Key,
+          skinCareProductPhotoStatus: latestAsset.status.wireName,
+          skinCareSkipped: false,
+        ),
+      );
+    }
     setState(() {
       if (latestAsset != null) {
         _uploadedAsset = latestAsset;
@@ -606,6 +662,14 @@ class _HasProductsModeScreenState
       _uploadError = null;
       _generationError = null;
     });
+    updateBaseTimelineDraft(
+      ref,
+      onboardingSkinCareStepIndex,
+      (base) => base.copyWith(
+        clearSkinCareProductPhoto: true,
+        skinCareSkipped: false,
+      ),
+    );
   }
 
   Future<void> _generate() async {
@@ -618,7 +682,11 @@ class _HasProductsModeScreenState
     if (uploadBusy) return;
 
     ref.read(mockOnboardingProvider.notifier).clearValidation();
-    final asset = _uploadedAsset;
+    final asset =
+        _uploadedAsset ??
+        _skinCareProductPhotoAssetFromDraft(
+          ref.read(mockOnboardingProvider).draft,
+        );
     final typedProductNames = onboarding7SplitTypedProductNames(
       _controller.text,
     );
@@ -633,6 +701,15 @@ class _HasProductsModeScreenState
     if (asset != null && asset.r2Key.trim().isEmpty) {
       setState(() {
         _generationError = 'Upload incomplete. Please upload again.';
+        _uploadError = null;
+      });
+      return;
+    }
+    if (asset != null &&
+        !_isSupportedSkinCareImageContentType(asset.contentType)) {
+      setState(() {
+        _generationError =
+            'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
         _uploadError = null;
       });
       return;
@@ -802,6 +879,9 @@ class _HasProductsModeScreenState
   @override
   Widget build(BuildContext context) {
     final generated = widget.blocks.isNotEmpty;
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final effectiveAsset =
+        _uploadedAsset ?? _skinCareProductPhotoAssetFromDraft(draft);
     final uploadState = ref.watch(uploadControllerProvider);
     final uploadApplies =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
@@ -827,7 +907,7 @@ class _HasProductsModeScreenState
         else if (!generated)
           _HasProductsSetupCard(
             controller: _controller,
-            asset: _uploadedAsset,
+            asset: effectiveAsset,
             tileHeight: _setupTileHeight,
             desiredApplicationsPerDay:
                 widget.base.skinCareDesiredApplicationsPerDay,
@@ -836,6 +916,7 @@ class _HasProductsModeScreenState
                 ? _skinCareUploadStatusLabel(uploadState.status)
                 : null,
             busy: busy,
+            generating: _generating,
             onUpload: busy ? null : _startUpload,
             onRemove: busy ? null : _removeUploadedAsset,
             onGenerate: busy ? null : _generate,
@@ -957,6 +1038,7 @@ class _HasProductsSetupCard extends StatelessWidget {
   final bool uploadBusy;
   final String? uploadStatusLabel;
   final bool busy;
+  final bool generating;
   final VoidCallback? onUpload;
   final VoidCallback? onRemove;
   final VoidCallback? onGenerate;
@@ -971,6 +1053,7 @@ class _HasProductsSetupCard extends StatelessWidget {
     required this.uploadBusy,
     required this.uploadStatusLabel,
     required this.busy,
+    required this.generating,
     required this.onUpload,
     required this.onRemove,
     required this.onGenerate,
@@ -1019,6 +1102,7 @@ class _HasProductsSetupCard extends StatelessWidget {
                 height: tileHeight,
                 child: _SkinCareProductNamesTarget(
                   controller: controller,
+                  enabled: !busy,
                   onChanged: onChanged,
                 ),
               );
@@ -1050,8 +1134,8 @@ class _HasProductsSetupCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _SkinCareGenerateRoutineButton(
-            label: 'Build skin routine',
-            busy: busy,
+            label: uploadBusy ? 'Uploading photo...' : 'Build skin routine',
+            busy: generating,
             onTap: onGenerate,
             accent: OptivusColors.roseAccent,
           ),
@@ -1063,10 +1147,12 @@ class _HasProductsSetupCard extends StatelessWidget {
 
 class _SkinCareProductNamesTarget extends StatelessWidget {
   final TextEditingController controller;
+  final bool enabled;
   final ValueChanged<String> onChanged;
 
   const _SkinCareProductNamesTarget({
     required this.controller,
+    this.enabled = true,
     required this.onChanged,
   });
 
@@ -1092,6 +1178,7 @@ class _SkinCareProductNamesTarget extends StatelessWidget {
               minLines: null,
               maxLines: null,
               expands: true,
+              enabled: enabled,
               textAlignVertical: TextAlignVertical.top,
               onChanged: onChanged,
               style: const TextStyle(
@@ -2502,12 +2589,16 @@ class _VisualSkinCareBlock {
   final int lane;
   final int order;
   final bool hasOverlap;
+  final double visualTop;
+  final double visualBottom;
 
   const _VisualSkinCareBlock({
     required this.block,
     required this.lane,
     required this.order,
     required this.hasOverlap,
+    required this.visualTop,
+    required this.visualBottom,
   });
 }
 
@@ -2719,8 +2810,16 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
     return a.title.compareTo(b.title);
   }
 
-  bool _blocksOverlap(TimelineBlockDraft a, TimelineBlockDraft b) {
-    return a.startMinute < b.endMinute && a.endMinute > b.startMinute;
+  bool _blocksVisuallyOverlap(
+    TimelineBlockDraft a,
+    TimelineBlockDraft b,
+    _SkinCareTimelineLayout layout,
+  ) {
+    final aTop = layout.yFor(a.startMinute);
+    final aBottom = layout.yFor(a.endMinute);
+    final bTop = layout.yFor(b.startMinute);
+    final bBottom = layout.yFor(b.endMinute);
+    return aTop < bBottom && aBottom > bTop;
   }
 
   double _blockDurationHeight(TimelineBlockDraft item) {
@@ -2732,13 +2831,16 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
 
   List<_VisualSkinCareBlock> _visualBlocksFor(
     List<TimelineBlockDraft> dayItems,
+    _SkinCareTimelineLayout layout,
   ) {
     final sorted = [...dayItems]..sort(_compareBlocksByTime);
     final active = <_VisualSkinCareBlock>[];
     final visualBlocks = <_VisualSkinCareBlock>[];
 
     for (final block in sorted) {
-      active.removeWhere((entry) => !_blocksOverlap(block, entry.block));
+      active.removeWhere(
+        (entry) => !_blocksVisuallyOverlap(block, entry.block, layout),
+      );
 
       final usedLanes = active.map((entry) => entry.lane).toSet();
       var lane = 0;
@@ -2754,8 +2856,12 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
         lane: lane,
         order: visualBlocks.length,
         hasOverlap: dayItems.any(
-          (other) => other.id != block.id && _blocksOverlap(block, other),
+          (other) =>
+              other.id != block.id &&
+              _blocksVisuallyOverlap(block, other, layout),
         ),
+        visualTop: layout.yFor(block.startMinute),
+        visualBottom: layout.yFor(block.endMinute),
       );
       active.add(visual);
       visualBlocks.add(visual);
@@ -2792,7 +2898,7 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
   }
 
   bool _visualsOverlap(_VisualSkinCareBlock a, _VisualSkinCareBlock b) {
-    return _blocksOverlap(a.block, b.block);
+    return a.visualTop < b.visualBottom && a.visualBottom > b.visualTop;
   }
 
   double _overlapExposedLabelWidth(double availableWidth) {
@@ -2884,9 +2990,6 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
   @override
   Widget build(BuildContext context) {
     final dayItems = [...widget.blocks]..sort(_compareBlocksByTime);
-    final visualBlocks = _visualBlocksFor(dayItems);
-    final paintedBlocks = _paintOrderedBlocks(visualBlocks);
-
     final range = _rangeFor(widget.blocks);
     const topPadding = 18.0;
     const bottomPadding = _kTimelineBottomPadding;
@@ -2971,6 +3074,8 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
                       topPadding: topPadding,
                       segments: segments,
                     );
+                    final visualBlocks = _visualBlocksFor(dayItems, layout);
+                    final paintedBlocks = _paintOrderedBlocks(visualBlocks);
                     final maxCardBottom = dayItems.fold<double>(0, (
                       maxBottom,
                       item,
@@ -3166,12 +3271,9 @@ class _SkinCareVerticalTimelineState extends State<_SkinCareVerticalTimeline> {
     final item = visual.block;
     final isFront = _isFrontVisual(visual, visualBlocks);
     final isBackOverlap = visual.hasOverlap && !isFront;
-    final top = layout.yFor(item.startMinute);
+    final top = visual.visualTop;
     final exactHeight = _blockDurationHeight(item);
-    final height = math.max(
-      exactHeight,
-      layout.yFor(item.endMinute) - layout.yFor(item.startMinute),
-    );
+    final height = math.max(exactHeight, visual.visualBottom - top);
     final compact = height < 92;
     final tiny = height < 42;
     final baseColor = widget.accent;

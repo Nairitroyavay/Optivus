@@ -81,10 +81,18 @@ function assertOwnedSkinCareObjectKey(uid: string, key: string): void {
   if (normalized.includes("../") || normalized.includes("..\\")) {
     throw new HttpError(403, "forbidden", "Path traversal detected.");
   }
-  const regex = new RegExp(`^users/${uid}/onboarding/skin_care/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic)$`);
+  const regex = new RegExp(`^users/${uid}/onboarding/skin_care/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic|heif|gif|pdf)$`);
   if (!regex.test(normalized)) {
     throw new HttpError(403, "forbidden", "Unauthorized R2 key access.");
   }
+}
+
+function supportedGeminiImageContentType(contentType: string | undefined): string {
+  const normalized = (contentType || "").split(";")[0].trim().toLowerCase();
+  if (normalized === "image/jpeg" || normalized === "image/png" || normalized === "image/webp") {
+    return normalized;
+  }
+  throw new HttpError(415, "unsupported_content_type", "This photo format is not supported. Please upload JPEG, PNG, or WEBP.");
 }
 
 function parseAiJsonText(text: string): any {
@@ -135,11 +143,11 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
     if (!object) {
       throw new HttpError(404, "r2_image_missing", `Could not find uploaded image: ${photoKey}`);
     }
+    const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType);
     const buffer = await object.arrayBuffer();
     if (buffer.byteLength > 15 * 1024 * 1024) {
       throw new HttpError(413, "payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
     }
-    const contentType = object.httpMetadata?.contentType || "image/jpeg";
     imageParts.push({
       inlineData: {
         mimeType: contentType,
@@ -229,18 +237,20 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
       assertOwnedSkinCareObjectKey(user.uid, body.facePhotoR2Key);
       const object = await env.UPLOAD_BUCKET.get(body.facePhotoR2Key);
       if (object) {
+        const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType);
         const buffer = await object.arrayBuffer();
-        if (buffer.byteLength <= 15 * 1024 * 1024) {
-          const contentType = object.httpMetadata?.contentType || "image/jpeg";
-          imageParts.push({
-            inlineData: {
-              mimeType: contentType,
-              data: arrayBufferToBase64(buffer)
-            }
-          });
+        if (buffer.byteLength > 15 * 1024 * 1024) {
+          throw new HttpError(413, "payload_too_large", `Image ${body.facePhotoR2Key} exceeds 15MB limit.`);
         }
+        imageParts.push({
+          inlineData: {
+            mimeType: contentType,
+            data: arrayBufferToBase64(buffer)
+          }
+        });
       }
     } catch (err) {
+      if (err instanceof HttpError) throw err;
       console.warn("[SkinCareWorker] Failed to load face photo:", err);
     }
   }

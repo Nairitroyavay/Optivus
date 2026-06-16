@@ -4,10 +4,18 @@ import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
 
 final skinCareAiClientProvider = Provider<SkinCareAiClient>((ref) {
-  if (OptivusAiWorkersConfig.useWorker) {
+  if (OptivusAiWorkersConfig.useWorker &&
+      OptivusAiWorkersConfig.skinCareWorkerUrl.trim().isNotEmpty) {
     return WorkerSkinCareAiClient();
   }
-  return const FakeSkinCareAiClient();
+  if (OptivusAiWorkersConfig.mode == OptivusAiWorkerMode.fake &&
+      OptivusAiWorkersConfig.allowFakeAiForTestsOnly) {
+    return const FakeSkinCareAiClient();
+  }
+  if (!OptivusAiWorkersConfig.useWorker) {
+    return const UnavailableSkinCareAiClient('worker_mode_disabled');
+  }
+  return const UnavailableSkinCareAiClient('missing_worker_url');
 });
 
 class SkinCareAiProductResult {
@@ -120,6 +128,30 @@ abstract class SkinCareAiClient {
     required String idToken,
     required Map<String, dynamic> params,
   });
+}
+
+class UnavailableSkinCareAiClient implements SkinCareAiClient {
+  final String errorCode;
+
+  const UnavailableSkinCareAiClient(this.errorCode);
+
+  @override
+  Future<SkinCareAiProductResult> analyzeProducts({
+    required String uid,
+    required String idToken,
+    required List<String> productPhotos,
+  }) async {
+    return SkinCareAiProductResult.error(errorCode);
+  }
+
+  @override
+  Future<SkinCareAiRoutineResult> generateRoutine({
+    required String uid,
+    required String idToken,
+    required Map<String, dynamic> params,
+  }) async {
+    return SkinCareAiRoutineResult.error(errorCode);
+  }
 }
 
 class FakeSkinCareAiClient implements SkinCareAiClient {

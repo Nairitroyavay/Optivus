@@ -1019,6 +1019,9 @@ class BaseTimelineDraft {
   final int? extraSnackMinute;
   final String? skinCareSetupPath;
   final String? skinCareProductNames;
+  final String? skinCareProductPhotoAssetId;
+  final String? skinCareProductPhotoR2Key;
+  final String? skinCareProductPhotoStatus;
   final bool skinCareFacePhotoSkipped;
   final String? skinCareSkinType;
   final List<String> skinCareProblems;
@@ -1056,6 +1059,9 @@ class BaseTimelineDraft {
     this.extraSnackMinute,
     this.skinCareSetupPath,
     this.skinCareProductNames,
+    this.skinCareProductPhotoAssetId,
+    this.skinCareProductPhotoR2Key,
+    this.skinCareProductPhotoStatus,
     this.skinCareFacePhotoSkipped = false,
     this.skinCareSkinType,
     this.skinCareProblems = const [],
@@ -1099,6 +1105,10 @@ class BaseTimelineDraft {
       extraSnackMinute: (map['extraSnackMinute'] as num?)?.toInt(),
       skinCareSetupPath: map['skinCareSetupPath'] as String?,
       skinCareProductNames: map['skinCareProductNames'] as String?,
+      skinCareProductPhotoAssetId:
+          map['skinCareProductPhotoAssetId'] as String?,
+      skinCareProductPhotoR2Key: map['skinCareProductPhotoR2Key'] as String?,
+      skinCareProductPhotoStatus: map['skinCareProductPhotoStatus'] as String?,
       skinCareFacePhotoSkipped:
           map['skinCareFacePhotoSkipped'] as bool? ?? false,
       skinCareSkinType: map['skinCareSkinType'] as String?,
@@ -1143,6 +1153,9 @@ class BaseTimelineDraft {
     'extraSnackMinute': extraSnackMinute,
     'skinCareSetupPath': skinCareSetupPath,
     'skinCareProductNames': skinCareProductNames,
+    'skinCareProductPhotoAssetId': skinCareProductPhotoAssetId,
+    'skinCareProductPhotoR2Key': skinCareProductPhotoR2Key,
+    'skinCareProductPhotoStatus': skinCareProductPhotoStatus,
     'skinCareFacePhotoSkipped': skinCareFacePhotoSkipped,
     'skinCareSkinType': skinCareSkinType,
     'skinCareProblems': skinCareProblems,
@@ -1183,6 +1196,9 @@ class BaseTimelineDraft {
     int? extraSnackMinute,
     String? skinCareSetupPath,
     String? skinCareProductNames,
+    String? skinCareProductPhotoAssetId,
+    String? skinCareProductPhotoR2Key,
+    String? skinCareProductPhotoStatus,
     bool? skinCareFacePhotoSkipped,
     String? skinCareSkinType,
     List<String>? skinCareProblems,
@@ -1198,6 +1214,7 @@ class BaseTimelineDraft {
     bool clearRoleChangeWarnings = false,
     bool clearSnackMinute = false,
     bool clearSkinCareProductNames = false,
+    bool clearSkinCareProductPhoto = false,
     bool clearSkinCareSkinType = false,
     bool clearSkinCareProblems = false,
     bool clearSkinCarePlanning = false,
@@ -1267,6 +1284,18 @@ class BaseTimelineDraft {
       skinCareProductNames: clearSkinCarePlanning || clearSkinCareProductNames
           ? null
           : (skinCareProductNames ?? this.skinCareProductNames),
+      skinCareProductPhotoAssetId:
+          clearSkinCarePlanning || clearSkinCareProductPhoto
+          ? null
+          : (skinCareProductPhotoAssetId ?? this.skinCareProductPhotoAssetId),
+      skinCareProductPhotoR2Key:
+          clearSkinCarePlanning || clearSkinCareProductPhoto
+          ? null
+          : (skinCareProductPhotoR2Key ?? this.skinCareProductPhotoR2Key),
+      skinCareProductPhotoStatus:
+          clearSkinCarePlanning || clearSkinCareProductPhoto
+          ? null
+          : (skinCareProductPhotoStatus ?? this.skinCareProductPhotoStatus),
       skinCareFacePhotoSkipped:
           skinCareFacePhotoSkipped ?? this.skinCareFacePhotoSkipped,
       skinCareSkinType: clearSkinCarePlanning || clearSkinCareSkinType
@@ -1980,6 +2009,7 @@ class TimelineBlockDraft {
   final double? protein;
   final List<String> skincareProducts;
   final List<String> skincareSteps;
+  final String? skincareSlotLabel;
 
   const TimelineBlockDraft({
     required this.id,
@@ -2000,6 +2030,7 @@ class TimelineBlockDraft {
     this.protein,
     this.skincareProducts = const [],
     this.skincareSteps = const [],
+    this.skincareSlotLabel,
   });
 
   factory TimelineBlockDraft.fromMap(Map<String, dynamic> map) {
@@ -2022,6 +2053,7 @@ class TimelineBlockDraft {
       protein: (map['protein'] as num?)?.toDouble(),
       skincareProducts: _readStringList(map['skincareProducts']),
       skincareSteps: _readStringList(map['skincareSteps']),
+      skincareSlotLabel: map['skincareSlotLabel'] as String?,
     );
   }
 
@@ -2044,6 +2076,7 @@ class TimelineBlockDraft {
     'protein': protein,
     'skincareProducts': skincareProducts,
     'skincareSteps': skincareSteps,
+    'skincareSlotLabel': skincareSlotLabel,
   };
 
   TimelineBlockDraft copyWith({
@@ -2065,6 +2098,7 @@ class TimelineBlockDraft {
     double? protein,
     List<String>? skincareProducts,
     List<String>? skincareSteps,
+    String? skincareSlotLabel,
   }) {
     return TimelineBlockDraft(
       id: id ?? this.id,
@@ -2086,6 +2120,7 @@ class TimelineBlockDraft {
       protein: protein ?? this.protein,
       skincareProducts: skincareProducts ?? this.skincareProducts,
       skincareSteps: skincareSteps ?? this.skincareSteps,
+      skincareSlotLabel: skincareSlotLabel ?? this.skincareSlotLabel,
     );
   }
 

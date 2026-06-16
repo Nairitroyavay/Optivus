@@ -22,6 +22,19 @@ class Onboarding7SkinCareScheduleResult {
 }
 
 @visibleForTesting
+class Onboarding7RoutinePlanAdaptationResult {
+  final List<SkinCareRoutinePlan> plans;
+  final String? errorMessage;
+
+  const Onboarding7RoutinePlanAdaptationResult({
+    required this.plans,
+    this.errorMessage,
+  });
+
+  bool get hasError => errorMessage != null;
+}
+
+@visibleForTesting
 class Onboarding7SkinCareSlotSpec {
   final String slotLabel;
   final String title;
@@ -67,91 +80,114 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   final desired = onboarding7NormalizeDesiredApplications(
     desiredApplicationsPerDay,
   );
-  final selectedPlans = onboarding7SelectRoutinePlansForSchedule(
-    routinePlans,
-    desired,
-  );
-  if (selectedPlans.length < desired) {
+  final bathBlock = onboarding7FindBathBlock(baseTimeline);
+  if (bathBlock == null) {
     return const Onboarding7SkinCareScheduleResult(
       blocks: [],
+      errorMessage: 'Set bath time first.',
+    );
+  }
+
+  final adaptedPlans = onboarding7AdaptRoutinePlansForSchedule(
+    routinePlans: routinePlans,
+    desiredApplicationsPerDay: desired,
+    fallbackProductNames: fallbackProductNames,
+  );
+  if (adaptedPlans.hasError || adaptedPlans.plans.length < desired) {
+    return Onboarding7SkinCareScheduleResult(
+      blocks: [],
       errorMessage:
-          'AI returned fewer routine steps than requested. Please try again.',
+          adaptedPlans.errorMessage ??
+          'AI returned fewer safe routine steps than requested.',
     );
   }
 
   final timestamp = (now ?? DateTime.now()).millisecondsSinceEpoch;
   final occupied = onboarding7OccupiedBlocksForSkinCare(baseTimeline);
   final sleepBlock = _findSleepBlock(occupied);
-  final bathBlock = onboarding7FindBathBlock(baseTimeline);
   final wakingRange = _wakingRangeForSleep(sleepBlock);
   final slotSpecs = onboarding7SkinCareSlotSpecs(
     desiredApplicationsPerDay: desired,
     bathBlock: bathBlock,
     wakingRange: wakingRange,
   );
-  final scheduled = <TimelineBlockDraft>[];
+  final scheduledSingles = <TimelineBlockDraft>[];
 
   for (var index = 0; index < desired; index += 1) {
-    final plan = selectedPlans[index];
+    final plan = adaptedPlans.plans[index];
     final spec = slotSpecs[index];
     final repeatDays = _safeRepeatDays(plan.repeatDays);
-    final afterBath = index == 0;
-    final minStart = afterBath && bathBlock != null
-        ? math.max(wakingRange.startMinute, bathBlock.endMinute + 5)
-        : wakingRange.startMinute;
-    final maxStart = math.min(
-      wakingRange.endMinute - onboarding7SkinCareDurationMinutes,
-      24 * 60 - onboarding7SkinCareDurationMinutes,
-    );
 
-    if (maxStart < minStart) {
-      return Onboarding7SkinCareScheduleResult(
-        blocks: const [],
-        errorMessage:
-            'No free 15-minute skin-care slot was found for ${_dayName(repeatDays.first)}.',
+    for (final day in repeatDays) {
+      final bathWindow = _windowForDay(bathBlock, day);
+      if (bathWindow == null) {
+        return const Onboarding7SkinCareScheduleResult(
+          blocks: [],
+          errorMessage: 'Set bath time first.',
+        );
+      }
+
+      final afterBath = index == 0;
+      final minStart = afterBath
+          ? math.max(wakingRange.startMinute, bathWindow.endMinute + 5)
+          : wakingRange.startMinute;
+      final maxStart = math.min(
+        wakingRange.endMinute - onboarding7SkinCareDurationMinutes,
+        24 * 60 - onboarding7SkinCareDurationMinutes,
+      );
+
+      if (maxStart < minStart) {
+        return Onboarding7SkinCareScheduleResult(
+          blocks: const [],
+          errorMessage:
+              'No free 15-minute skin-care slot was found for ${_dayName(day)}.',
+        );
+      }
+
+      final preferred = spec.preferredStartMinute
+          .clamp(minStart, maxStart)
+          .toInt();
+      final startMinute = onboarding7FindFreeSkinCareStart(
+        preferredStartMinute: preferred,
+        repeatDays: [day],
+        occupiedBlocks: [...occupied, ...scheduledSingles],
+        minStartMinute: minStart,
+        maxStartMinute: maxStart,
+        searchAfterOnly: afterBath,
+      );
+
+      if (startMinute == null) {
+        return Onboarding7SkinCareScheduleResult(
+          blocks: const [],
+          errorMessage:
+              'No free 15-minute skin-care slot was found for ${_dayName(day)}.',
+        );
+      }
+
+      final products = plan.productNames.isEmpty
+          ? fallbackProductNames
+          : plan.productNames;
+      scheduledSingles.add(
+        TimelineBlockDraft(
+          id: 'skin-care-$timestamp-$index-$day',
+          section: 'skin_care',
+          title: plan.title.trim().isNotEmpty ? plan.title.trim() : spec.title,
+          startMinute: startMinute,
+          endMinute: startMinute + onboarding7SkinCareDurationMinutes,
+          repeatDays: [day],
+          blockType: TimelineBlockDraft.softBlockKey,
+          source: 'ai_skin_care_setup',
+          skincareProducts: products,
+          skincareSteps: plan.steps,
+          skincareSlotLabel: spec.slotLabel,
+        ),
       );
     }
-
-    final preferred = spec.preferredStartMinute
-        .clamp(minStart, maxStart)
-        .toInt();
-    final startMinute = onboarding7FindFreeSkinCareStart(
-      preferredStartMinute: preferred,
-      repeatDays: repeatDays,
-      occupiedBlocks: [...occupied, ...scheduled],
-      minStartMinute: minStart,
-      maxStartMinute: maxStart,
-      searchAfterOnly: afterBath,
-    );
-
-    if (startMinute == null) {
-      return Onboarding7SkinCareScheduleResult(
-        blocks: const [],
-        errorMessage:
-            'No free 15-minute skin-care slot was found for ${_dayName(repeatDays.first)}.',
-      );
-    }
-
-    final products = plan.productNames.isEmpty
-        ? fallbackProductNames
-        : plan.productNames;
-    scheduled.add(
-      TimelineBlockDraft(
-        id: 'skin-care-$timestamp-$index',
-        section: 'skin_care',
-        title: plan.title.trim().isNotEmpty ? plan.title.trim() : spec.title,
-        startMinute: startMinute,
-        endMinute: startMinute + onboarding7SkinCareDurationMinutes,
-        repeatDays: repeatDays,
-        blockType: TimelineBlockDraft.softBlockKey,
-        source: 'ai_skin_care_setup',
-        skincareProducts: products,
-        skincareSteps: plan.steps,
-      ),
-    );
   }
 
-  return Onboarding7SkinCareScheduleResult(blocks: scheduled);
+  return Onboarding7SkinCareScheduleResult(
+    blocks: _groupSkinCareBlocks(scheduledSingles, timestamp),
+  );
 }
 
 @visibleForTesting
@@ -186,7 +222,7 @@ TimelineBlockDraft? onboarding7FindBathBlock(BaseTimelineDraft baseTimeline) {
     final title = block.title.toLowerCase();
     if (title.contains('bath') || title.contains('shower')) return block;
   }
-  return BaseTimelineDraft.defaultBathBlock();
+  return null;
 }
 
 @visibleForTesting
@@ -198,7 +234,7 @@ List<Onboarding7SkinCareSlotSpec> onboarding7SkinCareSlotSpecs({
   final desired = onboarding7NormalizeDesiredApplications(
     desiredApplicationsPerDay,
   );
-  final firstStart = (bathBlock?.endMinute ?? 7 * 60 + 30) + 5;
+  final firstStart = (bathBlock?.endMinute ?? wakingRange.startMinute) + 5;
   final nightStart = math.min(21 * 60, wakingRange.endMinute - 45);
   return switch (desired) {
     2 => [
@@ -260,6 +296,18 @@ List<SkinCareRoutinePlan> onboarding7SelectRoutinePlansForSchedule(
   List<SkinCareRoutinePlan> plans,
   int desiredApplicationsPerDay,
 ) {
+  return onboarding7AdaptRoutinePlansForSchedule(
+    routinePlans: plans,
+    desiredApplicationsPerDay: desiredApplicationsPerDay,
+  ).plans;
+}
+
+@visibleForTesting
+Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
+  required List<SkinCareRoutinePlan> routinePlans,
+  required int desiredApplicationsPerDay,
+  List<String> fallbackProductNames = const [],
+}) {
   final desired = onboarding7NormalizeDesiredApplications(
     desiredApplicationsPerDay,
   );
@@ -268,20 +316,51 @@ List<SkinCareRoutinePlan> onboarding7SelectRoutinePlansForSchedule(
     3 => const ['morning', 'midday', 'night'],
     _ => const ['morning', 'midday', 'afternoon', 'night'],
   };
-  final unused = plans.toList();
+  final slotSpecs = onboarding7SkinCareSlotSpecs(
+    desiredApplicationsPerDay: desired,
+    bathBlock: null,
+    wakingRange: const Onboarding7WakingRange(
+      startMinute: 6 * 60,
+      endMinute: 23 * 60,
+    ),
+  );
+  final unused = routinePlans.toList();
   final selected = <SkinCareRoutinePlan>[];
+  final productBasis = _dedupeStrings([
+    ...fallbackProductNames,
+    for (final plan in routinePlans) ...plan.productNames,
+  ]);
+  final textBasis = _dedupeStrings([
+    ...productBasis,
+    for (final plan in routinePlans) ...plan.steps,
+  ]);
 
-  for (final slot in targetSlots) {
+  for (var index = 0; index < targetSlots.length; index += 1) {
+    final slot = targetSlots[index];
+    final spec = slotSpecs[index];
     final matchIndex = unused.indexWhere(
       (plan) => _slotCompatible(plan.slotLabel, slot),
     );
     if (matchIndex >= 0) {
-      selected.add(unused.removeAt(matchIndex));
-    } else if (unused.isNotEmpty) {
-      selected.add(unused.removeAt(0));
+      selected.add(_planForSlot(unused.removeAt(matchIndex), slot, spec.title));
+      continue;
     }
+
+    final generated = _generatedPlanForMissingSlot(
+      slot: slot,
+      title: spec.title,
+      productBasis: productBasis,
+      textBasis: textBasis,
+    );
+    if (generated == null) {
+      return Onboarding7RoutinePlanAdaptationResult(
+        plans: selected,
+        errorMessage: _missingSlotMessage(slot),
+      );
+    }
+    selected.add(generated);
   }
-  return selected;
+  return Onboarding7RoutinePlanAdaptationResult(plans: selected);
 }
 
 @visibleForTesting
@@ -370,6 +449,55 @@ int? onboarding7FindFreeStartForSkinCareEdit({
   );
 }
 
+List<TimelineBlockDraft> _groupSkinCareBlocks(
+  List<TimelineBlockDraft> singles,
+  int timestamp,
+) {
+  final grouped = <String, TimelineBlockDraft>{};
+  for (final block in singles) {
+    final key = [
+      block.title.trim().toLowerCase(),
+      block.startMinute,
+      block.endMinute,
+      block.skincareSlotLabel?.trim().toLowerCase() ?? '',
+      block.skincareSteps.join('\u001f'),
+      block.skincareProducts.join('\u001f'),
+    ].join('\u001e');
+    final existing = grouped[key];
+    if (existing == null) {
+      grouped[key] = block;
+      continue;
+    }
+    final repeatDays = {...existing.repeatDays, ...block.repeatDays}.toList()
+      ..sort();
+    grouped[key] = existing.copyWith(repeatDays: repeatDays);
+  }
+
+  final result = grouped.values.toList()
+    ..sort((a, b) {
+      final startCompare = a.startMinute.compareTo(b.startMinute);
+      if (startCompare != 0) return startCompare;
+      return a.title.compareTo(b.title);
+    });
+  return [
+    for (var index = 0; index < result.length; index += 1)
+      result[index].copyWith(id: 'skin-care-$timestamp-group-$index'),
+  ];
+}
+
+_ScheduleWindow? _windowForDay(TimelineBlockDraft block, int day) {
+  final candidates = _windowsFor(block)
+      .where((window) => window.day == day)
+      .where(
+        (window) =>
+            window.endMinute - window.startMinute >= 0 &&
+            window.endMinute <= 24 * 60,
+      )
+      .toList(growable: false);
+  if (candidates.isEmpty) return null;
+  return candidates.reduce((a, b) => a.endMinute >= b.endMinute ? a : b);
+}
+
 TimelineBlockDraft? _findSleepBlock(Iterable<TimelineBlockDraft> blocks) {
   for (final block in blocks) {
     if (block.id == BaseTimelineDraft.fixedSleepId) return block;
@@ -416,6 +544,127 @@ bool _slotCompatible(String rawSlot, String targetSlot) {
     return slot == 'am' || slot == 'after_bath';
   }
   return false;
+}
+
+SkinCareRoutinePlan _planForSlot(
+  SkinCareRoutinePlan plan,
+  String slot,
+  String fallbackTitle,
+) {
+  return SkinCareRoutinePlan(
+    slotLabel: slot,
+    title: plan.title.trim().isEmpty ? fallbackTitle : plan.title.trim(),
+    steps: plan.steps,
+    productNames: plan.productNames,
+    warnings: plan.warnings,
+    repeatDays: plan.repeatDays,
+  );
+}
+
+SkinCareRoutinePlan? _generatedPlanForMissingSlot({
+  required String slot,
+  required String title,
+  required List<String> productBasis,
+  required List<String> textBasis,
+}) {
+  final sunscreenProducts = productBasis
+      .where((item) => _looksLikeSunscreen(item))
+      .toList(growable: false);
+  final cleanserProducts = productBasis
+      .where((item) => _looksLikeCleanser(item))
+      .toList(growable: false);
+  final moisturizerProducts = productBasis
+      .where((item) => _looksLikeMoisturizer(item))
+      .toList(growable: false);
+  final hasSunscreen =
+      sunscreenProducts.isNotEmpty ||
+      textBasis.any((item) => _looksLikeSunscreen(item));
+  final hasCleanser =
+      cleanserProducts.isNotEmpty ||
+      textBasis.any((item) => _looksLikeCleanser(item));
+  final hasMoisturizer =
+      moisturizerProducts.isNotEmpty ||
+      textBasis.any((item) => _looksLikeMoisturizer(item));
+
+  if (slot == 'midday' || slot == 'afternoon') {
+    if (!hasSunscreen) return null;
+    return SkinCareRoutinePlan(
+      slotLabel: slot,
+      title: title,
+      steps: const ['Refresh skin', 'Reapply sunscreen'],
+      productNames: sunscreenProducts.isEmpty
+          ? const ['Sunscreen']
+          : sunscreenProducts,
+    );
+  }
+
+  if (slot == 'morning') {
+    if (!hasSunscreen) return null;
+    return SkinCareRoutinePlan(
+      slotLabel: slot,
+      title: title,
+      steps: [if (hasCleanser) 'Cleanse face', 'Apply sunscreen'],
+      productNames: _dedupeStrings([
+        if (cleanserProducts.isNotEmpty) cleanserProducts.first,
+        if (sunscreenProducts.isEmpty) 'Sunscreen' else sunscreenProducts.first,
+      ]),
+    );
+  }
+
+  if (slot == 'night') {
+    if (!hasCleanser && !hasMoisturizer) return null;
+    return SkinCareRoutinePlan(
+      slotLabel: slot,
+      title: title,
+      steps: [
+        if (hasCleanser) 'Cleanse face',
+        if (hasMoisturizer) 'Apply moisturizer',
+      ],
+      productNames: _dedupeStrings([
+        if (cleanserProducts.isNotEmpty) cleanserProducts.first,
+        if (moisturizerProducts.isNotEmpty) moisturizerProducts.first,
+      ]),
+    );
+  }
+  return null;
+}
+
+String _missingSlotMessage(String slot) {
+  if (slot == 'midday' || slot == 'afternoon' || slot == 'morning') {
+    return 'Add a sunscreen product so this routine can be safely scheduled $slot.';
+  }
+  return 'AI did not return enough safe products to build a night routine.';
+}
+
+bool _looksLikeSunscreen(String value) {
+  final lower = value.toLowerCase();
+  return lower.contains('sunscreen') || lower.contains('spf');
+}
+
+bool _looksLikeCleanser(String value) {
+  final lower = value.toLowerCase();
+  return lower.contains('cleanser') ||
+      lower.contains('face wash') ||
+      lower.contains('wash face') ||
+      lower.contains('cleanse');
+}
+
+bool _looksLikeMoisturizer(String value) {
+  final lower = value.toLowerCase();
+  return lower.contains('moistur') ||
+      lower.contains('cream') ||
+      lower.contains('lotion');
+}
+
+List<String> _dedupeStrings(Iterable<String> values) {
+  final seen = <String>{};
+  final result = <String>[];
+  for (final raw in values) {
+    final value = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (value.isEmpty) continue;
+    if (seen.add(value.toLowerCase())) result.add(value);
+  }
+  return result;
 }
 
 bool _isSkinCareStartFree(
