@@ -1296,14 +1296,10 @@ class _HasProductsModeScreenState
         ),
         if (widget.base.skinCareSpecialCareNotes.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(
-              'Suggested: ${widget.base.skinCareSpecialCareNotes.join(", ")}',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: OptivusColors.roseAccent,
-              ),
+            padding: const EdgeInsets.only(top: 8),
+            child: _SkinCareSpecialCareNotesButton(
+              notes: widget.base.skinCareSpecialCareNotes,
+              accent: OptivusColors.roseAccent,
             ),
           ),
         if (message != null) ...[
@@ -2289,6 +2285,137 @@ class _SkinCareInlineMessage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SkinCareSpecialCareNotesButton extends StatelessWidget {
+  final List<String> notes;
+  final Color accent;
+
+  const _SkinCareSpecialCareNotesButton({
+    required this.notes,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (notes.isEmpty) return const SizedBox.shrink();
+    final count = notes.length;
+    final label = count == 1
+        ? '1 special-care note'
+        : '$count special-care notes';
+    return GestureDetector(
+      key: const ValueKey('onboarding-step7-special-care-notes-button'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showSkinCareSpecialCareNotesSheet(context, notes, accent),
+      child: OnboardingGlassCard(
+        tint: accent.withValues(alpha: 0.08),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        radius: 14,
+        child: Row(
+          children: [
+            Icon(Icons.info_outline_rounded, size: 16, color: accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w900,
+                  color: accent,
+                ),
+              ),
+            ),
+            Icon(Icons.expand_more_rounded, size: 18, color: accent),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void _showSkinCareSpecialCareNotesSheet(
+  BuildContext context,
+  List<String> notes,
+  Color accent,
+) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) => Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.info_outline_rounded, color: accent, size: 20),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Special-care notes',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final note in notes) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: accent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              note,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                height: 1.35,
+                                fontWeight: FontWeight.w700,
+                                color: OptivusColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _SkinCareTimelineSection extends ConsumerWidget {

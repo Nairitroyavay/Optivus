@@ -225,6 +225,17 @@ void main() {
 
     expect(find.textContaining('Missing skin-care worker URL'), findsOneWidget);
     expect(find.textContaining('OPTIVUS_SKIN_CARE_WORKER_URL'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    );
+    expect(
+      container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care'),
+      isEmpty,
+    );
   });
 
   test('8. Product analysis maps Map products safely into names', () {
@@ -351,7 +362,7 @@ void main() {
       );
       expect(blocks.first.startMinute, greaterThanOrEqualTo(455));
       expect(blocks.first.skincareProducts, ['Cleanser', 'Sunscreen']);
-      expect(blocks.first.skincareSteps, ['Face wash', 'Apply sunscreen']);
+      expect(blocks.first.skincareSteps, ['Cleanse face', 'Apply sunscreen']);
       expect(client.lastGenerateParams?['typedProductNames'], [
         'Cleanser',
         'Moisturizer',
@@ -924,7 +935,7 @@ void main() {
       );
       await tester.enterText(
         find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-        'Gentle Cleanser',
+        'Gentle Cleanser, Barrier Repair Moisturizer',
       );
       await tester.tap(find.text('Build skin routine'));
       await tester.pumpAndSettle();
@@ -986,7 +997,7 @@ void main() {
       );
       await tester.enterText(
         find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-        'Gentle Cleanser',
+        'Gentle Cleanser, Barrier Repair Moisturizer',
       );
       await tester.tap(find.text('Build skin routine'));
       await tester.pumpAndSettle();
@@ -1017,7 +1028,7 @@ void main() {
   );
 
   testWidgets(
-    '22. Photo metadata with no product name still generates sunscreen refresh',
+    '22. Photo metadata with only sunscreen cannot build full strict routine',
     (tester) async {
       final asset = _uploadedAsset();
       final client = TestSkinCareAiClient(
@@ -1060,19 +1071,12 @@ void main() {
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
 
-      expect(blocks, hasLength(4));
-      expect(find.textContaining('AI could not read products'), findsNothing);
+      expect(blocks, isEmpty);
       expect(
-        blocks
-            .singleWhere((block) => block.skincareSlotLabel == 'midday')
-            .skincareProducts,
-        contains('Sunscreen'),
-      );
-      expect(
-        blocks
-            .singleWhere((block) => block.skincareSlotLabel == 'afternoon')
-            .skincareProducts,
-        contains('Sunscreen'),
+        find.text(
+          'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
+        ),
+        findsOneWidget,
       );
       expect(
         (client.lastGenerateParams?['productsFromPhoto'] as List).single,
@@ -1150,7 +1154,7 @@ void main() {
     );
   });
 
-  test('25. Scheduler repairs title-only plans from fallback products', () {
+  test('25. Scheduler rejects title-only plans from fallback products', () {
     final result = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: BaseTimelineDraft(
         blocks: [BaseTimelineDraft.defaultBathBlock()],
@@ -1170,21 +1174,18 @@ void main() {
         ),
       ],
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Gentle Cleanser', 'Daily Sunscreen'],
+      fallbackProductNames: const [
+        'Gentle Cleanser',
+        'Daily Sunscreen',
+        'Barrier Repair Moisturizer',
+      ],
       now: DateTime.utc(2026, 6, 15),
     );
 
-    expect(result.errorMessage, isNull);
-    expect(result.blocks, hasLength(2));
-    expect(result.blocks.first.skincareSteps, isNotEmpty);
-    expect(result.blocks.first.skincareProducts, contains('Daily Sunscreen'));
+    expect(result.blocks, isEmpty);
     expect(
-      result.blocks.every(
-        (block) =>
-            block.endMinute - block.startMinute ==
-            onboarding7SkinCareDurationMinutes,
-      ),
-      isTrue,
+      result.errorMessage,
+      'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
     );
   });
 
@@ -1995,7 +1996,7 @@ void main() {
 
       await tester.enterText(
         find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-        'Cleanser',
+        'Cleanser, Moisturizer',
       );
       await tester.pumpAndSettle();
 
@@ -2010,10 +2011,8 @@ void main() {
         draftState.draft.baseTimeline.skinCareSpecialCareNotes,
         contains(startsWith('Special care: Exfoliation Night - AHA BHA')),
       );
-      expect(
-        find.textContaining('Special care: Exfoliation Night - AHA BHA'),
-        findsOneWidget,
-      );
+      expect(find.text('1 special-care note'), findsOneWidget);
+      expect(find.textContaining('Suggested:'), findsNothing);
       final scBlocks = draftState.draft.baseTimeline.blocks
           .where((b) => b.section == 'skin_care')
           .toList();
@@ -2070,20 +2069,13 @@ void main() {
       final scBlocks = draftState.draft.baseTimeline.blocks
           .where((b) => b.section == 'skin_care')
           .toList();
+      expect(draftState.draft.baseTimeline.skinCareSpecialCareNotes, isEmpty);
+      expect(scBlocks, isEmpty);
       expect(
-        draftState.draft.baseTimeline.skinCareSpecialCareNotes,
-        contains(startsWith('Special care: Retinol Treatment - Retinol Serum')),
-      );
-      expect(
-        find.textContaining('Special care: Retinol Treatment - Retinol Serum'),
+        find.text(
+          'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
+        ),
         findsOneWidget,
-      );
-
-      // Default desired applications is 2. The Retinol is filtered, so the scheduler synthesizes 2 safe blocks from Cleanser/Moisturizer.
-      expect(scBlocks.length, 2);
-      expect(
-        scBlocks.any((b) => b.skincareProducts.contains('Retinol Serum')),
-        isFalse,
       );
     },
   );
@@ -2164,10 +2156,22 @@ void main() {
         notes,
         contains(startsWith('Special care: AHA Night - AHA Serum')),
       );
+      expect(find.text('4 special-care notes'), findsOneWidget);
+      expect(find.textContaining('Suggested:'), findsNothing);
+      expect(find.textContaining('Retinol night - use 2x/week'), findsNothing);
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Special-care notes'), findsOneWidget);
       expect(
         find.textContaining('Retinol night - use 2x/week'),
         findsOneWidget,
       );
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
 
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpAndSettle();
@@ -2181,6 +2185,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('4 special-care notes'), findsOneWidget);
+      expect(find.textContaining('Suggested:'), findsNothing);
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
+      await tester.pumpAndSettle();
       expect(
         find.textContaining('Retinol night - use 2x/week'),
         findsOneWidget,
@@ -2234,7 +2246,8 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['First note']);
-      expect(find.textContaining('First note'), findsOneWidget);
+      expect(find.text('1 special-care note'), findsOneWidget);
+      expect(find.textContaining('Suggested:'), findsNothing);
 
       await tester.tap(find.text('Rebuild / Edit'));
       await tester.pumpAndSettle();
@@ -2249,6 +2262,13 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['Second note']);
+      expect(find.text('1 special-care note'), findsOneWidget);
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
+      await tester.pumpAndSettle();
       expect(find.textContaining('Second note'), findsOneWidget);
       expect(find.textContaining('First note'), findsNothing);
     },
@@ -2278,6 +2298,14 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(find.text('1 special-care note'), findsOneWidget);
+      expect(find.textContaining('Suggested:'), findsNothing);
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
+      await tester.pumpAndSettle();
       expect(
         find.textContaining('Special care: saved draft note'),
         findsOneWidget,
@@ -2413,101 +2441,147 @@ void main() {
     },
   );
 
-  test('57. Scheduler repairs or rejects unsafe slot products', () {
+  test('57. Scheduler repairs or rejects strict slot products', () {
     final bathBase = BaseTimelineDraft(
       blocks: [BaseTimelineDraft.defaultBathBlock()],
     );
+    const errorMessage =
+        'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.';
 
-    final middayRepair = onboarding7ScheduleSkinCareRoutine(
-      baseTimeline: bathBase,
-      desiredApplicationsPerDay: 3,
-      fallbackProductNames: const ['Cleanser', 'Sunscreen', 'Moisturizer'],
-      routinePlans: const [
-        SkinCareRoutinePlan(
-          slotLabel: 'midday',
-          title: 'Midday Skin Care',
-          steps: ['Cleanse'],
-          productNames: ['Cleanser'],
-        ),
-      ],
-      now: DateTime.utc(2026, 6, 15),
-    );
-    expect(middayRepair.errorMessage, isNull);
-    expect(
-      middayRepair.blocks
-          .singleWhere((block) => block.skincareSlotLabel == 'midday')
-          .skincareProducts,
-      ['Sunscreen'],
-    );
-
-    final morningRepair = onboarding7ScheduleSkinCareRoutine(
+    final morningSunscreenOnlyRepair = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Moisturizer', 'Sunscreen'],
+      fallbackProductNames: const [
+        'Gentle Cleanser',
+        'Daily Sunscreen',
+        'Barrier Repair Moisturizer',
+      ],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
           title: 'Morning Skin Care',
-          steps: ['Moisturize'],
-          productNames: ['Moisturizer'],
+          steps: ['Apply sunscreen'],
+          productNames: ['Daily Sunscreen'],
         ),
       ],
       now: DateTime.utc(2026, 6, 15),
     );
-    expect(morningRepair.errorMessage, isNull);
+    expect(morningSunscreenOnlyRepair.errorMessage, isNull);
     expect(
-      morningRepair.blocks
+      morningSunscreenOnlyRepair.blocks
           .singleWhere((block) => block.skincareSlotLabel == 'morning')
           .skincareProducts,
-      contains('Sunscreen'),
+      ['Gentle Cleanser', 'Daily Sunscreen'],
+    );
+    expect(
+      morningSunscreenOnlyRepair.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'morning')
+          .skincareSteps,
+      containsAll(['Cleanse face', 'Apply sunscreen']),
     );
 
-    final nightRepair = onboarding7ScheduleSkinCareRoutine(
+    final morningSunscreenOnlyFail = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Sunscreen', 'Cleanser', 'Moisturizer'],
+      fallbackProductNames: const ['Daily Sunscreen'],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning Skin Care',
+          steps: ['Apply sunscreen'],
+          productNames: ['Daily Sunscreen'],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+    expect(morningSunscreenOnlyFail.blocks, isEmpty);
+    expect(morningSunscreenOnlyFail.errorMessage, errorMessage);
+
+    final nightCleanserOnlyRepair = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 2,
+      fallbackProductNames: const [
+        'Daily Sunscreen',
+        'Gentle Cleanser',
+        'Barrier Repair Moisturizer',
+      ],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'night',
           title: 'Night Skin Care',
-          steps: ['Sunscreen'],
-          productNames: ['Sunscreen'],
+          steps: ['Cleanse'],
+          productNames: ['Gentle Cleanser'],
         ),
       ],
       now: DateTime.utc(2026, 6, 15),
     );
-    expect(nightRepair.errorMessage, isNull);
+    expect(nightCleanserOnlyRepair.errorMessage, isNull);
     expect(
-      nightRepair.blocks
+      nightCleanserOnlyRepair.blocks
           .singleWhere((block) => block.skincareSlotLabel == 'night')
           .skincareProducts,
-      ['Cleanser', 'Moisturizer'],
+      ['Gentle Cleanser', 'Barrier Repair Moisturizer'],
+    );
+    expect(
+      nightCleanserOnlyRepair.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'night')
+          .skincareSteps,
+      containsAll(['Cleanse face', 'Apply moisturizer']),
+    );
+
+    final nightMoisturizerOnlyRepair = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 2,
+      fallbackProductNames: const [
+        'Daily Sunscreen',
+        'Gentle Cleanser',
+        'Barrier Repair Moisturizer',
+      ],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night Skin Care',
+          steps: ['Moisturize'],
+          productNames: ['Barrier Repair Moisturizer'],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+    expect(nightMoisturizerOnlyRepair.errorMessage, isNull);
+    expect(
+      nightMoisturizerOnlyRepair.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'night')
+          .skincareProducts,
+      ['Gentle Cleanser', 'Barrier Repair Moisturizer'],
     );
 
     for (final result in [
       onboarding7ScheduleSkinCareRoutine(
         baseTimeline: bathBase,
-        desiredApplicationsPerDay: 3,
-        fallbackProductNames: const ['Cleanser', 'Moisturizer'],
+        desiredApplicationsPerDay: 2,
+        fallbackProductNames: const ['Daily Sunscreen', 'Gentle Cleanser'],
         routinePlans: const [
           SkinCareRoutinePlan(
-            slotLabel: 'midday',
-            title: 'Midday Skin Care',
+            slotLabel: 'night',
+            title: 'Night Skin Care',
             steps: ['Cleanse'],
-            productNames: ['Cleanser'],
+            productNames: ['Gentle Cleanser'],
           ),
         ],
       ),
       onboarding7ScheduleSkinCareRoutine(
         baseTimeline: bathBase,
         desiredApplicationsPerDay: 2,
-        fallbackProductNames: const ['Moisturizer'],
+        fallbackProductNames: const [
+          'Daily Sunscreen',
+          'Barrier Repair Moisturizer',
+        ],
         routinePlans: const [
           SkinCareRoutinePlan(
-            slotLabel: 'morning',
-            title: 'Morning Skin Care',
+            slotLabel: 'night',
+            title: 'Night Skin Care',
             steps: ['Moisturize'],
-            productNames: ['Moisturizer'],
+            productNames: ['Barrier Repair Moisturizer'],
           ),
         ],
       ),
@@ -2538,11 +2612,108 @@ void main() {
       ),
     ]) {
       expect(result.blocks, isEmpty);
-      expect(
-        result.errorMessage,
-        'AI could not build a safe daily routine from these products. Add product names like cleanser, moisturizer, or sunscreen.',
-      );
+      expect(result.errorMessage, errorMessage);
     }
+
+    final fourPerDay = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 4,
+      fallbackProductNames: const [
+        'Gentle Cleanser',
+        'Daily Sunscreen',
+        'Barrier Repair Moisturizer',
+      ],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning AI',
+          steps: ['Apply sunscreen'],
+          productNames: ['Daily Sunscreen'],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'afternoon',
+          title: 'Afternoon AI',
+          steps: ['Cleanse', 'Reapply sunscreen'],
+          productNames: ['Gentle Cleanser'],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night AI',
+          steps: ['Cleanse'],
+          productNames: ['Gentle Cleanser'],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+    expect(fourPerDay.errorMessage, isNull);
+    expect(
+      fourPerDay.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'midday')
+          .title,
+      isNot('Afternoon AI'),
+    );
+    expect(
+      fourPerDay.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'afternoon')
+          .title,
+      'Afternoon AI',
+    );
+    for (final slot in ['midday', 'afternoon']) {
+      final block = fourPerDay.blocks.singleWhere(
+        (block) => block.skincareSlotLabel == slot,
+      );
+      expect(block.skincareProducts, ['Daily Sunscreen']);
+      expect(block.skincareSteps, ['Reapply sunscreen']);
+    }
+  });
+
+  test('58. Sun cream is sunscreen and not moisturizer', () {
+    final result = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: BaseTimelineDraft(
+        blocks: [BaseTimelineDraft.defaultBathBlock()],
+      ),
+      desiredApplicationsPerDay: 3,
+      fallbackProductNames: const [
+        'Gentle Cleanser',
+        'Sun Cream SPF 50',
+        'Barrier Repair Moisturizer',
+      ],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning Skin Care',
+          steps: ['Apply sun cream'],
+          productNames: ['Sun Cream SPF 50'],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night Skin Care',
+          steps: ['Cleanse'],
+          productNames: ['Gentle Cleanser'],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+
+    expect(result.errorMessage, isNull);
+    expect(
+      result.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'morning')
+          .skincareProducts,
+      ['Gentle Cleanser', 'Sun Cream SPF 50'],
+    );
+    expect(
+      result.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'midday')
+          .skincareProducts,
+      ['Sun Cream SPF 50'],
+    );
+    expect(
+      result.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'night')
+          .skincareProducts,
+      ['Gentle Cleanser', 'Barrier Repair Moisturizer'],
+    );
   });
 }
 

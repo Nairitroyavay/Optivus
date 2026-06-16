@@ -120,6 +120,22 @@ class _ScheduleWindow {
   });
 }
 
+class _SlotProducts {
+  final List<String> sunscreens;
+  final List<String> cleansers;
+  final List<String> moisturizers;
+
+  const _SlotProducts({
+    required this.sunscreens,
+    required this.cleansers,
+    required this.moisturizers,
+  });
+
+  String? get sunscreen => sunscreens.firstOrNull;
+  String? get cleanser => cleansers.firstOrNull;
+  String? get moisturizer => moisturizers.firstOrNull;
+}
+
 @visibleForTesting
 class Onboarding7WakingRange {
   final int startMinute;
@@ -428,41 +444,65 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
     ),
   );
   final unused = sourcePlans.toList();
-  final selected = <SkinCareRoutinePlan>[];
+  final selectedBySlot = <String, SkinCareRoutinePlan>{};
   final productBasis = _dedupeStrings([
     ...fallbackProductNames,
     for (final product in fallbackProductDetails) product.fallbackLabel,
     for (final plan in sourcePlans) ...plan.productNames,
   ]);
+  final slotProducts = _slotProductsFromBasis(
+    productBasis: productBasis,
+    productDetails: fallbackProductDetails,
+  );
+  var usableDailyPlanCount = 0;
+
+  if (sourcePlans.isEmpty) {
+    return Onboarding7RoutinePlanAdaptationResult(
+      plans: const [],
+      errorMessage: _missingSlotMessage('daily'),
+    );
+  }
 
   for (var index = 0; index < targetSlots.length; index += 1) {
     final slot = targetSlots[index];
     final spec = slotSpecs[index];
     final matchIndex = unused.indexWhere(
-      (plan) => _slotCompatible(plan.slotLabel, slot),
+      (plan) =>
+          _slotCompatible(plan.slotLabel, slot, targetSlots: targetSlots) &&
+          _planHasUsableDailyIntentForSlot(plan, slot),
     );
     if (matchIndex >= 0) {
       final rawPlan = unused.removeAt(matchIndex);
-      final selectedPlan = _meaningfulRoutinePlan(rawPlan)
-          ? _slotSafePlanForSlot(
-              plan: rawPlan,
-              slot: slot,
-              title: spec.title,
-              productBasis: productBasis,
-              productDetails: fallbackProductDetails,
-            )
-          : _generatedPlanForMissingSlot(
-              slot: slot,
-              title: spec.title,
-              productBasis: productBasis,
-              productDetails: fallbackProductDetails,
-            );
+      final selectedPlan = _slotSafePlanForSlot(
+        plan: rawPlan,
+        slot: slot,
+        title: spec.title,
+        slotProducts: slotProducts,
+      );
       if (selectedPlan == null) {
         return Onboarding7RoutinePlanAdaptationResult(
-          plans: selected,
+          plans: selectedBySlot.values.toList(growable: false),
           errorMessage: _missingSlotMessage(slot),
         );
       }
+      usableDailyPlanCount += 1;
+      selectedBySlot[slot] = selectedPlan;
+    }
+  }
+
+  if (usableDailyPlanCount == 0) {
+    return Onboarding7RoutinePlanAdaptationResult(
+      plans: const [],
+      errorMessage: _missingSlotMessage('daily'),
+    );
+  }
+
+  final selected = <SkinCareRoutinePlan>[];
+  for (var index = 0; index < targetSlots.length; index += 1) {
+    final slot = targetSlots[index];
+    final spec = slotSpecs[index];
+    final selectedPlan = selectedBySlot[slot];
+    if (selectedPlan != null) {
       selected.add(selectedPlan);
       continue;
     }
@@ -470,8 +510,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
     final generated = _generatedPlanForMissingSlot(
       slot: slot,
       title: spec.title,
-      productBasis: productBasis,
-      productDetails: fallbackProductDetails,
+      slotProducts: slotProducts,
     );
     if (generated == null) {
       return Onboarding7RoutinePlanAdaptationResult(
@@ -651,12 +690,19 @@ Onboarding7WakingRange _wakingRangeForSleep(TimelineBlockDraft? sleepBlock) {
   return const Onboarding7WakingRange(startMinute: 6 * 60, endMinute: 23 * 60);
 }
 
-bool _slotCompatible(String rawSlot, String targetSlot) {
+bool _slotCompatible(
+  String rawSlot,
+  String targetSlot, {
+  required List<String> targetSlots,
+}) {
   final slot = rawSlot.toLowerCase().trim();
   if (slot.isEmpty || slot == 'custom') return false;
   if (slot == targetSlot) return true;
   if (targetSlot == 'midday') {
-    return slot == 'noon' || slot == 'lunch' || slot == 'afternoon';
+    final hasSeparateAfternoon = targetSlots.contains('afternoon');
+    return slot == 'noon' ||
+        slot == 'lunch' ||
+        (!hasSeparateAfternoon && slot == 'afternoon');
   }
   if (targetSlot == 'night') {
     return slot == 'evening' || slot == 'pm' || slot == 'bedtime';
@@ -682,43 +728,109 @@ SkinCareRoutinePlan _planForSlot(
   );
 }
 
-bool _meaningfulRoutinePlan(SkinCareRoutinePlan plan) {
-  return plan.productNames.isNotEmpty;
-}
-
 SkinCareRoutinePlan? _slotSafePlanForSlot({
   required SkinCareRoutinePlan plan,
   required String slot,
   required String title,
-  required List<String> productBasis,
-  required List<SkinCareDetectedProduct> productDetails,
+  required _SlotProducts slotProducts,
 }) {
   final normalized = _planForSlot(plan, slot, title);
-  if (_planIsSlotSafe(normalized, slot)) return normalized;
-  return _generatedPlanForMissingSlot(
+  return _normalizedPlanForSlot(
+    plan: normalized,
     slot: slot,
     title: title,
-    productBasis: productBasis,
-    productDetails: productDetails,
+    slotProducts: slotProducts,
   );
 }
 
-bool _planIsSlotSafe(SkinCareRoutinePlan plan, String slot) {
-  final products = plan.productNames;
-  if (products.isEmpty) return false;
-  final hasSunscreen = products.any(_looksLikeSunscreen);
-  final hasCleanser = products.any(_looksLikeCleanser);
-  final hasMoisturizer = products.any(_looksLikeMoisturizer);
+bool _planHasUsableDailyIntentForSlot(SkinCareRoutinePlan plan, String slot) {
+  final categories = _dailyRoutineIntentCategories(plan);
+  return switch (slot) {
+    'morning' =>
+      categories.contains('cleanser') || categories.contains('sunscreen'),
+    'midday' || 'afternoon' => categories.contains('sunscreen'),
+    'night' =>
+      categories.contains('cleanser') || categories.contains('moisturizer'),
+    _ => false,
+  };
+}
 
-  if (slot == 'morning') return hasSunscreen;
-  if (slot == 'midday' || slot == 'afternoon') return hasSunscreen;
-  if (slot == 'night') return hasCleanser || hasMoisturizer;
-  return products.isNotEmpty;
+Set<String> _dailyRoutineIntentCategories(SkinCareRoutinePlan plan) {
+  final categories = <String>{};
+  for (final product in plan.productNames) {
+    final lower = product.toLowerCase();
+    final isSunscreen = _looksLikeSunscreen(lower);
+    if (isSunscreen) categories.add('sunscreen');
+    if (_looksLikeCleanser(lower)) categories.add('cleanser');
+    if (!isSunscreen && _looksLikeMoisturizer(lower)) {
+      categories.add('moisturizer');
+    }
+  }
+  for (final step in plan.steps) {
+    final lower = step.toLowerCase();
+    if (_looksLikeSunscreen(lower) || lower.contains('sun protection')) {
+      categories.add('sunscreen');
+    }
+    if (_looksLikeCleanser(lower)) categories.add('cleanser');
+    if (_stepMentionsMoisturizer(lower)) categories.add('moisturizer');
+  }
+  return categories;
 }
 
 SkinCareRoutinePlan? _generatedPlanForMissingSlot({
   required String slot,
   required String title,
+  required _SlotProducts slotProducts,
+}) {
+  return _normalizedPlanForSlot(
+    slot: slot,
+    title: title,
+    slotProducts: slotProducts,
+  );
+}
+
+SkinCareRoutinePlan? _normalizedPlanForSlot({
+  SkinCareRoutinePlan? plan,
+  required String slot,
+  required String title,
+  required _SlotProducts slotProducts,
+}) {
+  final cleanser = slotProducts.cleanser;
+  final sunscreen = slotProducts.sunscreen;
+  final moisturizer = slotProducts.moisturizer;
+  final requiredProducts = switch (slot) {
+    'morning' =>
+      cleanser != null && sunscreen != null ? [cleanser, sunscreen] : null,
+    'midday' || 'afternoon' => sunscreen != null ? [sunscreen] : null,
+    'night' =>
+      cleanser != null && moisturizer != null ? [cleanser, moisturizer] : null,
+    _ => null,
+  };
+  if (requiredProducts == null) return null;
+
+  final requiredSteps = switch (slot) {
+    'morning' => const ['Cleanse face', 'Apply sunscreen'],
+    'midday' || 'afternoon' => const ['Reapply sunscreen'],
+    'night' => const ['Cleanse face', 'Apply moisturizer'],
+    _ => const <String>[],
+  };
+
+  final extraSteps = _safeExtraStepsForSlot(
+    slot: slot,
+    steps: plan?.steps ?? const [],
+    requiredSteps: requiredSteps,
+  );
+  return SkinCareRoutinePlan(
+    slotLabel: slot,
+    title: plan?.title.trim().isNotEmpty == true ? plan!.title.trim() : title,
+    steps: _dedupeStrings([...requiredSteps, ...extraSteps]),
+    productNames: _dedupeStrings(requiredProducts),
+    warnings: plan?.warnings ?? const [],
+    repeatDays: plan?.repeatDays ?? const [],
+  );
+}
+
+_SlotProducts _slotProductsFromBasis({
   required List<String> productBasis,
   required List<SkinCareDetectedProduct> productDetails,
 }) {
@@ -740,61 +852,96 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
   final moisturizerProducts = productBasis
       .where((item) => _looksLikeMoisturizer(item))
       .toList(growable: false);
-  final hasSunscreen =
-      sunscreenDetails.isNotEmpty || sunscreenProducts.isNotEmpty;
-  final hasCleanser = cleanserDetails.isNotEmpty || cleanserProducts.isNotEmpty;
-  final hasMoisturizer =
-      moisturizerDetails.isNotEmpty || moisturizerProducts.isNotEmpty;
+  return _SlotProducts(
+    sunscreens: _dedupeStrings([
+      for (final product in sunscreenDetails) product.fallbackLabel,
+      ...sunscreenProducts,
+    ]),
+    cleansers: _dedupeStrings([
+      if (cleanserDetails.isNotEmpty) cleanserDetails.first.fallbackLabel,
+      if (cleanserProducts.isNotEmpty) cleanserProducts.first,
+    ]),
+    moisturizers: _dedupeStrings([
+      if (moisturizerDetails.isNotEmpty) moisturizerDetails.first.fallbackLabel,
+      if (moisturizerProducts.isNotEmpty) moisturizerProducts.first,
+    ]),
+  );
+}
 
+List<String> _safeExtraStepsForSlot({
+  required String slot,
+  required List<String> steps,
+  required List<String> requiredSteps,
+}) {
+  final requiredKeys = requiredSteps.map(_stepKey).toSet();
+  final extras = <String>[];
+  for (final raw in steps) {
+    final step = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (step.isEmpty) continue;
+    final key = _stepKey(step);
+    if (requiredKeys.contains(key)) continue;
+    if (_stepLooksLikeSpecialCare(step)) continue;
+    if (_stepConflictsWithSlot(step, slot)) continue;
+    extras.add(step);
+  }
+  return _dedupeStrings(extras);
+}
+
+String _stepKey(String value) {
+  final lower = value.toLowerCase();
+  if (lower.contains('cleanse') ||
+      lower.contains('cleanser') ||
+      lower.contains('face wash')) {
+    return 'cleanse';
+  }
+  if (_stepMentionsMoisturizer(lower)) return 'moisturizer';
+  if (_looksLikeSunscreen(lower) || lower.contains('sun protection')) {
+    return 'sunscreen';
+  }
+  return lower.replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+}
+
+bool _stepLooksLikeSpecialCare(String value) {
+  final lower = value.toLowerCase();
+  return lower.contains('retinol') ||
+      lower.contains('retinal') ||
+      lower.contains('tretinoin') ||
+      lower.contains('adapalene') ||
+      lower.contains('exfoliant') ||
+      lower.contains('exfoliate') ||
+      lower.contains('peeling') ||
+      lower.contains('peel') ||
+      lower.contains('aha') ||
+      lower.contains('bha') ||
+      lower.contains('glycolic') ||
+      lower.contains('lactic') ||
+      lower.contains('salicylic') ||
+      lower.contains('mandelic') ||
+      lower.contains('benzoyl peroxide');
+}
+
+bool _stepConflictsWithSlot(String value, String slot) {
+  final lower = value.toLowerCase();
   if (slot == 'midday' || slot == 'afternoon') {
-    if (!hasSunscreen) return null;
-    return SkinCareRoutinePlan(
-      slotLabel: slot,
-      title: title,
-      steps: const ['Refresh skin', 'Reapply sunscreen'],
-      productNames: _dedupeStrings([
-        for (final product in sunscreenDetails) product.fallbackLabel,
-        ...sunscreenProducts,
-        if (sunscreenDetails.isEmpty && sunscreenProducts.isEmpty) 'Sunscreen',
-      ]),
-    );
+    return lower.contains('cleanse') ||
+        lower.contains('cleanser') ||
+        lower.contains('face wash') ||
+        _stepMentionsMoisturizer(lower);
   }
-
-  if (slot == 'morning') {
-    if (!hasSunscreen) return null;
-    return SkinCareRoutinePlan(
-      slotLabel: slot,
-      title: title,
-      steps: [if (hasCleanser) 'Cleanse face', 'Apply sunscreen'],
-      productNames: _dedupeStrings([
-        if (cleanserDetails.isNotEmpty) cleanserDetails.first.fallbackLabel,
-        if (cleanserProducts.isNotEmpty) cleanserProducts.first,
-        if (sunscreenDetails.isNotEmpty) sunscreenDetails.first.fallbackLabel,
-        if (sunscreenProducts.isNotEmpty) sunscreenProducts.first,
-        if (sunscreenDetails.isEmpty && sunscreenProducts.isEmpty) 'Sunscreen',
-      ]),
-    );
-  }
-
   if (slot == 'night') {
-    if (!hasCleanser && !hasMoisturizer) return null;
-    return SkinCareRoutinePlan(
-      slotLabel: slot,
-      title: title,
-      steps: [
-        if (hasCleanser) 'Cleanse face',
-        if (hasMoisturizer) 'Apply moisturizer',
-      ],
-      productNames: _dedupeStrings([
-        if (cleanserDetails.isNotEmpty) cleanserDetails.first.fallbackLabel,
-        if (cleanserProducts.isNotEmpty) cleanserProducts.first,
-        if (moisturizerDetails.isNotEmpty)
-          moisturizerDetails.first.fallbackLabel,
-        if (moisturizerProducts.isNotEmpty) moisturizerProducts.first,
-      ]),
-    );
+    return _looksLikeSunscreen(lower) || lower.contains('sun protection');
   }
-  return null;
+  if (slot == 'morning') {
+    return lower.contains('reapply') || _stepMentionsMoisturizer(lower);
+  }
+  return false;
+}
+
+bool _stepMentionsMoisturizer(String value) {
+  final lower = value.toLowerCase();
+  return lower.contains('moisturiz') ||
+      lower.contains('moisturis') ||
+      _looksLikeMoisturizer(lower);
 }
 
 String _missingSlotMessage(String slot) {
@@ -828,11 +975,17 @@ bool _looksLikeCleanser(String value) {
 
 bool _looksLikeMoisturizer(String value) {
   final lower = value.toLowerCase();
-  return lower.contains('moistur') ||
-      lower.contains('cream') ||
+  if (_looksLikeSunscreen(lower) ||
+      lower.contains('uv protector') ||
+      lower.contains('sun protection')) {
+    return false;
+  }
+  return lower.contains('moisturizer') ||
+      lower.contains('moisturiser') ||
+      lower.contains('barrier cream') ||
+      lower.contains('gel cream') ||
       lower.contains('lotion') ||
-      lower.contains('barrier repair') ||
-      lower.contains('gel cream');
+      lower.contains('barrier repair');
 }
 
 bool _productLooksLikeSunscreen(SkinCareDetectedProduct product) {
@@ -848,6 +1001,7 @@ bool _productLooksLikeCleanser(SkinCareDetectedProduct product) {
 
 bool _productLooksLikeMoisturizer(SkinCareDetectedProduct product) {
   final category = product.category.trim().toLowerCase();
+  if (_productLooksLikeSunscreen(product)) return false;
   return category == 'moisturizer' ||
       category == 'moisturiser' ||
       product.searchableFields.any(_looksLikeMoisturizer);
