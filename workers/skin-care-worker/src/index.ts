@@ -10,6 +10,9 @@ type Env = {
   UPLOAD_BUCKET: R2Bucket;
 };
 
+const ROUTINE_GENERATE_JSON_MAX_BYTES = 64 * 1024;
+const IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+
 class HttpError extends Error {
   status: number;
   errorCode: string;
@@ -66,11 +69,15 @@ async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<
 async function readSmallJson(request: Request, maxBytes = 8192): Promise<any> {
   const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
   if (contentLength > maxBytes) {
-    throw new HttpError(413, "payload_too_large", `Payload too large. Max ${maxBytes} bytes.`);
+    throw new HttpError(413, "json_payload_too_large", `JSON request payload too large. Max ${maxBytes} bytes.`);
   }
-  const clone = request.clone();
+  const text = await request.text();
+  const actualBytes = new TextEncoder().encode(text).byteLength;
+  if (actualBytes > maxBytes) {
+    throw new HttpError(413, "json_payload_too_large", `JSON request payload too large. Max ${maxBytes} bytes.`);
+  }
   try {
-    return await clone.json();
+    return JSON.parse(text);
   } catch {
     throw new HttpError(400, "invalid_json", "Invalid JSON body.");
   }
@@ -108,6 +115,53 @@ function parseAiJsonText(text: string): any {
   } catch {
     return null;
   }
+}
+
+function stringList(value: any): string[] {
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[\n,]+/) : [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of raw) {
+    const text = typeof item === "string"
+      ? item
+      : item && typeof item === "object"
+        ? String(item.instruction || item.step || item.text || item.name || item.productName || item.product || "")
+        : String(item || "");
+    const normalized = text.trim().replace(/\s+/g, " ");
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function repeatDays(value: any): number[] {
+  const raw = Array.isArray(value) ? value : [];
+  const days = Array.from(new Set(raw
+    .map((item) => Number.parseInt(String(item), 10))
+    .filter((day) => Number.isInteger(day) && day >= 1 && day <= 7)))
+    .sort((a, b) => a - b);
+  return days;
+}
+
+function normalizeRoutinePlan(plan: any): any | null {
+  if (!plan || typeof plan !== "object") return null;
+  const steps = stringList(plan.steps || plan.orderedSteps || plan.instructions);
+  const productNames = stringList(plan.productNames || plan.products || plan.skincareProducts);
+  if (steps.length === 0 && productNames.length === 0) return null;
+  const slotLabel = String(plan.slotLabel || plan.slot || plan.timeOfDay || "custom").trim().toLowerCase();
+  const title = String(plan.title || plan.name || `${slotLabel || "Custom"} Skin Care`).trim();
+  const normalizedTitle = title || `${slotLabel || "Custom"} Skin Care`;
+  return {
+    slotLabel: slotLabel || "custom",
+    title: normalizedTitle,
+    steps,
+    productNames,
+    warnings: stringList(plan.warnings || plan.warningIfAny),
+    repeatDays: repeatDays(plan.repeatDays || plan.days),
+  };
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -151,8 +205,8 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
     }
     const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType, photoKey);
     const buffer = await object.arrayBuffer();
-    if (buffer.byteLength > 15 * 1024 * 1024) {
-      throw new HttpError(413, "payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
+    if (buffer.byteLength > IMAGE_MAX_BYTES) {
+      throw new HttpError(413, "image_payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
     }
     imageParts.push({
       inlineData: {
@@ -233,7 +287,7 @@ Return a JSON object:
 
 async function handleRoutineGenerate(request: Request, env: Env): Promise<Response> {
   const user = await requireVerifiedFirebaseUser(request, env);
-  const body = await readSmallJson(request);
+  const body = await readSmallJson(request, ROUTINE_GENERATE_JSON_MAX_BYTES);
   const desiredApplicationsPerDay = Math.min(
     4,
     Math.max(2, Number.parseInt(String(body.desiredApplicationsPerDay || "2"), 10) || 2)
@@ -248,8 +302,8 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
       if (object) {
         const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType, body.facePhotoR2Key);
         const buffer = await object.arrayBuffer();
-        if (buffer.byteLength > 15 * 1024 * 1024) {
-          throw new HttpError(413, "payload_too_large", `Image ${body.facePhotoR2Key} exceeds 15MB limit.`);
+        if (buffer.byteLength > IMAGE_MAX_BYTES) {
+          throw new HttpError(413, "image_payload_too_large", `Image ${body.facePhotoR2Key} exceeds 15MB limit.`);
         }
         imageParts.push({
           inlineData: {
@@ -359,11 +413,18 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   if (!parsed) {
     throw new HttpError(502, "provider_invalid_json", "AI response could not be read safely. Please try again.");
   }
-  const routinePlans = Array.isArray(parsed.routinePlans)
+  const rawRoutinePlans = Array.isArray(parsed.routinePlans)
     ? parsed.routinePlans
     : Array.isArray(parsed.plans)
       ? parsed.plans
       : [];
+  const routinePlans = rawRoutinePlans
+    .map(normalizeRoutinePlan)
+    .filter((plan: any) => plan !== null);
+  const warnings = stringList(parsed.warnings);
+  if (routinePlans.length < desiredApplicationsPerDay) {
+    warnings.push("routine_plan_count_mismatch");
+  }
   const compatibilityStartForSlot = (slotLabel: string | undefined, index: number): number => {
     const slot = String(slotLabel || "").toLowerCase();
     if (slot === "morning") return 7 * 60;
@@ -372,9 +433,8 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     if (slot === "night" || slot === "evening" || slot === "bedtime") return 21 * 60;
     return [7 * 60, 13 * 60, 16 * 60, 21 * 60][Math.min(index, 3)];
   };
-  const compatibilityTimelineBlocks = Array.isArray(parsed.timelineBlocks)
-    ? parsed.timelineBlocks
-    : routinePlans.map((plan: any, index: number) => {
+  const compatibilityTimelineBlocks = routinePlans
+    .map((plan: any, index: number) => {
         const startMinute = compatibilityStartForSlot(plan?.slotLabel, index);
         return {
           title: plan?.title || `${plan?.slotLabel || "Custom"} Skin Care`,
@@ -396,7 +456,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     weeklyRoutine: parsed.weeklyRoutine || [],
     timelineBlocks: compatibilityTimelineBlocks,
     suggestedProducts: parsed.suggestedProducts || [],
-    warnings: parsed.warnings || []
+    warnings
   });
 }
 

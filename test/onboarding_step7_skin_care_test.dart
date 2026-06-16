@@ -1,8 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
@@ -1013,8 +1016,292 @@ void main() {
     },
   );
 
+  testWidgets(
+    '22. Photo metadata with no product name still generates sunscreen refresh',
+    (tester) async {
+      final asset = _uploadedAsset();
+      final client = TestSkinCareAiClient(
+        productResult: const SkinCareAiProductResult(
+          products: [
+            {
+              'category': 'sunscreen',
+              'possibleActives': ['UV filters'],
+            },
+          ],
+        ),
+        routineResult: _routineResultWithGenericTwoPlans(),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            uid: 'uid-1',
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          uploadController: TestUploadController(result: asset),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+
+      expect(blocks, hasLength(4));
+      expect(find.textContaining('AI could not read products'), findsNothing);
+      expect(
+        blocks
+            .singleWhere((block) => block.skincareSlotLabel == 'midday')
+            .skincareProducts,
+        contains('Sunscreen'),
+      );
+      expect(
+        blocks
+            .singleWhere((block) => block.skincareSlotLabel == 'afternoon')
+            .skincareProducts,
+        contains('Sunscreen'),
+      );
+      expect(
+        (client.lastGenerateParams?['productsFromPhoto'] as List).single,
+        containsPair('possibleActives', ['UV filters']),
+      );
+    },
+  );
+
   test(
-    '22. Different occupied weekdays produce grouped blocks with correct daily routine count',
+    '23. AI repeatDays Monday-only are forced to full daily routine in mode 1',
+    () {
+      const bath = TimelineBlockDraft(
+        id: BaseTimelineDraft.fixedBathId,
+        section: 'fixed',
+        title: 'Bath',
+        startMinute: 420,
+        endMinute: 450,
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      );
+      final mondayOnlyPlans = _skinCarePlansForCount(3)
+          .map(
+            (plan) => SkinCareRoutinePlan(
+              slotLabel: plan.slotLabel,
+              title: plan.title,
+              steps: plan.steps,
+              productNames: plan.productNames,
+              repeatDays: const [1],
+            ),
+          )
+          .toList();
+
+      final result = onboarding7ScheduleSkinCareRoutine(
+        baseTimeline: const BaseTimelineDraft(blocks: [bath]),
+        routinePlans: mondayOnlyPlans,
+        desiredApplicationsPerDay: 3,
+        now: DateTime.utc(2026, 6, 15),
+      );
+
+      expect(result.errorMessage, isNull);
+      for (final day in onboarding7EveryDay) {
+        expect(onboarding7RoutineCountForDay(result.blocks, day), 3);
+      }
+      final draft = _hasProductsDraft(
+        desiredApplicationsPerDay: 3,
+        blocks: result.blocks,
+      );
+      expect(
+        draft.validateStep(
+          7,
+          List<bool>.filled(OnboardingDraft.stepCount, true),
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test('24. Partial-day product routine does not pass Step 7 validation', () {
+    const mondayOnly = TimelineBlockDraft(
+      id: 'skin-monday',
+      section: 'skin_care',
+      title: 'Morning Skin Care',
+      startMinute: 455,
+      endMinute: 470,
+      repeatDays: [1],
+      blockType: TimelineBlockDraft.softBlockKey,
+      skincareSteps: ['Cleanse', 'Sunscreen'],
+      skincareProducts: ['Cleanser', 'Sunscreen'],
+    );
+    final draft = _hasProductsDraft(blocks: const [mondayOnly]);
+
+    expect(
+      draft.validateStep(7, List<bool>.filled(OnboardingDraft.stepCount, true)),
+      'Generate your full daily skin-care routine first.',
+    );
+  });
+
+  test('25. Scheduler repairs title-only plans from fallback products', () {
+    final result = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: BaseTimelineDraft(
+        blocks: [BaseTimelineDraft.defaultBathBlock()],
+      ),
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning Skin Care',
+          steps: [],
+          productNames: [],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night Skin Care',
+          steps: [],
+          productNames: [],
+        ),
+      ],
+      desiredApplicationsPerDay: 2,
+      fallbackProductNames: const ['Gentle Cleanser', 'Daily Sunscreen'],
+      now: DateTime.utc(2026, 6, 15),
+    );
+
+    expect(result.errorMessage, isNull);
+    expect(result.blocks, hasLength(2));
+    expect(result.blocks.first.skincareSteps, isNotEmpty);
+    expect(result.blocks.first.skincareProducts, contains('Daily Sunscreen'));
+    expect(
+      result.blocks.every(
+        (block) =>
+            block.endMinute - block.startMinute ==
+            onboarding7SkinCareDurationMinutes,
+      ),
+      isTrue,
+    );
+  });
+
+  test(
+    '26. Scheduler fails title-only plans without safe fallback products',
+    () {
+      final result = onboarding7ScheduleSkinCareRoutine(
+        baseTimeline: BaseTimelineDraft(
+          blocks: [BaseTimelineDraft.defaultBathBlock()],
+        ),
+        routinePlans: const [
+          SkinCareRoutinePlan(
+            slotLabel: 'morning',
+            title: 'Morning Skin Care',
+            steps: [],
+            productNames: [],
+          ),
+        ],
+        desiredApplicationsPerDay: 2,
+        now: DateTime.utc(2026, 6, 15),
+      );
+
+      expect(result.blocks, isEmpty);
+      expect(result.errorMessage, contains('sunscreen'));
+    },
+  );
+
+  test(
+    '27. Worker client maps image and routine JSON payload errors correctly',
+    () async {
+      final imageClient = WorkerSkinCareAiClient(
+        baseUrl: 'https://skin-care-worker.test',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'error': 'image_payload_too_large',
+              'message': 'Image exceeds 15MB limit.',
+            }),
+            413,
+          ),
+        ),
+      );
+      final imageResult = await imageClient.analyzeProducts(
+        uid: 'uid-1',
+        idToken: 'token',
+        productPhotos: const ['users/uid-1/onboarding/skin_care/products.jpg'],
+      );
+      expect(
+        imageResult.errorMessage,
+        'Product photo is too large. Upload a smaller, clearer photo.',
+      );
+
+      final routineClient = WorkerSkinCareAiClient(
+        baseUrl: 'https://skin-care-worker.test',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'error': 'json_payload_too_large',
+              'message': 'JSON request payload too large.',
+            }),
+            413,
+          ),
+        ),
+      );
+      final routineResult = await routineClient.generateRoutine(
+        uid: 'uid-1',
+        idToken: 'token',
+        params: const {
+          'typedProductNames': ['Cleanser'],
+        },
+      );
+      expect(
+        routineResult.errorMessage,
+        'Skin-care product details were too large to send. Try typing your main products or upload a clearer single photo.',
+      );
+    },
+  );
+
+  test('28. Worker client filters title-only routine plans', () async {
+    final client = WorkerSkinCareAiClient(
+      baseUrl: 'https://skin-care-worker.test',
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'routinePlans': [
+              {'slotLabel': 'morning', 'title': 'Morning Skin Care'},
+              {
+                'slotLabel': 'night',
+                'title': 'Night Skin Care',
+                'steps': ['Cleanse'],
+                'productNames': ['Gentle Cleanser'],
+              },
+            ],
+            'timelineBlocks': [],
+            'morningRoutine': [],
+            'nightRoutine': [],
+            'weeklyRoutine': [],
+          }),
+          200,
+        ),
+      ),
+    );
+
+    final result = await client.generateRoutine(
+      uid: 'uid-1',
+      idToken: 'token',
+      params: const {
+        'typedProductNames': ['Gentle Cleanser'],
+      },
+    );
+
+    expect(result.routinePlans, hasLength(1));
+    expect(result.routinePlans.single.slotLabel, 'night');
+  });
+
+  test(
+    '29. Different occupied weekdays produce grouped blocks with correct daily routine count',
     () {
       const bath = TimelineBlockDraft(
         id: BaseTimelineDraft.fixedBathId,
@@ -1075,7 +1362,7 @@ void main() {
   );
 
   testWidgets(
-    '23. No real bath blocks generation and creates no skin-care blocks',
+    '30. No real bath blocks generation and creates no skin-care blocks',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: _routineResultWithPlanCount(2),
@@ -1108,7 +1395,7 @@ void main() {
   );
 
   testWidgets(
-    '24. Uploaded product photo persists after rebuild and R2 key is used',
+    '31. Uploaded product photo persists after rebuild and R2 key is used',
     (tester) async {
       final asset = _uploadedAsset();
       final firstClient = TestSkinCareAiClient(
@@ -1136,6 +1423,14 @@ void main() {
         persistedDraft.baseTimeline.skinCareProductPhotoR2Key,
         asset.r2Key,
       );
+      expect(
+        persistedDraft.baseTimeline.skinCareProductPhotoCreatedAt,
+        asset.createdAt,
+      );
+      expect(
+        persistedDraft.baseTimeline.skinCareProductPhotoUpdatedAt,
+        asset.updatedAt,
+      );
 
       final secondClient = TestSkinCareAiClient(
         productResult: const SkinCareAiProductResult(
@@ -1161,7 +1456,7 @@ void main() {
   );
 
   testWidgets(
-    '25. Restored product photo states validate content type and show filename',
+    '32. Restored product photo states validate content type and show filename',
     (tester) async {
       final jpgClient = TestSkinCareAiClient(
         productResult: const SkinCareAiProductResult(
@@ -1223,7 +1518,7 @@ void main() {
   );
 
   testWidgets(
-    '26. Visual stretch lane logic keeps close edit buttons reachable',
+    '33. Visual stretch lane logic keeps close edit buttons reachable',
     (tester) async {
       await tester.pumpWidget(
         buildTestWidget(
@@ -1279,7 +1574,7 @@ void main() {
   );
 
   testWidgets(
-    '27. Missing worker config without override does not create fake blocks',
+    '34. Missing worker config without override does not create fake blocks',
     (tester) async {
       await tester.pumpWidget(
         buildTestWidget(
@@ -1316,7 +1611,7 @@ void main() {
     },
   );
 
-  testWidgets('28. Unsupported uploaded image type shows friendly error', (
+  testWidgets('35. Unsupported uploaded image type shows friendly error', (
     tester,
   ) async {
     final asset = _uploadedAsset(contentType: 'image/heic');
@@ -1343,7 +1638,7 @@ void main() {
     );
   });
 
-  testWidgets('29. Upload busy generate button has readable state', (
+  testWidgets('36. Upload busy generate button has readable state', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -1363,7 +1658,7 @@ void main() {
     expect(find.text('Uploading photo...'), findsOneWidget);
   });
 
-  testWidgets('30. Switching product mode to skip clears product fields', (
+  testWidgets('37. Switching product mode to skip clears product fields', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -1381,11 +1676,13 @@ void main() {
     expect(base.skinCareProductNames, isNull);
     expect(base.skinCareProductPhotoAssetId, isNull);
     expect(base.skinCareProductPhotoR2Key, isNull);
+    expect(base.skinCareProductPhotoCreatedAt, isNull);
+    expect(base.skinCareProductPhotoUpdatedAt, isNull);
     expect(base.blocks.where((block) => block.section == 'skin_care'), isEmpty);
   });
 
   testWidgets(
-    '31. Switching product mode to build-for-me clears product fields',
+    '38. Switching product mode to build-for-me clears product fields',
     (tester) async {
       await tester.pumpWidget(
         buildTestWidget(draft: _choiceDraftWithProductData()),
@@ -1402,6 +1699,8 @@ void main() {
       expect(base.skinCareProductNames, isNull);
       expect(base.skinCareProductPhotoAssetId, isNull);
       expect(base.skinCareProductPhotoR2Key, isNull);
+      expect(base.skinCareProductPhotoCreatedAt, isNull);
+      expect(base.skinCareProductPhotoUpdatedAt, isNull);
       expect(
         base.blocks.where((block) => block.section == 'skin_care'),
         isEmpty,
@@ -1409,7 +1708,7 @@ void main() {
     },
   );
 
-  testWidgets('32. Reselecting same product mode preserves current input', (
+  testWidgets('39. Reselecting same product mode preserves current input', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -1427,10 +1726,11 @@ void main() {
     expect(base.skinCareProductNames, 'Cleanser');
     expect(base.skinCareProductPhotoAssetId, 'skin-asset');
     expect(base.skinCareProductPhotoR2Key, contains('skin-asset.jpg'));
+    expect(base.skinCareProductPhotoCreatedAt, DateTime.utc(2026, 6, 15, 10));
   });
 
   testWidgets(
-    '33. Pre-generation products mode scrolls safely with keyboard and message',
+    '40. Pre-generation products mode scrolls safely with keyboard and message',
     (tester) async {
       tester.view.physicalSize = const Size(320, 560);
       tester.view.devicePixelRatio = 1;
@@ -1510,6 +1810,8 @@ OnboardingDraft _hasProductsDraft({
   String? productPhotoAssetId,
   String? productPhotoR2Key,
   String? productPhotoStatus,
+  DateTime? productPhotoCreatedAt,
+  DateTime? productPhotoUpdatedAt,
 }) {
   return OnboardingDraft(
     uid: uid,
@@ -1521,6 +1823,8 @@ OnboardingDraft _hasProductsDraft({
       skinCareProductPhotoAssetId: productPhotoAssetId,
       skinCareProductPhotoR2Key: productPhotoR2Key,
       skinCareProductPhotoStatus: productPhotoStatus,
+      skinCareProductPhotoCreatedAt: productPhotoCreatedAt,
+      skinCareProductPhotoUpdatedAt: productPhotoUpdatedAt,
       blocks: blocks,
     ),
   );
@@ -1530,7 +1834,7 @@ OnboardingDraft _choiceDraftWithProductData() {
   return OnboardingDraft(
     uid: 'uid-1',
     currentStep: 7,
-    baseTimeline: const BaseTimelineDraft(
+    baseTimeline: BaseTimelineDraft(
       skinCareSetupStep: 0,
       skinCareSetupPath: 'has_products',
       skinCareProductNames: 'Cleanser',
@@ -1538,7 +1842,9 @@ OnboardingDraft _choiceDraftWithProductData() {
       skinCareProductPhotoR2Key:
           'users/uid-1/onboarding/skin_care/skin-asset.jpg',
       skinCareProductPhotoStatus: 'uploaded',
-      blocks: [
+      skinCareProductPhotoCreatedAt: DateTime.utc(2026, 6, 15, 10),
+      skinCareProductPhotoUpdatedAt: DateTime.utc(2026, 6, 15, 10, 30),
+      blocks: const [
         TimelineBlockDraft(
           id: 'skin-old',
           section: 'skin_care',

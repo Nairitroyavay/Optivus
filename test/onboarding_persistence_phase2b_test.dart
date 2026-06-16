@@ -94,6 +94,14 @@ void main() {
         contains('skin_care'),
       );
       expect(roundTrip.baseTimeline.skinCareProductPhotoStatus, 'uploaded');
+      expect(
+        roundTrip.baseTimeline.skinCareProductPhotoCreatedAt,
+        DateTime.utc(2026, 6, 2, 8),
+      );
+      expect(
+        roundTrip.baseTimeline.skinCareProductPhotoUpdatedAt,
+        DateTime.utc(2026, 6, 2, 8, 30),
+      );
     },
   );
 
@@ -118,6 +126,8 @@ void main() {
     expect(skinReference['mode'], 'has_products');
     expect(skinReference['uploadedAssetR2Key'], contains('skin_care'));
     expect(skinReference['uploadedAssetStatus'], 'uploaded');
+    expect(skinReference['createdAt'], '2026-06-02T08:00:00.000Z');
+    expect(skinReference['updatedAt'], '2026-06-02T08:30:00.000Z');
     expect(
       references.any((item) => item.containsKey('uploadPlaceholderPath')),
       isFalse,
@@ -356,6 +366,8 @@ OnboardingDraft _draftWithUploadReferences() {
       skinCareProductPhotoR2Key:
           'users/phase2b-user/onboarding/skin_care/skin-asset.jpg',
       skinCareProductPhotoStatus: 'uploaded',
+      skinCareProductPhotoCreatedAt: now,
+      skinCareProductPhotoUpdatedAt: DateTime.utc(2026, 6, 2, 8, 30),
       pendingFutureImports: [
         PendingFutureImportDraft(
           id: 'classes_photo',

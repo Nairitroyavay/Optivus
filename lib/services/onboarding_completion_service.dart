@@ -78,7 +78,8 @@ class OnboardingCompletionService {
     if (base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true ||
         base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true ||
         base.skinCareProductPhotoStatus?.trim().isNotEmpty == true) {
-      final now = DateTime.now();
+      final createdAt = base.skinCareProductPhotoCreatedAt ?? DateTime.now();
+      final updatedAt = base.skinCareProductPhotoUpdatedAt ?? createdAt;
       addReference(
         OnboardingUploadedAssetReference(
           id: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
@@ -89,8 +90,8 @@ class OnboardingCompletionService {
           uploadedAssetId: base.skinCareProductPhotoAssetId,
           uploadedAssetR2Key: base.skinCareProductPhotoR2Key,
           uploadedAssetStatus: base.skinCareProductPhotoStatus,
-          createdAt: now,
-          updatedAt: now,
+          createdAt: createdAt,
+          updatedAt: updatedAt,
         ),
       );
     }

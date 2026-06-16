@@ -40,7 +40,7 @@ List<String> onboarding7ExtractPhotoProductNames(List<dynamic> products) {
     products
         .map(SkinCareDetectedProduct.fromValue)
         .where((product) => product.hasMeaningfulData)
-        .map((product) => product.displayName)
+        .map((product) => product.fallbackLabel)
         .where((name) => name.isNotEmpty),
   );
 }
@@ -97,6 +97,7 @@ List<TimelineBlockDraft> onboarding7TimelineBlocksFromWorkerBlocks(
       ..._skinCareNamesFromValue(map['orderedSteps']),
       ..._skinCareNamesFromValue(map['instructions']),
     ]);
+    if (products.isEmpty && steps.isEmpty) continue;
 
     final id = _stringValue(map['id']).trim();
     blocks.add(
@@ -128,7 +129,7 @@ List<SkinCareRoutinePlan> onboarding7RoutinePlansFromWorkerBlocks(
   return rawBlocks
       .whereType<Map>()
       .map((raw) => SkinCareRoutinePlan.fromMap(Map<String, dynamic>.from(raw)))
-      .where((plan) => plan.title.isNotEmpty || plan.steps.isNotEmpty)
+      .where((plan) => plan.steps.isNotEmpty || plan.productNames.isNotEmpty)
       .toList(growable: false);
 }
 
@@ -168,7 +169,13 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('r2_image_missing') || text.contains('not found')) {
     return 'Uploaded product photo could not be found. Please upload again.';
   }
-  if (text.contains('payload_too_large') || text.contains('too large')) {
+  if (text.contains('json_payload_too_large') ||
+      text.contains('product details were too large')) {
+    return 'Skin-care product details were too large to send. Try typing your main products or upload a clearer single photo.';
+  }
+  if (text.contains('image_payload_too_large') ||
+      text.contains('payload_too_large') ||
+      text.contains('too large')) {
     return 'Product photo is too large. Upload a smaller, clearer photo.';
   }
   if (text.contains('provider_quota_exceeded') ||
@@ -294,7 +301,10 @@ UploadedAsset? _skinCareProductPhotoAssetFromDraft(OnboardingDraft draft) {
   final base = draft.baseTimeline;
   final r2Key = base.skinCareProductPhotoR2Key?.trim();
   if (r2Key == null || r2Key.isEmpty) return null;
-  final now = DateTime.fromMillisecondsSinceEpoch(0);
+  final createdAt =
+      base.skinCareProductPhotoCreatedAt ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+  final updatedAt = base.skinCareProductPhotoUpdatedAt ?? createdAt;
   final fileName = r2Key.split('/').where((part) => part.isNotEmpty).lastOrNull;
   return UploadedAsset(
     assetId: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
@@ -312,8 +322,8 @@ UploadedAsset? _skinCareProductPhotoAssetFromDraft(OnboardingDraft draft) {
           ? base.skinCareProductPhotoStatus
           : 'uploaded',
     ),
-    createdAt: now,
-    updatedAt: now,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
   );
 }
 
@@ -663,6 +673,8 @@ class _HasProductsModeScreenState
           skinCareProductPhotoAssetId: latestAsset.assetId,
           skinCareProductPhotoR2Key: latestAsset.r2Key,
           skinCareProductPhotoStatus: latestAsset.status.wireName,
+          skinCareProductPhotoCreatedAt: latestAsset.createdAt,
+          skinCareProductPhotoUpdatedAt: latestAsset.updatedAt,
           skinCareSkipped: false,
         ),
       );
@@ -815,7 +827,12 @@ class _HasProductsModeScreenState
         photoProductNames,
         typedProductNames,
       );
-      if (allProductNames.isEmpty) {
+      final hasMeaningfulPhotoProducts = photoProductDetails.any(
+        (product) => product.hasMeaningfulData,
+      );
+      if (typedProductNames.isEmpty &&
+          photoProductNames.isEmpty &&
+          !hasMeaningfulPhotoProducts) {
         if (!mounted) return;
         setState(() {
           _generating = false;
@@ -872,6 +889,7 @@ class _HasProductsModeScreenState
         desiredApplicationsPerDay: desiredApplicationsPerDay,
         fallbackProductNames: allProductNames,
         fallbackProductDetails: photoProductDetails,
+        forceEveryDay: true,
       );
       if (schedule.hasError || schedule.blocks.isEmpty) {
         if (!mounted) return;

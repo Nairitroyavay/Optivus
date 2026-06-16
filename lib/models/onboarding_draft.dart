@@ -1022,6 +1022,8 @@ class BaseTimelineDraft {
   final String? skinCareProductPhotoAssetId;
   final String? skinCareProductPhotoR2Key;
   final String? skinCareProductPhotoStatus;
+  final DateTime? skinCareProductPhotoCreatedAt;
+  final DateTime? skinCareProductPhotoUpdatedAt;
   final bool skinCareFacePhotoSkipped;
   final String? skinCareSkinType;
   final List<String> skinCareProblems;
@@ -1062,6 +1064,8 @@ class BaseTimelineDraft {
     this.skinCareProductPhotoAssetId,
     this.skinCareProductPhotoR2Key,
     this.skinCareProductPhotoStatus,
+    this.skinCareProductPhotoCreatedAt,
+    this.skinCareProductPhotoUpdatedAt,
     this.skinCareFacePhotoSkipped = false,
     this.skinCareSkinType,
     this.skinCareProblems = const [],
@@ -1109,6 +1113,12 @@ class BaseTimelineDraft {
           map['skinCareProductPhotoAssetId'] as String?,
       skinCareProductPhotoR2Key: map['skinCareProductPhotoR2Key'] as String?,
       skinCareProductPhotoStatus: map['skinCareProductPhotoStatus'] as String?,
+      skinCareProductPhotoCreatedAt: _readDateTime(
+        map['skinCareProductPhotoCreatedAt'],
+      ),
+      skinCareProductPhotoUpdatedAt: _readDateTime(
+        map['skinCareProductPhotoUpdatedAt'],
+      ),
       skinCareFacePhotoSkipped:
           map['skinCareFacePhotoSkipped'] as bool? ?? false,
       skinCareSkinType: map['skinCareSkinType'] as String?,
@@ -1156,6 +1166,10 @@ class BaseTimelineDraft {
     'skinCareProductPhotoAssetId': skinCareProductPhotoAssetId,
     'skinCareProductPhotoR2Key': skinCareProductPhotoR2Key,
     'skinCareProductPhotoStatus': skinCareProductPhotoStatus,
+    'skinCareProductPhotoCreatedAt': skinCareProductPhotoCreatedAt
+        ?.toIso8601String(),
+    'skinCareProductPhotoUpdatedAt': skinCareProductPhotoUpdatedAt
+        ?.toIso8601String(),
     'skinCareFacePhotoSkipped': skinCareFacePhotoSkipped,
     'skinCareSkinType': skinCareSkinType,
     'skinCareProblems': skinCareProblems,
@@ -1199,6 +1213,8 @@ class BaseTimelineDraft {
     String? skinCareProductPhotoAssetId,
     String? skinCareProductPhotoR2Key,
     String? skinCareProductPhotoStatus,
+    DateTime? skinCareProductPhotoCreatedAt,
+    DateTime? skinCareProductPhotoUpdatedAt,
     bool? skinCareFacePhotoSkipped,
     String? skinCareSkinType,
     List<String>? skinCareProblems,
@@ -1298,6 +1314,16 @@ class BaseTimelineDraft {
           clearSkinCarePlanning || clearSkinCareProductPhoto
           ? null
           : (skinCareProductPhotoStatus ?? this.skinCareProductPhotoStatus),
+      skinCareProductPhotoCreatedAt:
+          clearSkinCarePlanning || clearSkinCareProductPhoto
+          ? null
+          : (skinCareProductPhotoCreatedAt ??
+                this.skinCareProductPhotoCreatedAt),
+      skinCareProductPhotoUpdatedAt:
+          clearSkinCarePlanning || clearSkinCareProductPhoto
+          ? null
+          : (skinCareProductPhotoUpdatedAt ??
+                this.skinCareProductPhotoUpdatedAt),
       skinCareFacePhotoSkipped:
           skinCareFacePhotoSkipped ?? this.skinCareFacePhotoSkipped,
       skinCareSkinType: clearSkinCarePlanning || clearSkinCareSkinType
@@ -1656,6 +1682,11 @@ class BaseTimelineDraft {
 
   String? validateSkinCareSetup() {
     if (skinCareSkipped) return null;
+    if (skinCareSetupPath == 'has_products') {
+      return hasFullDailySkinCareRoutine()
+          ? null
+          : 'Generate your full daily skin-care routine first.';
+    }
     if (_hasConfirmedSection('skin_care')) return null;
     return 'Build skin care routine or skip.';
   }
@@ -1734,6 +1765,30 @@ class BaseTimelineDraft {
 
   bool hasConfirmedSection(String section) {
     return _hasConfirmedSection(section);
+  }
+
+  bool hasFullDailySkinCareRoutine() {
+    final desired = _normalizeSkinCareDesiredApplicationsPerDay(
+      skinCareDesiredApplicationsPerDay,
+    );
+    for (final day in const [1, 2, 3, 4, 5, 6, 7]) {
+      if (_skinCareRoutineCountForDay(day) < desired) return false;
+    }
+    return true;
+  }
+
+  int _skinCareRoutineCountForDay(int day) {
+    return blocks
+        .where(
+          (block) =>
+              block.section == 'skin_care' &&
+              !block.needsTimeConfirmation &&
+              block.title.trim().isNotEmpty &&
+              (block.skincareSteps.isNotEmpty ||
+                  block.skincareProducts.isNotEmpty) &&
+              block.repeatDays.contains(day),
+        )
+        .length;
   }
 
   PendingFutureImportDraft? latestImportForSection(String sectionLabel) {

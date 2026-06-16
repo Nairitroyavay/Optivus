@@ -88,6 +88,24 @@ function stubGemini(text: string, calls: FetchCall[] = []) {
   );
 }
 
+function richProductPayload(size: number) {
+  return {
+    productsFromPhoto: [
+      {
+        name: "UV Aqua Gel",
+        category: "sunscreen",
+        keyIngredients: ["water", "glycerin", "zinc oxide", "x".repeat(size)],
+        possibleActives: ["UV filters"],
+        usageHint: "Reapply in daylight.",
+        warningIfAny: "",
+        confidence: "medium",
+      },
+    ],
+    typedProductNames: ["Gentle Cleanser"],
+    desiredApplicationsPerDay: 3,
+  };
+}
+
 describe("Skin-care Worker", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -139,6 +157,39 @@ describe("Skin-care Worker", () => {
     expect(json.products[0].name).toBe("UV Aqua Gel");
   });
 
+  test("product analysis invalid JSON returns provider_invalid_json", async () => {
+    const key = "users/uid-1/onboarding/skin_care/products.jpg";
+    stubGemini("not-json");
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/products/analyze", {
+        productPhotos: [key],
+      }),
+      makeEnv({ [key]: { contentType: "image/jpeg" } }) as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(502);
+    expect(json.error).toBe("provider_invalid_json");
+  });
+
+  test("product analysis image above 15MB returns image_payload_too_large", async () => {
+    const key = "users/uid-1/onboarding/skin_care/products.jpg";
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/products/analyze", {
+        productPhotos: [key],
+      }),
+      makeEnv({
+        [key]: { contentType: "image/jpeg", body: "x".repeat(15 * 1024 * 1024 + 1) },
+      }) as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(413);
+    expect(json.error).toBe("image_payload_too_large");
+  });
+
   test("invalid R2 key is rejected", async () => {
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/products/analyze", {
@@ -185,6 +236,53 @@ describe("Skin-care Worker", () => {
     expect(json.error).toBe("provider_invalid_json");
   });
 
+  test("routine generate accepts rich productsFromPhoto above 8KB", async () => {
+    const calls: FetchCall[] = [];
+    stubGemini(JSON.stringify({
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: ["Cleanse", "Apply sunscreen"],
+          productNames: ["Gentle Cleanser", "UV Aqua Gel"],
+        },
+        {
+          slotLabel: "midday",
+          title: "Midday Skin Care",
+          steps: ["Reapply sunscreen"],
+          productNames: ["UV Aqua Gel"],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse"],
+          productNames: ["Gentle Cleanser"],
+        },
+      ],
+    }), calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", richProductPayload(9000)),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(3);
+    expect(calls[0].body.contents[0].parts[0].text).toContain("UV Aqua Gel");
+  });
+
+  test("routine generate rejects JSON above 64KB", async () => {
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", richProductPayload(70 * 1024)),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(413);
+    expect(json.error).toBe("json_payload_too_large");
+  });
+
   test("routine generate returns routinePlans and compatibility timeline", async () => {
     stubGemini(JSON.stringify({
       routinePlans: [
@@ -207,7 +305,7 @@ describe("Skin-care Worker", () => {
             possibleActives: ["UV filters"],
           },
         ],
-        desiredApplicationsPerDay: 1,
+        desiredApplicationsPerDay: 2,
       }),
       makeEnv() as any,
     );
@@ -217,9 +315,30 @@ describe("Skin-care Worker", () => {
     expect(json.routinePlans).toHaveLength(1);
     expect(json.timelineBlocks).toHaveLength(1);
     expect(json.timelineBlocks[0].endMinute - json.timelineBlocks[0].startMinute).toBe(15);
+    expect(json.warnings).toContain("routine_plan_count_mismatch");
   });
 
-  test("desiredApplicationsPerDay is included in prompt and capped to 2-4", async () => {
+  test("desiredApplicationsPerDay 1 is clamped to 2 in prompt", async () => {
+    const calls: FetchCall[] = [];
+    stubGemini(JSON.stringify({
+      routinePlans: [
+        { slotLabel: "morning", title: "Morning", steps: ["Cleanse"] },
+      ],
+    }), calls);
+
+    await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 1,
+      }),
+      makeEnv() as any,
+    );
+
+    const prompt = calls[0].body.contents[0].parts[0].text as string;
+    expect(prompt).toContain("Desired Applications Per Day: 2");
+  });
+
+  test("desiredApplicationsPerDay 99 is capped to 4 in prompt", async () => {
     const calls: FetchCall[] = [];
     stubGemini(JSON.stringify({
       routinePlans: [
@@ -237,5 +356,40 @@ describe("Skin-care Worker", () => {
 
     const prompt = calls[0].body.contents[0].parts[0].text as string;
     expect(prompt).toContain("Desired Applications Per Day: 4");
+  });
+
+  test("title-only routine plans are filtered and compatibility uses valid plans", async () => {
+    stubGemini(JSON.stringify({
+      routinePlans: [
+        { slotLabel: "morning", title: "Morning Skin Care" },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse"],
+          productNames: ["Gentle Cleanser"],
+        },
+      ],
+      timelineBlocks: [
+        { title: "Bad Compatibility", startMinute: 1, endMinute: 2 },
+      ],
+      warnings: [],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Gentle Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(1);
+    expect(json.routinePlans[0].slotLabel).toBe("night");
+    expect(json.timelineBlocks).toHaveLength(1);
+    expect(json.timelineBlocks[0].title).toBe("Night Skin Care");
+    expect(json.timelineBlocks[0].title).not.toBe("Bad Compatibility");
+    expect(json.warnings).toContain("routine_plan_count_mismatch");
   });
 });

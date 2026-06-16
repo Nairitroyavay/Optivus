@@ -18,6 +18,7 @@ import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 
 // ── Main Onboarding Flow Wizard ──────────────────────────────────────────────
@@ -193,7 +194,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       );
 
       final savedDraft = ref.read(mockOnboardingProvider).draft;
-      
+
       if (step == 2 && savedDraft.baseTimeline.roleChangeWarnings.isNotEmpty) {
         _invalidateDownstreamStages(2);
       }
@@ -387,7 +388,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
     if (changed) {
       for (var i = fromStep + 1; i <= OnboardingDraft.lastStepIndex; i++) {
-        ref.read(mockOnboardingProvider.notifier).setStepCompleted(i, completed[i]);
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepCompleted(i, completed[i]);
       }
     }
   }
@@ -431,11 +434,16 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     if (!isBackward) {
       for (var i = _currentPage; i < boundedIndex; i++) {
-        final error = onboardingState.draft.validateStep(i, onboardingState.stepCompleted);
+        final error = onboardingState.draft.validateStep(
+          i,
+          onboardingState.stepCompleted,
+        );
         if (error != null) {
-          ref.read(mockOnboardingProvider.notifier).setValidationMessage(
-            'Please complete earlier steps before skipping ahead.',
-          );
+          ref
+              .read(mockOnboardingProvider.notifier)
+              .setValidationMessage(
+                'Please complete earlier steps before skipping ahead.',
+              );
           return;
         }
       }
@@ -804,7 +812,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return true;
     }
 
-    if (path == onboardingEatingPathHasRoutine || path == onboardingEatingPathCreate) {
+    if (path == onboardingEatingPathHasRoutine ||
+        path == onboardingEatingPathCreate) {
       if (!base.hasConfirmedSection('eating')) {
         _setInternalValidation('Generate your meal routine first.');
         return true;
@@ -821,15 +830,28 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   Future<bool> _nextSkinCare(OnboardingDraft draft) async {
     final base = draft.baseTimeline;
     if (base.skinCareSkipped) return false;
-    
+
     if (base.skinCareSetupPath == null) {
       _setInternalValidation('Choose skin care setup or skip.');
       return true;
     }
 
     final blocks = base.confirmedBlocksForSection('skin_care');
+    if (base.skinCareSetupPath == 'has_products') {
+      final desired = onboarding7NormalizeDesiredApplications(
+        base.skinCareDesiredApplicationsPerDay,
+      );
+      final hasFullDailyRoutine = onboarding7EveryDay.every(
+        (day) => onboarding7RoutineCountForDay(blocks, day) >= desired,
+      );
+      if (hasFullDailyRoutine) return false;
+      _setInternalValidation(
+        'Generate your full daily skin-care routine first.',
+      );
+      return true;
+    }
     if (blocks.isNotEmpty) return false;
-    
+
     _setInternalValidation(
       'Generate a routine before moving to the next step.',
     );
@@ -854,5 +876,4 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         );
     ref.read(mockOnboardingProvider.notifier).setStepDirty(stepIndex, true);
   }
-
 }

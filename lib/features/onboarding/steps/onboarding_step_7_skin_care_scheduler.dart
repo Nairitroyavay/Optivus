@@ -6,7 +6,6 @@ import 'package:optivus/services/skin_care_ai_client.dart';
 
 const int onboarding7SkinCareDurationMinutes = 15;
 
-@visibleForTesting
 const List<int> onboarding7EveryDay = [1, 2, 3, 4, 5, 6, 7];
 
 class Onboarding7SkinCareScheduleResult {
@@ -76,6 +75,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   required int desiredApplicationsPerDay,
   List<String> fallbackProductNames = const [],
   List<SkinCareDetectedProduct> fallbackProductDetails = const [],
+  bool forceEveryDay = true,
   DateTime? now,
 }) {
   final desired = onboarding7NormalizeDesiredApplications(
@@ -118,7 +118,9 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   for (var index = 0; index < desired; index += 1) {
     final plan = adaptedPlans.plans[index];
     final spec = slotSpecs[index];
-    final repeatDays = _safeRepeatDays(plan.repeatDays);
+    final repeatDays = forceEveryDay
+        ? onboarding7EveryDay
+        : _safeRepeatDays(plan.repeatDays);
 
     for (final day in repeatDays) {
       final bathWindow = _windowForDay(bathBlock, day);
@@ -166,9 +168,16 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
         );
       }
 
-      final products = plan.productNames.isEmpty
-          ? fallbackProductNames
-          : plan.productNames;
+      final products = _dedupeStrings(
+        plan.productNames.isEmpty ? fallbackProductNames : plan.productNames,
+      );
+      final steps = _dedupeStrings(plan.steps);
+      if (products.isEmpty && steps.isEmpty) {
+        return const Onboarding7SkinCareScheduleResult(
+          blocks: [],
+          errorMessage: 'AI did not return enough safe routine steps.',
+        );
+      }
       scheduledSingles.add(
         TimelineBlockDraft(
           id: 'skin-care-$timestamp-$index-$day',
@@ -180,7 +189,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
           blockType: TimelineBlockDraft.softBlockKey,
           source: 'ai_skin_care_setup',
           skincareProducts: products,
-          skincareSteps: plan.steps,
+          skincareSteps: steps,
           skincareSlotLabel: spec.slotLabel,
         ),
       );
@@ -192,14 +201,12 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   );
 }
 
-@visibleForTesting
 int onboarding7NormalizeDesiredApplications(int value) {
   if (value <= 2) return 2;
   if (value >= 4) return 4;
   return 3;
 }
 
-@visibleForTesting
 int onboarding7RoutineCountForDay(List<TimelineBlockDraft> blocks, int day) {
   return blocks
       .where(
@@ -207,6 +214,8 @@ int onboarding7RoutineCountForDay(List<TimelineBlockDraft> blocks, int day) {
             block.section == 'skin_care' &&
             !block.needsTimeConfirmation &&
             block.title.trim().isNotEmpty &&
+            (block.skincareSteps.isNotEmpty ||
+                block.skincareProducts.isNotEmpty) &&
             block.repeatDays.contains(day),
       )
       .length;
@@ -344,7 +353,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   final selected = <SkinCareRoutinePlan>[];
   final productBasis = _dedupeStrings([
     ...fallbackProductNames,
-    for (final product in fallbackProductDetails) product.displayName,
+    for (final product in fallbackProductDetails) product.fallbackLabel,
     for (final plan in routinePlans) ...plan.productNames,
   ]);
   final textBasis = _dedupeStrings([
@@ -360,7 +369,23 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       (plan) => _slotCompatible(plan.slotLabel, slot),
     );
     if (matchIndex >= 0) {
-      selected.add(_planForSlot(unused.removeAt(matchIndex), slot, spec.title));
+      final rawPlan = unused.removeAt(matchIndex);
+      final selectedPlan = _meaningfulRoutinePlan(rawPlan)
+          ? _planForSlot(rawPlan, slot, spec.title)
+          : _generatedPlanForMissingSlot(
+              slot: slot,
+              title: spec.title,
+              productBasis: productBasis,
+              textBasis: textBasis,
+              productDetails: fallbackProductDetails,
+            );
+      if (selectedPlan == null) {
+        return Onboarding7RoutinePlanAdaptationResult(
+          plans: selected,
+          errorMessage: _missingSlotMessage(slot),
+        );
+      }
+      selected.add(selectedPlan);
       continue;
     }
 
@@ -580,6 +605,10 @@ SkinCareRoutinePlan _planForSlot(
   );
 }
 
+bool _meaningfulRoutinePlan(SkinCareRoutinePlan plan) {
+  return plan.steps.isNotEmpty || plan.productNames.isNotEmpty;
+}
+
 SkinCareRoutinePlan? _generatedPlanForMissingSlot({
   required String slot,
   required String title,
@@ -625,7 +654,7 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
       title: title,
       steps: const ['Refresh skin', 'Reapply sunscreen'],
       productNames: _dedupeStrings([
-        for (final product in sunscreenDetails) product.displayName,
+        for (final product in sunscreenDetails) product.fallbackLabel,
         ...sunscreenProducts,
         if (sunscreenDetails.isEmpty && sunscreenProducts.isEmpty) 'Sunscreen',
       ]),
@@ -639,9 +668,9 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
       title: title,
       steps: [if (hasCleanser) 'Cleanse face', 'Apply sunscreen'],
       productNames: _dedupeStrings([
-        if (cleanserDetails.isNotEmpty) cleanserDetails.first.displayName,
+        if (cleanserDetails.isNotEmpty) cleanserDetails.first.fallbackLabel,
         if (cleanserProducts.isNotEmpty) cleanserProducts.first,
-        if (sunscreenDetails.isNotEmpty) sunscreenDetails.first.displayName,
+        if (sunscreenDetails.isNotEmpty) sunscreenDetails.first.fallbackLabel,
         if (sunscreenProducts.isNotEmpty) sunscreenProducts.first,
         if (sunscreenDetails.isEmpty && sunscreenProducts.isEmpty) 'Sunscreen',
       ]),
@@ -658,9 +687,10 @@ SkinCareRoutinePlan? _generatedPlanForMissingSlot({
         if (hasMoisturizer) 'Apply moisturizer',
       ],
       productNames: _dedupeStrings([
-        if (cleanserDetails.isNotEmpty) cleanserDetails.first.displayName,
+        if (cleanserDetails.isNotEmpty) cleanserDetails.first.fallbackLabel,
         if (cleanserProducts.isNotEmpty) cleanserProducts.first,
-        if (moisturizerDetails.isNotEmpty) moisturizerDetails.first.displayName,
+        if (moisturizerDetails.isNotEmpty)
+          moisturizerDetails.first.fallbackLabel,
         if (moisturizerProducts.isNotEmpty) moisturizerProducts.first,
       ]),
     );

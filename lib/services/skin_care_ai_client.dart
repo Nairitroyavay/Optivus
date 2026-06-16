@@ -108,8 +108,27 @@ class SkinCareDetectedProduct {
     return '$cleanBrand $cleanName';
   }
 
+  String get fallbackLabel {
+    final display = displayName.trim();
+    if (display.isNotEmpty) return display;
+    final categoryValue = category.trim().toLowerCase();
+    if (categoryValue == 'sunscreen' || _metadataLooksLikeSunscreen(this)) {
+      return 'Sunscreen';
+    }
+    if (categoryValue == 'cleanser' || _metadataLooksLikeCleanser(this)) {
+      return 'Cleanser';
+    }
+    if (categoryValue == 'moisturizer' ||
+        categoryValue == 'moisturiser' ||
+        _metadataLooksLikeMoisturizer(this)) {
+      return 'Moisturizer';
+    }
+    return hasMeaningfulData ? 'Skin-care product' : '';
+  }
+
   List<String> get searchableFields => [
     displayName,
+    fallbackLabel,
     name,
     brand,
     category,
@@ -390,7 +409,11 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return SkinCareAiProductResult.error(
-          _friendlyErrorMessage(response.statusCode, body),
+          _friendlyErrorMessage(
+            response.statusCode,
+            body,
+            endpoint: _SkinCareWorkerEndpoint.productAnalyze,
+          ),
         );
       }
 
@@ -434,7 +457,11 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return SkinCareAiRoutineResult.error(
-          _friendlyErrorMessage(response.statusCode, body),
+          _friendlyErrorMessage(
+            response.statusCode,
+            body,
+            endpoint: _SkinCareWorkerEndpoint.routineGenerate,
+          ),
         );
       }
 
@@ -485,8 +512,13 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     }
   }
 
-  String _friendlyErrorMessage(int statusCode, Map<String, dynamic> body) {
+  String _friendlyErrorMessage(
+    int statusCode,
+    Map<String, dynamic> body, {
+    required _SkinCareWorkerEndpoint endpoint,
+  }) {
     final rawError = body['error'] as String?;
+    final rawMessage = _stringValue(body['message']).toLowerCase();
 
     if (statusCode == 503 ||
         statusCode == 429 ||
@@ -498,7 +530,8 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     if (rawError == 'too_many_photos') {
       return 'Upload your main 10 products first. You can add more later.';
     }
-    if (rawError == 'provider_invalid_response') {
+    if (rawError == 'provider_invalid_response' ||
+        rawError == 'provider_invalid_json') {
       return 'AI response could not be safely read. Please try again.';
     }
     if (rawError == 'provider_empty_candidates' ||
@@ -515,12 +548,23 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
         rawError?.endsWith('_request') == true) {
       return 'The request was invalid. Please try again.';
     }
-    if (rawError == 'payload_too_large') {
-      return 'The uploaded image is too large (max 15MB).';
+    if (rawError == 'json_payload_too_large' ||
+        (rawError == 'payload_too_large' &&
+            endpoint == _SkinCareWorkerEndpoint.routineGenerate &&
+            rawMessage.contains('json'))) {
+      return 'Skin-care product details were too large to send. Try typing your main products or upload a clearer single photo.';
+    }
+    if (rawError == 'image_payload_too_large' ||
+        rawError == 'payload_too_large') {
+      return endpoint == _SkinCareWorkerEndpoint.productAnalyze
+          ? 'Product photo is too large. Upload a smaller, clearer photo.'
+          : 'Uploaded photo is too large. Upload a smaller photo.';
     }
     return 'AI service could not process this request.';
   }
 }
+
+enum _SkinCareWorkerEndpoint { productAnalyze, routineGenerate }
 
 List<SkinCareRoutinePlan> _routinePlansFromValue(
   dynamic value, {
@@ -532,7 +576,7 @@ List<SkinCareRoutinePlan> _routinePlansFromValue(
       .map(
         (item) => SkinCareRoutinePlan.fromMap(Map<String, dynamic>.from(item)),
       )
-      .where((plan) => plan.title.isNotEmpty || plan.steps.isNotEmpty)
+      .where(_routinePlanHasContent)
       .toList(growable: false);
   if (plans.isNotEmpty) return plans;
 
@@ -542,8 +586,12 @@ List<SkinCareRoutinePlan> _routinePlansFromValue(
       .map(
         (item) => SkinCareRoutinePlan.fromMap(Map<String, dynamic>.from(item)),
       )
-      .where((plan) => plan.title.isNotEmpty || plan.steps.isNotEmpty)
+      .where(_routinePlanHasContent)
       .toList(growable: false);
+}
+
+bool _routinePlanHasContent(SkinCareRoutinePlan plan) {
+  return plan.steps.isNotEmpty || plan.productNames.isNotEmpty;
 }
 
 String _stringValue(dynamic value) => value == null ? '' : value.toString();
@@ -608,3 +656,53 @@ List<String> _dedupeStrings(Iterable<String> values) {
   }
   return result;
 }
+
+bool _metadataLooksLikeSunscreen(SkinCareDetectedProduct product) {
+  return _rawProductFields(product).any((value) {
+    final lower = value.toLowerCase();
+    return lower.contains('sunscreen') ||
+        lower.contains('spf') ||
+        lower.contains('sun cream') ||
+        lower.contains('suncream') ||
+        lower.contains('sunblock') ||
+        lower.contains('uv') ||
+        lower.contains('pa++++') ||
+        lower.contains('uv filter') ||
+        lower.contains('uv-filter');
+  });
+}
+
+bool _metadataLooksLikeCleanser(SkinCareDetectedProduct product) {
+  return _rawProductFields(product).any((value) {
+    final lower = value.toLowerCase();
+    return lower.contains('cleanser') ||
+        lower.contains('face wash') ||
+        lower.contains('cleansing gel') ||
+        lower.contains('cleansing foam') ||
+        lower.contains('micellar') ||
+        lower.contains('cleanse');
+  });
+}
+
+bool _metadataLooksLikeMoisturizer(SkinCareDetectedProduct product) {
+  return _rawProductFields(product).any((value) {
+    final lower = value.toLowerCase();
+    return lower.contains('moistur') ||
+        lower.contains('cream') ||
+        lower.contains('lotion') ||
+        lower.contains('barrier repair') ||
+        lower.contains('gel cream');
+  });
+}
+
+List<String> _rawProductFields(SkinCareDetectedProduct product) => [
+  product.displayName,
+  product.name,
+  product.brand,
+  product.category,
+  ...product.keyIngredients,
+  ...product.possibleActives,
+  product.usageHint,
+  product.warningIfAny,
+  product.confidence,
+];
