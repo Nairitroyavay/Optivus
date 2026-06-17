@@ -281,6 +281,7 @@ describe("Skin-care Worker", () => {
     expect(json.routinePlans).toHaveLength(2);
     expect(json.routinePlans[0].productNames).toEqual(["UV Aqua Gel"]);
     expect(json.routinePlans[1].productNames).toEqual(["UV Aqua Gel"]);
+    expect(json.warnings).toContain("ai_returned_fewer_routines");
     expect(calls[0].body.contents[0].parts[0].text).toContain("UV Aqua");
   });
 
@@ -329,6 +330,7 @@ describe("Skin-care Worker", () => {
 
     expect(response.status).toBe(200);
     expect(json.routinePlans).toHaveLength(1);
+    expect(json.warnings).toContain("ai_returned_fewer_routines");
     expect(json.timelineBlocks).toHaveLength(1);
     expect(json.timelineBlocks[0].endMinute - json.timelineBlocks[0].startMinute).toBe(15);
   });
@@ -616,11 +618,11 @@ describe("Skin-care Worker", () => {
     expect(json.rejectedPlanReasons.join("|")).toContain("product_mismatch");
   });
 
-  test("three per day with limited owned products returns two safe plans and unsafe-frequency warning", async () => {
+  test("three per day with limited owned products returns two safe plans and ai_returned_fewer_routines warning", async () => {
     stubGemini(JSON.stringify({
       suggestedProducts: [],
       weeklyRoutine: [],
-      warnings: ["unsafe_frequency", "Only two safe daily routines are supported."],
+      warnings: [],
       routinePlans: [
         {
           slotLabel: "morning",
@@ -649,7 +651,7 @@ describe("Skin-care Worker", () => {
 
     expect(response.status).toBe(200);
     expect(json.routinePlans).toHaveLength(2);
-    expect(json.warnings).toContain("unsafe_frequency");
+    expect(json.warnings).toContain("ai_returned_fewer_routines");
   });
 
   test("photo source prompt uses productsFromPhoto and excludes typed products", async () => {
@@ -757,6 +759,7 @@ describe("Skin-care Worker", () => {
     expect(response.status).toBe(200);
     expect(json.routinePlans).toHaveLength(1);
     expect(json.routinePlans[0].slotLabel).toBe("night");
+    expect(json.warnings).toContain("ai_returned_fewer_routines");
     expect(json.timelineBlocks).toHaveLength(1);
     expect(json.timelineBlocks[0].title).toBe("Night Skin Care");
     expect(json.timelineBlocks[0].title).not.toBe("Bad Compatibility");

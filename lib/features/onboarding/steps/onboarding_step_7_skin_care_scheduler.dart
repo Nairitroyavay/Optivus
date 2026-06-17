@@ -11,8 +11,8 @@ const String _noRoutineMessage =
     'AI returned no usable routine. Try clearer product names or 2 times/day.';
 const String _productMismatchMessage =
     'AI used products outside your list. Try again.';
-const String onboarding7UnsafeFrequencyMessage =
-    'These products may not safely support this many routines per day. Try fewer routines or add more basic products.';
+const String onboarding7FewerRoutinesMessage =
+    'AI returned fewer routines than requested. Try again or choose fewer times per day.';
 const List<String> _schedulableSlotLabels = [
   'morning',
   'midday',
@@ -708,7 +708,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       errorMessage: sawProductMismatch
           ? _productMismatchMessage
           : sawUnsafePlan
-          ? onboarding7UnsafeFrequencyMessage
+          ? onboarding7FewerRoutinesMessage
           : _noRoutineMessage,
     );
   }
@@ -717,7 +717,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       plans: selected,
       errorMessage: sawProductMismatch
           ? _productMismatchMessage
-          : onboarding7UnsafeFrequencyMessage,
+          : onboarding7FewerRoutinesMessage,
     );
   }
   return Onboarding7RoutinePlanAdaptationResult(plans: selected);

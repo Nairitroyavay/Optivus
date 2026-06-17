@@ -625,15 +625,6 @@ List<String> _readNoteParts(dynamic value) {
   return text.isEmpty ? const [] : [text];
 }
 
-bool _hasUnsafeFrequencyWarning(Iterable<String> warnings) {
-  return warnings.any((warning) {
-    final lower = warning.toLowerCase();
-    return lower.contains('unsafe_frequency') ||
-        lower.contains('may not safely support') ||
-        lower.contains('try 2 times per day');
-  });
-}
-
 String _capSkinCareNote(String value) {
   final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
   if (normalized.length <= _onboarding7SpecialCareNoteMaxLength) {
@@ -1467,25 +1458,12 @@ class _HasProductsModeScreenState
       }).toList();
       final specialPlans = partitioned.specialCarePlans;
 
-      if (dailyPlans.length > desiredApplicationsPerDay) {
-        dailyPlans = onboarding7SelectRoutinePlansForSchedule(
-          dailyPlans,
-          desiredApplicationsPerDay,
-        );
-      }
-
-      
-      final missingProductNotes = onboarding7MissingBasicProductNotes(
-        productNames: ownedProductNames,
-        productDetails: ownedProductDetails,
+      final specialCareNotesForResult = onboarding7SpecialCareNotesFromAiResult(
+        suggestedProducts: result.suggestedProducts,
+        weeklyRoutine: result.weeklyRoutine,
+        specialCarePlans: specialPlans,
+        ownedProductNames: ownedProductNames,
       );
-      
-      final specialCareNotesForResult = <String>[
-        if (activeSource == 'none') ...result.suggestedProducts.map((e) => e.toString()),
-        ...result.weeklyRoutine.map((e) => e.toString()),
-        ...specialPlans.map((p) => 'Special care: ${p.title} - ${p.productNames.join(', ')}'),
-        ...missingProductNotes,
-      ].where((s) => s.trim().isNotEmpty).toList();
 
       final aiReturnedFewerDailyPlans =
           dailyPlans.length < desiredApplicationsPerDay;
@@ -1530,7 +1508,8 @@ class _HasProductsModeScreenState
         if (!mounted) return;
         setState(() {
           _generating = false;
-          _generationError = schedule.errorMessage ?? _onboarding7AiEmptyMessage;
+          _generationError =
+              schedule.errorMessage ?? _onboarding7AiEmptyMessage;
         });
         return;
       }
@@ -2911,7 +2890,6 @@ class _SkinCareInlineMessage extends StatelessWidget {
   }
 }
 
-
 void _showSkinCareSpecialCareNotesSheet(
   BuildContext context,
   List<String> notes,
@@ -3034,12 +3012,19 @@ class _SkinCareTimelineSection extends ConsumerWidget {
               ),
               if (specialCareNotes.isNotEmpty)
                 IconButton(
+                  key: const ValueKey(
+                    'onboarding-step7-special-care-notes-button',
+                  ),
                   onPressed: () => _showSkinCareSpecialCareNotesSheet(
                     context,
                     specialCareNotes,
                     accent,
                   ),
-                  icon: Icon(Icons.info_outline_rounded, color: accent, size: 22),
+                  icon: Icon(
+                    Icons.info_outline_rounded,
+                    color: accent,
+                    size: 22,
+                  ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   splashRadius: 20,

@@ -806,7 +806,7 @@ If at least one usable owned product exists, return exactly ${desiredApplication
 For 2/day: morning + night. For 3/day: morning + midday/afternoon + night. For 4/day: morning + midday + afternoon + night.
 Missing important categories must go into missingItems.
 Missing moisturizer/cleanser/sunscreen must not reduce routinePlan count.
-Do not use unsafe_frequency as the normal solution for incomplete products. Use unsafe_frequency only for truly unsafe cases where even a missingItems block cannot be safely described.
+Only return fewer routinePlans if no safe usable routine can be described.
 Do not invent owned products.
 productNames = exact owned product names only.
 missingItems = missing important categories/products not owned.
@@ -862,7 +862,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
       "source": "ai_skin_care_setup"
     }
   ],
-  "warnings": ["Use unsafe_frequency here only when you returned fewer routinePlans because the selected frequency is not safe."]
+  "warnings": ["Patch test new products", "Any other warnings"]
 }`;
 
   const text = await callGeminiWithFallback(prompt, imageParts, env);

@@ -828,10 +828,14 @@ void main() {
     ).read(mockOnboardingProvider).draft.baseTimeline.skinCareSpecialCareNotes;
     final joinedNotes = notes.join(' ').toLowerCase();
 
-    expect(notes, isNotEmpty);
+    expect(notes, isEmpty);
     expect(joinedNotes, isNot(contains('cerave')));
     expect(joinedNotes, isNot(contains('la roche')));
     expect(joinedNotes, isNot(contains('paula')));
+    expect(
+      find.byKey(const ValueKey('onboarding-step7-special-care-notes-button')),
+      findsNothing,
+    );
   });
 
   testWidgets('11. Step 7 uses full timeline instead of mini block list', (
@@ -1365,7 +1369,7 @@ void main() {
   );
 
   testWidgets(
-    '19b. Worker unsafe-frequency warning schedules 2 safe plans for 3/day request',
+    '19b. AI returns fewer plans for 3/day shows fewer-routines error and creates zero blocks',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: SkinCareAiRoutineResult(
@@ -1374,7 +1378,7 @@ void main() {
           nightRoutine: const [],
           weeklyRoutine: const [],
           timelineBlocks: const [],
-          warnings: const [onboarding7UnsafeFrequencyMessage],
+          warnings: const ['ai_returned_fewer_routines'],
         ),
       );
       await tester.pumpWidget(
@@ -1405,7 +1409,12 @@ void main() {
 
       expect(blocks, hasLength(0));
       expect(base.skinCareDesiredApplicationsPerDay, 3);
-      expect(find.text('AI returned fewer routines than requested. Try again or choose fewer times per day.'), findsOneWidget);
+      expect(
+        find.text(
+          'AI returned fewer routines than requested. Try again or choose fewer times per day.',
+        ),
+        findsOneWidget,
+      );
       expect(
         find.textContaining('AI returned no usable routine'),
         findsNothing,
@@ -1652,18 +1661,7 @@ void main() {
 
       expect(blocks, isEmpty);
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
-      expect(
-        base.skinCareSpecialCareNotes,
-        contains(
-          'No moisturizer detected. You can still use your current products, but adding moisturizer may improve night routine balance.',
-        ),
-      );
-      expect(
-        base.skinCareSpecialCareNotes,
-        contains(
-          'No cleanser detected. Add a cleanser if you want a complete cleanse step.',
-        ),
-      );
+      expect(base.skinCareSpecialCareNotes, isEmpty);
       expect(
         find.text(
           'AI returned fewer routines than requested. Try again or choose fewer times per day.',
@@ -2742,7 +2740,7 @@ void main() {
       final client = TestSkinCareAiClient(
         routineResult: const SkinCareAiRoutineResult(
           suggestedProducts: ['Use barrier moisturizer after exfoliation'],
-          weeklyRoutine: const [
+          weeklyRoutine: [
             'Special care: Retinol night - use 2x/week; avoid acids the same night',
             'warning: Patch test before new actives',
           ],
@@ -2796,6 +2794,7 @@ void main() {
       final persistedDraft = container.read(mockOnboardingProvider).draft;
       final notes = persistedDraft.baseTimeline.skinCareSpecialCareNotes;
 
+      expect(notes, contains('Use barrier moisturizer after exfoliation'));
       expect(
         notes,
         contains(
@@ -2807,12 +2806,24 @@ void main() {
         notes,
         contains(startsWith('Special care: AHA Night - AHA Serum')),
       );
-      
+
       expect(find.textContaining('Suggested:'), findsNothing);
+      expect(find.textContaining('barrier moisturizer'), findsNothing);
       expect(find.textContaining('Retinol night - use 2x/week'), findsNothing);
-      await tester.tap(find.byIcon(Icons.info_outline_rounded));
+      expect(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Special-care notes'), findsOneWidget);
+      expect(find.textContaining('barrier moisturizer'), findsOneWidget);
       expect(
         find.textContaining('Retinol night - use 2x/week'),
         findsOneWidget,
@@ -2832,10 +2843,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      
       expect(find.textContaining('Suggested:'), findsNothing);
-      await tester.tap(find.byIcon(Icons.info_outline_rounded));
+      expect(find.textContaining('barrier moisturizer'), findsNothing);
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
       await tester.pumpAndSettle();
+      expect(find.textContaining('barrier moisturizer'), findsOneWidget);
       expect(
         find.textContaining('Retinol night - use 2x/week'),
         findsOneWidget,
@@ -2889,7 +2905,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['missing: First note']);
-      
+
       expect(find.textContaining('Suggested:'), findsNothing);
 
       await tester.tap(find.text('Rebuild / Edit'));
@@ -2905,8 +2921,12 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['missing: Second note']);
-      
-      await tester.tap(find.byIcon(Icons.info_outline_rounded));
+
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(find.textContaining('Second note'), findsOneWidget);
       expect(find.textContaining('First note'), findsNothing);
@@ -2937,9 +2957,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      
       expect(find.textContaining('Suggested:'), findsNothing);
-      await tester.tap(find.byIcon(Icons.info_outline_rounded));
+      await tester.tap(
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(
         find.textContaining('Special care: saved draft note'),
@@ -3084,8 +3107,8 @@ void main() {
         'AI returned no usable routine. Try clearer product names or 2 times/day.';
     const productMismatchMessage =
         'AI used products outside your list. Try again.';
-    const unsafeFrequencyMessage =
-        'These products may not safely support this many routines per day. Try fewer routines or add more basic products.';
+    const fewerRoutinesMessage =
+        'AI returned fewer routines than requested. Try again or choose fewer times per day.';
 
     final sunscreenOnly = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
@@ -3365,7 +3388,7 @@ void main() {
       now: DateTime.utc(2026, 6, 15),
     );
     expect(fourPerDay.blocks, isEmpty);
-    expect(fourPerDay.errorMessage, unsafeFrequencyMessage);
+    expect(fourPerDay.errorMessage, fewerRoutinesMessage);
 
     final ambiguousSerum = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
@@ -3392,27 +3415,23 @@ void main() {
     expect(ambiguousSerum.blocks, isEmpty);
     expect(ambiguousSerum.errorMessage, productMismatchMessage);
 
-    final unsafeFrequency = onboarding7ScheduleSkinCareRoutine(
+    final aiReturnedFewerRoutines = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 4,
-      ownedProductNames: const ['Hydrating Serum'],
+      ownedProductNames: const ['Cleanse', 'Protect'],
+      ownedProductDetails: const [],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
-          title: 'Morning Serum',
-          steps: ['Apply hydrating serum'],
-          productNames: ['Hydrating Serum'],
-        ),
-        SkinCareRoutinePlan(
-          slotLabel: 'night',
-          title: 'Night Serum',
-          steps: ['Apply hydrating serum'],
-          productNames: ['Hydrating Serum'],
+          title: 'Morning SPF',
+          productNames: ['Cleanse', 'Protect'],
+          steps: ['Cleanse', 'Protect'],
+          warnings: ['ai_returned_fewer_routines'],
         ),
       ],
     );
-    expect(unsafeFrequency.blocks, isEmpty);
-    expect(unsafeFrequency.errorMessage, unsafeFrequencyMessage);
+    expect(aiReturnedFewerRoutines.blocks, isEmpty);
+    expect(aiReturnedFewerRoutines.errorMessage, fewerRoutinesMessage);
   });
 
   test('58. Sun cream is sunscreen and not moisturizer', () {
