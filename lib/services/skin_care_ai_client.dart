@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
@@ -243,6 +244,7 @@ class SkinCareAiRoutineResult {
   final List<dynamic> timelineBlocks;
   final List<String> suggestedProducts;
   final List<String> warnings;
+  final List<String> rejectedPlanReasons;
   final String? errorMessage;
   final String? errorCode;
 
@@ -256,6 +258,7 @@ class SkinCareAiRoutineResult {
     required this.timelineBlocks,
     this.suggestedProducts = const [],
     this.warnings = const [],
+    this.rejectedPlanReasons = const [],
     this.errorMessage,
     this.errorCode,
   });
@@ -268,6 +271,7 @@ class SkinCareAiRoutineResult {
       weeklyRoutine: [],
       timelineBlocks: [],
       suggestedProducts: [],
+      rejectedPlanReasons: [],
       errorMessage: msg,
       errorCode: errorCode,
     );
@@ -516,7 +520,19 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       final tB = body['timelineBlocks'];
       final sP = body['suggestedProducts'];
       final warnings = body['warnings'];
+      final rejectedPlanReasons = body['rejectedPlanReasons'];
       final plans = body['routinePlans'] ?? body['plans'];
+
+      if (kDebugMode) {
+        debugPrint(
+          '[SkinCareWorkerClient] routine raw '
+          'routinePlans=$plans '
+          'weeklyRoutine=$wR '
+          'suggestedProducts=$sP '
+          'warnings=$warnings '
+          'rejectedPlanReasons=$rejectedPlanReasons',
+        );
+      }
 
       return SkinCareAiRoutineResult(
         routinePlans: _routinePlansFromValue(plans, fallbackBlocks: tB),
@@ -529,6 +545,9 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
             : [],
         warnings: warnings is List
             ? warnings.map((e) => e.toString()).toList()
+            : [],
+        rejectedPlanReasons: rejectedPlanReasons is List
+            ? rejectedPlanReasons.map((e) => e.toString()).toList()
             : [],
       );
     } catch (_) {

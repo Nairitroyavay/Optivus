@@ -12,6 +12,14 @@ type Env = {
 
 const ROUTINE_GENERATE_JSON_MAX_BYTES = 64 * 1024;
 const IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+const UNSAFE_FREQUENCY_WARNING =
+  "These products may not safely support 3 routines per day. Try 2 times per day.";
+
+type OwnedSkinCareProduct = {
+  name: string;
+  category: string;
+  searchableFields: string[];
+};
 
 class HttpError extends Error {
   status: number;
@@ -162,6 +170,532 @@ function normalizeRoutinePlan(plan: any): any | null {
     warnings: stringList(plan.warnings || plan.warningIfAny),
     repeatDays: repeatDays(plan.repeatDays || plan.days),
   };
+}
+
+function normalizedProductKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function containsInitialism(value: string, token: string): boolean {
+  return new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`).test(value);
+}
+
+function looksLikeSunscreen(value: string): boolean {
+  const lower = value.toLowerCase();
+  return lower.includes("sunscreen") ||
+    lower.includes("spf") ||
+    lower.includes("sun cream") ||
+    lower.includes("suncream") ||
+    lower.includes("sunblock") ||
+    lower.includes("uv") ||
+    lower.includes("pa++++") ||
+    lower.includes("pa ++++") ||
+    lower.includes("uv filter") ||
+    lower.includes("uv-filter");
+}
+
+function looksLikeCleanser(value: string): boolean {
+  const lower = value.toLowerCase();
+  return lower.includes("cleanser") ||
+    lower.includes("face wash") ||
+    lower.includes("wash face") ||
+    lower.includes("cleansing gel") ||
+    lower.includes("cleansing foam") ||
+    lower.includes("micellar") ||
+    lower.includes("cleanse");
+}
+
+function looksLikeMoisturizer(value: string): boolean {
+  const lower = value.toLowerCase();
+  if (looksLikeSunscreen(lower) || lower.includes("sun protection")) return false;
+  return lower.includes("moisturizer") ||
+    lower.includes("moisturiser") ||
+    lower.includes("barrier cream") ||
+    lower.includes("gel cream") ||
+    lower.includes("lotion") ||
+    lower.includes("barrier repair");
+}
+
+function looksLikeSerum(value: string): boolean {
+  const lower = value.toLowerCase();
+  return lower.includes("serum") ||
+    lower.includes("ampoule") ||
+    lower.includes("essence") ||
+    lower.includes("vitamin c") ||
+    lower.includes("alpha arbutin") ||
+    lower.includes("niacinamide");
+}
+
+function looksLikeStrongActive(value: string): boolean {
+  const lower = value.toLowerCase();
+  return lower.includes("retinol") ||
+    lower.includes("retinal") ||
+    lower.includes("tretinoin") ||
+    lower.includes("adapalene") ||
+    lower.includes("exfoliant") ||
+    lower.includes("exfoliate") ||
+    lower.includes("exfoliator") ||
+    lower.includes("peeling") ||
+    lower.includes("peel") ||
+    containsInitialism(lower, "pha") ||
+    containsInitialism(lower, "aha") ||
+    containsInitialism(lower, "bha") ||
+    lower.includes("glycolic") ||
+    lower.includes("lactic") ||
+    lower.includes("salicylic") ||
+    lower.includes("mandelic") ||
+    lower.includes("benzoyl peroxide") ||
+    lower.includes("strong active");
+}
+
+function productText(product: OwnedSkinCareProduct): string {
+  return [product.name, product.category, ...product.searchableFields].join(" ");
+}
+
+function isSunscreen(product: OwnedSkinCareProduct): boolean {
+  return product.category === "sunscreen" || looksLikeSunscreen(productText(product));
+}
+
+function isCleanser(product: OwnedSkinCareProduct): boolean {
+  return product.category === "cleanser" || looksLikeCleanser(productText(product));
+}
+
+function isMoisturizer(product: OwnedSkinCareProduct): boolean {
+  return product.category === "moisturizer" ||
+    product.category === "moisturiser" ||
+    looksLikeMoisturizer(productText(product));
+}
+
+function isSerum(product: OwnedSkinCareProduct): boolean {
+  return product.category === "serum" || looksLikeSerum(productText(product));
+}
+
+function isStrongActive(product: OwnedSkinCareProduct): boolean {
+  return product.category === "exfoliant" ||
+    product.category === "exfoliator" ||
+    looksLikeStrongActive(productText(product));
+}
+
+function isUsableDailyProduct(product: OwnedSkinCareProduct): boolean {
+  if (isStrongActive(product)) return false;
+  return isCleanser(product) ||
+    isSunscreen(product) ||
+    isMoisturizer(product) ||
+    isSerum(product) ||
+    product.category === "toner";
+}
+
+function isVitaminC(product: OwnedSkinCareProduct): boolean {
+  return productText(product).toLowerCase().includes("vitamin c");
+}
+
+function isAlphaArbutin(product: OwnedSkinCareProduct): boolean {
+  return productText(product).toLowerCase().includes("alpha arbutin");
+}
+
+function ownedProductName(value: any): string {
+  if (typeof value === "string") return value.trim().replace(/\s+/g, " ");
+  if (!value || typeof value !== "object") return "";
+  const name = String(value.name || value.productName || value.product || "").trim().replace(/\s+/g, " ");
+  const brand = String(value.brand || "").trim().replace(/\s+/g, " ");
+  if (!name) return brand;
+  if (!brand || name.toLowerCase().includes(brand.toLowerCase())) return name;
+  return `${brand} ${name}`;
+}
+
+function ownedProductCatalog(rawProducts: any[]): OwnedSkinCareProduct[] {
+  const seen = new Set<string>();
+  const products: OwnedSkinCareProduct[] = [];
+
+  for (const raw of rawProducts) {
+    const name = ownedProductName(raw);
+    if (!name) continue;
+    const category = raw && typeof raw === "object"
+      ? String(raw.category || "").trim().toLowerCase()
+      : "";
+    const searchableFields = stringList([
+      name,
+      category,
+      raw && typeof raw === "object" ? raw.brand : "",
+      ...(raw && typeof raw === "object" ? stringList(raw.keyIngredients || raw.ingredients) : []),
+      ...(raw && typeof raw === "object" ? stringList(raw.possibleActives || raw.actives) : []),
+      raw && typeof raw === "object" ? raw.usageHint || raw.usage : "",
+      raw && typeof raw === "object" ? raw.warningIfAny || raw.warning || raw.warnings : "",
+      raw && typeof raw === "object" ? raw.confidence : "",
+    ]);
+    const key = normalizedProductKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    products.push({ name, category, searchableFields });
+  }
+
+  return products;
+}
+
+function significantProductTokens(value: string): Set<string> {
+  const stopWords = new Set([
+    "the",
+    "and",
+    "with",
+    "for",
+    "skin",
+    "care",
+    "product",
+    "daily",
+    "apply",
+    "use",
+    "serum",
+    "sunscreen",
+    "spf",
+    "cleanser",
+    "face",
+    "wash",
+    "moisturizer",
+    "moisturiser",
+    "cream",
+    "lotion",
+    "toner",
+    "exfoliant",
+    "exfoliator",
+  ]);
+  return new Set(normalizedProductKey(value)
+    .split(" ")
+    .filter((token) => token && !stopWords.has(token)));
+}
+
+function isGenericProductName(value: string): boolean {
+  return new Set([
+    "sunscreen",
+    "spf",
+    "cleanser",
+    "face wash",
+    "moisturizer",
+    "moisturiser",
+    "serum",
+  ]).has(normalizedProductKey(value));
+}
+
+function singleOwnedProduct(
+  products: OwnedSkinCareProduct[],
+  test: (product: OwnedSkinCareProduct) => boolean,
+): OwnedSkinCareProduct | null {
+  const matches = products.filter(test);
+  return matches.length === 1 ? matches[0] : null;
+}
+
+function matchOwnedProduct(value: string, products: OwnedSkinCareProduct[]): OwnedSkinCareProduct | null {
+  const query = normalizedProductKey(value);
+  if (!query) return null;
+  const lower = value.toLowerCase();
+
+  if (isGenericProductName(value)) {
+    if (looksLikeSunscreen(lower)) return singleOwnedProduct(products, isSunscreen);
+    if (looksLikeCleanser(lower)) return singleOwnedProduct(products, isCleanser);
+    if (looksLikeMoisturizer(lower)) return singleOwnedProduct(products, isMoisturizer);
+    if (looksLikeSerum(lower)) return singleOwnedProduct(products, isSerum);
+  }
+
+  for (const product of products) {
+    if (normalizedProductKey(product.name) === query) return product;
+  }
+  for (const product of products) {
+    const productKey = normalizedProductKey(product.name);
+    if (query.length >= 4 && (productKey.includes(query) || query.includes(productKey))) {
+      return product;
+    }
+  }
+
+  const queryTokens = significantProductTokens(query);
+  if (queryTokens.size > 0) {
+    const tokenMatches = products.filter((product) => {
+      const productTokens = significantProductTokens(product.name);
+      if (productTokens.size === 0) return false;
+      return [...queryTokens].every((token) => productTokens.has(token)) ||
+        [...productTokens].every((token) => queryTokens.has(token));
+    });
+    if (tokenMatches.length === 1) return tokenMatches[0];
+  }
+
+  if (looksLikeSunscreen(lower)) return singleOwnedProduct(products, isSunscreen);
+  if (looksLikeCleanser(lower)) return singleOwnedProduct(products, isCleanser);
+  if (looksLikeMoisturizer(lower)) return singleOwnedProduct(products, isMoisturizer);
+  if (looksLikeSerum(lower)) return singleOwnedProduct(products, isSerum);
+  return null;
+}
+
+function dedupeOwnedProducts(products: OwnedSkinCareProduct[]): OwnedSkinCareProduct[] {
+  const seen = new Set<string>();
+  const result: OwnedSkinCareProduct[] = [];
+  for (const product of products) {
+    const key = normalizedProductKey(product.name);
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      result.push(product);
+    }
+  }
+  return result;
+}
+
+function safeStepListForProducts(products: OwnedSkinCareProduct[]): string[] {
+  return products.map((product) => isCleanser(product) ? "Cleanse face" : `Apply ${product.name}`);
+}
+
+function sameProducts(a: OwnedSkinCareProduct[], b: OwnedSkinCareProduct[]): boolean {
+  const aKey = a.map((product) => normalizedProductKey(product.name)).join("|");
+  const bKey = b.map((product) => normalizedProductKey(product.name)).join("|");
+  return aKey === bKey;
+}
+
+function deterministicOwnedRoutine(
+  products: OwnedSkinCareProduct[],
+  desiredApplicationsPerDay: number,
+): { routinePlans: any[]; weeklyRoutine: string[]; warnings: string[] } {
+  const cleanser = products.find(isCleanser);
+  const sunscreen = products.find(isSunscreen);
+  const moisturizer = products.find(isMoisturizer);
+  const safeSerums = products.filter((product) => isSerum(product) && !isStrongActive(product));
+  const vitaminC = safeSerums.find(isVitaminC);
+  const alphaArbutin = safeSerums.find(isAlphaArbutin);
+  const fallbackSerum = safeSerums[0];
+  const morningSerum = vitaminC || fallbackSerum;
+  const nightSerum = alphaArbutin ||
+    safeSerums.find((product) => product !== morningSerum) ||
+    (!sunscreen ? morningSerum : undefined);
+
+  const morningProducts = dedupeOwnedProducts([
+    ...(cleanser ? [cleanser] : []),
+    ...(morningSerum ? [morningSerum] : []),
+    ...(moisturizer && !sunscreen ? [moisturizer] : []),
+    ...(sunscreen ? [sunscreen] : []),
+  ]);
+  const nightProducts = dedupeOwnedProducts([
+    ...(cleanser ? [cleanser] : []),
+    ...(nightSerum ? [nightSerum] : []),
+    ...(moisturizer ? [moisturizer] : []),
+  ]);
+
+  const routinePlans: any[] = [];
+  if (morningProducts.length > 0) {
+    routinePlans.push({
+      slotLabel: "morning",
+      title: "Morning Skin Care",
+      steps: safeStepListForProducts(morningProducts),
+      productNames: morningProducts.map((product) => product.name),
+      warnings: [],
+      repeatDays: [1, 2, 3, 4, 5, 6, 7],
+    });
+  }
+  if (nightProducts.length > 0 && !sameProducts(morningProducts, nightProducts)) {
+    routinePlans.push({
+      slotLabel: "night",
+      title: "Night Skin Care",
+      steps: safeStepListForProducts(nightProducts),
+      productNames: nightProducts.map((product) => product.name),
+      warnings: [],
+      repeatDays: [1, 2, 3, 4, 5, 6, 7],
+    });
+  }
+  if (routinePlans.length === 0) {
+    const firstDaily = products.find(isUsableDailyProduct);
+    if (firstDaily) {
+      routinePlans.push({
+        slotLabel: isSunscreen(firstDaily) ? "morning" : "night",
+        title: isSunscreen(firstDaily) ? "Morning Skin Care" : "Night Skin Care",
+        steps: safeStepListForProducts([firstDaily]),
+        productNames: [firstDaily.name],
+        warnings: [],
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+      });
+    }
+  }
+
+  const weeklyRoutine = products
+    .filter(isStrongActive)
+    .map((product) => `Use ${product.name} 1-2 times per week at night. Do not combine with other strong actives.`);
+  const warnings = [
+    ...(!moisturizer
+      ? ["No moisturizer detected. You can still use your current products, but adding moisturizer may improve night routine balance."]
+      : []),
+    ...(!sunscreen ? ["No sunscreen detected. Consider SPF for daytime protection."] : []),
+    ...(!cleanser ? ["No cleanser detected. Add a cleanser if you want a complete cleanse step."] : []),
+  ];
+  if (desiredApplicationsPerDay > 2 && routinePlans.length > 0 && routinePlans.length < desiredApplicationsPerDay) {
+    warnings.push(UNSAFE_FREQUENCY_WARNING);
+  }
+
+  return {
+    routinePlans: routinePlans.slice(0, desiredApplicationsPerDay > 2 ? 2 : desiredApplicationsPerDay),
+    weeklyRoutine,
+    warnings,
+  };
+}
+
+function noteText(value: any): string {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return String(value || "");
+  return stringList([
+    value.title,
+    value.name,
+    value.productName,
+    value.product,
+    value.warning,
+    value.warningIfAny,
+    value.instruction,
+    value.step,
+    value.text,
+    ...(Array.isArray(value.products) ? stringList(value.products) : []),
+    ...(Array.isArray(value.productNames) ? stringList(value.productNames) : []),
+    ...(Array.isArray(value.steps) ? stringList(value.steps) : []),
+    ...(Array.isArray(value.warnings) ? stringList(value.warnings) : []),
+  ]).join(" ");
+}
+
+function ownedNoteAllowed(value: any, products: OwnedSkinCareProduct[]): boolean {
+  const text = noteText(value).trim();
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  const outsideBrand = lower.includes("cerave") ||
+    lower.includes("cera ve") ||
+    lower.includes("la roche") ||
+    lower.includes("laroche") ||
+    lower.includes("posay") ||
+    lower.includes("paula");
+  const outsideBrandOwned = products.some((product) => {
+    const productLower = product.name.toLowerCase();
+    return (lower.includes("cerave") && productLower.includes("cerave")) ||
+      (lower.includes("cera ve") && productLower.includes("cera ve")) ||
+      (lower.includes("la roche") && productLower.includes("la roche")) ||
+      (lower.includes("laroche") && productLower.includes("laroche")) ||
+      (lower.includes("posay") && productLower.includes("posay")) ||
+      (lower.includes("paula") && productLower.includes("paula"));
+  });
+  if (outsideBrand && !outsideBrandOwned) return false;
+  if (products.some((product) => normalizedProductKey(text).includes(normalizedProductKey(product.name)))) {
+    return true;
+  }
+  return lower.includes("no moisturizer") ||
+    lower.includes("missing moisturizer") ||
+    lower.includes("no sunscreen") ||
+    lower.includes("missing sunscreen") ||
+    lower.includes("no cleanser") ||
+    lower.includes("missing cleanser") ||
+    lower.startsWith("warning") ||
+    lower.includes("warning:") ||
+    lower.startsWith("missing:");
+}
+
+function sanitizeOwnedRoutinePlan(
+  plan: any,
+  products: OwnedSkinCareProduct[],
+  rejectedPlanReasons: string[],
+): any | null {
+  const normalized = normalizeRoutinePlan(plan);
+  if (!normalized) {
+    rejectedPlanReasons.push("empty");
+    return null;
+  }
+
+  const matched: OwnedSkinCareProduct[] = [];
+  if (normalized.productNames.length > 0) {
+    for (const productName of normalized.productNames) {
+      const product = matchOwnedProduct(productName, products);
+      if (!product) {
+        rejectedPlanReasons.push(`product_mismatch:${normalized.slotLabel}:${productName}`);
+        return null;
+      }
+      matched.push(product);
+    }
+  } else {
+    for (const step of normalized.steps) {
+      const product = matchOwnedProduct(step, products);
+      if (product) matched.push(product);
+      else if (looksLikeSunscreen(step)) {
+        const sunscreen = singleOwnedProduct(products, isSunscreen);
+        if (sunscreen) matched.push(sunscreen);
+      } else if (looksLikeCleanser(step)) {
+        const cleanser = singleOwnedProduct(products, isCleanser);
+        if (cleanser) matched.push(cleanser);
+      } else if (looksLikeMoisturizer(step)) {
+        const moisturizer = singleOwnedProduct(products, isMoisturizer);
+        if (moisturizer) matched.push(moisturizer);
+      }
+    }
+  }
+
+  const safeProducts = dedupeOwnedProducts(matched).filter((product) => !isStrongActive(product));
+  if (safeProducts.length === 0) {
+    rejectedPlanReasons.push(`unsafe:${normalized.slotLabel}:${normalized.title}`);
+    return null;
+  }
+  if (normalized.slotLabel === "night" && safeProducts.every(isSunscreen)) {
+    rejectedPlanReasons.push(`unsafe:${normalized.slotLabel}:night_sunscreen`);
+    return null;
+  }
+
+  const safeSteps = stringList(normalized.steps).filter((step) => !looksLikeStrongActive(step));
+  return {
+    ...normalized,
+    steps: safeSteps.length > 0 ? safeSteps : safeStepListForProducts(safeProducts),
+    productNames: safeProducts.map((product) => product.name),
+  };
+}
+
+function mergeOwnedRoutinePlans(
+  aiPlans: any[],
+  fallbackPlans: any[],
+  desiredApplicationsPerDay: number,
+  minimumPlanCount: number,
+): any[] {
+  const orderedSlots = ["morning", "midday", "afternoon", "night", "custom"];
+  const orderPlans = (plans: any[]): any[] => {
+    const bySlot = new Map<string, any>();
+    for (const plan of plans) {
+      const slot = String(plan.slotLabel || "custom").toLowerCase();
+      if (!bySlot.has(slot)) bySlot.set(slot, plan);
+    }
+    const ordered: any[] = [];
+    for (const slot of orderedSlots) {
+      const plan = bySlot.get(slot);
+      if (plan) ordered.push(plan);
+    }
+    for (const [slot, plan] of bySlot.entries()) {
+      if (!orderedSlots.includes(slot)) ordered.push(plan);
+    }
+    return ordered;
+  };
+
+  if (aiPlans.length > 0 && aiPlans.length >= minimumPlanCount) {
+    return orderPlans(aiPlans).slice(0, desiredApplicationsPerDay);
+  }
+
+  const bySlot = new Map<string, any>();
+  for (const plan of aiPlans) {
+    const slot = String(plan.slotLabel || "custom").toLowerCase();
+    if (!bySlot.has(slot)) bySlot.set(slot, plan);
+  }
+  for (const plan of fallbackPlans) {
+    const slot = String(plan.slotLabel || "custom").toLowerCase();
+    if (!bySlot.has(slot)) bySlot.set(slot, plan);
+  }
+  const ordered: any[] = [];
+  for (const slot of orderedSlots) {
+    const plan = bySlot.get(slot);
+    if (plan) ordered.push(plan);
+  }
+  for (const [slot, plan] of bySlot.entries()) {
+    if (!orderedSlots.includes(slot)) ordered.push(plan);
+  }
+  const targetCount = aiPlans.length >= desiredApplicationsPerDay
+    ? desiredApplicationsPerDay
+    : Math.min(
+        Math.max(aiPlans.length, minimumPlanCount),
+        desiredApplicationsPerDay > 2 ? 2 : desiredApplicationsPerDay,
+      );
+  return ordered.slice(0, targetCount);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -321,14 +855,23 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
     }
   }
 
-  const typedProductDetails = Array.isArray(body.typedProductDetails)
-    ? body.typedProductDetails
-    : [];
   const productsFromPhoto = Array.isArray(body.productsFromPhoto)
     ? body.productsFromPhoto
     : [];
+  const requestedProductInputSource = String(body.productInputSource || "").toLowerCase();
+  const legacyTypedProductNames = Array.isArray(body.typedProductNames)
+    ? stringList(body.typedProductNames)
+    : [];
+  const explicitTypedProductDetails = Array.isArray(body.typedProductDetails)
+    ? body.typedProductDetails
+    : [];
+  const typedProductDetails = explicitTypedProductDetails.length > 0
+    ? explicitTypedProductDetails
+    : (requestedProductInputSource === "typed" || productsFromPhoto.length === 0)
+      ? legacyTypedProductNames.map((name) => ({ name, source: "typed" }))
+      : [];
   const activeSource = String(
-    body.productInputSource ||
+    requestedProductInputSource ||
       (typedProductDetails.length > 0
         ? "typed"
         : productsFromPhoto.length > 0
@@ -412,13 +955,52 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     : Array.isArray(parsed.plans)
       ? parsed.plans
       : [];
-  const routinePlans = rawRoutinePlans
-    .map(normalizeRoutinePlan)
-    .filter((plan: any) => plan !== null);
-  const warnings = stringList(parsed.warnings);
+  const rejectedPlanReasons: string[] = [];
+  const ownedProductMode = activeSource === "photo" || activeSource === "typed";
+  const catalog = ownedProductMode ? ownedProductCatalog(ownedProducts) : [];
+  const fallback = ownedProductMode
+    ? deterministicOwnedRoutine(catalog, desiredApplicationsPerDay)
+    : { routinePlans: [], weeklyRoutine: [], warnings: [] };
+  const rawWeeklyRoutine = Array.isArray(parsed.weeklyRoutine) ? parsed.weeklyRoutine : [];
+  const rawSuggestedProducts = Array.isArray(parsed.suggestedProducts) ? parsed.suggestedProducts : [];
+  const aiRoutinePlans = ownedProductMode
+    ? rawRoutinePlans
+        .map((plan: any) => sanitizeOwnedRoutinePlan(plan, catalog, rejectedPlanReasons))
+        .filter((plan: any) => plan !== null)
+    : rawRoutinePlans
+        .map(normalizeRoutinePlan)
+        .filter((plan: any) => plan !== null);
+  const minimumOwnedPlanCount = ownedProductMode && catalog.some(isUsableDailyProduct)
+    ? catalog.some(isCleanser) && catalog.some(isSunscreen)
+      ? Math.min(2, desiredApplicationsPerDay)
+      : aiRoutinePlans.length === 0
+        ? Math.min(1, fallback.routinePlans.length)
+        : aiRoutinePlans.length
+    : 0;
+  const routinePlans = ownedProductMode
+    ? mergeOwnedRoutinePlans(
+        aiRoutinePlans,
+        fallback.routinePlans,
+        desiredApplicationsPerDay,
+        minimumOwnedPlanCount,
+      )
+    : aiRoutinePlans;
+  const warnings = stringList([
+    ...stringList(parsed.warnings),
+    ...(ownedProductMode ? fallback.warnings : []),
+  ]);
   if (routinePlans.length < desiredApplicationsPerDay) {
     warnings.push("routine_plan_count_mismatch");
   }
+  const weeklyRoutine = ownedProductMode
+    ? stringList([
+        ...rawWeeklyRoutine.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText),
+        ...fallback.weeklyRoutine,
+      ])
+    : rawWeeklyRoutine;
+  const suggestedProducts = ownedProductMode
+    ? stringList(rawSuggestedProducts.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
+    : rawSuggestedProducts;
   const compatibilityStartForSlot = (slotLabel: string | undefined, index: number): number => {
     const slot = String(slotLabel || "").toLowerCase();
     if (slot === "morning") return 7 * 60;
@@ -447,10 +1029,11 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     routinePlans,
     morningRoutine: parsed.morningRoutine || [],
     nightRoutine: parsed.nightRoutine || [],
-    weeklyRoutine: parsed.weeklyRoutine || [],
+    weeklyRoutine,
     timelineBlocks: compatibilityTimelineBlocks,
-    suggestedProducts: parsed.suggestedProducts || [],
-    warnings
+    suggestedProducts,
+    warnings,
+    rejectedPlanReasons
   });
 }
 

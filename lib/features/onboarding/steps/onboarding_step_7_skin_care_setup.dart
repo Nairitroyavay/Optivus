@@ -29,6 +29,8 @@ const String _onboarding7NoTypedProductsMessage =
     'Type one product per line, for example "Minimalist SPF 50 - sunscreen".';
 const String _onboarding7AiEmptyMessage =
     'AI returned no usable routine. Try again or use typed product names.';
+const String _onboarding7AiEmptyOwnedProductsMessage =
+    'AI returned notes but no routine. Try 2 times/day or typed product names.';
 const String _onboarding7PhotoUnreadableMessage =
     'AI could not read your products. Upload a clearer photo or use typed product names.';
 
@@ -352,6 +354,9 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
       text.contains('provider_invalid_json')) {
     return 'AI response could not be read safely. Please try again.';
   }
+  if (text.contains('may not safely support')) {
+    return onboarding7UnsafeFrequencyMessage;
+  }
   if (text.contains('unavailable') || text.contains('provider_timeout')) {
     return 'AI skin care service is unavailable. Try again later.';
   }
@@ -612,6 +617,14 @@ List<String> _readNoteParts(dynamic value) {
   }
   final text = _stringValue(value).trim();
   return text.isEmpty ? const [] : [text];
+}
+
+bool _hasUnsafeFrequencyWarning(Iterable<String> warnings) {
+  return warnings.any((warning) {
+    final lower = warning.toLowerCase();
+    return lower.contains('may not safely support') ||
+        lower.contains('try 2 times per day');
+  });
 }
 
 String _capSkinCareNote(String value) {
@@ -1058,7 +1071,7 @@ class _HasProductsModeScreen extends ConsumerStatefulWidget {
 
 class _HasProductsModeScreenState
     extends ConsumerState<_HasProductsModeScreen> {
-  static const double _setupTileHeight = 156;
+  static const double _setupTileHeight = 184;
 
   late final TextEditingController _controller;
   UploadedAsset? _uploadedAsset;
@@ -1387,6 +1400,14 @@ class _HasProductsModeScreenState
           '[Onboarding7] routinePlansReturned='
           '${result.routinePlans.map((plan) => plan.toMap()).toList()}',
         );
+        debugPrint('[Onboarding7] weeklyRoutine=${result.weeklyRoutine}');
+        debugPrint(
+          '[Onboarding7] suggestedProducts=${result.suggestedProducts}',
+        );
+        debugPrint('[Onboarding7] warnings=${result.warnings}');
+        debugPrint(
+          '[Onboarding7] rejectedPlanReasons=${result.rejectedPlanReasons}',
+        );
       }
       final routinePlans = result.routinePlans.isNotEmpty
           ? result.routinePlans
@@ -1397,7 +1418,9 @@ class _HasProductsModeScreenState
         setState(() {
           _generating = false;
           if (routinePlans.isEmpty && !result.hasError) {
-            _generationError = _onboarding7AiEmptyMessage;
+            _generationError = ownedProductNames.isNotEmpty
+                ? _onboarding7AiEmptyOwnedProductsMessage
+                : _onboarding7AiEmptyMessage;
           } else {
             _generationError =
                 didCompactPayloadRetry &&
@@ -1415,6 +1438,13 @@ class _HasProductsModeScreenState
       final partitioned = onboarding7PartitionRoutinePlans(routinePlans);
       final dailyPlans = partitioned.dailyPlans;
       final specialPlans = partitioned.specialCarePlans;
+      final unsafeFrequencyReturned =
+          desiredApplicationsPerDay > 2 &&
+          dailyPlans.length >= 2 &&
+          _hasUnsafeFrequencyWarning(result.warnings);
+      final scheduleApplicationsPerDay = unsafeFrequencyReturned
+          ? 2
+          : desiredApplicationsPerDay;
       final missingProductNotes = onboarding7MissingBasicProductNotes(
         productNames: ownedProductNames,
         productDetails: ownedProductDetails,
@@ -1432,7 +1462,7 @@ class _HasProductsModeScreenState
       final schedule = onboarding7ScheduleSkinCareRoutine(
         baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
         routinePlans: dailyPlans,
-        desiredApplicationsPerDay: desiredApplicationsPerDay,
+        desiredApplicationsPerDay: scheduleApplicationsPerDay,
         fallbackProductNames: ownedProductNames,
         fallbackProductDetails: ownedProductDetails,
         forceEveryDay: true,
@@ -1450,8 +1480,9 @@ class _HasProductsModeScreenState
         if (!mounted) return;
         setState(() {
           _generating = false;
-          _generationError =
-              schedule.errorMessage ?? _onboarding7AiEmptyMessage;
+          _generationError = unsafeFrequencyReturned
+              ? onboarding7UnsafeFrequencyMessage
+              : schedule.errorMessage ?? _onboarding7AiEmptyMessage;
         });
         return;
       }
@@ -1463,7 +1494,7 @@ class _HasProductsModeScreenState
         return base.copyWith(
           blocks: nextBlocks,
           skinCareProductNames: _controller.text,
-          skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+          skinCareDesiredApplicationsPerDay: scheduleApplicationsPerDay,
           skinCareSkipped: false,
           skinCareSpecialCareNotes: specialCareNotes,
         );
@@ -1472,6 +1503,9 @@ class _HasProductsModeScreenState
       if (!mounted) return;
       setState(() {
         _generating = false;
+        _generationError = unsafeFrequencyReturned
+            ? onboarding7UnsafeFrequencyMessage
+            : null;
       });
     } catch (e, st) {
       debugPrint('Error generating routine (Products): $e\n$st');
@@ -1503,12 +1537,16 @@ class _HasProductsModeScreenState
     final textInputEnabled = !busy && _inputSource != _ProductInputSource.photo;
     final photoUploadEnabled =
         !busy && _inputSource != _ProductInputSource.typed;
+    final typedPreviewProducts = _inputSource == _ProductInputSource.typed
+        ? onboarding7ParseTypedProductDetails(_controller.text)
+        : const <SkinCareDetectedProduct>[];
 
     final setupCard = _HasProductsSetupCard(
       controller: _controller,
       asset: effectiveAsset,
       tileHeight: _setupTileHeight,
       sourceLabel: sourceLabel,
+      typedPreviewProducts: typedPreviewProducts,
       desiredApplicationsPerDay: widget.base.skinCareDesiredApplicationsPerDay,
       uploadBusy: uploadBusy,
       uploadStatusLabel: uploadBusy
@@ -1725,6 +1763,7 @@ class _HasProductsSetupCard extends StatelessWidget {
   final UploadedAsset? asset;
   final double tileHeight;
   final String? sourceLabel;
+  final List<SkinCareDetectedProduct> typedPreviewProducts;
   final int desiredApplicationsPerDay;
   final bool uploadBusy;
   final String? uploadStatusLabel;
@@ -1745,6 +1784,7 @@ class _HasProductsSetupCard extends StatelessWidget {
     required this.asset,
     required this.tileHeight,
     required this.sourceLabel,
+    required this.typedPreviewProducts,
     required this.desiredApplicationsPerDay,
     required this.uploadBusy,
     required this.uploadStatusLabel,
@@ -1842,6 +1882,10 @@ class _HasProductsSetupCard extends StatelessWidget {
               );
             },
           ),
+          if (typedPreviewProducts.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _TypedProductPreviewChips(products: typedPreviewProducts),
+          ],
           const SizedBox(height: 12),
           _SkinCareFrequencySelector(
             value: desiredApplicationsPerDay,
@@ -1968,6 +2012,67 @@ class _SkinCareProductNamesTarget extends StatelessWidget {
     );
     return Opacity(opacity: enabled ? 1 : 0.55, child: child);
   }
+}
+
+class _TypedProductPreviewChips extends StatelessWidget {
+  final List<SkinCareDetectedProduct> products;
+
+  const _TypedProductPreviewChips({required this.products});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxChipWidth = constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : 320.0;
+        return Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: [
+            for (final product in products)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxChipWidth),
+                child: Container(
+                  key: ValueKey(
+                    'onboarding-step7-typed-product-${product.displayName}-${product.category}',
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.38),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.72),
+                    ),
+                  ),
+                  child: Text(
+                    _typedProductChipLabel(product),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      height: 1.15,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+String _typedProductChipLabel(SkinCareDetectedProduct product) {
+  final name = product.displayName.trim();
+  final category = product.category.trim();
+  if (category.isEmpty) return name;
+  return '$name · $category';
 }
 
 class _SkinCareFrequencySelector extends StatelessWidget {

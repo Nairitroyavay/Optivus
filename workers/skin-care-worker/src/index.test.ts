@@ -106,6 +106,16 @@ function richProductPayload(size: number) {
   };
 }
 
+function fiveTypedProducts() {
+  return [
+    { name: "Beardo Detan Face Wash", category: "cleanser", source: "typed" },
+    { name: "Minimalist SPF 50", category: "sunscreen", source: "typed" },
+    { name: "Minimalist Vitamin C", category: "serum", source: "typed" },
+    { name: "Minimalist Alpha Arbutin", category: "serum", source: "typed" },
+    { name: "Minimalist PHA Toner", category: "exfoliant", source: "typed" },
+  ];
+}
+
 describe("Skin-care Worker", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -268,7 +278,8 @@ describe("Skin-care Worker", () => {
     const json = await response.json() as any;
 
     expect(response.status).toBe(200);
-    expect(json.routinePlans).toHaveLength(3);
+    expect(json.routinePlans).toHaveLength(1);
+    expect(json.routinePlans[0].productNames).toEqual(["UV Aqua Gel"]);
     expect(calls[0].body.contents[0].parts[0].text).toContain("UV Aqua Gel");
   });
 
@@ -352,6 +363,109 @@ describe("Skin-care Worker", () => {
     expect(prompt).toContain("Active Product Source: typed");
     expect(prompt).toContain("Minimalist SPF 50");
     expect(prompt).not.toContain("Inactive Photo Cleanser");
+  });
+
+  test("text-only owned products build daily routinePlans when AI returns notes only", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: ["Missing moisturizer"],
+      weeklyRoutine: [],
+      warnings: ["No moisturizer detected"],
+      routinePlans: [],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(2);
+    expect(json.routinePlans[0].slotLabel).toBe("morning");
+    expect(json.routinePlans[0].productNames).toEqual([
+      "Beardo Detan Face Wash",
+      "Minimalist Vitamin C",
+      "Minimalist SPF 50",
+    ]);
+    expect(json.routinePlans[0].steps).toEqual([
+      "Cleanse face",
+      "Apply Minimalist Vitamin C",
+      "Apply Minimalist SPF 50",
+    ]);
+    expect(json.routinePlans[1].slotLabel).toBe("night");
+    expect(json.routinePlans[1].productNames).toEqual([
+      "Beardo Detan Face Wash",
+      "Minimalist Alpha Arbutin",
+    ]);
+    expect(json.routinePlans[1].steps).toEqual([
+      "Cleanse face",
+      "Apply Minimalist Alpha Arbutin",
+    ]);
+    expect(json.weeklyRoutine).toContain(
+      "Use Minimalist PHA Toner 1-2 times per week at night. Do not combine with other strong actives.",
+    );
+    expect(json.warnings.join(" ").toLowerCase()).toContain("moisturizer");
+  });
+
+  test("missing moisturizer warning does not make owned-product routine empty", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: ["No moisturizer detected"],
+      weeklyRoutine: [],
+      warnings: ["No moisturizer detected"],
+      routinePlans: [],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: [
+          { name: "Gentle Cleanser", category: "cleanser", source: "typed" },
+          { name: "Daily SPF 50", category: "sunscreen", source: "typed" },
+        ],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans.length).toBeGreaterThanOrEqual(2);
+    expect(json.routinePlans.flatMap((plan: any) => plan.productNames)).toEqual(
+      expect.arrayContaining(["Gentle Cleanser", "Daily SPF 50"]),
+    );
+    expect(json.warnings.join(" ").toLowerCase()).toContain("moisturizer");
+  });
+
+  test("three per day with limited owned products returns two safe plans and unsafe-frequency warning", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 3,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(2);
+    expect(json.warnings).toContain(
+      "These products may not safely support 3 routines per day. Try 2 times per day.",
+    );
+    expect(json.weeklyRoutine).toContain(
+      "Use Minimalist PHA Toner 1-2 times per week at night. Do not combine with other strong actives.",
+    );
   });
 
   test("photo source prompt uses productsFromPhoto and excludes typed products", async () => {

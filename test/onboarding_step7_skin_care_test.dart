@@ -437,7 +437,7 @@ void main() {
     expect(find.text('Morning skin care'), findsNothing);
     expect(
       find.text(
-        'AI returned no usable routine. Try again or use typed product names.',
+        'AI returned notes but no routine. Try 2 times/day or typed product names.',
       ),
       findsOneWidget,
     );
@@ -626,6 +626,36 @@ void main() {
       expect(client.analyzeCalls, 0);
       expect(client.lastGenerateParams?['productsFromPhoto'], isNull);
       expect(client.lastGenerateParams?['typedProductDetails'], isNotNull);
+    },
+  );
+
+  testWidgets(
+    '10bb. Typed products show parsed preview chips before generate',
+    (tester) async {
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Beardo Detan Face Wash - cleanser\n'
+        'Minimalist SPF 50 - sunscreen\n'
+        'Minimalist Vitamin C - serum\n'
+        'Minimalist Alpha Arbutin - serum\n'
+        'Minimalist PHA Toner - exfoliant',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Beardo Detan Face Wash · cleanser'), findsOneWidget);
+      expect(find.text('Minimalist SPF 50 · sunscreen'), findsOneWidget);
+      expect(find.text('Minimalist Vitamin C · serum'), findsOneWidget);
+      expect(find.text('Minimalist Alpha Arbutin · serum'), findsOneWidget);
+      expect(find.text('Minimalist PHA Toner · exfoliant'), findsOneWidget);
     },
   );
 
@@ -1247,7 +1277,7 @@ void main() {
       expect(blocks, isEmpty);
       expect(
         find.text(
-          'These products may not safely support this many routines per day. Try 2 times per day.',
+          'These products may not safely support 3 routines per day. Try 2 times per day.',
         ),
         findsOneWidget,
       );
@@ -1292,9 +1322,58 @@ void main() {
       expect(blocks, isEmpty);
       expect(
         find.text(
-          'These products may not safely support this many routines per day. Try 2 times per day.',
+          'These products may not safely support 3 routines per day. Try 2 times per day.',
         ),
         findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    '19b. Worker unsafe-frequency warning schedules 2 safe plans for 3/day request',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: SkinCareAiRoutineResult(
+          routinePlans: _skinCarePlansForCount(2),
+          morningRoutine: const [],
+          nightRoutine: const [],
+          weeklyRoutine: const [],
+          timelineBlocks: const [],
+          warnings: const [onboarding7UnsafeFrequencyMessage],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser, Sunscreen',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final blocks = base.confirmedBlocksForSection('skin_care');
+
+      expect(blocks, hasLength(2));
+      expect(base.skinCareDesiredApplicationsPerDay, 2);
+      expect(find.text(onboarding7UnsafeFrequencyMessage), findsOneWidget);
+      expect(
+        find.textContaining('AI returned no usable routine'),
+        findsNothing,
       );
     },
   );
@@ -1553,7 +1632,7 @@ void main() {
       expect(find.text('2 special-care notes'), findsOneWidget);
       expect(
         find.text(
-          'These products may not safely support this many routines per day. Try 2 times per day.',
+          'These products may not safely support 3 routines per day. Try 2 times per day.',
         ),
         findsOneWidget,
       );
@@ -2951,7 +3030,7 @@ void main() {
     const productMismatchMessage =
         'AI used products outside your list. Try again.';
     const unsafeFrequencyMessage =
-        'These products may not safely support this many routines per day. Try 2 times per day.';
+        'These products may not safely support 3 routines per day. Try 2 times per day.';
 
     final sunscreenOnly = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
