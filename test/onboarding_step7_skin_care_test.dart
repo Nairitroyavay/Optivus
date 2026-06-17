@@ -1038,6 +1038,159 @@ void main() {
     );
   });
 
+  testWidgets(
+    '13b. 3/day split night variants schedule exactly 3 blocks per day',
+    (tester) async {
+      const strongActiveNote =
+          'Minimalist PHA Toner is used only on Wednesday and Saturday nights. Do not combine with other strong actives.';
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Morning Skin Care',
+              steps: [
+                'Cleanse face',
+                'Apply Minimalist Vitamin C',
+                'Apply Minimalist SPF 50',
+              ],
+              productNames: [
+                'Beardo Detan Face Wash',
+                'Minimalist Vitamin C',
+                'Minimalist SPF 50',
+              ],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'midday',
+              title: 'Midday Skin Care',
+              steps: ['Reapply Minimalist SPF 50'],
+              productNames: ['Minimalist SPF 50'],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Night Skin Care',
+              steps: [
+                'Cleanse face',
+                'Apply Minimalist Alpha Arbutin',
+                'Add moisturizer when available',
+              ],
+              productNames: [
+                'Beardo Detan Face Wash',
+                'Minimalist Alpha Arbutin',
+              ],
+              missingItems: [
+                SkinCareMissingItem(
+                  name: 'Moisturizer',
+                  importance: 'important',
+                  reason: 'Helps reduce dryness/irritation after serum.',
+                ),
+              ],
+              repeatDays: [1, 2, 4, 5, 7],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Night Skin Care',
+              steps: [
+                'Cleanse face',
+                'Apply Minimalist Alpha Arbutin',
+                'Apply Minimalist PHA Toner',
+                'Add moisturizer when available',
+              ],
+              productNames: [
+                'Beardo Detan Face Wash',
+                'Minimalist Alpha Arbutin',
+                'Minimalist PHA Toner',
+              ],
+              missingItems: [
+                SkinCareMissingItem(
+                  name: 'Moisturizer',
+                  importance: 'important',
+                  reason: 'Helps reduce dryness/irritation after serum.',
+                ),
+              ],
+              repeatDays: [3, 6],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [strongActiveNote],
+          timelineBlocks: [],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Beardo Detan Face Wash - cleanser\n'
+        'Minimalist SPF 50 - sunscreen\n'
+        'Minimalist Vitamin C - serum\n'
+        'Minimalist Alpha Arbutin - serum\n'
+        'Minimalist PHA Toner - exfoliant',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final blocks = base.confirmedBlocksForSection('skin_care');
+
+      expect(blocks, hasLength(4));
+      for (final day in onboarding7EveryDay) {
+        expect(onboarding7RoutineCountForDay(blocks, day), 3);
+      }
+      final activeNight = blocks.singleWhere(
+        (block) => block.skincareProducts.contains('Minimalist PHA Toner'),
+      );
+      expect(activeNight.skincareSlotLabel, 'night');
+      expect(activeNight.repeatDays, [3, 6]);
+      expect(
+        blocks
+            .where((block) => block.skincareSlotLabel == 'night')
+            .where(
+              (block) => !block.skincareProducts.contains(
+                'Minimalist PHA Toner',
+              ),
+            )
+            .single
+            .repeatDays,
+        [1, 2, 4, 5, 7],
+      );
+      expect(
+        base.skinCareSpecialCareNotes,
+        contains(strongActiveNote),
+      );
+      expect(
+        base.skinCareSpecialCareNotes.any(
+          (note) => note.startsWith('Special care:'),
+        ),
+        isFalse,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-special-care-notes-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(strongActiveNote), findsOneWidget);
+      expect(find.textContaining('AI returned no usable routine'), findsNothing);
+    },
+  );
+
   testWidgets('14. Selecting 4 routines per day creates 4 skin-care blocks', (
     tester,
   ) async {
@@ -1434,6 +1587,10 @@ void main() {
               'category': 'sunscreen',
               'possibleActives': ['UV filters'],
             },
+            {
+              'name': 'Photo Cleanser',
+              'category': 'cleanser',
+            },
           ],
         ),
         routineResult: const SkinCareAiRoutineResult(
@@ -1451,10 +1608,10 @@ void main() {
               productNames: ['sunscreen'],
             ),
             SkinCareRoutinePlan(
-              slotLabel: 'afternoon',
-              title: 'Afternoon SPF',
-              steps: ['Apply sunscreen'],
-              productNames: ['sunscreen'],
+              slotLabel: 'night',
+              title: 'Night Cleanse',
+              steps: ['Cleanse'],
+              productNames: ['cleanser'],
             ),
           ],
           morningRoutine: [],
@@ -1503,8 +1660,9 @@ void main() {
       expect(client.lastGenerateParams?['productInputSource'], 'photo');
       expect(client.lastGenerateParams?['typedProductDetails'], isNull);
       expect(client.lastGenerateParams?['typedProductNames'], isNull);
-      expect(productsFromPhoto.single['category'], 'sunscreen');
-      expect(productsFromPhoto.single['possibleActives'], ['UV filters']);
+      expect(productsFromPhoto, hasLength(2));
+      expect(productsFromPhoto.first['category'], 'sunscreen');
+      expect(productsFromPhoto.first['possibleActives'], ['UV filters']);
     },
   );
 
@@ -3110,10 +3268,10 @@ void main() {
     const fewerRoutinesMessage =
         'AI returned fewer routines than requested. Try again or choose fewer times per day.';
 
-    final sunscreenOnly = onboarding7ScheduleSkinCareRoutine(
+    final sunscreenWithNightCleanser = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
-      desiredApplicationsPerDay: 2,
-      ownedProductNames: const ['Daily Sunscreen'],
+      desiredApplicationsPerDay: 3,
+      ownedProductNames: const ['Daily Sunscreen', 'Gentle Cleanser'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
@@ -3127,22 +3285,34 @@ void main() {
           steps: ['Reapply sunscreen'],
           productNames: ['sunscreen'],
         ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night Cleanse',
+          steps: ['Cleanse'],
+          productNames: ['Gentle Cleanser'],
+        ),
       ],
       now: DateTime.utc(2026, 6, 15),
     );
-    expect(sunscreenOnly.errorMessage, isNull);
-    expect(sunscreenOnly.blocks, hasLength(2));
+    expect(sunscreenWithNightCleanser.errorMessage, isNull);
+    expect(sunscreenWithNightCleanser.blocks, hasLength(3));
     expect(
-      sunscreenOnly.blocks
+      sunscreenWithNightCleanser.blocks
           .singleWhere((block) => block.skincareSlotLabel == 'morning')
           .skincareProducts,
       ['Daily Sunscreen'],
     );
     expect(
-      sunscreenOnly.blocks
+      sunscreenWithNightCleanser.blocks
           .singleWhere((block) => block.skincareSlotLabel == 'midday')
           .skincareSteps,
       ['Reapply sunscreen'],
+    );
+    expect(
+      sunscreenWithNightCleanser.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'night')
+          .skincareProducts,
+      ['Gentle Cleanser'],
     );
 
     final nameVariations = onboarding7ScheduleSkinCareRoutine(

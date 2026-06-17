@@ -1464,27 +1464,12 @@ class _HasProductsModeScreenState
         specialCarePlans: specialPlans,
         ownedProductNames: ownedProductNames,
       );
-
-      final aiReturnedFewerDailyPlans =
-          dailyPlans.length < desiredApplicationsPerDay;
-      if (aiReturnedFewerDailyPlans) {
-        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-          return base.copyWith(
-            blocks: base.blocks.where((b) => b.section != 'skin_care').toList(),
-            skinCareProductNames: _controller.text,
-            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-            skinCareSkipped: false,
-            skinCareSpecialCareNotes: specialCareNotesForResult,
-          );
-        });
-        if (!mounted) return;
-        setState(() {
-          _generating = false;
-          _generationError = dailyPlans.isEmpty
-              ? _onboarding7AiEmptyMessage
-              : _onboarding7AiFewerRoutinesMessage;
-        });
-        return;
+      if (kDebugMode) {
+        debugPrint(
+          '[Onboarding7] dailyPlanPerDayCounts='
+          '${onboarding7RoutinePlanCountsByDay(dailyPlans)} '
+          'desired=$desiredApplicationsPerDay',
+        );
       }
 
       final schedule = onboarding7ScheduleSkinCareRoutine(

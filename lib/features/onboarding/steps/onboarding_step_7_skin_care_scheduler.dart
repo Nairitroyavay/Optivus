@@ -34,6 +34,9 @@ class Onboarding7SkinCareScheduleResult {
 
 @visibleForTesting
 bool onboarding7IsSpecialCarePlan(SkinCareRoutinePlan plan) {
+  if (_isStrongActiveNightSplitVariant(plan)) {
+    return false;
+  }
   final fields = [
     plan.title,
     plan.slotLabel,
@@ -46,6 +49,25 @@ bool onboarding7IsSpecialCarePlan(SkinCareRoutinePlan plan) {
     return false;
   }
   return !_planExplicitlyAllowsDailyStrongActive(plan);
+}
+
+bool _isStrongActiveNightSplitVariant(SkinCareRoutinePlan plan) {
+  final repeatDays = _safeRepeatDays(plan.repeatDays);
+  if (_canonicalSlotLabel(plan.slotLabel) != 'night') return false;
+  if (repeatDays.length != 2 ||
+      !repeatDays.contains(3) ||
+      !repeatDays.contains(6)) {
+    return false;
+  }
+  final fields = [
+    plan.title,
+    ...plan.steps,
+    ...plan.productNames,
+    ...plan.warnings,
+  ];
+  if (!fields.any(_looksLikeStrongActive)) return false;
+  return plan.productNames.any((product) => !_looksLikeStrongActive(product)) ||
+      plan.steps.any((step) => !_looksLikeStrongActive(step));
 }
 
 class Onboarding7PartitionedPlans {
@@ -345,8 +367,9 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
     desiredApplicationsPerDay: desired,
     ownedProductNames: ownedProductNames,
     ownedProductDetails: ownedProductDetails,
+    forceEveryDay: forceEveryDay,
   );
-  if (adaptedPlans.hasError || adaptedPlans.plans.length < desired) {
+  if (adaptedPlans.hasError) {
     return Onboarding7SkinCareScheduleResult(
       blocks: [],
       errorMessage:
@@ -366,17 +389,20 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   );
   final scheduledSingles = <TimelineBlockDraft>[];
 
-  for (var index = 0; index < desired; index += 1) {
+  for (var index = 0; index < adaptedPlans.plans.length; index += 1) {
     final plan = adaptedPlans.plans[index];
+    final fallbackSpec = _fallbackSlotSpecForPlan(
+      plan,
+      slotSpecs: slotSpecs,
+      index: index,
+    );
     final spec = _skinCareSlotSpecForLabel(
       plan.slotLabel,
-      fallbackSpec: slotSpecs[index],
+      fallbackSpec: fallbackSpec,
       bathBlock: bathBlock,
       wakingRange: wakingRange,
     );
-    final repeatDays = forceEveryDay
-        ? onboarding7EveryDay
-        : _safeRepeatDays(plan.repeatDays);
+    final repeatDays = _safeRepeatDays(plan.repeatDays);
 
     for (final day in repeatDays) {
       final bathWindow = _windowForDay(bathBlock, day);
@@ -481,6 +507,31 @@ int onboarding7RoutineCountForDay(List<TimelineBlockDraft> blocks, int day) {
             block.repeatDays.contains(day),
       )
       .length;
+}
+
+Map<int, int> onboarding7RoutinePlanCountsByDay(
+  List<SkinCareRoutinePlan> plans,
+) {
+  final counts = {for (final day in onboarding7EveryDay) day: 0};
+  for (final plan in plans) {
+    for (final day in _safeRepeatDays(plan.repeatDays)) {
+      counts[day] = (counts[day] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+@visibleForTesting
+bool onboarding7RoutinePlansSupportPerDayCount(
+  List<SkinCareRoutinePlan> plans,
+  int desiredApplicationsPerDay,
+) {
+  if (plans.isEmpty) return false;
+  final desired = onboarding7NormalizeDesiredApplications(
+    desiredApplicationsPerDay,
+  );
+  final counts = onboarding7RoutinePlanCountsByDay(plans);
+  return onboarding7EveryDay.every((day) => counts[day] == desired);
 }
 
 String? onboarding7MissingRoutineMessage(
@@ -599,6 +650,7 @@ List<SkinCareRoutinePlan> onboarding7SelectRoutinePlansForSchedule(
   return onboarding7AdaptRoutinePlansForSchedule(
     routinePlans: plans,
     desiredApplicationsPerDay: desiredApplicationsPerDay,
+    forceEveryDay: true,
   ).plans;
 }
 
@@ -608,6 +660,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   required int desiredApplicationsPerDay,
   List<String> ownedProductNames = const [],
   List<SkinCareDetectedProduct> ownedProductDetails = const [],
+  bool forceEveryDay = true,
 }) {
   final sourcePlans = onboarding7PartitionRoutinePlans(routinePlans).dailyPlans;
   final desired = onboarding7NormalizeDesiredApplications(
@@ -626,8 +679,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       endMinute: 23 * 60,
     ),
   );
-  final unused = sourcePlans.toList();
-  final selectedBySlot = <String, SkinCareRoutinePlan>{};
+  final selectedBySlot = <String, List<SkinCareRoutinePlan>>{};
   final ownedProducts = _ownedProductCatalogFromBasis(
     productNames: ownedProductNames,
     productDetails: ownedProductDetails,
@@ -657,11 +709,11 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   for (var index = 0; index < targetSlots.length; index += 1) {
     final slot = targetSlots[index];
     final spec = slotSpecs[index];
-    final matchIndex = unused.indexWhere(
-      (plan) => _slotCompatible(plan.slotLabel, slot, targetSlots: targetSlots),
-    );
-    if (matchIndex >= 0) {
-      final rawPlan = unused.removeAt(matchIndex);
+    final candidates = <SkinCareRoutinePlan>[];
+    for (final rawPlan in sourcePlans) {
+      if (!_slotCompatible(rawPlan.slotLabel, slot, targetSlots: targetSlots)) {
+        continue;
+      }
       final result = _ownedProductPlanForSlot(
         plan: rawPlan,
         slot: slot,
@@ -670,38 +722,23 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
       );
       final selectedPlan = result.plan;
       if (selectedPlan != null) {
-        selectedBySlot[slot] = selectedPlan;
+        candidates.add(selectedPlan);
       } else {
         recordRejection(rawPlan, result.reason);
       }
     }
-  }
-
-  for (final rawPlan in unused.toList(growable: false)) {
-    if (selectedBySlot.length >= desired) break;
-    final slot = _canonicalSlotLabel(rawPlan.slotLabel);
-    if (!_schedulableSlotLabels.contains(slot) ||
-        selectedBySlot.containsKey(slot)) {
-      continue;
-    }
-    final result = _ownedProductPlanForSlot(
-      plan: rawPlan,
-      slot: slot,
-      title: _titleForSlot(slot),
-      ownedProducts: ownedProducts,
+    final selectedForSlot = _selectRoutinePlansForSlot(
+      candidates,
+      forceEveryDay: forceEveryDay,
     );
-    final selectedPlan = result.plan;
-    if (selectedPlan == null) {
-      recordRejection(rawPlan, result.reason);
-      continue;
+    if (selectedForSlot.isNotEmpty) {
+      selectedBySlot[slot] = selectedForSlot;
     }
-    unused.remove(rawPlan);
-    selectedBySlot[slot] = selectedPlan;
   }
 
-  final selected = _orderedSelectedPlans(
+  final selected = _orderedSelectedPlansBySlot(
     selectedBySlot,
-  ).take(desired).toList(growable: false);
+  ).toList(growable: false);
   if (selected.isEmpty) {
     return Onboarding7RoutinePlanAdaptationResult(
       plans: const [],
@@ -712,7 +749,17 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
           : _noRoutineMessage,
     );
   }
-  if (selected.length < desired) {
+  final supportsDesiredPerDayCount = onboarding7RoutinePlansSupportPerDayCount(
+    selected,
+    desired,
+  );
+  if (!supportsDesiredPerDayCount) {
+    if (kDebugMode) {
+      debugPrint(
+        '[Onboarding7Scheduler] per-day routine counts='
+        '${onboarding7RoutinePlanCountsByDay(selected)} desired=$desired',
+      );
+    }
     return Onboarding7RoutinePlanAdaptationResult(
       plans: selected,
       errorMessage: sawProductMismatch
@@ -925,6 +972,18 @@ Onboarding7SkinCareSlotSpec _skinCareSlotSpecForLabel(
   };
 }
 
+Onboarding7SkinCareSlotSpec _fallbackSlotSpecForPlan(
+  SkinCareRoutinePlan plan, {
+  required List<Onboarding7SkinCareSlotSpec> slotSpecs,
+  required int index,
+}) {
+  final slot = _canonicalSlotLabel(plan.slotLabel);
+  for (final spec in slotSpecs) {
+    if (spec.slotLabel == slot) return spec;
+  }
+  return slotSpecs[index.clamp(0, slotSpecs.length - 1).toInt()];
+}
+
 bool _slotCompatible(
   String rawSlot,
   String targetSlot, {
@@ -958,30 +1017,60 @@ String _canonicalSlotLabel(String rawSlot) {
   };
 }
 
-String _titleForSlot(String slot) {
-  return switch (slot) {
-    'morning' => 'Morning Skin Care',
-    'midday' => 'Midday Skin Care',
-    'afternoon' => 'Afternoon Skin Care',
-    'night' => 'Night Skin Care',
-    _ => 'Skin Care',
-  };
-}
-
-List<SkinCareRoutinePlan> _orderedSelectedPlans(
-  Map<String, SkinCareRoutinePlan> selectedBySlot,
+List<SkinCareRoutinePlan> _orderedSelectedPlansBySlot(
+  Map<String, List<SkinCareRoutinePlan>> selectedBySlot,
 ) {
   final ordered = <SkinCareRoutinePlan>[];
   for (final slot in _schedulableSlotLabels) {
-    final plan = selectedBySlot[slot];
-    if (plan != null) ordered.add(plan);
+    final plans = selectedBySlot[slot];
+    if (plans != null) ordered.addAll(plans);
   }
   for (final entry in selectedBySlot.entries) {
     if (!_schedulableSlotLabels.contains(entry.key)) {
-      ordered.add(entry.value);
+      ordered.addAll(entry.value);
     }
   }
   return ordered;
+}
+
+List<SkinCareRoutinePlan> _selectRoutinePlansForSlot(
+  List<SkinCareRoutinePlan> candidates, {
+  required bool forceEveryDay,
+}) {
+  if (candidates.isEmpty) return const [];
+  final hasActiveNightSplit = candidates.any(_isStrongActiveNightSplitVariant);
+  if (candidates.length > 1) {
+    final counts = onboarding7RoutinePlanCountsByDay(candidates);
+    final exactlyOnePerDay = onboarding7EveryDay.every(
+      (day) => counts[day] == 1,
+    );
+    if (exactlyOnePerDay) return candidates;
+    if (hasActiveNightSplit) return candidates;
+  }
+
+  final dailyIndex = candidates.indexWhere(
+    (plan) => _safeRepeatDays(plan.repeatDays).length == 7,
+  );
+  final selected = dailyIndex >= 0 ? candidates[dailyIndex] : candidates.first;
+  if (!forceEveryDay || _isStrongActiveNightSplitVariant(selected)) {
+    return [selected];
+  }
+  return [_planWithRepeatDays(selected, onboarding7EveryDay)];
+}
+
+SkinCareRoutinePlan _planWithRepeatDays(
+  SkinCareRoutinePlan plan,
+  List<int> repeatDays,
+) {
+  return SkinCareRoutinePlan(
+    slotLabel: plan.slotLabel,
+    title: plan.title,
+    steps: plan.steps,
+    productNames: plan.productNames,
+    missingItems: plan.missingItems,
+    warnings: plan.warnings,
+    repeatDays: repeatDays,
+  );
 }
 
 SkinCareRoutinePlan _planForSlot(
@@ -1192,10 +1281,15 @@ _OwnedProductCatalog _ownedProductCatalogFromBasis({
 List<String> _safeStepsForPlan(SkinCareRoutinePlan plan) {
   final steps = <String>[];
   final allowStrongActive = _planExplicitlyAllowsDailyStrongActive(plan);
+  final repeatsEveryDay = _safeRepeatDays(plan.repeatDays).length >= 7;
   for (final raw in plan.steps) {
     final step = raw.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (step.isEmpty) continue;
-    if (!allowStrongActive && _stepLooksLikeUnsafeSpecialCare(step)) continue;
+    if (!allowStrongActive &&
+        repeatsEveryDay &&
+        _stepLooksLikeUnsafeSpecialCare(step)) {
+      continue;
+    }
     steps.add(step);
   }
   return _dedupeStrings(steps);

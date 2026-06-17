@@ -405,6 +405,10 @@ function singleOwnedProduct(
   return matches.length === 1 ? matches[0] : null;
 }
 
+function isSafeSerum(product: OwnedSkinCareProduct): boolean {
+  return isSerum(product) && !isStrongActive(product);
+}
+
 function matchOwnedProduct(value: string, products: OwnedSkinCareProduct[]): OwnedSkinCareProduct | null {
   const query = normalizedProductKey(value);
   if (!query) return null;
@@ -443,6 +447,37 @@ function matchOwnedProduct(value: string, products: OwnedSkinCareProduct[]): Own
   if (looksLikeMoisturizer(lower)) return singleOwnedProduct(products, isMoisturizer);
   if (looksLikeSerum(lower)) return singleOwnedProduct(products, isSerum);
   return null;
+}
+
+function inferOwnedProductFromStep(step: string, products: OwnedSkinCareProduct[]): OwnedSkinCareProduct | null {
+  const lower = step.toLowerCase();
+  const direct = matchOwnedProduct(step, products);
+  if (direct) return direct;
+  if (looksLikeCleanser(lower)) return singleOwnedProduct(products, isCleanser);
+  if (looksLikeSunscreen(lower) || lower.includes("sun protection")) {
+    return singleOwnedProduct(products, isSunscreen);
+  }
+  if (lower.includes("vitamin c")) return matchOwnedProduct("vitamin c serum", products);
+  if (lower.includes("alpha arbutin")) return matchOwnedProduct("alpha arbutin serum", products);
+  if (looksLikeSerum(lower)) return singleOwnedProduct(products, isSafeSerum);
+  return null;
+}
+
+function inferOwnedProductsFromSteps(
+  steps: string[],
+  products: OwnedSkinCareProduct[],
+): OwnedSkinCareProduct[] {
+  const inferred: OwnedSkinCareProduct[] = [];
+  for (const step of steps) {
+    const product = inferOwnedProductFromStep(step, products);
+    if (product) inferred.push(product);
+  }
+  return dedupeOwnedProducts(inferred);
+}
+
+function safeRepeatDays(value: any): number[] {
+  const days = repeatDays(value);
+  return days.length > 0 ? days : [1, 2, 3, 4, 5, 6, 7];
 }
 
 function dedupeOwnedProducts(products: OwnedSkinCareProduct[]): OwnedSkinCareProduct[] {
@@ -516,49 +551,116 @@ function sanitizeOwnedRoutinePlan(
   plan: any,
   products: OwnedSkinCareProduct[],
   rejectedPlanReasons: string[],
-): any | null {
+): { plans: any[]; strongActiveSplitNotes: string[] } {
   const normalized = normalizeRoutinePlan(plan);
   if (!normalized) {
     rejectedPlanReasons.push("empty");
-    return null;
+    return { plans: [], strongActiveSplitNotes: [] };
   }
 
   const matched: OwnedSkinCareProduct[] = [];
   if (normalized.productNames.length === 0) {
-    rejectedPlanReasons.push(`missing_product_names:${normalized.slotLabel}:${normalized.title}`);
-    return null;
-  }
-  for (const productName of normalized.productNames) {
-    const product = matchOwnedProduct(productName, products);
-    if (!product) {
-      rejectedPlanReasons.push(`product_mismatch:${normalized.slotLabel}:${productName}`);
+    const inferred = inferOwnedProductsFromSteps(normalized.steps, products);
+    if (inferred.length === 0) {
+      rejectedPlanReasons.push(`missing_product_names:${normalized.slotLabel}:${normalized.title}`);
+      return { plans: [], strongActiveSplitNotes: [] };
     } else {
-      matched.push(product);
+      rejectedPlanReasons.push(`missing_product_names_inferred:${normalized.slotLabel}`);
+      matched.push(...inferred);
     }
+  } else {
+    for (const productName of normalized.productNames) {
+      const product = matchOwnedProduct(productName, products);
+      if (!product) {
+        rejectedPlanReasons.push(`product_mismatch:${normalized.slotLabel}:${productName}`);
+      } else {
+        matched.push(product);
+      }
+    }
+    matched.push(...inferOwnedProductsFromSteps(normalized.steps, products));
   }
 
   const ownedPlanProducts = dedupeOwnedProducts(matched);
   if (ownedPlanProducts.length === 0) {
     rejectedPlanReasons.push(`empty:${normalized.slotLabel}:${normalized.title}`);
-    return null;
-  }
-  if (_planHasUnsafeStrongActive(normalized, ownedPlanProducts)) {
-    rejectedPlanReasons.push(`unsafe:${normalized.slotLabel}:${normalized.title}`);
-    return null;
+    return { plans: [], strongActiveSplitNotes: [] };
   }
   if (normalized.slotLabel === "night" && ownedPlanProducts.every(isSunscreen)) {
     rejectedPlanReasons.push(`unsafe:${normalized.slotLabel}:night_sunscreen`);
-    return null;
+    return { plans: [], strongActiveSplitNotes: [] };
+  }
+
+  const missingItems = sanitizeMissingItemsForOwnedProducts(
+    normalized.missingItems,
+    products,
+  );
+  const planHasStrongActive = _planHasStrongActive(normalized, ownedPlanProducts);
+  if (planHasStrongActive && !_planExplicitlyAllowsDailyStrongActive(normalized)) {
+    return repairStrongActiveRoutinePlan(
+      normalized,
+      ownedPlanProducts,
+      missingItems,
+      rejectedPlanReasons,
+    );
   }
 
   return {
+    plans: [{
+      ...normalized,
+      steps: normalized.steps,
+      productNames: ownedPlanProducts.map((product) => product.name),
+      missingItems,
+    }],
+    strongActiveSplitNotes: [],
+  };
+}
+
+function repairStrongActiveRoutinePlan(
+  normalized: any,
+  ownedPlanProducts: OwnedSkinCareProduct[],
+  missingItems: Array<{ name: string; importance: string; reason: string }>,
+  rejectedPlanReasons: string[],
+): { plans: any[]; strongActiveSplitNotes: string[] } {
+  const safeProducts = dedupeOwnedProducts(
+    ownedPlanProducts.filter((product) => !isStrongActive(product)),
+  );
+  const strongProducts = dedupeOwnedProducts(
+    ownedPlanProducts.filter((product) => isStrongActive(product)),
+  );
+  const safeSteps = normalized.steps.filter((step: string) => !looksLikeStrongActive(step));
+  const activeSteps = normalized.steps.filter((step: string) => looksLikeStrongActive(step));
+  if (safeProducts.length === 0) {
+    rejectedPlanReasons.push(`unsafe_no_safe_products:${normalized.slotLabel}:${normalized.title}`);
+    return { plans: [], strongActiveSplitNotes: [] };
+  }
+
+  const normalPlan = {
     ...normalized,
-    steps: normalized.steps,
-    productNames: ownedPlanProducts.map((product) => product.name),
-    missingItems: sanitizeMissingItemsForOwnedProducts(
-      normalized.missingItems,
-      products,
-    ),
+    repeatDays: [1, 2, 4, 5, 7],
+    productNames: safeProducts.map((product) => product.name),
+    steps: safeSteps,
+    missingItems,
+  };
+  const activeProducts = dedupeOwnedProducts([...safeProducts, ...strongProducts]);
+  const activePlan = {
+    ...normalized,
+    slotLabel: "night",
+    repeatDays: [3, 6],
+    productNames: activeProducts.map((product) => product.name),
+    steps: [...safeSteps, ...activeSteps],
+    missingItems,
+    warnings: [
+      ...normalized.warnings,
+      "Use strong actives only 2 times per week. Do not combine with other exfoliants/retinoids.",
+    ],
+  };
+  const activeProductName = strongProducts[0]?.name || activeSteps[0] || normalized.title;
+  rejectedPlanReasons.push(`strong_active_split:${normalized.slotLabel}:${activeProductName}`);
+  return {
+    plans: [normalPlan, activePlan],
+    strongActiveSplitNotes: [
+      `${activeProductName} is used only on Wednesday and Saturday nights. Do not combine with other strong actives.`,
+    ],
   };
 }
 
@@ -584,8 +686,7 @@ function sanitizeMissingItemsForOwnedProducts(
   return result;
 }
 
-function _planHasUnsafeStrongActive(plan: any, products: OwnedSkinCareProduct[]): boolean {
-  if (_planExplicitlyAllowsDailyStrongActive(plan)) return false;
+function _planHasStrongActive(plan: any, products: OwnedSkinCareProduct[]): boolean {
   return products.some(isStrongActive) || plan.steps.some((step: string) => looksLikeStrongActive(step));
 }
 
@@ -601,6 +702,30 @@ function _planExplicitlyAllowsDailyStrongActive(plan: any): boolean {
     content.includes("safe to use daily") ||
     content.includes("daily safe") ||
     content.includes("daily use is safe");
+}
+
+function routinePlanPerDayCounts(plans: any[]): Record<string, number> {
+  const counts: Record<string, number> = {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0,
+  };
+  for (const plan of plans) {
+    for (const day of safeRepeatDays(plan?.repeatDays)) {
+      counts[String(day)] = (counts[String(day)] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function supportsDesiredPerDayCount(plans: any[], desiredApplicationsPerDay: number): boolean {
+  if (plans.length === 0) return false;
+  const counts = routinePlanPerDayCounts(plans);
+  return Object.values(counts).every((count) => count === desiredApplicationsPerDay);
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -798,19 +923,24 @@ Use ONLY the owned products above. Do not merge photo and typed products. Do not
 When source is photo, these are productsFromPhoto. When source is typed, these are typedProductDetails.
 Pay attention to name, category, source, keyIngredients, possibleActives, usageHint, warningIfAny, and confidence.
 Use product categories and ingredient/active metadata to identify product roles, especially sunscreen. A product may be sunscreen if category is sunscreen, name mentions UV/sun/SPF, ingredients/actives mention UV filters, or warnings/usage imply sun protection.
+Use only owned products. Return exact owned product names in routinePlans.productNames. If product names are unclear, use the closest exact owned name from the owned list.
 If at least one usable owned product exists, do not return notes only. Return routinePlans with productNames using exact owned product names and missingItems for important missing categories.
-Missing moisturizer, cleanser, or sunscreen must not block generation. If moisturizer is missing, add missingItems entry {"name":"Moisturizer","importance":"important","reason":"Helps reduce dryness/irritation after serum."} to the night routine when relevant. If sunscreen is missing, add missingItems entry {"name":"Sunscreen","importance":"important","reason":"Needed for daytime protection."} to morning/daytime routine when relevant. If cleanser is missing, add missingItems entry {"name":"Cleanser","importance":"important","reason":"Needed before applying leave-on products."} to morning/night routine when relevant.
+Missing moisturizer, cleanser, or sunscreen must not block generation or reduce selected routine count. If moisturizer is missing, add missingItems entry {"name":"Moisturizer","importance":"important","reason":"Helps reduce dryness/irritation after serum."} to the night routine when relevant. If sunscreen is missing, add missingItems entry {"name":"Sunscreen","importance":"important","reason":"Needed for daytime protection."} to morning/daytime routine when relevant. If cleanser is missing, add missingItems entry {"name":"Cleanser","importance":"important","reason":"Needed before applying leave-on products."} to morning/night routine when relevant.
 Do not name outside products in suggestedProducts, weeklyRoutine, routinePlans.productNames, warnings, or notes for an owned-product request. missingItems may use generic category names only and must not be converted into productNames. If the user owns an incomplete set, still build the best safe limited routine from available products.
 Return routinePlans.productNames using EXACT owned product names from the list above. Do not use generic names if an exact product name is available.
-If at least one usable owned product exists, return exactly ${desiredApplicationsPerDay} routinePlans.
-For 2/day: morning + night. For 3/day: morning + midday/afternoon + night. For 4/day: morning + midday + afternoon + night.
+If at least one usable owned product exists, return the selected routine count per day.
+For 2/day: morning + night. For 3/day: morning + midday + night. For 4/day: morning + midday + afternoon + night.
 Missing important categories must go into missingItems.
 Missing moisturizer/cleanser/sunscreen must not reduce routinePlan count.
 Only return fewer routinePlans if no safe usable routine can be described.
 Do not invent owned products.
 productNames = exact owned product names only.
 missingItems = missing important categories/products not owned.
-If a product is a strong active or exfoliant such as PHA, AHA, BHA, retinol, or peeling solution, do not schedule it daily unless the owned product metadata explicitly says daily use is safe. Put non-daily strong actives in weeklyRoutine instead.`
+Strong actives include PHA, AHA, BHA, retinol, retinal, tretinoin, adapalene, exfoliant, peeling, glycolic, lactic, salicylic, mandelic, benzoyl peroxide.
+Do not put strong actives in daily morning/midday/afternoon routines. Do not create an extra special-care block.
+Put strong actives only inside the existing night slot on exactly two repeat days per week.
+Split night routine when needed: normal night without strong active repeatDays [1,2,4,5,7], active night with strong active repeatDays [3,6].
+This must not increase the number of blocks on any day. For 3/day with a strong active, valid routinePlans are morning [1,2,3,4,5,6,7], midday [1,2,3,4,5,6,7], night normal [1,2,4,5,7], night active [3,6]. Per-day count remains 3.`
     : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
 
   const prompt = `You are an expert dermatologist. Generate skin-care routine plans. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
@@ -824,7 +954,7 @@ Use warningIfAny and possibleActives to avoid unsafe conflicts. E.g. avoid Retin
 If a face photo is provided, use it to personalize the routine and suggested products.
 Use slot labels from: morning, midday, afternoon, night, custom.
 For 2/day prefer morning + night.
-For 3/day prefer morning + midday/afternoon + night.
+For 3/day use morning + midday + night.
 For 4/day prefer morning + midday + afternoon + night.
 
 Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks may be included only for compatibility; Flutter will ignore all start/end times:
@@ -881,25 +1011,39 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const catalog = ownedProductMode ? ownedProductCatalog(ownedProducts) : [];
   const rawWeeklyRoutine = Array.isArray(parsed.weeklyRoutine) ? parsed.weeklyRoutine : [];
   const rawSuggestedProducts = Array.isArray(parsed.suggestedProducts) ? parsed.suggestedProducts : [];
+  const strongActiveSplitNotes: string[] = [];
   const routinePlans = ownedProductMode
-    ? rawRoutinePlans
-        .map((plan: any) => sanitizeOwnedRoutinePlan(plan, catalog, rejectedPlanReasons))
-        .filter((plan: any) => plan !== null)
+    ? rawRoutinePlans.flatMap((plan: any) => {
+        const result = sanitizeOwnedRoutinePlan(plan, catalog, rejectedPlanReasons);
+        strongActiveSplitNotes.push(...result.strongActiveSplitNotes);
+        return result.plans;
+      })
     : rawRoutinePlans
         .map(normalizeRoutinePlan)
         .filter((plan: any) => plan !== null);
   const warnings = stringList(parsed.warnings);
   if (routinePlans.length === 0) {
     warnings.push("ai_returned_no_usable_routine");
-  } else if (routinePlans.length < desiredApplicationsPerDay) {
+  } else if (!supportsDesiredPerDayCount(routinePlans, desiredApplicationsPerDay)) {
     warnings.push("ai_returned_fewer_routines");
   }
   const weeklyRoutine = ownedProductMode
-    ? stringList(rawWeeklyRoutine.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
+    ? stringList([
+        ...rawWeeklyRoutine.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText),
+        ...strongActiveSplitNotes,
+      ])
     : rawWeeklyRoutine;
   const suggestedProducts = ownedProductMode
     ? stringList(rawSuggestedProducts.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
     : rawSuggestedProducts;
+  const perDayRoutineCounts = routinePlanPerDayCounts(routinePlans);
+  console.log("[SkinCareWorker] routine-generate productInputSource=", activeSource);
+  console.log("[SkinCareWorker] ownedProducts=", JSON.stringify(ownedProducts));
+  console.log("[SkinCareWorker] raw routinePlans=", JSON.stringify(rawRoutinePlans));
+  console.log("[SkinCareWorker] sanitized routinePlans=", JSON.stringify(routinePlans));
+  console.log("[SkinCareWorker] rejectedPlanReasons=", JSON.stringify(rejectedPlanReasons));
+  console.log("[SkinCareWorker] strongActiveSplitNotes=", JSON.stringify(strongActiveSplitNotes));
+  console.log("[SkinCareWorker] per-day routine counts=", JSON.stringify(perDayRoutineCounts));
   const compatibilityStartForSlot = (slotLabel: string | undefined, index: number): number => {
     const slot = String(slotLabel || "").toLowerCase();
     if (slot === "morning") return 7 * 60;
@@ -933,7 +1077,9 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     timelineBlocks: compatibilityTimelineBlocks,
     suggestedProducts,
     warnings,
-    rejectedPlanReasons
+    rejectedPlanReasons,
+    strongActiveSplitNotes,
+    perDayRoutineCounts
   });
 }
 
