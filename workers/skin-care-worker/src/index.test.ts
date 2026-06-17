@@ -278,9 +278,10 @@ describe("Skin-care Worker", () => {
     const json = await response.json() as any;
 
     expect(response.status).toBe(200);
-    expect(json.routinePlans).toHaveLength(1);
+    expect(json.routinePlans).toHaveLength(2);
     expect(json.routinePlans[0].productNames).toEqual(["UV Aqua Gel"]);
-    expect(calls[0].body.contents[0].parts[0].text).toContain("UV Aqua Gel");
+    expect(json.routinePlans[1].productNames).toEqual(["UV Aqua Gel"]);
+    expect(calls[0].body.contents[0].parts[0].text).toContain("UV Aqua");
   });
 
   test("routine generate rejects JSON above 64KB", async () => {

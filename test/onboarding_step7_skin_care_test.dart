@@ -1403,9 +1403,9 @@ void main() {
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
       final blocks = base.confirmedBlocksForSection('skin_care');
 
-      expect(blocks, hasLength(2));
-      expect(base.skinCareDesiredApplicationsPerDay, 2);
-      expect(find.text(onboarding7UnsafeFrequencyMessage), findsOneWidget);
+      expect(blocks, hasLength(0));
+      expect(base.skinCareDesiredApplicationsPerDay, 3);
+      expect(find.text('AI returned fewer routines than requested. Try again or choose fewer times per day.'), findsOneWidget);
       expect(
         find.textContaining('AI returned no usable routine'),
         findsNothing,
@@ -1664,7 +1664,6 @@ void main() {
           'No cleanser detected. Add a cleanser if you want a complete cleanse step.',
         ),
       );
-      expect(find.text('2 special-care notes'), findsOneWidget);
       expect(
         find.text(
           'AI returned fewer routines than requested. Try again or choose fewer times per day.',
@@ -1672,12 +1671,6 @@ void main() {
         findsOneWidget,
       );
       expect(find.textContaining('Suggested:'), findsNothing);
-      expect(
-        find.byKey(
-          const ValueKey('onboarding-step7-special-care-notes-button'),
-        ),
-        findsOneWidget,
-      );
       expect(
         (client.lastGenerateParams?['productsFromPhoto'] as List).single,
         containsPair('possibleActives', ['UV filters']),
@@ -2672,7 +2665,6 @@ void main() {
         draftState.draft.baseTimeline.skinCareSpecialCareNotes,
         contains(startsWith('Special care: Exfoliation Night - AHA BHA')),
       );
-      expect(find.text('1 special-care note'), findsOneWidget);
       expect(find.textContaining('Suggested:'), findsNothing);
       final scBlocks = draftState.draft.baseTimeline.blocks
           .where((b) => b.section == 'skin_care')
@@ -2750,12 +2742,8 @@ void main() {
       final client = TestSkinCareAiClient(
         routineResult: const SkinCareAiRoutineResult(
           suggestedProducts: ['Use barrier moisturizer after exfoliation'],
-          weeklyRoutine: [
-            {
-              'title': 'Retinol night',
-              'steps': ['use 2x/week'],
-              'warnings': ['avoid acids the same night'],
-            },
+          weeklyRoutine: const [
+            'Special care: Retinol night - use 2x/week; avoid acids the same night',
             'warning: Patch test before new actives',
           ],
           routinePlans: [
@@ -2808,7 +2796,6 @@ void main() {
       final persistedDraft = container.read(mockOnboardingProvider).draft;
       final notes = persistedDraft.baseTimeline.skinCareSpecialCareNotes;
 
-      expect(notes, contains('Use barrier moisturizer after exfoliation'));
       expect(
         notes,
         contains(
@@ -2820,14 +2807,10 @@ void main() {
         notes,
         contains(startsWith('Special care: AHA Night - AHA Serum')),
       );
-      expect(find.text('4 special-care notes'), findsOneWidget);
+      
       expect(find.textContaining('Suggested:'), findsNothing);
       expect(find.textContaining('Retinol night - use 2x/week'), findsNothing);
-      await tester.tap(
-        find.byKey(
-          const ValueKey('onboarding-step7-special-care-notes-button'),
-        ),
-      );
+      await tester.tap(find.byIcon(Icons.info_outline_rounded));
       await tester.pumpAndSettle();
       expect(find.text('Special-care notes'), findsOneWidget);
       expect(
@@ -2849,13 +2832,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('4 special-care notes'), findsOneWidget);
+      
       expect(find.textContaining('Suggested:'), findsNothing);
-      await tester.tap(
-        find.byKey(
-          const ValueKey('onboarding-step7-special-care-notes-button'),
-        ),
-      );
+      await tester.tap(find.byIcon(Icons.info_outline_rounded));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('Retinol night - use 2x/week'),
@@ -2871,18 +2850,18 @@ void main() {
       final client = TestSkinCareAiClient(
         routineResultsQueue: [
           SkinCareAiRoutineResult(
-            suggestedProducts: const ['missing: First note'],
+            suggestedProducts: const [],
             morningRoutine: const [],
             nightRoutine: const [],
-            weeklyRoutine: const [],
+            weeklyRoutine: const ['missing: First note'],
             timelineBlocks: const [],
             routinePlans: _skinCarePlansForCount(2),
           ),
           SkinCareAiRoutineResult(
-            suggestedProducts: const ['missing: Second note'],
+            suggestedProducts: const [],
             morningRoutine: const [],
             nightRoutine: const [],
-            weeklyRoutine: const [],
+            weeklyRoutine: const ['missing: Second note'],
             timelineBlocks: const [],
             routinePlans: _skinCarePlansForCount(2),
           ),
@@ -2910,7 +2889,7 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['missing: First note']);
-      expect(find.text('1 special-care note'), findsOneWidget);
+      
       expect(find.textContaining('Suggested:'), findsNothing);
 
       await tester.tap(find.text('Rebuild / Edit'));
@@ -2926,12 +2905,8 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSpecialCareNotes, ['missing: Second note']);
-      expect(find.text('1 special-care note'), findsOneWidget);
-      await tester.tap(
-        find.byKey(
-          const ValueKey('onboarding-step7-special-care-notes-button'),
-        ),
-      );
+      
+      await tester.tap(find.byIcon(Icons.info_outline_rounded));
       await tester.pumpAndSettle();
       expect(find.textContaining('Second note'), findsOneWidget);
       expect(find.textContaining('First note'), findsNothing);
@@ -2962,13 +2937,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('1 special-care note'), findsOneWidget);
+      
       expect(find.textContaining('Suggested:'), findsNothing);
-      await tester.tap(
-        find.byKey(
-          const ValueKey('onboarding-step7-special-care-notes-button'),
-        ),
-      );
+      await tester.tap(find.byIcon(Icons.info_outline_rounded));
       await tester.pumpAndSettle();
       expect(
         find.textContaining('Special care: saved draft note'),

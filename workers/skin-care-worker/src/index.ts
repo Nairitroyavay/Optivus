@@ -532,9 +532,9 @@ function sanitizeOwnedRoutinePlan(
     const product = matchOwnedProduct(productName, products);
     if (!product) {
       rejectedPlanReasons.push(`product_mismatch:${normalized.slotLabel}:${productName}`);
-      return null;
+    } else {
+      matched.push(product);
     }
-    matched.push(product);
   }
 
   const ownedPlanProducts = dedupeOwnedProducts(matched);
@@ -802,8 +802,14 @@ If at least one usable owned product exists, do not return notes only. Return ro
 Missing moisturizer, cleanser, or sunscreen must not block generation. If moisturizer is missing, add missingItems entry {"name":"Moisturizer","importance":"important","reason":"Helps reduce dryness/irritation after serum."} to the night routine when relevant. If sunscreen is missing, add missingItems entry {"name":"Sunscreen","importance":"important","reason":"Needed for daytime protection."} to morning/daytime routine when relevant. If cleanser is missing, add missingItems entry {"name":"Cleanser","importance":"important","reason":"Needed before applying leave-on products."} to morning/night routine when relevant.
 Do not name outside products in suggestedProducts, weeklyRoutine, routinePlans.productNames, warnings, or notes for an owned-product request. missingItems may use generic category names only and must not be converted into productNames. If the user owns an incomplete set, still build the best safe limited routine from available products.
 Return routinePlans.productNames using EXACT owned product names from the list above. Do not use generic names if an exact product name is available.
-Try to return exactly ${desiredApplicationsPerDay} routinePlans. If owned products cannot safely support ${desiredApplicationsPerDay} routines per day, return the maximum safe routinePlans you can create and include warning "unsafe_frequency" plus a short explanation.
-For 2/day, prefer morning + night. For 3/day, prefer morning + midday/afternoon + night. For 4/day, prefer morning + midday + afternoon + night.
+If at least one usable owned product exists, return exactly ${desiredApplicationsPerDay} routinePlans.
+For 2/day: morning + night. For 3/day: morning + midday/afternoon + night. For 4/day: morning + midday + afternoon + night.
+Missing important categories must go into missingItems.
+Missing moisturizer/cleanser/sunscreen must not reduce routinePlan count.
+Do not use unsafe_frequency as the normal solution for incomplete products. Use unsafe_frequency only for truly unsafe cases where even a missingItems block cannot be safely described.
+Do not invent owned products.
+productNames = exact owned product names only.
+missingItems = missing important categories/products not owned.
 If a product is a strong active or exfoliant such as PHA, AHA, BHA, retinol, or peeling solution, do not schedule it daily unless the owned product metadata explicitly says daily use is safe. Put non-daily strong actives in weeklyRoutine instead.`
     : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
 
@@ -885,6 +891,8 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const warnings = stringList(parsed.warnings);
   if (routinePlans.length === 0) {
     warnings.push("ai_returned_no_usable_routine");
+  } else if (routinePlans.length < desiredApplicationsPerDay) {
+    warnings.push("ai_returned_fewer_routines");
   }
   const weeklyRoutine = ownedProductMode
     ? stringList(rawWeeklyRoutine.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
