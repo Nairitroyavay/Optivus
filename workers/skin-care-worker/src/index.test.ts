@@ -421,10 +421,18 @@ describe("Skin-care Worker", () => {
           steps: [
             "Cleanse face",
             "Apply Minimalist Alpha Arbutin",
+            "Add moisturizer after serum when available",
           ],
           productNames: [
             "Beardo Detan Face Wash",
             "Minimalist Alpha Arbutin",
+          ],
+          missingItems: [
+            {
+              name: "Moisturizer",
+              importance: "important",
+              reason: "Helps reduce dryness/irritation after serum.",
+            },
           ],
         },
       ],
@@ -451,6 +459,14 @@ describe("Skin-care Worker", () => {
       "Beardo Detan Face Wash",
       "Minimalist Alpha Arbutin",
     ]);
+    expect(json.routinePlans[1].missingItems).toEqual([
+      {
+        name: "Moisturizer",
+        importance: "important",
+        reason: "Helps reduce dryness/irritation after serum.",
+      },
+    ]);
+    expect(json.routinePlans[1].productNames).not.toContain("Moisturizer");
     expect(json.weeklyRoutine).toContain(
       "Use Minimalist PHA Toner 1-2 times per week at night. Do not combine with other strong actives.",
     );
@@ -471,8 +487,15 @@ describe("Skin-care Worker", () => {
         {
           slotLabel: "night",
           title: "Night Cleanse",
-          steps: ["Cleanse"],
+          steps: ["Cleanse", "Add moisturizer after serum when available"],
           productNames: ["Gentle Cleanser"],
+          missingItems: [
+            {
+              name: "Moisturizer",
+              importance: "important",
+              reason: "Helps reduce dryness/irritation after serum.",
+            },
+          ],
         },
       ],
     }));
@@ -495,7 +518,67 @@ describe("Skin-care Worker", () => {
     expect(json.routinePlans.flatMap((plan: any) => plan.productNames)).toEqual(
       expect.arrayContaining(["Gentle Cleanser", "Daily SPF 50"]),
     );
+    expect(json.routinePlans[1].missingItems).toEqual([
+      {
+        name: "Moisturizer",
+        importance: "important",
+        reason: "Helps reduce dryness/irritation after serum.",
+      },
+    ]);
+    expect(json.routinePlans.flatMap((plan: any) => plan.productNames))
+      .not.toContain("Moisturizer");
     expect(json.warnings.join(" ").toLowerCase()).toContain("moisturizer");
+  });
+
+  test("missing sunscreen and cleanser stay missingItems, not owned products", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: ["No sunscreen or cleanser detected"],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Serum",
+          steps: ["Apply Hydrating Serum", "Add sunscreen when available"],
+          productNames: ["Hydrating Serum"],
+          missingItems: [
+            {
+              name: "Sunscreen",
+              importance: "important",
+              reason: "Needed for daytime protection.",
+            },
+            {
+              name: "Cleanser",
+              importance: "important",
+              reason: "Needed before applying leave-on products.",
+            },
+          ],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: [
+          { name: "Hydrating Serum", category: "serum", source: "typed" },
+        ],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(1);
+    expect(json.routinePlans[0].productNames).toEqual(["Hydrating Serum"]);
+    expect(json.routinePlans[0].missingItems.map((item: any) => item.name))
+      .toEqual([
+        "Sunscreen",
+        "Cleanser",
+      ]);
+    expect(json.routinePlans[0].productNames).not.toContain("Sunscreen");
+    expect(json.routinePlans[0].productNames).not.toContain("Cleanser");
   });
 
   test("owned-product routine rejects clearly outside products", async () => {

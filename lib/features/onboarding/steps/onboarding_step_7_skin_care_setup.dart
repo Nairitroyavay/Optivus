@@ -263,6 +263,11 @@ List<TimelineBlockDraft> onboarding7TimelineBlocksFromWorkerBlocks(
       ..._skinCareNamesFromValue(map['orderedSteps']),
       ..._skinCareNamesFromValue(map['instructions']),
     ]);
+    final missingItems = _dedupeSkinCareNames([
+      ..._skinCareMissingItemLabelsFromValue(map['skincareMissingItems']),
+      ..._skinCareMissingItemLabelsFromValue(map['missingItems']),
+      ..._skinCareMissingItemLabelsFromValue(map['missing_products']),
+    ]);
     if (products.isEmpty && steps.isEmpty) continue;
 
     final id = _stringValue(map['id']).trim();
@@ -278,6 +283,7 @@ List<TimelineBlockDraft> onboarding7TimelineBlocksFromWorkerBlocks(
         source: onboardingSkinCareGeneratedSource,
         skincareProducts: products,
         skincareSteps: steps,
+        skincareMissingItems: missingItems,
         skincareSlotLabel: _stringValue(
           map['slotLabel'] ?? map['slot'] ?? map['timeOfDay'],
         ).trim(),
@@ -658,6 +664,23 @@ List<String> _skinCareNamesFromValue(dynamic value) {
   if (value is List) return onboarding7ExtractPhotoProductNames(value);
   final name = _skinCareNameFromProduct(value);
   return name.isEmpty ? const [] : [name];
+}
+
+List<String> _skinCareMissingItemLabelsFromValue(dynamic value) {
+  if (value == null) return const [];
+  if (value is String) return onboarding7SplitTypedProductNames(value);
+  if (value is List) {
+    return value
+        .expand(_skinCareMissingItemLabelsFromValue)
+        .toList(growable: false);
+  }
+  if (value is Map) {
+    final item = SkinCareMissingItem.fromMap(Map<String, dynamic>.from(value));
+    final label = item.displayLabel.trim();
+    return label.isEmpty ? const [] : [label];
+  }
+  final label = _stringValue(value).trim();
+  return label.isEmpty ? const [] : [label];
 }
 
 List<String> _dedupeSkinCareNames(Iterable<String> source) {
@@ -3575,6 +3598,10 @@ double _calculateRequiredSkinCareBlockHeight({
       .map((item) => item.trim())
       .where((item) => item.isNotEmpty)
       .toList(growable: false);
+  final missingItems = block.skincareMissingItems
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList(growable: false);
   final contentWidth = math.max(80.0, blockWidth - 34.0);
   var height = 20.0;
   height += _measureTextHeight(
@@ -3614,6 +3641,20 @@ double _calculateRequiredSkinCareBlockHeight({
       width: contentWidth,
       maxLines: 3,
     );
+  }
+  if (missingItems.isNotEmpty) {
+    height += products.isNotEmpty ? 5.0 : 8.0;
+    for (var i = 0; i < missingItems.length; i += 1) {
+      height += _measureTextHeight(
+        context: context,
+        text: missingItems[i],
+        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+        width: contentWidth - 18.0,
+        maxLines: 2,
+      );
+      height += 10.0;
+      if (i != missingItems.length - 1) height += 4.0;
+    }
   }
   height += 40.0;
   return math.min(430.0, math.max(110.0, height));
@@ -3668,6 +3709,10 @@ class _SkinCareBlockCard extends StatelessWidget {
             .where((i) => i.isNotEmpty),
     ];
     final productNames = item.skincareProducts
+        .map((product) => product.trim())
+        .where((product) => product.isNotEmpty)
+        .toList(growable: false);
+    final missingItems = item.skincareMissingItems
         .map((product) => product.trim())
         .where((product) => product.isNotEmpty)
         .toList(growable: false);
@@ -3796,6 +3841,46 @@ class _SkinCareBlockCard extends StatelessWidget {
                         height: 1.25,
                       ),
                     ),
+                  ],
+                  if (missingItems.isNotEmpty) ...[
+                    SizedBox(height: productNames.isNotEmpty ? 5 : 7),
+                    for (var i = 0; i < missingItems.length; i += 1)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: i == missingItems.length - 1 ? 0 : 4,
+                        ),
+                        child: Container(
+                          key: ValueKey(
+                            'onboarding-step7-missing-item-${item.id}-$i',
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: OptivusColors.danger.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: OptivusColors.danger.withValues(
+                                alpha: 0.22,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            missingItems[i],
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              color: OptivusColors.danger.withValues(
+                                alpha: 0.92,
+                              ),
+                              height: 1.2,
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ],
               ),

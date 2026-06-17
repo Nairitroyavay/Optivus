@@ -2085,6 +2085,7 @@ class TimelineBlockDraft {
   final double? protein;
   final List<String> skincareProducts;
   final List<String> skincareSteps;
+  final List<String> skincareMissingItems;
   final String? skincareSlotLabel;
 
   const TimelineBlockDraft({
@@ -2106,6 +2107,7 @@ class TimelineBlockDraft {
     this.protein,
     this.skincareProducts = const [],
     this.skincareSteps = const [],
+    this.skincareMissingItems = const [],
     this.skincareSlotLabel,
   });
 
@@ -2129,6 +2131,7 @@ class TimelineBlockDraft {
       protein: (map['protein'] as num?)?.toDouble(),
       skincareProducts: _readStringList(map['skincareProducts']),
       skincareSteps: _readStringList(map['skincareSteps']),
+      skincareMissingItems: _readStringList(map['skincareMissingItems']),
       skincareSlotLabel: map['skincareSlotLabel'] as String?,
     );
   }
@@ -2152,6 +2155,7 @@ class TimelineBlockDraft {
     'protein': protein,
     'skincareProducts': skincareProducts,
     'skincareSteps': skincareSteps,
+    'skincareMissingItems': skincareMissingItems,
     'skincareSlotLabel': skincareSlotLabel,
   };
 
@@ -2174,6 +2178,7 @@ class TimelineBlockDraft {
     double? protein,
     List<String>? skincareProducts,
     List<String>? skincareSteps,
+    List<String>? skincareMissingItems,
     String? skincareSlotLabel,
   }) {
     return TimelineBlockDraft(
@@ -2196,6 +2201,7 @@ class TimelineBlockDraft {
       protein: protein ?? this.protein,
       skincareProducts: skincareProducts ?? this.skincareProducts,
       skincareSteps: skincareSteps ?? this.skincareSteps,
+      skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
       skincareSlotLabel: skincareSlotLabel ?? this.skincareSlotLabel,
     );
   }

@@ -197,6 +197,7 @@ class SkinCareRoutinePlan {
   final String title;
   final List<String> steps;
   final List<String> productNames;
+  final List<SkinCareMissingItem> missingItems;
   final List<String> warnings;
   final List<int> repeatDays;
 
@@ -205,6 +206,7 @@ class SkinCareRoutinePlan {
     required this.title,
     required this.steps,
     required this.productNames,
+    this.missingItems = const [],
     this.warnings = const [],
     this.repeatDays = const [],
   });
@@ -221,6 +223,12 @@ class SkinCareRoutinePlan {
       productNames: _stringListFromValue(
         map['productNames'] ?? map['products'] ?? map['skincareProducts'],
       ),
+      missingItems: _missingItemsFromValue(
+        map['missingItems'] ??
+            map['missing_items'] ??
+            map['missingProducts'] ??
+            map['missing_products'],
+      ),
       warnings: _stringListFromValue(map['warnings'] ?? map['warningIfAny']),
       repeatDays: _repeatDaysFromValue(map['repeatDays'] ?? map['days']),
     );
@@ -231,8 +239,57 @@ class SkinCareRoutinePlan {
     'title': title,
     'steps': steps,
     'productNames': productNames,
+    'missingItems': missingItems.map((item) => item.toMap()).toList(),
     'warnings': warnings,
     'repeatDays': repeatDays,
+  };
+}
+
+class SkinCareMissingItem {
+  final String name;
+  final String importance;
+  final String reason;
+
+  const SkinCareMissingItem({
+    required this.name,
+    this.importance = 'important',
+    this.reason = '',
+  });
+
+  factory SkinCareMissingItem.fromValue(dynamic value) {
+    if (value is Map) {
+      return SkinCareMissingItem.fromMap(Map<String, dynamic>.from(value));
+    }
+    return SkinCareMissingItem(
+      name: _stringValue(value).trim(),
+      importance: 'important',
+    );
+  }
+
+  factory SkinCareMissingItem.fromMap(Map<String, dynamic> map) {
+    return SkinCareMissingItem(
+      name: _stringValue(
+        map['name'] ?? map['product'] ?? map['productName'] ?? map['category'],
+      ).trim(),
+      importance: _normalizeMissingItemImportance(
+        map['importance'] ?? map['priority'],
+      ),
+      reason: _stringValue(map['reason'] ?? map['note'] ?? map['why']).trim(),
+    );
+  }
+
+  String get displayLabel {
+    final cleanName = name.trim();
+    final cleanImportance = importance.trim();
+    if (cleanName.isEmpty) return '';
+    if (cleanImportance.isEmpty) return '$cleanName (missing)';
+    return '$cleanName ($cleanImportance, missing)';
+  }
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'importance': importance,
+    'reason': reason,
   };
 }
 
@@ -646,6 +703,37 @@ bool _routinePlanHasContent(SkinCareRoutinePlan plan) {
 }
 
 String _stringValue(dynamic value) => value == null ? '' : value.toString();
+
+List<SkinCareMissingItem> _missingItemsFromValue(dynamic value) {
+  if (value == null) return const [];
+  final raw = value is List ? value : [value];
+  final seen = <String>{};
+  final result = <SkinCareMissingItem>[];
+  for (final item in raw) {
+    final parsed = SkinCareMissingItem.fromValue(item);
+    final cleanName = parsed.name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (cleanName.isEmpty) continue;
+    final key = cleanName.toLowerCase();
+    if (!seen.add(key)) continue;
+    result.add(
+      SkinCareMissingItem(
+        name: cleanName,
+        importance: parsed.importance,
+        reason: parsed.reason,
+      ),
+    );
+  }
+  return result;
+}
+
+String _normalizeMissingItemImportance(dynamic value) {
+  final text = _stringValue(value)
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[_-]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ');
+  return text.isEmpty ? 'important' : text;
+}
 
 List<String> _stringListFromValue(dynamic value) {
   if (value == null) return const [];

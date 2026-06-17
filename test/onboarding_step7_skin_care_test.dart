@@ -496,11 +496,8 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final blocks = container
-          .read(mockOnboardingProvider)
-          .draft
-          .baseTimeline
-          .confirmedBlocksForSection('skin_care');
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final blocks = base.confirmedBlocksForSection('skin_care');
       expect(blocks, hasLength(2));
       expect(blocks.first.section, 'skin_care');
       expect(blocks.first.blockType, TimelineBlockDraft.softBlockKey);
@@ -578,13 +575,26 @@ void main() {
             SkinCareRoutinePlan(
               slotLabel: 'night',
               title: 'Night Skin Care',
-              steps: ['Face wash', 'Alpha Arbutin serum'],
+              steps: [
+                'Face wash',
+                'Alpha Arbutin serum',
+                'Add moisturizer after serum when available',
+              ],
               productNames: ['cleanser', 'Alpha Arbutin serum'],
+              missingItems: [
+                SkinCareMissingItem(
+                  name: 'Moisturizer',
+                  importance: 'important',
+                  reason: 'Helps reduce dryness/irritation after serum.',
+                ),
+              ],
             ),
           ],
           morningRoutine: [],
           nightRoutine: [],
-          weeklyRoutine: [],
+          weeklyRoutine: [
+            'Use Minimalist PHA Toner 1-2 times/week at night. Do not combine with other strong actives.',
+          ],
           timelineBlocks: [],
         ),
       );
@@ -612,11 +622,8 @@ void main() {
       final container = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
-      final blocks = container
-          .read(mockOnboardingProvider)
-          .draft
-          .baseTimeline
-          .confirmedBlocksForSection('skin_care');
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final blocks = base.confirmedBlocksForSection('skin_care');
 
       expect(blocks, hasLength(2));
       expect(
@@ -630,6 +637,20 @@ void main() {
             .singleWhere((block) => block.skincareSlotLabel == 'night')
             .skincareProducts,
         ['Beardo Detan Face Wash', 'Minimalist Alpha Arbutin'],
+      );
+      final nightBlock = blocks.singleWhere(
+        (block) => block.skincareSlotLabel == 'night',
+      );
+      expect(nightBlock.skincareMissingItems, [
+        'Moisturizer (important, missing)',
+      ]);
+      expect(nightBlock.skincareProducts, isNot(contains('Moisturizer')));
+      expect(find.text('Moisturizer (important, missing)'), findsOneWidget);
+      expect(
+        base.skinCareSpecialCareNotes,
+        contains(
+          'Use Minimalist PHA Toner 1-2 times/week at night. Do not combine with other strong actives.',
+        ),
       );
       expect(client.analyzeCalls, 0);
       expect(client.lastGenerateParams?['productsFromPhoto'], isNull);
@@ -1157,6 +1178,7 @@ void main() {
                 'Moisturizer',
                 'Sunscreen',
               ],
+              skincareMissingItems: ['Moisturizer (important, missing)'],
             ),
           ],
         ),
@@ -1168,6 +1190,11 @@ void main() {
     expect(find.text('2. Vitamin C'), findsOneWidget);
     expect(find.text('3. Moisturizer'), findsOneWidget);
     expect(find.text('4. Sunscreen'), findsOneWidget);
+    expect(find.text('Moisturizer (important, missing)'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-step7-missing-item-skin-long-0')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('onboarding-step7-edit-skin-long')),
       findsOneWidget,
@@ -1851,6 +1878,13 @@ void main() {
                 'title': 'Night Skin Care',
                 'steps': ['Cleanse'],
                 'productNames': ['Gentle Cleanser'],
+                'missingItems': [
+                  {
+                    'name': 'Moisturizer',
+                    'importance': 'important',
+                    'reason': 'Helps reduce dryness.',
+                  },
+                ],
               },
             ],
             'timelineBlocks': [],
@@ -1873,6 +1907,11 @@ void main() {
 
     expect(result.routinePlans, hasLength(1));
     expect(result.routinePlans.single.slotLabel, 'night');
+    expect(result.routinePlans.single.missingItems.single.name, 'Moisturizer');
+    expect(
+      result.routinePlans.single.missingItems.single.displayLabel,
+      'Moisturizer (important, missing)',
+    );
   });
 
   test(
@@ -3186,6 +3225,71 @@ void main() {
           .singleWhere((block) => block.skincareSlotLabel == 'night')
           .skincareProducts,
       ['Barrier Repair Lotion'],
+    );
+
+    final missingBasics = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 2,
+      ownedProductNames: const ['Hydrating Serum', 'Barrier Repair Lotion'],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning Serum',
+          steps: ['Apply hydrating serum', 'Add sunscreen when available'],
+          productNames: ['Hydrating Serum'],
+          missingItems: [
+            SkinCareMissingItem(
+              name: 'Sunscreen',
+              importance: 'important',
+              reason: 'Needed for daytime protection.',
+            ),
+            SkinCareMissingItem(
+              name: 'Cleanser',
+              importance: 'important',
+              reason: 'Needed before applying leave-on products.',
+            ),
+          ],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night Moisturizer',
+          steps: ['Apply moisturizer after serum'],
+          productNames: ['Barrier Repair Lotion'],
+          missingItems: [
+            SkinCareMissingItem(
+              name: 'Cleanser',
+              importance: 'important',
+              reason: 'Needed before applying leave-on products.',
+            ),
+          ],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+    expect(missingBasics.errorMessage, isNull);
+    expect(
+      missingBasics.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'morning')
+          .skincareMissingItems,
+      ['Sunscreen (important, missing)', 'Cleanser (important, missing)'],
+    );
+    expect(
+      missingBasics.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'night')
+          .skincareMissingItems,
+      ['Cleanser (important, missing)'],
+    );
+    expect(
+      missingBasics.blocks
+          .expand((block) => block.skincareProducts)
+          .toList(growable: false),
+      isNot(contains('Sunscreen')),
+    );
+    expect(
+      missingBasics.blocks
+          .expand((block) => block.skincareProducts)
+          .toList(growable: false),
+      isNot(contains('Cleanser')),
     );
 
     expect(

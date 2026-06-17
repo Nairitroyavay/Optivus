@@ -143,6 +143,40 @@ function stringList(value: any): string[] {
   return result;
 }
 
+function normalizeMissingItems(
+  value: any,
+): Array<{ name: string; importance: string; reason: string }> {
+  const raw = Array.isArray(value)
+    ? value
+    : value == null
+      ? []
+      : [value];
+  const seen = new Set<string>();
+  const result: Array<{ name: string; importance: string; reason: string }> = [];
+
+  for (const item of raw) {
+    const source = item && typeof item === "object" ? item : { name: item };
+    const name = String(source.name || source.product || source.productName || source.category || "")
+      .trim()
+      .replace(/\s+/g, " ");
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const importance = String(source.importance || source.priority || "important")
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ") || "important";
+    const reason = String(source.reason || source.note || source.why || "")
+      .trim()
+      .replace(/\s+/g, " ");
+    result.push({ name, importance, reason });
+  }
+
+  return result;
+}
+
 function repeatDays(value: any): number[] {
   const raw = Array.isArray(value) ? value : [];
   const days = Array.from(new Set(raw
@@ -165,6 +199,9 @@ function normalizeRoutinePlan(plan: any): any | null {
     title: normalizedTitle,
     steps,
     productNames,
+    missingItems: normalizeMissingItems(
+      plan.missingItems || plan.missing_items || plan.missingProducts || plan.missing_products,
+    ),
     warnings: stringList(plan.warnings || plan.warningIfAny),
     repeatDays: repeatDays(plan.repeatDays || plan.days),
   };
@@ -518,7 +555,33 @@ function sanitizeOwnedRoutinePlan(
     ...normalized,
     steps: normalized.steps,
     productNames: ownedPlanProducts.map((product) => product.name),
+    missingItems: sanitizeMissingItemsForOwnedProducts(
+      normalized.missingItems,
+      products,
+    ),
   };
+}
+
+function sanitizeMissingItemsForOwnedProducts(
+  missingItems: Array<{ name: string; importance: string; reason: string }>,
+  products: OwnedSkinCareProduct[],
+): Array<{ name: string; importance: string; reason: string }> {
+  const seen = new Set<string>();
+  const result: Array<{ name: string; importance: string; reason: string }> = [];
+  for (const item of missingItems) {
+    const name = String(item.name || "").trim().replace(/\s+/g, " ");
+    if (!name) continue;
+    if (matchOwnedProduct(name, products)) continue;
+    const key = normalizedProductKey(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      name,
+      importance: String(item.importance || "important").trim() || "important",
+      reason: String(item.reason || "").trim(),
+    });
+  }
+  return result;
 }
 
 function _planHasUnsafeStrongActive(plan: any, products: OwnedSkinCareProduct[]): boolean {
@@ -731,12 +794,14 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
   const ownedProductInstruction = activeSource === "photo" || activeSource === "typed"
     ? `Active Product Source: ${activeSource}
 Owned Products From Active Source Only: ${JSON.stringify(ownedProducts)}
-Use ONLY the owned products above. Do not merge photo and typed products. Do not invent missing products. Do not suggest CeraVe, La Roche-Posay, Paula's Choice, or any product outside the owned list unless the user owns it.
+Use ONLY the owned products above. Do not merge photo and typed products. Do not invent owned products. Do not suggest CeraVe, La Roche-Posay, Paula's Choice, or any product outside the owned list unless the user owns it.
 When source is photo, these are productsFromPhoto. When source is typed, these are typedProductDetails.
 Pay attention to name, category, source, keyIngredients, possibleActives, usageHint, warningIfAny, and confidence.
 Use product categories and ingredient/active metadata to identify product roles, especially sunscreen. A product may be sunscreen if category is sunscreen, name mentions UV/sun/SPF, ingredients/actives mention UV filters, or warnings/usage imply sun protection.
-If moisturizer is missing, add a generic warning/note only. If sunscreen is missing, add a generic warning/note only. Do not name outside products in suggestedProducts, weeklyRoutine, routinePlans, warnings, or notes for an owned-product request. Missing moisturizer, cleanser, or sunscreen must not block generation. If the user owns an incomplete set, still build the best safe limited routine from available products.
-Return routinePlans using EXACT owned product names from the list above. Do not use generic names if an exact product name is available.
+If at least one usable owned product exists, do not return notes only. Return routinePlans with productNames using exact owned product names and missingItems for important missing categories.
+Missing moisturizer, cleanser, or sunscreen must not block generation. If moisturizer is missing, add missingItems entry {"name":"Moisturizer","importance":"important","reason":"Helps reduce dryness/irritation after serum."} to the night routine when relevant. If sunscreen is missing, add missingItems entry {"name":"Sunscreen","importance":"important","reason":"Needed for daytime protection."} to morning/daytime routine when relevant. If cleanser is missing, add missingItems entry {"name":"Cleanser","importance":"important","reason":"Needed before applying leave-on products."} to morning/night routine when relevant.
+Do not name outside products in suggestedProducts, weeklyRoutine, routinePlans.productNames, warnings, or notes for an owned-product request. missingItems may use generic category names only and must not be converted into productNames. If the user owns an incomplete set, still build the best safe limited routine from available products.
+Return routinePlans.productNames using EXACT owned product names from the list above. Do not use generic names if an exact product name is available.
 Try to return exactly ${desiredApplicationsPerDay} routinePlans. If owned products cannot safely support ${desiredApplicationsPerDay} routines per day, return the maximum safe routinePlans you can create and include warning "unsafe_frequency" plus a short explanation.
 For 2/day, prefer morning + night. For 3/day, prefer morning + midday/afternoon + night. For 4/day, prefer morning + midday + afternoon + night.
 If a product is a strong active or exfoliant such as PHA, AHA, BHA, retinol, or peeling solution, do not schedule it daily unless the owned product metadata explicitly says daily use is safe. Put non-daily strong actives in weeklyRoutine instead.`
@@ -764,6 +829,13 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
       "title": "Morning Skin Care",
       "steps": ["Face wash", "Vitamin C", "Sunscreen"],
       "productNames": ["Cleanser Name", "Vitamin C Serum Name", "Sunscreen Name"],
+      "missingItems": [
+        {
+          "name": "Moisturizer",
+          "importance": "important",
+          "reason": "Helps reduce dryness/irritation after serum."
+        }
+      ],
       "warnings": [],
       "repeatDays": [1,2,3,4,5,6,7]
     }
@@ -838,6 +910,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
           endMinute: startMinute + 15,
           repeatDays: Array.isArray(plan?.repeatDays) ? plan.repeatDays : [1, 2, 3, 4, 5, 6, 7],
           products: Array.isArray(plan?.productNames) ? plan.productNames : [],
+          missingItems: Array.isArray(plan?.missingItems) ? plan.missingItems : [],
           steps: Array.isArray(plan?.steps) ? plan.steps : [],
           source: "ai_skin_care_setup",
           id: `skin-care-plan-${index + 1}`

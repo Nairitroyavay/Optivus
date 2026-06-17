@@ -93,6 +93,7 @@ Onboarding7PartitionedPlans onboarding7PartitionRoutinePlans(
             title: plan.title,
             steps: safeSteps,
             productNames: safeProductNames,
+            missingItems: plan.missingItems,
             warnings: plan.warnings,
             repeatDays: plan.repeatDays,
           ),
@@ -106,6 +107,7 @@ Onboarding7PartitionedPlans onboarding7PartitionRoutinePlans(
             title: plan.title,
             steps: unsafeSteps,
             productNames: unsafeProductNames,
+            missingItems: const [],
             warnings: plan.warnings,
             repeatDays: plan.repeatDays,
           ),
@@ -120,6 +122,7 @@ Onboarding7PartitionedPlans onboarding7PartitionRoutinePlans(
             title: plan.title,
             steps: const [],
             productNames: const [],
+            missingItems: const [],
             warnings: plan.warnings,
             repeatDays: plan.repeatDays,
           ),
@@ -423,6 +426,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
 
       final products = _dedupeStrings(plan.productNames);
       final steps = _dedupeStrings(plan.steps);
+      final missingItems = _missingItemLabelsForPlan(plan);
       if (products.isEmpty) {
         return const Onboarding7SkinCareScheduleResult(
           blocks: [],
@@ -432,7 +436,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
       if (kDebugMode) {
         debugPrint(
           '[Onboarding7Scheduler] final block slot=${spec.slotLabel} '
-          'day=$day products=$products steps=$steps',
+          'day=$day products=$products missingItems=$missingItems steps=$steps',
         );
       }
       scheduledSingles.add(
@@ -447,6 +451,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
           source: 'ai_skin_care_setup',
           skincareProducts: products,
           skincareSteps: steps,
+          skincareMissingItems: missingItems,
           skincareSlotLabel: spec.slotLabel,
         ),
       );
@@ -817,6 +822,7 @@ List<TimelineBlockDraft> _groupSkinCareBlocks(
       block.skincareSlotLabel?.trim().toLowerCase() ?? '',
       block.skincareSteps.join('\u001f'),
       block.skincareProducts.join('\u001f'),
+      block.skincareMissingItems.join('\u001f'),
     ].join('\u001e');
     final existing = grouped[key];
     if (existing == null) {
@@ -988,6 +994,7 @@ SkinCareRoutinePlan _planForSlot(
     title: plan.title.trim().isEmpty ? fallbackTitle : plan.title.trim(),
     steps: plan.steps,
     productNames: plan.productNames,
+    missingItems: plan.missingItems,
     warnings: plan.warnings,
     repeatDays: plan.repeatDays,
   );
@@ -1028,10 +1035,45 @@ _OwnedProductPlanResult _ownedProductPlanForSlot({
       title: normalized.title.trim().isEmpty ? title : normalized.title.trim(),
       steps: _safeStepsForPlan(normalized),
       productNames: _dedupeStrings(safeProducts.map((product) => product.name)),
+      missingItems: _missingItemsNotOwned(
+        normalized.missingItems,
+        ownedProducts,
+      ),
       warnings: normalized.warnings,
       repeatDays: normalized.repeatDays,
     ),
   );
+}
+
+List<String> _missingItemLabelsForPlan(SkinCareRoutinePlan plan) {
+  return _dedupeStrings(
+    plan.missingItems
+        .map((item) => item.displayLabel)
+        .where((label) => label.trim().isNotEmpty),
+  );
+}
+
+List<SkinCareMissingItem> _missingItemsNotOwned(
+  List<SkinCareMissingItem> items,
+  _OwnedProductCatalog ownedProducts,
+) {
+  final seen = <String>{};
+  final result = <SkinCareMissingItem>[];
+  for (final item in items) {
+    final name = item.name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (name.isEmpty) continue;
+    if (ownedProducts.match(name) != null) continue;
+    final key = _normalizedProductKey(name);
+    if (!seen.add(key)) continue;
+    result.add(
+      SkinCareMissingItem(
+        name: name,
+        importance: item.importance,
+        reason: item.reason,
+      ),
+    );
+  }
+  return result;
 }
 
 List<_OwnedProduct>? _matchedOwnedProductsForPlan(
