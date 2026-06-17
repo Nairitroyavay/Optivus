@@ -1191,6 +1191,107 @@ void main() {
     },
   );
 
+  testWidgets(
+    '13c. 3/day removed morning PHA note does not create extra night block',
+    (tester) async {
+      const removedMorningNote =
+          'Minimalist PHA Toner was removed from the daily morning routine and moved to special-care notes. Add it manually on two nights only after review.';
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Morning Skin Care',
+              steps: [
+                'Cleanse face',
+                'Apply Minimalist Vitamin C',
+                'Apply Minimalist SPF 50',
+              ],
+              productNames: [
+                'Beardo Detan Face Wash',
+                'Minimalist Vitamin C',
+                'Minimalist SPF 50',
+              ],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'midday',
+              title: 'Midday Skin Care',
+              steps: ['Reapply Minimalist SPF 50'],
+              productNames: ['Minimalist SPF 50'],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Night Skin Care',
+              steps: ['Cleanse face', 'Apply Minimalist Alpha Arbutin'],
+              productNames: [
+                'Beardo Detan Face Wash',
+                'Minimalist Alpha Arbutin',
+              ],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [removedMorningNote],
+          timelineBlocks: [],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Beardo Detan Face Wash - cleanser\n'
+        'Minimalist SPF 50 - sunscreen\n'
+        'Minimalist Vitamin C - serum\n'
+        'Minimalist Alpha Arbutin - serum\n'
+        'Minimalist PHA Toner - exfoliant',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final base = container.read(mockOnboardingProvider).draft.baseTimeline;
+      final blocks = base.confirmedBlocksForSection('skin_care');
+
+      expect(blocks, hasLength(3));
+      for (final day in onboarding7EveryDay) {
+        expect(onboarding7RoutineCountForDay(blocks, day), 3);
+      }
+      expect(
+        blocks.expand((block) => block.skincareProducts),
+        isNot(contains('Minimalist PHA Toner')),
+      );
+      expect(
+        blocks.where((block) => block.skincareSlotLabel == 'night'),
+        hasLength(1),
+      );
+      expect(base.skinCareSpecialCareNotes, contains(removedMorningNote));
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-special-care-notes-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(removedMorningNote), findsOneWidget);
+      expect(find.textContaining('AI returned no usable routine'), findsNothing);
+    },
+  );
+
   testWidgets('14. Selecting 4 routines per day creates 4 skin-care blocks', (
     tester,
   ) async {

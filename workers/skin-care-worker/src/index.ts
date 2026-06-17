@@ -186,6 +186,14 @@ function repeatDays(value: any): number[] {
   return days;
 }
 
+function canonicalRoutineSlot(slot: string): string {
+  const value = String(slot || "").toLowerCase().trim().replace(/[-\s]+/g, "_");
+  if (value === "evening" || value === "pm" || value === "bedtime") return "night";
+  if (value === "noon" || value === "lunch") return "midday";
+  if (value === "am" || value === "after_bath") return "morning";
+  return value;
+}
+
 function normalizeRoutinePlan(plan: any): any | null {
   if (!plan || typeof plan !== "object") return null;
   const steps = stringList(plan.steps || plan.orderedSteps || plan.instructions);
@@ -634,6 +642,24 @@ function repairStrongActiveRoutinePlan(
     return { plans: [], strongActiveSplitNotes: [] };
   }
 
+  const slot = canonicalRoutineSlot(normalized.slotLabel);
+  const activeProductName = strongProducts[0]?.name || activeSteps[0] || normalized.title;
+  if (slot !== "night") {
+    rejectedPlanReasons.push(`strong_active_removed_from_non_night:${slot}:${activeProductName}`);
+    return {
+      plans: [{
+        ...normalized,
+        repeatDays: safeRepeatDays(normalized.repeatDays),
+        productNames: safeProducts.map((product) => product.name),
+        steps: safeSteps,
+        missingItems,
+      }],
+      strongActiveSplitNotes: [
+        `${activeProductName} was removed from the daily ${slot} routine and moved to special-care notes. Add it manually on two nights only after review.`,
+      ],
+    };
+  }
+
   const normalPlan = {
     ...normalized,
     repeatDays: [1, 2, 4, 5, 7],
@@ -654,8 +680,7 @@ function repairStrongActiveRoutinePlan(
       "Use strong actives only 2 times per week. Do not combine with other exfoliants/retinoids.",
     ],
   };
-  const activeProductName = strongProducts[0]?.name || activeSteps[0] || normalized.title;
-  rejectedPlanReasons.push(`strong_active_split:${normalized.slotLabel}:${activeProductName}`);
+  rejectedPlanReasons.push(`strong_active_split:${slot}:${activeProductName}`);
   return {
     plans: [normalPlan, activePlan],
     strongActiveSplitNotes: [
