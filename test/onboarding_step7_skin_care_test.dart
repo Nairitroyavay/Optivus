@@ -141,7 +141,7 @@ void main() {
     },
   );
 
-  testWidgets('4. Uploaded photo still allows typing product names', (
+  testWidgets('4. Uploaded photo disables typing product names', (
     tester,
   ) async {
     useAndroidWidth(tester);
@@ -157,14 +157,13 @@ void main() {
     await tester.tap(find.text('Add photo'));
     await tester.pumpAndSettle();
     expect(find.text('Photo uploaded'), findsOneWidget);
+    expect(find.text('Using product photo'), findsOneWidget);
+    expect(find.text('Remove photo to type products manually.'), findsWidgets);
 
-    await tester.enterText(
+    final textField = tester.widget<TextField>(
       find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-      'Cleanser, sunscreen',
     );
-    await tester.pump();
-
-    expect(find.text('Cleanser, sunscreen'), findsOneWidget);
+    expect(textField.enabled, isFalse);
   });
 
   testWidgets('5. Missing photo/text blocks generation with friendly error', (
@@ -177,7 +176,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Upload your product photo or type product names first.'),
+      find.text(
+        'Type one product per line, for example "Minimalist SPF 50 - sunscreen".',
+      ),
       findsOneWidget,
     );
   });
@@ -201,6 +202,129 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsWidgets);
     expect(find.text('Uploading...'), findsOneWidget);
+  });
+
+  testWidgets('6b. Typing product names disables photo upload', (tester) async {
+    final uploadController = TestUploadController(result: _uploadedAsset());
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: _hasProductsDraft(),
+        uploadController: uploadController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+      'Minimalist SPF 50 - sunscreen',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Using typed product names'), findsOneWidget);
+    expect(find.text('Clear product names to upload a photo.'), findsOneWidget);
+    await tester.tap(find.text('Add photo'));
+    await tester.pumpAndSettle();
+    expect(uploadController.startUploadCalls, 0);
+  });
+
+  testWidgets('6c. Clearing typed product names re-enables photo upload', (
+    tester,
+  ) async {
+    final uploadController = TestUploadController(result: _uploadedAsset());
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: _hasProductsDraft(),
+        uploadController: uploadController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+      'Minimalist SPF 50 - sunscreen',
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+      '',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Using typed product names'), findsNothing);
+    await tester.tap(find.text('Add photo'));
+    await tester.pumpAndSettle();
+    expect(uploadController.startUploadCalls, 1);
+    expect(find.text('Photo uploaded'), findsOneWidget);
+  });
+
+  testWidgets('6d. Removing photo re-enables text input', (tester) async {
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: _hasProductsDraft(uid: 'uid-1'),
+        uploadController: TestUploadController(result: _uploadedAsset()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add photo'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+          )
+          .enabled,
+      isFalse,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('onboarding-step7-remove-photo-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+          )
+          .enabled,
+      isTrue,
+    );
+    expect(find.text('Photo uploaded'), findsNothing);
+  });
+
+  testWidgets('6e. Switching source does not silently delete typed text', (
+    tester,
+  ) async {
+    final asset = _uploadedAsset();
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: _hasProductsDraft(
+          productNames: 'Saved Cleanser - cleanser',
+          productPhotoAssetId: asset.assetId,
+          productPhotoR2Key: asset.r2Key,
+          productPhotoStatus: 'uploaded',
+          productPhotoCreatedAt: asset.createdAt,
+          productPhotoUpdatedAt: asset.updatedAt,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Photo uploaded'), findsOneWidget);
+    expect(find.text('Saved Cleanser - cleanser'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('onboarding-step7-remove-photo-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saved Cleanser - cleanser'), findsOneWidget);
+    final base = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    ).read(mockOnboardingProvider).draft.baseTimeline;
+    expect(base.skinCareProductNames, 'Saved Cleanser - cleanser');
+    expect(base.skinCareProductPhotoR2Key, isNull);
   });
 
   testWidgets('7. Missing skin-care worker URL shows debug-safe error', (
@@ -254,6 +378,26 @@ void main() {
     ]);
   });
 
+  test('8b. Typed product parser supports dash colon and parentheses', () {
+    final products = onboarding7ParseTypedProductDetails(
+      'Beardo Detan Face Wash - cleanser\n'
+      'Minimalist SPF 50: sunscreen\n'
+      'Minimalist Vitamin C (serum)',
+    );
+
+    expect(products.map((product) => product.name), [
+      'Beardo Detan Face Wash',
+      'Minimalist SPF 50',
+      'Minimalist Vitamin C',
+    ]);
+    expect(products.map((product) => product.category), [
+      'cleanser',
+      'sunscreen',
+      'serum',
+    ]);
+    expect(products.map((product) => product.source).toSet(), {'typed'});
+  });
+
   testWidgets('9. Empty timelineBlocks does not create fallback blocks', (
     tester,
   ) async {
@@ -293,7 +437,7 @@ void main() {
     expect(find.text('Morning skin care'), findsNothing);
     expect(
       find.text(
-        'AI could not build a routine from these products. Try typing the product names clearly.',
+        'AI returned no usable routine. Try again or use typed product names.',
       ),
       findsOneWidget,
     );
@@ -365,14 +509,271 @@ void main() {
       expect(blocks.first.startMinute, greaterThanOrEqualTo(455));
       expect(blocks.first.skincareProducts, ['Cleanser', 'Sunscreen']);
       expect(blocks.first.skincareSteps, ['Face wash', 'Apply sunscreen']);
-      expect(client.lastGenerateParams?['typedProductNames'], [
-        'Cleanser',
-        'Sunscreen',
-        'Moisturizer',
+      expect(client.lastGenerateParams?['typedProductNames'], isNull);
+      expect(client.lastGenerateParams?['productsFromPhoto'], isNull);
+      expect(client.lastGenerateParams?['productInputSource'], 'typed');
+      expect(client.lastGenerateParams?['typedProductDetails'], [
+        {
+          'name': 'Cleanser',
+          'brand': '',
+          'category': 'cleanser',
+          'source': 'typed',
+          'keyIngredients': [],
+          'possibleActives': [],
+          'usageHint': '',
+          'warningIfAny': '',
+          'confidence': '',
+        },
+        {
+          'name': 'Sunscreen',
+          'brand': '',
+          'category': 'sunscreen',
+          'source': 'typed',
+          'keyIngredients': [],
+          'possibleActives': [],
+          'usageHint': '',
+          'warningIfAny': '',
+          'confidence': '',
+        },
+        {
+          'name': 'Moisturizer',
+          'brand': '',
+          'category': 'moisturizer',
+          'source': 'typed',
+          'keyIngredients': [],
+          'possibleActives': [],
+          'usageHint': '',
+          'warningIfAny': '',
+          'confidence': '',
+        },
       ]);
       expect(client.lastGenerateParams?['desiredApplicationsPerDay'], 2);
     },
   );
+
+  testWidgets(
+    '10b. Text-only routine with provided products generates exact owned names',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Morning Skin Care',
+              steps: ['Face wash', 'Vitamin C serum', 'Sunscreen'],
+              productNames: [
+                'face wash',
+                'Vitamin C serum',
+                'Minimalist SPF 50 Sunscreen',
+              ],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Night Skin Care',
+              steps: ['Face wash', 'Alpha Arbutin serum'],
+              productNames: ['cleanser', 'Alpha Arbutin serum'],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [],
+          timelineBlocks: [],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Beardo Detan Face Wash - cleanser\n'
+        'Minimalist SPF 50 - sunscreen\n'
+        'Minimalist Vitamin C - serum\n'
+        'Minimalist Alpha Arbutin - serum\n'
+        'Minimalist PHA Toner - exfoliant',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+
+      expect(blocks, hasLength(2));
+      expect(
+        blocks
+            .singleWhere((block) => block.skincareSlotLabel == 'morning')
+            .skincareProducts,
+        ['Beardo Detan Face Wash', 'Minimalist Vitamin C', 'Minimalist SPF 50'],
+      );
+      expect(
+        blocks
+            .singleWhere((block) => block.skincareSlotLabel == 'night')
+            .skincareProducts,
+        ['Beardo Detan Face Wash', 'Minimalist Alpha Arbutin'],
+      );
+      expect(client.analyzeCalls, 0);
+      expect(client.lastGenerateParams?['productsFromPhoto'], isNull);
+      expect(client.lastGenerateParams?['typedProductDetails'], isNotNull);
+    },
+  );
+
+  testWidgets(
+    '10c. PHA moves to special-care note without deleting daily routine',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Morning Skin Care',
+              steps: ['Face wash', 'Vitamin C serum', 'Sunscreen'],
+              productNames: [
+                'Beardo Detan Face Wash',
+                'Minimalist Vitamin C',
+                'Minimalist SPF 50',
+              ],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Night Skin Care',
+              steps: [
+                'Face wash',
+                'Alpha Arbutin serum',
+                'Use Minimalist PHA Toner 1-2 times/week at night',
+              ],
+              productNames: [
+                'Beardo Detan Face Wash',
+                'Minimalist Alpha Arbutin',
+                'Minimalist PHA Toner',
+              ],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [],
+          timelineBlocks: [],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Beardo Detan Face Wash - cleanser\n'
+        'Minimalist SPF 50 - sunscreen\n'
+        'Minimalist Vitamin C - serum\n'
+        'Minimalist Alpha Arbutin - serum\n'
+        'Minimalist PHA Toner - exfoliant',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final base = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      ).read(mockOnboardingProvider).draft.baseTimeline;
+      final blocks = base.confirmedBlocksForSection('skin_care');
+      final nightBlock = blocks.singleWhere(
+        (block) => block.skincareSlotLabel == 'night',
+      );
+
+      expect(blocks, hasLength(2));
+      expect(nightBlock.skincareProducts, [
+        'Beardo Detan Face Wash',
+        'Minimalist Alpha Arbutin',
+      ]);
+      expect(
+        nightBlock.skincareProducts,
+        isNot(contains('Minimalist PHA Toner')),
+      );
+      expect(
+        base.skinCareSpecialCareNotes,
+        contains(
+          startsWith('Special care: Night Skin Care - Minimalist PHA Toner'),
+        ),
+      );
+      expect(
+        find.textContaining('AI returned no usable routine'),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('10d. Mode 1 notes drop outside product suggestions', (
+    tester,
+  ) async {
+    final client = TestSkinCareAiClient(
+      routineResult: const SkinCareAiRoutineResult(
+        suggestedProducts: [
+          'Try CeraVe Moisturizing Cream',
+          'Use La Roche-Posay Anthelios Sunscreen',
+          "Consider Paula's Choice BHA",
+        ],
+        routinePlans: [
+          SkinCareRoutinePlan(
+            slotLabel: 'morning',
+            title: 'Morning Skin Care',
+            steps: ['Cleanse', 'Apply sunscreen'],
+            productNames: ['Cleanser', 'Sunscreen'],
+          ),
+          SkinCareRoutinePlan(
+            slotLabel: 'night',
+            title: 'Night Skin Care',
+            steps: ['Cleanse'],
+            productNames: ['Cleanser'],
+          ),
+        ],
+        morningRoutine: [],
+        nightRoutine: [],
+        weeklyRoutine: [],
+        timelineBlocks: [],
+      ),
+    );
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: _hasProductsDraft(
+          blocks: [BaseTimelineDraft.defaultBathBlock()],
+        ),
+        client: client,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+      'Cleanser - cleanser\nSunscreen - sunscreen',
+    );
+    await tester.tap(find.text('Build skin routine'));
+    await tester.pumpAndSettle();
+
+    final notes = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    ).read(mockOnboardingProvider).draft.baseTimeline.skinCareSpecialCareNotes;
+    final joinedNotes = notes.join(' ').toLowerCase();
+
+    expect(notes, isNotEmpty);
+    expect(joinedNotes, isNot(contains('cerave')));
+    expect(joinedNotes, isNot(contains('la roche')));
+    expect(joinedNotes, isNot(contains('paula')));
+  });
 
   testWidgets('11. Step 7 uses full timeline instead of mini block list', (
     tester,
@@ -809,7 +1210,7 @@ void main() {
   });
 
   testWidgets(
-    '18. AI returns 2 plans, selecting 3 creates safe refresh block',
+    '18. AI returns 2 plans, selecting 3 shows unsafe-frequency error',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: _routineResultWithPlanCount(2),
@@ -843,22 +1244,18 @@ void main() {
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
 
-      expect(blocks, hasLength(3));
+      expect(blocks, isEmpty);
       expect(
-        blocks.any((block) => block.skincareSlotLabel == 'midday'),
-        isTrue,
-      );
-      expect(
-        blocks
-            .singleWhere((block) => block.skincareSlotLabel == 'midday')
-            .skincareSteps,
-        contains('Reapply sunscreen'),
+        find.text(
+          'These products may not safely support this many routines per day. Try 2 times per day.',
+        ),
+        findsOneWidget,
       );
     },
   );
 
   testWidgets(
-    '19. AI returns 2 plans, selecting 4 creates two safe refresh blocks',
+    '19. AI returns 2 plans, selecting 4 shows unsafe-frequency error',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: _routineResultWithPlanCount(2),
@@ -892,20 +1289,18 @@ void main() {
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
 
-      expect(blocks, hasLength(4));
+      expect(blocks, isEmpty);
       expect(
-        blocks.any((block) => block.skincareSlotLabel == 'midday'),
-        isTrue,
-      );
-      expect(
-        blocks.any((block) => block.skincareSlotLabel == 'afternoon'),
-        isTrue,
+        find.text(
+          'These products may not safely support this many routines per day. Try 2 times per day.',
+        ),
+        findsOneWidget,
       );
     },
   );
 
   testWidgets(
-    '20. Product metadata sunscreen supports 3 routines without sunscreen name',
+    '20. Photo source sends only photo products for 3 AI-returned routines',
     (tester) async {
       final asset = _uploadedAsset();
       final client = TestSkinCareAiClient(
@@ -918,7 +1313,32 @@ void main() {
             },
           ],
         ),
-        routineResult: _routineResultWithGenericTwoPlans(),
+        routineResult: const SkinCareAiRoutineResult(
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Morning SPF',
+              steps: ['Apply sunscreen'],
+              productNames: ['sunscreen'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'midday',
+              title: 'Midday SPF',
+              steps: ['Reapply sunscreen'],
+              productNames: ['sunscreen'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'afternoon',
+              title: 'Afternoon SPF',
+              steps: ['Apply sunscreen'],
+              productNames: ['sunscreen'],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [],
+          timelineBlocks: [],
+        ),
       );
       await tester.pumpWidget(
         buildTestWidget(
@@ -936,10 +1356,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey('onboarding-step7-frequency-3')),
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-        'Gentle Cleanser, Barrier Repair Moisturizer',
       );
       await tester.tap(find.text('Build skin routine'));
       await tester.pumpAndSettle();
@@ -961,13 +1377,16 @@ void main() {
       expect(blocks, hasLength(3));
       expect(midday.skincareProducts, contains('UV Aqua Gel'));
       expect(midday.skincareSteps, contains('Reapply sunscreen'));
+      expect(client.lastGenerateParams?['productInputSource'], 'photo');
+      expect(client.lastGenerateParams?['typedProductDetails'], isNull);
+      expect(client.lastGenerateParams?['typedProductNames'], isNull);
       expect(productsFromPhoto.single['category'], 'sunscreen');
       expect(productsFromPhoto.single['possibleActives'], ['UV filters']);
     },
   );
 
   testWidgets(
-    '21. Product metadata sunscreen supports 4 routines without sunscreen name',
+    '21. Photo source sends only photo products for 4 AI-returned routines',
     (tester) async {
       final asset = _uploadedAsset();
       final client = TestSkinCareAiClient(
@@ -978,9 +1397,41 @@ void main() {
               'category': 'sunscreen',
               'possibleActives': ['UV filters'],
             },
+            {'name': 'Gentle Cleanser', 'category': 'cleanser'},
           ],
         ),
-        routineResult: _routineResultWithGenericTwoPlans(),
+        routineResult: const SkinCareAiRoutineResult(
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Morning SPF',
+              steps: ['Apply sunscreen'],
+              productNames: ['sunscreen'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'midday',
+              title: 'Midday SPF',
+              steps: ['Reapply sunscreen'],
+              productNames: ['sunscreen'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'afternoon',
+              title: 'Afternoon SPF',
+              steps: ['Reapply sunscreen'],
+              productNames: ['sunscreen'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Night Cleanse',
+              steps: ['Cleanse'],
+              productNames: ['cleanser'],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [],
+          timelineBlocks: [],
+        ),
       );
       await tester.pumpWidget(
         buildTestWidget(
@@ -998,10 +1449,6 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey('onboarding-step7-frequency-4')),
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-        'Gentle Cleanser, Barrier Repair Moisturizer',
       );
       await tester.tap(find.text('Build skin routine'));
       await tester.pumpAndSettle();
@@ -1028,11 +1475,12 @@ void main() {
             .skincareProducts,
         contains('UV Aqua Gel'),
       );
+      expect(client.lastGenerateParams?['typedProductDetails'], isNull);
     },
   );
 
   testWidgets(
-    '22. Photo metadata with only sunscreen builds limited routine with notes',
+    '22. Photo metadata with only sunscreen does not synthesize missing routines',
     (tester) async {
       final asset = _uploadedAsset();
       final client = TestSkinCareAiClient(
@@ -1088,11 +1536,7 @@ void main() {
           .baseTimeline
           .confirmedBlocksForSection('skin_care');
 
-      expect(blocks, hasLength(3));
-      expect(
-        blocks.every((block) => block.skincareProducts.contains('Sunscreen')),
-        isTrue,
-      );
+      expect(blocks, isEmpty);
       final base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(
         base.skinCareSpecialCareNotes,
@@ -1108,10 +1552,11 @@ void main() {
       );
       expect(find.text('2 special-care notes'), findsOneWidget);
       expect(
-        find.textContaining('AI could not build a safe daily routine'),
-        findsNothing,
+        find.text(
+          'These products may not safely support this many routines per day. Try 2 times per day.',
+        ),
+        findsOneWidget,
       );
-      expect(find.textContaining('AI could not build a routine'), findsNothing);
       expect(find.textContaining('Suggested:'), findsNothing);
       expect(
         find.byKey(
@@ -1227,33 +1672,36 @@ void main() {
     expect(result.blocks, isEmpty);
     expect(
       result.errorMessage,
-      'AI could not build a routine from these products. Try typing the product names clearly.',
+      'AI returned no usable routine. Try again or use typed product names.',
     );
   });
 
-  test('26. Scheduler fails title-only plans without safe fallback products', () {
-    final result = onboarding7ScheduleSkinCareRoutine(
-      baseTimeline: BaseTimelineDraft(
-        blocks: [BaseTimelineDraft.defaultBathBlock()],
-      ),
-      routinePlans: const [
-        SkinCareRoutinePlan(
-          slotLabel: 'morning',
-          title: 'Morning Skin Care',
-          steps: [],
-          productNames: [],
+  test(
+    '26. Scheduler fails title-only plans without safe fallback products',
+    () {
+      final result = onboarding7ScheduleSkinCareRoutine(
+        baseTimeline: BaseTimelineDraft(
+          blocks: [BaseTimelineDraft.defaultBathBlock()],
         ),
-      ],
-      desiredApplicationsPerDay: 2,
-      now: DateTime.utc(2026, 6, 15),
-    );
+        routinePlans: const [
+          SkinCareRoutinePlan(
+            slotLabel: 'morning',
+            title: 'Morning Skin Care',
+            steps: [],
+            productNames: [],
+          ),
+        ],
+        desiredApplicationsPerDay: 2,
+        now: DateTime.utc(2026, 6, 15),
+      );
 
-    expect(result.blocks, isEmpty);
-    expect(
-      result.errorMessage,
-      'AI could not build a routine from these products. Try typing the product names clearly.',
-    );
-  });
+      expect(result.blocks, isEmpty);
+      expect(
+        result.errorMessage,
+        'AI returned no usable routine. Try again or use typed product names.',
+      );
+    },
+  );
 
   test(
     '27. Worker client maps image and routine JSON payload errors correctly',
@@ -1790,7 +2238,7 @@ void main() {
               final notifier = MockOnboardingNotifier();
               notifier.loadSeedData(_hasProductsDraft());
               notifier.setValidationMessage(
-                'Upload your product photo or type product names first.',
+                'Type one product per line, for example "Minimalist SPF 50 - sunscreen".',
               );
               return notifier;
             }),
@@ -1815,7 +2263,7 @@ void main() {
                   false,
                 ),
                 validationMessage:
-                    'Upload your product photo or type product names first.',
+                    'Type one product per line, for example "Minimalist SPF 50 - sunscreen".',
                 onDotTap: (_) {},
                 onIndicatorDraggedTo: (_) {},
                 onNext: () {},
@@ -2021,6 +2469,13 @@ void main() {
               productNames: ['Cleanser', 'SPF'],
               repeatDays: [1, 2, 3, 4, 5, 6, 7], // Daily plan
             ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Daily Night',
+              steps: ['Cleanse', 'Moisturizer'],
+              productNames: ['Cleanser', 'Moisturizer'],
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ),
           ],
         ),
       );
@@ -2039,7 +2494,7 @@ void main() {
 
       await tester.enterText(
         find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-        'Cleanser, Sunscreen, Moisturizer',
+        'Cleanser, Sunscreen, Moisturizer, AHA BHA',
       );
       await tester.pumpAndSettle();
 
@@ -2059,7 +2514,7 @@ void main() {
       final scBlocks = draftState.draft.baseTimeline.blocks
           .where((b) => b.section == 'skin_care')
           .toList();
-      expect(scBlocks.length, 2); // Morning from AI plus daytime SPF refresh
+      expect(scBlocks.length, 2);
     },
   );
 
@@ -2119,7 +2574,7 @@ void main() {
       expect(scBlocks, isEmpty);
       expect(
         find.text(
-          'AI could not build a routine from these products. Try typing the product names clearly.',
+          'AI returned no usable routine. Try again or use typed product names.',
         ),
         findsOneWidget,
       );
@@ -2138,7 +2593,7 @@ void main() {
               'steps': ['use 2x/week'],
               'warnings': ['avoid acids the same night'],
             },
-            'Patch test before new actives',
+            'warning: Patch test before new actives',
           ],
           routinePlans: [
             SkinCareRoutinePlan(
@@ -2197,7 +2652,7 @@ void main() {
           'Special care: Retinol night - use 2x/week; avoid acids the same night',
         ),
       );
-      expect(notes, contains('Patch test before new actives'));
+      expect(notes, contains('warning: Patch test before new actives'));
       expect(
         notes,
         contains(startsWith('Special care: AHA Night - AHA Serum')),
@@ -2253,7 +2708,7 @@ void main() {
       final client = TestSkinCareAiClient(
         routineResultsQueue: [
           SkinCareAiRoutineResult(
-            suggestedProducts: const ['First note'],
+            suggestedProducts: const ['missing: First note'],
             morningRoutine: const [],
             nightRoutine: const [],
             weeklyRoutine: const [],
@@ -2261,7 +2716,7 @@ void main() {
             routinePlans: _skinCarePlansForCount(2),
           ),
           SkinCareAiRoutineResult(
-            suggestedProducts: const ['Second note'],
+            suggestedProducts: const ['missing: Second note'],
             morningRoutine: const [],
             nightRoutine: const [],
             weeklyRoutine: const [],
@@ -2291,7 +2746,7 @@ void main() {
       var base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
-      expect(base.skinCareSpecialCareNotes, ['First note']);
+      expect(base.skinCareSpecialCareNotes, ['missing: First note']);
       expect(find.text('1 special-care note'), findsOneWidget);
       expect(find.textContaining('Suggested:'), findsNothing);
 
@@ -2307,7 +2762,7 @@ void main() {
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
-      expect(base.skinCareSpecialCareNotes, ['Second note']);
+      expect(base.skinCareSpecialCareNotes, ['missing: Second note']);
       expect(find.text('1 special-care note'), findsOneWidget);
       await tester.tap(
         find.byKey(
@@ -2492,7 +2947,11 @@ void main() {
       blocks: [BaseTimelineDraft.defaultBathBlock()],
     );
     const noRoutineMessage =
-        'AI could not build a routine from these products. Try typing the product names clearly.';
+        'AI returned no usable routine. Try again or use typed product names.';
+    const productMismatchMessage =
+        'AI used products outside your list. Try again.';
+    const unsafeFrequencyMessage =
+        'These products may not safely support this many routines per day. Try 2 times per day.';
 
     final sunscreenOnly = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
@@ -2504,6 +2963,12 @@ void main() {
           title: 'Morning SPF',
           steps: ['Apply sunscreen'],
           productNames: ['Daily Sunscreen'],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'midday',
+          title: 'Midday SPF',
+          steps: ['Reapply sunscreen'],
+          productNames: ['sunscreen'],
         ),
       ],
       now: DateTime.utc(2026, 6, 15),
@@ -2523,33 +2988,43 @@ void main() {
       ['Reapply sunscreen'],
     );
 
-    final serumOnly = onboarding7ScheduleSkinCareRoutine(
+    final nameVariations = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Hydrating Serum'],
+      fallbackProductNames: const [
+        'Beardo Detan Face Wash',
+        'Minimalist SPF 50',
+        'Minimalist Vitamin C',
+        'Minimalist Alpha Arbutin',
+      ],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
-          title: 'Morning Serum',
-          steps: ['Apply hydrating serum'],
-          productNames: ['Hydrating Serum'],
+          title: 'Morning Actives',
+          steps: ['Vitamin C serum', 'Sunscreen'],
+          productNames: ['Vitamin C serum', 'Minimalist SPF 50 Sunscreen'],
         ),
         SkinCareRoutinePlan(
           slotLabel: 'night',
-          title: 'Night Serum',
-          steps: ['Apply hydrating serum'],
-          productNames: ['Hydrating Serum'],
+          title: 'Night Brightening',
+          steps: ['Face wash', 'Alpha Arbutin serum'],
+          productNames: ['Beardo Detan Face Wash', 'Alpha Arbutin serum'],
         ),
       ],
       now: DateTime.utc(2026, 6, 15),
     );
-    expect(serumOnly.errorMessage, isNull);
-    expect(serumOnly.blocks, hasLength(2));
+    expect(nameVariations.errorMessage, isNull);
     expect(
-      serumOnly.blocks
+      nameVariations.blocks
+          .singleWhere((block) => block.skincareSlotLabel == 'morning')
+          .skincareProducts,
+      ['Minimalist Vitamin C', 'Minimalist SPF 50'],
+    );
+    expect(
+      nameVariations.blocks
           .singleWhere((block) => block.skincareSlotLabel == 'night')
           .skincareProducts,
-      ['Hydrating Serum'],
+      ['Beardo Detan Face Wash', 'Minimalist Alpha Arbutin'],
     );
 
     final cleanserMoisturizerOnly = onboarding7ScheduleSkinCareRoutine(
@@ -2623,7 +3098,30 @@ void main() {
       now: DateTime.utc(2026, 6, 15),
     );
     expect(unownedProduct.blocks, isEmpty);
-    expect(unownedProduct.errorMessage, noRoutineMessage);
+    expect(unownedProduct.errorMessage, productMismatchMessage);
+
+    final outsideBrandProduct = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 2,
+      fallbackProductNames: const ['Minimalist SPF 50'],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Outside Brand',
+          steps: ['Apply sunscreen'],
+          productNames: ['La Roche-Posay Anthelios Sunscreen'],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Outside Brand Night',
+          steps: ['Apply moisturizer'],
+          productNames: ['CeraVe Moisturizing Cream'],
+        ),
+      ],
+      now: DateTime.utc(2026, 6, 15),
+    );
+    expect(outsideBrandProduct.blocks, isEmpty);
+    expect(outsideBrandProduct.errorMessage, productMismatchMessage);
 
     final titleOnly = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
@@ -2667,26 +3165,33 @@ void main() {
       ],
       now: DateTime.utc(2026, 6, 15),
     );
-    expect(fourPerDay.errorMessage, isNull);
-    expect(
-      fourPerDay.blocks
-          .singleWhere((block) => block.skincareSlotLabel == 'midday')
-          .title,
-      isNot('Afternoon AI'),
+    expect(fourPerDay.blocks, isEmpty);
+    expect(fourPerDay.errorMessage, unsafeFrequencyMessage);
+
+    final ambiguousSerum = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: bathBase,
+      desiredApplicationsPerDay: 2,
+      fallbackProductNames: const [
+        'Minimalist Vitamin C',
+        'Minimalist Alpha Arbutin',
+      ],
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning Serum',
+          steps: ['Apply serum'],
+          productNames: ['serum'],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'night',
+          title: 'Night Serum',
+          steps: ['Apply serum'],
+          productNames: ['serum'],
+        ),
+      ],
     );
-    expect(
-      fourPerDay.blocks
-          .singleWhere((block) => block.skincareSlotLabel == 'afternoon')
-          .title,
-      'Afternoon AI',
-    );
-    for (final slot in ['midday', 'afternoon']) {
-      final block = fourPerDay.blocks.singleWhere(
-        (block) => block.skincareSlotLabel == slot,
-      );
-      expect(block.skincareProducts, ['Daily Sunscreen']);
-      expect(block.skincareSteps, ['Reapply sunscreen']);
-    }
+    expect(ambiguousSerum.blocks, isEmpty);
+    expect(ambiguousSerum.errorMessage, productMismatchMessage);
 
     final unsafeFrequency = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
@@ -2708,10 +3213,7 @@ void main() {
       ],
     );
     expect(unsafeFrequency.blocks, isEmpty);
-    expect(
-      unsafeFrequency.errorMessage,
-      'These products may not safely support this many daily routines. Try fewer routines or add more basic products.',
-    );
+    expect(unsafeFrequency.errorMessage, unsafeFrequencyMessage);
   });
 
   test('58. Sun cream is sunscreen and not moisturizer', () {
@@ -2730,6 +3232,12 @@ void main() {
           slotLabel: 'morning',
           title: 'Morning Skin Care',
           steps: ['Apply sun cream'],
+          productNames: ['Sun Cream SPF 50'],
+        ),
+        SkinCareRoutinePlan(
+          slotLabel: 'midday',
+          title: 'Midday Skin Care',
+          steps: ['Reapply sun cream'],
           productNames: ['Sun Cream SPF 50'],
         ),
         SkinCareRoutinePlan(
@@ -2768,6 +3276,7 @@ OnboardingDraft _hasProductsDraft({
   String uid = 'uid-1',
   List<TimelineBlockDraft> blocks = const [],
   int desiredApplicationsPerDay = 2,
+  String? productNames,
   String? productPhotoAssetId,
   String? productPhotoR2Key,
   String? productPhotoStatus,
@@ -2782,6 +3291,7 @@ OnboardingDraft _hasProductsDraft({
       skinCareSetupStep: 1,
       skinCareSetupPath: 'has_products',
       skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+      skinCareProductNames: productNames,
       skinCareProductPhotoAssetId: productPhotoAssetId,
       skinCareProductPhotoR2Key: productPhotoR2Key,
       skinCareProductPhotoStatus: productPhotoStatus,
@@ -2820,29 +3330,6 @@ OnboardingDraft _choiceDraftWithProductData() {
         ),
       ],
     ),
-  );
-}
-
-SkinCareAiRoutineResult _routineResultWithGenericTwoPlans() {
-  return const SkinCareAiRoutineResult(
-    routinePlans: [
-      SkinCareRoutinePlan(
-        slotLabel: 'morning',
-        title: 'Morning Skin Care',
-        steps: ['Face wash', 'Apply sunscreen'],
-        productNames: ['Gentle Cleanser', 'Sunscreen'],
-      ),
-      SkinCareRoutinePlan(
-        slotLabel: 'night',
-        title: 'Night Skin Care',
-        steps: ['Face wash'],
-        productNames: ['Gentle Cleanser'],
-      ),
-    ],
-    morningRoutine: [],
-    nightRoutine: [],
-    weeklyRoutine: [],
-    timelineBlocks: [],
   );
 }
 
@@ -3069,6 +3556,7 @@ class TestSkinCareAiClient implements SkinCareAiClient {
 
 class TestUploadController extends UploadController {
   final UploadedAsset? result;
+  int startUploadCalls = 0;
 
   TestUploadController({
     this.result,
@@ -3088,6 +3576,7 @@ class TestUploadController extends UploadController {
     required UploadedAssetPurpose purpose,
     required String sourceFeature,
   }) async {
+    startUploadCalls += 1;
     if (result == null) return null;
     state = UploadState(
       status: UploadFlowStatus.uploaded,

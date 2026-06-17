@@ -321,20 +321,50 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
     }
   }
 
+  const typedProductDetails = Array.isArray(body.typedProductDetails)
+    ? body.typedProductDetails
+    : [];
+  const productsFromPhoto = Array.isArray(body.productsFromPhoto)
+    ? body.productsFromPhoto
+    : [];
+  const activeSource = String(
+    body.productInputSource ||
+      (typedProductDetails.length > 0
+        ? "typed"
+        : productsFromPhoto.length > 0
+          ? "photo"
+          : "none")
+  ).toLowerCase();
+  const ownedProducts = activeSource === "photo"
+    ? productsFromPhoto
+    : activeSource === "typed"
+      ? typedProductDetails
+      : [];
+  if ((activeSource === "photo" || activeSource === "typed") && ownedProducts.length === 0) {
+    throw new HttpError(400, "invalid_skin_care_request", "No owned products were provided for routine generation.");
+  }
+  const ownedProductInstruction = activeSource === "photo" || activeSource === "typed"
+    ? `Active Product Source: ${activeSource}
+Owned Products From Active Source Only: ${JSON.stringify(ownedProducts)}
+Use ONLY the owned products above. Do not merge photo and typed products. Do not invent missing products. Do not suggest CeraVe, La Roche-Posay, Paula's Choice, or any product outside the owned list unless the user owns it.
+When source is photo, these are productsFromPhoto. When source is typed, these are typedProductDetails.
+Pay attention to name, category, source, keyIngredients, possibleActives, usageHint, warningIfAny, and confidence.
+Use product categories and ingredient/active metadata to identify product roles, especially sunscreen. A product may be sunscreen if category is sunscreen, name mentions UV/sun/SPF, ingredients/actives mention UV filters, or warnings/usage imply sun protection.
+If moisturizer is missing, add a generic warning/note only. If sunscreen is missing, add a generic warning/note only. Do not name outside products in suggestedProducts, weeklyRoutine, routinePlans, warnings, or notes for an owned-product request. Missing moisturizer, cleanser, or sunscreen must not block generation. If the user owns an incomplete set, still build the best safe limited routine from available products.
+Return routinePlans using EXACT owned product names from the list above. Do not use generic names if an exact product name is available.
+Return exactly ${desiredApplicationsPerDay} routinePlans unless there is a safety reason not to. If owned products cannot safely support ${desiredApplicationsPerDay} routines per day, return fewer routinePlans and include warnings explaining the limit.
+If a product is a strong active or exfoliant, do not schedule it daily unless the owned product metadata explicitly says daily use is safe.`
+    : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
+
   const prompt = `You are an expert dermatologist. Generate skin-care routine plans. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
 Skin Type: ${body.skinType || "unknown"}
 Main Problem: ${body.mainProblem || "none"}
 Budget: ${body.budget || "medium"}
 Routine Preference: ${body.routinePreference || "balanced"}
 Desired Applications Per Day: ${desiredApplicationsPerDay}
-Products Owned (from photo): ${JSON.stringify(body.productsFromPhoto || [])}
-Photo Product Names (fallback/display only): ${JSON.stringify(body.photoProductNames || [])}
-Typed Products: ${JSON.stringify(body.typedProductNames || [])}
-For owned products, use the structured photo metadata whenever available. Pay attention to category, keyIngredients, possibleActives, usageHint, warningIfAny, and confidence.
-Use product categories and ingredient/active metadata to identify product roles, especially sunscreen. A product may be sunscreen if category is sunscreen, name mentions UV/sun/SPF, ingredients/actives mention UV filters, or warnings/usage imply sun protection.
+${ownedProductInstruction}
 Use warningIfAny and possibleActives to avoid unsafe conflicts. E.g. avoid Retinol + AHA/BHA in the same routine block, sunscreen in morning when appropriate.
 If a face photo is provided, use it to personalize the routine and suggested products.
-Return exactly ${desiredApplicationsPerDay} routinePlans unless there is a safety reason not to.
 Use slot labels from: morning, midday, afternoon, night, custom.
 For 2/day prefer morning + night.
 For 3/day prefer morning + midday/afternoon + night.
@@ -355,7 +385,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   "morningRoutine": [],
   "nightRoutine": [],
   "weeklyRoutine": [],
-  "suggestedProducts": ["Product Name 1", "Product Name 2"],
+  "suggestedProducts": ["Warnings or optional generic gap notes only. For owned-product requests, do not name unowned products here."],
   "timelineBlocks": [
     {
       "title": "Morning Skin Care",

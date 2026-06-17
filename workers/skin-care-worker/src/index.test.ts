@@ -318,6 +318,78 @@ describe("Skin-care Worker", () => {
     expect(json.warnings).toContain("routine_plan_count_mismatch");
   });
 
+  test("typed source prompt uses typedProductDetails and excludes photo products", async () => {
+    const calls: FetchCall[] = [];
+    stubGemini(JSON.stringify({
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning",
+          steps: ["Apply sunscreen"],
+          productNames: ["Minimalist SPF 50"],
+        },
+      ],
+    }), calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: [
+          {
+            name: "Minimalist SPF 50",
+            category: "sunscreen",
+            source: "typed",
+          },
+        ],
+        productsFromPhoto: [{ name: "Inactive Photo Cleanser" }],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+
+    const prompt = calls[0].body.contents[0].parts[0].text as string;
+    expect(response.status).toBe(200);
+    expect(prompt).toContain("Active Product Source: typed");
+    expect(prompt).toContain("Minimalist SPF 50");
+    expect(prompt).not.toContain("Inactive Photo Cleanser");
+  });
+
+  test("photo source prompt uses productsFromPhoto and excludes typed products", async () => {
+    const calls: FetchCall[] = [];
+    stubGemini(JSON.stringify({
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning",
+          steps: ["Cleanse"],
+          productNames: ["Photo Cleanser"],
+        },
+      ],
+    }), calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "photo",
+        productsFromPhoto: [{ name: "Photo Cleanser", category: "cleanser" }],
+        typedProductDetails: [
+          {
+            name: "Inactive Typed SPF",
+            category: "sunscreen",
+            source: "typed",
+          },
+        ],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+
+    const prompt = calls[0].body.contents[0].parts[0].text as string;
+    expect(response.status).toBe(200);
+    expect(prompt).toContain("Active Product Source: photo");
+    expect(prompt).toContain("Photo Cleanser");
+    expect(prompt).not.toContain("Inactive Typed SPF");
+  });
+
   test("desiredApplicationsPerDay 1 is clamped to 2 in prompt", async () => {
     const calls: FetchCall[] = [];
     stubGemini(JSON.stringify({

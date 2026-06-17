@@ -44,6 +44,7 @@ class SkinCareDetectedProduct {
   final String name;
   final String brand;
   final String category;
+  final String source;
   final List<String> keyIngredients;
   final List<String> possibleActives;
   final String usageHint;
@@ -54,6 +55,7 @@ class SkinCareDetectedProduct {
     this.name = '',
     this.brand = '',
     this.category = '',
+    this.source = '',
     this.keyIngredients = const [],
     this.possibleActives = const [],
     this.usageHint = '',
@@ -74,6 +76,7 @@ class SkinCareDetectedProduct {
       name: _stringValue(map['name']).trim(),
       brand: _stringValue(map['brand']).trim(),
       category: _stringValue(map['category']).trim(),
+      source: _stringValue(map['source']).trim(),
       keyIngredients: _stringListFromValue(
         map['keyIngredients'] ?? map['ingredients'],
       ),
@@ -92,6 +95,7 @@ class SkinCareDetectedProduct {
       name.isNotEmpty ||
       brand.isNotEmpty ||
       category.isNotEmpty ||
+      source.isNotEmpty ||
       keyIngredients.isNotEmpty ||
       possibleActives.isNotEmpty ||
       usageHint.isNotEmpty ||
@@ -143,6 +147,7 @@ class SkinCareDetectedProduct {
     'name': name,
     'brand': brand,
     'category': category,
+    if (source.isNotEmpty) 'source': source,
     'keyIngredients': keyIngredients,
     'possibleActives': possibleActives,
     'usageHint': usageHint,
@@ -155,7 +160,8 @@ class SkinCareDetectedProduct {
     if (name.isNotEmpty) map['name'] = _truncate(name, 50);
     if (brand.isNotEmpty) map['brand'] = _truncate(brand, 50);
     if (category.isNotEmpty) map['category'] = _truncate(category, 30);
-    
+    if (source.isNotEmpty) map['source'] = _truncate(source, 20);
+
     if (keyIngredients.isNotEmpty) {
       map['keyIngredients'] = keyIngredients
           .take(5)
@@ -575,7 +581,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     }
     if (rawError == 'provider_empty_candidates' ||
         rawError == 'no_blocks_generated') {
-      return 'AI could not read the product from the photo. Try a clearer image.';
+      return 'AI could not read your products. Upload a clearer photo or use typed product names.';
     }
     if (rawError == 'unsupported_content_type') {
       return 'Photo format is not supported. Please upload JPEG, PNG, or WEBP.';
