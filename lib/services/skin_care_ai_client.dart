@@ -535,7 +535,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       }
 
       return SkinCareAiRoutineResult(
-        routinePlans: _routinePlansFromValue(plans, fallbackBlocks: tB),
+        routinePlans: _routinePlansFromValue(plans),
         morningRoutine: mR is List ? mR : [],
         nightRoutine: nR is List ? nR : [],
         weeklyRoutine: wR is List ? wR : [],
@@ -630,22 +630,9 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
 
 enum _SkinCareWorkerEndpoint { productAnalyze, routineGenerate }
 
-List<SkinCareRoutinePlan> _routinePlansFromValue(
-  dynamic value, {
-  dynamic fallbackBlocks,
-}) {
+List<SkinCareRoutinePlan> _routinePlansFromValue(dynamic value) {
   final rawPlans = value is List ? value : const [];
-  final plans = rawPlans
-      .whereType<Map>()
-      .map(
-        (item) => SkinCareRoutinePlan.fromMap(Map<String, dynamic>.from(item)),
-      )
-      .where(_routinePlanHasContent)
-      .toList(growable: false);
-  if (plans.isNotEmpty) return plans;
-
-  final rawBlocks = fallbackBlocks is List ? fallbackBlocks : const [];
-  return rawBlocks
+  return rawPlans
       .whereType<Map>()
       .map(
         (item) => SkinCareRoutinePlan.fromMap(Map<String, dynamic>.from(item)),

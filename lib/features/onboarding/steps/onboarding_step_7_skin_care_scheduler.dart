@@ -8,11 +8,11 @@ const int onboarding7SkinCareDurationMinutes = 15;
 
 const List<int> onboarding7EveryDay = [1, 2, 3, 4, 5, 6, 7];
 const String _noRoutineMessage =
-    'AI returned no usable routine. Try again or use typed product names.';
+    'AI returned no usable routine. Try clearer product names or 2 times/day.';
 const String _productMismatchMessage =
     'AI used products outside your list. Try again.';
 const String onboarding7UnsafeFrequencyMessage =
-    'These products may not safely support 3 routines per day. Try 2 times per day.';
+    'These products may not safely support this many routines per day. Try fewer routines or add more basic products.';
 const List<String> _schedulableSlotLabels = [
   'morning',
   'midday',
@@ -321,8 +321,8 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   required BaseTimelineDraft baseTimeline,
   required List<SkinCareRoutinePlan> routinePlans,
   required int desiredApplicationsPerDay,
-  List<String> fallbackProductNames = const [],
-  List<SkinCareDetectedProduct> fallbackProductDetails = const [],
+  List<String> ownedProductNames = const [],
+  List<SkinCareDetectedProduct> ownedProductDetails = const [],
   bool forceEveryDay = true,
   DateTime? now,
 }) {
@@ -340,8 +340,8 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
   final adaptedPlans = onboarding7AdaptRoutinePlansForSchedule(
     routinePlans: onboarding7PartitionRoutinePlans(routinePlans).dailyPlans,
     desiredApplicationsPerDay: desired,
-    fallbackProductNames: fallbackProductNames,
-    fallbackProductDetails: fallbackProductDetails,
+    ownedProductNames: ownedProductNames,
+    ownedProductDetails: ownedProductDetails,
   );
   if (adaptedPlans.hasError || adaptedPlans.plans.length < desired) {
     return Onboarding7SkinCareScheduleResult(
@@ -421,9 +421,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
         );
       }
 
-      final products = _dedupeStrings(
-        plan.productNames.isEmpty ? fallbackProductNames : plan.productNames,
-      );
+      final products = _dedupeStrings(plan.productNames);
       final steps = _dedupeStrings(plan.steps);
       if (products.isEmpty) {
         return const Onboarding7SkinCareScheduleResult(
@@ -603,8 +601,8 @@ List<SkinCareRoutinePlan> onboarding7SelectRoutinePlansForSchedule(
 Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   required List<SkinCareRoutinePlan> routinePlans,
   required int desiredApplicationsPerDay,
-  List<String> fallbackProductNames = const [],
-  List<SkinCareDetectedProduct> fallbackProductDetails = const [],
+  List<String> ownedProductNames = const [],
+  List<SkinCareDetectedProduct> ownedProductDetails = const [],
 }) {
   final sourcePlans = onboarding7PartitionRoutinePlans(routinePlans).dailyPlans;
   final desired = onboarding7NormalizeDesiredApplications(
@@ -626,8 +624,8 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
   final unused = sourcePlans.toList();
   final selectedBySlot = <String, SkinCareRoutinePlan>{};
   final ownedProducts = _ownedProductCatalogFromBasis(
-    productNames: fallbackProductNames,
-    productDetails: fallbackProductDetails,
+    productNames: ownedProductNames,
+    productDetails: ownedProductDetails,
   );
   var sawProductMismatch = false;
   var sawUnsafePlan = false;

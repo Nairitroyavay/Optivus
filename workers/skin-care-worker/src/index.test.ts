@@ -301,7 +301,7 @@ describe("Skin-care Worker", () => {
           slotLabel: "morning",
           title: "Morning Skin Care",
           steps: ["Face wash", "Apply sunscreen"],
-          productNames: ["Cleanser", "UV Aqua Gel"],
+          productNames: ["Gentle Cleanser", "UV Aqua Gel"],
         },
       ],
       warnings: [],
@@ -310,6 +310,10 @@ describe("Skin-care Worker", () => {
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/routine/generate", {
         productsFromPhoto: [
+          {
+            name: "Gentle Cleanser",
+            category: "cleanser",
+          },
           {
             name: "UV Aqua Gel",
             category: "sunscreen",
@@ -326,7 +330,6 @@ describe("Skin-care Worker", () => {
     expect(json.routinePlans).toHaveLength(1);
     expect(json.timelineBlocks).toHaveLength(1);
     expect(json.timelineBlocks[0].endMinute - json.timelineBlocks[0].startMinute).toBe(15);
-    expect(json.warnings).toContain("routine_plan_count_mismatch");
   });
 
   test("typed source prompt uses typedProductDetails and excludes photo products", async () => {
@@ -365,7 +368,7 @@ describe("Skin-care Worker", () => {
     expect(prompt).not.toContain("Inactive Photo Cleanser");
   });
 
-  test("text-only owned products build daily routinePlans when AI returns notes only", async () => {
+  test("text-only owned products do not get fallback plans when AI returns notes only", async () => {
     stubGemini(JSON.stringify({
       suggestedProducts: ["Missing moisturizer"],
       weeklyRoutine: [],
@@ -384,31 +387,73 @@ describe("Skin-care Worker", () => {
     const json = await response.json() as any;
 
     expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(0);
+    expect(json.weeklyRoutine).toEqual([]);
+    expect(json.warnings.join(" ").toLowerCase()).toContain("moisturizer");
+    expect(json.warnings).toContain("ai_returned_no_usable_routine");
+  });
+
+  test("text-only owned products preserve exact sanitized AI routine names", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [
+        "Use Minimalist PHA Toner 1-2 times per week at night. Do not combine with other strong actives.",
+      ],
+      warnings: ["No moisturizer detected"],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: [
+            "Cleanse face",
+            "Apply Minimalist Vitamin C",
+            "Apply Minimalist SPF 50",
+          ],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Vitamin C",
+            "Minimalist SPF 50",
+          ],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: [
+            "Cleanse face",
+            "Apply Minimalist Alpha Arbutin",
+          ],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Alpha Arbutin",
+          ],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
     expect(json.routinePlans).toHaveLength(2);
-    expect(json.routinePlans[0].slotLabel).toBe("morning");
     expect(json.routinePlans[0].productNames).toEqual([
       "Beardo Detan Face Wash",
       "Minimalist Vitamin C",
       "Minimalist SPF 50",
     ]);
-    expect(json.routinePlans[0].steps).toEqual([
-      "Cleanse face",
-      "Apply Minimalist Vitamin C",
-      "Apply Minimalist SPF 50",
-    ]);
-    expect(json.routinePlans[1].slotLabel).toBe("night");
     expect(json.routinePlans[1].productNames).toEqual([
       "Beardo Detan Face Wash",
       "Minimalist Alpha Arbutin",
     ]);
-    expect(json.routinePlans[1].steps).toEqual([
-      "Cleanse face",
-      "Apply Minimalist Alpha Arbutin",
-    ]);
     expect(json.weeklyRoutine).toContain(
       "Use Minimalist PHA Toner 1-2 times per week at night. Do not combine with other strong actives.",
     );
-    expect(json.warnings.join(" ").toLowerCase()).toContain("moisturizer");
   });
 
   test("missing moisturizer warning does not make owned-product routine empty", async () => {
@@ -416,7 +461,20 @@ describe("Skin-care Worker", () => {
       suggestedProducts: ["No moisturizer detected"],
       weeklyRoutine: [],
       warnings: ["No moisturizer detected"],
-      routinePlans: [],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning SPF",
+          steps: ["Cleanse", "Apply Daily SPF 50"],
+          productNames: ["Gentle Cleanser", "Daily SPF 50"],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Cleanse",
+          steps: ["Cleanse"],
+          productNames: ["Gentle Cleanser"],
+        },
+      ],
     }));
 
     const response = await worker.fetch(
@@ -440,12 +498,59 @@ describe("Skin-care Worker", () => {
     expect(json.warnings.join(" ").toLowerCase()).toContain("moisturizer");
   });
 
+  test("owned-product routine rejects clearly outside products", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: ["Try CeraVe Moisturizing Cream"],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [
+        {
+          slotLabel: "night",
+          title: "Outside Product",
+          steps: ["Apply moisturizer"],
+          productNames: ["CeraVe Moisturizing Cream"],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: [
+          { name: "Daily SPF 50", category: "sunscreen", source: "typed" },
+        ],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toEqual([]);
+    expect(json.suggestedProducts).toEqual([]);
+    expect(json.warnings).toContain("ai_returned_no_usable_routine");
+    expect(json.rejectedPlanReasons.join("|")).toContain("product_mismatch");
+  });
+
   test("three per day with limited owned products returns two safe plans and unsafe-frequency warning", async () => {
     stubGemini(JSON.stringify({
       suggestedProducts: [],
       weeklyRoutine: [],
-      warnings: [],
-      routinePlans: [],
+      warnings: ["unsafe_frequency", "Only two safe daily routines are supported."],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: ["Cleanse face", "Apply Minimalist Vitamin C", "Apply Minimalist SPF 50"],
+          productNames: ["Beardo Detan Face Wash", "Minimalist Vitamin C", "Minimalist SPF 50"],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse face", "Apply Minimalist Alpha Arbutin"],
+          productNames: ["Beardo Detan Face Wash", "Minimalist Alpha Arbutin"],
+        },
+      ],
     }));
 
     const response = await worker.fetch(
@@ -460,12 +565,7 @@ describe("Skin-care Worker", () => {
 
     expect(response.status).toBe(200);
     expect(json.routinePlans).toHaveLength(2);
-    expect(json.warnings).toContain(
-      "These products may not safely support 3 routines per day. Try 2 times per day.",
-    );
-    expect(json.weeklyRoutine).toContain(
-      "Use Minimalist PHA Toner 1-2 times per week at night. Do not combine with other strong actives.",
-    );
+    expect(json.warnings).toContain("unsafe_frequency");
   });
 
   test("photo source prompt uses productsFromPhoto and excludes typed products", async () => {
@@ -576,6 +676,5 @@ describe("Skin-care Worker", () => {
     expect(json.timelineBlocks).toHaveLength(1);
     expect(json.timelineBlocks[0].title).toBe("Night Skin Care");
     expect(json.timelineBlocks[0].title).not.toBe("Bad Compatibility");
-    expect(json.warnings).toContain("routine_plan_count_mismatch");
   });
 });

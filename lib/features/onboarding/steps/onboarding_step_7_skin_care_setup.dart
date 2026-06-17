@@ -28,9 +28,9 @@ const int _onboarding7SpecialCareNoteMaxLength = 180;
 const String _onboarding7NoTypedProductsMessage =
     'Type one product per line, for example "Minimalist SPF 50 - sunscreen".';
 const String _onboarding7AiEmptyMessage =
-    'AI returned no usable routine. Try again or use typed product names.';
-const String _onboarding7AiEmptyOwnedProductsMessage =
-    'AI returned notes but no routine. Try 2 times/day or typed product names.';
+    'AI returned no usable routine. Try clearer product names or 2 times/day.';
+const String _onboarding7AiFewerRoutinesMessage =
+    'AI returned fewer routines than requested. Try again or choose fewer times per day.';
 const String _onboarding7PhotoUnreadableMessage =
     'AI could not read your products. Upload a clearer photo or use typed product names.';
 
@@ -354,7 +354,8 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
       text.contains('provider_invalid_json')) {
     return 'AI response could not be read safely. Please try again.';
   }
-  if (text.contains('may not safely support')) {
+  if (text.contains('unsafe_frequency') ||
+      text.contains('may not safely support')) {
     return onboarding7UnsafeFrequencyMessage;
   }
   if (text.contains('unavailable') || text.contains('provider_timeout')) {
@@ -622,7 +623,8 @@ List<String> _readNoteParts(dynamic value) {
 bool _hasUnsafeFrequencyWarning(Iterable<String> warnings) {
   return warnings.any((warning) {
     final lower = warning.toLowerCase();
-    return lower.contains('may not safely support') ||
+    return lower.contains('unsafe_frequency') ||
+        lower.contains('may not safely support') ||
         lower.contains('try 2 times per day');
   });
 }
@@ -1409,18 +1411,14 @@ class _HasProductsModeScreenState
           '[Onboarding7] rejectedPlanReasons=${result.rejectedPlanReasons}',
         );
       }
-      final routinePlans = result.routinePlans.isNotEmpty
-          ? result.routinePlans
-          : onboarding7RoutinePlansFromWorkerBlocks(result.timelineBlocks);
+      final routinePlans = result.routinePlans;
 
       if (result.hasError || routinePlans.isEmpty) {
         if (!mounted) return;
         setState(() {
           _generating = false;
           if (routinePlans.isEmpty && !result.hasError) {
-            _generationError = ownedProductNames.isNotEmpty
-                ? _onboarding7AiEmptyOwnedProductsMessage
-                : _onboarding7AiEmptyMessage;
+            _generationError = _onboarding7AiEmptyMessage;
           } else {
             _generationError =
                 didCompactPayloadRetry &&
@@ -1438,33 +1436,58 @@ class _HasProductsModeScreenState
       final partitioned = onboarding7PartitionRoutinePlans(routinePlans);
       final dailyPlans = partitioned.dailyPlans;
       final specialPlans = partitioned.specialCarePlans;
+      final aiReturnedFewerDailyPlans =
+          dailyPlans.length < desiredApplicationsPerDay;
       final unsafeFrequencyReturned =
-          desiredApplicationsPerDay > 2 &&
-          dailyPlans.length >= 2 &&
+          aiReturnedFewerDailyPlans &&
+          dailyPlans.isNotEmpty &&
           _hasUnsafeFrequencyWarning(result.warnings);
+      final specialCareNotesForResult = () {
+        final missingProductNotes = onboarding7MissingBasicProductNotes(
+          productNames: ownedProductNames,
+          productDetails: ownedProductDetails,
+        );
+        return onboarding7SpecialCareNotesFromAiResult(
+          suggestedProducts: [
+            ...result.suggestedProducts,
+            ...missingProductNotes,
+          ],
+          weeklyRoutine: result.weeklyRoutine,
+          specialCarePlans: specialPlans,
+          ownedProductNames: ownedProductNames,
+        );
+      }();
+
+      if (aiReturnedFewerDailyPlans && !unsafeFrequencyReturned) {
+        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+          return base.copyWith(
+            blocks: base.blocks.where((b) => b.section != 'skin_care').toList(),
+            skinCareProductNames: _controller.text,
+            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+            skinCareSkipped: false,
+            skinCareSpecialCareNotes: specialCareNotesForResult,
+          );
+        });
+        if (!mounted) return;
+        setState(() {
+          _generating = false;
+          _generationError = dailyPlans.isEmpty
+              ? _onboarding7AiEmptyMessage
+              : _onboarding7AiFewerRoutinesMessage;
+        });
+        return;
+      }
+
       final scheduleApplicationsPerDay = unsafeFrequencyReturned
-          ? 2
+          ? dailyPlans.length
           : desiredApplicationsPerDay;
-      final missingProductNotes = onboarding7MissingBasicProductNotes(
-        productNames: ownedProductNames,
-        productDetails: ownedProductDetails,
-      );
-      final specialCareNotes = onboarding7SpecialCareNotesFromAiResult(
-        suggestedProducts: [
-          ...result.suggestedProducts,
-          ...missingProductNotes,
-        ],
-        weeklyRoutine: result.weeklyRoutine,
-        specialCarePlans: specialPlans,
-        ownedProductNames: ownedProductNames,
-      );
 
       final schedule = onboarding7ScheduleSkinCareRoutine(
         baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
         routinePlans: dailyPlans,
         desiredApplicationsPerDay: scheduleApplicationsPerDay,
-        fallbackProductNames: ownedProductNames,
-        fallbackProductDetails: ownedProductDetails,
+        ownedProductNames: ownedProductNames,
+        ownedProductDetails: ownedProductDetails,
         forceEveryDay: true,
       );
       if (schedule.hasError || schedule.blocks.isEmpty) {
@@ -1474,7 +1497,7 @@ class _HasProductsModeScreenState
             skinCareProductNames: _controller.text,
             skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
             skinCareSkipped: false,
-            skinCareSpecialCareNotes: specialCareNotes,
+            skinCareSpecialCareNotes: specialCareNotesForResult,
           );
         });
         if (!mounted) return;
@@ -1496,7 +1519,7 @@ class _HasProductsModeScreenState
           skinCareProductNames: _controller.text,
           skinCareDesiredApplicationsPerDay: scheduleApplicationsPerDay,
           skinCareSkipped: false,
-          skinCareSpecialCareNotes: specialCareNotes,
+          skinCareSpecialCareNotes: specialCareNotesForResult,
         );
       });
 

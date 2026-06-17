@@ -409,7 +409,15 @@ void main() {
             morningRoutine: [],
             nightRoutine: [],
             weeklyRoutine: [],
-            timelineBlocks: [],
+            timelineBlocks: [
+              {
+                'title': 'Morning skin care',
+                'startMinute': 420,
+                'endMinute': 435,
+                'products': ['Cleanser'],
+                'steps': ['Cleanse'],
+              },
+            ],
           ),
         ),
       ),
@@ -437,7 +445,7 @@ void main() {
     expect(find.text('Morning skin care'), findsNothing);
     expect(
       find.text(
-        'AI returned notes but no routine. Try 2 times/day or typed product names.',
+        'AI returned no usable routine. Try clearer product names or 2 times/day.',
       ),
       findsOneWidget,
     );
@@ -1106,7 +1114,7 @@ void main() {
         baseTimeline: BaseTimelineDraft(blocks: occupied),
         routinePlans: _skinCarePlansForCount(4),
         desiredApplicationsPerDay: 4,
-        fallbackProductNames: const ['Cleanser', 'Sunscreen'],
+        ownedProductNames: const ['Cleanser', 'Sunscreen'],
         now: DateTime.utc(2026, 6, 15),
       );
 
@@ -1240,7 +1248,7 @@ void main() {
   });
 
   testWidgets(
-    '18. AI returns 2 plans, selecting 3 shows unsafe-frequency error',
+    '18. AI returns 2 plans, selecting 3 without unsafe warning shows fewer-routines error',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: _routineResultWithPlanCount(2),
@@ -1277,7 +1285,7 @@ void main() {
       expect(blocks, isEmpty);
       expect(
         find.text(
-          'These products may not safely support 3 routines per day. Try 2 times per day.',
+          'AI returned fewer routines than requested. Try again or choose fewer times per day.',
         ),
         findsOneWidget,
       );
@@ -1285,7 +1293,7 @@ void main() {
   );
 
   testWidgets(
-    '19. AI returns 2 plans, selecting 4 shows unsafe-frequency error',
+    '19. AI returns 2 plans, selecting 4 without unsafe warning shows fewer-routines error',
     (tester) async {
       final client = TestSkinCareAiClient(
         routineResult: _routineResultWithPlanCount(2),
@@ -1322,7 +1330,7 @@ void main() {
       expect(blocks, isEmpty);
       expect(
         find.text(
-          'These products may not safely support 3 routines per day. Try 2 times per day.',
+          'AI returned fewer routines than requested. Try again or choose fewer times per day.',
         ),
         findsOneWidget,
       );
@@ -1632,7 +1640,7 @@ void main() {
       expect(find.text('2 special-care notes'), findsOneWidget);
       expect(
         find.text(
-          'These products may not safely support 3 routines per day. Try 2 times per day.',
+          'AI returned fewer routines than requested. Try again or choose fewer times per day.',
         ),
         findsOneWidget,
       );
@@ -1678,7 +1686,7 @@ void main() {
         baseTimeline: const BaseTimelineDraft(blocks: [bath]),
         routinePlans: mondayOnlyPlans,
         desiredApplicationsPerDay: 3,
-        fallbackProductNames: const ['Cleanser', 'Sunscreen'],
+        ownedProductNames: const ['Cleanser', 'Sunscreen'],
         now: DateTime.utc(2026, 6, 15),
       );
 
@@ -1740,7 +1748,7 @@ void main() {
         ),
       ],
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const [
+      ownedProductNames: const [
         'Gentle Cleanser',
         'Daily Sunscreen',
         'Barrier Repair Moisturizer',
@@ -1751,36 +1759,33 @@ void main() {
     expect(result.blocks, isEmpty);
     expect(
       result.errorMessage,
-      'AI returned no usable routine. Try again or use typed product names.',
+      'AI returned no usable routine. Try clearer product names or 2 times/day.',
     );
   });
 
-  test(
-    '26. Scheduler fails title-only plans without safe fallback products',
-    () {
-      final result = onboarding7ScheduleSkinCareRoutine(
-        baseTimeline: BaseTimelineDraft(
-          blocks: [BaseTimelineDraft.defaultBathBlock()],
+  test('26. Scheduler fails title-only plans without safe fallback products', () {
+    final result = onboarding7ScheduleSkinCareRoutine(
+      baseTimeline: BaseTimelineDraft(
+        blocks: [BaseTimelineDraft.defaultBathBlock()],
+      ),
+      routinePlans: const [
+        SkinCareRoutinePlan(
+          slotLabel: 'morning',
+          title: 'Morning Skin Care',
+          steps: [],
+          productNames: [],
         ),
-        routinePlans: const [
-          SkinCareRoutinePlan(
-            slotLabel: 'morning',
-            title: 'Morning Skin Care',
-            steps: [],
-            productNames: [],
-          ),
-        ],
-        desiredApplicationsPerDay: 2,
-        now: DateTime.utc(2026, 6, 15),
-      );
+      ],
+      desiredApplicationsPerDay: 2,
+      now: DateTime.utc(2026, 6, 15),
+    );
 
-      expect(result.blocks, isEmpty);
-      expect(
-        result.errorMessage,
-        'AI returned no usable routine. Try again or use typed product names.',
-      );
-    },
-  );
+    expect(result.blocks, isEmpty);
+    expect(
+      result.errorMessage,
+      'AI returned no usable routine. Try clearer product names or 2 times/day.',
+    );
+  });
 
   test(
     '27. Worker client maps image and routine JSON payload errors correctly',
@@ -1871,6 +1876,46 @@ void main() {
   });
 
   test(
+    '28b. Worker client does not use compatibility blocks as plans',
+    () async {
+      final client = WorkerSkinCareAiClient(
+        baseUrl: 'https://skin-care-worker.test',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'routinePlans': [],
+              'timelineBlocks': [
+                {
+                  'title': 'Compatibility Morning',
+                  'startMinute': 420,
+                  'endMinute': 435,
+                  'products': ['Cleanser'],
+                  'steps': ['Cleanse'],
+                },
+              ],
+              'morningRoutine': [],
+              'nightRoutine': [],
+              'weeklyRoutine': [],
+            }),
+            200,
+          ),
+        ),
+      );
+
+      final result = await client.generateRoutine(
+        uid: 'uid-1',
+        idToken: 'token',
+        params: const {
+          'typedProductNames': ['Gentle Cleanser'],
+        },
+      );
+
+      expect(result.routinePlans, isEmpty);
+      expect(result.timelineBlocks, hasLength(1));
+    },
+  );
+
+  test(
     '29. Different occupied weekdays produce grouped blocks with correct daily routine count',
     () {
       const bath = TimelineBlockDraft(
@@ -1896,7 +1941,7 @@ void main() {
         baseTimeline: const BaseTimelineDraft(blocks: [bath, mondayLunch]),
         routinePlans: _skinCarePlansForCount(3),
         desiredApplicationsPerDay: 3,
-        fallbackProductNames: const ['Cleanser', 'Sunscreen'],
+        ownedProductNames: const ['Cleanser', 'Sunscreen'],
         now: DateTime.utc(2026, 6, 15),
       );
 
@@ -2653,7 +2698,7 @@ void main() {
       expect(scBlocks, isEmpty);
       expect(
         find.text(
-          'AI returned no usable routine. Try again or use typed product names.',
+          'AI returned no usable routine. Try clearer product names or 2 times/day.',
         ),
         findsOneWidget,
       );
@@ -3026,16 +3071,16 @@ void main() {
       blocks: [BaseTimelineDraft.defaultBathBlock()],
     );
     const noRoutineMessage =
-        'AI returned no usable routine. Try again or use typed product names.';
+        'AI returned no usable routine. Try clearer product names or 2 times/day.';
     const productMismatchMessage =
         'AI used products outside your list. Try again.';
     const unsafeFrequencyMessage =
-        'These products may not safely support 3 routines per day. Try 2 times per day.';
+        'These products may not safely support this many routines per day. Try fewer routines or add more basic products.';
 
     final sunscreenOnly = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Daily Sunscreen'],
+      ownedProductNames: const ['Daily Sunscreen'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
@@ -3070,7 +3115,7 @@ void main() {
     final nameVariations = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const [
+      ownedProductNames: const [
         'Beardo Detan Face Wash',
         'Minimalist SPF 50',
         'Minimalist Vitamin C',
@@ -3109,7 +3154,7 @@ void main() {
     final cleanserMoisturizerOnly = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const [
+      ownedProductNames: const [
         'Beardo Detan Face Wash',
         'Barrier Repair Lotion',
       ],
@@ -3165,7 +3210,7 @@ void main() {
     final unownedProduct = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Daily Sunscreen'],
+      ownedProductNames: const ['Daily Sunscreen'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
@@ -3182,7 +3227,7 @@ void main() {
     final outsideBrandProduct = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Minimalist SPF 50'],
+      ownedProductNames: const ['Minimalist SPF 50'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
@@ -3205,7 +3250,7 @@ void main() {
     final titleOnly = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const ['Daily Sunscreen'],
+      ownedProductNames: const ['Daily Sunscreen'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
@@ -3221,7 +3266,7 @@ void main() {
     final fourPerDay = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 4,
-      fallbackProductNames: const ['Gentle Cleanser', 'Daily Sunscreen'],
+      ownedProductNames: const ['Gentle Cleanser', 'Daily Sunscreen'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
@@ -3250,7 +3295,7 @@ void main() {
     final ambiguousSerum = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 2,
-      fallbackProductNames: const [
+      ownedProductNames: const [
         'Minimalist Vitamin C',
         'Minimalist Alpha Arbutin',
       ],
@@ -3275,7 +3320,7 @@ void main() {
     final unsafeFrequency = onboarding7ScheduleSkinCareRoutine(
       baseTimeline: bathBase,
       desiredApplicationsPerDay: 4,
-      fallbackProductNames: const ['Hydrating Serum'],
+      ownedProductNames: const ['Hydrating Serum'],
       routinePlans: const [
         SkinCareRoutinePlan(
           slotLabel: 'morning',
@@ -3301,7 +3346,7 @@ void main() {
         blocks: [BaseTimelineDraft.defaultBathBlock()],
       ),
       desiredApplicationsPerDay: 3,
-      fallbackProductNames: const [
+      ownedProductNames: const [
         'Gentle Cleanser',
         'Sun Cream SPF 50',
         'Barrier Repair Moisturizer',
