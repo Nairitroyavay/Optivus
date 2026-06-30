@@ -53,7 +53,7 @@ List<SkinCareDetectedProduct> onboarding7ParseTypedProductDetails(
   final products = <SkinCareDetectedProduct>[];
   final seen = <String>{};
 
-  for (final raw in text.split(RegExp(r'[\n,]+'))) {
+  for (final raw in _typedProductEntryStrings(text)) {
     final parsed = _typedProductFromLine(raw);
     if (parsed == null) continue;
     final key = [
@@ -64,6 +64,29 @@ List<SkinCareDetectedProduct> onboarding7ParseTypedProductDetails(
   }
 
   return products;
+}
+
+Iterable<String> _typedProductEntryStrings(String text) sync* {
+  for (final raw in text.split(RegExp(r'[\n;]+'))) {
+    final entry = raw.trim();
+    if (entry.isEmpty) continue;
+    if (_canSplitTypedProductEntryOnComma(entry)) {
+      for (final commaPart in entry.split(',')) {
+        final part = commaPart.trim();
+        if (part.isNotEmpty) yield part;
+      }
+    } else {
+      yield entry;
+    }
+  }
+}
+
+bool _canSplitTypedProductEntryOnComma(String entry) {
+  if (!entry.contains(',')) return false;
+  if (RegExp(r'\s+-\s+').hasMatch(entry)) return false;
+  if (RegExp(r'\s*:\s+').hasMatch(entry)) return false;
+  if (RegExp(r'\([^()]+\)').hasMatch(entry)) return false;
+  return true;
 }
 
 @visibleForTesting
@@ -359,6 +382,18 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('provider_invalid_response') ||
       text.contains('provider_invalid_json')) {
     return 'AI response could not be read safely. Please try again.';
+  }
+  if (text.contains('ai_missing_required_slot:midday')) {
+    return 'AI returned no midday routine for 3/day. Try again or choose 2 times/day.';
+  }
+  if (text.contains('ai_missing_required_slot:afternoon')) {
+    return 'AI returned no afternoon routine for 4/day. Try again or choose 3 times/day.';
+  }
+  if (text.contains('ai_extra_daily_slot_count')) {
+    return 'AI returned too many routines for some days. Try again.';
+  }
+  if (text.contains('ai_wrong_daily_slot_count')) {
+    return 'AI returned the wrong daily routine count. Try again or choose fewer times per day.';
   }
   if (text.contains('ai_returned_fewer_routines')) {
     return _onboarding7AiFewerRoutinesMessage;
@@ -1470,6 +1505,32 @@ class _HasProductsModeScreenState
           '${onboarding7RoutinePlanCountsByDay(dailyPlans)} '
           'desired=$desiredApplicationsPerDay',
         );
+      }
+
+      if (result.warnings.any(
+        (warning) =>
+            warning.contains('ai_wrong_daily_slot_count') ||
+            warning.contains('ai_missing_required_slot:') ||
+            warning.contains('ai_extra_daily_slot_count'),
+      )) {
+        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+          return base.copyWith(
+            blocks: base.blocks.where((b) => b.section != 'skin_care').toList(),
+            skinCareProductNames: _controller.text,
+            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+            skinCareSkipped: false,
+            skinCareSpecialCareNotes: specialCareNotesForResult,
+          );
+        });
+        if (!mounted) return;
+        setState(() {
+          _generating = false;
+          _generationError = onboarding7FriendlyAiMessage(
+            null,
+            result.warnings,
+          );
+        });
+        return;
       }
 
       final schedule = onboarding7ScheduleSkinCareRoutine(

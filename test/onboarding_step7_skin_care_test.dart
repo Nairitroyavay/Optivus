@@ -398,6 +398,30 @@ void main() {
     expect(products.map((product) => product.source).toSet(), {'typed'});
   });
 
+  test('8c. Typed product parser preserves full five-line owned products', () {
+    final products = onboarding7ParseTypedProductDetails(
+      'Beardo Detan Face Wash - cleanser\n'
+      'Minimalist SPF 50 - sunscreen\n'
+      'Minimalist Vitamin C - serum\n'
+      'Minimalist Alpha Arbutin - serum\n'
+      'Minimalist PHA Toner - exfoliant',
+    );
+
+    expect(
+      products.map((product) => {
+        'name': product.name,
+        'category': product.category,
+      }),
+      [
+        {'name': 'Beardo Detan Face Wash', 'category': 'cleanser'},
+        {'name': 'Minimalist SPF 50', 'category': 'sunscreen'},
+        {'name': 'Minimalist Vitamin C', 'category': 'serum'},
+        {'name': 'Minimalist Alpha Arbutin', 'category': 'serum'},
+        {'name': 'Minimalist PHA Toner', 'category': 'exfoliant'},
+      ],
+    );
+  });
+
   testWidgets('9. Empty timelineBlocks does not create fallback blocks', (
     tester,
   ) async {
@@ -1292,6 +1316,70 @@ void main() {
     },
   );
 
+  testWidgets(
+    '13d. Rinse-off acid cleanser remains visible in generated blocks',
+    (tester) async {
+      const cleanser = 'Beardo De-Tan Face Wash Coffee Detox';
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          routinePlans: [
+            SkinCareRoutinePlan(
+              slotLabel: 'morning',
+              title: 'Morning Skin Care',
+              steps: [
+                'Cleanse with Beardo De-Tan Face Wash Coffee Detox glycolic lactic acid',
+                'Apply Minimalist SPF 50',
+              ],
+              productNames: [cleanser, 'Minimalist SPF 50'],
+            ),
+            SkinCareRoutinePlan(
+              slotLabel: 'night',
+              title: 'Night Skin Care',
+              steps: ['Cleanse with Beardo De-Tan Face Wash Coffee Detox'],
+              productNames: [cleanser],
+            ),
+          ],
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [],
+          timelineBlocks: [],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        '$cleanser - cleanser\nMinimalist SPF 50 - sunscreen',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+
+      expect(blocks, hasLength(2));
+      expect(
+        blocks.expand((block) => block.skincareProducts),
+        contains(cleanser),
+      );
+      expect(find.textContaining('AI returned no usable routine'), findsNothing);
+    },
+  );
+
   testWidgets('14. Selecting 4 routines per day creates 4 skin-care blocks', (
     tester,
   ) async {
@@ -1672,6 +1760,171 @@ void main() {
       expect(
         find.textContaining('AI returned no usable routine'),
         findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    '19c. Missing midday worker warning shows specific 3/day error and creates zero blocks',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: SkinCareAiRoutineResult(
+          routinePlans: _skinCarePlansForCount(2),
+          morningRoutine: const [],
+          nightRoutine: const [],
+          weeklyRoutine: const [],
+          timelineBlocks: const [],
+          warnings: const [
+            'ai_missing_required_slot:midday',
+            'ai_wrong_daily_slot_count',
+            'ai_returned_fewer_routines',
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser\nSunscreen',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+
+      expect(blocks, isEmpty);
+      expect(
+        find.text(
+          'AI returned no midday routine for 3/day. Try again or choose 2 times/day.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    '19d. Missing afternoon worker warning shows specific 4/day error and creates zero blocks',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: SkinCareAiRoutineResult(
+          routinePlans: _skinCarePlansForCount(3),
+          morningRoutine: const [],
+          nightRoutine: const [],
+          weeklyRoutine: const [],
+          timelineBlocks: const [],
+          warnings: const [
+            'ai_missing_required_slot:afternoon',
+            'ai_wrong_daily_slot_count',
+            'ai_returned_fewer_routines',
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser\nSunscreen',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+
+      expect(blocks, isEmpty);
+      expect(
+        find.text(
+          'AI returned no afternoon routine for 4/day. Try again or choose 3 times/day.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    '19e. Extra daily slot warning shows too-many-routines error and creates zero blocks',
+    (tester) async {
+      final client = TestSkinCareAiClient(
+        routineResult: SkinCareAiRoutineResult(
+          routinePlans: _skinCarePlansForCount(4),
+          morningRoutine: const [],
+          nightRoutine: const [],
+          weeklyRoutine: const [],
+          timelineBlocks: const [],
+          warnings: const [
+            'ai_extra_daily_slot_count',
+            'ai_wrong_daily_slot_count',
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+        'Cleanser\nSunscreen',
+      );
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final blocks = container
+          .read(mockOnboardingProvider)
+          .draft
+          .baseTimeline
+          .confirmedBlocksForSection('skin_care');
+
+      expect(blocks, isEmpty);
+      expect(
+        find.text('AI returned too many routines for some days. Try again.'),
+        findsOneWidget,
       );
     },
   );

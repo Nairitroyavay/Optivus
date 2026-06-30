@@ -673,6 +673,109 @@ describe("Skin-care Worker", () => {
     ]);
   });
 
+  test("routine generate warns when 3/day is missing required midday slot", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: ["Cleanse face", "Apply Minimalist SPF 50"],
+          productNames: ["Beardo Detan Face Wash", "Minimalist SPF 50"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse face", "Apply Minimalist Alpha Arbutin"],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Alpha Arbutin",
+          ],
+          repeatDays: [1, 2, 4, 5, 7],
+        },
+        {
+          slotLabel: "night",
+          title: "Active Night Skin Care",
+          steps: [
+            "Cleanse face",
+            "Apply Minimalist Alpha Arbutin",
+            "Apply Minimalist PHA Toner",
+          ],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Alpha Arbutin",
+            "Minimalist PHA Toner",
+          ],
+          repeatDays: [3, 6],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 3,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(3);
+    expect(json.warnings).toContain("ai_missing_required_slot:midday");
+    expect(json.warnings).toContain("ai_wrong_daily_slot_count");
+    expect(json.warnings).toContain("ai_returned_fewer_routines");
+  });
+
+  test("routine generate warns when 4/day is missing required afternoon slot", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: ["Apply Minimalist SPF 50"],
+          productNames: ["Minimalist SPF 50"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+        {
+          slotLabel: "midday",
+          title: "Midday Skin Care",
+          steps: ["Reapply Minimalist SPF 50"],
+          productNames: ["Minimalist SPF 50"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse face"],
+          productNames: ["Beardo Detan Face Wash"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 4,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.warnings).toContain("ai_missing_required_slot:afternoon");
+    expect(json.warnings).toContain("ai_wrong_daily_slot_count");
+  });
+
   test("owned-product sanitizer removes morning strong active without creating active night variant", async () => {
     stubGemini(JSON.stringify({
       suggestedProducts: [],
@@ -816,6 +919,124 @@ describe("Skin-care Worker", () => {
     );
   });
 
+  test("owned-product sanitizer does not double-split existing night variants", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: ["Apply Minimalist SPF 50"],
+          productNames: ["Minimalist SPF 50"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+        {
+          slotLabel: "midday",
+          title: "Midday Skin Care",
+          steps: ["Reapply Minimalist SPF 50"],
+          productNames: ["Minimalist SPF 50"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse face", "Apply Minimalist Alpha Arbutin"],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Alpha Arbutin",
+          ],
+          repeatDays: [1, 2, 4, 5, 7],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: [
+            "Cleanse face",
+            "Apply Minimalist Alpha Arbutin",
+            "Apply Minimalist PHA Toner",
+          ],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Alpha Arbutin",
+            "Minimalist PHA Toner",
+          ],
+          repeatDays: [3, 6],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 3,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+    const normalNights = json.routinePlans.filter(
+      (plan: any) =>
+        plan.slotLabel === "night" &&
+        JSON.stringify(plan.repeatDays) === JSON.stringify([1, 2, 4, 5, 7]),
+    );
+    const activeNights = json.routinePlans.filter(
+      (plan: any) =>
+        plan.slotLabel === "night" &&
+        JSON.stringify(plan.repeatDays) === JSON.stringify([3, 6]),
+    );
+
+    expect(response.status).toBe(200);
+    expect(normalNights).toHaveLength(1);
+    expect(activeNights).toHaveLength(1);
+    expect(activeNights[0].productNames).toContain("Minimalist PHA Toner");
+    expect(json.warnings).not.toContain("ai_extra_daily_slot_count");
+    expect(json.warnings).not.toContain("ai_returned_fewer_routines");
+  });
+
+  test("owned-product sanitizer keeps already-limited active night without creating normal variant", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [
+        {
+          slotLabel: "night",
+          title: "Active Night Skin Care",
+          steps: [
+            "Cleanse face",
+            "Apply Minimalist PHA Toner",
+          ],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist PHA Toner",
+          ],
+          repeatDays: [3, 6],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(1);
+    expect(json.routinePlans[0].repeatDays).toEqual([3, 6]);
+    expect(json.routinePlans[0].productNames).toContain("Minimalist PHA Toner");
+    expect(
+      json.routinePlans.some((plan: any) =>
+        JSON.stringify(plan.repeatDays) === JSON.stringify([1, 2, 4, 5, 7])),
+    ).toBe(false);
+  });
+
   test("owned-product sanitizer splits daily night strong active into night variants", async () => {
     stubGemini(JSON.stringify({
       suggestedProducts: [],
@@ -916,6 +1137,66 @@ describe("Skin-care Worker", () => {
       "strong_active_split:night:Minimalist PHA Toner",
     );
     expect(json.warnings).not.toContain("ai_returned_fewer_routines");
+  });
+
+  test("rinse-off acid cleanser is not removed as a strong active", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: [
+            "Cleanse with Beardo De-Tan Face Wash Coffee Detox glycolic lactic acid",
+            "Apply Minimalist SPF 50",
+          ],
+          productNames: [
+            "Beardo De-Tan Face Wash Coffee Detox",
+            "Minimalist SPF 50",
+          ],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse with Beardo De-Tan Face Wash Coffee Detox"],
+          productNames: ["Beardo De-Tan Face Wash Coffee Detox"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: [
+          {
+            name: "Beardo De-Tan Face Wash Coffee Detox",
+            category: "cleanser",
+            keyIngredients: ["glycolic acid", "lactic acid"],
+            source: "typed",
+          },
+          { name: "Minimalist SPF 50", category: "sunscreen", source: "typed" },
+        ],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(2);
+    expect(json.routinePlans[0].productNames).toContain(
+      "Beardo De-Tan Face Wash Coffee Detox",
+    );
+    expect(json.routinePlans[1].productNames).toContain(
+      "Beardo De-Tan Face Wash Coffee Detox",
+    );
+    expect(json.rejectedPlanReasons.join("|")).not.toContain(
+      "strong_active",
+    );
   });
 
   test("owned-product sanitizer rejects strong-active-only plans without fallback routines", async () => {

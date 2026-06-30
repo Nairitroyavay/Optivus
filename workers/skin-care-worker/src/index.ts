@@ -295,6 +295,10 @@ function looksLikeStrongActive(value: string): boolean {
     lower.includes("strong active");
 }
 
+function looksLikeLeaveOnStrongActive(value: string): boolean {
+  return looksLikeStrongActive(value) && !looksLikeCleanser(value);
+}
+
 function productText(product: OwnedSkinCareProduct): string {
   return [product.name, product.category, ...product.searchableFields].join(" ");
 }
@@ -305,6 +309,15 @@ function isSunscreen(product: OwnedSkinCareProduct): boolean {
 
 function isCleanser(product: OwnedSkinCareProduct): boolean {
   return product.category === "cleanser" || looksLikeCleanser(productText(product));
+}
+
+function isRinseOffCleanser(product: OwnedSkinCareProduct): boolean {
+  const lower = productText(product).toLowerCase();
+  return product.category === "cleanser" ||
+    lower.includes("face wash") ||
+    lower.includes("cleanser") ||
+    lower.includes("cleansing gel") ||
+    lower.includes("cleansing foam");
 }
 
 function isMoisturizer(product: OwnedSkinCareProduct): boolean {
@@ -318,6 +331,7 @@ function isSerum(product: OwnedSkinCareProduct): boolean {
 }
 
 function isStrongActive(product: OwnedSkinCareProduct): boolean {
+  if (isRinseOffCleanser(product)) return false;
   return product.category === "exfoliant" ||
     product.category === "exfoliator" ||
     looksLikeStrongActive(productText(product));
@@ -488,6 +502,11 @@ function safeRepeatDays(value: any): number[] {
   return days.length > 0 ? days : [1, 2, 3, 4, 5, 6, 7];
 }
 
+function sameRepeatDays(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((day, index) => day === right[index]);
+}
+
 function dedupeOwnedProducts(products: OwnedSkinCareProduct[]): OwnedSkinCareProduct[] {
   const seen = new Set<string>();
   const result: OwnedSkinCareProduct[] = [];
@@ -635,8 +654,8 @@ function repairStrongActiveRoutinePlan(
   const strongProducts = dedupeOwnedProducts(
     ownedPlanProducts.filter((product) => isStrongActive(product)),
   );
-  const safeSteps = normalized.steps.filter((step: string) => !looksLikeStrongActive(step));
-  const activeSteps = normalized.steps.filter((step: string) => looksLikeStrongActive(step));
+  const safeSteps = normalized.steps.filter((step: string) => !looksLikeLeaveOnStrongActive(step));
+  const activeSteps = normalized.steps.filter((step: string) => looksLikeLeaveOnStrongActive(step));
   if (safeProducts.length === 0) {
     rejectedPlanReasons.push(`unsafe_no_safe_products:${normalized.slotLabel}:${normalized.title}`);
     return { plans: [], strongActiveSplitNotes: [] };
@@ -644,18 +663,55 @@ function repairStrongActiveRoutinePlan(
 
   const slot = canonicalRoutineSlot(normalized.slotLabel);
   const activeProductName = strongProducts[0]?.name || activeSteps[0] || normalized.title;
+  const days = safeRepeatDays(normalized.repeatDays);
   if (slot !== "night") {
     rejectedPlanReasons.push(`strong_active_removed_from_non_night:${slot}:${activeProductName}`);
     return {
       plans: [{
         ...normalized,
-        repeatDays: safeRepeatDays(normalized.repeatDays),
+        repeatDays: days,
         productNames: safeProducts.map((product) => product.name),
         steps: safeSteps,
         missingItems,
       }],
       strongActiveSplitNotes: [
         `${activeProductName} was removed from the daily ${slot} routine and moved to special-care notes. Add it manually on two nights only after review.`,
+      ],
+    };
+  }
+
+  if (sameRepeatDays(days, [3, 6])) {
+    return {
+      plans: [{
+        ...normalized,
+        slotLabel: "night",
+        repeatDays: [3, 6],
+        productNames: dedupeOwnedProducts([...safeProducts, ...strongProducts])
+          .map((product) => product.name),
+        steps: [...safeSteps, ...activeSteps],
+        missingItems,
+        warnings: [
+          ...normalized.warnings,
+          "Use strong actives only 2 times per week. Do not combine with other exfoliants/retinoids.",
+        ],
+      }],
+      strongActiveSplitNotes: [
+        `${activeProductName} is used only on Wednesday and Saturday nights. Do not combine with other strong actives.`,
+      ],
+    };
+  }
+
+  if (!sameRepeatDays(days, [1, 2, 3, 4, 5, 6, 7])) {
+    return {
+      plans: [{
+        ...normalized,
+        repeatDays: days,
+        productNames: safeProducts.map((product) => product.name),
+        steps: safeSteps,
+        missingItems,
+      }],
+      strongActiveSplitNotes: [
+        `${activeProductName} was removed from a limited night routine. Add it manually on two nights only after review.`,
       ],
     };
   }
@@ -712,7 +768,8 @@ function sanitizeMissingItemsForOwnedProducts(
 }
 
 function _planHasStrongActive(plan: any, products: OwnedSkinCareProduct[]): boolean {
-  return products.some(isStrongActive) || plan.steps.some((step: string) => looksLikeStrongActive(step));
+  return products.some(isStrongActive) ||
+    plan.steps.some((step: string) => looksLikeLeaveOnStrongActive(step));
 }
 
 function _planExplicitlyAllowsDailyStrongActive(plan: any): boolean {
@@ -747,10 +804,99 @@ function routinePlanPerDayCounts(plans: any[]): Record<string, number> {
   return counts;
 }
 
-function supportsDesiredPerDayCount(plans: any[], desiredApplicationsPerDay: number): boolean {
-  if (plans.length === 0) return false;
+function requiredSlotsForFrequency(desired: number): string[] {
+  if (desired <= 2) return ["morning", "night"];
+  if (desired === 3) return ["morning", "midday", "night"];
+  return ["morning", "midday", "afternoon", "night"];
+}
+
+function slotCoverageByDay(plans: any[]): Record<string, Set<string>> {
+  const coverage: Record<string, Set<string>> = {
+    "1": new Set<string>(),
+    "2": new Set<string>(),
+    "3": new Set<string>(),
+    "4": new Set<string>(),
+    "5": new Set<string>(),
+    "6": new Set<string>(),
+    "7": new Set<string>(),
+  };
+  for (const plan of plans) {
+    const slot = canonicalRoutineSlot(plan?.slotLabel || "");
+    if (!slot) continue;
+    for (const day of safeRepeatDays(plan?.repeatDays)) {
+      coverage[String(day)].add(slot);
+    }
+  }
+  return coverage;
+}
+
+function serializableSlotCoverage(coverage: Record<string, Set<string>>): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const day of Object.keys(coverage)) {
+    result[day] = Array.from(coverage[day]).sort();
+  }
+  return result;
+}
+
+function routineCoverageWarnings(plans: any[], desiredApplicationsPerDay: number): string[] {
+  if (plans.length === 0) return [];
+  const requiredSlots = requiredSlotsForFrequency(desiredApplicationsPerDay);
+  const coverage = slotCoverageByDay(plans);
   const counts = routinePlanPerDayCounts(plans);
-  return Object.values(counts).every((count) => count === desiredApplicationsPerDay);
+  const warnings: string[] = [];
+  const missingSlots = new Set<string>();
+
+  for (const day of ["1", "2", "3", "4", "5", "6", "7"]) {
+    for (const slot of requiredSlots) {
+      if (!coverage[day].has(slot)) missingSlots.add(slot);
+    }
+  }
+
+  for (const slot of missingSlots) {
+    warnings.push(`ai_missing_required_slot:${slot}`);
+  }
+
+  const hasExtra = ["1", "2", "3", "4", "5", "6", "7"].some((day) =>
+    (counts[day] || 0) > desiredApplicationsPerDay ||
+    coverage[day].size > desiredApplicationsPerDay
+  );
+  if (hasExtra) warnings.push("ai_extra_daily_slot_count");
+
+  if (missingSlots.size > 0 || hasExtra) {
+    warnings.push("ai_wrong_daily_slot_count");
+  }
+  if (missingSlots.size > 0) {
+    warnings.push("ai_returned_fewer_routines");
+  }
+
+  return warnings;
+}
+
+function routinePlanDedupeKey(plan: any): string {
+  return [
+    canonicalRoutineSlot(plan?.slotLabel || ""),
+    safeRepeatDays(plan?.repeatDays).join(","),
+    normalizedProductKey(String(plan?.title || "")),
+    stringList(plan?.productNames).map(normalizedProductKey).sort().join(","),
+  ].join("|");
+}
+
+function routinePlanRichness(plan: any): number {
+  return stringList(plan?.productNames).length * 100 +
+    stringList(plan?.steps).length * 10 +
+    (Array.isArray(plan?.missingItems) ? plan.missingItems.length : 0);
+}
+
+function dedupeRoutinePlans(plans: any[]): any[] {
+  const byKey = new Map<string, any>();
+  for (const plan of plans) {
+    const key = routinePlanDedupeKey(plan);
+    const existing = byKey.get(key);
+    if (!existing || routinePlanRichness(plan) > routinePlanRichness(existing)) {
+      byKey.set(key, plan);
+    }
+  }
+  return Array.from(byKey.values());
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -954,16 +1100,22 @@ Missing moisturizer, cleanser, or sunscreen must not block generation or reduce 
 Do not name outside products in suggestedProducts, weeklyRoutine, routinePlans.productNames, warnings, or notes for an owned-product request. missingItems may use generic category names only and must not be converted into productNames. If the user owns an incomplete set, still build the best safe limited routine from available products.
 Return routinePlans.productNames using EXACT owned product names from the list above. Do not use generic names if an exact product name is available.
 If at least one usable owned product exists, return the selected routine count per day.
-For 2/day: morning + night. For 3/day: morning + midday + night. For 4/day: morning + midday + afternoon + night.
+For selected frequency, required slots are strict every day:
+2/day requires exactly these slots every day: morning, night.
+3/day requires exactly these slots every day: morning, midday, night.
+4/day requires exactly these slots every day: morning, midday, afternoon, night.
+Do not omit midday for 3/day. Do not replace midday with night active.
 Missing important categories must go into missingItems.
 Missing moisturizer/cleanser/sunscreen must not reduce routinePlan count.
 Only return fewer routinePlans if no safe usable routine can be described.
 Do not invent owned products.
 productNames = exact owned product names only.
 missingItems = missing important categories/products not owned.
-Strong actives include PHA, AHA, BHA, retinol, retinal, tretinoin, adapalene, exfoliant, peeling, glycolic, lactic, salicylic, mandelic, benzoyl peroxide.
+Rinse-off cleanser/face wash may contain acids but should still be treated as cleanser, not removed as a leave-on strong active.
+Leave-on strong actives include PHA/AHA/BHA toner, exfoliant, retinol, retinal, tretinoin, adapalene, peeling solution, glycolic/lactic/salicylic/mandelic leave-on products, and benzoyl peroxide.
 Do not put strong actives in daily morning/midday/afternoon routines. Do not create an extra special-care block.
 Put strong actives only inside the existing night slot on exactly two repeat days per week.
+Strong-active split is only a variation of the night slot, not an extra slot.
 Split night routine when needed: normal night without strong active repeatDays [1,2,4,5,7], active night with strong active repeatDays [3,6].
 This must not increase the number of blocks on any day. For 3/day with a strong active, valid routinePlans are morning [1,2,3,4,5,6,7], midday [1,2,3,4,5,6,7], night normal [1,2,4,5,7], night active [3,6]. Per-day count remains 3.`
     : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
@@ -1037,7 +1189,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const rawWeeklyRoutine = Array.isArray(parsed.weeklyRoutine) ? parsed.weeklyRoutine : [];
   const rawSuggestedProducts = Array.isArray(parsed.suggestedProducts) ? parsed.suggestedProducts : [];
   const strongActiveSplitNotes: string[] = [];
-  const routinePlans = ownedProductMode
+  let routinePlans = ownedProductMode
     ? rawRoutinePlans.flatMap((plan: any) => {
         const result = sanitizeOwnedRoutinePlan(plan, catalog, rejectedPlanReasons);
         strongActiveSplitNotes.push(...result.strongActiveSplitNotes);
@@ -1046,11 +1198,14 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     : rawRoutinePlans
         .map(normalizeRoutinePlan)
         .filter((plan: any) => plan !== null);
+  routinePlans = dedupeRoutinePlans(routinePlans);
   const warnings = stringList(parsed.warnings);
   if (routinePlans.length === 0) {
     warnings.push("ai_returned_no_usable_routine");
-  } else if (!supportsDesiredPerDayCount(routinePlans, desiredApplicationsPerDay)) {
-    warnings.push("ai_returned_fewer_routines");
+  } else {
+    for (const warning of routineCoverageWarnings(routinePlans, desiredApplicationsPerDay)) {
+      if (!warnings.includes(warning)) warnings.push(warning);
+    }
   }
   const weeklyRoutine = ownedProductMode
     ? stringList([
@@ -1062,6 +1217,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     ? stringList(rawSuggestedProducts.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
     : rawSuggestedProducts;
   const perDayRoutineCounts = routinePlanPerDayCounts(routinePlans);
+  const perDaySlotCoverage = serializableSlotCoverage(slotCoverageByDay(routinePlans));
   console.log("[SkinCareWorker] routine-generate productInputSource=", activeSource);
   console.log("[SkinCareWorker] ownedProducts=", JSON.stringify(ownedProducts));
   console.log("[SkinCareWorker] raw routinePlans=", JSON.stringify(rawRoutinePlans));
@@ -1069,6 +1225,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   console.log("[SkinCareWorker] rejectedPlanReasons=", JSON.stringify(rejectedPlanReasons));
   console.log("[SkinCareWorker] strongActiveSplitNotes=", JSON.stringify(strongActiveSplitNotes));
   console.log("[SkinCareWorker] per-day routine counts=", JSON.stringify(perDayRoutineCounts));
+  console.log("[SkinCareWorker] per-day slot coverage=", JSON.stringify(perDaySlotCoverage));
   const compatibilityStartForSlot = (slotLabel: string | undefined, index: number): number => {
     const slot = String(slotLabel || "").toLowerCase();
     if (slot === "morning") return 7 * 60;
@@ -1104,7 +1261,8 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     warnings,
     rejectedPlanReasons,
     strongActiveSplitNotes,
-    perDayRoutineCounts
+    perDayRoutineCounts,
+    perDaySlotCoverage
   });
 }
 
