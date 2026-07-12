@@ -641,11 +641,21 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     final rawError = body['error'] as String?;
     final rawMessage = _stringValue(body['message']).toLowerCase();
 
-    if (statusCode == 503 ||
-        statusCode == 429 ||
-        rawError == 'provider_high_demand' ||
-        rawError == 'provider_quota_exceeded' ||
+    if (rawError == 'provider_unauthorized') {
+      return 'Skin care AI provider authorization failed. Please check the worker configuration.';
+    }
+    if (rawError == 'provider_model_not_found') {
+      return 'Skin care AI model is unavailable. Please check the worker model configuration.';
+    }
+    if (rawError == 'provider_timeout' ||
+        rawError == 'provider_unavailable' ||
         rawError == 'provider_request_failed') {
+      return 'AI skin care service is unavailable. Try again later.';
+    }
+    if (statusCode == 429 || rawError == 'provider_quota_exceeded') {
+      return 'AI usage limit reached. Try again later.';
+    }
+    if (statusCode == 503 || rawError == 'provider_high_demand') {
       return 'AI is busy right now. Try again in a moment.';
     }
     if (rawError == 'too_many_photos') {
@@ -654,6 +664,12 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     if (rawError == 'provider_invalid_response' ||
         rawError == 'provider_invalid_json') {
       return 'AI response could not be safely read. Please try again.';
+    }
+    if (rawError == 'provider_invalid_image_payload') {
+      return 'AI could not process this photo. Upload a clearer JPEG, PNG, or WEBP image.';
+    }
+    if (rawError == 'provider_invalid_request') {
+      return 'AI could not process this request. Please try again.';
     }
     if (rawError == 'provider_empty_candidates' ||
         rawError == 'no_blocks_generated') {

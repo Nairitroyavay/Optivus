@@ -88,6 +88,37 @@ function stubGemini(text: string, calls: FetchCall[] = []) {
   );
 }
 
+function stubGeminiResponses(
+  responses: Array<{ status: number; body: unknown }>,
+  calls: FetchCall[] = [],
+) {
+  let index = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({
+        url,
+        body: JSON.parse(String(init?.body ?? "{}")),
+      });
+      const next = responses[Math.min(index, responses.length - 1)];
+      index += 1;
+      return new Response(JSON.stringify(next.body), {
+        status: next.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }),
+  );
+}
+
+function geminiSuccess(text: string) {
+  return {
+    status: 200,
+    body: {
+      candidates: [{ content: { parts: [{ text }] } }],
+    },
+  };
+}
+
 function richProductPayload(size: number) {
   return {
     productsFromPhoto: [
@@ -228,6 +259,203 @@ describe("Skin-care Worker", () => {
 
     expect(response.status).toBe(500);
     expect(json.error).toBe("internal_error");
+  });
+
+  test("provider authorization failure is preserved and does not retry another model", async () => {
+    const calls: FetchCall[] = [];
+    stubGeminiResponses([
+      {
+        status: 403,
+        body: {
+          error: {
+            code: 403,
+            status: "PERMISSION_DENIED",
+            message: "API key not valid.",
+          },
+        },
+      },
+    ], calls);
+    const env = {
+      ...makeEnv(),
+      AI_FALLBACK_MODEL: "gemini-fallback",
+    };
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      env as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(502);
+    expect(json.error).toBe("provider_unauthorized");
+    expect(calls).toHaveLength(1);
+  });
+
+  test("provider quota failure is preserved after fallback also fails", async () => {
+    const calls: FetchCall[] = [];
+    stubGeminiResponses([
+      {
+        status: 429,
+        body: {
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "Quota exceeded.",
+          },
+        },
+      },
+      {
+        status: 429,
+        body: {
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "Quota exceeded.",
+          },
+        },
+      },
+    ], calls);
+    const env = {
+      ...makeEnv(),
+      AI_FALLBACK_MODEL: "gemini-fallback",
+    };
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      env as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(429);
+    expect(json.error).toBe("provider_quota_exceeded");
+    expect(calls).toHaveLength(2);
+  });
+
+  test("fallback succeeds when the primary model is unavailable", async () => {
+    const calls: FetchCall[] = [];
+    stubGeminiResponses([
+      {
+        status: 404,
+        body: {
+          error: {
+            code: 404,
+            status: "NOT_FOUND",
+            message: "Model not found for API version.",
+          },
+        },
+      },
+      geminiSuccess(JSON.stringify({
+        routinePlans: [
+          {
+            slotLabel: "morning",
+            title: "Morning",
+            steps: ["Cleanse"],
+            productNames: ["Cleanser"],
+          },
+        ],
+      })),
+    ], calls);
+    const env = {
+      ...makeEnv(),
+      AI_FALLBACK_MODEL: "gemini-fallback",
+    };
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      env as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(1);
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toContain("gemini-fallback");
+  });
+
+  test("fallback succeeds when the primary model returns invalid JSON", async () => {
+    const calls: FetchCall[] = [];
+    stubGeminiResponses([
+      geminiSuccess("not-json"),
+      geminiSuccess(JSON.stringify({
+        routinePlans: [
+          {
+            slotLabel: "night",
+            title: "Night",
+            steps: ["Cleanse"],
+            productNames: ["Cleanser"],
+          },
+        ],
+      })),
+    ], calls);
+    const env = {
+      ...makeEnv(),
+      AI_FALLBACK_MODEL: "gemini-fallback",
+    };
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      env as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(1);
+    expect(json.routinePlans[0].slotLabel).toBe("night");
+    expect(calls).toHaveLength(2);
+  });
+
+  test("empty provider candidates return provider_empty_candidates", async () => {
+    stubGeminiResponses([
+      {
+        status: 200,
+        body: { candidates: [] },
+      },
+    ]);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(502);
+    expect(json.error).toBe("provider_empty_candidates");
+  });
+
+  test("provider network timeout returns provider_timeout", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new DOMException("Timed out", "TimeoutError");
+      }),
+    );
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(504);
+    expect(json.error).toBe("provider_timeout");
   });
 
   test("provider invalid JSON maps to safe error", async () => {
@@ -1137,6 +1365,76 @@ describe("Skin-care Worker", () => {
       "strong_active_split:night:Minimalist PHA Toner",
     );
     expect(json.warnings).not.toContain("ai_returned_fewer_routines");
+  });
+
+  test("warning text mentioning sunscreen does not turn cleanser and serum into sunscreen", async () => {
+    stubGemini(JSON.stringify({
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: ["Apply sunscreen"],
+          productNames: ["Sunscreen SPF 50 PA++++"],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse face", "Apply Alpha Arbutin serum"],
+          productNames: [
+            "De-Tan Face Wash Coffee Detox",
+            "Alpha Arbutin 02% Face Serum",
+          ],
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "photo",
+        productsFromPhoto: [
+          {
+            name: "De-Tan Face Wash Coffee Detox",
+            category: "cleanser",
+            keyIngredients: ["Glycolic Acid", "Lactic Acid"],
+            warningIfAny:
+              "Contains AHAs. Always use a broad-spectrum sunscreen during the day.",
+          },
+          {
+            name: "Alpha Arbutin 02% Face Serum",
+            category: "serum",
+            possibleActives: ["Alpha Arbutin"],
+            warningIfAny:
+              "Do not combine with benzoyl peroxide. Always use sunscreen.",
+          },
+          {
+            name: "Sunscreen SPF 50 PA++++",
+            category: "sunscreen",
+            possibleActives: ["UV filters"],
+          },
+        ],
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+    const night = json.routinePlans.find(
+      (plan: any) => plan.slotLabel === "night",
+    );
+
+    expect(response.status).toBe(200);
+    expect(night).toBeTruthy();
+    expect(night.productNames).toEqual([
+      "De-Tan Face Wash Coffee Detox",
+      "Alpha Arbutin 02% Face Serum",
+    ]);
+    expect(json.rejectedPlanReasons.join("|")).not.toContain(
+      "night_sunscreen",
+    );
+    expect(json.rejectedPlanReasons.join("|")).not.toContain(
+      "strong_active",
+    );
   });
 
   test("rinse-off acid cleanser is not removed as a strong active", async () => {

@@ -362,6 +362,29 @@ void main() {
     );
   });
 
+  test('7b. Provider failures retain actionable skin-care messages', () {
+    expect(
+      onboarding7FriendlyAiMessage('provider_unauthorized', const []),
+      'Skin care AI provider authorization failed. Check the worker configuration.',
+    );
+    expect(
+      onboarding7FriendlyAiMessage('provider_model_not_found', const []),
+      'Skin care AI model is unavailable. Check the worker model configuration.',
+    );
+    expect(
+      onboarding7FriendlyAiMessage('provider_quota_exceeded', const []),
+      'AI usage limit reached. Try again later.',
+    );
+    expect(
+      onboarding7FriendlyAiMessage('provider_timeout', const []),
+      'AI skin care service is unavailable. Try again later.',
+    );
+    expect(
+      onboarding7FriendlyAiMessage('provider_invalid_image_payload', const []),
+      'AI could not process this photo. Upload a clearer JPEG, PNG, or WEBP image.',
+    );
+  });
+
   test('8. Product analysis maps Map products safely into names', () {
     final names = onboarding7ExtractPhotoProductNames([
       {'brand': 'CeraVe', 'name': 'Hydrating Cleanser', 'category': 'cleanser'},
@@ -408,10 +431,9 @@ void main() {
     );
 
     expect(
-      products.map((product) => {
-        'name': product.name,
-        'category': product.category,
-      }),
+      products.map(
+        (product) => {'name': product.name, 'category': product.category},
+      ),
       [
         {'name': 'Beardo Detan Face Wash', 'category': 'cleanser'},
         {'name': 'Minimalist SPF 50', 'category': 'sunscreen'},
@@ -1186,18 +1208,14 @@ void main() {
         blocks
             .where((block) => block.skincareSlotLabel == 'night')
             .where(
-              (block) => !block.skincareProducts.contains(
-                'Minimalist PHA Toner',
-              ),
+              (block) =>
+                  !block.skincareProducts.contains('Minimalist PHA Toner'),
             )
             .single
             .repeatDays,
         [1, 2, 4, 5, 7],
       );
-      expect(
-        base.skinCareSpecialCareNotes,
-        contains(strongActiveNote),
-      );
+      expect(base.skinCareSpecialCareNotes, contains(strongActiveNote));
       expect(
         base.skinCareSpecialCareNotes.any(
           (note) => note.startsWith('Special care:'),
@@ -1206,12 +1224,17 @@ void main() {
       );
 
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-special-care-notes-button')),
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text(strongActiveNote), findsOneWidget);
-      expect(find.textContaining('AI returned no usable routine'), findsNothing);
+      expect(
+        find.textContaining('AI returned no usable routine'),
+        findsNothing,
+      );
     },
   );
 
@@ -1307,12 +1330,17 @@ void main() {
       expect(base.skinCareSpecialCareNotes, contains(removedMorningNote));
 
       await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-special-care-notes-button')),
+        find.byKey(
+          const ValueKey('onboarding-step7-special-care-notes-button'),
+        ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text(removedMorningNote), findsOneWidget);
-      expect(find.textContaining('AI returned no usable routine'), findsNothing);
+      expect(
+        find.textContaining('AI returned no usable routine'),
+        findsNothing,
+      );
     },
   );
 
@@ -1376,7 +1404,10 @@ void main() {
         blocks.expand((block) => block.skincareProducts),
         contains(cleanser),
       );
-      expect(find.textContaining('AI returned no usable routine'), findsNothing);
+      expect(
+        find.textContaining('AI returned no usable routine'),
+        findsNothing,
+      );
     },
   );
 
@@ -1941,10 +1972,7 @@ void main() {
               'category': 'sunscreen',
               'possibleActives': ['UV filters'],
             },
-            {
-              'name': 'Photo Cleanser',
-              'category': 'cleanser',
-            },
+            {'name': 'Photo Cleanser', 'category': 'cleanser'},
           ],
         ),
         routineResult: const SkinCareAiRoutineResult(
@@ -2367,6 +2395,58 @@ void main() {
       );
     },
   );
+
+  test('27b. Worker client distinguishes provider failures', () async {
+    final cases = <(int, String, String)>[
+      (
+        502,
+        'provider_unauthorized',
+        'Skin care AI provider authorization failed. Please check the worker configuration.',
+      ),
+      (
+        502,
+        'provider_model_not_found',
+        'Skin care AI model is unavailable. Please check the worker model configuration.',
+      ),
+      (
+        429,
+        'provider_quota_exceeded',
+        'AI usage limit reached. Try again later.',
+      ),
+      (
+        504,
+        'provider_timeout',
+        'AI skin care service is unavailable. Try again later.',
+      ),
+      (
+        503,
+        'provider_high_demand',
+        'AI is busy right now. Try again in a moment.',
+      ),
+    ];
+
+    for (final (status, code, message) in cases) {
+      final client = WorkerSkinCareAiClient(
+        baseUrl: 'https://skin-care-worker.test',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({'error': code, 'message': 'Provider failure.'}),
+            status,
+          ),
+        ),
+      );
+      final result = await client.generateRoutine(
+        uid: 'uid-1',
+        idToken: 'token',
+        params: const {
+          'typedProductNames': ['Cleanser'],
+        },
+      );
+
+      expect(result.errorCode, code);
+      expect(result.errorMessage, message);
+    }
+  });
 
   test('28. Worker client filters title-only routine plans', () async {
     final client = WorkerSkinCareAiClient(

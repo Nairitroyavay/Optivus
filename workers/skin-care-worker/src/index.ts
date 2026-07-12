@@ -1,22 +1,34 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
-type Env = {
-  FIREBASE_PROJECT_ID: string;
-  AI_PROVIDER?: string;
-  AI_MODEL?: string;
-  AI_FALLBACK_MODEL?: string;
-  GEMINI_API_KEY?: string;
-  ALLOWED_ORIGINS?: string;
-  UPLOAD_BUCKET: R2Bucket;
-};
-
 const ROUTINE_GENERATE_JSON_MAX_BYTES = 64 * 1024;
 const IMAGE_MAX_BYTES = 15 * 1024 * 1024;
+const GEMINI_RESPONSE_MAX_BYTES = 1024 * 1024;
+const GEMINI_REQUEST_TIMEOUT_MS = 60_000;
 
 type OwnedSkinCareProduct = {
   name: string;
   category: string;
   searchableFields: string[];
+};
+
+type ProviderFailureCode =
+  | "provider_model_not_found"
+  | "provider_invalid_image_payload"
+  | "provider_invalid_request"
+  | "provider_unauthorized"
+  | "provider_quota_exceeded"
+  | "provider_timeout"
+  | "provider_empty_candidates"
+  | "provider_invalid_json"
+  | "provider_invalid_response"
+  | "provider_high_demand"
+  | "provider_unavailable"
+  | "provider_request_failed";
+
+type ProviderFailure = {
+  errorCode: ProviderFailureCode;
+  providerStatus?: number;
+  providerCode?: string;
 };
 
 class HttpError extends Error {
@@ -26,6 +38,15 @@ class HttpError extends Error {
     super(message);
     this.status = status;
     this.errorCode = errorCode;
+  }
+}
+
+class ProviderRequestError extends Error {
+  failure: ProviderFailure;
+
+  constructor(failure: ProviderFailure) {
+    super(failure.errorCode);
+    this.failure = failure;
   }
 }
 
@@ -45,7 +66,11 @@ function corsHeaders(request: Request, env: Env): Headers {
 function jsonResponse(request: Request, env: Env, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...Object.fromEntries(corsHeaders(request, env)), "Content-Type": "application/json" },
+    headers: {
+      ...Object.fromEntries(corsHeaders(request, env)),
+      "Cache-Control": "no-store",
+      "Content-Type": "application/json",
+    },
   });
 }
 
@@ -299,20 +324,22 @@ function looksLikeLeaveOnStrongActive(value: string): boolean {
   return looksLikeStrongActive(value) && !looksLikeCleanser(value);
 }
 
-function productText(product: OwnedSkinCareProduct): string {
+function productClassificationText(product: OwnedSkinCareProduct): string {
   return [product.name, product.category, ...product.searchableFields].join(" ");
 }
 
 function isSunscreen(product: OwnedSkinCareProduct): boolean {
-  return product.category === "sunscreen" || looksLikeSunscreen(productText(product));
+  return product.category === "sunscreen" ||
+    looksLikeSunscreen(productClassificationText(product));
 }
 
 function isCleanser(product: OwnedSkinCareProduct): boolean {
-  return product.category === "cleanser" || looksLikeCleanser(productText(product));
+  return product.category === "cleanser" ||
+    looksLikeCleanser(productClassificationText(product));
 }
 
 function isRinseOffCleanser(product: OwnedSkinCareProduct): boolean {
-  const lower = productText(product).toLowerCase();
+  const lower = productClassificationText(product).toLowerCase();
   return product.category === "cleanser" ||
     lower.includes("face wash") ||
     lower.includes("cleanser") ||
@@ -323,18 +350,19 @@ function isRinseOffCleanser(product: OwnedSkinCareProduct): boolean {
 function isMoisturizer(product: OwnedSkinCareProduct): boolean {
   return product.category === "moisturizer" ||
     product.category === "moisturiser" ||
-    looksLikeMoisturizer(productText(product));
+    looksLikeMoisturizer(productClassificationText(product));
 }
 
 function isSerum(product: OwnedSkinCareProduct): boolean {
-  return product.category === "serum" || looksLikeSerum(productText(product));
+  return product.category === "serum" ||
+    looksLikeSerum(productClassificationText(product));
 }
 
 function isStrongActive(product: OwnedSkinCareProduct): boolean {
   if (isRinseOffCleanser(product)) return false;
   return product.category === "exfoliant" ||
     product.category === "exfoliator" ||
-    looksLikeStrongActive(productText(product));
+    looksLikeStrongActive(productClassificationText(product));
 }
 
 function ownedProductName(value: any): string {
@@ -363,9 +391,6 @@ function ownedProductCatalog(rawProducts: any[]): OwnedSkinCareProduct[] {
       raw && typeof raw === "object" ? raw.brand : "",
       ...(raw && typeof raw === "object" ? stringList(raw.keyIngredients || raw.ingredients) : []),
       ...(raw && typeof raw === "object" ? stringList(raw.possibleActives || raw.actives) : []),
-      raw && typeof raw === "object" ? raw.usageHint || raw.usage : "",
-      raw && typeof raw === "object" ? raw.warningIfAny || raw.warning || raw.warnings : "",
-      raw && typeof raw === "object" ? raw.confidence : "",
     ]);
     const key = normalizedProductKey(name);
     if (!key || seen.has(key)) continue;
@@ -872,6 +897,16 @@ function routineCoverageWarnings(plans: any[], desiredApplicationsPerDay: number
   return warnings;
 }
 
+function rejectionReasonCounts(reasons: string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const reason of reasons) {
+    const [kind = "unknown", slot = ""] = reason.split(":");
+    const key = slot ? `${kind}:${slot}` : kind;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return counts;
+}
+
 function routinePlanDedupeKey(plan: any): string {
   return [
     canonicalRoutineSlot(plan?.slotLabel || ""),
@@ -909,6 +944,278 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+function objectValue(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object"
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function compactProviderToken(value: unknown, fallback: string): string {
+  const text = String(value ?? "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_.-]+/g, "_")
+    .slice(0, 80);
+  return text || fallback;
+}
+
+async function readBoundedResponseText(
+  response: Response,
+  maxBytes = GEMINI_RESPONSE_MAX_BYTES,
+): Promise<string> {
+  const declaredLength = Number.parseInt(
+    response.headers.get("content-length") || "0",
+    10,
+  );
+  if (declaredLength > maxBytes) {
+    await response.body?.cancel();
+    throw new ProviderRequestError({
+      errorCode: "provider_invalid_response",
+      providerStatus: response.status,
+      providerCode: "response_too_large",
+    });
+  }
+
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      await reader.cancel();
+      throw new ProviderRequestError({
+        errorCode: "provider_invalid_response",
+        providerStatus: response.status,
+        providerCode: "response_too_large",
+      });
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
+}
+
+function classifyProviderFailure(
+  providerStatus: number,
+  providerCode: string,
+  providerMessage: string,
+): ProviderFailure {
+  const normalized = `${providerCode} ${providerMessage}`.toLowerCase();
+  let errorCode: ProviderFailureCode = "provider_request_failed";
+
+  if (
+    providerStatus === 401 ||
+    providerStatus === 403 ||
+    normalized.includes("api_key_invalid") ||
+    normalized.includes("api key") ||
+    normalized.includes("permission_denied") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("forbidden")
+  ) {
+    errorCode = "provider_unauthorized";
+  } else if (
+    providerStatus === 404 ||
+    normalized.includes("not_found") ||
+    normalized.includes("model not found") ||
+    normalized.includes("not found for api version") ||
+    normalized.includes("not supported for generatecontent")
+  ) {
+    errorCode = "provider_model_not_found";
+  } else if (
+    providerStatus === 429 ||
+    normalized.includes("quota") ||
+    normalized.includes("rate limit") ||
+    normalized.includes("resource_exhausted")
+  ) {
+    errorCode = "provider_quota_exceeded";
+  } else if (
+    providerStatus === 408 ||
+    normalized.includes("timeout") ||
+    normalized.includes("deadline")
+  ) {
+    errorCode = "provider_timeout";
+  } else if (
+    providerStatus >= 500 ||
+    normalized.includes("busy") ||
+    normalized.includes("high demand") ||
+    normalized.includes("overloaded")
+  ) {
+    errorCode = "provider_high_demand";
+  } else if (
+    providerStatus === 400 &&
+    (normalized.includes("image") ||
+      normalized.includes("inline") ||
+      normalized.includes("mime") ||
+      normalized.includes("base64") ||
+      normalized.includes("payload"))
+  ) {
+    errorCode = "provider_invalid_image_payload";
+  } else if (providerStatus === 400) {
+    errorCode = "provider_invalid_request";
+  }
+
+  return {
+    errorCode,
+    providerStatus,
+    providerCode: compactProviderToken(
+      providerCode,
+      `http_${providerStatus}`,
+    ),
+  };
+}
+
+function providerFailureFromResponse(
+  response: Response,
+  responseText: string,
+): ProviderFailure {
+  let parsed: unknown;
+  try {
+    parsed = responseText.trim() ? JSON.parse(responseText) : undefined;
+  } catch {
+    parsed = undefined;
+  }
+
+  const body = objectValue(parsed);
+  const providerError = objectValue(body.error);
+  const providerCode = String(
+    providerError.status ??
+      providerError.code ??
+      body.error ??
+      `http_${response.status}`,
+  );
+  const providerMessage = String(
+    providerError.message ??
+      body.message ??
+      response.statusText ??
+      "Provider request failed.",
+  );
+  return classifyProviderFailure(
+    response.status,
+    providerCode,
+    providerMessage,
+  );
+}
+
+function geminiCandidateText(providerBody: unknown): string {
+  const candidates = objectValue(providerBody).candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return "";
+  const content = objectValue(objectValue(candidates[0]).content);
+  const parts = content.parts;
+  if (!Array.isArray(parts)) return "";
+  return parts
+    .map((part) => objectValue(part).text)
+    .filter((text): text is string => typeof text === "string")
+    .join("")
+    .trim();
+}
+
+function logProviderFailure(
+  model: string,
+  failure: ProviderFailure,
+  attempt: "primary" | "fallback",
+): void {
+  console.warn(JSON.stringify({
+    event: "skin_care_provider_request_failed",
+    provider: "gemini",
+    model: compactProviderToken(model, "unknown"),
+    attempt,
+    status: failure.providerStatus ?? null,
+    providerCode: compactProviderToken(
+      failure.providerCode,
+      failure.errorCode,
+    ),
+    errorCode: failure.errorCode,
+  }));
+}
+
+function providerFailureToHttpError(failure: ProviderFailure): HttpError {
+  switch (failure.errorCode) {
+    case "provider_unauthorized":
+      return new HttpError(
+        502,
+        failure.errorCode,
+        "AI provider authorization failed.",
+      );
+    case "provider_model_not_found":
+      return new HttpError(
+        502,
+        failure.errorCode,
+        "AI provider model is unavailable.",
+      );
+    case "provider_quota_exceeded":
+      return new HttpError(
+        429,
+        failure.errorCode,
+        "AI provider quota was exceeded.",
+      );
+    case "provider_timeout":
+      return new HttpError(
+        504,
+        failure.errorCode,
+        "AI provider request timed out.",
+      );
+    case "provider_high_demand":
+      return new HttpError(
+        503,
+        failure.errorCode,
+        "AI provider is temporarily unavailable.",
+      );
+    case "provider_invalid_image_payload":
+      return new HttpError(
+        502,
+        failure.errorCode,
+        "AI provider rejected the image payload.",
+      );
+    case "provider_invalid_request":
+      return new HttpError(
+        502,
+        failure.errorCode,
+        "AI provider rejected the request.",
+      );
+    case "provider_empty_candidates":
+      return new HttpError(
+        502,
+        failure.errorCode,
+        "AI provider returned no usable response.",
+      );
+    case "provider_invalid_response":
+    case "provider_invalid_json":
+      return new HttpError(
+        502,
+        failure.errorCode,
+        "AI provider returned an invalid response.",
+      );
+    case "provider_unavailable":
+      return new HttpError(
+        503,
+        failure.errorCode,
+        "AI provider could not be reached.",
+      );
+    default:
+      return new HttpError(
+        502,
+        "provider_request_failed",
+        "AI provider request failed.",
+      );
+  }
+}
+
+function shouldTryFallback(failure: ProviderFailure): boolean {
+  return failure.errorCode !== "provider_unauthorized" &&
+    failure.errorCode !== "provider_invalid_image_payload" &&
+    failure.errorCode !== "provider_invalid_request";
+}
+
 async function callGeminiWithFallback(prompt: string, imageParts: any[], env: Env): Promise<string> {
   const provider = env.AI_PROVIDER || "gemini";
   if (provider !== "gemini") {
@@ -916,37 +1223,109 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
   }
 
   const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-  const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
-  const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
+  const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash";
+  const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-3.5-flash";
 
-  const fetchGemini = async (model: string) => {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-        generationConfig: { responseMimeType: "application/json" }
-      })
-    });
-    if (!res.ok) throw new Error(`Provider failed with status ${res.status}`);
-    const json = await res.json() as any;
-    return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+  const fetchGemini = async (model: string): Promise<string> => {
+    const modelId = model.replace(/^models\//, "");
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/` +
+      `${encodeURIComponent(modelId)}:generateContent`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
+          generationConfig: {
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json",
+            temperature: 0,
+          },
+        }),
+        signal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS),
+      });
+      const responseText = await readBoundedResponseText(response);
+      if (!response.ok) {
+        throw new ProviderRequestError(
+          providerFailureFromResponse(response, responseText),
+        );
+      }
+
+      let providerBody: unknown;
+      try {
+        providerBody = responseText.trim()
+          ? JSON.parse(responseText)
+          : undefined;
+      } catch {
+        throw new ProviderRequestError({
+          errorCode: "provider_invalid_response",
+          providerStatus: response.status,
+          providerCode: "invalid_json",
+        });
+      }
+      const text = geminiCandidateText(providerBody);
+      if (!text) {
+        throw new ProviderRequestError({
+          errorCode: "provider_empty_candidates",
+          providerStatus: response.status,
+          providerCode: "empty_candidates",
+        });
+      }
+      if (!parseAiJsonText(text)) {
+        throw new ProviderRequestError({
+          errorCode: "provider_invalid_json",
+          providerStatus: response.status,
+          providerCode: "invalid_model_json",
+        });
+      }
+      return text;
+    } catch (error) {
+      if (error instanceof ProviderRequestError) throw error;
+      const errorName = error instanceof Error
+        ? error.name.toLowerCase()
+        : "";
+      const timedOut = errorName.includes("timeout") ||
+        errorName.includes("abort");
+      throw new ProviderRequestError({
+        errorCode: timedOut ? "provider_timeout" : "provider_unavailable",
+        providerCode: timedOut ? "request_timeout" : "fetch_failed",
+      });
+    }
   };
 
   try {
     return await fetchGemini(primaryModel);
-  } catch (err) {
-    if (fallbackModel && fallbackModel !== primaryModel) {
-      console.warn(`[SkinCareWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+  } catch (error) {
+    const primaryFailure = error instanceof ProviderRequestError
+      ? error.failure
+      : {
+          errorCode: "provider_unavailable" as const,
+          providerCode: "unknown_failure",
+        };
+    logProviderFailure(primaryModel, primaryFailure, "primary");
+    if (
+      fallbackModel &&
+      fallbackModel !== primaryModel &&
+      shouldTryFallback(primaryFailure)
+    ) {
       try {
         return await fetchGemini(fallbackModel);
-      } catch {
-        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+      } catch (fallbackError) {
+        const fallbackFailure = fallbackError instanceof ProviderRequestError
+          ? fallbackError.failure
+          : {
+              errorCode: "provider_unavailable" as const,
+              providerCode: "unknown_failure",
+            };
+        logProviderFailure(fallbackModel, fallbackFailure, "fallback");
+        throw providerFailureToHttpError(fallbackFailure);
       }
-    } else {
-      throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
     }
+    throw providerFailureToHttpError(primaryFailure);
   }
 }
 
@@ -1052,7 +1431,10 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
       }
     } catch (err) {
       if (err instanceof HttpError) throw err;
-      console.warn("[SkinCareWorker] Failed to load face photo:", err);
+      console.warn(JSON.stringify({
+        event: "skin_care_face_photo_load_failed",
+        errorType: err instanceof Error ? err.name : "unknown",
+      }));
     }
   }
 
@@ -1218,14 +1600,17 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     : rawSuggestedProducts;
   const perDayRoutineCounts = routinePlanPerDayCounts(routinePlans);
   const perDaySlotCoverage = serializableSlotCoverage(slotCoverageByDay(routinePlans));
-  console.log("[SkinCareWorker] routine-generate productInputSource=", activeSource);
-  console.log("[SkinCareWorker] ownedProducts=", JSON.stringify(ownedProducts));
-  console.log("[SkinCareWorker] raw routinePlans=", JSON.stringify(rawRoutinePlans));
-  console.log("[SkinCareWorker] sanitized routinePlans=", JSON.stringify(routinePlans));
-  console.log("[SkinCareWorker] rejectedPlanReasons=", JSON.stringify(rejectedPlanReasons));
-  console.log("[SkinCareWorker] strongActiveSplitNotes=", JSON.stringify(strongActiveSplitNotes));
-  console.log("[SkinCareWorker] per-day routine counts=", JSON.stringify(perDayRoutineCounts));
-  console.log("[SkinCareWorker] per-day slot coverage=", JSON.stringify(perDaySlotCoverage));
+  console.log(JSON.stringify({
+    event: "skin_care_routine_generated",
+    productInputSource: activeSource,
+    ownedProductCount: ownedProducts.length,
+    rawPlanCount: rawRoutinePlans.length,
+    sanitizedPlanCount: routinePlans.length,
+    rejectionReasonCounts: rejectionReasonCounts(rejectedPlanReasons),
+    strongActiveSplitCount: strongActiveSplitNotes.length,
+    perDayRoutineCounts,
+    perDaySlotCoverage,
+  }));
   const compatibilityStartForSlot = (slotLabel: string | undefined, index: number): number => {
     const slot = String(slotLabel || "").toLowerCase();
     if (slot === "morning") return 7 * 60;
@@ -1298,7 +1683,11 @@ export default {
       if (httpError) {
         return jsonResponse(request, env, { error: httpError.errorCode, message: httpError.message }, httpError.status);
       }
+      console.error(JSON.stringify({
+        event: "skin_care_unexpected_error",
+        errorType: error instanceof Error ? error.name : "unknown",
+      }));
       return jsonResponse(request, env, { error: "internal_error", message: "An unexpected error occurred" }, 500);
     }
   }
-};
+} satisfies ExportedHandler<Env>;

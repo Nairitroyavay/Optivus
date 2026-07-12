@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "optivus-skin-care-worker-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "FIREBASE_PROJECT_ID": "optivus-lifeos",
+    "AI_PROVIDER": "gemini",
+    "AI_MODEL": "gemini-2.5-flash",
+    "AI_FALLBACK_MODEL": "gemini-3.5-flash",
+    "ALLOWED_ORIGINS": "*"
+  },
+  "secrets": {
+    "required": ["GEMINI_API_KEY"]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    }
+  },
+  "r2_buckets": [
+    {
+      "binding": "UPLOAD_BUCKET",
+      "bucket_name": "optivus-uploads-dev"
+    }
+  ]
+}

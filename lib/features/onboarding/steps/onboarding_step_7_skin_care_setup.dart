@@ -356,6 +356,24 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('no_products_detected')) {
     return _onboarding7PhotoUnreadableMessage;
   }
+  if (text.contains('provider_unauthorized')) {
+    return 'Skin care AI provider authorization failed. Check the worker configuration.';
+  }
+  if (text.contains('provider_model_not_found')) {
+    return 'Skin care AI model is unavailable. Check the worker model configuration.';
+  }
+  if (text.contains('provider_timeout') ||
+      text.contains('provider_unavailable') ||
+      text.contains('provider_request_failed') ||
+      text.contains('network_unavailable')) {
+    return 'AI skin care service is unavailable. Try again later.';
+  }
+  if (text.contains('provider_invalid_image_payload')) {
+    return 'AI could not process this photo. Upload a clearer JPEG, PNG, or WEBP image.';
+  }
+  if (text.contains('provider_invalid_request')) {
+    return 'AI could not process this request. Please try again.';
+  }
   if (text.contains('unsupported_content_type') ||
       text.contains('content type') ||
       text.contains('format')) {
@@ -373,10 +391,10 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
       text.contains('too large')) {
     return 'Product photo is too large. Upload a smaller, clearer photo.';
   }
-  if (text.contains('provider_quota_exceeded') ||
-      text.contains('provider_high_demand') ||
-      text.contains('provider_request_failed') ||
-      text.contains('rate_limit')) {
+  if (text.contains('provider_quota_exceeded') || text.contains('rate_limit')) {
+    return 'AI usage limit reached. Try again later.';
+  }
+  if (text.contains('provider_high_demand')) {
     return 'AI is busy right now. Try again in a moment.';
   }
   if (text.contains('provider_invalid_response') ||
@@ -398,7 +416,7 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('ai_returned_fewer_routines')) {
     return _onboarding7AiFewerRoutinesMessage;
   }
-  if (text.contains('unavailable') || text.contains('provider_timeout')) {
+  if (text.contains('unavailable')) {
     return 'AI skin care service is unavailable. Try again later.';
   }
   if (messages.isNotEmpty && !messages.first.startsWith('provider_')) {
