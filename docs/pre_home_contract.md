@@ -1,5 +1,12 @@
 # Pre-Home Contract
 
+> **Phase 3 stabilization input.** This contract remains useful for limiting
+> Home work, but it is subordinate to the current
+> [product blueprint](OPTIVUS_PRODUCT_BLUEPRINT_AS_BUILT.md),
+> [architecture](ARCHITECTURE.md), and
+> [data-source contract](DATA_SOURCE_CONTRACT.md). If a statement conflicts,
+> the Phase 0 authoritative documents win.
+
 Phase 1 through Phase 2D are stabilization inputs for Home. This document marks the boundary before Phase 3 Home work starts.
 
 ## Home Can Read Now

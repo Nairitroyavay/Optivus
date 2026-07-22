@@ -1,5 +1,13 @@
 # Frontend Ready Gate v2 Handoff
 
+> **Historical snapshot — superseded 2026-07-22.** The statements below
+> describe an earlier frontend-only handoff and are retained only for history.
+> Do not use them as current implementation truth. Use the
+> [product blueprint](OPTIVUS_PRODUCT_BLUEPRINT_AS_BUILT.md),
+> [architecture](ARCHITECTURE.md),
+> [data-source contract](DATA_SOURCE_CONTRACT.md), and
+> [technical-debt register](TECHNICAL_DEBT.md) instead.
+
 This is the frontend-only handoff for backend development. It freezes the model
 ownership boundaries and future Firestore path targets without connecting
 Firebase, Cloudflare Workers, R2, native services, or paid APIs.

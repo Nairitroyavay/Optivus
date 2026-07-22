@@ -299,6 +299,7 @@ class SkinCareAiRoutineResult {
   final List<dynamic> nightRoutine;
   final List<dynamic> weeklyRoutine;
   final List<dynamic> timelineBlocks;
+  final List<SkinCareProductRecommendation> recommendedProducts;
   final List<String> suggestedProducts;
   final List<String> warnings;
   final List<String> rejectedPlanReasons;
@@ -313,6 +314,7 @@ class SkinCareAiRoutineResult {
     required this.nightRoutine,
     required this.weeklyRoutine,
     required this.timelineBlocks,
+    this.recommendedProducts = const [],
     this.suggestedProducts = const [],
     this.warnings = const [],
     this.rejectedPlanReasons = const [],
@@ -327,12 +329,70 @@ class SkinCareAiRoutineResult {
       nightRoutine: [],
       weeklyRoutine: [],
       timelineBlocks: [],
+      recommendedProducts: [],
       suggestedProducts: [],
       rejectedPlanReasons: [],
       errorMessage: msg,
       errorCode: errorCode,
     );
   }
+}
+
+class SkinCareProductRecommendation {
+  final String name;
+  final String brand;
+  final String category;
+  final String estimatedPrice;
+  final String currencyCode;
+  final String reason;
+
+  const SkinCareProductRecommendation({
+    required this.name,
+    this.brand = '',
+    this.category = '',
+    this.estimatedPrice = '',
+    this.currencyCode = '',
+    this.reason = '',
+  });
+
+  factory SkinCareProductRecommendation.fromValue(dynamic value) {
+    if (value is String) {
+      return SkinCareProductRecommendation(name: value.trim());
+    }
+    if (value is! Map) {
+      return const SkinCareProductRecommendation(name: '');
+    }
+    final map = Map<String, dynamic>.from(value);
+    return SkinCareProductRecommendation(
+      name: _stringValue(map['name'] ?? map['productName']).trim(),
+      brand: _stringValue(map['brand']).trim(),
+      category: _stringValue(map['category']).trim(),
+      estimatedPrice: _stringValue(
+        map['estimatedPrice'] ?? map['price'] ?? map['priceRange'],
+      ).trim(),
+      currencyCode: _stringValue(map['currencyCode'] ?? map['currency']).trim(),
+      reason: _stringValue(map['reason'] ?? map['why']).trim(),
+    );
+  }
+
+  bool get isUsable => name.isNotEmpty || brand.isNotEmpty;
+
+  String get displayName {
+    if (name.isEmpty) return brand;
+    if (brand.isEmpty || name.toLowerCase().contains(brand.toLowerCase())) {
+      return name;
+    }
+    return '$brand $name';
+  }
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'brand': brand,
+    'category': category,
+    'estimatedPrice': estimatedPrice,
+    'currencyCode': currencyCode,
+    'reason': reason,
+  };
 }
 
 abstract class SkinCareAiClient {
@@ -406,36 +466,96 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
     required String idToken,
     required Map<String, dynamic> params,
   }) async {
+    const recommendations = [
+      SkinCareProductRecommendation(
+        name: 'Gentle Cleanser',
+        brand: 'Minimalist',
+        category: 'cleanser',
+        estimatedPrice: '299',
+        currencyCode: 'INR',
+        reason: 'Gentle daily cleansing',
+      ),
+      SkinCareProductRecommendation(
+        name: 'Barrier Moisturizer',
+        brand: 'Minimalist',
+        category: 'moisturizer',
+        estimatedPrice: '349',
+        currencyCode: 'INR',
+        reason: 'Supports the skin barrier',
+      ),
+      SkinCareProductRecommendation(
+        name: 'SPF 50 Sunscreen',
+        brand: 'Minimalist',
+        category: 'sunscreen',
+        estimatedPrice: '399',
+        currencyCode: 'INR',
+        reason: 'Daily sun protection',
+      ),
+    ];
+    if (params['recommendationOnly'] == true) {
+      return const SkinCareAiRoutineResult(
+        routinePlans: [],
+        morningRoutine: [],
+        nightRoutine: [],
+        weeklyRoutine: [],
+        timelineBlocks: [],
+        recommendedProducts: recommendations,
+      );
+    }
+
     final desired =
         (params['desiredApplicationsPerDay'] is num
                 ? (params['desiredApplicationsPerDay'] as num).toInt()
                 : 2)
             .clamp(2, 4)
             .toInt();
-    const allPlans = [
+    final rawDetails = params['typedProductDetails'];
+    final selectedDetails = rawDetails is List
+        ? rawDetails.whereType<Map>().map(Map<String, dynamic>.from).toList()
+        : const <Map<String, dynamic>>[];
+    String selectedName(String category, String fallback) {
+      final match = selectedDetails.where(
+        (product) =>
+            _stringValue(product['category']).trim().toLowerCase() == category,
+      );
+      if (match.isEmpty) return fallback;
+      final product = match.first;
+      final name = _stringValue(product['name']).trim();
+      final brand = _stringValue(product['brand']).trim();
+      if (name.isEmpty) return brand.isEmpty ? fallback : brand;
+      if (brand.isEmpty || name.toLowerCase().contains(brand.toLowerCase())) {
+        return name;
+      }
+      return '$brand $name';
+    }
+
+    final cleanser = selectedName('cleanser', 'Fake Cleanser');
+    final moisturizer = selectedName('moisturizer', 'Moisturizer');
+    final sunscreen = selectedName('sunscreen', 'Sunscreen');
+    final allPlans = [
       SkinCareRoutinePlan(
         slotLabel: 'morning',
         title: 'Morning Skin Care',
         steps: ['Cleanse face', 'Apply sunscreen'],
-        productNames: ['Fake Cleanser', 'Sunscreen'],
+        productNames: [cleanser, sunscreen],
       ),
       SkinCareRoutinePlan(
         slotLabel: 'midday',
         title: 'Midday Skin Care',
         steps: ['Refresh skin', 'Reapply sunscreen'],
-        productNames: ['Sunscreen'],
+        productNames: [sunscreen],
       ),
       SkinCareRoutinePlan(
         slotLabel: 'afternoon',
         title: 'Afternoon Skin Care',
         steps: ['Reapply sunscreen'],
-        productNames: ['Sunscreen'],
+        productNames: [sunscreen],
       ),
       SkinCareRoutinePlan(
         slotLabel: 'night',
         title: 'Night Skin Care',
         steps: ['Cleanse face', 'Apply moisturizer'],
-        productNames: ['Fake Cleanser', 'Moisturizer'],
+        productNames: [cleanser, moisturizer],
       ),
     ];
     final plans = desired == 2
@@ -470,6 +590,7 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
           "skincareProducts": <String>["Fake Cleanser", "Moisturizer"],
         },
       ],
+      recommendedProducts: recommendations,
       suggestedProducts: ["Suggested Cleanser", "Suggested Moisturizer"],
       warnings: [],
     );
@@ -575,6 +696,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       final nR = body['nightRoutine'];
       final wR = body['weeklyRoutine'];
       final tB = body['timelineBlocks'];
+      final rP = body['recommendedProducts'];
       final sP = body['suggestedProducts'];
       final warnings = body['warnings'];
       final rejectedPlanReasons = body['rejectedPlanReasons'];
@@ -597,6 +719,12 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
         nightRoutine: nR is List ? nR : [],
         weeklyRoutine: wR is List ? wR : [],
         timelineBlocks: tB is List ? tB : [],
+        recommendedProducts: rP is List
+            ? rP
+                  .map(SkinCareProductRecommendation.fromValue)
+                  .where((product) => product.isUsable)
+                  .toList(growable: false)
+            : const [],
         suggestedProducts: sP is List
             ? sP.map((e) => e.toString()).toList()
             : [],

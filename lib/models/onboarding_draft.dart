@@ -990,6 +990,53 @@ class BodyBasicsDraft {
   }
 }
 
+class SkinCareProductRecommendationDraft {
+  final String name;
+  final String brand;
+  final String category;
+  final String estimatedPrice;
+  final String currencyCode;
+  final String reason;
+
+  const SkinCareProductRecommendationDraft({
+    required this.name,
+    this.brand = '',
+    this.category = '',
+    this.estimatedPrice = '',
+    this.currencyCode = '',
+    this.reason = '',
+  });
+
+  factory SkinCareProductRecommendationDraft.fromMap(Map<String, dynamic> map) {
+    return SkinCareProductRecommendationDraft(
+      name: map['name']?.toString().trim() ?? '',
+      brand: map['brand']?.toString().trim() ?? '',
+      category: map['category']?.toString().trim() ?? '',
+      estimatedPrice: map['estimatedPrice']?.toString().trim() ?? '',
+      currencyCode: map['currencyCode']?.toString().trim() ?? '',
+      reason: map['reason']?.toString().trim() ?? '',
+    );
+  }
+
+  String get displayName {
+    if (brand.isEmpty || name.toLowerCase().contains(brand.toLowerCase())) {
+      return name;
+    }
+    return '$brand $name';
+  }
+
+  String get selectionKey => displayName.toLowerCase();
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'brand': brand,
+    'category': category,
+    'estimatedPrice': estimatedPrice,
+    'currencyCode': currencyCode,
+    'reason': reason,
+  };
+}
+
 class BaseTimelineDraft {
   static const fixedSleepId = 'fixed-sleep';
   static const fixedBathId = 'fixed-bath';
@@ -1035,6 +1082,9 @@ class BaseTimelineDraft {
   final List<String> acceptedConflictKeys;
   final List<String> roleChangeWarnings;
   final List<String> skinCareSpecialCareNotes;
+  final List<SkinCareProductRecommendationDraft> skinCareProductRecommendations;
+  final List<String> skinCareSelectedProductNames;
+  final List<String> skinCareSuggestedProducts;
 
   const BaseTimelineDraft({
     this.blocks = const [],
@@ -1078,6 +1128,9 @@ class BaseTimelineDraft {
     this.acceptedConflictKeys = const [],
     this.roleChangeWarnings = const [],
     this.skinCareSpecialCareNotes = const [],
+    this.skinCareProductRecommendations = const [],
+    this.skinCareSelectedProductNames = const [],
+    this.skinCareSuggestedProducts = const [],
   });
 
   factory BaseTimelineDraft.fromMap(Map<String, dynamic> map) {
@@ -1139,6 +1192,16 @@ class BaseTimelineDraft {
       skinCareSpecialCareNotes: _readStringList(
         map['skinCareSpecialCareNotes'],
       ),
+      skinCareProductRecommendations: _readList(
+        map['skinCareProductRecommendations'],
+        SkinCareProductRecommendationDraft.fromMap,
+      ),
+      skinCareSelectedProductNames: _readStringList(
+        map['skinCareSelectedProductNames'],
+      ),
+      skinCareSuggestedProducts: _readStringList(
+        map['skinCareSuggestedProducts'],
+      ),
     );
   }
 
@@ -1188,6 +1251,11 @@ class BaseTimelineDraft {
     'acceptedConflictKeys': acceptedConflictKeys,
     'roleChangeWarnings': roleChangeWarnings,
     'skinCareSpecialCareNotes': skinCareSpecialCareNotes,
+    'skinCareProductRecommendations': skinCareProductRecommendations
+        .map((product) => product.toMap())
+        .toList(),
+    'skinCareSelectedProductNames': skinCareSelectedProductNames,
+    'skinCareSuggestedProducts': skinCareSuggestedProducts,
   };
 
   BaseTimelineDraft copyWith({
@@ -1232,6 +1300,9 @@ class BaseTimelineDraft {
     List<String>? acceptedConflictKeys,
     List<String>? roleChangeWarnings,
     List<String>? skinCareSpecialCareNotes,
+    List<SkinCareProductRecommendationDraft>? skinCareProductRecommendations,
+    List<String>? skinCareSelectedProductNames,
+    List<String>? skinCareSuggestedProducts,
     bool clearMealPlanning = false,
     bool clearBusinessPlanning = false,
     bool clearRoleChangeWarnings = false,
@@ -1242,6 +1313,9 @@ class BaseTimelineDraft {
     bool clearSkinCareProblems = false,
     bool clearSkinCareBudget = false,
     bool clearSkinCarePreference = false,
+    bool clearSkinCareProductRecommendations = false,
+    bool clearSkinCareSelectedProductNames = false,
+    bool clearSkinCareSuggestedProducts = false,
     bool clearSkinCarePlanning = false,
     bool clearClassData = false,
     bool clearWorkData = false,
@@ -1372,6 +1446,19 @@ class BaseTimelineDraft {
       skinCareSpecialCareNotes: clearSkinCarePlanning
           ? const []
           : (skinCareSpecialCareNotes ?? this.skinCareSpecialCareNotes),
+      skinCareProductRecommendations:
+          clearSkinCarePlanning || clearSkinCareProductRecommendations
+          ? const []
+          : (skinCareProductRecommendations ??
+                this.skinCareProductRecommendations),
+      skinCareSelectedProductNames:
+          clearSkinCarePlanning || clearSkinCareSelectedProductNames
+          ? const []
+          : (skinCareSelectedProductNames ?? this.skinCareSelectedProductNames),
+      skinCareSuggestedProducts:
+          clearSkinCarePlanning || clearSkinCareSuggestedProducts
+          ? const []
+          : (skinCareSuggestedProducts ?? this.skinCareSuggestedProducts),
     );
   }
 
@@ -1692,14 +1779,22 @@ class BaseTimelineDraft {
 
   String? validateSkinCareSetup() {
     if (skinCareSkipped) return null;
-    if (skinCareSetupPath == 'has_products') {
+    if (skinCareSetupPath == 'no_products') {
+      if (skinCareProductPhotoR2Key?.trim().isNotEmpty != true) {
+        return 'Add a face photo to personalize your product recommendations.';
+      }
+      if (skinCareSuggestedProducts.isEmpty) {
+        return 'Select at least one recommended product before building your routine.';
+      }
+    }
+    if (skinCareSetupPath == 'has_products' ||
+        skinCareSetupPath == 'no_products') {
       final desired = _normalizeSkinCareDesiredApplicationsPerDay(
         skinCareDesiredApplicationsPerDay,
       );
       final msg = _missingSkinCareRoutineMessage(desired);
       return msg;
     }
-    if (_hasConfirmedSection('skin_care')) return null;
     return 'Build skin care routine or skip.';
   }
 

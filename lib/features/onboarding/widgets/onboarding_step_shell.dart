@@ -509,7 +509,9 @@ class OnboardingStepShell extends StatelessWidget {
                     Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(
-                          bottom: MediaQuery.viewInsetsOf(context).bottom,
+                          bottom: keyboardOpen
+                              ? MediaQuery.viewInsetsOf(context).bottom
+                              : 0,
                         ),
                         child: child,
                       ),

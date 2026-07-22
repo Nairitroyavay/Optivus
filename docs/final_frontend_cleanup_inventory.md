@@ -1,5 +1,13 @@
 # Final Frontend Cleanup Inventory
 
+> **Historical snapshot — superseded 2026-07-22.** This inventory records an
+> earlier cleanup baseline and is retained only for history. Do not treat its
+> status, routes, or test results as current. Use the
+> [product blueprint](OPTIVUS_PRODUCT_BLUEPRINT_AS_BUILT.md),
+> [navigation contract](NAVIGATION.md),
+> [data-source contract](DATA_SOURCE_CONTRACT.md), and
+> [technical-debt register](TECHNICAL_DEBT.md) instead.
+
 Date: 2026-06-01
 
 ## Final Frontend-Ready Pass

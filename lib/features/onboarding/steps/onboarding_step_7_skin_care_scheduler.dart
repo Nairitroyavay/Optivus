@@ -5,6 +5,13 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 
 const int onboarding7SkinCareDurationMinutes = 15;
+const int onboarding7SkinCareMinimumGapMinutes = 60;
+
+const int _onboarding7DefaultLunchStartMinute = 13 * 60;
+const int _onboarding7FallbackLunchDurationMinutes = 35;
+const int _onboarding7AfternoonPreferredMinute = 16 * 60;
+const int _onboarding7BathAfterWakeThresholdMinutes = 90;
+const int _onboarding7AnchorSearchMinutes = 120;
 
 const List<int> onboarding7EveryDay = [1, 2, 3, 4, 5, 6, 7];
 const String _noRoutineMessage =
@@ -13,6 +20,8 @@ const String _productMismatchMessage =
     'AI used products outside your list. Try again.';
 const String onboarding7FewerRoutinesMessage =
     'AI returned fewer routines than requested. Try again or choose fewer times per day.';
+const String onboarding7NoCompleteScheduleMessage =
+    'No complete skin-care schedule fits the available timetable. Add one 15-minute free period or choose fewer times per day.';
 const List<String> _schedulableSlotLabels = [
   'morning',
   'midday',
@@ -218,6 +227,24 @@ class _ScheduleWindow {
   });
 }
 
+class _SkinCareSearchWindow {
+  final int minStartMinute;
+  final int maxStartMinute;
+  final int preferredStartMinute;
+  final bool searchAfterOnly;
+  final bool enforceAfterMidday;
+  final String displayTitle;
+
+  const _SkinCareSearchWindow({
+    required this.minStartMinute,
+    required this.maxStartMinute,
+    required this.preferredStartMinute,
+    required this.displayTitle,
+    this.searchAfterOnly = false,
+    this.enforceAfterMidday = false,
+  });
+}
+
 class _OwnedProductPlanResult {
   final SkinCareRoutinePlan? plan;
   final String reason;
@@ -387,10 +414,88 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
     bathBlock: bathBlock,
     wakingRange: wakingRange,
   );
+  Onboarding7SkinCareScheduleResult? lastFailure;
+  for (final minimumGapMinutes in const [
+    onboarding7SkinCareMinimumGapMinutes,
+    30,
+    15,
+    0,
+  ]) {
+    final result = _attemptSkinCareSchedule(
+      baseTimeline: baseTimeline,
+      plans: adaptedPlans.plans,
+      bathBlock: bathBlock,
+      occupied: occupied,
+      wakingRange: wakingRange,
+      slotSpecs: slotSpecs,
+      timestamp: timestamp,
+      desiredApplicationsPerDay: desired,
+      minimumGapMinutes: minimumGapMinutes,
+      flexiblePlacement: false,
+    );
+    if (!result.hasError) {
+      if (kDebugMode) {
+        debugPrint(
+          '[Onboarding7Scheduler] accepted gap=$minimumGapMinutes '
+          'flexible=false blocks=${result.blocks.length}',
+        );
+      }
+      return result;
+    }
+    lastFailure = result;
+  }
+  for (final minimumGapMinutes in const [30, 15, 0]) {
+    final result = _attemptSkinCareSchedule(
+      baseTimeline: baseTimeline,
+      plans: adaptedPlans.plans,
+      bathBlock: bathBlock,
+      occupied: occupied,
+      wakingRange: wakingRange,
+      slotSpecs: slotSpecs,
+      timestamp: timestamp,
+      desiredApplicationsPerDay: desired,
+      minimumGapMinutes: minimumGapMinutes,
+      flexiblePlacement: true,
+    );
+    if (!result.hasError) {
+      if (kDebugMode) {
+        debugPrint(
+          '[Onboarding7Scheduler] accepted gap=$minimumGapMinutes '
+          'flexible=true blocks=${result.blocks.length}',
+        );
+      }
+      return result;
+    }
+    lastFailure = result;
+  }
+  if (lastFailure != null) {
+    return const Onboarding7SkinCareScheduleResult(
+      blocks: [],
+      errorMessage: onboarding7NoCompleteScheduleMessage,
+    );
+  }
+  return const Onboarding7SkinCareScheduleResult(
+    blocks: [],
+    errorMessage: 'No available skin-care time was found.',
+  );
+}
+
+Onboarding7SkinCareScheduleResult _attemptSkinCareSchedule({
+  required BaseTimelineDraft baseTimeline,
+  required List<SkinCareRoutinePlan> plans,
+  required TimelineBlockDraft bathBlock,
+  required List<TimelineBlockDraft> occupied,
+  required Onboarding7WakingRange wakingRange,
+  required List<Onboarding7SkinCareSlotSpec> slotSpecs,
+  required int timestamp,
+  required int desiredApplicationsPerDay,
+  required int minimumGapMinutes,
+  required bool flexiblePlacement,
+}) {
   final scheduledSingles = <TimelineBlockDraft>[];
 
-  for (var index = 0; index < adaptedPlans.plans.length; index += 1) {
-    final plan = adaptedPlans.plans[index];
+  for (var index = 0; index < plans.length; index += 1) {
+    final plan = plans[index];
     final fallbackSpec = _fallbackSlotSpecForPlan(
       plan,
       slotSpecs: slotSpecs,
@@ -413,40 +518,76 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
         );
       }
 
-      final afterBath = spec.slotLabel == 'morning';
-      final minStart = afterBath
-          ? math.max(wakingRange.startMinute, bathWindow.endMinute + 5)
-          : wakingRange.startMinute;
-      final maxStart = math.min(
-        wakingRange.endMinute - onboarding7SkinCareDurationMinutes,
-        24 * 60 - onboarding7SkinCareDurationMinutes,
+      final searchWindow = _skinCareSearchWindowForDay(
+        baseTimeline: baseTimeline,
+        slotLabel: spec.slotLabel,
+        day: day,
+        bathWindow: bathWindow,
+        wakingRange: wakingRange,
+        desiredApplicationsPerDay: desiredApplicationsPerDay,
+        flexiblePlacement: flexiblePlacement,
       );
-
-      if (maxStart < minStart) {
+      if (searchWindow == null) {
         return Onboarding7SkinCareScheduleResult(
           blocks: const [],
-          errorMessage:
-              'No free 15-minute skin-care slot was found for ${_dayName(day)}.',
+          errorMessage: _skinCareScheduleError(spec.slotLabel, day),
         );
       }
 
-      final preferred = spec.preferredStartMinute
-          .clamp(minStart, maxStart)
-          .toInt();
+      var orderedMinStartMinute = searchWindow.minStartMinute;
+      final canonicalSlot = _canonicalSlotLabel(spec.slotLabel);
+      if (canonicalSlot == 'afternoon' && searchWindow.enforceAfterMidday) {
+        final middayBlocks = scheduledSingles.where(
+          (block) =>
+              block.repeatDays.contains(day) &&
+              _canonicalSlotLabel(block.skincareSlotLabel ?? '') == 'midday',
+        );
+        if (middayBlocks.isNotEmpty) {
+          final middayEnd = middayBlocks
+              .map((block) => block.endMinute)
+              .reduce(math.max);
+          orderedMinStartMinute = math.max(
+            orderedMinStartMinute,
+            middayEnd + minimumGapMinutes,
+          );
+        }
+      } else if (canonicalSlot == 'night') {
+        final earlierBlocks = scheduledSingles.where(
+          (block) => block.repeatDays.contains(day),
+        );
+        if (earlierBlocks.isNotEmpty) {
+          final latestEnd = earlierBlocks
+              .map((block) => block.endMinute)
+              .reduce(math.max);
+          orderedMinStartMinute = math.max(
+            orderedMinStartMinute,
+            latestEnd + minimumGapMinutes,
+          );
+        }
+      }
+      if (searchWindow.maxStartMinute < orderedMinStartMinute) {
+        return Onboarding7SkinCareScheduleResult(
+          blocks: const [],
+          errorMessage: _skinCareScheduleError(spec.slotLabel, day),
+        );
+      }
+
       final startMinute = onboarding7FindFreeSkinCareStart(
-        preferredStartMinute: preferred,
+        preferredStartMinute: searchWindow.preferredStartMinute
+            .clamp(orderedMinStartMinute, searchWindow.maxStartMinute)
+            .toInt(),
         repeatDays: [day],
         occupiedBlocks: [...occupied, ...scheduledSingles],
-        minStartMinute: minStart,
-        maxStartMinute: maxStart,
-        searchAfterOnly: afterBath,
+        minStartMinute: orderedMinStartMinute,
+        maxStartMinute: searchWindow.maxStartMinute,
+        searchAfterOnly: searchWindow.searchAfterOnly,
+        minimumSkinCareGapMinutes: minimumGapMinutes,
       );
 
       if (startMinute == null) {
         return Onboarding7SkinCareScheduleResult(
           blocks: const [],
-          errorMessage:
-              'No free 15-minute skin-care slot was found for ${_dayName(day)}.',
+          errorMessage: _skinCareScheduleError(spec.slotLabel, day),
         );
       }
 
@@ -459,17 +600,15 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
           errorMessage: _noRoutineMessage,
         );
       }
-      if (kDebugMode) {
-        debugPrint(
-          '[Onboarding7Scheduler] final block slot=${spec.slotLabel} '
-          'day=$day products=$products missingItems=$missingItems steps=$steps',
-        );
-      }
       scheduledSingles.add(
         TimelineBlockDraft(
           id: 'skin-care-$timestamp-$index-$day',
           section: 'skin_care',
-          title: plan.title.trim().isNotEmpty ? plan.title.trim() : spec.title,
+          title: _scheduledSkinCareTitle(
+            plan: plan,
+            spec: spec,
+            displayTitle: searchWindow.displayTitle,
+          ),
           startMinute: startMinute,
           endMinute: startMinute + onboarding7SkinCareDurationMinutes,
           repeatDays: [day],
@@ -548,6 +687,28 @@ String? onboarding7MissingRoutineMessage(
   return null;
 }
 
+bool onboarding7CanContinue(BaseTimelineDraft base) {
+  if (base.skinCareSkipped) return true;
+  final blocks = base.confirmedBlocksForSection('skin_care');
+  return switch (base.skinCareSetupPath) {
+    'has_products' =>
+      onboarding7MissingRoutineMessage(
+            blocks,
+            base.skinCareDesiredApplicationsPerDay,
+          ) ==
+          null,
+    'no_products' =>
+      base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
+          base.skinCareSuggestedProducts.isNotEmpty &&
+          onboarding7MissingRoutineMessage(
+                blocks,
+                base.skinCareDesiredApplicationsPerDay,
+              ) ==
+              null,
+    _ => false,
+  };
+}
+
 @visibleForTesting
 List<TimelineBlockDraft> onboarding7OccupiedBlocksForSkinCare(
   BaseTimelineDraft baseTimeline, {
@@ -556,9 +717,16 @@ List<TimelineBlockDraft> onboarding7OccupiedBlocksForSkinCare(
   return baseTimeline.blocks
       .where((block) => block.id != excludingBlockId)
       .where((block) => block.section != 'skin_care')
+      .where((block) => !_isNonExclusiveMealWindow(block))
       .where((block) => !block.needsTimeConfirmation)
       .where((block) => block.title.trim().isNotEmpty)
       .toList(growable: false);
+}
+
+bool _isNonExclusiveMealWindow(TimelineBlockDraft block) {
+  return block.section == 'eating' &&
+      (block.blockType == TimelineBlockDraft.softBlockKey ||
+          block.id.startsWith('eating-ai-'));
 }
 
 @visibleForTesting
@@ -576,6 +744,223 @@ TimelineBlockDraft? onboarding7FindBathBlock(BaseTimelineDraft baseTimeline) {
   return null;
 }
 
+_SkinCareSearchWindow? _skinCareSearchWindowForDay({
+  required BaseTimelineDraft baseTimeline,
+  required String slotLabel,
+  required int day,
+  required _ScheduleWindow bathWindow,
+  required Onboarding7WakingRange wakingRange,
+  required int desiredApplicationsPerDay,
+  required bool flexiblePlacement,
+}) {
+  final latestWakingStart = math.min(
+    wakingRange.endMinute - onboarding7SkinCareDurationMinutes,
+    24 * 60 - onboarding7SkinCareDurationMinutes,
+  );
+  if (latestWakingStart < wakingRange.startMinute) return null;
+
+  final lunchWindow = _lunchWindowForDay(
+    baseTimeline,
+    day,
+    wakingRange: wakingRange,
+  );
+  final restWindow = _restWindowAfterLunchForDay(
+    baseTimeline,
+    day,
+    lunchWindow: lunchWindow,
+    wakingRange: wakingRange,
+  );
+  final canonicalSlot = _canonicalSlotLabel(slotLabel);
+  final bathFollowsWake = _bathFollowsWake(
+    bathWindow: bathWindow,
+    wakingRange: wakingRange,
+  );
+  final wakeAnchor = bathFollowsWake
+      ? math.max(wakingRange.startMinute, bathWindow.endMinute)
+      : wakingRange.startMinute;
+  final morningMaxStart = math.min(
+    latestWakingStart,
+    flexiblePlacement
+        ? lunchWindow.startMinute - onboarding7SkinCareDurationMinutes
+        : math.min(
+            lunchWindow.startMinute - onboarding7SkinCareDurationMinutes,
+            wakeAnchor + _onboarding7AnchorSearchMinutes,
+          ),
+  );
+  final nightAnchor = latestWakingStart;
+  final nightMinStart = math.max(
+    wakingRange.startMinute,
+    nightAnchor - _onboarding7AnchorSearchMinutes,
+  );
+  final hasSeparateBathRoutine =
+      desiredApplicationsPerDay >= 4 && !bathFollowsWake;
+  final separateBathAnchor = math.max(
+    wakingRange.startMinute,
+    bathWindow.endMinute,
+  );
+  final separateBathMaxStart = math.min(
+    latestWakingStart,
+    separateBathAnchor + _onboarding7AnchorSearchMinutes,
+  );
+  final afterLunchMaxStart = restWindow == null
+      ? latestWakingStart
+      : math.min(
+          latestWakingStart,
+          restWindow.startMinute - onboarding7SkinCareDurationMinutes,
+        );
+
+  final window = switch (canonicalSlot) {
+    'morning' => _SkinCareSearchWindow(
+      minStartMinute: wakeAnchor,
+      maxStartMinute: morningMaxStart,
+      preferredStartMinute: wakeAnchor,
+      searchAfterOnly: true,
+      displayTitle: bathFollowsWake
+          ? 'After-bath Skin Care'
+          : 'After-wake Skin Care',
+    ),
+    'midday' => _SkinCareSearchWindow(
+      minStartMinute: math.max(wakingRange.startMinute, lunchWindow.endMinute),
+      maxStartMinute: afterLunchMaxStart,
+      preferredStartMinute: math.max(
+        wakingRange.startMinute,
+        lunchWindow.endMinute,
+      ),
+      searchAfterOnly: true,
+      displayTitle: 'After-lunch Skin Care',
+    ),
+    'afternoon' =>
+      hasSeparateBathRoutine
+          ? _SkinCareSearchWindow(
+              minStartMinute: separateBathAnchor,
+              maxStartMinute: separateBathMaxStart,
+              preferredStartMinute: separateBathAnchor,
+              searchAfterOnly: true,
+              displayTitle: 'After-bath Skin Care',
+            )
+          : _SkinCareSearchWindow(
+              minStartMinute: math.max(
+                wakingRange.startMinute,
+                lunchWindow.endMinute,
+              ),
+              maxStartMinute: latestWakingStart,
+              preferredStartMinute: _onboarding7AfternoonPreferredMinute,
+              enforceAfterMidday: true,
+              displayTitle: 'Afternoon Skin Care',
+            ),
+    'night' => _SkinCareSearchWindow(
+      minStartMinute: nightMinStart,
+      maxStartMinute: latestWakingStart,
+      preferredStartMinute: nightAnchor,
+      displayTitle: 'Before-bed Skin Care',
+    ),
+    _ => null,
+  };
+
+  if (window == null || window.maxStartMinute < window.minStartMinute) {
+    return null;
+  }
+  return window;
+}
+
+_ScheduleWindow? _restWindowAfterLunchForDay(
+  BaseTimelineDraft baseTimeline,
+  int day, {
+  required _ScheduleWindow lunchWindow,
+  required Onboarding7WakingRange wakingRange,
+}) {
+  final windows =
+      baseTimeline.blocks
+          .where((block) => !block.needsTimeConfirmation)
+          .where((block) {
+            final title = block.title.trim().toLowerCase();
+            return RegExp(r'\b(rest|nap)\b').hasMatch(title);
+          })
+          .expand(_windowsFor)
+          .where((window) => window.day == day)
+          .where((window) => window.startMinute >= lunchWindow.endMinute)
+          .where((window) => window.startMinute < wakingRange.endMinute)
+          .toList(growable: false)
+        ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  return windows.isEmpty ? null : windows.first;
+}
+
+bool _bathFollowsWake({
+  required _ScheduleWindow bathWindow,
+  required Onboarding7WakingRange wakingRange,
+}) {
+  final latestFollowingBathStart =
+      wakingRange.startMinute + _onboarding7BathAfterWakeThresholdMinutes;
+  return bathWindow.endMinute >= wakingRange.startMinute &&
+      bathWindow.startMinute <= latestFollowingBathStart;
+}
+
+_ScheduleWindow _lunchWindowForDay(
+  BaseTimelineDraft baseTimeline,
+  int day, {
+  required Onboarding7WakingRange wakingRange,
+}) {
+  final lunchWindows =
+      baseTimeline.blocks
+          .where((block) => !block.needsTimeConfirmation)
+          .where(_isLunchBlock)
+          .expand(_windowsFor)
+          .where((window) => window.day == day)
+          .where((window) => window.endMinute > window.startMinute)
+          .toList(growable: false)
+        ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  if (lunchWindows.isNotEmpty) return lunchWindows.first;
+
+  final latestFallbackStart = math.max(
+    wakingRange.startMinute,
+    wakingRange.endMinute - _onboarding7FallbackLunchDurationMinutes,
+  );
+  final startMinute =
+      (baseTimeline.lunchMinute ?? _onboarding7DefaultLunchStartMinute)
+          .clamp(wakingRange.startMinute, latestFallbackStart)
+          .toInt();
+  return _ScheduleWindow(
+    day: day,
+    startMinute: startMinute,
+    endMinute: math.min(
+      wakingRange.endMinute,
+      startMinute + _onboarding7FallbackLunchDurationMinutes,
+    ),
+  );
+}
+
+bool _isLunchBlock(TimelineBlockDraft block) {
+  if (block.section != 'eating') return false;
+  final category = block.mealCategory?.trim().toLowerCase() ?? '';
+  final title = block.title.trim().toLowerCase();
+  return category == 'lunch' || RegExp(r'\blunch\b').hasMatch(title);
+}
+
+String _skinCareScheduleError(String slotLabel, int day) {
+  final dayName = _dayName(day);
+  return switch (_canonicalSlotLabel(slotLabel)) {
+    'morning' =>
+      'No free skin-care time was found after wake-up and bath on $dayName. Adjust the bath or daytime schedule.',
+    'midday' =>
+      'No free skin-care time was found after lunch on $dayName. Adjust lunch or the daytime schedule.',
+    'afternoon' =>
+      'No free afternoon skin-care time was found on $dayName. Adjust the daytime schedule.',
+    'night' =>
+      'No free night skin-care time was found before sleep on $dayName. Adjust the night or sleep schedule.',
+    _ => 'No free 15-minute skin-care time was found for $dayName.',
+  };
+}
+
+String _scheduledSkinCareTitle({
+  required SkinCareRoutinePlan plan,
+  required Onboarding7SkinCareSlotSpec spec,
+  required String displayTitle,
+}) {
+  if (displayTitle.trim().isNotEmpty) return displayTitle;
+  final title = plan.title.trim();
+  return title.isNotEmpty ? title : spec.title;
+}
+
 @visibleForTesting
 List<Onboarding7SkinCareSlotSpec> onboarding7SkinCareSlotSpecs({
   required int desiredApplicationsPerDay,
@@ -585,8 +970,11 @@ List<Onboarding7SkinCareSlotSpec> onboarding7SkinCareSlotSpecs({
   final desired = onboarding7NormalizeDesiredApplications(
     desiredApplicationsPerDay,
   );
-  final firstStart = (bathBlock?.endMinute ?? wakingRange.startMinute) + 5;
-  final nightStart = math.min(21 * 60, wakingRange.endMinute - 45);
+  final firstStart = _firstRoutineAnchor(
+    bathBlock: bathBlock,
+    wakingRange: wakingRange,
+  );
+  final nightStart = wakingRange.endMinute - onboarding7SkinCareDurationMinutes;
   return switch (desired) {
     2 => [
       Onboarding7SkinCareSlotSpec(
@@ -609,7 +997,9 @@ List<Onboarding7SkinCareSlotSpec> onboarding7SkinCareSlotSpecs({
       const Onboarding7SkinCareSlotSpec(
         slotLabel: 'midday',
         title: 'Midday Skin Care',
-        preferredStartMinute: 13 * 60,
+        preferredStartMinute:
+            _onboarding7DefaultLunchStartMinute +
+            _onboarding7FallbackLunchDurationMinutes,
       ),
       Onboarding7SkinCareSlotSpec(
         slotLabel: 'night',
@@ -626,12 +1016,14 @@ List<Onboarding7SkinCareSlotSpec> onboarding7SkinCareSlotSpecs({
       const Onboarding7SkinCareSlotSpec(
         slotLabel: 'midday',
         title: 'Midday Skin Care',
-        preferredStartMinute: 12 * 60,
+        preferredStartMinute:
+            _onboarding7DefaultLunchStartMinute +
+            _onboarding7FallbackLunchDurationMinutes,
       ),
       const Onboarding7SkinCareSlotSpec(
         slotLabel: 'afternoon',
         title: 'Afternoon Skin Care',
-        preferredStartMinute: 16 * 60,
+        preferredStartMinute: _onboarding7AfternoonPreferredMinute,
       ),
       Onboarding7SkinCareSlotSpec(
         slotLabel: 'night',
@@ -778,6 +1170,7 @@ int? onboarding7FindFreeSkinCareStart({
   required int minStartMinute,
   required int maxStartMinute,
   bool searchAfterOnly = false,
+  int minimumSkinCareGapMinutes = 0,
 }) {
   final minStart = _roundUpToFive(minStartMinute.clamp(0, 24 * 60 - 1));
   final maxStart = _roundDownToFive(
@@ -788,7 +1181,12 @@ int? onboarding7FindFreeSkinCareStart({
   final preferred = _roundToFive(
     preferredStartMinute.clamp(minStart, maxStart),
   );
-  if (_isSkinCareStartFree(preferred, repeatDays, occupiedBlocks)) {
+  if (_isSkinCareStartFree(
+    preferred,
+    repeatDays,
+    occupiedBlocks,
+    minimumSkinCareGapMinutes: minimumSkinCareGapMinutes,
+  )) {
     return preferred;
   }
 
@@ -798,7 +1196,12 @@ int? onboarding7FindFreeSkinCareStart({
       start <= maxStart;
       start += 5
     ) {
-      if (_isSkinCareStartFree(start, repeatDays, occupiedBlocks)) {
+      if (_isSkinCareStartFree(
+        start,
+        repeatDays,
+        occupiedBlocks,
+        minimumSkinCareGapMinutes: minimumSkinCareGapMinutes,
+      )) {
         return start;
       }
     }
@@ -809,12 +1212,22 @@ int? onboarding7FindFreeSkinCareStart({
   for (var offset = 5; offset <= maxOffset; offset += 5) {
     final after = preferred + offset;
     if (after <= maxStart &&
-        _isSkinCareStartFree(after, repeatDays, occupiedBlocks)) {
+        _isSkinCareStartFree(
+          after,
+          repeatDays,
+          occupiedBlocks,
+          minimumSkinCareGapMinutes: minimumSkinCareGapMinutes,
+        )) {
       return after;
     }
     final before = preferred - offset;
     if (before >= minStart &&
-        _isSkinCareStartFree(before, repeatDays, occupiedBlocks)) {
+        _isSkinCareStartFree(
+          before,
+          repeatDays,
+          occupiedBlocks,
+          minimumSkinCareGapMinutes: minimumSkinCareGapMinutes,
+        )) {
       return before;
     }
   }
@@ -830,6 +1243,7 @@ bool onboarding7SkinCareCandidateConflicts({
   final occupied = baseTimeline.blocks
       .where((block) => block.id != excludingBlockId)
       .where((block) => includeSkinCareBlocks || block.section != 'skin_care')
+      .where((block) => !_isNonExclusiveMealWindow(block))
       .where((block) => !block.needsTimeConfirmation)
       .where((block) => block.title.trim().isNotEmpty)
       .toList(growable: false);
@@ -848,6 +1262,7 @@ int? onboarding7FindFreeStartForSkinCareEdit({
     repeatDays: _safeRepeatDays(block.repeatDays),
     occupiedBlocks: baseTimeline.blocks
         .where((item) => item.id != block.id)
+        .where((item) => !_isNonExclusiveMealWindow(item))
         .where((item) => !item.needsTimeConfirmation)
         .where((item) => item.title.trim().isNotEmpty)
         .toList(growable: false),
@@ -935,7 +1350,27 @@ Onboarding7WakingRange _wakingRangeForSleep(TimelineBlockDraft? sleepBlock) {
       return Onboarding7WakingRange(startMinute: start, endMinute: end);
     }
   }
+  if (sleepBlock.startMinute <= 3 * 60 &&
+      sleepBlock.endMinute > sleepBlock.startMinute &&
+      sleepBlock.endMinute <= 12 * 60) {
+    final start = sleepBlock.endMinute.clamp(5 * 60, 11 * 60).toInt();
+    return Onboarding7WakingRange(startMinute: start, endMinute: 24 * 60);
+  }
   return const Onboarding7WakingRange(startMinute: 6 * 60, endMinute: 23 * 60);
+}
+
+int _firstRoutineAnchor({
+  required TimelineBlockDraft? bathBlock,
+  required Onboarding7WakingRange wakingRange,
+}) {
+  if (bathBlock == null) return wakingRange.startMinute;
+  final bathFollowsWake =
+      bathBlock.endMinute >= wakingRange.startMinute &&
+      bathBlock.startMinute <=
+          wakingRange.startMinute + _onboarding7BathAfterWakeThresholdMinutes;
+  return bathFollowsWake
+      ? math.max(wakingRange.startMinute, bathBlock.endMinute)
+      : wakingRange.startMinute;
 }
 
 Onboarding7SkinCareSlotSpec _skinCareSlotSpecForLabel(
@@ -945,8 +1380,11 @@ Onboarding7SkinCareSlotSpec _skinCareSlotSpecForLabel(
   required Onboarding7WakingRange wakingRange,
 }) {
   final slot = _canonicalSlotLabel(rawSlot);
-  final firstStart = (bathBlock?.endMinute ?? wakingRange.startMinute) + 5;
-  final nightStart = math.min(21 * 60, wakingRange.endMinute - 45);
+  final firstStart = _firstRoutineAnchor(
+    bathBlock: bathBlock,
+    wakingRange: wakingRange,
+  );
+  final nightStart = wakingRange.endMinute - onboarding7SkinCareDurationMinutes;
   return switch (slot) {
     'morning' => Onboarding7SkinCareSlotSpec(
       slotLabel: 'morning',
@@ -956,12 +1394,14 @@ Onboarding7SkinCareSlotSpec _skinCareSlotSpecForLabel(
     'midday' => const Onboarding7SkinCareSlotSpec(
       slotLabel: 'midday',
       title: 'Midday Skin Care',
-      preferredStartMinute: 13 * 60,
+      preferredStartMinute:
+          _onboarding7DefaultLunchStartMinute +
+          _onboarding7FallbackLunchDurationMinutes,
     ),
     'afternoon' => const Onboarding7SkinCareSlotSpec(
       slotLabel: 'afternoon',
       title: 'Afternoon Skin Care',
-      preferredStartMinute: 16 * 60,
+      preferredStartMinute: _onboarding7AfternoonPreferredMinute,
     ),
     'night' => Onboarding7SkinCareSlotSpec(
       slotLabel: 'night',
@@ -1487,8 +1927,9 @@ List<String> _dedupeStrings(Iterable<String> values) {
 bool _isSkinCareStartFree(
   int startMinute,
   List<int> repeatDays,
-  List<TimelineBlockDraft> occupiedBlocks,
-) {
+  List<TimelineBlockDraft> occupiedBlocks, {
+  int minimumSkinCareGapMinutes = 0,
+}) {
   final candidate = TimelineBlockDraft(
     id: 'candidate',
     section: 'skin_care',
@@ -1498,7 +1939,27 @@ bool _isSkinCareStartFree(
     repeatDays: _safeRepeatDays(repeatDays),
     blockType: TimelineBlockDraft.softBlockKey,
   );
-  return !_candidateConflicts(candidate, occupiedBlocks);
+  if (_candidateConflicts(candidate, occupiedBlocks)) return false;
+  if (minimumSkinCareGapMinutes <= 0) return true;
+
+  final candidateWindows = _windowsFor(candidate);
+  for (final block in occupiedBlocks.where(
+    (block) => block.section == 'skin_care',
+  )) {
+    for (final candidateWindow in candidateWindows) {
+      for (final blockWindow in _windowsFor(block)) {
+        if (candidateWindow.day != blockWindow.day) continue;
+        final enoughGapBefore =
+            candidateWindow.endMinute + minimumSkinCareGapMinutes <=
+            blockWindow.startMinute;
+        final enoughGapAfter =
+            candidateWindow.startMinute >=
+            blockWindow.endMinute + minimumSkinCareGapMinutes;
+        if (!enoughGapBefore && !enoughGapAfter) return false;
+      }
+    }
+  }
+  return true;
 }
 
 bool _candidateConflicts(

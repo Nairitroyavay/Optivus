@@ -80,16 +80,20 @@ class OnboardingCompletionService {
         base.skinCareProductPhotoStatus?.trim().isNotEmpty == true) {
       final fallbackCreatedAt = draft.createdAt ?? DateTime.now();
       final fallbackUpdatedAt = draft.updatedAt ?? fallbackCreatedAt;
-      
+
       final createdAt = base.skinCareProductPhotoCreatedAt ?? fallbackCreatedAt;
       final updatedAt = base.skinCareProductPhotoUpdatedAt ?? fallbackUpdatedAt;
       addReference(
         OnboardingUploadedAssetReference(
           id: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
               ? base.skinCareProductPhotoAssetId!.trim()
+              : base.skinCareSetupPath == 'no_products'
+              ? 'skin_care_face_photo'
               : 'skin_care_product_photo',
           section: 'skin_care',
-          mode: 'has_products',
+          mode: base.skinCareSetupPath == 'no_products'
+              ? 'no_products'
+              : 'has_products',
           uploadedAssetId: base.skinCareProductPhotoAssetId,
           uploadedAssetR2Key: base.skinCareProductPhotoR2Key,
           uploadedAssetStatus: base.skinCareProductPhotoStatus,

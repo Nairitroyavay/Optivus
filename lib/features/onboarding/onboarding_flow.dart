@@ -497,13 +497,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   void _onIndicatorDraggedTo(int index) => _navigateToIndicatorStep(index);
 
   bool _showTopLeftOverlay(OnboardingDraft draft) {
-    if (_currentPage == onboardingEatingStepIndex) {
-      return draft.baseTimeline.eatingSetupStep > 0;
-    }
-    if (_currentPage == onboardingSkinCareStepIndex) {
-      return draft.baseTimeline.skinCareSetupStep > 0;
-    }
-    return false;
+    return onboardingShouldShowTopLeftBackButton(
+      currentPage: _currentPage,
+      baseTimeline: draft.baseTimeline,
+    );
   }
 
   @override
@@ -544,6 +541,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
     if (classJobActionBusy) {
       ctaEnabled = false;
+    }
+    if (_currentPage == onboardingSkinCareStepIndex) {
+      ctaEnabled =
+          ctaEnabled &&
+          onboarding7CanContinue(onboardingState.draft.baseTimeline);
     }
 
     return PopScope(
@@ -872,4 +874,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         );
     ref.read(mockOnboardingProvider.notifier).setStepDirty(stepIndex, true);
   }
+}
+
+@visibleForTesting
+bool onboardingShouldShowTopLeftBackButton({
+  required int currentPage,
+  required BaseTimelineDraft baseTimeline,
+}) {
+  if (currentPage == onboardingEatingStepIndex) {
+    return baseTimeline.eatingSetupStep > 0;
+  }
+  // Skin Care has both page-level and internal navigation. On its choice
+  // screen this returns to Fixed Schedule; inside a path it returns to choice.
+  if (currentPage == onboardingSkinCareStepIndex) return true;
+  return false;
 }

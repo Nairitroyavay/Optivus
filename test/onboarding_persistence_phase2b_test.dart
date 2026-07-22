@@ -134,6 +134,30 @@ void main() {
     );
   });
 
+  test('no-products face photo is persisted as a face-photo reference', () {
+    final now = DateTime.utc(2026, 7, 22, 8);
+    final bundle = OnboardingCompletionService.buildBundle(
+      OnboardingDraft(
+        uid: 'no-products-user',
+        baseTimeline: BaseTimelineDraft(
+          skinCareSetupPath: 'no_products',
+          skinCareProductPhotoAssetId: 'face-asset',
+          skinCareProductPhotoR2Key:
+              'users/no-products-user/onboarding/skin_care/face-asset.jpg',
+          skinCareProductPhotoStatus: 'uploaded',
+          skinCareProductPhotoCreatedAt: now,
+          skinCareProductPhotoUpdatedAt: now,
+        ),
+      ),
+    );
+
+    final reference = bundle.uploadedAssetReferences.single;
+    expect(reference.id, 'face-asset');
+    expect(reference.section, 'skin_care');
+    expect(reference.mode, 'no_products');
+    expect(reference.uploadedAssetR2Key, contains('face-asset.jpg'));
+  });
+
   test('FakeOnboardingRepository saves and fetches draft', () async {
     final repository = FakeOnboardingRepository();
     final draft = _draftWithUploadReferences().copyWith(currentStep: 6);

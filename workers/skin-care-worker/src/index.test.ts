@@ -179,6 +179,157 @@ describe("Skin-care Worker", () => {
     expect(json.error).toBe("unsupported_content_type");
   });
 
+  test("product recommendations require a face photo", async () => {
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        recommendationOnly: true,
+        skinType: "oily",
+        mainProblem: "pimples",
+        budget: "low",
+        countryCode: "IN",
+        countryName: "India",
+        currencyCode: "INR",
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe("invalid_skin_care_request");
+  });
+
+  test("product recommendations are branded, priced, and location-aware", async () => {
+    const key = "users/uid-1/onboarding/skin_care/face.jpg";
+    const calls: FetchCall[] = [];
+    stubGemini(JSON.stringify({
+      routinePlans: [],
+      recommendedProducts: [
+        {
+          name: "Gentle Cleanser",
+          brand: "Minimalist",
+          category: "cleanser",
+          estimatedPrice: "299",
+          currencyCode: "INR",
+          reason: "Affordable daily cleanser",
+        },
+        {
+          name: "Oil-Free Moisturizer",
+          brand: "Minimalist",
+          category: "moisturizer",
+          estimatedPrice: "349",
+          currencyCode: "INR",
+          reason: "Light daily hydration",
+        },
+        {
+          name: "Ultra Light Sunscreen SPF 50",
+          brand: "Minimalist",
+          category: "sunscreen",
+          estimatedPrice: "399",
+          currencyCode: "INR",
+          reason: "Daily broad-spectrum protection",
+        },
+      ],
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+    }), calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        recommendationOnly: true,
+        facePhotoR2Key: key,
+        skinType: "oily",
+        skinConcerns: ["pimples", "oiliness"],
+        mainProblem: "pimples",
+        budget: "low",
+        countryCode: "IN",
+        countryName: "India",
+        currencyCode: "INR",
+      }),
+      makeEnv({ [key]: { contentType: "image/jpeg" } }) as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toEqual([]);
+    expect(json.recommendedProducts).toEqual([
+      {
+        name: "Gentle Cleanser",
+        brand: "Minimalist",
+        category: "cleanser",
+        estimatedPrice: "299",
+        currencyCode: "INR",
+        reason: "Affordable daily cleanser",
+      },
+      {
+        name: "Oil-Free Moisturizer",
+        brand: "Minimalist",
+        category: "moisturizer",
+        estimatedPrice: "349",
+        currencyCode: "INR",
+        reason: "Light daily hydration",
+      },
+      {
+        name: "Ultra Light Sunscreen SPF 50",
+        brand: "Minimalist",
+        category: "sunscreen",
+        estimatedPrice: "399",
+        currencyCode: "INR",
+        reason: "Daily broad-spectrum protection",
+      },
+    ]);
+    expect(json.warnings).not.toContain("ai_missing_product_category:cleanser");
+    expect(json.warnings).not.toContain("ai_missing_product_category:moisturizer");
+    expect(json.warnings).not.toContain("ai_missing_product_category:sunscreen");
+    const promptBody = JSON.stringify(calls[0].body);
+    expect(promptBody).toContain("India (IN)");
+    expect(promptBody).toContain("Minimalist");
+    expect(promptBody).toContain("Mamaearth");
+  });
+
+  test("incomplete product recommendations are removed before returning", async () => {
+    const key = "users/uid-1/onboarding/skin_care/face.jpg";
+    stubGemini(JSON.stringify({
+      routinePlans: [],
+      recommendedProducts: [
+        {
+          brand: "Brand without a product",
+          category: "cleanser",
+          estimatedPrice: "299",
+          currencyCode: "INR",
+          reason: "Missing an exact name",
+        },
+        {
+          name: "Product without a price",
+          brand: "Example Brand",
+          category: "sunscreen",
+          currencyCode: "INR",
+          reason: "Missing price",
+        },
+      ],
+      warnings: [],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        recommendationOnly: true,
+        facePhotoR2Key: key,
+        skinType: "oily",
+        skinConcerns: ["pimples"],
+        budget: "low",
+        countryCode: "IN",
+        countryName: "India",
+        currencyCode: "INR",
+      }),
+      makeEnv({ [key]: { contentType: "image/jpeg" } }) as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.recommendedProducts).toEqual([]);
+    expect(json.warnings).toContain("ai_returned_no_product_recommendations");
+  });
+
   test("missing metadata with .jpg key is accepted", async () => {
     const key = "users/uid-1/onboarding/skin_care/products.jpg";
     stubGemini(JSON.stringify({

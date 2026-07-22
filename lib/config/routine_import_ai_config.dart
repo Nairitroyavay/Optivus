@@ -14,7 +14,8 @@ class OptivusRoutineImportAiConfig {
 
   static const String workerBaseUrl = String.fromEnvironment(
     'OPTIVUS_ROUTINE_IMPORT_WORKER_URL',
-    defaultValue: '',
+    defaultValue:
+        'https://optivus-routine-import-worker-dev.nairitstock.workers.dev',
   );
 
   static OptivusRoutineImportAiMode get mode {

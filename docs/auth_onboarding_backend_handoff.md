@@ -1,5 +1,13 @@
 # Optivus Auth & Onboarding Backend Handoff
 
+> **Historical snapshot — superseded 2026-07-22.** The statements below
+> describe an earlier frontend-only Auth/Onboarding phase and are retained only
+> for history. Do not use them as current implementation truth. Use the
+> [product blueprint](OPTIVUS_PRODUCT_BLUEPRINT_AS_BUILT.md),
+> [architecture](ARCHITECTURE.md),
+> [data-source contract](DATA_SOURCE_CONTRACT.md), and
+> [technical-debt register](TECHNICAL_DEBT.md) instead.
+
 This document describes the current frontend-only auth and onboarding flow. It is backend-ready in shape, but no Firebase, Firestore, Cloudflare Worker, AI API, R2 upload, or real notification permission call is connected in this phase.
 
 ## Current Auth Architecture

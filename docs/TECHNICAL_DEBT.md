@@ -1,0 +1,140 @@
+# Optivus Technical-Debt Register
+
+Status: Phase 0 register established — maintained across all later phases
+
+This is the single authoritative register for verified Optivus technical debt.
+The register records current repository truth; it does not authorize Phase 0 to
+implement later-phase solutions. Product behavior and data provenance remain
+owned by the product blueprint and the
+[data-source contract](DATA_SOURCE_CONTRACT.md).
+
+## 1. Purpose and usage
+
+- Every entry describes one actionable, evidence-backed problem.
+- Stable IDs are used in planning, implementation changes, tests, and release
+  reviews.
+- Target phase is the single primary completion gate, even when preparation
+  occurs incrementally in earlier phases.
+- A checked-in target class, path, or client is not resolution. The active flow
+  must satisfy the measurable acceptance condition.
+- Risks describe possible impact from the current design; they are not claims
+  that a production incident has already occurred.
+
+## 2. Priority definitions
+
+| Priority | Meaning |
+| --- | --- |
+| **P0** | Threatens correctness, security, privacy, or user data. |
+| **P1** | Blocks a production integration or critical journey. |
+| **P2** | Reliability, maintainability, or product-truth problem. |
+| **P3** | Cleanup or low-risk consistency issue. |
+
+## 3. Status definitions
+
+| Status | Meaning |
+| --- | --- |
+| **Open** | Evidence confirms the problem and its acceptance condition is not satisfied. |
+| **In progress** | An authorized target-phase change is actively addressing the item, but the acceptance condition is not yet verified. |
+| **Blocked** | The owning phase cannot proceed until a named dependency or decision is supplied. |
+| **Resolved** | Evidence verifies every part of the acceptance condition in the active path. |
+| **Accepted** | The debt remains by an explicit, documented risk-acceptance decision with an owner and review date. |
+
+## 4. Active debt register
+
+| ID | Area | Problem | Evidence | Risk | Priority | Target phase | Acceptance condition | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **TD-001** | Routine | Duplicate Routine state ownership: both `routineNotifierProvider` and `mockRoutineProvider` own/receive active Routine items. | `lib/features/routine/routine_state.dart`; `lib/state/app_state.dart`; dual writes in `OnboardingFrontendHydrationService` and import restore service. | Data divergence, inconsistent UI, and partial persistence. | P0 | Phase 4 | One canonical Routine provider owns active state; Onboarding/imports/screens use it; the duplicate leaves production flows; restoration and projection regression tests pass. | Open |
+| **TD-002** | Routine | Active Routine CRUD uses `FakeRoutineRepository`. | `lib/repositories/routine_repository.dart` always returns `FakeRoutineRepository`; Routine screens use `routineNotifierProvider`. | Edits are lost after restart and another-device login. | P0 | Phase 4 | Firebase mode uses owner-scoped Firestore create/update/delete; changes survive restart and another-device login; fake mode is development-only; repository/integration tests pass. | Open |
+| **TD-003** | Firestore security | A verified-owner development catch-all allows broad nested collection reads/writes without collection schemas. | `firestore.rules` match `/users/{uid}/{collectionId}/{document=**}`; only uploads/reviews have strict exclusions. | Malformed, oversized, or unintended records can be written. | P0 | Phase 11 | Each production collection has explicit owner/schema validation introduced with Phases 4–10; cross-user/malformed emulator tests reject writes; the catch-all is removed by the Phase 11 gate. | Open |
+| **TD-004** | Home | Home displays seeded/static values as ordinary dashboard content. | `HomeDashboardNotifier._initialMockState()` supplies Now/Next, mission, insights, previews, tip, and Coming Up. | Misleading product behavior and loss of user trust. | P2 | Phase 8 | Every Home value comes from a defined durable aggregation or is visibly unavailable/demo; production mode never silently displays seeded intelligence. | Open |
+| **TD-005** | Coach | Active Coach UI bypasses the production AI client and durable session repositories. | `coach_tab.dart` calls `mockCoachProvider`; `coachAiClientProvider` and fake session repositories exist separately. | Fake replies and lost conversation history; context/privacy rules are unverified. | P1 | Phase 7 | Active sends use the approved Worker; sessions/messages persist; context grants and selected-note sharing are tested; production contains no fake reply path. | Open |
+| **TD-007** | Design system | Shared widgets have multiple canonical-looking homes. | Reusable UI exists in `lib/widgets/`, `lib/core/widgets/`, and feature folders; examples include parallel button, input, and glass-card families. | Duplicate components and inconsistent behavior/accessibility. | P2 | Phase 12 | `lib/core/widgets/` is canonical; no active shared component is duplicated; feature-only widgets remain area-owned; canonical interactive-component tests pass. | Open |
+| **TD-008** | Architecture/state | `lib/state/app_state.dart` owns state for several application areas. | The file defines Profile, Routine, Tracker, Goals, Mind, Coach, notification, and permission providers. | Unclear ownership and cross-feature regression risk. | P2 | Phase 10 | All six areas expose area-owned controllers/providers; consumers use those boundaries; `app_state.dart` contains no canonical migrated domain owner; dependency checks pass. | Open |
+| **TD-009** | Goals | Active Goal screens use a local mock provider and the repository is always fake. | `goals_tab.dart` and Goal flows use `mockGoalProvider`; `goalRepositoryProvider` returns `FakeGoalRepository`. | Goals, proofs, streaks, reviews, and archive state are lost. | P1 | Phase 5 | Firebase mode uses owner-scoped Goal/proof/review repositories; active screens use one controller; restart/cross-device and archive/proof tests pass; fake mode is explicit. | Open |
+| **TD-010** | Tracker | Tracker repositories/providers remain fake or local across manual trackers. | `tracker_repository.dart` returns fake Tracker, history, Focus, bad-habit, sleep, nutrition, fitness, and money repositories; screens use `mockTrackerProvider`. | Critical measurements and sessions disappear or diverge. | P1 | Phase 6 | Each Tracker record has one owner-scoped repository/controller; Firebase mode persists manual records; restart/cross-device and failure tests pass; fake mode is development-only. | Open |
+| **TD-011** | Routine | Routine history is stored only in memory. | `routineHistoryRepositoryProvider` always returns `FakeRoutineHistoryRepository`. | Occurrence/status history is lost and cannot support reliable summaries. | P1 | Phase 4 | Owner-scoped Routine event/history CRUD is active; stable event IDs make append retry-safe; restart/cross-device/history-order tests pass. | Open |
+| **TD-012** | Routine | Habit systems use local/fake stores. | `habitSystemsRepositoryProvider` and `habitRepositoryProvider` always return fake implementations. | Habit schedules and pause/edit state are lost. | P1 | Phase 4 | One owner-scoped habit-system repository is active; Routine references stable system IDs; create/edit/pause/restore and cross-device tests pass. | Open |
+| **TD-013** | Cross-feature events | Completion/results are copied by direct provider mutation without one durable idempotency envelope. | Routine money actions and Fitness completion mutate `mockTrackerProvider`; Onboarding writes several providers directly. | Retries can duplicate records or leave owners inconsistent. | P0 | Phase 6 | Typed owner commands/results use stable IDs; durable writes are transactional where required; duplicate-delivery tests pass; no canonical notifier directly mutates another area's provider. | Open |
+| **TD-014** | Onboarding | Active onboarding completion does not project all accepted records into normalized feature collections. | `FirestoreOnboardingRepository.completeOnboarding` writes draft, bundle, and profile patch; normalized batch logic exists only in `onboarding_repositories.dart`, marked legacy/future. | Restored setup state can compete with or fail to update feature-owned records. | P1 | Phase 4 | A documented, idempotent projection writes each accepted record to its canonical owner with a completion marker/retry policy; partial-failure and repeated-projection tests pass. | Open |
+| **TD-015** | Tracker/product truth | Tracker history includes predetermined entries and seeded screen-time/fitness/meditation history. | `TrackerHistoryScreen._buildEntries`, `MockSeedData.defaultScreenTimeApps`, `meditation_mock_data.dart`, and `FitnessCenterState.mock()`. | Users can mistake demo history for measured activity. | P2 | Phase 6 | Production history contains only durable user/connected events or visibly isolated demo rows; seeded histories are absent from normal production mode; provenance tests pass. | Open |
+| **TD-016** | Profile/native | Permission status is simulated instead of queried from Android. | `native_service_adapters.dart` provides fake adapters; `ProfileSettingsStateSeed.permissions` and preview rechecks say native check pending. | UI can show stale/incorrect access state and dependent actions cannot be trusted. | P1 | Phase 9 | Approved native adapters return actual grant/service status; lifecycle refresh and denied/permanently-denied behavior are tested; Profile shows no simulated live status. | Open |
+| **TD-017** | Notifications | Notification permission/delivery/scheduling is inactive. | Notification preference screens exist; native adapter comments defer `permission_handler`/local notifications; repositories are fake. | Critical reminders never arrive although preferences can be enabled. | P1 | Phase 9 | Actual permission and scheduling are active; quiet hours/intensity/types are enforced; denial, reboot/reschedule, timezone, and delivery tests pass. | Open |
+| **TD-018** | Tracker/native | Health Connect ingestion is not implemented. | Fake native adapter and setup copy (“Health Connect later”); no Health Connect dependency/implementation. | Sleep/fitness/health automation cannot deliver its journey. | P1 | Phase 6 | Approved Health Connect adapter handles availability, permissions, bounded reads, deduplication, revocation, and manual fallback; device/integration tests pass. | Open |
+| **TD-019** | Tracker/native | Android Usage Access ingestion is not implemented. | Usage setup UI exists; adapter is fake; screen-time values come from `MockSeedData`. | Screen-time/distraction metrics are fabricated or unavailable. | P1 | Phase 6 | Actual Usage Access status/data are queried; app aggregation, privacy redaction, denial/revocation, and no-seed production tests pass. | Open |
+| **TD-020** | Tracker/native | GPS/background Fitness recording is not implemented. | Location adapter is fake; Fitness routes/metrics initialize from mock state. | Route/session data cannot be captured and UI may imply tracking. | P1 | Phase 6 | Permission-aware foreground/background capture has explicit user control, lifecycle recovery, battery-safe sampling, and manual fallback; route/session tests pass. | Open |
+| **TD-021** | Tracker/maps | Mapbox map integration is missing. | Native adapter/setup copy reserves Mapbox; no active SDK/map implementation exists. | Fitness route visualization and review are unavailable. | P1 | Phase 6 | Mapbox is configured without client secrets, renders only owner-authorized route data, handles offline/error states, and passes map/route integration checks. | Open |
+| **TD-022** | Profile/uploads | Profile photo is not a verified durable lifecycle. | Upload purpose/rules exist, but Profile lacks proven upload-display-replace-restore-delete wiring; upload defaults to fake. | Photos can disappear, orphan objects, or misreport success. | P1 | Phase 9 | Active Profile uploads private bytes, stores owner metadata/pointer, restores display, atomically replaces, deletes old objects, and passes failure/retry/cross-device tests. | Open |
+| **TD-023** | Data control | Export is a local preview, not an executed data job. | `ExportDataScreen` mutates local request status to ready; `FakeDataControlRepository`; no export Worker/job/artifact. | Users can believe a complete portable export exists when it does not. | P1 | Phase 10 | Reauthenticated, auditable, idempotent export covers documented data, creates an expiring private artifact, supports failure/retry, and passes content/access tests. | Open |
+| **TD-024** | Data control/privacy | Selected-data deletion does not delete canonical data. | `DeleteSelectedDataScreen` records selections/confirmation locally; no executor exists. | A privacy/data-control request can appear handled while data remains. | P0 | Phase 10 | Reauthenticated, auditable, idempotent deletion removes every selected Firestore/R2 scope, reports partial failure truthfully, and passes retained/deleted/cross-user tests. | Open |
+| **TD-025** | Data control/privacy | Account deletion is a local pending-request simulation. | `DeleteAccountRequestScreen` and `FakeDataControlRepository` only change local state/cancellation deadline. | A user can believe an account/data deletion request exists when none was submitted. | P0 | Phase 10 | Reauthentication creates a durable auditable request; cancellation window and final Firebase Auth/Firestore/R2 deletion execute idempotently; end-to-end tests pass. | Open |
+| **TD-026** | Persistence | Offline queue and conflict policy are undefined. | `ARCHITECTURE.md` lists the decision unresolved; current repositories define no domain conflict/version policy. | Concurrent/offline edits can overwrite or duplicate user data as durable features are added. | P1 | Phase 11 | Each mutable domain declares conflict/version/idempotency behavior; offline retry queues expose state; multi-device conflict and recovery tests pass. | Open |
+| **TD-027** | Observability | Flutter client has no crash/error reporting integration. | No Crashlytics/error-reporting dependency or initialization appears in `pubspec.yaml` or `lib/`; Worker observability does not cover the client. | Production failures cannot be measured or diagnosed reliably. | P2 | Phase 12 | Consent-aware client crash/error capture is active with PII/token scrubbing, environment/release tags, test-event verification, and an incident runbook. | Open |
+| **TD-028** | Analytics/privacy | No analytics event contract or consent state exists. | No analytics SDK/event layer/consent manager is present in `pubspec.yaml` or `lib/`. | Product measurement may be absent or added inconsistently without privacy controls. | P2 | Phase 12 | An approved minimal event schema, consent/withdrawal flow, retention/redaction rules, environment isolation, and event validation tests are documented and active. | Open |
+| **TD-029** | Accessibility | Accessibility behavior is documented but not validated across the six areas. | `DESIGN_SYSTEM.md` defines rules; repository tests do not provide a comprehensive semantics/text-scale/focus/contrast audit. | Important journeys may be unusable with assistive technology or large text. | P2 | Phase 12 | Auth/Onboarding and all six areas pass documented semantics, keyboard/focus, 200% text scale, contrast, touch-target, and screen-reader checks with regression coverage. | Open |
+| **TD-030** | Schema evolution | Migration/versioning coverage is concentrated in Onboarding and absent for future/current durable domain records. | Onboarding draft/bundle have schema handling; Profile/settings/upload/review and reserved feature records lack a unified migration test matrix. | App upgrades can fail to read or safely transform stored user data. | P1 | Phase 11 | Every durable schema has a version/default/migration policy; fixtures for supported old versions and unknown/newer versions pass; migrations are idempotent. | Open |
+| **TD-031** | Delivery | Repository has no checked-in CI/release automation. | No `.github/workflows`, Codemagic, Bitrise, or equivalent pipeline configuration was found. | Analyzer/tests/rules/Worker checks and release configuration can be skipped. | P1 | Phase 12 | CI runs format check, analyzer, Flutter tests, Firestore rule tests, Worker tests/typechecks, secret/config scans, and a fail-closed release-build check; protected release criteria are documented. | Open |
+| **TD-032** | Cloudflare/Firebase delivery | Production deployment and health verification are not recorded for Workers, R2, or Firebase. | Checked-in configs use `*-dev` Workers and `optivus-uploads-dev`; URLs in client config and source tests are not deployment evidence. | Clients may point to absent, stale, or development services. | P1 | Phase 11 | Named production environments, routes, bindings, secrets checklist, deployed versions, authenticated health/smoke results, rollback owner, and verification date are recorded without secret values. | Open |
+| **TD-033** | Worker abuse controls | Workers have no verified application-owned per-user rate-limit policy. | Worker code validates tokens/payloads and maps provider 429s; configs show no rate-limit binding/policy or deterministic per-UID quota tests. | Authenticated abuse can exhaust AI/provider capacity or degrade service. | P1 | Phase 11 | Documented per-UID/endpoint limits fail closed with safe 429 responses; limits are enforced at an approved edge/state layer; burst, bypass, and recovery tests pass. | Open |
+| **TD-034** | R2 lifecycle | Temporary/orphan R2 cleanup and retention are undefined. | Upload delete endpoint exists, but Worker configs/source contain no scheduled cleanup, retention policy, or orphan reconciliation; Firestore client deletes are denied. | Private files can be retained indefinitely or orphaned after partial flows. | P1 | Phase 11 | Purpose-specific retention is documented; abandoned/expired objects and metadata are reconciled; deletion is idempotent/auditable; scheduled/manual cleanup and failure tests pass. | Open |
+| **TD-035** | Release configuration | Backend configuration defaults to fake with no release guard. | `OptivusBackendConfig._modeName` defaults to `fake`; unlike AI config it does not inspect `kReleaseMode`. | A release can use fake identity/local data and present successful actions as production behavior. | P0 | Phase 11 | Release builds fail at build/startup unless an approved non-fake backend is explicit; fake backend is debug/test-only; release-mode configuration tests cover missing/invalid values. | Open |
+| **TD-036** | Upload/release configuration | Upload configuration defaults to a fake client that reports success while discarding bytes. | `OPTIVUS_UPLOAD_MODE` defaults to `fake`; `FakeR2UploadClient.uploadBytes` is a no-op; no release guard exists. | User-selected private files can appear uploaded but be irrecoverably absent. | P0 | Phase 9 | Release builds reject fake upload mode; unavailable mode reports failure; R2 success is verified by durable bytes/metadata; missing/invalid config and restart/restore tests pass. | Open |
+| **TD-037** | Home/Mind | Two Mind Note model/provider paths coexist. | `HomeMindNote`/`homeMindNoteProvider` coexist with `MindNote`/`mockMindNoteProvider` and `MindNoteRepository`. | Sharing, deletion, or persistence can affect one copy while another is displayed. | P1 | Phase 8 | One Mind Note model/controller/repository owns active records; all Home/Notebook/Coach/delete paths use it; share/revoke/delete/restore tests operate on the same ID. | Open |
+| **TD-038** | Tracker/Fitness | Fitness records are split between `fitnessCenterProvider` and `mockTrackerProvider`. | `FitnessCenterState.mock()` owns recent activities; completion copies an activity into `mockTrackerProvider`. | Duplicate/inconsistent Fitness sessions and history. | P0 | Phase 6 | One canonical Fitness controller/repository owns sessions; summaries are derived; completion carries a stable ID; duplicate-delivery, history, and restore tests pass. | Open |
+| **TD-039** | Authentication/session isolation | Signed-out reset does not invalidate all feature-local user state. | `_resetSignedOutState()` clears global mocks/Profile/region/Onboarding but does not explicitly invalidate `routineNotifierProvider`, Home providers, or `fitnessCenterProvider`. | Another account in the same process can see stale prior-user presentation/domain state. | P0 | Phase 11 | Every user-scoped provider is keyed, disposed, or invalidated on auth UID change; logout/login-as-another-user tests prove no prior-account state remains in all six areas. | Open |
+| **TD-040** | Design system | Many active screens bypass canonical color/type/spacing/radius/motion tokens. | Representative feature files contain raw values; `OptivusTypography` has few/no external consumers; Phase 0 added radius/motion sources without call-site migration. | Low-risk visual drift and repeated styling decisions. | P3 | Phase 12 | Touched-file migration completes; retained exceptions state a reason; representative static audit finds no unexplained raw design values in active shared/area primitives. | Open |
+| **TD-041** | UI reliability | Loading, empty, error, retry, disabled, and progress states are implemented inconsistently. | Canonical `LiquidEmptyState`, `LiquidLoadingState`, and `LiquidErrorState` have limited/no consumers while feature screens use bespoke patterns. | Recovery and accessibility differ; duplicate actions or hidden failures can escape review. | P2 | Phase 12 | Every durable feature has tested canonical loading/empty/recoverable/blocking-error/retry/disabled/progress behavior or a documented owner-specific extension. | Open |
+| **TD-043** | Phase 3 testing | The full Flutter suite has one stale Onboarding Eating assertion. | `test/onboarding_step4_timeline_layout_test.dart:1764` expects removed key `onboarding-step5-timeline-scroll`; 2026-07-22 close-out result was 377 passed, 1 failed. | The suite cannot be a clean release signal, and restoring obsolete UI solely for a test could regress the current design. | P1 | Phase 3 | Update the test to assert the approved current Eating timeline contract, or restore the key only if the UI contract requires it; the isolated test and full `flutter test` suite pass with no unrelated behavior change. | Open |
+| **TD-044** | Phase 3 verification | The complete Onboarding journey is not verified on a physical Android device against the current 15-page flow. | Widget/router coverage exists, but the Phase 0 close-out contains no recorded physical-device completion covering navigation, keyboard/scroll behavior, restore, and final app entry. | Device-only layout, lifecycle, picker, or navigation failures can block the critical setup journey. | P1 | Phase 3 | On a supported physical Android device, complete and record the 15-page flow with safe configured services; verify back/forward, keyboard/scroll, interruption restore, upload/AI unavailable behavior, final completion, and app entry without crash/overflow; record device/build/mode and results. | Open |
+
+### Active-debt summary
+
+| Priority | Open items |
+| --- | ---: |
+| P0 | 10 |
+| P1 | 23 |
+| P2 | 8 |
+| P3 | 1 |
+| **Total** | **42** |
+
+| Primary target phase | Open items |
+| --- | ---: |
+| Phase 3 | 2 |
+| Phase 4 | 5 |
+| Phase 5 | 1 |
+| Phase 6 | 8 |
+| Phase 7 | 1 |
+| Phase 8 | 2 |
+| Phase 9 | 4 |
+| Phase 10 | 4 |
+| Phase 11 | 8 |
+| Phase 12 | 7 |
+| **Total** | **42** |
+
+## 5. Resolved debt
+
+| ID | Area | Problem | Evidence | Risk | Priority | Target phase | Acceptance condition | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **TD-006** | Developer experience | README was the Flutter starter template and lacked real project environment/testing guidance. | Resolved 2026-07-22: `README.md` now documents product/platform status, structure, prerequisites, safe setup, fake/Firebase/Worker/R2 modes, every compile-time definition, tests, secrets, authoritative documents, warnings, and limitations. Link/heading/required-section checks passed. | New developers could configure the wrong backend/modes or miss required verification. | P2 | Phase 0 | README documents prerequisites, Flutter/Firebase setup, all backend/upload/AI modes, safe local run commands, analyzer/tests/Worker checks, architecture links, and secret-handling rules. | Resolved |
+| **TD-042** | Documentation | Legacy handoff documents contained stale or contradictory implementation claims. | Resolved 2026-07-22: the Auth/Onboarding, frontend-ready, and final-cleanup handoffs are explicitly dated/superseded and link to current authority; `pre_home_contract.md` is labeled subordinate Phase 3 input; README/blueprint index current contracts; relative links/anchors passed. | Developers could implement against superseded architecture or report incorrect product status. | P2 | Phase 0 | Every legacy handoff is updated, clearly archived/superseded with a date/link, or removed through an authorized change; README/blueprint point only to authoritative current contracts; link/status checks pass. | Resolved |
+
+## 6. Debt maintenance rules
+
+1. New debt receives the next stable ID; IDs are never reused or renumbered.
+2. Resolved entries move to the resolved section and retain their IDs.
+3. Every feature phase reviews all debt assigned to that phase before its gate
+   can close.
+4. New persistence work records its security-rule, test, migration/versioning,
+   conflict, and idempotency debt immediately rather than deferring an audit.
+5. Phase 0 documents debt and acceptance conditions; it does not implement
+   solutions assigned to later phases.
+6. An item closes only when every acceptance-condition clause is verified in
+   the active flow. A model, path, client, or partial implementation is not
+   enough.
+7. “Accepted” requires an explicit risk owner, rationale, and review date in
+   the entry; it is not a synonym for postponed.
+8. Product documentation and this register change together whenever
+   architecture, data-source, deployment, or integration truth changes.
+9. Priority changes require updated evidence/risk text. Target-phase changes
+   require a planning rationale, but never a new ID.
+10. Completion reports count only Active entries as open debt and never report
+    Resolved entries as open.

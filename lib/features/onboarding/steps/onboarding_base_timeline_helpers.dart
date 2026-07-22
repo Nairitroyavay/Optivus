@@ -959,11 +959,13 @@ class OnboardingTimelineLayout {
     required this.pxPerMinute,
     required this.topPadding,
     required List<StretchedSegment> segments,
-  })  : endMinute = startMinute + rangeMinutes,
-        mergedSegments = _mergeSegments(segments),
-        totalExtraStretch = _calculateTotalStretch(segments);
+  }) : endMinute = startMinute + rangeMinutes,
+       mergedSegments = _mergeSegments(segments),
+       totalExtraStretch = _calculateTotalStretch(segments);
 
-  static List<StretchedSegment> _mergeSegments(List<StretchedSegment> segments) {
+  static List<StretchedSegment> _mergeSegments(
+    List<StretchedSegment> segments,
+  ) {
     if (segments.isEmpty) return [];
     final sorted = List<StretchedSegment>.from(segments)
       ..sort((a, b) {
@@ -977,7 +979,7 @@ class OnboardingTimelineLayout {
 
     for (int i = 1; i < sorted.length; i++) {
       final next = sorted[i];
-      if (next.startMinute <= current.endMinute) {
+      if (next.startMinute < current.endMinute) {
         final newStart = current.startMinute;
         final newEnd = math.max(current.endMinute, next.endMinute);
         final newExtraStretch = current.extraStretch + next.extraStretch;
@@ -1002,9 +1004,13 @@ class OnboardingTimelineLayout {
 
   double yFor(num minute) {
     final double m = minute.toDouble();
-    final double baseClamped = m.clamp(startMinute.toDouble(), endMinute.toDouble());
-    final double normalY = topPadding + (baseClamped - startMinute) * pxPerMinute;
-    
+    final double baseClamped = m.clamp(
+      startMinute.toDouble(),
+      endMinute.toDouble(),
+    );
+    final double normalY =
+        topPadding + (baseClamped - startMinute) * pxPerMinute;
+
     double stretch = 0.0;
     for (final seg in mergedSegments) {
       if (m <= seg.startMinute) {
@@ -1012,7 +1018,8 @@ class OnboardingTimelineLayout {
       } else if (m >= seg.endMinute) {
         stretch += seg.extraStretch;
       } else {
-        final double fraction = (m - seg.startMinute) / (seg.endMinute - seg.startMinute);
+        final double fraction =
+            (m - seg.startMinute) / (seg.endMinute - seg.startMinute);
         stretch += fraction * seg.extraStretch;
       }
     }
@@ -1027,15 +1034,25 @@ double calculateRequiredBlockHeight({
   required String timeLabel,
   required double blockWidth,
 }) {
-  final allItems = items.map((d) => d.trim()).where((d) => d.isNotEmpty).toList();
+  final allItems = items
+      .map((d) => d.trim())
+      .where((d) => d.isNotEmpty)
+      .toList();
   const double spacingBeforeWrap = 5.0;
   const double verticalPadding = 20.0; // SafeArea padding inside block
 
   final List<String> labels = [timeLabel, ...allItems];
   final double wrapWidth = math.max(50.0, blockWidth - 49.0);
-  final double wrapHeight = _calculateWrapHeight(context, labels, wrapWidth, 6.0, 5.0);
-  
-  final double estimatedHeight = verticalPadding + titleRowHeight + spacingBeforeWrap + wrapHeight + 10.0;
+  final double wrapHeight = _calculateWrapHeight(
+    context,
+    labels,
+    wrapWidth,
+    6.0,
+    5.0,
+  );
+
+  final double estimatedHeight =
+      verticalPadding + titleRowHeight + spacingBeforeWrap + wrapHeight + 10.0;
   return math.min(450.0, math.max(74.0, estimatedHeight));
 }
 
@@ -1058,15 +1075,12 @@ double _calculateWrapHeight(
     final textPainter = TextPainter(
       text: TextSpan(
         text: label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-        ),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
       ),
       textDirection: textDirection,
       textScaler: textScaler,
     )..layout(maxWidth: math.max(10.0, wrapWidth - 16.0));
-    
+
     final double chipWidth = textPainter.width + 16.0;
     final double chipHeight = textPainter.height + 8.0;
 

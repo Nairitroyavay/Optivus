@@ -27,21 +27,24 @@ class OptivusAiWorkersConfig {
 
   static const String routineImportWorkerUrl = String.fromEnvironment(
     'OPTIVUS_ROUTINE_IMPORT_WORKER_URL',
-    defaultValue: '',
+    defaultValue:
+        'https://optivus-routine-import-worker-dev.nairitstock.workers.dev',
   );
 
   static const String nutritionWorkerUrl = String.fromEnvironment(
     'OPTIVUS_NUTRITION_WORKER_URL',
-    defaultValue: '',
+    defaultValue:
+        'https://optivus-nutrition-worker-dev.nairitstock.workers.dev',
   );
 
   static const String coachWorkerUrl = String.fromEnvironment(
     'OPTIVUS_COACH_WORKER_URL',
-    defaultValue: '',
+    defaultValue: 'https://optivus-coach-worker-dev.nairitstock.workers.dev',
   );
 
   static const String skinCareWorkerUrl = String.fromEnvironment(
     'OPTIVUS_SKIN_CARE_WORKER_URL',
-    defaultValue: '',
+    defaultValue:
+        'https://optivus-skin-care-worker-dev.nairitstock.workers.dev',
   );
 }

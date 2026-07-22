@@ -240,6 +240,47 @@ function normalizeRoutinePlan(plan: any): any | null {
   };
 }
 
+function normalizeRecommendedProducts(value: any): Array<{
+  name: string;
+  brand: string;
+  category: string;
+  estimatedPrice: string;
+  currencyCode: string;
+  reason: string;
+}> {
+  const raw = Array.isArray(value) ? value : [];
+  const seen = new Set<string>();
+  const result: Array<{
+    name: string;
+    brand: string;
+    category: string;
+    estimatedPrice: string;
+    currencyCode: string;
+    reason: string;
+  }> = [];
+  for (const item of raw) {
+    const source = item && typeof item === "object" ? item : { name: item };
+    const name = String(source.name || source.productName || "").trim().replace(/\s+/g, " ");
+    const brand = String(source.brand || "").trim().replace(/\s+/g, " ");
+    if (!name || !brand) continue;
+    const key = normalizedProductKey(`${brand} ${name}`);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push({
+      name,
+      brand,
+      category: String(source.category || "").trim().toLowerCase().replace(/\s+/g, " "),
+      estimatedPrice: String(source.estimatedPrice || source.price || source.priceRange || "")
+        .trim()
+        .replace(/\s+/g, " "),
+      currencyCode: String(source.currencyCode || source.currency || "").trim().toUpperCase(),
+      reason: String(source.reason || source.why || "").trim().replace(/\s+/g, " "),
+    });
+    if (result.length >= 12) break;
+  }
+  return result;
+}
+
 function normalizedProductKey(value: string): string {
   return value
     .toLowerCase()
@@ -1405,6 +1446,10 @@ Return a JSON object:
 async function handleRoutineGenerate(request: Request, env: Env): Promise<Response> {
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request, ROUTINE_GENERATE_JSON_MAX_BYTES);
+  const recommendationOnly = body.recommendationOnly === true;
+  const countryName = String(body.countryName || "Unknown").trim() || "Unknown";
+  const countryCode = String(body.countryCode || "ZZ").trim().toUpperCase() || "ZZ";
+  const currencyCode = String(body.currencyCode || "USD").trim().toUpperCase() || "USD";
   const desiredApplicationsPerDay = Math.min(
     4,
     Math.max(2, Number.parseInt(String(body.desiredApplicationsPerDay || "2"), 10) || 2)
@@ -1436,6 +1481,13 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
         errorType: err instanceof Error ? err.name : "unknown",
       }));
     }
+  }
+  if (recommendationOnly && imageParts.length === 0) {
+    throw new HttpError(
+      400,
+      body.facePhotoR2Key ? "r2_image_missing" : "invalid_skin_care_request",
+      "A face photo is required before recommending products.",
+    );
   }
 
   const productsFromPhoto = Array.isArray(body.productsFromPhoto)
@@ -1500,12 +1552,21 @@ Put strong actives only inside the existing night slot on exactly two repeat day
 Strong-active split is only a variation of the night slot, not an extra slot.
 Split night routine when needed: normal night without strong active repeatDays [1,2,4,5,7], active night with strong active repeatDays [3,6].
 This must not increase the number of blocks on any day. For 3/day with a strong active, valid routinePlans are morning [1,2,3,4,5,6,7], midday [1,2,3,4,5,6,7], night normal [1,2,4,5,7], night active [3,6]. Per-day count remains 3.`
-    : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
+    : recommendationOnly
+      ? `The user owns no products. Recommend 6 to 10 real, commonly available products in ${countryName} (${countryCode}) that match the user's skin details and budget.
+Return exact company/brand and product names, category, a realistic estimated local price or price range in ${currencyCode}, and one short usefulness reason.
+Cover the essential categories needed for a simple routine, including cleanser, moisturizer, and sunscreen when appropriate. Offer useful alternatives so the user can select products within budget.
+For India, brands such as Minimalist, Mamaearth, Cetaphil, Neutrogena, Plum, and Re'equil may be considered only when the specific product is suitable. For other countries, prefer brands normally sold in that country.
+Do not invent brands, products, prices, medical diagnoses, or guaranteed availability. Do not generate routinePlans in recommendation-only mode.`
+      : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
 
   const prompt = `You are an expert dermatologist. Generate skin-care routine plans. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
 Skin Type: ${body.skinType || "unknown"}
 Main Problem: ${body.mainProblem || "none"}
+Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
 Budget: ${body.budget || "medium"}
+Country: ${countryName} (${countryCode})
+Currency: ${currencyCode}
 Routine Preference: ${body.routinePreference || "balanced"}
 Desired Applications Per Day: ${desiredApplicationsPerDay}
 ${ownedProductInstruction}
@@ -1533,6 +1594,16 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
       ],
       "warnings": [],
       "repeatDays": [1,2,3,4,5,6,7]
+    }
+  ],
+  "recommendedProducts": [
+    {
+      "name": "Exact Product Name",
+      "brand": "Company or Brand",
+      "category": "cleanser | moisturizer | sunscreen | serum | toner | treatment",
+      "estimatedPrice": "realistic local price or range",
+      "currencyCode": "${currencyCode}",
+      "reason": "Why it suits this user"
     }
   ],
   "morningRoutine": [],
@@ -1571,7 +1642,9 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const rawWeeklyRoutine = Array.isArray(parsed.weeklyRoutine) ? parsed.weeklyRoutine : [];
   const rawSuggestedProducts = Array.isArray(parsed.suggestedProducts) ? parsed.suggestedProducts : [];
   const strongActiveSplitNotes: string[] = [];
-  let routinePlans = ownedProductMode
+  let routinePlans = recommendationOnly
+    ? []
+    : ownedProductMode
     ? rawRoutinePlans.flatMap((plan: any) => {
         const result = sanitizeOwnedRoutinePlan(plan, catalog, rejectedPlanReasons);
         strongActiveSplitNotes.push(...result.strongActiveSplitNotes);
@@ -1582,7 +1655,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
         .filter((plan: any) => plan !== null);
   routinePlans = dedupeRoutinePlans(routinePlans);
   const warnings = stringList(parsed.warnings);
-  if (routinePlans.length === 0) {
+  if (routinePlans.length === 0 && !recommendationOnly) {
     warnings.push("ai_returned_no_usable_routine");
   } else {
     for (const warning of routineCoverageWarnings(routinePlans, desiredApplicationsPerDay)) {
@@ -1598,6 +1671,36 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const suggestedProducts = ownedProductMode
     ? stringList(rawSuggestedProducts.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
     : rawSuggestedProducts;
+  const recommendedProducts = normalizeRecommendedProducts(parsed.recommendedProducts)
+    .map((product) => ({
+      ...product,
+      currencyCode: product.currencyCode || currencyCode,
+    }))
+    .filter((product) =>
+      product.name.length > 0 &&
+      product.brand.length > 0 &&
+      product.category.length > 0 &&
+      product.estimatedPrice.length > 0 &&
+      product.currencyCode.length > 0 &&
+      product.reason.length > 0
+    );
+  if (recommendationOnly && recommendedProducts.length === 0) {
+    warnings.push("ai_returned_no_product_recommendations");
+  }
+  if (recommendationOnly && recommendedProducts.length > 0) {
+    const categories = new Set(recommendedProducts.map((product) => {
+      const category = product.category.toLowerCase();
+      if (category === "face wash") return "cleanser";
+      if (category === "moisturiser") return "moisturizer";
+      if (category === "spf") return "sunscreen";
+      return category;
+    }));
+    for (const requiredCategory of ["cleanser", "moisturizer", "sunscreen"]) {
+      if (!categories.has(requiredCategory)) {
+        warnings.push(`ai_missing_product_category:${requiredCategory}`);
+      }
+    }
+  }
   const perDayRoutineCounts = routinePlanPerDayCounts(routinePlans);
   const perDaySlotCoverage = serializableSlotCoverage(slotCoverageByDay(routinePlans));
   console.log(JSON.stringify({
@@ -1610,6 +1713,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     strongActiveSplitCount: strongActiveSplitNotes.length,
     perDayRoutineCounts,
     perDaySlotCoverage,
+    recommendedProductCount: recommendedProducts.length,
   }));
   const compatibilityStartForSlot = (slotLabel: string | undefined, index: number): number => {
     const slot = String(slotLabel || "").toLowerCase();
@@ -1642,6 +1746,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     nightRoutine: parsed.nightRoutine || [],
     weeklyRoutine,
     timelineBlocks: compatibilityTimelineBlocks,
+    recommendedProducts,
     suggestedProducts,
     warnings,
     rejectedPlanReasons,

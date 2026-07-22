@@ -26,13 +26,11 @@ class OnboardingDayChips extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 42,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (var index = 0; index < _labels.length; index++)
-              SizedBox(
-                width: 50,
+      child: Row(
+        children: [
+          for (var index = 0; index < _labels.length; index++)
+            Expanded(
+              child: SizedBox(
                 height: 42,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
@@ -44,8 +42,8 @@ class OnboardingDayChips extends StatelessWidget {
                   ),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -248,10 +246,7 @@ class OnboardingVerticalTimeline extends StatelessWidget {
         );
 
         final timelineHeight =
-            rangeMinutes * pxPerMinute +
-            topPadding +
-            bottomPadding +
-            layout.totalExtraStretch;
+            rangeMinutes * pxPerMinute + topPadding + layout.totalExtraStretch;
 
         return Container(
           key: const ValueKey('onboarding-generic-timeline'),
@@ -424,9 +419,9 @@ class OnboardingMinuteIndicator extends StatelessWidget {
     final h = (minute ~/ 60) % 24;
     final m = minute % 60;
     final displayH = h == 0 ? 12 : (h > 12 ? h - 12 : h);
-    final amPm = h < 12 ? 'a' : 'p';
+    final amPm = h < 12 ? 'AM' : 'PM';
     final mm = m.toString().padLeft(2, '0');
-    return '$displayH:$mm$amPm';
+    return '$displayH:$mm $amPm';
   }
 
   @override
@@ -436,7 +431,7 @@ class OnboardingMinuteIndicator extends StatelessWidget {
         Positioned(
           top: top - 8,
           left: 0,
-          width: 38,
+          width: 44,
           height: 16,
           child: Text(
             _compactMinuteLabel(minute),

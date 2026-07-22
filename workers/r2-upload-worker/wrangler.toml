@@ -12,6 +12,9 @@ MAX_PROFILE_UPLOAD_BYTES = "5242880"
 MAX_ROUTINE_IMPORT_UPLOAD_BYTES = "15728640"
 ALLOWED_ORIGINS = ""
 
+[secrets]
+required = ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]
+
 [[r2_buckets]]
 binding = "UPLOAD_BUCKET"
 bucket_name = "optivus-uploads-dev"

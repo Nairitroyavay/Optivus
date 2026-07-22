@@ -12,6 +12,9 @@ AI_PROVIDER = "gemini"
 AI_MODEL = "gemini-2.5-flash"
 AI_FALLBACK_MODEL = "gemini-2.5-flash"
 
+[secrets]
+required = ["GEMINI_API_KEY"]
+
 [[r2_buckets]]
 binding = "UPLOAD_BUCKET"
 bucket_name = "optivus-uploads-dev"
