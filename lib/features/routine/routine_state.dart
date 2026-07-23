@@ -326,8 +326,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       ]);
       if (generation != _loadGeneration || _ownerUid != uid) return;
       final remoteItems = results[0] as List<RoutineItem>;
-      final localActiveIds = state.pendingItemIds.union(state.failedIntentsByItemId.keys.toSet());
-      
+      final localActiveIds = state.pendingItemIds.union(
+        state.failedIntentsByItemId.keys.toSet(),
+      );
+
       final mergedItems = <RoutineItem>[];
       for (final remote in remoteItems) {
         if (!localActiveIds.contains(remote.id)) {
@@ -419,7 +421,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       createdByOperationId: operationId,
       lastMutationOperationId: operationId,
     );
-    final generation = _loadGeneration;
 
     state = state.copyWith(
       pendingItemIds: {...state.pendingItemIds, ownedItem.id},
@@ -523,7 +524,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       userId: uid,
       lastMutationOperationId: operationId,
     );
-    final generation = _loadGeneration;
 
     state = state.copyWith(
       pendingItemIds: {...state.pendingItemIds, ownedItem.id},
@@ -584,7 +584,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
     if (previousItem == null) return;
 
-    final generation = _loadGeneration;
     state = state.copyWith(pendingItemIds: {...state.pendingItemIds, itemId});
 
     try {
@@ -648,7 +647,6 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     final uid = _ownerUid;
     if (uid == null || uid != intent.ownerUid) return;
-    final generation = _loadGeneration;
 
     dismissFailedOperation(itemId);
 

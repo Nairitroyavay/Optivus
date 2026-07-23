@@ -619,10 +619,12 @@ String onboarding4SourceFailureMessage({
   }
   if (joined.contains('upload a photo before running ai extraction') ||
       joined.contains('missing photo')) {
-    if (source == RoutineImportReviewSource.classes)
+    if (source == RoutineImportReviewSource.classes) {
       return 'Please upload your class timetable.';
-    if (source == RoutineImportReviewSource.work)
+    }
+    if (source == RoutineImportReviewSource.work) {
       return 'Please upload your work/job timetable.';
+    }
     return 'Please upload your timetable.';
   }
   if (joined.contains('upload incomplete') ||

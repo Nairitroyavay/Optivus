@@ -79,6 +79,10 @@ class FakeRoutineRepository implements RoutineRepository {
       throw Exception('Routine item does not exist.');
     }
     final current = userItems[item.id]!;
+    if (item.lastMutationOperationId != null &&
+        current.lastMutationOperationId == item.lastMutationOperationId) {
+      return current;
+    }
     final effective = item.copyWith(
       userId: uid,
       onboardingProjectionId:

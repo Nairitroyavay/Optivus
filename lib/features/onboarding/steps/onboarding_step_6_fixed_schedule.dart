@@ -756,8 +756,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     ),
                                   ),
                                   onPressed: () {
-                                    if (!formKey.currentState!.validate())
+                                    if (!formKey.currentState!.validate()) {
                                       return;
+                                    }
 
                                     final subject = subjectCtrl.text.trim();
                                     final parsedStart = _parseClockMinute(
@@ -856,8 +857,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
     final hour = int.tryParse(match.group(1) ?? '');
     final minute = int.tryParse(match.group(2) ?? '0');
     final period = match.group(3)?.toUpperCase();
-    if (hour == null || minute == null || minute < 0 || minute > 59)
+    if (hour == null || minute == null || minute < 0 || minute > 59) {
       return null;
+    }
 
     var h = hour;
     if (period != null) {

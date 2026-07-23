@@ -159,36 +159,36 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                   child: state.loading
                       ? const Center(child: CircularProgressIndicator())
                       : sortedItems.isEmpty
-                          ? Stack(
-                              children: [
-                                RoutineTimelineViewport(
-                                  items: const [],
-                                  layout: layout,
-                                  isToday: isToday,
-                                  showCurrentTimeLine: showCurrentTimeLine,
-                                ),
-                                Positioned.fill(
-                                  child: IgnorePointer(child: _buildEmptyState()),
-                                ),
-                              ],
-                            )
-                          : RoutineTimelineViewport(
-                              items: sortedItems,
+                      ? Stack(
+                          children: [
+                            RoutineTimelineViewport(
+                              items: const [],
                               layout: layout,
                               isToday: isToday,
                               showCurrentTimeLine: showCurrentTimeLine,
-                              onCardTap: (item) {
-                                if (item.hasConflict) {
-                                  showRoutineConflictResolverSheet(
-                                    context,
-                                    ref,
-                                    itemId: item.id,
-                                  );
-                                  return;
-                                }
-                                showRoutineDetailSheet(context, ref, item);
-                              },
                             ),
+                            Positioned.fill(
+                              child: IgnorePointer(child: _buildEmptyState()),
+                            ),
+                          ],
+                        )
+                      : RoutineTimelineViewport(
+                          items: sortedItems,
+                          layout: layout,
+                          isToday: isToday,
+                          showCurrentTimeLine: showCurrentTimeLine,
+                          onCardTap: (item) {
+                            if (item.hasConflict) {
+                              showRoutineConflictResolverSheet(
+                                context,
+                                ref,
+                                itemId: item.id,
+                              );
+                              return;
+                            }
+                            showRoutineDetailSheet(context, ref, item);
+                          },
+                        ),
                 ),
               ],
             ),
