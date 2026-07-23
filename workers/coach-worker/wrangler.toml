@@ -1,17 +1,40 @@
 name = "optivus-coach-worker-dev"
 main = "src/index.ts"
-compatibility_date = "2026-06-02"
+compatibility_date = "2026-07-22"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
 [vars]
 FIREBASE_PROJECT_ID = "optivus-lifeos"
 AI_PROVIDER = "gemini"
 AI_MODEL = "gemini-2.5-flash-lite"
 AI_FALLBACK_MODEL = "gemini-2.5-flash"
+ALLOWED_ORIGINS = ""
 
 [secrets]
 required = ["GEMINI_API_KEY"]
 
 [observability]
+enabled = true
+head_sampling_rate = 1
+
+# This staging environment is deliberately non-deployable until every
+# `required-approved-*` value and the provisional Worker name are replaced
+# with the exact targets recorded in the Phase 3 authorization record.
+[env.staging]
+name = "optivus-coach-worker-staging-pending-authorization"
+workers_dev = true
+
+[env.staging.vars]
+FIREBASE_PROJECT_ID = "required-approved-staging-project"
+AI_PROVIDER = "gemini"
+AI_MODEL = "gemini-2.5-flash-lite"
+AI_FALLBACK_MODEL = "gemini-2.5-flash"
+ALLOWED_ORIGINS = "https://staging-origin.invalid"
+
+[env.staging.secrets]
+required = ["GEMINI_API_KEY"]
+
+[env.staging.observability]
 enabled = true
 head_sampling_rate = 1

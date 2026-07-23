@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/optivus_app.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/config/firebase_options.dart';
+import 'package:optivus/config/runtime_config.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 void main() async {
@@ -25,10 +26,15 @@ void main() async {
   // Enable true full screen (immersive mode, hides status and nav bars)
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-  if (OptivusBackendConfig.useFirebase) {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+  final firebaseOptions = OptivusBackendConfig.useFirebase
+      ? DefaultFirebaseOptions.currentPlatform
+      : null;
+  OptivusRuntimeConfig.validateForStartup(
+    generatedFirebaseProjectId: firebaseOptions?.projectId ?? '',
+  );
+
+  if (firebaseOptions != null) {
+    await Firebase.initializeApp(options: firebaseOptions);
     debugPrint('Optivus backend mode: Firebase initialized');
   } else {
     debugPrint('Optivus backend mode: fake frontend/dev mode');

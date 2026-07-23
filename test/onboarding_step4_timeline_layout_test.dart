@@ -1761,10 +1761,8 @@ void main() {
     );
     expect(find.text('Edit'), findsOneWidget);
     expect(find.text('Set Your Weekly Meal'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('onboarding-step5-timeline-scroll')),
-      findsOneWidget,
-    );
+    expect(find.text('Breakfast'), findsOneWidget);
+    expect(find.text('Oatmeal'), findsOneWidget);
 
     await tester.tap(find.text('Next Step'));
     await tester.pump();
@@ -1792,6 +1790,17 @@ void main() {
       isTrue,
     );
     expect(eatingBlocks.first.dishes, isNotEmpty);
+
+    final restoredDraft = OnboardingDraft.fromMap(nextDraft.toMap());
+    final restoredEatingBlocks = restoredDraft.baseTimeline
+        .confirmedBlocksForSection('eating');
+    expect(restoredDraft.currentStep, onboardingFixedStepIndex);
+    expect(restoredDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
+    expect(restoredDraft.stepDirty[onboardingEatingStepIndex], isFalse);
+    expect(
+      restoredEatingBlocks.map((block) => block.title).toList(),
+      ['Breakfast', 'Lunch', 'Snack', 'Dinner'],
+    );
   });
 
   testWidgets('Eating has-routine path saves AI blocks without review screen', (

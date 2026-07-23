@@ -164,19 +164,19 @@ export default {
       }
 
       if (request.method === "POST" && url.pathname === "/v1/routine-import/extract") {
-        return handleExtract(request, env);
+        return await handleExtract(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/routine-import/classes") {
-        return handleExtract(request, env, "classes");
+        return await handleExtract(request, env, "classes");
       }
 
       if (request.method === "POST" && url.pathname === "/v1/routine-import/work") {
-        return handleExtract(request, env, "work");
+        return await handleExtract(request, env, "work");
       }
 
       if (request.method === "POST" && url.pathname === "/v1/routine-import/eating-photo") {
-        return handleExtract(request, env, "eating");
+        return await handleExtract(request, env, "eating");
       }
 
       return jsonResponse(request, env, { error: "not_found" }, 404);
@@ -1313,8 +1313,7 @@ function logProviderFailure(options: {
     `[RoutineImportWorker] provider=${safeLogToken(options.provider)} ` +
       `model=${safeLogToken(options.model)} ` +
       `status=${options.failure.status ?? "n/a"} ` +
-      `errorCode=${safeLogToken(options.failure.errorCode ?? options.failure.kind)} ` +
-      `message=${safeLogText(options.failure.message)} ` +
+      `failureKind=${safeLogToken(options.failure.kind)} ` +
       `endpointPath=${safeLogToken(options.endpointPath)} ` +
       `imageLoadedFromR2=${options.args.imageBytes.byteLength > 0} ` +
       `contentType=${safeLogToken(options.args.contentType)} ` +
@@ -1507,10 +1506,15 @@ async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<
   }
 
   const projectId = requiredEnv(env.FIREBASE_PROJECT_ID, "FIREBASE_PROJECT_ID");
-  const result = await jwtVerify(token, firebaseJwks, {
-    audience: projectId,
-    issuer: `https://securetoken.google.com/${projectId}`,
-  });
+  let result;
+  try {
+    result = await jwtVerify(token, firebaseJwks, {
+      audience: projectId,
+      issuer: `https://securetoken.google.com/${projectId}`,
+    });
+  } catch {
+    throw new HttpError(401, "invalid_auth", "Invalid Firebase ID token.");
+  }
   const uid = result.payload.sub;
   if (!uid) {
     throw new HttpError(401, "invalid_auth", "Firebase ID token has no uid.");
@@ -1585,9 +1589,13 @@ async function readSmallJson(request: Request): Promise<Record<string, unknown>>
   if (Number.isFinite(contentLength) && contentLength > 8192) {
     throw new HttpError(413, "body_too_large", "Request body is too large.");
   }
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > 8192) {
+    throw new HttpError(413, "body_too_large", "Request body is too large.");
+  }
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(text);
   } catch {
     throw new HttpError(400, "invalid_json", "Expected a JSON object.");
   }
@@ -1687,17 +1695,18 @@ function corsHeaders(request: Request, env: Env): HeadersInit {
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item !== "");
-  const allowOrigin =
-    origin && allowedOrigins.includes(origin)
-      ? origin
-      : allowedOrigins.length === 0
-        ? "*"
-        : allowedOrigins[0];
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization,Content-Type",
   };
+  if (
+    origin &&
+    (allowedOrigins.includes(origin) || allowedOrigins.includes("*"))
+  ) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers.Vary = "Origin";
+  }
+  return headers;
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {

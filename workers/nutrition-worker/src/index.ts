@@ -25,7 +25,18 @@ const firebaseJwks = createRemoteJWKSet(
 
 function corsHeaders(request: Request, env: Env): Headers {
   const headers = new Headers();
-  headers.set("Access-Control-Allow-Origin", env.ALLOWED_ORIGINS || "*");
+  const origin = request.headers.get("Origin");
+  const allowedOrigins = (env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+  if (
+    origin &&
+    (allowedOrigins.includes(origin) || allowedOrigins.includes("*"))
+  ) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Vary", "Origin");
+  }
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
   headers.set("Access-Control-Max-Age", "86400");
@@ -46,8 +57,8 @@ function requiredEnv(value: string | undefined, name: string): string {
 
 async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<{ uid: string }> {
   const authHeader = request.headers.get("Authorization") || "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token) throw new HttpError(401, "unauthorized", "Missing token");
+  const token = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) throw new HttpError(401, "unauthorized", "Missing or malformed token");
   const projectId = requiredEnv(env.FIREBASE_PROJECT_ID, "FIREBASE_PROJECT_ID");
   try {
     const { payload } = await jwtVerify(token, firebaseJwks, { issuer: `https://securetoken.google.com/${projectId}`, audience: projectId });
@@ -67,16 +78,40 @@ async function readSmallJson(request: Request, maxBytes = 8192): Promise<any> {
   if (contentLength > maxBytes) {
     throw new HttpError(413, "payload_too_large", `Payload too large. Max ${maxBytes} bytes.`);
   }
-  const clone = request.clone();
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw new HttpError(413, "payload_too_large", `Payload too large. Max ${maxBytes} bytes.`);
+  }
+  let parsed: unknown;
   try {
-    return await clone.json();
+    parsed = JSON.parse(text);
   } catch {
     throw new HttpError(400, "invalid_json", "Invalid JSON body.");
   }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new HttpError(400, "invalid_json", "Expected a JSON object.");
+  }
+  return parsed;
 }
 
 function readOptionalString(obj: any, key: string): string | undefined {
   return typeof obj[key] === "string" && obj[key].trim() ? obj[key].trim() : undefined;
+}
+
+function readRequiredString(obj: any, key: string): string {
+  const value = readOptionalString(obj, key);
+  if (!value) {
+    throw new HttpError(400, "invalid_eating_request", `Missing ${key}.`);
+  }
+  return value;
+}
+
+function readRequiredNumber(obj: any, key: string): number {
+  const value = obj[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new HttpError(400, "invalid_eating_request", `Missing ${key}.`);
+  }
+  return value;
 }
 
 function parseAiJsonText(text: string): any {
@@ -135,12 +170,12 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
   const body = await readSmallJson(request);
 
   const context = {
-    bodyGoal: readOptionalString(body, "bodyGoal") ?? "maintain",
-    eatingMode: readOptionalString(body, "eatingMode") ?? "india",
-    foodType: readOptionalString(body, "foodType") ?? "mixed",
+    bodyGoal: readRequiredString(body, "bodyGoal"),
+    eatingMode: readRequiredString(body, "eatingMode"),
+    foodType: readRequiredString(body, "foodType"),
     foodStyleCustomText: readOptionalString(body, "foodStyleCustomText"),
-    mealsPerDay: typeof body.mealsPerDay === "number" ? body.mealsPerDay : 3,
-    targetCalories: typeof body.targetCalories === "number" ? body.targetCalories : 2000,
+    mealsPerDay: readRequiredNumber(body, "mealsPerDay"),
+    targetCalories: readRequiredNumber(body, "targetCalories"),
     estimatedBmr: typeof body.estimatedBmr === "number" ? body.estimatedBmr : undefined,
     breakfastMinute: typeof body.breakfastMinute === "number" ? body.breakfastMinute : 480,
     lunchMinute: typeof body.lunchMinute === "number" ? body.lunchMinute : 780,
@@ -235,23 +270,9 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
 
   const genericTerms = new Set(["breakfast", "lunch", "snack", "dinner", "food", "meal", "eat", "dish"]);
 
-  const validBlocks = blocks.map((b: any) => {
-    if (!Array.isArray(b.steps)) return null;
-    const cleanSteps = b.steps
-      .map((s: any) => typeof s === "string" ? s.trim() : "")
-      .filter((s: string) => {
-        if (!s) return false;
-        const lower = s.toLowerCase();
-        return !genericTerms.has(lower);
-      });
-    
-    if (cleanSteps.length >= 2) {
-      return { ...b, steps: cleanSteps };
-    } else {
-      console.warn(`[NutritionWorker] Dropping invalid candidate ${b.title || "unknown"}. Steps: ${JSON.stringify(b.steps)}`);
-      return null;
-    }
-  }).filter(Boolean);
+  const validBlocks = blocks
+    .map((block: unknown) => sanitizeMealCandidate(block, genericTerms))
+    .filter((block: Record<string, unknown> | null): block is Record<string, unknown> => block !== null);
 
   if (validBlocks.length === 0) {
     throw new HttpError(500, "provider_empty_candidates", "AI returned no valid meals.");
@@ -262,6 +283,76 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     uid: user.uid,
     candidates: validBlocks 
   });
+}
+
+function sanitizeMealCandidate(
+  value: unknown,
+  genericTerms: Set<string>,
+): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const block = value as Record<string, unknown>;
+  const title = typeof block.title === "string" ? block.title.trim() : "";
+  const mealCategory = typeof block.mealCategory === "string"
+    ? block.mealCategory.trim().toLowerCase()
+    : "";
+  const startMinute = block.startMinute;
+  const endMinute = block.endMinute;
+  const repeatDays = Array.isArray(block.repeatDays)
+    ? [...new Set(
+        block.repeatDays
+          .filter((day): day is number =>
+            typeof day === "number" &&
+            Number.isInteger(day) &&
+            day >= 1 &&
+            day <= 7
+          ),
+      )].sort((a, b) => a - b)
+    : [];
+  const cleanSteps = Array.isArray(block.steps)
+    ? block.steps
+        .map((step) => typeof step === "string" ? step.trim() : "")
+        .filter((step) => step !== "" && !genericTerms.has(step.toLowerCase()))
+        .slice(0, 12)
+    : [];
+  const validCategory = ["breakfast", "lunch", "snack", "dinner"].includes(mealCategory);
+  const validTime = typeof startMinute === "number" &&
+    Number.isInteger(startMinute) &&
+    startMinute >= 0 &&
+    startMinute < 1440 &&
+    typeof endMinute === "number" &&
+    Number.isInteger(endMinute) &&
+    endMinute > startMinute &&
+    endMinute <= 1440;
+
+  if (
+    title === "" ||
+    title.length > 120 ||
+    !validCategory ||
+    !validTime ||
+    repeatDays.length === 0 ||
+    cleanSteps.length < 2
+  ) {
+    console.warn("[NutritionWorker] Dropping invalid meal candidate.");
+    return null;
+  }
+
+  const confidence = typeof block.confidenceScore === "number" &&
+      Number.isFinite(block.confidenceScore)
+    ? Math.max(0, Math.min(1, block.confidenceScore))
+    : 0.8;
+  return {
+    title,
+    startMinute,
+    endMinute,
+    repeatDays,
+    mealCategory,
+    steps: cleanSteps,
+    blockType: "soft_block",
+    candidateType: "block",
+    confidenceScore: confidence,
+  };
 }
 
 export default {
@@ -283,7 +374,7 @@ export default {
       }
 
       if (request.method === "POST" && url.pathname === "/v1/eating/generate-routine") {
-        return handleEatingGenerateRoutine(request, env);
+        return await handleEatingGenerateRoutine(request, env);
       }
 
       return jsonResponse(request, env, { error: "not_found" }, 404);

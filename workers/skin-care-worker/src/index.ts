@@ -56,7 +56,18 @@ const firebaseJwks = createRemoteJWKSet(
 
 function corsHeaders(request: Request, env: Env): Headers {
   const headers = new Headers();
-  headers.set("Access-Control-Allow-Origin", env.ALLOWED_ORIGINS || "*");
+  const origin = request.headers.get("Origin");
+  const allowedOrigins = (env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+  if (
+    origin &&
+    (allowedOrigins.includes(origin) || allowedOrigins.includes("*"))
+  ) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Vary", "Origin");
+  }
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
   headers.set("Access-Control-Max-Age", "86400");
@@ -81,8 +92,8 @@ function requiredEnv(value: string | undefined, name: string): string {
 
 async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<{ uid: string }> {
   const authHeader = request.headers.get("Authorization") || "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token) throw new HttpError(401, "unauthorized", "Missing token");
+  const token = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) throw new HttpError(401, "unauthorized", "Missing or malformed token");
   const projectId = requiredEnv(env.FIREBASE_PROJECT_ID, "FIREBASE_PROJECT_ID");
   try {
     const { payload } = await jwtVerify(token, firebaseJwks, { issuer: `https://securetoken.google.com/${projectId}`, audience: projectId });
@@ -97,7 +108,10 @@ async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<
   }
 }
 
-async function readSmallJson(request: Request, maxBytes = 8192): Promise<any> {
+async function readSmallJson(
+  request: Request,
+  maxBytes = 8192,
+): Promise<Record<string, unknown>> {
   const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
   if (contentLength > maxBytes) {
     throw new HttpError(413, "json_payload_too_large", `JSON request payload too large. Max ${maxBytes} bytes.`);
@@ -107,11 +121,16 @@ async function readSmallJson(request: Request, maxBytes = 8192): Promise<any> {
   if (actualBytes > maxBytes) {
     throw new HttpError(413, "json_payload_too_large", `JSON request payload too large. Max ${maxBytes} bytes.`);
   }
+  let parsed: unknown;
   try {
-    return JSON.parse(text);
+    parsed = JSON.parse(text);
   } catch {
     throw new HttpError(400, "invalid_json", "Invalid JSON body.");
   }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new HttpError(400, "invalid_json", "Expected a JSON object.");
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function assertOwnedSkinCareObjectKey(uid: string, key: string): void {
@@ -240,24 +259,79 @@ function normalizeRoutinePlan(plan: any): any | null {
   };
 }
 
-function normalizeRecommendedProducts(value: any): Array<{
+type RecommendedSkinCareProduct = {
   name: string;
   brand: string;
   category: string;
   estimatedPrice: string;
   currencyCode: string;
   reason: string;
-}> {
+};
+
+function canonicalRecommendationCategory(
+  categoryValue: unknown,
+  productName: string,
+): string {
+  const category = String(categoryValue || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_/|-]+/g, " ")
+    .replace(/\s+/g, " ");
+  const classificationText = `${category} ${productName}`;
+  if (category === "cleanser" || category === "face wash") {
+    return "cleanser";
+  }
+  if (category === "moisturizer" || category === "moisturiser") {
+    return "moisturizer";
+  }
+  if (category === "sunscreen" || category === "spf") {
+    return "sunscreen";
+  }
+  if (category.includes("vitamin c")) {
+    return "vitamin_c_serum";
+  }
+  if (
+    category === "treatment serum" ||
+    category === "treatment" ||
+    category.includes("spot treatment")
+  ) {
+    return "treatment_serum";
+  }
+  if (
+    looksLikeSunscreen(classificationText) ||
+    category.includes("sun protection")
+  ) {
+    return "sunscreen";
+  }
+  if (
+    looksLikeCleanser(classificationText) ||
+    category.includes("facial wash") ||
+    category.includes("facewash")
+  ) {
+    return "cleanser";
+  }
+  if (
+    looksLikeMoisturizer(classificationText) ||
+    category.includes("moistur") ||
+    category.includes("hydrator") ||
+    category.includes("hydrating gel") ||
+    category.includes("hydration")
+  ) {
+    return "moisturizer";
+  }
+  if (looksLikeVitaminCSerum(classificationText)) {
+    return "vitamin_c_serum";
+  }
+  if (looksLikeTreatmentSerum(classificationText)) {
+    return "treatment_serum";
+  }
+  return category;
+}
+
+function normalizeRecommendedProducts(value: any): RecommendedSkinCareProduct[] {
   const raw = Array.isArray(value) ? value : [];
   const seen = new Set<string>();
-  const result: Array<{
-    name: string;
-    brand: string;
-    category: string;
-    estimatedPrice: string;
-    currencyCode: string;
-    reason: string;
-  }> = [];
+  const result: RecommendedSkinCareProduct[] = [];
   for (const item of raw) {
     const source = item && typeof item === "object" ? item : { name: item };
     const name = String(source.name || source.productName || "").trim().replace(/\s+/g, " ");
@@ -269,7 +343,7 @@ function normalizeRecommendedProducts(value: any): Array<{
     result.push({
       name,
       brand,
-      category: String(source.category || "").trim().toLowerCase().replace(/\s+/g, " "),
+      category: canonicalRecommendationCategory(source.category, name),
       estimatedPrice: String(source.estimatedPrice || source.price || source.priceRange || "")
         .trim()
         .replace(/\s+/g, " "),
@@ -279,6 +353,62 @@ function normalizeRecommendedProducts(value: any): Array<{
     if (result.length >= 12) break;
   }
   return result;
+}
+
+function usableRecommendedProducts(
+  value: unknown,
+  fallbackCurrencyCode: string,
+): RecommendedSkinCareProduct[] {
+  return normalizeRecommendedProducts(value)
+    .map((product) => ({
+      ...product,
+      currencyCode: product.currencyCode || fallbackCurrencyCode,
+    }))
+    .filter((product) =>
+      product.name.length > 0 &&
+      product.brand.length > 0 &&
+      product.category.length > 0 &&
+      product.estimatedPrice.length > 0 &&
+      product.currencyCode.length > 0 &&
+      product.reason.length > 0
+    );
+}
+
+function missingRecommendedProductCategories(
+  products: RecommendedSkinCareProduct[],
+): string[] {
+  const categoryCounts = new Map<string, number>();
+  for (const product of products) {
+    categoryCounts.set(
+      product.category,
+      (categoryCounts.get(product.category) || 0) + 1,
+    );
+  }
+  return [
+    "cleanser",
+    "moisturizer",
+    "sunscreen",
+    "vitamin_c_serum",
+    "treatment_serum",
+  ].filter(
+    (category) => (categoryCounts.get(category) || 0) < 2,
+  );
+}
+
+function mergeRecommendedProducts(
+  first: RecommendedSkinCareProduct[],
+  second: RecommendedSkinCareProduct[],
+): RecommendedSkinCareProduct[] {
+  const seen = new Set<string>();
+  const merged: RecommendedSkinCareProduct[] = [];
+  for (const product of [...first, ...second]) {
+    const key = normalizedProductKey(`${product.brand} ${product.name}`);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(product);
+    if (merged.length >= 12) break;
+  }
+  return merged;
 }
 
 function normalizedProductKey(value: string): string {
@@ -311,6 +441,8 @@ function looksLikeCleanser(value: string): boolean {
   const lower = value.toLowerCase();
   return lower.includes("cleanser") ||
     lower.includes("face wash") ||
+    lower.includes("facial wash") ||
+    lower.includes("facewash") ||
     lower.includes("wash face") ||
     lower.includes("cleansing gel") ||
     lower.includes("cleansing foam") ||
@@ -325,6 +457,10 @@ function looksLikeMoisturizer(value: string): boolean {
     lower.includes("moisturiser") ||
     lower.includes("barrier cream") ||
     lower.includes("gel cream") ||
+    lower.includes("face cream") ||
+    lower.includes("water gel") ||
+    lower.includes("hydrating gel") ||
+    lower.includes("hydrator") ||
     lower.includes("lotion") ||
     lower.includes("barrier repair");
 }
@@ -337,6 +473,28 @@ function looksLikeSerum(value: string): boolean {
     lower.includes("vitamin c") ||
     lower.includes("alpha arbutin") ||
     lower.includes("niacinamide");
+}
+
+function looksLikeVitaminCSerum(value: string): boolean {
+  const lower = value.toLowerCase();
+  return lower.includes("vitamin c") ||
+    lower.includes("ascorbic acid") ||
+    lower.includes("ascorbyl glucoside") ||
+    lower.includes("ethyl ascorbic acid");
+}
+
+function looksLikeTreatmentSerum(value: string): boolean {
+  const lower = value.toLowerCase();
+  if (looksLikeVitaminCSerum(lower)) return false;
+  return lower.includes("treatment serum") ||
+    lower.includes("spot treatment") ||
+    lower.includes("alpha arbutin") ||
+    lower.includes("niacinamide") ||
+    lower.includes("azelaic") ||
+    lower.includes("retinol") ||
+    lower.includes("retinal") ||
+    lower.includes("salicylic serum") ||
+    lower.includes("benzoyl peroxide");
 }
 
 function looksLikeStrongActive(value: string): boolean {
@@ -396,7 +554,19 @@ function isMoisturizer(product: OwnedSkinCareProduct): boolean {
 
 function isSerum(product: OwnedSkinCareProduct): boolean {
   return product.category === "serum" ||
+    product.category === "vitamin_c_serum" ||
+    product.category === "treatment_serum" ||
     looksLikeSerum(productClassificationText(product));
+}
+
+function isVitaminCSerum(product: OwnedSkinCareProduct): boolean {
+  return product.category === "vitamin_c_serum" ||
+    looksLikeVitaminCSerum(productClassificationText(product));
+}
+
+function isTreatmentSerum(product: OwnedSkinCareProduct): boolean {
+  return product.category === "treatment_serum" ||
+    looksLikeTreatmentSerum(productClassificationText(product));
 }
 
 function isStrongActive(product: OwnedSkinCareProduct): boolean {
@@ -482,6 +652,8 @@ function isGenericProductName(value: string): boolean {
     "moisturizer",
     "moisturiser",
     "serum",
+    "vitamin c serum",
+    "treatment serum",
   ]).has(normalizedProductKey(value));
 }
 
@@ -506,6 +678,12 @@ function matchOwnedProduct(value: string, products: OwnedSkinCareProduct[]): Own
     if (looksLikeSunscreen(lower)) return singleOwnedProduct(products, isSunscreen);
     if (looksLikeCleanser(lower)) return singleOwnedProduct(products, isCleanser);
     if (looksLikeMoisturizer(lower)) return singleOwnedProduct(products, isMoisturizer);
+    if (looksLikeVitaminCSerum(lower)) {
+      return singleOwnedProduct(products, isVitaminCSerum);
+    }
+    if (lower.includes("treatment serum")) {
+      return singleOwnedProduct(products, isTreatmentSerum);
+    }
     if (looksLikeSerum(lower)) return singleOwnedProduct(products, isSerum);
   }
 
@@ -533,6 +711,12 @@ function matchOwnedProduct(value: string, products: OwnedSkinCareProduct[]): Own
   if (looksLikeSunscreen(lower)) return singleOwnedProduct(products, isSunscreen);
   if (looksLikeCleanser(lower)) return singleOwnedProduct(products, isCleanser);
   if (looksLikeMoisturizer(lower)) return singleOwnedProduct(products, isMoisturizer);
+  if (looksLikeVitaminCSerum(lower)) {
+    return singleOwnedProduct(products, isVitaminCSerum);
+  }
+  if (looksLikeTreatmentSerum(lower)) {
+    return singleOwnedProduct(products, isTreatmentSerum);
+  }
   if (looksLikeSerum(lower)) return singleOwnedProduct(products, isSerum);
   return null;
 }
@@ -545,8 +729,12 @@ function inferOwnedProductFromStep(step: string, products: OwnedSkinCareProduct[
   if (looksLikeSunscreen(lower) || lower.includes("sun protection")) {
     return singleOwnedProduct(products, isSunscreen);
   }
-  if (lower.includes("vitamin c")) return matchOwnedProduct("vitamin c serum", products);
-  if (lower.includes("alpha arbutin")) return matchOwnedProduct("alpha arbutin serum", products);
+  if (looksLikeVitaminCSerum(lower)) {
+    return singleOwnedProduct(products, isVitaminCSerum);
+  }
+  if (looksLikeTreatmentSerum(lower)) {
+    return singleOwnedProduct(products, isTreatmentSerum);
+  }
   if (looksLikeSerum(lower)) return singleOwnedProduct(products, isSafeSerum);
   return null;
 }
@@ -1533,6 +1721,7 @@ If at least one usable owned product exists, do not return notes only. Return ro
 Missing moisturizer, cleanser, or sunscreen must not block generation or reduce selected routine count. If moisturizer is missing, add missingItems entry {"name":"Moisturizer","importance":"important","reason":"Helps reduce dryness/irritation after serum."} to the night routine when relevant. If sunscreen is missing, add missingItems entry {"name":"Sunscreen","importance":"important","reason":"Needed for daytime protection."} to morning/daytime routine when relevant. If cleanser is missing, add missingItems entry {"name":"Cleanser","importance":"important","reason":"Needed before applying leave-on products."} to morning/night routine when relevant.
 Do not name outside products in suggestedProducts, weeklyRoutine, routinePlans.productNames, warnings, or notes for an owned-product request. missingItems may use generic category names only and must not be converted into productNames. If the user owns an incomplete set, still build the best safe limited routine from available products.
 Return routinePlans.productNames using EXACT owned product names from the list above. Do not use generic names if an exact product name is available.
+When an owned product is categorized as vitamin_c_serum, use it in the morning after cleansing and before moisturizer/sunscreen when safe. When an owned product is categorized as treatment_serum, use it in the appropriate night routine and follow its active-safety rules. Use both selected serum categories when they are safe; never report an owned category as missing.
 If at least one usable owned product exists, return the selected routine count per day.
 For selected frequency, required slots are strict every day:
 2/day requires exactly these slots every day: morning, night.
@@ -1553,14 +1742,48 @@ Strong-active split is only a variation of the night slot, not an extra slot.
 Split night routine when needed: normal night without strong active repeatDays [1,2,4,5,7], active night with strong active repeatDays [3,6].
 This must not increase the number of blocks on any day. For 3/day with a strong active, valid routinePlans are morning [1,2,3,4,5,6,7], midday [1,2,3,4,5,6,7], night normal [1,2,4,5,7], night active [3,6]. Per-day count remains 3.`
     : recommendationOnly
-      ? `The user owns no products. Recommend 6 to 10 real, commonly available products in ${countryName} (${countryCode}) that match the user's skin details and budget.
+      ? `The user owns no products. Recommend 10 to 12 real, commonly available products in ${countryName} (${countryCode}) that match the user's skin details and budget.
 Return exact company/brand and product names, category, a realistic estimated local price or price range in ${currencyCode}, and one short usefulness reason.
-Cover the essential categories needed for a simple routine, including cleanser, moisturizer, and sunscreen when appropriate. Offer useful alternatives so the user can select products within budget.
+Cover all five required categories: cleanser, moisturizer, sunscreen, vitamin_c_serum, and treatment_serum. Return at least two alternatives in each category so the user can choose one product per category within budget.
 For India, brands such as Minimalist, Mamaearth, Cetaphil, Neutrogena, Plum, and Re'equil may be considered only when the specific product is suitable. For other countries, prefer brands normally sold in that country.
 Do not invent brands, products, prices, medical diagnoses, or guaranteed availability. Do not generate routinePlans in recommendation-only mode.`
       : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
 
-  const prompt = `You are an expert dermatologist. Generate skin-care routine plans. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
+  const recommendationPrompt = `You recommend a small, safe skin-care shopping list. The user owns no products.
+Use the face photo only for broad cosmetic personalization. Do not diagnose a disease or claim certainty from the photo.
+Skin Type: ${body.skinType || "unknown"}
+Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
+Budget: ${body.budget || "medium"}
+Country: ${countryName} (${countryCode})
+Currency: ${currencyCode}
+Desired Applications Per Day: ${desiredApplicationsPerDay}
+
+Return 10 to 12 real products commonly sold in ${countryName}. The response must contain at least two alternatives in every required category: cleanser, moisturizer, sunscreen, vitamin_c_serum, and treatment_serum.
+Use only these exact category values: "cleanser", "moisturizer", "sunscreen", "vitamin_c_serum", "treatment_serum".
+The vitamin_c_serum choices must be genuine leave-on Vitamin C or Vitamin C-derivative serums for morning antioxidant/brightening use. Do not count a Vitamin C cleanser or cream.
+The treatment_serum choices must be different products from the Vitamin C choices and must target the user's stated concerns. Prefer beginner-safe, concern-matched ingredients such as niacinamide, alpha arbutin, or azelaic acid when suitable. Do not recommend prescription products, and do not recommend a strong retinoid or exfoliating treatment unless the user's details clearly make it appropriate and the reason includes a safety caveat.
+Every product must have an exact brand, exact product name, realistic local price or price range, ${currencyCode}, and one short usefulness reason.
+For India, consider suitable specific products from brands such as Minimalist, Mamaearth, Cetaphil, Neutrogena, Plum, and Re'equil. For other countries, use brands normally sold there.
+Do not invent brands, products, prices, medical diagnoses, or guaranteed availability.
+
+Return ONLY this strict JSON object:
+{
+  "recommendedProducts": [
+    {
+      "name": "Exact Product Name",
+      "brand": "Company or Brand",
+      "category": "cleanser",
+      "estimatedPrice": "realistic local price or range",
+      "currencyCode": "${currencyCode}",
+      "reason": "Why it suits this user"
+    }
+  ],
+  "warnings": ["Patch test new products"]
+}`;
+
+  const prompt = recommendationOnly
+    ? recommendationPrompt
+    : `You are an expert dermatologist. Generate skin-care routine plans. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
 Skin Type: ${body.skinType || "unknown"}
 Main Problem: ${body.mainProblem || "none"}
 Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
@@ -1600,7 +1823,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
     {
       "name": "Exact Product Name",
       "brand": "Company or Brand",
-      "category": "cleanser | moisturizer | sunscreen | serum | toner | treatment",
+      "category": "cleanser | moisturizer | sunscreen | vitamin_c_serum | treatment_serum",
       "estimatedPrice": "realistic local price or range",
       "currencyCode": "${currencyCode}",
       "reason": "Why it suits this user"
@@ -1671,34 +1894,87 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   const suggestedProducts = ownedProductMode
     ? stringList(rawSuggestedProducts.filter((item: any) => ownedNoteAllowed(item, catalog)).map(noteText))
     : rawSuggestedProducts;
-  const recommendedProducts = normalizeRecommendedProducts(parsed.recommendedProducts)
-    .map((product) => ({
-      ...product,
-      currencyCode: product.currencyCode || currencyCode,
-    }))
-    .filter((product) =>
-      product.name.length > 0 &&
-      product.brand.length > 0 &&
-      product.category.length > 0 &&
-      product.estimatedPrice.length > 0 &&
-      product.currencyCode.length > 0 &&
-      product.reason.length > 0
+  let recommendedProducts = usableRecommendedProducts(
+    parsed.recommendedProducts,
+    currencyCode,
+  );
+  if (recommendationOnly) {
+    const initiallyMissing = missingRecommendedProductCategories(
+      recommendedProducts,
     );
+    if (initiallyMissing.length > 0) {
+      const repairPrompt = `Repair an incomplete skin-care shopping list for this user.
+Skin Type: ${body.skinType || "unknown"}
+Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
+Budget: ${body.budget || "medium"}
+Country: ${countryName} (${countryCode})
+Currency: ${currencyCode}
+Missing essential categories: ${JSON.stringify(initiallyMissing)}
+Already accepted products: ${JSON.stringify(recommendedProducts)}
+
+Return real, commonly sold products only for the missing categories. Return at least two alternatives for every missing category.
+Use only these exact category values: "cleanser", "moisturizer", "sunscreen", "vitamin_c_serum", "treatment_serum".
+For vitamin_c_serum, return genuine leave-on Vitamin C or Vitamin C-derivative serums. For treatment_serum, return a different concern-matched leave-on serum and prefer a beginner-safe active when suitable.
+Every product must contain exact name, brand, realistic local price or range, currencyCode "${currencyCode}", and a short usefulness reason.
+Do not invent products, prices, diagnoses, or guaranteed availability.
+Return ONLY strict JSON:
+{
+  "recommendedProducts": [
+    {
+      "name": "Exact Product Name",
+      "brand": "Company or Brand",
+      "category": "cleanser",
+      "estimatedPrice": "realistic local price or range",
+      "currencyCode": "${currencyCode}",
+      "reason": "Why it suits this user"
+    }
+  ],
+  "warnings": []
+}`;
+      try {
+        const repairText = await callGeminiWithFallback(
+          repairPrompt,
+          imageParts,
+          env,
+        );
+        const repairParsed = parseAiJsonText(repairText);
+        const repairedProducts = usableRecommendedProducts(
+          repairParsed?.recommendedProducts,
+          currencyCode,
+        );
+        const mergedProducts = mergeRecommendedProducts(
+          recommendedProducts,
+          repairedProducts,
+        );
+        if (
+          missingRecommendedProductCategories(mergedProducts).length <
+          initiallyMissing.length
+        ) {
+          recommendedProducts = mergedProducts;
+          warnings.push("ai_product_recommendations_repaired");
+        }
+      } catch (error) {
+        console.warn(JSON.stringify({
+          event: "skin_care_product_recommendation_repair_failed",
+          errorType: error instanceof HttpError
+            ? error.errorCode
+            : error instanceof Error
+              ? error.name
+              : "unknown",
+        }));
+      }
+    }
+  }
   if (recommendationOnly && recommendedProducts.length === 0) {
     warnings.push("ai_returned_no_product_recommendations");
   }
   if (recommendationOnly && recommendedProducts.length > 0) {
-    const categories = new Set(recommendedProducts.map((product) => {
-      const category = product.category.toLowerCase();
-      if (category === "face wash") return "cleanser";
-      if (category === "moisturiser") return "moisturizer";
-      if (category === "spf") return "sunscreen";
-      return category;
-    }));
-    for (const requiredCategory of ["cleanser", "moisturizer", "sunscreen"]) {
-      if (!categories.has(requiredCategory)) {
-        warnings.push(`ai_missing_product_category:${requiredCategory}`);
-      }
+    for (
+      const requiredCategory of missingRecommendedProductCategories(
+        recommendedProducts,
+      )
+    ) {
+      warnings.push(`ai_missing_product_category:${requiredCategory}`);
     }
   }
   const perDayRoutineCounts = routinePlanPerDayCounts(routinePlans);

@@ -65,15 +65,15 @@ export default {
       }
 
       if (request.method === "POST" && url.pathname === "/v1/uploads/sign") {
-        return handleSignUpload(request, env);
+        return await handleSignUpload(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/uploads/complete") {
-        return handleCompleteUpload(request, env);
+        return await handleCompleteUpload(request, env);
       }
 
       if (request.method === "POST" && url.pathname === "/v1/uploads/delete") {
-        return handleDeleteUpload(request, env);
+        return await handleDeleteUpload(request, env);
       }
 
       return jsonResponse(request, env, { error: "not_found" }, 404);
@@ -199,10 +199,15 @@ async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<
   }
 
   const projectId = requiredEnv(env.FIREBASE_PROJECT_ID, "FIREBASE_PROJECT_ID");
-  const result = await jwtVerify(token, firebaseJwks, {
-    audience: projectId,
-    issuer: `https://securetoken.google.com/${projectId}`,
-  });
+  let result;
+  try {
+    result = await jwtVerify(token, firebaseJwks, {
+      audience: projectId,
+      issuer: `https://securetoken.google.com/${projectId}`,
+    });
+  } catch {
+    throw new HttpError(401, "invalid_auth", "Invalid Firebase ID token.");
+  }
   const uid = result.payload.sub;
   if (!uid) {
     throw new HttpError(401, "invalid_auth", "Firebase ID token has no uid.");
@@ -279,7 +284,16 @@ async function readSmallJson(request: Request): Promise<Record<string, unknown>>
   if (Number.isFinite(contentLength) && contentLength > 4096) {
     throw new HttpError(413, "body_too_large", "Request body is too large.");
   }
-  const body = await request.json();
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > 4096) {
+    throw new HttpError(413, "body_too_large", "Request body is too large.");
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new HttpError(400, "invalid_json", "Expected a JSON object.");
+  }
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
     throw new HttpError(400, "invalid_json", "Expected a JSON object.");
   }
@@ -429,9 +443,7 @@ function corsHeaders(request: Request, env: Env): HeadersInit {
     .filter((item) => item.length > 0);
   const allowed =
     origin !== null &&
-    (allowedOrigins.includes(origin) ||
-      origin.startsWith("http://localhost:") ||
-      origin.startsWith("http://127.0.0.1:"));
+    (allowedOrigins.includes(origin) || allowedOrigins.includes("*"));
 
   if (!allowed) {
     return {};
@@ -441,6 +453,7 @@ function corsHeaders(request: Request, env: Env): HeadersInit {
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization,Content-Type",
     "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
   };
 }
 

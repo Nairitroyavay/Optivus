@@ -25,7 +25,18 @@ const firebaseJwks = createRemoteJWKSet(
 
 function corsHeaders(request: Request, env: Env): Headers {
   const headers = new Headers();
-  headers.set("Access-Control-Allow-Origin", env.ALLOWED_ORIGINS || "*");
+  const origin = request.headers.get("Origin");
+  const allowedOrigins = (env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item !== "");
+  if (
+    origin &&
+    (allowedOrigins.includes(origin) || allowedOrigins.includes("*"))
+  ) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Vary", "Origin");
+  }
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
   headers.set("Access-Control-Max-Age", "86400");
@@ -46,8 +57,8 @@ function requiredEnv(value: string | undefined, name: string): string {
 
 async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<{ uid: string }> {
   const authHeader = request.headers.get("Authorization") || "";
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token) throw new HttpError(401, "unauthorized", "Missing token");
+  const token = authHeader.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) throw new HttpError(401, "unauthorized", "Missing or malformed token");
   const projectId = requiredEnv(env.FIREBASE_PROJECT_ID, "FIREBASE_PROJECT_ID");
   try {
     const { payload } = await jwtVerify(token, firebaseJwks, { issuer: `https://securetoken.google.com/${projectId}`, audience: projectId });
@@ -62,17 +73,25 @@ async function requireVerifiedFirebaseUser(request: Request, env: Env): Promise<
   }
 }
 
-async function readSmallJson(request: Request, maxBytes = 8192): Promise<any> {
+async function readSmallJson(request: Request, maxBytes = 8192): Promise<Record<string, unknown>> {
   const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
   if (contentLength > maxBytes) {
     throw new HttpError(413, "payload_too_large", `Payload too large. Max ${maxBytes} bytes.`);
   }
-  const clone = request.clone();
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw new HttpError(413, "payload_too_large", `Payload too large. Max ${maxBytes} bytes.`);
+  }
+  let parsed: unknown;
   try {
-    return await clone.json();
+    parsed = JSON.parse(text);
   } catch {
     throw new HttpError(400, "invalid_json", "Invalid JSON body.");
   }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new HttpError(400, "invalid_json", "Expected a JSON object.");
+  }
+  return parsed as Record<string, unknown>;
 }
 
 function parseAiJsonText(text: string): any {
@@ -84,7 +103,31 @@ function parseAiJsonText(text: string): any {
   }
 }
 
-function buildCoachPrompt(context: any): string {
+function optionalText(
+  body: Record<string, unknown>,
+  key: string,
+  maxLength: number,
+): string | undefined {
+  const value = body[key];
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  return value.trim().slice(0, maxLength);
+}
+
+function requiredMessage(body: Record<string, unknown>): string {
+  const message = optionalText(body, "message", 4000);
+  if (!message) {
+    throw new HttpError(400, "invalid_coach_request", "Missing message.");
+  }
+  return message;
+}
+
+function buildCoachPrompt(context: {
+  message: string;
+  coachStyle?: string;
+  selectedTopic?: string;
+  userContext?: string;
+  recentSessionContext?: string;
+}): string {
   return `You are an AI life coach. Be supportive but direct. Do not provide medical, legal, or financial diagnosis. 
 Coach Style: ${context.coachStyle || "friendly and encouraging"}.
 User Topic: ${context.selectedTopic || "general advice"}.
@@ -99,14 +142,24 @@ Return a strict JSON object with:
 }
 
 async function handleCoachReply(request: Request, env: Env): Promise<Response> {
-  const user = await requireVerifiedFirebaseUser(request, env);
+  await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
-
-  if (!body.message) {
-    throw new HttpError(400, "invalid_coach_request", "Missing message.");
-  }
-
-  const prompt = buildCoachPrompt(body);
+  const permissions = body.contextPermissions !== null &&
+      typeof body.contextPermissions === "object" &&
+      !Array.isArray(body.contextPermissions)
+    ? body.contextPermissions as Record<string, unknown>
+    : {};
+  const prompt = buildCoachPrompt({
+    message: requiredMessage(body),
+    coachStyle: optionalText(body, "coachStyle", 80),
+    selectedTopic: optionalText(body, "selectedTopic", 120),
+    userContext: permissions.userContext === true
+      ? optionalText(body, "userContext", 2000)
+      : undefined,
+    recentSessionContext: permissions.recentSessionContext === true
+      ? optionalText(body, "recentSessionContext", 2000)
+      : undefined,
+  });
   const provider = env.AI_PROVIDER || "gemini";
   let text = "";
 
@@ -138,22 +191,46 @@ async function handleCoachReply(request: Request, env: Env): Promise<Response> {
         try {
           text = await fetchGemini(fallbackModel);
         } catch {
-          throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+          throw new HttpError(503, "provider_request_failed", "AI provider request failed.");
         }
       } else {
-        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+        throw new HttpError(503, "provider_request_failed", "AI provider request failed.");
       }
     }
   } else {
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
   }
 
-  const parsed = parseAiJsonText(text) || {};
-  
+  const parsed = parseAiJsonText(text);
+  const reply = parsed && typeof parsed.reply === "string"
+    ? parsed.reply.trim().slice(0, 4000)
+    : "";
+  if (!reply) {
+    throw new HttpError(
+      502,
+      "provider_invalid_response",
+      "AI provider returned an invalid response.",
+    );
+  }
+  const cards = Array.isArray(parsed.cards)
+    ? parsed.cards
+        .filter((card: unknown) =>
+          card !== null && typeof card === "object" && !Array.isArray(card)
+        )
+        .slice(0, 8)
+    : [];
+  const warnings = Array.isArray(parsed.warnings)
+    ? parsed.warnings
+        .filter((warning: unknown): warning is string => typeof warning === "string")
+        .map((warning: string) => warning.trim().slice(0, 240))
+        .filter((warning: string) => warning !== "")
+        .slice(0, 8)
+    : [];
+
   return jsonResponse(request, env, { 
-    reply: parsed.reply || "I'm here to help, but I'm having trouble understanding right now.",
-    cards: parsed.cards || [],
-    warnings: parsed.warnings || []
+    reply,
+    cards,
+    warnings,
   });
 }
 
@@ -176,7 +253,7 @@ export default {
       }
 
       if (request.method === "POST" && url.pathname === "/v1/coach/reply") {
-        return handleCoachReply(request, env);
+        return await handleCoachReply(request, env);
       }
 
       return jsonResponse(request, env, { error: "not_found" }, 404);

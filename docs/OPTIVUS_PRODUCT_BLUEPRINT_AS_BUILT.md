@@ -1,9 +1,10 @@
 # Optivus Product Blueprint — As Built
 
-Status date: 2026-07-22
+Status date: 2026-07-23
 
-Inspection baseline: `main` at `c2ac02d`, with pre-existing uncommitted
-Onboarding and Worker changes preserved
+Inspection baseline: `main` at
+`b1372a2fbbbf6605dd6afd4586fa6ce48c36d70a`, plus the documented uncommitted
+Phase 3 stabilization working tree
 
 Phase status: **Phase 0 documentation foundation complete**; active work remains
 **Phase 3 Stabilization**, not Phase 4
@@ -100,11 +101,24 @@ second live database for Routine, Tracker, Goals, Coach, or Profile.
 
 ### 4.2 Runtime modes
 
+`OPTIVUS_APP_ENV` names the runtime environment:
+
+- `development` — default; intentional local/fake modes remain available.
+- `staging` — requires fail-closed live integrations.
+- `production` — requires fail-closed live integrations and rejects
+  development/staging Worker URLs.
+
 The main backend mode is selected with `OPTIVUS_BACKEND`:
 
 - `fake` — default; in-memory auth/repositories and local frontend state.
 - `firebase` — initializes Firebase and enables the implemented Firebase Auth
   and Firestore-backed profile/onboarding paths.
+
+Every release build, plus explicitly named staging/production builds, validates
+configuration before Firebase initialization. Startup fails unless backend is
+Firebase, upload is R2, both AI modes are Worker, all five Worker URLs are
+explicit HTTPS URLs valid for the named environment, and
+`OPTIVUS_FIREBASE_PROJECT_ID` matches generated Android Firebase options.
 
 AI and upload capabilities use separate build-time settings:
 
@@ -114,9 +128,9 @@ AI and upload capabilities use separate build-time settings:
 - Worker URLs are supplied independently for Coach, Nutrition, Skin Care,
   Routine Import, and R2 Upload.
 
-Release builds force the general AI client mode to Worker. A missing Worker URL
-must be treated as unavailable configuration, not as permission to invent AI
-results.
+Staging, production, and release builds force both AI client modes to Worker.
+A missing/unsafe Worker URL must fail startup or be treated as unavailable
+configuration, never as permission to invent AI results.
 
 ### 4.3 Current persistence boundary
 
@@ -390,7 +404,9 @@ special-care notes, missing-product warnings, and upload references where used.
 
 **Safety behavior:** empty, malformed, unbranded, unpriced, incomplete,
 incompatible, wrong-slot-count, or unreadable AI output is rejected instead of
-replaced with a fake routine.
+replaced with a fake routine. Flutter bounds Worker requests and retains a
+previous valid routine when a request times out; the Worker rejects a JSON
+primitive or array instead of accepting it as an object payload.
 
 **Status:** implemented with the Skin Care Worker when configured.
 
@@ -859,7 +875,20 @@ Five Worker projects exist:
 
 Worker security rules include Firebase ID-token verification, verified-email
 checks, owner-scoped R2 keys, upload size/type restrictions, request schema
-validation, bounded AI payloads, and sanitized output.
+validation, bounded AI payloads, explicit CORS allowlists, context-permission
+enforcement in Coach, and sanitized output.
+
+All five Workers now have exported-handler coverage. On 2026-07-23, every
+typecheck and 102 Worker tests passed: R2 Upload 14, Routine Import 13,
+Nutrition 12, Skin Care 52, and Coach 11.
+
+Each Wrangler project also has a separate named staging template with
+environment-specific bindings and explicit origin configuration. The templates
+are deliberately non-deployable while exact authorization is absent: their
+names end in `staging-pending-authorization`, resources use
+`required-approved-*`, and origins use `.invalid`. Environment type generation
+and dry-run bundling pass locally, but no deployment/version/URL/smoke result
+exists.
 
 No AI secret belongs in Flutter. Provider keys remain Worker secrets.
 
@@ -1033,21 +1062,30 @@ Before any build is called production-ready, verify all of the following:
 
 ## 22. Verification snapshot
 
-Verification performed against the inspection baseline named at the top of
-this document:
+Verification performed on 2026-07-23 against the inspection baseline and
+Phase 3 working tree named at the top of this document:
 
 - `flutter analyze`: passed with no issues.
-- `flutter test`: 377 tests passed and 1 test failed.
-- `flutter test test/onboarding_routing_test.dart`: all 6 focused route/guard
-  tests passed.
-- The remaining failure is
-  `Eating no path saves generated blocks and advances to Fixed` in
-  `test/onboarding_step4_timeline_layout_test.dart`. The test still expects the
-  removed `onboarding-step5-timeline-scroll` widget key; the current Step 5
-  timeline renders without that key. This is a test/implementation contract
-  mismatch that should be resolved before the release checklist is considered
-  complete. It is assigned to Phase 3 as TD-043; physical-device Onboarding
-  verification is assigned to Phase 3 as TD-044.
+- Focused Phase 3 Flutter matrix: all 268 tests passed across authentication,
+  router, persistence/restore, upload, Routine Import, Nutrition, Skin Care,
+  AI configuration, and fail-closed runtime configuration.
+- `flutter test`: all 392 tests passed.
+- All five Workers passed TypeScript typechecking and all 102 request tests.
+- Wrangler staging environment type generation and non-deploying dry runs
+  passed for all five Worker templates.
+- Startup configuration coverage proves staging/release rejects fake backend,
+  fake upload, fake/disabled AI, missing/mismatched Firebase project,
+  missing/non-HTTPS/placeholder/development URLs, and production use of
+  staging URLs.
+- TD-043 is resolved: the Eating test asserts visible generated content,
+  saving, completion/dirty state, Fixed Schedule advancement, and draft
+  serialization restoration without restoring the removed structural key.
+- A physical Realme RMX2001 running Android 11 (API 30) was connected on
+  2026-07-23, but no staging APK was built or run because staging deployment
+  authorization and exact targets were not supplied. TD-044 remains open,
+  staging was not smoke-tested, and no integration is promoted to Live.
+- The complete automated evidence, Worker readiness review, Android manual
+  matrix, and remaining gates are in [PHASE_3_QA.md](PHASE_3_QA.md).
 - Phase 0 navigation, design-token, documentation whitespace, heading, and
   internal-link checks passed.
 - The [Phase 0 close-out audit](PHASE_0_CLOSEOUT.md) records the completion

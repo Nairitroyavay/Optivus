@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum MeasurementSystem { metric, imperial, mixed }
@@ -17,6 +19,142 @@ enum WeekStartDay { monday, sunday, saturday }
 enum FoodVocabularyMode { global, india, japan, custom }
 
 enum PaymentRegion { global, indiaUpi, manualOnly }
+
+class _CurrencyProfile {
+  final String code;
+  final String symbol;
+
+  const _CurrencyProfile(this.code, this.symbol);
+}
+
+const Map<String, _CurrencyProfile> _countryCurrencies = {
+  'AE': _CurrencyProfile('AED', 'د.إ'),
+  'AU': _CurrencyProfile('AUD', r'A$'),
+  'BD': _CurrencyProfile('BDT', '৳'),
+  'BR': _CurrencyProfile('BRL', r'R$'),
+  'CA': _CurrencyProfile('CAD', r'C$'),
+  'CH': _CurrencyProfile('CHF', 'CHF'),
+  'CN': _CurrencyProfile('CNY', '¥'),
+  'CZ': _CurrencyProfile('CZK', 'Kč'),
+  'DK': _CurrencyProfile('DKK', 'kr'),
+  'EG': _CurrencyProfile('EGP', 'E£'),
+  'GB': _CurrencyProfile('GBP', '£'),
+  'HK': _CurrencyProfile('HKD', r'HK$'),
+  'ID': _CurrencyProfile('IDR', 'Rp'),
+  'IN': _CurrencyProfile('INR', '₹'),
+  'JP': _CurrencyProfile('JPY', '¥'),
+  'KR': _CurrencyProfile('KRW', '₩'),
+  'LK': _CurrencyProfile('LKR', 'Rs'),
+  'MY': _CurrencyProfile('MYR', 'RM'),
+  'MX': _CurrencyProfile('MXN', r'MX$'),
+  'NG': _CurrencyProfile('NGN', '₦'),
+  'NO': _CurrencyProfile('NOK', 'kr'),
+  'NP': _CurrencyProfile('NPR', 'रू'),
+  'NZ': _CurrencyProfile('NZD', r'NZ$'),
+  'PH': _CurrencyProfile('PHP', '₱'),
+  'PK': _CurrencyProfile('PKR', '₨'),
+  'PL': _CurrencyProfile('PLN', 'zł'),
+  'SA': _CurrencyProfile('SAR', 'SAR'),
+  'SE': _CurrencyProfile('SEK', 'kr'),
+  'SG': _CurrencyProfile('SGD', r'S$'),
+  'TH': _CurrencyProfile('THB', '฿'),
+  'TR': _CurrencyProfile('TRY', '₺'),
+  'TW': _CurrencyProfile('TWD', r'NT$'),
+  'US': _CurrencyProfile('USD', r'$'),
+  'VN': _CurrencyProfile('VND', '₫'),
+  'ZA': _CurrencyProfile('ZAR', 'R'),
+};
+
+const Set<String> _euroCountries = {
+  'AT',
+  'BE',
+  'CY',
+  'DE',
+  'EE',
+  'ES',
+  'FI',
+  'FR',
+  'GR',
+  'HR',
+  'IE',
+  'IT',
+  'LT',
+  'LU',
+  'LV',
+  'MT',
+  'NL',
+  'PT',
+  'SI',
+  'SK',
+};
+
+const Map<String, String> _countryNames = {
+  'AE': 'United Arab Emirates',
+  'AU': 'Australia',
+  'BD': 'Bangladesh',
+  'BR': 'Brazil',
+  'CA': 'Canada',
+  'CH': 'Switzerland',
+  'CN': 'China',
+  'DE': 'Germany',
+  'EG': 'Egypt',
+  'ES': 'Spain',
+  'FR': 'France',
+  'GB': 'United Kingdom',
+  'HK': 'Hong Kong',
+  'ID': 'Indonesia',
+  'IN': 'India',
+  'IT': 'Italy',
+  'JP': 'Japan',
+  'KR': 'South Korea',
+  'LK': 'Sri Lanka',
+  'MY': 'Malaysia',
+  'MX': 'Mexico',
+  'NG': 'Nigeria',
+  'NP': 'Nepal',
+  'NZ': 'New Zealand',
+  'PH': 'Philippines',
+  'PK': 'Pakistan',
+  'SA': 'Saudi Arabia',
+  'SG': 'Singapore',
+  'TH': 'Thailand',
+  'TR': 'Türkiye',
+  'TW': 'Taiwan',
+  'US': 'United States',
+  'VN': 'Vietnam',
+  'ZA': 'South Africa',
+  'ZZ': 'Other / Custom',
+};
+
+const Map<String, String> _defaultTimezones = {
+  'AE': 'Asia/Dubai',
+  'BD': 'Asia/Dhaka',
+  'CN': 'Asia/Shanghai',
+  'GB': 'Europe/London',
+  'HK': 'Asia/Hong_Kong',
+  'ID': 'Asia/Jakarta',
+  'IN': 'Asia/Kolkata',
+  'JP': 'Asia/Tokyo',
+  'KR': 'Asia/Seoul',
+  'LK': 'Asia/Colombo',
+  'MY': 'Asia/Kuala_Lumpur',
+  'NP': 'Asia/Kathmandu',
+  'PH': 'Asia/Manila',
+  'PK': 'Asia/Karachi',
+  'SA': 'Asia/Riyadh',
+  'SG': 'Asia/Singapore',
+  'TH': 'Asia/Bangkok',
+  'TW': 'Asia/Taipei',
+  'US': 'America/New_York',
+  'VN': 'Asia/Ho_Chi_Minh',
+};
+
+_CurrencyProfile _currencyProfileForCountry(String countryCode) {
+  if (_euroCountries.contains(countryCode)) {
+    return const _CurrencyProfile('EUR', '€');
+  }
+  return _countryCurrencies[countryCode] ?? const _CurrencyProfile('USD', r'$');
+}
 
 class RegionSettings {
   final String userId;
@@ -62,7 +200,56 @@ class RegionSettings {
   });
 
   factory RegionSettings.defaultForUser(String userId) {
-    return RegionSettings.unitedStates(userId: userId);
+    return RegionSettings.forCountry(
+      userId: userId,
+      countryCode: PlatformDispatcher.instance.locale.countryCode ?? '',
+    );
+  }
+
+  factory RegionSettings.forCountry({
+    required String userId,
+    required String countryCode,
+    String countryName = '',
+  }) {
+    final code = countryCode.trim().toUpperCase();
+    if (code == 'IN') return RegionSettings.india(userId: userId);
+    if (code == 'US') return RegionSettings.unitedStates(userId: userId);
+    if (code == 'JP') return RegionSettings.japan(userId: userId);
+    if (code == 'GB') return RegionSettings.unitedKingdom(userId: userId);
+
+    final now = DateTime.now();
+    final resolvedCode = code.length == 2 ? code : 'ZZ';
+    final currency = _currencyProfileForCountry(resolvedCode);
+    final imperial = const {'LR', 'MM'}.contains(resolvedCode);
+    final resolvedName = countryName.trim().isNotEmpty
+        ? countryName.trim()
+        : (_countryNames[resolvedCode] ?? 'Other / Custom');
+    return RegionSettings(
+      userId: userId,
+      countryCode: resolvedCode,
+      countryName: resolvedName,
+      timezone: _defaultTimezones[resolvedCode] ?? 'UTC',
+      languageCode:
+          PlatformDispatcher.instance.locale.languageCode.trim().isEmpty
+          ? 'en'
+          : PlatformDispatcher.instance.locale.languageCode,
+      currencyCode: currency.code,
+      currencySymbol: currency.symbol,
+      measurementSystem: imperial
+          ? MeasurementSystem.imperial
+          : MeasurementSystem.metric,
+      heightUnit: imperial ? HeightUnit.ftIn : HeightUnit.cm,
+      weightUnit: imperial ? WeightUnit.lb : WeightUnit.kg,
+      distanceUnit: imperial ? DistanceUnit.mile : DistanceUnit.km,
+      temperatureUnit: TemperatureUnit.celsius,
+      timeFormat: TimeFormatPreference.system,
+      dateFormat: 'dd/MM/yyyy',
+      weekStartDay: WeekStartDay.monday,
+      foodVocabularyMode: FoodVocabularyMode.global,
+      paymentRegion: PaymentRegion.global,
+      createdAt: now,
+      updatedAt: now,
+    );
   }
 
   factory RegionSettings.india({required String userId}) {

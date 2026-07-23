@@ -7,6 +7,7 @@ vi.mock("jose", () => ({
   })),
 }));
 
+import { jwtVerify } from "jose";
 import worker from "./index";
 
 type StoredObject = {
@@ -46,6 +47,7 @@ function makeEnv(objects: Record<string, StoredObject> = {}) {
     AI_PROVIDER: "gemini",
     AI_MODEL: "gemini-test",
     GEMINI_API_KEY: "gemini-key",
+    ALLOWED_ORIGINS: "https://staging.example.test",
     UPLOAD_BUCKET: {
       get: vi.fn(async (key: string) => {
         if (!(key in objects)) return null;
@@ -141,9 +143,37 @@ function fiveTypedProducts() {
   return [
     { name: "Beardo Detan Face Wash", category: "cleanser", source: "typed" },
     { name: "Minimalist SPF 50", category: "sunscreen", source: "typed" },
-    { name: "Minimalist Vitamin C", category: "serum", source: "typed" },
-    { name: "Minimalist Alpha Arbutin", category: "serum", source: "typed" },
+    { name: "Minimalist Vitamin C", category: "vitamin_c_serum", source: "typed" },
+    { name: "Minimalist Alpha Arbutin", category: "treatment_serum", source: "typed" },
     { name: "Minimalist PHA Toner", category: "exfoliant", source: "typed" },
+  ];
+}
+
+function completeIndianRecommendationProducts() {
+  const product = (
+    name: string,
+    brand: string,
+    category: string,
+    estimatedPrice: string,
+  ) => ({
+    name,
+    brand,
+    category,
+    estimatedPrice,
+    currencyCode: "INR",
+    reason: `Useful ${category.replaceAll("_", " ")} option`,
+  });
+  return [
+    product("Gentle Cleanser", "Minimalist", "cleanser", "₹299"),
+    product("Kind to Skin Face Wash", "Simple", "cleanser", "₹325"),
+    product("Oil-Free Moisturizer", "Minimalist", "moisturizer", "₹349"),
+    product("Hydro Boost Water Gel", "Neutrogena", "moisturizer", "₹499"),
+    product("Ultra Light Sunscreen SPF 50", "Minimalist", "sunscreen", "₹399"),
+    product("Oxybenzone Free Sunscreen SPF 50", "Re'equil", "sunscreen", "₹495"),
+    product("10% Vitamin C Face Serum", "Minimalist", "vitamin_c_serum", "₹699"),
+    product("Vitamin C 15% Face Serum", "Plum", "vitamin_c_serum", "₹790"),
+    product("5% Niacinamide Face Serum", "Minimalist", "treatment_serum", "₹599"),
+    product("2% Alpha Arbutin Face Serum", "Minimalist", "treatment_serum", "₹549"),
   ];
 }
 
@@ -151,6 +181,9 @@ describe("Skin-care Worker", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.mocked(jwtVerify).mockReset().mockResolvedValue({
+      payload: { sub: "uid-1", email_verified: true },
+    } as never);
   });
 
   test("health endpoint returns service metadata", async () => {
@@ -163,6 +196,114 @@ describe("Skin-care Worker", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(json.service).toBe("skin-care-worker");
+  });
+
+  test("CORS echoes only an explicitly allowed origin", async () => {
+    const allowed = await worker.fetch(
+      new Request("https://skin-care-worker.test/health", {
+        headers: { Origin: "https://staging.example.test" },
+      }),
+      makeEnv() as any,
+    );
+    const rejected = await worker.fetch(
+      new Request("https://skin-care-worker.test/health", {
+        headers: { Origin: "https://unapproved.example.test" },
+      }),
+      makeEnv() as any,
+    );
+
+    expect(allowed.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://staging.example.test",
+    );
+    expect(allowed.headers.get("Vary")).toBe("Origin");
+    expect(rejected.headers.get("Access-Control-Allow-Origin")).toBeNull();
+  });
+
+  test("protected endpoints reject missing authentication safely", async () => {
+    const response = await worker.fetch(
+      new Request(
+        "https://skin-care-worker.test/v1/skin-care/products/analyze",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productPhotos: ["photo.jpg"] }),
+        },
+      ),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(401);
+    expect(json.error).toBe("unauthorized");
+    expect(json.message).toBe("Missing or malformed token");
+  });
+
+  test("malformed Authorization is rejected before token verification", async () => {
+    const response = await worker.fetch(
+      new Request(
+        "https://skin-care-worker.test/v1/skin-care/products/analyze",
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Basic token",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ productPhotos: ["photo.jpg"] }),
+        },
+      ),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(401);
+    expect(json.error).toBe("unauthorized");
+    expect(jwtVerify).not.toHaveBeenCalled();
+  });
+
+  test("invalid or expired token returns a safe 401", async () => {
+    vi.mocked(jwtVerify).mockRejectedValue(
+      new Error("expired verifier internal detail"),
+    );
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/products/analyze", {
+        productPhotos: ["photo.jpg"],
+      }),
+      makeEnv() as any,
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(401);
+    expect(JSON.parse(text).error).toBe("unauthorized");
+    expect(text).not.toContain("internal detail");
+  });
+
+  test("malformed request JSON is rejected safely", async () => {
+    const response = await worker.fetch(
+      new Request(
+        "https://skin-care-worker.test/v1/skin-care/routine/generate",
+        {
+          method: "POST",
+          headers: authHeaders(),
+          body: "{",
+        },
+      ),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe("invalid_json");
+  });
+
+  test("valid JSON that is not an object is rejected as invalid_json", async () => {
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", null),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe("invalid_json");
   });
 
   test("unsupported image content type returns unsupported_content_type", async () => {
@@ -201,34 +342,10 @@ describe("Skin-care Worker", () => {
   test("product recommendations are branded, priced, and location-aware", async () => {
     const key = "users/uid-1/onboarding/skin_care/face.jpg";
     const calls: FetchCall[] = [];
+    const products = completeIndianRecommendationProducts();
     stubGemini(JSON.stringify({
       routinePlans: [],
-      recommendedProducts: [
-        {
-          name: "Gentle Cleanser",
-          brand: "Minimalist",
-          category: "cleanser",
-          estimatedPrice: "299",
-          currencyCode: "INR",
-          reason: "Affordable daily cleanser",
-        },
-        {
-          name: "Oil-Free Moisturizer",
-          brand: "Minimalist",
-          category: "moisturizer",
-          estimatedPrice: "349",
-          currencyCode: "INR",
-          reason: "Light daily hydration",
-        },
-        {
-          name: "Ultra Light Sunscreen SPF 50",
-          brand: "Minimalist",
-          category: "sunscreen",
-          estimatedPrice: "399",
-          currencyCode: "INR",
-          reason: "Daily broad-spectrum protection",
-        },
-      ],
+      recommendedProducts: products,
       suggestedProducts: [],
       weeklyRoutine: [],
       warnings: [],
@@ -252,39 +369,92 @@ describe("Skin-care Worker", () => {
 
     expect(response.status).toBe(200);
     expect(json.routinePlans).toEqual([]);
-    expect(json.recommendedProducts).toEqual([
-      {
-        name: "Gentle Cleanser",
-        brand: "Minimalist",
-        category: "cleanser",
-        estimatedPrice: "299",
-        currencyCode: "INR",
-        reason: "Affordable daily cleanser",
-      },
-      {
-        name: "Oil-Free Moisturizer",
-        brand: "Minimalist",
-        category: "moisturizer",
-        estimatedPrice: "349",
-        currencyCode: "INR",
-        reason: "Light daily hydration",
-      },
-      {
-        name: "Ultra Light Sunscreen SPF 50",
-        brand: "Minimalist",
-        category: "sunscreen",
-        estimatedPrice: "399",
-        currencyCode: "INR",
-        reason: "Daily broad-spectrum protection",
-      },
-    ]);
-    expect(json.warnings).not.toContain("ai_missing_product_category:cleanser");
-    expect(json.warnings).not.toContain("ai_missing_product_category:moisturizer");
-    expect(json.warnings).not.toContain("ai_missing_product_category:sunscreen");
+    expect(json.recommendedProducts).toEqual(products);
+    for (const category of [
+      "cleanser",
+      "moisturizer",
+      "sunscreen",
+      "vitamin_c_serum",
+      "treatment_serum",
+    ]) {
+      expect(
+        json.recommendedProducts.filter((item: any) => item.category === category),
+      ).toHaveLength(2);
+      expect(json.warnings).not.toContain(`ai_missing_product_category:${category}`);
+    }
     const promptBody = JSON.stringify(calls[0].body);
     expect(promptBody).toContain("India (IN)");
     expect(promptBody).toContain("Minimalist");
     expect(promptBody).toContain("Mamaearth");
+    expect(promptBody).toContain("vitamin_c_serum");
+    expect(promptBody).toContain("treatment_serum");
+  });
+
+  test("incomplete recommendations are repaired and common categories are canonicalized", async () => {
+    const key = "users/uid-1/onboarding/skin_care/face.jpg";
+    const calls: FetchCall[] = [];
+    const repairProducts = completeIndianRecommendationProducts().slice(1);
+    repairProducts[1] = {
+      ...repairProducts[1],
+      category: "Daily Hydrator",
+    };
+    repairProducts[3] = {
+      ...repairProducts[3],
+      category: "UV Sun Protection",
+    };
+    stubGeminiResponses([
+      geminiSuccess(JSON.stringify({
+        recommendedProducts: [
+          {
+            name: "Kind to Skin Refreshing Facial Wash",
+            brand: "Simple",
+            category: "Facial Wash",
+            estimatedPrice: "₹325",
+            currencyCode: "INR",
+            reason: "A gentle daily wash",
+          },
+        ],
+        warnings: [],
+      })),
+      geminiSuccess(JSON.stringify({
+        recommendedProducts: repairProducts,
+        warnings: [],
+      })),
+    ], calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        recommendationOnly: true,
+        facePhotoR2Key: key,
+        skinType: "combination",
+        skinConcerns: ["pimples", "dark_spots"],
+        budget: "medium",
+        countryCode: "IN",
+        countryName: "India",
+        currencyCode: "INR",
+      }),
+      makeEnv({ [key]: { contentType: "image/jpeg" } }) as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    for (const category of [
+      "cleanser",
+      "moisturizer",
+      "sunscreen",
+      "vitamin_c_serum",
+      "treatment_serum",
+    ]) {
+      expect(
+        json.recommendedProducts.filter((item: any) => item.category === category)
+          .length,
+      ).toBeGreaterThanOrEqual(2);
+    }
+    expect(json.warnings).toContain("ai_product_recommendations_repaired");
+    expect(calls).toHaveLength(2);
+    expect(JSON.stringify(calls[1].body)).toContain("Missing essential categories");
+    expect(JSON.stringify(calls[1].body)).toContain("vitamin_c_serum");
+    expect(JSON.stringify(calls[1].body)).toContain("treatment_serum");
   });
 
   test("incomplete product recommendations are removed before returning", async () => {
@@ -851,6 +1021,70 @@ describe("Skin-care Worker", () => {
     expect(json.routinePlans[1].productNames).not.toContain("Moisturizer");
     expect(json.weeklyRoutine).toContain(
       "Use Minimalist PHA Toner 1-2 times per week at night. Do not combine with other strong actives.",
+    );
+  });
+
+  test("selected Vitamin C and treatment serums are used and never returned as missing", async () => {
+    stubGemini(JSON.stringify({
+      suggestedProducts: [],
+      weeklyRoutine: [],
+      warnings: [],
+      routinePlans: [
+        {
+          slotLabel: "morning",
+          title: "Morning Skin Care",
+          steps: [
+            "Cleanse",
+            "Apply Vitamin C serum",
+            "Apply moisturizer",
+            "Apply sunscreen",
+          ],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Vitamin C",
+            "Minimalist SPF 50",
+          ],
+          missingItems: [{
+            name: "Vitamin C Serum (important, missing)",
+            importance: "important",
+            reason: "Brightening support",
+          }],
+        },
+        {
+          slotLabel: "night",
+          title: "Night Skin Care",
+          steps: ["Cleanse", "Apply treatment serum"],
+          productNames: [
+            "Beardo Detan Face Wash",
+            "Minimalist Alpha Arbutin",
+          ],
+          missingItems: [{
+            name: "Treatment Serum (e.g., Niacinamide or Alpha Arbutin)",
+            importance: "important",
+            reason: "Concern support",
+          }],
+        },
+      ],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        productInputSource: "typed",
+        typedProductDetails: fiveTypedProducts(),
+        desiredApplicationsPerDay: 2,
+      }),
+      makeEnv() as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(2);
+    expect(json.routinePlans[0].productNames).toContain("Minimalist Vitamin C");
+    expect(json.routinePlans[1].productNames).toContain(
+      "Minimalist Alpha Arbutin",
+    );
+    expect(json.routinePlans.flatMap((plan: any) => plan.missingItems)).toEqual(
+      [],
     );
   });
 

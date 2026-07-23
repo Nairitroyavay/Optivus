@@ -600,10 +600,14 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
 class WorkerSkinCareAiClient implements SkinCareAiClient {
   final String baseUrl;
   final http.Client _client;
+  final Duration requestTimeout;
 
-  WorkerSkinCareAiClient({String? baseUrl, http.Client? client})
-    : baseUrl = baseUrl ?? OptivusAiWorkersConfig.skinCareWorkerUrl,
-      _client = client ?? http.Client();
+  WorkerSkinCareAiClient({
+    String? baseUrl,
+    http.Client? client,
+    this.requestTimeout = const Duration(seconds: 70),
+  }) : baseUrl = baseUrl ?? OptivusAiWorkersConfig.skinCareWorkerUrl,
+       _client = client ?? http.Client();
 
   @override
   Future<SkinCareAiProductResult> analyzeProducts({
@@ -621,15 +625,17 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     }
 
     try {
-      final response = await _client.post(
-        _workerUri('/v1/skin-care/products/analyze'),
-        headers: {
-          'Authorization': 'Bearer $idToken',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({'productPhotos': productPhotos}),
-      );
+      final response = await _client
+          .post(
+            _workerUri('/v1/skin-care/products/analyze'),
+            headers: {
+              'Authorization': 'Bearer $idToken',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({'productPhotos': productPhotos}),
+          )
+          .timeout(requestTimeout);
       final body = _jsonObject(response.body);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -669,15 +675,17 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     }
 
     try {
-      final response = await _client.post(
-        _workerUri('/v1/skin-care/routine/generate'),
-        headers: {
-          'Authorization': 'Bearer $idToken',
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode(params),
-      );
+      final response = await _client
+          .post(
+            _workerUri('/v1/skin-care/routine/generate'),
+            headers: {
+              'Authorization': 'Bearer $idToken',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(params),
+          )
+          .timeout(requestTimeout);
       final body = _jsonObject(response.body);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {

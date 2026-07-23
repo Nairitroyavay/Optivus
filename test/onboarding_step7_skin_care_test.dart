@@ -18,6 +18,7 @@ import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/state/app_state.dart';
@@ -28,6 +29,7 @@ void main() {
     OnboardingDraft draft = const OnboardingDraft(currentStep: 7),
     SkinCareAiClient? client,
     TestUploadController? uploadController,
+    DeviceCountry? detectedCountry,
     bool overrideSkinCareClient = true,
   }) {
     return ProviderScope(
@@ -43,6 +45,9 @@ void main() {
           ),
         uploadControllerProvider.overrideWith(
           (ref) => uploadController ?? TestUploadController(),
+        ),
+        deviceCountryServiceProvider.overrideWithValue(
+          TestDeviceCountryService(detectedCountry),
         ),
       ],
       child: const MaterialApp(home: Scaffold(body: OnboardingStep7())),
@@ -3361,6 +3366,33 @@ void main() {
     }
   });
 
+  test(
+    '27c. Worker client times out safely without fabricating output',
+    () async {
+      final client = WorkerSkinCareAiClient(
+        baseUrl: 'https://skin-care-worker.test',
+        requestTimeout: Duration.zero,
+        client: MockClient((_) => Completer<http.Response>().future),
+      );
+
+      final result = await client.generateRoutine(
+        uid: 'uid-1',
+        idToken: 'token',
+        params: const {
+          'typedProductNames': ['Cleanser'],
+        },
+      );
+
+      expect(result.hasError, isTrue);
+      expect(
+        result.errorMessage,
+        'AI skin care service is unavailable. Try again later.',
+      );
+      expect(result.routinePlans, isEmpty);
+      expect(result.timelineBlocks, isEmpty);
+    },
+  );
+
   test('28. Worker client filters title-only routine plans', () async {
     final client = WorkerSkinCareAiClient(
       baseUrl: 'https://skin-care-worker.test',
@@ -5176,6 +5208,11 @@ void main() {
             blocks: [BaseTimelineDraft.defaultBathBlock()],
           ),
           client: client,
+          detectedCountry: const DeviceCountry(
+            countryCode: 'IN',
+            countryName: 'India',
+            fromDeviceLocation: true,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -5183,17 +5220,23 @@ void main() {
       await tester.tap(find.text('Find products'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('available in United States'), findsOneWidget);
+      expect(find.textContaining('available in India'), findsOneWidget);
       expect(find.text('Minimalist Gentle Cleanser'), findsOneWidget);
       expect(find.text('cleanser • INR 299'), findsOneWidget);
       expect(client.generateCalls.single['recommendationOnly'], isTrue);
-      expect(client.generateCalls.single['countryCode'], 'US');
+      expect(client.generateCalls.single['countryCode'], 'IN');
+      expect(client.generateCalls.single['countryName'], 'India');
+      expect(client.generateCalls.single['currencyCode'], 'INR');
 
       for (final name in const [
         'Minimalist Gentle Cleanser',
         'Minimalist SPF 50 Sunscreen',
         'Minimalist Barrier Moisturizer',
+        'Minimalist 10% Vitamin C Serum',
+        'Minimalist 5% Niacinamide Serum',
       ]) {
+        await tester.ensureVisible(find.text(name));
+        await tester.pump();
         await tester.tap(find.text(name));
       }
       await tapBuildRoutine(tester);
@@ -5218,6 +5261,8 @@ void main() {
         'Minimalist Gentle Cleanser',
         'Minimalist SPF 50 Sunscreen',
         'Minimalist Barrier Moisturizer',
+        'Minimalist 10% Vitamin C Serum',
+        'Minimalist 5% Niacinamide Serum',
       ]);
       expect(base.skinCareSpecialCareNotes, [
         'Patch test Minimalist Gentle Cleanser first',
@@ -5225,10 +5270,40 @@ void main() {
       expect(base.skinCareFacePhotoSkipped, isFalse);
       expect(client.generateCalls, hasLength(2));
       expect(client.generateCalls.last['productInputSource'], 'typed');
-      expect(client.generateCalls.last['typedProductDetails'], hasLength(3));
+      expect(client.generateCalls.last['typedProductDetails'], hasLength(5));
       expect(client.lastGenerateParams?['desiredApplicationsPerDay'], 2);
+      final selectedProductsButton = find.byKey(
+        const ValueKey('onboarding-step7-selected-products-button'),
+      );
+      expect(selectedProductsButton, findsOneWidget);
+      expect(find.text('Selected products'), findsNothing);
+      expect(
+        (tester.getCenter(find.text('Routine built')).dy -
+                tester.getCenter(find.text('Rebuild / Edit')).dy)
+            .abs(),
+        lessThan(10),
+      );
+      expect(
+        find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+        findsOneWidget,
+      );
+
+      await tester.tap(selectedProductsButton);
+      await tester.pumpAndSettle();
       expect(find.text('Selected products'), findsOneWidget);
-      expect(find.text('• Minimalist SPF 50 Sunscreen'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(
+            const ValueKey('onboarding-step7-selected-products-list'),
+          ),
+          matching: find.text('Minimalist SPF 50 Sunscreen'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-selected-products-close')),
+      );
+      await tester.pumpAndSettle();
       expect(onboarding7CanContinue(base), isTrue);
     },
   );
@@ -5270,7 +5345,9 @@ void main() {
     await tester.tap(find.text('Minimalist Gentle Cleanser'));
     await tester.pumpAndSettle();
     expect(
-      find.text('Select a moisturizer and sunscreen to continue.'),
+      find.text(
+        'Select moisturizer, sunscreen, Vitamin C serum, and treatment serum to continue.',
+      ),
       findsOneWidget,
     );
     expect(
@@ -5289,8 +5366,16 @@ void main() {
       isNull,
     );
 
-    await tester.tap(find.text('Minimalist Barrier Moisturizer'));
-    await tester.tap(find.text('Minimalist SPF 50 Sunscreen'));
+    for (final name in const [
+      'Minimalist Barrier Moisturizer',
+      'Minimalist SPF 50 Sunscreen',
+      'Minimalist 10% Vitamin C Serum',
+      'Minimalist 5% Niacinamide Serum',
+    ]) {
+      await tester.ensureVisible(find.text(name));
+      await tester.pump();
+      await tester.tap(find.text(name));
+    }
     await tester.pumpAndSettle();
     expect(
       tester
@@ -5429,7 +5514,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Selected products'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
+        findsOneWidget,
+      );
     },
   );
 
@@ -5587,12 +5675,15 @@ void main() {
       );
       await tester.pumpAndSettle();
       base = container.read(mockOnboardingProvider).draft.baseTimeline;
-      expect(find.text('Selected products'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
+        findsOneWidget,
+      );
       expect(onboarding7CanContinue(base), isTrue);
     },
   );
 
-  test('67. Essential selection helper requires all three basics', () {
+  test('67. Essential selection helper requires basics and both serums', () {
     final products = _productRecommendationDraftsForTest();
     expect(
       onboarding7MissingEssentialRecommendationCategories(products),
@@ -5603,7 +5694,7 @@ void main() {
         products,
         selectedProductNames: const ['Minimalist Gentle Cleanser'],
       ),
-      ['moisturizer', 'sunscreen'],
+      ['moisturizer', 'sunscreen', 'vitamin_c_serum', 'treatment_serum'],
     );
   });
 
@@ -5658,6 +5749,8 @@ void main() {
             'Minimalist Gentle Cleanser',
             'Minimalist Barrier Moisturizer',
             'Minimalist SPF 50 Sunscreen',
+            'Minimalist 10% Vitamin C Serum',
+            'Minimalist 5% Niacinamide Serum',
           ],
           withPhoto: true,
           blocks: [BaseTimelineDraft.defaultBathBlock()],
@@ -5678,7 +5771,10 @@ void main() {
 
     completer.complete(_selectedProductRoutineResult());
     await tester.pumpAndSettle();
-    expect(find.text('Selected products'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
+      findsOneWidget,
+    );
   });
 
   test('70. Sun cream is sunscreen and not moisturizer', () {
@@ -5889,6 +5985,240 @@ void main() {
 
     expect(find.text('Fixed Schedule'), findsOneWidget);
   });
+
+  test('74. Common store category labels satisfy all five essentials', () {
+    const recommendations = [
+      SkinCareProductRecommendationDraft(
+        name: 'Kind to Skin Refreshing Facial Wash',
+        brand: 'Simple',
+        category: 'Facial cleansing gel',
+        estimatedPrice: '₹325',
+        currencyCode: 'INR',
+        reason: 'Gentle daily cleansing',
+      ),
+      SkinCareProductRecommendationDraft(
+        name: 'Hydro Boost Water Gel',
+        brand: 'Neutrogena',
+        category: 'Daily hydrator',
+        estimatedPrice: '₹450-₹550',
+        currencyCode: 'INR',
+        reason: 'Lightweight hydration',
+      ),
+      SkinCareProductRecommendationDraft(
+        name: 'UV Doux Silicone Sunscreen Gel',
+        brand: 'Brinton',
+        category: 'UV sun protection',
+        estimatedPrice: '₹700',
+        currencyCode: 'INR',
+        reason: 'Daily broad-spectrum protection',
+      ),
+      SkinCareProductRecommendationDraft(
+        name: '10% Vitamin C Face Serum',
+        brand: 'Minimalist',
+        category: 'Brightening Vitamin C Serum',
+        estimatedPrice: '₹699',
+        currencyCode: 'INR',
+        reason: 'Morning antioxidant support',
+      ),
+      SkinCareProductRecommendationDraft(
+        name: '5% Niacinamide Face Serum',
+        brand: 'Minimalist',
+        category: 'Treatment Serum',
+        estimatedPrice: '₹599',
+        currencyCode: 'INR',
+        reason: 'Concern-targeted night treatment',
+      ),
+    ];
+
+    expect(
+      onboarding7MissingEssentialRecommendationCategories(recommendations),
+      isEmpty,
+    );
+  });
+
+  testWidgets(
+    '75. No-products details and error fit above the CTA without scrolling',
+    (tester) async {
+      useAndroidWidth(tester);
+      final client = TestSkinCareAiClient(
+        routineResult: const SkinCareAiRoutineResult(
+          morningRoutine: [],
+          nightRoutine: [],
+          weeklyRoutine: [],
+          timelineBlocks: [],
+          recommendedProducts: [
+            SkinCareProductRecommendation(
+              name: 'Gentle Cleanser',
+              brand: 'Minimalist',
+              category: 'cleanser',
+              estimatedPrice: '₹299',
+              currencyCode: 'INR',
+              reason: 'Affordable daily cleanser',
+            ),
+          ],
+        ),
+      );
+      final draft = _noProductsDraft(
+        skinType: 'not_sure',
+        problems: const ['pimples', 'dark_spots'],
+        budget: 'medium',
+        desiredApplicationsPerDay: 2,
+        withPhoto: true,
+        blocks: [BaseTimelineDraft.defaultBathBlock()],
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            skinCareAiClientProvider.overrideWithValue(client),
+            uploadControllerProvider.overrideWith(
+              (_) => TestUploadController(),
+            ),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: MaterialApp(
+            home: OnboardingStepShell(
+              currentPage: onboardingSkinCareStepIndex,
+              pageOffset: onboardingSkinCareStepIndex.toDouble(),
+              completedSteps: List<bool>.filled(
+                OnboardingDraft.stepCount,
+                false,
+              ),
+              validationMessage: null,
+              onDotTap: (_) {},
+              onIndicatorDraggedTo: (_) {},
+              onNext: () {},
+              onSave: null,
+              showSave: false,
+              isSaving: false,
+              isSaved: false,
+              saveEnabled: true,
+              ctaLabel: 'Next Step',
+              ctaEnabled: false,
+              ctaLoading: false,
+              child: const OnboardingStep7(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      await tester.tap(find.text('Find products'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(
+        find.textContaining('complete branded cleanser, moisturizer'),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(OnboardingStep7),
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsNothing,
+      );
+      expect(find.text('Skin Care'), findsOneWidget);
+      expect(find.text('Find products'), findsOneWidget);
+      expect(find.text('How many times per day?'), findsOneWidget);
+      expect(
+        tester
+            .getRect(
+              find.byKey(const ValueKey('onboarding-step7-generate-button')),
+            )
+            .bottom,
+        lessThanOrEqualTo(
+          tester
+              .getRect(find.byKey(const ValueKey('onboarding-cta-visible')))
+              .top,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('76. Selecting another product replaces the same category', (
+    tester,
+  ) async {
+    useAndroidWidth(tester);
+    final client = TestSkinCareAiClient(
+      routineResult: _productRecommendationResultWithAlternatives(),
+    );
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: _noProductsDraft(
+          skinType: 'combination',
+          problems: const ['pimples', 'dark_spots'],
+          budget: 'medium',
+          withPhoto: true,
+          blocks: [BaseTimelineDraft.defaultBathBlock()],
+        ),
+        client: client,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Find products'));
+    await tester.pumpAndSettle();
+
+    for (final name in const [
+      'Minimalist Gentle Cleanser',
+      'Minimalist SPF 50 Sunscreen',
+      'Minimalist Barrier Moisturizer',
+      'Minimalist 10% Vitamin C Serum',
+      'Minimalist 5% Niacinamide Serum',
+      'Simple Kind to Skin Face Wash',
+      "Re'equil Ultra Matte Sunscreen Gel",
+    ]) {
+      final product = find.text(name);
+      if (product.evaluate().isEmpty) {
+        await tester.scrollUntilVisible(
+          product,
+          180,
+          scrollable: find.byType(Scrollable).last,
+        );
+      } else {
+        await tester.ensureVisible(product);
+      }
+      await tester.pump();
+      await tester.tap(product);
+      await tester.pump();
+    }
+
+    final base = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    ).read(mockOnboardingProvider).draft.baseTimeline;
+    expect(base.skinCareSelectedProductNames, hasLength(5));
+    expect(
+      base.skinCareSelectedProductNames,
+      contains('Simple Kind to Skin Face Wash'),
+    );
+    expect(
+      base.skinCareSelectedProductNames,
+      contains("Re'equil Ultra Matte Sunscreen Gel"),
+    );
+    expect(
+      base.skinCareSelectedProductNames,
+      isNot(contains('Minimalist Gentle Cleanser')),
+    );
+    expect(
+      base.skinCareSelectedProductNames,
+      isNot(contains('Minimalist SPF 50 Sunscreen')),
+    );
+    expect(
+      onboarding7MissingEssentialRecommendationCategories(
+        base.skinCareProductRecommendations,
+        selectedProductNames: base.skinCareSelectedProductNames,
+      ),
+      isEmpty,
+    );
+  });
 }
 
 OnboardingDraft _hasProductsDraft({
@@ -6001,6 +6331,50 @@ SkinCareAiRoutineResult _productRecommendationResult() {
         currencyCode: 'INR',
         reason: 'Supports the skin barrier',
       ),
+      SkinCareProductRecommendation(
+        name: '10% Vitamin C Serum',
+        brand: 'Minimalist',
+        category: 'vitamin_c_serum',
+        estimatedPrice: '699',
+        currencyCode: 'INR',
+        reason: 'Morning antioxidant and brightening support',
+      ),
+      SkinCareProductRecommendation(
+        name: '5% Niacinamide Serum',
+        brand: 'Minimalist',
+        category: 'treatment_serum',
+        estimatedPrice: '599',
+        currencyCode: 'INR',
+        reason: 'A beginner-friendly concern-targeted treatment',
+      ),
+    ],
+  );
+}
+
+SkinCareAiRoutineResult _productRecommendationResultWithAlternatives() {
+  return SkinCareAiRoutineResult(
+    morningRoutine: const [],
+    nightRoutine: const [],
+    weeklyRoutine: const [],
+    timelineBlocks: const [],
+    recommendedProducts: [
+      ..._productRecommendationResult().recommendedProducts,
+      const SkinCareProductRecommendation(
+        name: 'Kind to Skin Face Wash',
+        brand: 'Simple',
+        category: 'Facial cleansing gel',
+        estimatedPrice: '325',
+        currencyCode: 'INR',
+        reason: 'A gentle alternative cleanser',
+      ),
+      const SkinCareProductRecommendation(
+        name: 'Ultra Matte Sunscreen Gel',
+        brand: "Re'equil",
+        category: 'UV sun protection',
+        estimatedPrice: '495',
+        currencyCode: 'INR',
+        reason: 'An alternative broad-spectrum sunscreen',
+      ),
     ],
   );
 }
@@ -6029,6 +6403,7 @@ SkinCareAiRoutineResult _selectedProductRoutineResult() {
         steps: ['Cleanse', 'Apply sunscreen'],
         productNames: [
           'Minimalist Gentle Cleanser',
+          'Minimalist 10% Vitamin C Serum',
           'Minimalist SPF 50 Sunscreen',
         ],
       ),
@@ -6038,6 +6413,7 @@ SkinCareAiRoutineResult _selectedProductRoutineResult() {
         steps: ['Cleanse', 'Moisturize'],
         productNames: [
           'Minimalist Gentle Cleanser',
+          'Minimalist 5% Niacinamide Serum',
           'Minimalist Barrier Moisturizer',
         ],
       ),
@@ -6311,6 +6687,15 @@ class TestSkinCareAiClient implements SkinCareAiClient {
     }
     return routineResult;
   }
+}
+
+class TestDeviceCountryService implements DeviceCountryService {
+  final DeviceCountry? result;
+
+  const TestDeviceCountryService(this.result);
+
+  @override
+  Future<DeviceCountry?> detectCountry() async => result;
 }
 
 class TestUploadController extends UploadController {

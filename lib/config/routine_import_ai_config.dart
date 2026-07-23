@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:optivus/config/app_environment_config.dart';
 
 enum OptivusRoutineImportAiMode { disabled, fake, worker }
 
@@ -19,7 +19,7 @@ class OptivusRoutineImportAiConfig {
   );
 
   static OptivusRoutineImportAiMode get mode {
-    if (kReleaseMode) {
+    if (OptivusAppEnvironmentConfig.requiresLiveServices) {
       return OptivusRoutineImportAiMode.worker;
     }
     return switch (_modeName) {

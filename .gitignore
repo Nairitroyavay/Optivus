@@ -37,6 +37,16 @@ migrate_working_dir/
 node_modules/
 **/node_modules/
 
+# Local Worker and app environment values. Keep secrets out of source control.
+.dev.vars
+.dev.vars.*
+**/.dev.vars
+**/.dev.vars.*
+.env
+.env.*
+**/.env
+**/.env.*
+
 # Symbolication related
 app.*.symbols
 

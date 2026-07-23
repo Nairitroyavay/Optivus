@@ -11,8 +11,9 @@ Coach preferences, notification preferences, and reviewed AI-import data.
 ## Current project status
 
 The Phase 0 documentation foundation is complete. Active development remains
-in **Phase 3 Stabilization**; do not start Phase 4 while the known onboarding
-test mismatch and physical-Android onboarding verification remain open.
+in **Phase 3 Stabilization**. The stale Eating test contract is resolved and
+the automated Flutter/Worker gates are green, but physical-Android onboarding
+QA and authorized staging verification remain open; do not start Phase 4 yet.
 
 This repository is not production-ready. At the Phase 0 close-out audit, the
 [data-source inventory](docs/DATA_SOURCE_CONTRACT.md) classified 0 capabilities
@@ -22,13 +23,17 @@ active flows production-ready.
 
 Important warnings:
 
-- `OPTIVUS_BACKEND` defaults to `fake`, including release builds.
-- `OPTIVUS_UPLOAD_MODE` defaults to `fake`; the fake upload client can simulate
-  success without retaining bytes.
+- `OPTIVUS_BACKEND` and `OPTIVUS_UPLOAD_MODE` default to fake for local
+  development. Staging, production, and release startup now fail closed unless
+  Firebase, R2, the matching Firebase project, and every Worker URL are
+  explicit.
+- The fake upload client can simulate success without retaining bytes and must
+  remain limited to an intentional development build.
 - Most post-onboarding feature repositories are in-memory/fake.
 - Home, Tracker, and Coach contain seeded or deterministic demo content.
-- Worker URLs checked into configuration point to development names and have
-  not been verified as production deployments.
+- Worker URLs checked into Flutter configuration point to development names.
+  The runtime guard rejects them in staging/production, and no remote
+  deployment has been verified.
 
 See the [technical-debt register](docs/TECHNICAL_DEBT.md), especially TD-035
 and TD-036, before preparing any release build.
@@ -81,6 +86,8 @@ The complete ownership/dependency rules are in
   priorities, target phases, and measurable acceptance conditions.
 - [Phase 0 close-out](docs/PHASE_0_CLOSEOUT.md) — completion-gate audit and
   Phase 3 handoff.
+- [Phase 3 QA handoff](docs/PHASE_3_QA.md) — automated evidence, deployment
+  readiness, Android manual cases, and the remaining external gates.
 - [Strict task rules](docs/OPTIVUS_STRICT_TASK_RULES.md) — Spark-only service,
   security, R2, Worker, and delivery constraints.
 
@@ -126,6 +133,7 @@ Firebase or development Workers:
 
 ```sh
 flutter run \
+  --dart-define=OPTIVUS_APP_ENV=development \
   --dart-define=OPTIVUS_BACKEND=fake \
   --dart-define=OPTIVUS_UPLOAD_MODE=disabled \
   --dart-define=OPTIVUS_AI_WORKERS_MODE=disabled \
@@ -163,6 +171,7 @@ also intentionally configured:
 
 ```sh
 flutter run \
+  --dart-define=OPTIVUS_APP_ENV=development \
   --dart-define=OPTIVUS_BACKEND=firebase \
   --dart-define=OPTIVUS_UPLOAD_MODE=disabled \
   --dart-define=OPTIVUS_AI_WORKERS_MODE=disabled \
@@ -196,9 +205,15 @@ Checked-in development configuration references `optivus-uploads-dev`.
 
 Store secrets only with the approved Wrangler/Cloudflare secret mechanism.
 Never put them in Dart defines, `wrangler.toml`, `wrangler.jsonc`, source code,
-shell history, screenshots, or documentation. This repository does not
-currently ignore `.dev.vars`; do not create or commit that file without a
-separate approved ignore-policy change.
+shell history, screenshots, or documentation. `.dev.vars*` and `.env*` files
+are ignored at the root and in Worker directories, but ignore rules do not make
+them an approved transport or excuse printing values.
+
+The named staging templates, authorization gate, deploy order, version
+evidence, and rollback commands are in
+[workers/STAGING_DEPLOYMENT.md](workers/STAGING_DEPLOYMENT.md). Their
+`pending-authorization`, `required-approved-*`, and `.invalid` values are
+intentional blockers, not deployable targets.
 
 ### Worker-enabled Flutter run
 
@@ -206,6 +221,7 @@ Replace placeholders with the intended local or authorized environment URLs:
 
 ```sh
 flutter run \
+  --dart-define=OPTIVUS_APP_ENV=development \
   --dart-define=OPTIVUS_BACKEND=firebase \
   --dart-define=OPTIVUS_UPLOAD_MODE=r2 \
   --dart-define=OPTIVUS_R2_UPLOAD_WORKER_URL=<r2-upload-worker-url> \
@@ -220,15 +236,42 @@ flutter run \
 The active Coach tab still uses local deterministic replies; supplying the
 Coach URL does not activate the production Coach journey.
 
+### Android staging build definitions
+
+After the authorization record contains exact staging targets, an Android QA
+build must supply all of these non-secret values:
+
+```sh
+flutter build apk --debug \
+  --dart-define=OPTIVUS_APP_ENV=staging \
+  --dart-define=OPTIVUS_BACKEND=firebase \
+  --dart-define=OPTIVUS_FIREBASE_PROJECT_ID=<approved-staging-project-id> \
+  --dart-define=OPTIVUS_UPLOAD_MODE=r2 \
+  --dart-define=OPTIVUS_R2_UPLOAD_WORKER_URL=<approved-r2-staging-url> \
+  --dart-define=OPTIVUS_AI_WORKERS_MODE=worker \
+  --dart-define=OPTIVUS_ROUTINE_IMPORT_AI_MODE=worker \
+  --dart-define=OPTIVUS_ROUTINE_IMPORT_WORKER_URL=<approved-routine-import-staging-url> \
+  --dart-define=OPTIVUS_NUTRITION_WORKER_URL=<approved-nutrition-staging-url> \
+  --dart-define=OPTIVUS_SKIN_CARE_WORKER_URL=<approved-skin-care-staging-url> \
+  --dart-define=OPTIVUS_COACH_WORKER_URL=<approved-coach-staging-url>
+```
+
+The Firebase project definition must match the generated Android Firebase
+configuration. This command is a template only; do not substitute development
+URLs or run it as staging evidence while targets remain unresolved. No secret
+belongs in a Dart define.
+
 ## Compile-time definitions
 
 | Definition | Values/default | Requirement |
 | --- | --- | --- |
-| `OPTIVUS_BACKEND` | `fake` (default), `firebase` | Set explicitly. Firebase is currently Android-only. |
-| `OPTIVUS_UPLOAD_MODE` | `fake` (default), `disabled`, `r2` | Use `disabled` for safe offline work; `r2` requires its Worker URL. Never ship the fake default. |
+| `OPTIVUS_APP_ENV` | `development` (default), `staging`, `production` | Staging/production and every release build activate fail-closed live-service validation. |
+| `OPTIVUS_BACKEND` | `fake` (default), `firebase` | Staging/production/release requires `firebase`. Firebase is currently Android-only. |
+| `OPTIVUS_FIREBASE_PROJECT_ID` | Empty by default | Required for staging/production/release and must match generated Android Firebase options. |
+| `OPTIVUS_UPLOAD_MODE` | `fake` (default), `disabled`, `r2` | Use `disabled` for safe offline work; staging/production/release requires `r2` and its Worker URL. |
 | `OPTIVUS_R2_UPLOAD_WORKER_URL` | Empty by default | Required when upload mode is `r2`; missing configuration fails visibly. |
-| `OPTIVUS_AI_WORKERS_MODE` | `worker` (default), `disabled`, `fake` | Release builds force `worker`. Fake Nutrition/Skin Care clients are tests-only; missing/disabled services are unavailable. |
-| `OPTIVUS_ROUTINE_IMPORT_AI_MODE` | `fake` (default), `disabled`, `worker` | Release builds force `worker`; application fake candidates are tests-only. |
+| `OPTIVUS_AI_WORKERS_MODE` | `worker` (default), `disabled`, `fake` | Staging/production/release forces `worker`. Fake Nutrition/Skin Care clients are tests-only; missing/disabled services are unavailable. |
+| `OPTIVUS_ROUTINE_IMPORT_AI_MODE` | `fake` (default), `disabled`, `worker` | Staging/production/release forces `worker`; application fake candidates are tests-only. |
 | `OPTIVUS_ROUTINE_IMPORT_WORKER_URL` | Checked-in development URL | Override for the intended environment; deployment must be verified separately. |
 | `OPTIVUS_NUTRITION_WORKER_URL` | Checked-in development URL | Same requirement. |
 | `OPTIVUS_SKIN_CARE_WORKER_URL` | Checked-in development URL | Same requirement. |
@@ -256,29 +299,32 @@ Worker checks:
 ```sh
 for worker in coach-worker nutrition-worker r2-upload-worker routine-import-worker skin-care-worker; do
   (cd "workers/$worker" && npm run typecheck)
+  (cd "workers/$worker" && npm test)
 done
-
-(cd workers/nutrition-worker && npm test)
-(cd workers/skin-care-worker && npm test)
 ```
 
-Only Nutrition and Skin Care currently define Worker test scripts. A passing
-client/unit suite does not replace authenticated deployed-environment smoke
-tests.
+All five Workers define request-level suites. On 2026-07-23 they passed 102
+tests total: R2 Upload 14, Routine Import 13, Nutrition 12, Skin Care 52, and
+Coach 11. A passing local suite does not replace authenticated
+deployed-environment smoke tests.
 
-### Known Phase 3 test and device gates
+### Phase 3 automated and device gates
 
-The known full-suite mismatch is isolated with:
+The former Eating mismatch can be rechecked with:
 
 ```sh
 flutter test test/onboarding_step4_timeline_layout_test.dart \
   --plain-name "Eating no path saves generated blocks and advances to Fixed"
 ```
 
-The test expects the removed `onboarding-step5-timeline-scroll` key. Resolve
-the test/current-UI contract in Phase 3 (TD-043); do not restore obsolete UI
-solely to make the test green. A complete physical-Android onboarding pass is
-also required by TD-044 before leaving Phase 3.
+The test now verifies visible generated meals, saved Eating blocks, completion
+and dirty state, advancement to Fixed Schedule, and serialization restoration;
+it no longer depends on the removed `onboarding-step5-timeline-scroll` key.
+On 2026-07-23, `flutter analyze`, the 268-test focused Phase 3 matrix, and all
+392 Flutter tests passed. A complete physical-Android onboarding pass is still
+required by TD-044, and exact staging targets, deploy authorization, versions,
+and smoke results remain unresolved. See
+[PHASE_3_QA.md](docs/PHASE_3_QA.md).
 
 ## Security and secret handling
 
@@ -316,8 +362,9 @@ The full prohibited-service and integration rules are in
 - The broad Firestore development catch-all remains.
 - Client crash reporting, analytics consent, CI/release automation, deployment
   verification, rate limiting, and R2 cleanup policy remain open debt.
-- The full Flutter suite has a known Phase 3 onboarding test mismatch, and
-  physical-device onboarding has not completed its stabilization gate.
+- Physical-device onboarding and authorized staging deployment/smoke testing
+  have not completed their Phase 3 gates.
 
 Do not begin Phase 4 durable Routine work until Phase 3 Stabilization closes
-TD-043 and TD-044 and the full required verification is green.
+TD-044, completes the staging/manual QA matrix, and records the required
+account-separation and restoration evidence.

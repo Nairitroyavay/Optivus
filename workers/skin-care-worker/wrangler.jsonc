@@ -2,14 +2,15 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "optivus-skin-care-worker-dev",
   "main": "src/index.ts",
-  "compatibility_date": "2026-06-30",
+  "compatibility_date": "2026-07-22",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
   "vars": {
     "FIREBASE_PROJECT_ID": "optivus-lifeos",
     "AI_PROVIDER": "gemini",
     "AI_MODEL": "gemini-2.5-flash",
     "AI_FALLBACK_MODEL": "gemini-3.5-flash",
-    "ALLOWED_ORIGINS": "*"
+    "ALLOWED_ORIGINS": ""
   },
   "secrets": {
     "required": ["GEMINI_API_KEY"]
@@ -27,5 +28,37 @@
       "binding": "UPLOAD_BUCKET",
       "bucket_name": "optivus-uploads-dev"
     }
-  ]
+  ],
+  // Deliberately non-deployable until all `required-approved-*` values and
+  // the provisional Worker name are replaced with exact authorized targets.
+  "env": {
+    "staging": {
+      "name": "optivus-skin-care-worker-staging-pending-authorization",
+      "workers_dev": true,
+      "vars": {
+        "FIREBASE_PROJECT_ID": "required-approved-staging-project",
+        "AI_PROVIDER": "gemini",
+        "AI_MODEL": "gemini-2.5-flash",
+        "AI_FALLBACK_MODEL": "gemini-3.5-flash",
+        "ALLOWED_ORIGINS": "https://staging-origin.invalid"
+      },
+      "secrets": {
+        "required": ["GEMINI_API_KEY"]
+      },
+      "observability": {
+        "enabled": true,
+        "logs": {
+          "enabled": true,
+          "head_sampling_rate": 1,
+          "invocation_logs": true
+        }
+      },
+      "r2_buckets": [
+        {
+          "binding": "UPLOAD_BUCKET",
+          "bucket_name": "required-approved-staging-bucket"
+        }
+      ]
+    }
+  }
 }

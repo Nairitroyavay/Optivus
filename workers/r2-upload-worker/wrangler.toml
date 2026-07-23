@@ -1,7 +1,8 @@
 name = "optivus-r2-upload-worker-dev"
 main = "src/index.ts"
-compatibility_date = "2026-06-02"
+compatibility_date = "2026-07-22"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
 [vars]
 FIREBASE_PROJECT_ID = "optivus-lifeos"
@@ -20,5 +21,32 @@ binding = "UPLOAD_BUCKET"
 bucket_name = "optivus-uploads-dev"
 
 [observability]
+enabled = true
+head_sampling_rate = 1
+
+# This staging environment is deliberately non-deployable until every
+# `required-approved-*` value and the provisional Worker name are replaced
+# with the exact targets recorded in the Phase 3 authorization record.
+[env.staging]
+name = "optivus-r2-upload-worker-staging-pending-authorization"
+workers_dev = true
+
+[env.staging.vars]
+FIREBASE_PROJECT_ID = "required-approved-staging-project"
+R2_BUCKET_NAME = "required-approved-staging-bucket"
+R2_ACCOUNT_ID = "required-approved-cloudflare-account-id"
+UPLOAD_URL_EXPIRES_SECONDS = "900"
+MAX_PROFILE_UPLOAD_BYTES = "5242880"
+MAX_ROUTINE_IMPORT_UPLOAD_BYTES = "15728640"
+ALLOWED_ORIGINS = "https://staging-origin.invalid"
+
+[env.staging.secrets]
+required = ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]
+
+[[env.staging.r2_buckets]]
+binding = "UPLOAD_BUCKET"
+bucket_name = "required-approved-staging-bucket"
+
+[env.staging.observability]
 enabled = true
 head_sampling_rate = 1

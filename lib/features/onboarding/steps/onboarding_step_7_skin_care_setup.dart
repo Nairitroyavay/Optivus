@@ -13,7 +13,9 @@ import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
@@ -522,9 +524,43 @@ String _normalizeTypedProductCategory(String value) {
   final normalized = value
       .trim()
       .toLowerCase()
-      .replaceAll(RegExp(r'[^a-z0-9 /_-]+'), '')
+      .replaceAll(RegExp(r'[^a-z0-9 ]+'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ');
   if (normalized.isEmpty) return '';
+
+  if (normalized.contains('vitamin c')) {
+    return 'vitamin_c_serum';
+  }
+  if (normalized.contains('treatment serum') ||
+      normalized == 'treatment' ||
+      normalized.contains('spot treatment')) {
+    return 'treatment_serum';
+  }
+  if (normalized.contains('sunscreen') ||
+      normalized.contains('sun protection') ||
+      normalized.contains('sun cream') ||
+      normalized.contains('sunblock') ||
+      RegExp(r'(^| )spf( |$)').hasMatch(normalized)) {
+    return 'sunscreen';
+  }
+  if (normalized.contains('cleanser') ||
+      normalized.contains('face wash') ||
+      normalized.contains('facial wash') ||
+      normalized.contains('facewash') ||
+      normalized.contains('cleansing gel') ||
+      normalized.contains('cleansing foam')) {
+    return 'cleanser';
+  }
+  if (normalized.contains('moistur') ||
+      normalized.contains('hydrator') ||
+      normalized.contains('hydrating gel') ||
+      normalized.contains('hydration') ||
+      normalized.contains('barrier cream') ||
+      normalized.contains('barrier repair') ||
+      normalized.contains('water gel') ||
+      normalized.contains('face cream')) {
+    return 'moisturizer';
+  }
 
   const known = {
     'cleanser',
@@ -542,6 +578,8 @@ String _normalizeTypedProductCategory(String value) {
     'mask',
     'spot treatment',
     'treatment',
+    'treatment serum',
+    'vitamin c serum',
     'retinol',
   };
   if (!known.contains(normalized)) return '';
@@ -551,7 +589,11 @@ String _normalizeTypedProductCategory(String value) {
     'spf' => 'sunscreen',
     'exfoliator' => 'exfoliant',
     'mask' => 'face mask',
-    'retinol' => 'serum',
+    'spot treatment' ||
+    'treatment' ||
+    'treatment serum' ||
+    'retinol' => 'treatment_serum',
+    'vitamin c serum' => 'vitamin_c_serum',
     _ => normalized,
   };
 }
@@ -576,12 +618,20 @@ String _inferTypedProductCategory(String name) {
       lower.contains('lotion')) {
     return 'moisturizer';
   }
-  if (lower.contains('serum') ||
-      lower.contains('vitamin c') ||
-      lower.contains('alpha arbutin') ||
-      lower.contains('niacinamide')) {
-    return 'serum';
+  if (lower.contains('vitamin c')) {
+    return 'vitamin_c_serum';
   }
+  if (lower.contains('treatment serum') ||
+      lower.contains('alpha arbutin') ||
+      lower.contains('niacinamide') ||
+      lower.contains('azelaic') ||
+      lower.contains('retinol') ||
+      lower.contains('retinal') ||
+      lower.contains('benzoyl peroxide') ||
+      lower.contains('salicylic serum')) {
+    return 'treatment_serum';
+  }
+  if (lower.contains('serum')) return 'serum';
   if (lower.contains('toner')) return 'toner';
   if (lower.contains('exfoliant') ||
       lower.contains('exfoliator') ||
@@ -597,7 +647,38 @@ const List<String> _onboarding7EssentialProductCategories = [
   'cleanser',
   'moisturizer',
   'sunscreen',
+  'vitamin_c_serum',
+  'treatment_serum',
 ];
+
+@visibleForTesting
+String onboarding7RecommendationCategory(
+  SkinCareProductRecommendationDraft product,
+) {
+  final explicit = _normalizeTypedProductCategory(product.category);
+  if (explicit == 'serum') {
+    final inferred = _inferTypedProductCategory(product.displayName);
+    if (inferred == 'vitamin_c_serum' || inferred == 'treatment_serum') {
+      return inferred;
+    }
+  }
+  if (explicit.isNotEmpty) return explicit;
+  return _inferTypedProductCategory(product.displayName);
+}
+
+String _onboarding7ProductSelectionGroup(
+  SkinCareProductRecommendationDraft product,
+) {
+  final category = onboarding7RecommendationCategory(product);
+  if (category.isNotEmpty) return category;
+  final rawCategory = product.category
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'_+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+  return rawCategory.isNotEmpty ? rawCategory : product.selectionKey;
+}
 
 @visibleForTesting
 List<String> onboarding7MissingEssentialRecommendationCategories(
@@ -613,11 +694,8 @@ List<String> onboarding7MissingEssentialRecommendationCategories(
     if (selectedKeys != null && !selectedKeys.contains(product.selectionKey)) {
       continue;
     }
-    final explicit = _normalizeTypedProductCategory(product.category);
-    final inferred = explicit.isNotEmpty
-        ? explicit
-        : _inferTypedProductCategory(product.displayName);
-    if (inferred.isNotEmpty) categories.add(inferred);
+    final category = onboarding7RecommendationCategory(product);
+    if (category.isNotEmpty) categories.add(category);
   }
   return _onboarding7EssentialProductCategories
       .where((category) => !categories.contains(category))
@@ -627,13 +705,22 @@ List<String> onboarding7MissingEssentialRecommendationCategories(
 String _onboarding7EssentialSelectionMessage(List<String> missing) {
   if (missing.isEmpty) return '';
   final labels = missing
-      .map((category) => category == 'moisturizer' ? 'moisturizer' : category)
+      .map(_onboarding7ProductCategoryLabel)
       .toList(growable: false);
   if (labels.length == 1) return 'Select a ${labels.single} to continue.';
   if (labels.length == 2) {
     return 'Select a ${labels.first} and ${labels.last} to continue.';
   }
-  return 'Select a cleanser, moisturizer, and sunscreen to continue.';
+  return 'Select ${labels.take(labels.length - 1).join(', ')}, and '
+      '${labels.last} to continue.';
+}
+
+String _onboarding7ProductCategoryLabel(String category) {
+  return switch (category) {
+    'vitamin_c_serum' => 'Vitamin C serum',
+    'treatment_serum' => 'treatment serum',
+    _ => category.replaceAll('_', ' '),
+  };
 }
 
 bool _containsAcidInitialism(String value, String token) {
@@ -2630,25 +2717,27 @@ class _SkinCareFrequencySelector extends StatelessWidget {
   final int value;
   final ValueChanged<int>? onChanged;
   final Color accent;
+  final bool compact;
 
   const _SkinCareFrequencySelector({
     required this.value,
     required this.onChanged,
     this.accent = OptivusColors.roseAccent,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    const label = Text(
+    final label = Text(
       'How many times per day?',
       style: TextStyle(
-        fontSize: 12,
+        fontSize: compact ? 11 : 12,
         fontWeight: FontWeight.w900,
         color: OptivusColors.textPrimary,
       ),
     );
     final selector = Container(
-      padding: const EdgeInsets.all(3),
+      padding: EdgeInsets.all(compact ? 2 : 3),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.34),
         borderRadius: BorderRadius.circular(14),
@@ -2665,8 +2754,8 @@ class _SkinCareFrequencySelector extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 curve: Curves.easeOutCubic,
-                width: 34,
-                height: 30,
+                width: compact ? 32 : 34,
+                height: compact ? 28 : 30,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: value == option ? accent : Colors.transparent,
@@ -2675,7 +2764,7 @@ class _SkinCareFrequencySelector extends StatelessWidget {
                 child: Text(
                   '$option',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: compact ? 11.5 : 12,
                     fontWeight: FontWeight.w900,
                     color: value == option
                         ? Colors.white
@@ -2698,7 +2787,7 @@ class _SkinCareFrequencySelector extends StatelessWidget {
         }
         return Row(
           children: [
-            const Expanded(child: label),
+            Expanded(child: label),
             const SizedBox(width: 10),
             selector,
           ],
@@ -2986,7 +3075,32 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           await ref.read(authRepositoryProvider).currentIdToken() ?? '';
       final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
       final client = ref.read(skinCareAiClientProvider);
-      final region = ref.read(regionSettingsProvider);
+      var region = ref.read(regionSettingsProvider);
+      final detectedCountry = await ref
+          .read(deviceCountryServiceProvider)
+          .detectCountry();
+      if (detectedCountry != null &&
+          (detectedCountry.fromDeviceLocation ||
+              region.countryCode.trim().isEmpty ||
+              region.countryCode == 'ZZ')) {
+        final detectedRegion = RegionSettings.forCountry(
+          userId: uid,
+          countryCode: detectedCountry.countryCode,
+          countryName: detectedCountry.countryName,
+        ).copyWith(createdAt: region.createdAt);
+        region = detectedRegion;
+        try {
+          await ref.read(regionSettingsProvider.notifier).save(detectedRegion);
+        } catch (error, stackTrace) {
+          ref
+              .read(regionSettingsProvider.notifier)
+              .loadSettings(detectedRegion);
+          debugPrint(
+            'Detected region could not be persisted; using it for this '
+            'skin-care request: $error\n$stackTrace',
+          );
+        }
+      }
 
       final result = await client.generateRoutine(
         uid: uid,
@@ -3049,7 +3163,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         setState(() {
           _findingProducts = false;
           _generationError = !result.hasError
-              ? 'AI could not provide a complete branded cleanser, moisturizer, and sunscreen set with local prices. Please try again.'
+              ? 'AI could not provide a complete branded cleanser, moisturizer, sunscreen, Vitamin C serum, and treatment serum set with local prices. Please try again.'
               : onboarding7FriendlyAiMessage(
                   result.errorCode == 'json_payload_too_large'
                       ? 'json_payload_too_large'
@@ -3272,6 +3386,16 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     if (index >= 0) {
       next.removeAt(index);
     } else {
+      final group = _onboarding7ProductSelectionGroup(product);
+      final productsByKey = {
+        for (final recommendation in base.skinCareProductRecommendations)
+          recommendation.selectionKey: recommendation,
+      };
+      next.removeWhere((name) {
+        final selectedProduct = productsByKey[name.trim().toLowerCase()];
+        return selectedProduct != null &&
+            _onboarding7ProductSelectionGroup(selectedProduct) == group;
+      });
       next.add(product.displayName);
     }
     setState(() => _generationError = null);
@@ -3410,33 +3534,62 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         children: [
           OnboardingGlassCard(
             tint: OptivusColors.purpleAccent.withValues(alpha: 0.12),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             radius: 20,
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            child: Row(
               children: [
-                const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.auto_awesome_rounded,
-                      color: OptivusColors.purpleAccent,
-                      size: 20,
-                    ),
-                    SizedBox(width: 10),
-                    Text(
-                      'Routine built',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: OptivusColors.textPrimary,
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome_rounded,
+                        color: OptivusColors.purpleAccent,
+                        size: 19,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Routine built',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            color: OptivusColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (base.skinCareSuggestedProducts.isNotEmpty) ...[
+                        const SizedBox(width: 2),
+                        IconButton(
+                          key: const ValueKey(
+                            'onboarding-step7-selected-products-button',
+                          ),
+                          tooltip: 'Selected products',
+                          onPressed: () => _showSkinCareSelectedProductsSheet(
+                            context,
+                            products: base.skinCareSuggestedProducts,
+                            recommendations:
+                                base.skinCareProductRecommendations,
+                            accent: OptivusColors.purpleAccent,
+                          ),
+                          icon: const Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                          ),
+                          color: OptivusColors.purpleAccent,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 28,
+                            height: 28,
+                          ),
+                          splashRadius: 15,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 OnboardingActionPill(
                   label: 'Rebuild / Edit',
                   icon: Icons.edit_rounded,
@@ -3458,55 +3611,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             _SkinCareInlineMessage(message: message),
           ],
           const SizedBox(height: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (base.skinCareSuggestedProducts.isNotEmpty) ...[
-                  OnboardingGlassCard(
-                    tint: OptivusColors.purpleAccent.withValues(alpha: 0.08),
-                    padding: const EdgeInsets.all(12),
-                    radius: 18,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Selected products',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            color: OptivusColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        for (final product in base.skinCareSuggestedProducts)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 3),
-                            child: Text(
-                              '• $product',
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                height: 1.3,
-                                fontWeight: FontWeight.w700,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                _SkinCareTimelineSection(
-                  selectedDay: _selectedDay,
-                  blocks: widget.blocks,
-                  onDayChanged: (day) => setState(() => _selectedDay = day),
-                  emptyLabel: 'No skin care scheduled for this day.',
-                  accent: OptivusColors.purpleAccent,
-                  specialCareNotes: base.skinCareSpecialCareNotes,
-                ),
-              ],
-            ),
+          _SkinCareTimelineSection(
+            selectedDay: _selectedDay,
+            blocks: widget.blocks,
+            onDayChanged: (day) => setState(() => _selectedDay = day),
+            emptyLabel: 'No skin care scheduled for this day.',
+            accent: OptivusColors.purpleAccent,
+            specialCareNotes: base.skinCareSpecialCareNotes,
           ),
         ],
       );
@@ -3587,8 +3698,15 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           final selected = selectedKeys.contains(
                             product.selectionKey,
                           );
+                          final normalizedCategory =
+                              onboarding7RecommendationCategory(product);
                           final details = [
-                            if (product.category.isNotEmpty) product.category,
+                            if (normalizedCategory.isNotEmpty)
+                              _onboarding7ProductCategoryLabel(
+                                normalizedCategory,
+                              )
+                            else if (product.category.isNotEmpty)
+                              product.category,
                             if (product.estimatedPrice.isNotEmpty)
                               [
                                 product.currencyCode,
@@ -3752,201 +3870,234 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             ),
           ),
         Expanded(
-          child: OnboardingGlassCard(
-            tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
-            padding: const EdgeInsets.all(12),
-            radius: 18,
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.only(
-                bottom: OnboardingStepShell.bottomCtaHeight + 8,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'No products',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Add a clear face photo and tell us your skin needs. The photo is required for personalized product suggestions.',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700,
-                      color: OptivusColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 128,
-                    child: _SkinCarePhotoTarget(
-                      asset: effectiveAsset,
-                      busy: uploadBusy || _removingPhoto,
-                      busyLabel: _removingPhoto
-                          ? 'Removing...'
-                          : uploadBusy
-                          ? _skinCareUploadStatusLabel(uploadState.status)
-                          : null,
-                      helperText: effectiveAsset == null
-                          ? 'Face photo required'
-                          : null,
-                      onRemove: busy ? null : _removeUploadedAsset,
-                      onTap: busy ? null : _startUpload,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _SkinCareChipGroup(
-                    label: 'Skin Type',
+          child: Padding(
+            padding: const EdgeInsets.only(
+              bottom: OnboardingStepShell.bottomCtaHeight + 8,
+            ),
+            child: OnboardingGlassCard(
+              tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
+              padding: const EdgeInsets.all(12),
+              radius: 18,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final dense = constraints.maxHeight < 620;
+                  final sectionGap = dense ? 6.0 : 8.0;
+                  final content = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      for (final option in const [
-                        _SkinOption('oily', 'Oily'),
-                        _SkinOption('dry', 'Dry'),
-                        _SkinOption('combination', 'Combination'),
-                        _SkinOption('not_sure', 'Not sure'),
-                      ])
-                        _SkinCarePreferenceChip(
-                          label: option.label,
-                          selected: base.skinCareSkinType == option.key,
-                          accent: OptivusColors.purpleAccent,
-                          onTap: busy
-                              ? null
-                              : () => updateBaseTimelineDraft(
-                                  ref,
-                                  onboardingSkinCareStepIndex,
-                                  (base) => base.copyWith(
-                                    skinCareSkinType: option.key,
-                                    clearSkinCareProductRecommendations: true,
-                                    clearSkinCareSelectedProductNames: true,
-                                    clearSkinCareSuggestedProducts: !base.blocks
-                                        .any(
-                                          (block) =>
-                                              block.section == 'skin_care',
-                                        ),
-                                    skinCareSkipped: false,
-                                  ),
-                                ),
+                      const Text(
+                        'No products',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _SkinCareChipGroup(
-                    label: 'Concerns',
-                    children: [
-                      for (final option in const [
-                        _SkinOption('pimples', 'Acne'),
-                        _SkinOption('dark_spots', 'Spots'),
-                        _SkinOption('tan', 'Tan'),
-                        _SkinOption('dryness', 'Dryness'),
-                        _SkinOption('oiliness', 'Oiliness'),
-                        _SkinOption('none', 'None'),
-                      ])
-                        _SkinCarePreferenceChip(
-                          label: option.label,
-                          selected: base.skinCareProblems.contains(option.key),
-                          accent: OptivusColors.purpleAccent,
-                          onTap: busy
-                              ? null
-                              : () {
-                                  final next = {...base.skinCareProblems};
-                                  if (option.key == 'none') {
-                                    next
-                                      ..clear()
-                                      ..add('none');
-                                  } else {
-                                    next.remove('none');
-                                    next.contains(option.key)
-                                        ? next.remove(option.key)
-                                        : next.add(option.key);
-                                  }
-                                  updateBaseTimelineDraft(
-                                    ref,
-                                    onboardingSkinCareStepIndex,
-                                    (base) => base.copyWith(
-                                      skinCareProblems: next.toList(),
-                                      clearSkinCareProductRecommendations: true,
-                                      clearSkinCareSelectedProductNames: true,
-                                      clearSkinCareSuggestedProducts: !base
-                                          .blocks
-                                          .any(
-                                            (block) =>
-                                                block.section == 'skin_care',
-                                          ),
-                                      skinCareSkipped: false,
-                                    ),
-                                  );
-                                },
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _SkinCareChipGroup(
-                    label: 'Budget',
-                    children: [
-                      for (final option in const [
-                        _SkinOption('low', 'Low'),
-                        _SkinOption('medium', 'Medium'),
-                        _SkinOption('high', 'High'),
-                      ])
-                        _SkinCarePreferenceChip(
-                          label: option.label,
-                          selected: base.skinCareBudget == option.key,
-                          accent: OptivusColors.purpleAccent,
-                          onTap: busy
-                              ? null
-                              : () => updateBaseTimelineDraft(
-                                  ref,
-                                  onboardingSkinCareStepIndex,
-                                  (base) => base.copyWith(
-                                    skinCareBudget: option.key,
-                                    clearSkinCareProductRecommendations: true,
-                                    clearSkinCareSelectedProductNames: true,
-                                    clearSkinCareSuggestedProducts: !base.blocks
-                                        .any(
-                                          (block) =>
-                                              block.section == 'skin_care',
-                                        ),
-                                    skinCareSkipped: false,
-                                  ),
-                                ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  _SkinCareFrequencySelector(
-                    value: desiredApplicationsPerDay,
-                    accent: OptivusColors.purpleAccent,
-                    onChanged: busy ? null : _changeDesiredApplications,
-                  ),
-                  const SizedBox(height: 12),
-                  _SkinCareGenerateRoutineButton(
-                    label: 'Find products',
-                    busy: busy,
-                    accent: OptivusColors.purpleAccent,
-                    onTap: !busy && inputsComplete ? _findProducts : null,
-                  ),
-                  if (!inputsComplete) ...[
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Add a face photo and choose skin type, at least one concern, and budget to continue.',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        height: 1.3,
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textSecondary,
                       ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Add a clear face photo and tell us your skin needs. The photo is required for personalized product suggestions.',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          height: 1.35,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: dense ? 6 : 8),
+                      SizedBox(
+                        height: dense ? 88 : 104,
+                        child: _SkinCarePhotoTarget(
+                          asset: effectiveAsset,
+                          busy: uploadBusy || _removingPhoto,
+                          busyLabel: _removingPhoto
+                              ? 'Removing...'
+                              : uploadBusy
+                              ? _skinCareUploadStatusLabel(uploadState.status)
+                              : null,
+                          helperText: effectiveAsset == null
+                              ? 'Face photo required'
+                              : null,
+                          onRemove: busy ? null : _removeUploadedAsset,
+                          onTap: busy ? null : _startUpload,
+                        ),
+                      ),
+                      SizedBox(height: sectionGap),
+                      _SkinCareChipGroup(
+                        label: 'Skin Type',
+                        compact: true,
+                        children: [
+                          for (final option in const [
+                            _SkinOption('oily', 'Oily'),
+                            _SkinOption('dry', 'Dry'),
+                            _SkinOption('combination', 'Combination'),
+                            _SkinOption('not_sure', 'Not sure'),
+                          ])
+                            _SkinCarePreferenceChip(
+                              label: option.label,
+                              selected: base.skinCareSkinType == option.key,
+                              accent: OptivusColors.purpleAccent,
+                              compact: true,
+                              onTap: busy
+                                  ? null
+                                  : () => updateBaseTimelineDraft(
+                                      ref,
+                                      onboardingSkinCareStepIndex,
+                                      (base) => base.copyWith(
+                                        skinCareSkinType: option.key,
+                                        clearSkinCareProductRecommendations:
+                                            true,
+                                        clearSkinCareSelectedProductNames: true,
+                                        clearSkinCareSuggestedProducts: !base
+                                            .blocks
+                                            .any(
+                                              (block) =>
+                                                  block.section == 'skin_care',
+                                            ),
+                                        skinCareSkipped: false,
+                                      ),
+                                    ),
+                            ),
+                        ],
+                      ),
+                      SizedBox(height: sectionGap),
+                      _SkinCareChipGroup(
+                        label: 'Concerns',
+                        compact: true,
+                        children: [
+                          for (final option in const [
+                            _SkinOption('pimples', 'Acne'),
+                            _SkinOption('dark_spots', 'Spots'),
+                            _SkinOption('tan', 'Tan'),
+                            _SkinOption('dryness', 'Dryness'),
+                            _SkinOption('oiliness', 'Oiliness'),
+                            _SkinOption('none', 'None'),
+                          ])
+                            _SkinCarePreferenceChip(
+                              label: option.label,
+                              selected: base.skinCareProblems.contains(
+                                option.key,
+                              ),
+                              accent: OptivusColors.purpleAccent,
+                              compact: true,
+                              onTap: busy
+                                  ? null
+                                  : () {
+                                      final next = {...base.skinCareProblems};
+                                      if (option.key == 'none') {
+                                        next
+                                          ..clear()
+                                          ..add('none');
+                                      } else {
+                                        next.remove('none');
+                                        next.contains(option.key)
+                                            ? next.remove(option.key)
+                                            : next.add(option.key);
+                                      }
+                                      updateBaseTimelineDraft(
+                                        ref,
+                                        onboardingSkinCareStepIndex,
+                                        (base) => base.copyWith(
+                                          skinCareProblems: next.toList(),
+                                          clearSkinCareProductRecommendations:
+                                              true,
+                                          clearSkinCareSelectedProductNames:
+                                              true,
+                                          clearSkinCareSuggestedProducts: !base
+                                              .blocks
+                                              .any(
+                                                (block) =>
+                                                    block.section ==
+                                                    'skin_care',
+                                              ),
+                                          skinCareSkipped: false,
+                                        ),
+                                      );
+                                    },
+                            ),
+                        ],
+                      ),
+                      SizedBox(height: sectionGap),
+                      _SkinCareChipGroup(
+                        label: 'Budget',
+                        compact: true,
+                        children: [
+                          for (final option in const [
+                            _SkinOption('low', 'Low'),
+                            _SkinOption('medium', 'Medium'),
+                            _SkinOption('high', 'High'),
+                          ])
+                            _SkinCarePreferenceChip(
+                              label: option.label,
+                              selected: base.skinCareBudget == option.key,
+                              accent: OptivusColors.purpleAccent,
+                              compact: true,
+                              onTap: busy
+                                  ? null
+                                  : () => updateBaseTimelineDraft(
+                                      ref,
+                                      onboardingSkinCareStepIndex,
+                                      (base) => base.copyWith(
+                                        skinCareBudget: option.key,
+                                        clearSkinCareProductRecommendations:
+                                            true,
+                                        clearSkinCareSelectedProductNames: true,
+                                        clearSkinCareSuggestedProducts: !base
+                                            .blocks
+                                            .any(
+                                              (block) =>
+                                                  block.section == 'skin_care',
+                                            ),
+                                        skinCareSkipped: false,
+                                      ),
+                                    ),
+                            ),
+                        ],
+                      ),
+                      SizedBox(height: sectionGap),
+                      _SkinCareFrequencySelector(
+                        value: desiredApplicationsPerDay,
+                        accent: OptivusColors.purpleAccent,
+                        compact: true,
+                        onChanged: busy ? null : _changeDesiredApplications,
+                      ),
+                      SizedBox(height: dense ? 8 : 10),
+                      _SkinCareGenerateRoutineButton(
+                        label: 'Find products',
+                        busy: busy,
+                        accent: OptivusColors.purpleAccent,
+                        onTap: !busy && inputsComplete ? _findProducts : null,
+                      ),
+                      if (!inputsComplete) ...[
+                        const SizedBox(height: 5),
+                        const Text(
+                          'Add a face photo and choose skin type, at least one concern, and budget to continue.',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                      if (message != null) ...[
+                        const SizedBox(height: 6),
+                        _SkinCareInlineMessage(message: message, compact: true),
+                      ],
+                    ],
+                  );
+                  return FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      child: content,
                     ),
-                  ],
-                ],
+                  );
+                },
               ),
             ),
           ),
         ),
-        if (message != null) ...[
-          const SizedBox(height: 10),
-          _SkinCareInlineMessage(message: message),
-        ],
       ],
     );
   }
@@ -4133,13 +4284,17 @@ class _SkinCarePhotoTarget extends StatelessWidget {
 
 class _SkinCareInlineMessage extends StatelessWidget {
   final String message;
+  final bool compact;
 
-  const _SkinCareInlineMessage({required this.message});
+  const _SkinCareInlineMessage({required this.message, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 14,
+        vertical: compact ? 7 : 10,
+      ),
       decoration: BoxDecoration(
         color: OptivusColors.roseAccent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
@@ -4158,8 +4313,11 @@ class _SkinCareInlineMessage extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
-                fontSize: 11.5,
+              maxLines: compact ? 2 : null,
+              overflow: compact ? TextOverflow.ellipsis : null,
+              style: TextStyle(
+                fontSize: compact ? 10 : 11.5,
+                height: compact ? 1.2 : null,
                 fontWeight: FontWeight.w800,
                 color: OptivusColors.roseAccent,
               ),
@@ -4169,6 +4327,226 @@ class _SkinCareInlineMessage extends StatelessWidget {
       ),
     );
   }
+}
+
+IconData _skinCareSelectedProductIcon(String category) {
+  return switch (category) {
+    'cleanser' => Icons.face_retouching_natural_rounded,
+    'moisturizer' => Icons.water_drop_rounded,
+    'sunscreen' => Icons.wb_sunny_rounded,
+    'vitamin_c_serum' => Icons.brightness_7_rounded,
+    'treatment_serum' => Icons.science_rounded,
+    _ => Icons.spa_rounded,
+  };
+}
+
+void _showSkinCareSelectedProductsSheet(
+  BuildContext context, {
+  required List<String> products,
+  required List<SkinCareProductRecommendationDraft> recommendations,
+  required Color accent,
+}) {
+  final recommendationsByKey = {
+    for (final product in recommendations) product.selectionKey: product,
+  };
+  final initialSize = math.min(0.78, 0.34 + (products.length * 0.075));
+
+  showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black.withValues(alpha: 0.24),
+    builder: (sheetContext) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: initialSize,
+      minChildSize: 0.38,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFFCF6),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 42,
+              height: 4,
+              decoration: BoxDecoration(
+                color: OptivusColors.textSecondary.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.shopping_bag_outlined,
+                      color: accent,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Selected products',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: OptivusColors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Products used to build your routine',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${products.length}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: accent,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey(
+                      'onboarding-step7-selected-products-close',
+                    ),
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    color: OptivusColors.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+            Divider(
+              height: 1,
+              color: OptivusColors.textSecondary.withValues(alpha: 0.1),
+            ),
+            Expanded(
+              child: ListView.separated(
+                key: const ValueKey('onboarding-step7-selected-products-list'),
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+                physics: const BouncingScrollPhysics(),
+                itemCount: products.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 9),
+                itemBuilder: (context, index) {
+                  final productName = products[index];
+                  final recommendation =
+                      recommendationsByKey[productName.trim().toLowerCase()];
+                  final category = recommendation == null
+                      ? ''
+                      : onboarding7RecommendationCategory(recommendation);
+                  final details = [
+                    if (category.isNotEmpty)
+                      _onboarding7ProductCategoryLabel(category),
+                    if (recommendation?.estimatedPrice.isNotEmpty ?? false)
+                      [
+                        recommendation!.currencyCode,
+                        recommendation.estimatedPrice,
+                      ].where((part) => part.isNotEmpty).join(' '),
+                  ].join(' • ');
+
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: accent.withValues(alpha: 0.14)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            _skinCareSelectedProductIcon(category),
+                            color: accent,
+                            size: 19,
+                          ),
+                        ),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                productName,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  height: 1.25,
+                                  fontWeight: FontWeight.w900,
+                                  color: OptivusColors.textPrimary,
+                                ),
+                              ),
+                              if (details.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  details,
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: accent,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.check_circle_rounded,
+                          color: accent,
+                          size: 19,
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 void _showSkinCareSpecialCareNotesSheet(
@@ -5120,8 +5498,13 @@ class _SkinCareBlockCard extends StatelessWidget {
 class _SkinCareChipGroup extends StatelessWidget {
   final String label;
   final List<Widget> children;
+  final bool compact;
 
-  const _SkinCareChipGroup({required this.label, required this.children});
+  const _SkinCareChipGroup({
+    required this.label,
+    required this.children,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -5130,14 +5513,18 @@ class _SkinCareChipGroup extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontSize: 11,
+          style: TextStyle(
+            fontSize: compact ? 10.5 : 11,
             fontWeight: FontWeight.w800,
             color: OptivusColors.textSecondary,
           ),
         ),
-        const SizedBox(height: 6),
-        Wrap(spacing: 8, runSpacing: 8, children: children),
+        SizedBox(height: compact ? 4 : 6),
+        Wrap(
+          spacing: compact ? 6 : 8,
+          runSpacing: compact ? 5 : 8,
+          children: children,
+        ),
       ],
     );
   }
@@ -5148,12 +5535,14 @@ class _SkinCarePreferenceChip extends StatelessWidget {
   final bool selected;
   final Color accent;
   final VoidCallback? onTap;
+  final bool compact;
 
   const _SkinCarePreferenceChip({
     required this.label,
     required this.selected,
     required this.accent,
     required this.onTap,
+    this.compact = false,
   });
 
   @override
@@ -5162,7 +5551,10 @@ class _SkinCarePreferenceChip extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 10 : 14,
+          vertical: compact ? 6 : 8,
+        ),
         decoration: BoxDecoration(
           color: selected ? accent : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
@@ -5176,7 +5568,7 @@ class _SkinCarePreferenceChip extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: compact ? 11.5 : 12,
             fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
             color: selected ? Colors.white : OptivusColors.textPrimary,
           ),
