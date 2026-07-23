@@ -208,6 +208,14 @@ class FirestoreRoutineRepository implements RoutineRepository {
         throw Exception('Routine item does not exist.');
       }
       final existingData = existingSnapshot.data()!;
+      if (item.lastMutationOperationId != null &&
+          existingData['lastMutationOperationId'] ==
+              item.lastMutationOperationId) {
+        return _codec.fromFirestore(
+          documentId: existingSnapshot.id,
+          data: existingData,
+        );
+      }
       final existing = _codec.fromFirestore(
         documentId: existingSnapshot.id,
         data: existingData,

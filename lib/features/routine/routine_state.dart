@@ -305,17 +305,44 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     if (uid.trim().isEmpty || uid.contains('/')) {
       throw ArgumentError('A valid authenticated Routine owner is required.');
     }
+    final isNewOwner = _ownerUid != uid;
     final generation = ++_loadGeneration;
     _ownerUid = uid;
-    state = state.copyWith(loading: true, error: null);
+    if (isNewOwner) {
+      state = state.copyWith(
+        loading: true,
+        error: null,
+        pendingItemIds: const {},
+        failedIntentsByItemId: const {},
+        items: const [],
+      );
+    } else {
+      state = state.copyWith(loading: true, error: null);
+    }
     try {
       final results = await Future.wait<Object>([
         _repository.fetchRoutineItems(uid),
         _historyRepository.fetchHistory(uid),
       ]);
       if (generation != _loadGeneration || _ownerUid != uid) return;
+      final remoteItems = results[0] as List<RoutineItem>;
+      final localActiveIds = state.pendingItemIds.union(state.failedIntentsByItemId.keys.toSet());
+      
+      final mergedItems = <RoutineItem>[];
+      for (final remote in remoteItems) {
+        if (!localActiveIds.contains(remote.id)) {
+          mergedItems.add(remote);
+        }
+      }
+      for (final id in localActiveIds) {
+        final localItem = state.items.where((e) => e.id == id).firstOrNull;
+        if (localItem != null) {
+          mergedItems.add(localItem);
+        }
+      }
+
       state = state.copyWith(
-        items: results[0] as List<RoutineItem>,
+        items: mergedItems,
         occurrences: results[1] as List<RoutineOccurrenceRecord>,
         loading: false,
       );
@@ -402,7 +429,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     try {
       final canonical = await _repository.createRoutineItem(uid, ownedItem);
-      if (generation != _loadGeneration || _ownerUid != uid) return;
+      if (_ownerUid != uid) return;
 
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
@@ -414,7 +441,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
       _recalculateConflicts();
     } catch (error) {
-      if (generation != _loadGeneration || _ownerUid != uid) return;
+      if (_ownerUid != uid) return;
 
       bool isSuccess = false;
       RoutineItem? recoveredItem;
@@ -506,7 +533,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     try {
       final canonical = await _repository.updateRoutineItem(uid, ownedItem);
-      if (generation != _loadGeneration || _ownerUid != uid) return;
+      if (_ownerUid != uid) return;
 
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
@@ -518,7 +545,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
       _recalculateConflicts();
     } catch (error) {
-      if (generation != _loadGeneration || _ownerUid != uid) return;
+      if (_ownerUid != uid) return;
 
       final intent = RoutineWriteIntent(
         action: RoutineWriteAction.update,
@@ -562,7 +589,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
     try {
       await _repository.deleteRoutineItem(uid, itemId);
-      if (generation != _loadGeneration || _ownerUid != uid) return;
+      if (_ownerUid != uid) return;
 
       _ref.read(trackerSessionLinksProvider.notifier).clearForRoutine(itemId);
       state = state.copyWith(
@@ -573,7 +600,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
       _recalculateConflicts();
     } catch (error) {
-      if (generation != _loadGeneration || _ownerUid != uid) return;
+      if (_ownerUid != uid) return;
 
       bool isSuccess = false;
       try {
@@ -638,7 +665,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           uid,
           intent.attemptedItem!,
         );
-        if (generation != _loadGeneration || _ownerUid != uid) return;
+        if (_ownerUid != uid) return;
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
@@ -649,7 +676,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
         _recalculateConflicts();
       } catch (error) {
-        if (generation != _loadGeneration || _ownerUid != uid) return;
+        if (_ownerUid != uid) return;
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
@@ -674,7 +701,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           uid,
           intent.attemptedItem!,
         );
-        if (generation != _loadGeneration || _ownerUid != uid) return;
+        if (_ownerUid != uid) return;
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
@@ -685,7 +712,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
         _recalculateConflicts();
       } catch (error) {
-        if (generation != _loadGeneration || _ownerUid != uid) return;
+        if (_ownerUid != uid) return;
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
@@ -709,7 +736,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       state = state.copyWith(pendingItemIds: {...state.pendingItemIds, itemId});
       try {
         await _repository.deleteRoutineItem(uid, itemId);
-        if (generation != _loadGeneration || _ownerUid != uid) return;
+        if (_ownerUid != uid) return;
         _ref.read(trackerSessionLinksProvider.notifier).clearForRoutine(itemId);
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
@@ -719,7 +746,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
         _recalculateConflicts();
       } catch (error) {
-        if (generation != _loadGeneration || _ownerUid != uid) return;
+        if (_ownerUid != uid) return;
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
