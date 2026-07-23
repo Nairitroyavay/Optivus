@@ -66,8 +66,9 @@ Path _buildBubblePath(Size size, {required bool isUser}) {
 
   // Tail geometry
   final double tailEdgeOffset = isUser ? w - _kTailX : _kTailX;
-  final double tailTipX =
-      isUser ? tailEdgeOffset + _kTailW * 0.5 : tailEdgeOffset - _kTailW * 0.5;
+  final double tailTipX = isUser
+      ? tailEdgeOffset + _kTailW * 0.5
+      : tailEdgeOffset - _kTailW * 0.5;
 
   final p = Path();
 
@@ -171,7 +172,8 @@ class _HeavyGlassPainter extends CustomPainter {
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 14.0 // extends 7px inside
+        ..strokeWidth =
+            14.0 // extends 7px inside
         ..strokeJoin = StrokeJoin.round
         ..shader = LinearGradient(
           begin: Alignment.topLeft,
@@ -180,8 +182,9 @@ class _HeavyGlassPainter extends CustomPainter {
             Colors.white.withValues(alpha: 0.95), // hot white reflection
             Colors.white.withValues(alpha: 0.5), // solid glass body transiton
             Colors.black.withValues(alpha: 0.2), // soft shadow wrapping
-            Colors.black
-                .withValues(alpha: 0.4), // deep inner shadow bottom-right
+            Colors.black.withValues(
+              alpha: 0.4,
+            ), // deep inner shadow bottom-right
           ],
           stops: const [0.0, 0.4, 0.7, 1.0],
         ).createShader(rect),
@@ -192,7 +195,8 @@ class _HeavyGlassPainter extends CustomPainter {
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 8.0 // clears 0 to 4px inside
+        ..strokeWidth =
+            8.0 // clears 0 to 4px inside
         ..strokeJoin = StrokeJoin.round
         ..blendMode = BlendMode.clear
         ..color = Colors.black,
@@ -308,8 +312,9 @@ class _SpeechBubble extends StatelessWidget {
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
+        ),
         child: CustomPaint(
           painter: _BubbleShadowPainter(isUser: isUser),
           foregroundPainter: _HeavyGlassPainter(isUser: isUser),
@@ -318,8 +323,9 @@ class _SpeechBubble extends StatelessWidget {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
               child: Container(
-                color: Colors.white
-                    .withValues(alpha: 0.06), // Very faint base frost
+                color: Colors.white.withValues(
+                  alpha: 0.06,
+                ), // Very faint base frost
                 padding: contentPad,
                 child: Text(
                   message.text,
@@ -327,7 +333,8 @@ class _SpeechBubble extends StatelessWidget {
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                     color: Color(
-                        0xFF111111), // pure black/dark grey text per reference
+                      0xFF111111,
+                    ), // pure black/dark grey text per reference
                     height: 1.3,
                     letterSpacing: -0.3,
                   ),
@@ -350,8 +357,9 @@ class _CrisisCard extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.9),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.9,
+        ),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -372,8 +380,11 @@ class _CrisisCard extends StatelessWidget {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.health_and_safety_rounded,
-                      color: Color(0xFFBE123C), size: 22),
+                  Icon(
+                    Icons.health_and_safety_rounded,
+                    color: Color(0xFFBE123C),
+                    size: 22,
+                  ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -405,8 +416,9 @@ class _CrisisCard extends StatelessWidget {
                   _CrisisChip(icon: Icons.call_rounded, label: 'Call 988'),
                   _CrisisChip(icon: Icons.sms_rounded, label: 'Text 988'),
                   _CrisisChip(
-                      icon: Icons.person_add_alt_1_rounded,
-                      label: 'Contact someone trusted'),
+                    icon: Icons.person_add_alt_1_rounded,
+                    label: 'Contact someone trusted',
+                  ),
                 ],
               ),
             ],
@@ -464,8 +476,9 @@ class _TypingBubbleState extends State<_TypingBubble>
   void initState() {
     super.initState();
     _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat();
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
   }
 
   @override
@@ -502,9 +515,11 @@ class _TypingBubbleState extends State<_TypingBubble>
                         height: 10,
                         transform: Matrix4.translationValues(0, -bounce * 6, 0),
                         decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFF0F172A)
-                                .withValues(alpha: 0.4 + bounce * 0.6)),
+                          shape: BoxShape.circle,
+                          color: const Color(
+                            0xFF0F172A,
+                          ).withValues(alpha: 0.4 + bounce * 0.6),
+                        ),
                       );
                     },
                   );
@@ -546,9 +561,10 @@ class _HeavyGlassInputState extends State<_HeavyGlassInput>
   @override
   void initState() {
     super.initState();
-    _anim =
-        AnimationController(vsync: this, duration: const Duration(seconds: 4))
-          ..repeat();
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 4),
+    )..repeat();
   }
 
   @override
@@ -604,8 +620,9 @@ class _HeavyGlassInputState extends State<_HeavyGlassInput>
                                       decoration: InputDecoration(
                                         hintText: 'Type a message...',
                                         hintStyle: TextStyle(
-                                          color: const Color(0xFF94A3B8)
-                                              .withValues(alpha: 0.9),
+                                          color: const Color(
+                                            0xFF94A3B8,
+                                          ).withValues(alpha: 0.9),
                                           fontSize: 16,
                                           fontWeight: FontWeight.w400,
                                         ),
@@ -613,7 +630,8 @@ class _HeavyGlassInputState extends State<_HeavyGlassInput>
                                         isDense: true,
                                         contentPadding:
                                             const EdgeInsets.symmetric(
-                                                vertical: 12),
+                                              vertical: 12,
+                                            ),
                                       ),
                                     ),
                                   ),
@@ -629,14 +647,18 @@ class _HeavyGlassInputState extends State<_HeavyGlassInput>
                           child: widget.hasText
                               ? Padding(
                                   key: const ValueKey('send'),
-                                  padding:
-                                      const EdgeInsets.only(right: 6, left: 6),
+                                  padding: const EdgeInsets.only(
+                                    right: 6,
+                                    left: 6,
+                                  ),
                                   child: _buildSendBtn(),
                                 )
                               : Padding(
                                   key: const ValueKey('mic'),
-                                  padding:
-                                      const EdgeInsets.only(right: 6, left: 6),
+                                  padding: const EdgeInsets.only(
+                                    right: 6,
+                                    left: 6,
+                                  ),
                                   child: _buildIconBtn(Icons.mic_rounded, 26),
                                 ),
                         ),
@@ -689,7 +711,7 @@ class _HeavyGlassInputState extends State<_HeavyGlassInput>
               color: const Color(0xFFC084FC).withValues(alpha: 0.4),
               blurRadius: 8,
               offset: const Offset(0, 4),
-            )
+            ),
           ],
         ),
         child: const Center(
@@ -700,12 +722,15 @@ class _HeavyGlassInputState extends State<_HeavyGlassInput>
   }
 }
 
-Path _getMorphingPillPath(Size size, double phase,
-    {double ampTop = 4.0,
-    double ampBot = 4.0,
-    double topYOffset = 0.0,
-    double botYOffset = 0.0,
-    double phaseOffset = 0.0}) {
+Path _getMorphingPillPath(
+  Size size,
+  double phase, {
+  double ampTop = 4.0,
+  double ampBot = 4.0,
+  double topYOffset = 0.0,
+  double botYOffset = 0.0,
+  double phaseOffset = 0.0,
+}) {
   final w = size.width;
   final h = size.height;
   final r = h / 2;
@@ -717,8 +742,9 @@ Path _getMorphingPillPath(Size size, double phase,
 
   // Math for identical endcaps considering offsets
   // Default radius is 'r' for offset 0; adjusts mathematically when inset
-  final arcRadius =
-      Radius.circular(math.max(0.1, r - (topYOffset - botYOffset) / 2));
+  final arcRadius = Radius.circular(
+    math.max(0.1, r - (topYOffset - botYOffset) / 2),
+  );
 
   path.moveTo(startTopX, topYOffset);
 
@@ -731,7 +757,8 @@ Path _getMorphingPillPath(Size size, double phase,
     double attenuation = math.sin(t * math.pi);
     attenuation = attenuation * attenuation * (3 - 2 * attenuation);
 
-    double wave = math.sin(t * math.pi * 3 + phase + phaseOffset) * 0.7 +
+    double wave =
+        math.sin(t * math.pi * 3 + phase + phaseOffset) * 0.7 +
         math.cos(t * math.pi * 5 - phase * 1.3) * 0.3;
 
     double y = topYOffset + wave * ampTop * attenuation;
@@ -755,7 +782,8 @@ Path _getMorphingPillPath(Size size, double phase,
     double attenuation = math.sin(t * math.pi);
     attenuation = attenuation * attenuation * (3 - 2 * attenuation);
 
-    double wave = math.sin(t * math.pi * 4 - phase + phaseOffset) * 0.7 +
+    double wave =
+        math.sin(t * math.pi * 4 - phase + phaseOffset) * 0.7 +
         math.cos(t * math.pi * 6 + phase * 1.1) * 0.3;
 
     double y = h + botYOffset + wave * ampBot * attenuation;
@@ -808,8 +836,12 @@ class _WavyGlassInputPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final baseLayer =
-        _getMorphingPillPath(size, phase, ampTop: 5.0, ampBot: 5.0);
+    final baseLayer = _getMorphingPillPath(
+      size,
+      phase,
+      ampTop: 5.0,
+      ampBot: 5.0,
+    );
 
     canvas.save();
     canvas.clipPath(baseLayer);
@@ -852,8 +884,14 @@ class _WavyGlassInputPainter extends CustomPainter {
 
     // 3. Iridescent caustics
     // offset 3px inside logically, mimicking internal liquid reflections!
-    final iridescencePath = _getMorphingPillPath(size, phase,
-        ampTop: 5.0, ampBot: 5.0, topYOffset: 3.0, botYOffset: -3.0);
+    final iridescencePath = _getMorphingPillPath(
+      size,
+      phase,
+      ampTop: 5.0,
+      ampBot: 5.0,
+      topYOffset: 3.0,
+      botYOffset: -3.0,
+    );
     canvas.drawPath(
       iridescencePath,
       Paint()
@@ -875,12 +913,15 @@ class _WavyGlassInputPainter extends CustomPainter {
 
     // 4. Heavy white fluid reflections
     // Flowing independently mostly on top inner edge
-    final topWhite = _getMorphingPillPath(size, phase,
-        ampTop: 6.0,
-        ampBot: 4.0,
-        topYOffset: 1.0,
-        botYOffset: -1.0,
-        phaseOffset: 0.5);
+    final topWhite = _getMorphingPillPath(
+      size,
+      phase,
+      ampTop: 6.0,
+      ampBot: 4.0,
+      topYOffset: 1.0,
+      botYOffset: -1.0,
+      phaseOffset: 0.5,
+    );
     canvas.drawPath(
       topWhite,
       Paint()
@@ -901,12 +942,15 @@ class _WavyGlassInputPainter extends CustomPainter {
     );
 
     // Thin inner rim highlight (gives depth to the bottom edge)
-    final botWhite = _getMorphingPillPath(size, phase,
-        ampTop: 4.0,
-        ampBot: 6.0,
-        topYOffset: 5.0,
-        botYOffset: -5.0,
-        phaseOffset: -0.5);
+    final botWhite = _getMorphingPillPath(
+      size,
+      phase,
+      ampTop: 4.0,
+      ampBot: 6.0,
+      topYOffset: 5.0,
+      botYOffset: -5.0,
+      phaseOffset: -0.5,
+    );
     canvas.drawPath(
       botWhite,
       Paint()
@@ -953,12 +997,16 @@ class _InnerCavityPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final rrect =
-        RRect.fromRectAndRadius(rect, Radius.circular(size.height / 2));
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      Radius.circular(size.height / 2),
+    );
 
     // Frost base
     canvas.drawRRect(
-        rrect, Paint()..color = Colors.white.withValues(alpha: 0.15));
+      rrect,
+      Paint()..color = Colors.white.withValues(alpha: 0.15),
+    );
 
     // Inner top shadow
     canvas.save();
@@ -974,7 +1022,8 @@ class _InnerCavityPainter extends CustomPainter {
     // Bottom crisp white lip
     canvas.save();
     canvas.clipRect(
-        Rect.fromLTWH(0, size.height * 0.5, size.width, size.height * 0.5));
+      Rect.fromLTWH(0, size.height * 0.5, size.width, size.height * 0.5),
+    );
     final bottomLip = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
@@ -1024,10 +1073,12 @@ class _ModeTile extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(_icon,
-                  color: selected
-                      ? const Color(0xFF7E22CE)
-                      : const Color(0xFF64748B)),
+              Icon(
+                _icon,
+                color: selected
+                    ? const Color(0xFF7E22CE)
+                    : const Color(0xFF64748B),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1054,8 +1105,10 @@ class _ModeTile extends StatelessWidget {
                 ),
               ),
               if (selected)
-                const Icon(Icons.check_circle_rounded,
-                    color: Color(0xFF7E22CE)),
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF7E22CE),
+                ),
             ],
           ),
         ),
@@ -1091,8 +1144,11 @@ class _RetryReplyBanner extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(Icons.wifi_off_rounded,
-                  size: 20, color: Color(0xFFB45309)),
+              const Icon(
+                Icons.wifi_off_rounded,
+                size: 20,
+                color: Color(0xFFB45309),
+              ),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
@@ -1146,10 +1202,7 @@ class _HistoryErrorRow extends StatelessWidget {
   final String text;
   final VoidCallback onRetry;
 
-  const _HistoryErrorRow({
-    required this.text,
-    required this.onRetry,
-  });
+  const _HistoryErrorRow({required this.text, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -1217,13 +1270,16 @@ class _CoachTabState extends ConsumerState<CoachTab> {
   CoachService get _coachService => ref.read(coachServiceProvider);
 
   void _listenForLatestMessages() {
-    _latestSub = _coachService.watchLatestMessages().listen((messages) {
-      if (!mounted) return;
-      final hadNew = _mergeMessages(messages);
-      if (hadNew) _scrollToBottom();
-    }, onError: (e) {
-      debugPrint('[CoachTab] Error listening to coach_messages: $e');
-    });
+    _latestSub = _coachService.watchLatestMessages().listen(
+      (messages) {
+        if (!mounted) return;
+        final hadNew = _mergeMessages(messages);
+        if (hadNew) _scrollToBottom();
+      },
+      onError: (e) {
+        debugPrint('[CoachTab] Error listening to coach_messages: $e');
+      },
+    );
   }
 
   Future<void> _loadInitialHistory() async {
@@ -1277,8 +1333,11 @@ class _CoachTabState extends ConsumerState<CoachTab> {
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
-        _scroll.animateTo(0,
-            duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        _scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -1313,14 +1372,16 @@ class _CoachTabState extends ConsumerState<CoachTab> {
 
   void _addWelcomeMessage() {
     const id = 'local_welcome';
-    _messages.add(_CoachMessage(
-      id: id,
-      text:
-          "Hello! I'm $_coachName, your personal AI coach. How can I support you today?",
-      isUser: false,
-      createdAt: null,
-      mode: CoachTopicMode.askAnything,
-    ));
+    _messages.add(
+      _CoachMessage(
+        id: id,
+        text:
+            "Hello! I'm $_coachName, your personal AI coach. How can I support you today?",
+        isUser: false,
+        createdAt: null,
+        mode: CoachTopicMode.askAnything,
+      ),
+    );
   }
 
   bool _mergeMessages(List<CoachChatMessage> incoming) {
@@ -1339,7 +1400,8 @@ class _CoachTabState extends ConsumerState<CoachTab> {
       if (changed) {
         _sortMessages();
         final newest = _newestMessage;
-        shouldScroll = newest?.id != previousNewestId ||
+        shouldScroll =
+            newest?.id != previousNewestId ||
             (newest != null &&
                 !newest.isUser &&
                 updatedAssistantIds.contains(newest.id));
@@ -1560,7 +1622,8 @@ class _CoachTabState extends ConsumerState<CoachTab> {
     // When keyboard is up, lift the input bar above the keyboard
     final double keyboardHeight = mq.viewInsets.bottom;
     final double inputBottom = keyboardHeight > 0
-        ? keyboardHeight + 8 // above keyboard
+        ? keyboardHeight +
+              8 // above keyboard
         : tabBarHeight; // above tab bar normally
 
     return GestureDetector(
@@ -1588,7 +1651,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                               colors: [
                                 Colors.transparent,
                                 Colors.white,
-                                Colors.white
+                                Colors.white,
                               ],
                               stops: [0.0, 0.05, 1.0],
                             ).createShader(bounds);
@@ -1597,21 +1660,25 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                           child: ListView.builder(
                             controller: _scroll,
                             padding: EdgeInsets.fromLTRB(
-                              16, 12, 16,
+                              16,
+                              12,
+                              16,
                               // bottom padding keeps last bubble above input bar + tab bar
                               inputBottom + inputBarHeight + 16,
                             ),
                             reverse: true,
                             physics: const BouncingScrollPhysics(),
-                            itemCount: _messages.length +
+                            itemCount:
+                                _messages.length +
                                 (_isTyping ? 1 : 0) +
                                 (_isLoadingMore ? 1 : 0) +
                                 (_loadError != null ? 1 : 0),
                             itemBuilder: (context, i) {
                               if (_isTyping && i == 0) {
                                 return const Padding(
-                                    padding: EdgeInsets.only(bottom: 16),
-                                    child: _TypingBubble());
+                                  padding: EdgeInsets.only(bottom: 16),
+                                  child: _TypingBubble(),
+                                );
                               }
                               final offset = _isTyping ? 1 : 0;
                               final messageIndex = i - offset;
@@ -1624,8 +1691,10 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                                 }
                                 return const _OlderMessagesLoader();
                               }
-                              final msg = _messages[
-                                  _messages.length - 1 - messageIndex];
+                              final msg =
+                                  _messages[_messages.length -
+                                      1 -
+                                      messageIndex];
                               return Padding(
                                 key: ValueKey(msg.id),
                                 padding: const EdgeInsets.only(bottom: 16),
@@ -1684,8 +1753,11 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                 shape: BoxShape.circle,
                 color: const Color(0xFFC084FC).withValues(alpha: 0.25),
               ),
-              child: const Icon(Icons.smart_toy_rounded,
-                  color: Color(0xFF9333EA), size: 30),
+              child: const Icon(
+                Icons.smart_toy_rounded,
+                color: Color(0xFF9333EA),
+                size: 30,
+              ),
             ),
           ),
           const SizedBox(width: 16),
@@ -1694,12 +1766,15 @@ class _CoachTabState extends ConsumerState<CoachTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(_coachName,
-                    style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.5)),
+                Text(
+                  _coachName,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF0F172A),
+                    letterSpacing: -0.5,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1712,9 +1787,11 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                         color: const Color(0xFF4CAF50),
                         boxShadow: [
                           BoxShadow(
-                              color: const Color(0xFF4CAF50)
-                                  .withValues(alpha: 0.5),
-                              blurRadius: 4)
+                            color: const Color(
+                              0xFF4CAF50,
+                            ).withValues(alpha: 0.5),
+                            blurRadius: 4,
+                          ),
                         ],
                       ),
                     ),
@@ -1723,10 +1800,10 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                       child: Text(
                         '$statusLabel · ${_mode.label}',
                         style: TextStyle(
-                            fontSize: 14,
-                            color:
-                                const Color(0xFF64748B).withValues(alpha: 0.9),
-                            fontWeight: FontWeight.w600),
+                          fontSize: 14,
+                          color: const Color(0xFF64748B).withValues(alpha: 0.9),
+                          fontWeight: FontWeight.w600,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1744,10 +1821,15 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                 shape: BoxShape.circle,
                 color: Colors.white.withValues(alpha: 0.35),
                 border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+                  color: Colors.white.withValues(alpha: 0.9),
+                  width: 1.2,
+                ),
               ),
-              child: const Icon(Icons.more_horiz_rounded,
-                  color: Color(0xFF64748B), size: 24),
+              child: const Icon(
+                Icons.more_horiz_rounded,
+                color: Color(0xFF64748B),
+                size: 24,
+              ),
             ),
           ),
         ],

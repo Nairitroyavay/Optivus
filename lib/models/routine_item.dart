@@ -49,8 +49,15 @@ enum TrackerType { meditation, workout, focus, money, hydration, smoking, none }
 
 // ── RoutineItem ─────────────────────────────────────────────
 class RoutineItem {
+  static const int currentSchemaVersion = 1;
+
   final String id;
   final String? userId;
+  final int schemaVersion;
+  final String? onboardingProjectionId;
+  final String? onboardingSourceItemId;
+  final String? createdByOperationId;
+  final String? lastMutationOperationId;
   final String title;
   final DateTime? date;
   final DateTime? endDate; // Non-null for overnight items
@@ -105,6 +112,11 @@ class RoutineItem {
   RoutineItem({
     required this.id,
     this.userId,
+    this.schemaVersion = currentSchemaVersion,
+    this.onboardingProjectionId,
+    this.onboardingSourceItemId,
+    this.createdByOperationId,
+    this.lastMutationOperationId,
     required this.title,
     required this.startMinute,
     required this.endMinute,
@@ -230,6 +242,11 @@ class RoutineItem {
   RoutineItem copyWith({
     String? id,
     String? userId,
+    int? schemaVersion,
+    String? onboardingProjectionId,
+    String? onboardingSourceItemId,
+    String? createdByOperationId,
+    String? lastMutationOperationId,
     String? title,
     DateTime? date,
     DateTime? endDate,
@@ -271,6 +288,14 @@ class RoutineItem {
     return RoutineItem(
       id: id ?? this.id,
       userId: userId ?? this.userId,
+      schemaVersion: schemaVersion ?? this.schemaVersion,
+      onboardingProjectionId:
+          onboardingProjectionId ?? this.onboardingProjectionId,
+      onboardingSourceItemId:
+          onboardingSourceItemId ?? this.onboardingSourceItemId,
+      createdByOperationId: createdByOperationId ?? this.createdByOperationId,
+      lastMutationOperationId:
+          lastMutationOperationId ?? this.lastMutationOperationId,
       title: title ?? this.title,
       date: date ?? this.date,
       endDate: endDate ?? this.endDate,
@@ -318,6 +343,11 @@ class RoutineItem {
     return {
       'id': id,
       'userId': userId,
+      'schemaVersion': schemaVersion,
+      'onboardingProjectionId': onboardingProjectionId,
+      'onboardingSourceItemId': onboardingSourceItemId,
+      'createdByOperationId': createdByOperationId,
+      'lastMutationOperationId': lastMutationOperationId,
       'title': title,
       'date': date?.toIso8601String(),
       'endDate': endDate?.toIso8601String(),
@@ -361,6 +391,12 @@ class RoutineItem {
     return RoutineItem(
       id: map['id'] as String? ?? '',
       userId: map['userId'] as String?,
+      schemaVersion:
+          (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
+      onboardingProjectionId: map['onboardingProjectionId'] as String?,
+      onboardingSourceItemId: map['onboardingSourceItemId'] as String?,
+      createdByOperationId: map['createdByOperationId'] as String?,
+      lastMutationOperationId: map['lastMutationOperationId'] as String?,
       title: map['title'] as String? ?? '',
       date: map['date'] != null
           ? DateTime.tryParse(map['date'] as String)

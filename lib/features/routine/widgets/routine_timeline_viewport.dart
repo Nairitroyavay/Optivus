@@ -87,6 +87,7 @@ class _RoutineTimelineViewportState
     final bottomPadding = liquidTabBarReserve(context) + 24;
     final timelineHeight = widget.layout.totalHeight;
     final itemLayouts = _buildItemLayouts();
+    final routineState = ref.watch(routineNotifierProvider);
 
     return SingleChildScrollView(
       controller: _scrollController,
@@ -224,15 +225,151 @@ class _RoutineTimelineViewportState
                     constraints: BoxConstraints(
                       minHeight: _minimumCardHeightFor(item),
                     ),
-                    child: Opacity(
-                      opacity: isDragging ? 0.8 : 1.0,
-                      // Drag-to-move is handled by the surrounding GestureDetector.
-                      child: RoutineCardFactory.buildCard(
-                        item: item,
-                        isNow: isNow,
-                        railHeight: entry.railHeight,
-                        onTap: () => widget.onCardTap?.call(item),
-                      ),
+                    child: Builder(
+                      builder: (context) {
+                        final isPending = routineState.pendingItemIds.contains(
+                          item.id,
+                        );
+                        final failedIntent =
+                            routineState.failedIntentsByItemId[item.id];
+                        return Opacity(
+                          opacity: isDragging || isPending ? 0.6 : 1.0,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              RoutineCardFactory.buildCard(
+                                item: item,
+                                isNow: isNow,
+                                railHeight: entry.railHeight,
+                                onTap: isPending
+                                    ? null
+                                    : () => widget.onCardTap?.call(item),
+                              ),
+                              if (isPending)
+                                const Positioned(
+                                  top: 12,
+                                  right: 12,
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              if (failedIntent != null && !isPending)
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (failedIntent.action ==
+                                          RoutineWriteAction.create) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.shade50,
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.red.shade200,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Not saved',
+                                            style: TextStyle(
+                                              color: Colors.red,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => ref
+                                            .read(
+                                              routineNotifierProvider.notifier,
+                                            )
+                                            .retryFailedOperation(item.id),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                                blurRadius: 2,
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Icon(
+                                            Icons.refresh,
+                                            color: Colors.red,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () {
+                                          if (failedIntent.action ==
+                                              RoutineWriteAction.create) {
+                                            ref
+                                                .read(
+                                                  routineNotifierProvider
+                                                      .notifier,
+                                                )
+                                                .discardFailedCreate(item.id);
+                                          } else {
+                                            ref
+                                                .read(
+                                                  routineNotifierProvider
+                                                      .notifier,
+                                                )
+                                                .dismissFailedOperation(
+                                                  item.id,
+                                                );
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                                blurRadius: 2,
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            color: Colors.red,
+                                            size: 16,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),

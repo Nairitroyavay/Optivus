@@ -5,14 +5,16 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
-import 'package:optivus/services/routine_import_applied_restore_service.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/mock_seed_data.dart';
@@ -26,10 +28,6 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     return FirebaseAuthRepository();
   }
   return FakeAuthRepository();
-});
-
-final optivusBackendModeProvider = Provider<OptivusBackendMode>((ref) {
-  return OptivusBackendConfig.mode;
 });
 
 enum AuthFlowStatus {
@@ -372,7 +370,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> _loadOrCreateBackendUserState(AuthUser user) async {
     if (!_useFirebaseBackend) {
       if (user.uid == 'dev-user-12345') {
-        _loadDevSeedState(user);
+        await _loadDevSeedState(user);
       } else {
         await _loadFakeUserState(user);
       }
@@ -400,6 +398,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       status: AuthFlowStatus.loadingBackendUser,
       clearError: true,
     );
+    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
 
     try {
       var profile = await profileRepository.fetchUserProfile(user.uid);
@@ -467,7 +466,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
-      var completedBundleLoaded = false;
       if (profile.onboardingCompleted) {
         _ref
             .read(mockOnboardingProvider.notifier)
@@ -500,39 +498,52 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _ref.read(regionSettingsProvider.notifier).loadSettings(regionSettings);
 
       if (profile.onboardingCompleted) {
-        try {
-          final bundle = await _ref
-              .read(onboardingRepositoryProvider)
-              .fetchCompletionBundle(user.uid);
-          if (!_isCurrentRestore(restoreGeneration)) return;
-          if (bundle != null) {
-            await const OnboardingFrontendHydrationService().hydrate(
-              read: _ref.read,
-              bundle: bundle,
-            );
-            if (!_isCurrentRestore(restoreGeneration)) return;
-            completedBundleLoaded = true;
-          }
-        } catch (_) {
-          completedBundleLoaded = false;
+        final bundle = await _ref
+            .read(onboardingRepositoryProvider)
+            .fetchCompletionBundle(user.uid);
+        if (!_isCurrentRestore(restoreGeneration)) return;
+        if (bundle == null || bundle.uid != user.uid) {
+          throw const _RoutineProjectionRestoreException(
+            'Routine setup recovery is required because the completion '
+            'snapshot is missing.',
+          );
         }
-        try {
-          await const RoutineImportAppliedRestoreService()
-              .restoreMissingAcceptedReviews(read: _ref.read, uid: user.uid);
-        } catch (_) {
-          // Best effort only: Routine import restore must not block login.
+        final plan = RoutineOnboardingProjection.build(bundle);
+        final receipt = await _ref
+            .read(routineRepositoryProvider)
+            .fetchProjectionReceipt(user.uid, plan.projectionId);
+        if (!_isCurrentRestore(restoreGeneration)) return;
+        if (receipt == null ||
+            receipt.status != 'completed' ||
+            receipt.sourceBundleFingerprint != plan.fingerprint) {
+          throw const _RoutineProjectionRestoreException(
+            'Routine setup recovery is required because its projection '
+            'receipt is missing or does not match.',
+          );
         }
-        if (!completedBundleLoaded) {
-          _ref
-              .read(mockUserProfileProvider.notifier)
-              .updateProfile(profile.copyWith(onboardingCompleted: true));
-        }
+        await const OnboardingFrontendHydrationService().hydrate(
+          read: _ref.read,
+          bundle: bundle,
+        );
+        if (!_isCurrentRestore(restoreGeneration)) return;
+      } else {
+        await _ref
+            .read(routineNotifierProvider.notifier)
+            .loadForOwner(user.uid);
+        if (!_isCurrentRestore(restoreGeneration)) return;
       }
 
       state = state.copyWith(
         user: user,
         status: statusFor(user, profile.onboardingCompleted),
         clearError: true,
+      );
+    } on _RoutineProjectionRestoreException catch (error) {
+      if (!_isCurrentRestore(restoreGeneration)) return;
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.backendRestoreFailed,
+        errorMessage: error.message,
       );
     } catch (_) {
       if (!_isCurrentRestore(restoreGeneration)) return;
@@ -553,7 +564,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return _ref.read(optivusBackendModeProvider) == OptivusBackendMode.firebase;
   }
 
-  void _loadDevSeedState(AuthUser user) {
+  Future<void> _loadDevSeedState(AuthUser user) async {
     final now = DateTime.now();
     final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
     _ref
@@ -583,6 +594,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ),
         );
     _ref.read(mockRoutineProvider.notifier).loadSeedData();
+    await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
+    await _ref
+        .read(routineNotifierProvider.notifier)
+        .addMissingItems(
+          MockSeedData.defaultRoutineItems
+              .map((item) => item.copyWith(userId: user.uid))
+              .toList(growable: false),
+        );
     _ref.read(mockTrackerProvider.notifier).loadSeedData();
     _ref.read(mockGoalProvider.notifier).loadSeedData();
     _ref.read(mockMindNoteProvider.notifier).loadSeedData();
@@ -612,6 +631,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         .fetchDraft(user.uid);
     if (savedDraft == null) {
       _resetNormalUserState(user);
+      await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
       return;
     }
 
@@ -650,9 +670,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
           ),
         );
     _resetUserScopedMockState();
+    final bundle = await _ref
+        .read(onboardingRepositoryProvider)
+        .fetchCompletionBundle(user.uid);
+    if (savedDraft.onboardingCompleted && bundle != null) {
+      await const OnboardingFrontendHydrationService().hydrate(
+        read: _ref.read,
+        bundle: bundle,
+      );
+    } else {
+      await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
+    }
   }
 
   void _resetSignedOutState() {
+    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
     _ref.read(mockUserProfileProvider.notifier).resetEmpty();
     _ref.read(mockOnboardingProvider.notifier).reset('');
     _ref.read(profileSettingsProvider.notifier).resetForSignedOut();
@@ -678,3 +710,9 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final repository = ref.watch(authRepositoryProvider);
   return AuthNotifier(repository, ref);
 });
+
+class _RoutineProjectionRestoreException implements Exception {
+  final String message;
+
+  const _RoutineProjectionRestoreException(this.message);
+}

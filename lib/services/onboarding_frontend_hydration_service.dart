@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
-import 'package:optivus/models/onboarding_draft.dart';
-import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/state/app_state.dart';
 
 typedef OptivusProviderReader = T Function<T>(ProviderListenable<T> provider);
@@ -31,17 +31,23 @@ class OnboardingFrontendHydrationService {
     required OptivusProviderReader read,
     required OnboardingCompletionBundle bundle,
   }) async {
-    final routineItems = routineItemsForHydration(
-      bundle,
-    ).map((item) => item.copyWith(userId: bundle.uid)).toList(growable: false);
+    final projection = RoutineOnboardingProjection.build(bundle);
+    final routineItems = projection.items;
+    final firebaseMode =
+        read(optivusBackendModeProvider) == OptivusBackendMode.firebase;
+    final routineBefore = read(
+      routineNotifierProvider,
+    ).items.map((item) => item.id).toSet();
 
     read(mockUserProfileProvider.notifier).applyOnboardingBundle(bundle);
-    final mockRoutineIds = read(
-      mockRoutineProvider.notifier,
-    ).mergeMissing(routineItems);
-    final routineIds = await read(
-      routineNotifierProvider.notifier,
-    ).addMissingItems(routineItems);
+    final mockRoutineIds = firebaseMode
+        ? const <String>[]
+        : read(mockRoutineProvider.notifier).mergeMissing(routineItems);
+    await read(routineNotifierProvider.notifier).loadForOwner(bundle.uid);
+    final routineIds = read(routineNotifierProvider).items
+        .map((item) => item.id)
+        .where((id) => !routineBefore.contains(id))
+        .toList(growable: false);
     final goalIds = read(
       mockGoalProvider.notifier,
     ).mergeMissing(bundle.identityGoalSystems);
@@ -58,55 +64,5 @@ class OnboardingFrontendHydrationService {
       mockRoutineItemIds: mockRoutineIds,
       goalIds: goalIds,
     );
-  }
-
-  List<RoutineItem> routineItemsForHydration(
-    OnboardingCompletionBundle bundle,
-  ) {
-    if (bundle.routineItemsForApp.isNotEmpty) {
-      return bundle.routineItemsForApp;
-    }
-    return bundle.baseTimelineBlocks.map(_routineItemFromBlock).toList();
-  }
-
-  RoutineItem _routineItemFromBlock(TimelineBlockDraft block) {
-    final blockType = block.blockType == TimelineBlockDraft.hardBlockKey
-        ? RoutineBlockType.hardBlock
-        : RoutineBlockType.softBlock;
-    return RoutineItem(
-      id: block.id,
-      title: block.title.trim().isEmpty ? 'Onboarding block' : block.title,
-      startMinute: block.startMinute,
-      endMinute: block.endMinute,
-      crossesMidnight: block.crossesMidnight,
-      endsNextDay: block.endsNextDay,
-      repeatDays: block.repeatDays,
-      location: block.location,
-      blockType: blockType,
-      category: _categoryForSection(block.section),
-      source: RoutineSource.onboarding,
-      priority: blockType == RoutineBlockType.hardBlock
-          ? RoutinePriority.mustDo
-          : RoutinePriority.goodToDo,
-      hardBlock: blockType == RoutineBlockType.hardBlock,
-      notes: block.source,
-      mealCategory: block.mealCategory,
-      dishes: block.dishes,
-      caloriesEstimate: block.calories,
-      proteinEstimate: block.protein,
-      skincareProducts: block.skincareProducts,
-      steps: block.skincareProducts,
-    );
-  }
-
-  RoutineCategory _categoryForSection(String section) {
-    return switch (section) {
-      'classes' => RoutineCategory.classBlock,
-      'job_work_business' => RoutineCategory.job,
-      'eating' => RoutineCategory.eating,
-      'skin_care' => RoutineCategory.skinCare,
-      'fixed' => RoutineCategory.fixed,
-      _ => RoutineCategory.fixed,
-    };
   }
 }

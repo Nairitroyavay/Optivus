@@ -14,29 +14,35 @@ import 'package:optivus/services/routine_import_ai_client.dart';
 
 void main() {
   group('Onboarding Step 5 Eating AI Flow Logic', () {
-    test('onboarding5FriendlyAiMessage returns strict upload error for empty candidates', () {
-      final message = onboarding5FriendlyAiMessage(
-        'provider_empty_candidates',
-        const [],
-      );
+    test(
+      'onboarding5FriendlyAiMessage returns strict upload error for empty candidates',
+      () {
+        final message = onboarding5FriendlyAiMessage(
+          'provider_empty_candidates',
+          const [],
+        );
 
-      expect(
-        message,
-        'AI could not read meals clearly. Try a clearer photo.',
-      );
-    });
+        expect(
+          message,
+          'AI could not read meals clearly. Try a clearer photo.',
+        );
+      },
+    );
 
-    test('onboarding5FriendlyAiMessage returns strict upload error as default fallback', () {
-      final message = onboarding5FriendlyAiMessage(
-        null,
-        const [], // No clear error from AI
-      );
+    test(
+      'onboarding5FriendlyAiMessage returns strict upload error as default fallback',
+      () {
+        final message = onboarding5FriendlyAiMessage(
+          null,
+          const [], // No clear error from AI
+        );
 
-      expect(
-        message,
-        'AI could not read this meal routine/menu image. Please upload a clearer image and try again.',
-      );
-    });
+        expect(
+          message,
+          'AI could not read this meal routine/menu image. Please upload a clearer image and try again.',
+        );
+      },
+    );
 
     test('onboarding5FriendlyAiMessage handles standard provider errors', () {
       final message = onboarding5FriendlyAiMessage(
@@ -47,27 +53,36 @@ void main() {
       expect(message, 'AI is busy right now. Try again in a moment.');
     });
 
-    test('onboarding5FriendlyAiMessage surfaces missing worker url properly', () {
-      final message = onboarding5FriendlyAiMessage(
-        null,
-        const ['worker is not configured'],
-      );
+    test(
+      'onboarding5FriendlyAiMessage surfaces missing worker url properly',
+      () {
+        final message = onboarding5FriendlyAiMessage(null, const [
+          'worker is not configured',
+        ]);
 
-      expect(message, 'Real AI is not configured. Missing nutrition worker URL.');
-    });
+        expect(
+          message,
+          'Real AI is not configured. Missing nutrition worker URL.',
+        );
+      },
+    );
 
     test('onboarding5FriendlyAiMessage handles incomplete R2 upload', () {
-      final message = onboarding5FriendlyAiMessage(
-        null,
-        const ['r2_image_missing'],
-      );
+      final message = onboarding5FriendlyAiMessage(null, const [
+        'r2_image_missing',
+      ]);
 
-      expect(message, 'Uploaded meal photo could not be found. Please upload again.');
+      expect(
+        message,
+        'Uploaded meal photo could not be found. Please upload again.',
+      );
     });
   });
 
   group('Onboarding Step 5 AI Loading UI', () {
-    testWidgets('shows AiThinkingCard during generated meal plan creation', (tester) async {
+    testWidgets('shows AiThinkingCard during generated meal plan creation', (
+      tester,
+    ) async {
       // Set up a draft that leads directly to the create routine screen
       final draft = OnboardingDraft(
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
@@ -84,13 +99,11 @@ void main() {
               (ref) => MockOnboardingNotifier()..loadSeedData(draft),
             ),
             // Provide a fake nutrition client that hangs
-            nutritionAiClientProvider.overrideWithValue(FakeDelayedNutritionAiClient()),
-          ],
-          child: const MaterialApp(
-            home: Scaffold(
-              body: OnboardingStep5(),
+            nutritionAiClientProvider.overrideWithValue(
+              FakeDelayedNutritionAiClient(),
             ),
-          ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: OnboardingStep5())),
         ),
       );
 
@@ -104,8 +117,14 @@ void main() {
 
       // Now it should be generating
       expect(find.byType(AiThinkingCard), findsOneWidget);
-      expect(find.textContaining('AI is creating your weekly meal plan'), findsOneWidget);
-      expect(find.textContaining('Planning meals around your daily routine'), findsOneWidget);
+      expect(
+        find.textContaining('AI is creating your weekly meal plan'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Planning meals around your daily routine'),
+        findsOneWidget,
+      );
       expect(find.text('AI is generating your timeline.'), findsNothing);
 
       // Force cleanup of timers inside AiThinkingCard before test ends
@@ -113,7 +132,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
     });
 
-    testWidgets('shows AiThinkingCard during meal photo upload extraction', (tester) async {
+    testWidgets('shows AiThinkingCard during meal photo upload extraction', (
+      tester,
+    ) async {
       final draft = OnboardingDraft(
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
         baseTimeline: const BaseTimelineDraft(
@@ -129,14 +150,13 @@ void main() {
               (ref) => MockOnboardingNotifier()..loadSeedData(draft),
             ),
             routineImportAiControllerProvider.overrideWith(
-              (ref) => MockExtractingRoutineImportAiController(ref, FakeDelayedRoutineImportAiClient()),
+              (ref) => MockExtractingRoutineImportAiController(
+                ref,
+                FakeDelayedRoutineImportAiClient(),
+              ),
             ),
           ],
-          child: const MaterialApp(
-            home: Scaffold(
-              body: OnboardingStep5(),
-            ),
-          ),
+          child: const MaterialApp(home: Scaffold(body: OnboardingStep5())),
         ),
       );
 
@@ -144,8 +164,14 @@ void main() {
 
       // Verify the thinking card appears instead of old static text
       expect(find.byType(AiThinkingCard), findsOneWidget);
-      expect(find.textContaining('AI is reading your meal photo'), findsOneWidget);
-      expect(find.textContaining('Looking for dishes, portions, and meal timing'), findsOneWidget);
+      expect(
+        find.textContaining('AI is reading your meal photo'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Looking for dishes, portions, and meal timing'),
+        findsOneWidget,
+      );
       expect(find.text('AI is reading your meal photo…'), findsNothing);
 
       // Force cleanup
@@ -155,9 +181,12 @@ void main() {
   });
 }
 
-class MockExtractingRoutineImportAiController extends RoutineImportAiController {
+class MockExtractingRoutineImportAiController
+    extends RoutineImportAiController {
   MockExtractingRoutineImportAiController(super.ref, super.client) {
-    state = const RoutineImportAiState(status: RoutineImportAiStatus.extracting);
+    state = const RoutineImportAiState(
+      status: RoutineImportAiStatus.extracting,
+    );
   }
 }
 

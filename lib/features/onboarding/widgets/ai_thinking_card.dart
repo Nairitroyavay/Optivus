@@ -47,7 +47,7 @@ class _AiThinkingCardState extends State<AiThinkingCard>
       parent: _pulseController,
       curve: Curves.easeInOut,
     );
-    
+
     if (widget.isActive) {
       _pulseController.repeat(reverse: true);
       _resetAndStartTimers();
@@ -144,7 +144,7 @@ class _AiThinkingCardState extends State<AiThinkingCard>
     if (_elapsedSeconds < widget.firstLongWaitDelay.inSeconds) {
       return const SizedBox.shrink();
     }
-    
+
     final hint = _elapsedSeconds < widget.secondLongWaitDelay.inSeconds
         ? 'Detailed photos can take a little longer'
         : 'Still working. Keep this screen open';

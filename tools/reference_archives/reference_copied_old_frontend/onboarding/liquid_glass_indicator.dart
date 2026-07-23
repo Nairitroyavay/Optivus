@@ -38,10 +38,12 @@ class LiquidGlassIndicator extends StatelessWidget {
     final double fromCX = _cx(from);
     final double toCX = _cx(to);
 
-    final double leadT =
-        Curves.easeInOut.transform((frac * 1.6).clamp(0.0, 1.0));
-    final double lagT =
-        Curves.easeInOut.transform(((frac - 0.35) * 1.6).clamp(0.0, 1.0));
+    final double leadT = Curves.easeInOut.transform(
+      (frac * 1.6).clamp(0.0, 1.0),
+    );
+    final double lagT = Curves.easeInOut.transform(
+      ((frac - 0.35) * 1.6).clamp(0.0, 1.0),
+    );
     final bool movingRight = to >= from;
 
     final double pillLeft = movingRight
@@ -51,8 +53,10 @@ class LiquidGlassIndicator extends StatelessWidget {
         ? (fromCX + _pillW / 2) + leadT * (toCX - fromCX)
         : (fromCX + _pillW / 2) + lagT * (toCX - fromCX);
 
-    final double pillWidth =
-        (pillRight - pillLeft).clamp(_pillH, double.infinity);
+    final double pillWidth = (pillRight - pillLeft).clamp(
+      _pillH,
+      double.infinity,
+    );
     final double pillTopLocal = _trackH / 2 - _pillH / 2;
 
     return ClipRRect(
@@ -100,10 +104,7 @@ class LiquidGlassIndicator extends StatelessWidget {
                     gradient: const LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xCC89F4DD),
-                        Color(0x8889F4DD),
-                      ],
+                      colors: [Color(0xCC89F4DD), Color(0x8889F4DD)],
                     ),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.70),
@@ -114,7 +115,7 @@ class LiquidGlassIndicator extends StatelessWidget {
                         color: const Color(0xFF89F4DD).withValues(alpha: 0.40),
                         blurRadius: 6,
                         spreadRadius: 0,
-      )
+                      ),
                     ],
                   ),
                 ),

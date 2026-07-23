@@ -1,5 +1,5 @@
 // REFERENCE COPY ONLY — not imported into app yet.
-// This contains a clean subset of models and helper functions extracted from the 
+// This contains a clean subset of models and helper functions extracted from the
 // legacy routine_provider.dart so that reference timeline setup screens can parse
 // their internal structures (like skincare steps, meals, fixed templates, and classes)
 // without depending on the entire legacy state provider.
@@ -15,8 +15,9 @@ import 'routine_template_model.dart';
 String _cleanRoutineString(Object? value) => value?.toString().trim() ?? '';
 
 String _normalizeRoutineTime(Object? value, {required String fallback}) {
-  final match =
-      RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(_cleanRoutineString(value));
+  final match = RegExp(
+    r'^(\d{1,2}):(\d{2})$',
+  ).firstMatch(_cleanRoutineString(value));
   if (match == null) return fallback;
   final hour = int.tryParse(match.group(1)!);
   final minute = int.tryParse(match.group(2)!);
@@ -27,17 +28,18 @@ String _normalizeRoutineTime(Object? value, {required String fallback}) {
 
 List<int> _routineIntList(Object? value) {
   if (value is! List) return const [5, 10];
-  final values = value
-      .whereType<Object>()
-      .map((item) {
-        if (item is int) return item;
-        if (item is num) return item.round();
-        return int.tryParse(item.toString()) ?? 0;
-      })
-      .where((item) => item > 0)
-      .toSet()
-      .toList()
-    ..sort();
+  final values =
+      value
+          .whereType<Object>()
+          .map((item) {
+            if (item is int) return item;
+            if (item is num) return item.round();
+            return int.tryParse(item.toString()) ?? 0;
+          })
+          .where((item) => item > 0)
+          .toSet()
+          .toList()
+        ..sort();
   return values.isEmpty ? const [5] : values;
 }
 
@@ -89,10 +91,10 @@ class SkinStep {
   Map<String, dynamic> toMap() => {'emoji': emoji, 'name': name, 'tag': tag};
 
   factory SkinStep.fromMap(Map<String, dynamic> m) => SkinStep(
-        emoji: m['emoji'] ?? '',
-        name: m['name'] ?? '',
-        tag: m['tag'] ?? '',
-      );
+    emoji: m['emoji'] ?? '',
+    name: m['name'] ?? '',
+    tag: m['tag'] ?? '',
+  );
 }
 
 /// Skin care plan for one day: three time slots
@@ -112,30 +114,29 @@ class DaySkinPlan {
     List<SkinStep>? morning,
     List<SkinStep>? afternoon,
     List<SkinStep>? night,
-  }) =>
-      DaySkinPlan(
-        morning: morning ?? this.morning,
-        afternoon: afternoon ?? this.afternoon,
-        night: night ?? this.night,
-      );
+  }) => DaySkinPlan(
+    morning: morning ?? this.morning,
+    afternoon: afternoon ?? this.afternoon,
+    night: night ?? this.night,
+  );
 
   Map<String, dynamic> toMap() => {
-        'morning': morning.map((e) => e.toMap()).toList(),
-        'afternoon': afternoon.map((e) => e.toMap()).toList(),
-        'night': night.map((e) => e.toMap()).toList(),
-      };
+    'morning': morning.map((e) => e.toMap()).toList(),
+    'afternoon': afternoon.map((e) => e.toMap()).toList(),
+    'night': night.map((e) => e.toMap()).toList(),
+  };
 
   factory DaySkinPlan.fromMap(Map<String, dynamic> m) => DaySkinPlan(
-        morning: (m['morning'] as List? ?? [])
-            .map((e) => SkinStep.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-        afternoon: (m['afternoon'] as List? ?? [])
-            .map((e) => SkinStep.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-        night: (m['night'] as List? ?? [])
-            .map((e) => SkinStep.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    morning: (m['morning'] as List? ?? [])
+        .map((e) => SkinStep.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+    afternoon: (m['afternoon'] as List? ?? [])
+        .map((e) => SkinStep.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+    night: (m['night'] as List? ?? [])
+        .map((e) => SkinStep.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,10 +153,10 @@ class MealItem {
   Map<String, dynamic> toMap() => {'emoji': emoji, 'name': name, 'time': time};
 
   factory MealItem.fromMap(Map<String, dynamic> m) => MealItem(
-        emoji: m['emoji'] ?? '',
-        name: m['name'] ?? '',
-        time: m['time'] ?? '',
-      );
+    emoji: m['emoji'] ?? '',
+    name: m['name'] ?? '',
+    time: m['time'] ?? '',
+  );
 }
 
 /// Eating plan for one day
@@ -167,22 +168,18 @@ class DayMealPlan {
 
   List<MealItem> get all => meals;
 
-  DayMealPlan copyWith({
-    List<MealItem>? meals,
-  }) =>
-      DayMealPlan(
-        meals: meals ?? this.meals,
-      );
+  DayMealPlan copyWith({List<MealItem>? meals}) =>
+      DayMealPlan(meals: meals ?? this.meals);
 
   Map<String, dynamic> toMap() => {
-        'meals': meals.map((e) => e.toMap()).toList(),
-      };
+    'meals': meals.map((e) => e.toMap()).toList(),
+  };
 
   factory DayMealPlan.fromMap(Map<String, dynamic> m) => DayMealPlan(
-        meals: (m['meals'] as List? ?? [])
-            .map((e) => MealItem.fromMap(Map<String, dynamic>.from(e)))
-            .toList(),
-      );
+    meals: (m['meals'] as List? ?? [])
+        .map((e) => MealItem.fromMap(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -209,24 +206,24 @@ class ClassItem {
   });
 
   Map<String, dynamic> toMap() => {
-        'subject': subject,
-        'room': room,
-        'professor': professor,
-        'startTime': startTime,
-        'endTime': endTime,
-        'weekday': weekday,
-        'colorHex': colorHex,
-      };
+    'subject': subject,
+    'room': room,
+    'professor': professor,
+    'startTime': startTime,
+    'endTime': endTime,
+    'weekday': weekday,
+    'colorHex': colorHex,
+  };
 
   factory ClassItem.fromMap(Map<String, dynamic> m) => ClassItem(
-        subject: m['subject'] ?? '',
-        room: m['room'] ?? '',
-        professor: m['professor'] ?? '',
-        startTime: m['startTime'] ?? '',
-        endTime: m['endTime'] ?? '',
-        weekday: m['weekday'] ?? 1,
-        colorHex: m['colorHex'] ?? '#FFFFFF',
-      );
+    subject: m['subject'] ?? '',
+    room: m['room'] ?? '',
+    professor: m['professor'] ?? '',
+    startTime: m['startTime'] ?? '',
+    endTime: m['endTime'] ?? '',
+    weekday: m['weekday'] ?? 1,
+    colorHex: m['colorHex'] ?? '#FFFFFF',
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,24 +264,25 @@ const _fixedBlockKnownKeys = {
 
 bool _fixedTemplateIsActive(Map<String, dynamic> map) {
   if (map['isActive'] is bool) return map['isActive'] as bool;
-  final lifecycle =
-      _cleanRoutineString(map['state'] ?? map['status']).toLowerCase();
+  final lifecycle = _cleanRoutineString(
+    map['state'] ?? map['status'],
+  ).toLowerCase();
   return lifecycle != 'inactive' &&
       lifecycle != 'archived' &&
       lifecycle != 'deleted';
 }
 
 Map<String, dynamic> _fixedTemplateExtra(Map<String, dynamic> map) => {
-      for (final entry in map.entries)
-        if (!_fixedScheduleKnownKeys.contains(entry.key))
-          entry.key.toString(): entry.value,
-    };
+  for (final entry in map.entries)
+    if (!_fixedScheduleKnownKeys.contains(entry.key))
+      entry.key.toString(): entry.value,
+};
 
 Map<String, dynamic> _fixedBlockExtra(Map<String, dynamic> map) => {
-      for (final entry in map.entries)
-        if (!_fixedBlockKnownKeys.contains(entry.key))
-          entry.key.toString(): entry.value,
-    };
+  for (final entry in map.entries)
+    if (!_fixedBlockKnownKeys.contains(entry.key))
+      entry.key.toString(): entry.value,
+};
 
 String _fixedTemplateId(Map<String, dynamic> map) {
   final explicit = _cleanRoutineString(map['templateId'] ?? map['id']);
@@ -341,41 +339,39 @@ class FixedScheduleTemplate {
     bool? isActive,
     String? updatedAt,
     Map<String, dynamic>? extra,
-  }) =>
-      FixedScheduleTemplate(
-        templateId: templateId,
-        title: title ?? this.title,
-        routineType: routineType,
-        startTime: startTime ?? this.startTime,
-        endTime: endTime ?? this.endTime,
-        repeatRule: repeatRule ?? this.repeatRule,
-        category: category ?? this.category,
-        notes: notes ?? this.notes,
-        reminderEnabled: reminderEnabled ?? this.reminderEnabled,
-        reminderOffsetMinutes:
-            reminderOffsetMinutes ?? this.reminderOffsetMinutes,
-        isActive: isActive ?? this.isActive,
-        createdAt: createdAt,
-        updatedAt: updatedAt ?? this.updatedAt,
-        extra: extra ?? this.extra,
-      );
+  }) => FixedScheduleTemplate(
+    templateId: templateId,
+    title: title ?? this.title,
+    routineType: routineType,
+    startTime: startTime ?? this.startTime,
+    endTime: endTime ?? this.endTime,
+    repeatRule: repeatRule ?? this.repeatRule,
+    category: category ?? this.category,
+    notes: notes ?? this.notes,
+    reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+    reminderOffsetMinutes: reminderOffsetMinutes ?? this.reminderOffsetMinutes,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    extra: extra ?? this.extra,
+  );
 
   Map<String, dynamic> toMap() => {
-        ...extra,
-        'templateId': templateId,
-        'title': title,
-        'routineType': routineType,
-        'startTime': startTime,
-        'endTime': endTime,
-        'repeatRule': repeatRule,
-        'category': category,
-        'notes': notes,
-        'reminderEnabled': reminderEnabled,
-        'reminderOffsetMinutes': reminderOffsetMinutes,
-        'isActive': isActive,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    ...extra,
+    'templateId': templateId,
+    'title': title,
+    'routineType': routineType,
+    'startTime': startTime,
+    'endTime': endTime,
+    'repeatRule': repeatRule,
+    'category': category,
+    'notes': notes,
+    'reminderEnabled': reminderEnabled,
+    'reminderOffsetMinutes': reminderOffsetMinutes,
+    'isActive': isActive,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 
   factory FixedScheduleTemplate.fromMap(Map<String, dynamic> m) =>
       FixedScheduleTemplate(
@@ -389,8 +385,8 @@ class FixedScheduleTemplate {
         endTime: _normalizeRoutineTime(m['endTime'], fallback: '10:00'),
         repeatRule:
             _cleanRoutineString(m['repeatRule'] ?? m['weekdayRule']).isNotEmpty
-                ? _cleanRoutineString(m['repeatRule'] ?? m['weekdayRule'])
-                : 'daily',
+            ? _cleanRoutineString(m['repeatRule'] ?? m['weekdayRule'])
+            : 'daily',
         category: _cleanRoutineString(m['category']),
         notes: _cleanRoutineString(m['notes']),
         reminderEnabled: m['reminderEnabled'] == true,
@@ -445,21 +441,21 @@ class FixedBlock {
   String get endLabel => _routineTimeLabel(endMinute);
 
   Map<String, dynamic> toMap() => {
-        ...extra,
-        'id': id,
-        'title': title,
-        'emoji': emoji,
-        'startMinute': startMinute,
-        'endMinute': endMinute,
-        'colorHex': colorHex,
-        'repeatRule': repeatRule,
-        'category': category,
-        'notes': notes,
-        'reminderEnabled': reminderEnabled,
-        'reminderOffsetMinutes': reminderOffsetMinutes,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt,
-      };
+    ...extra,
+    'id': id,
+    'title': title,
+    'emoji': emoji,
+    'startMinute': startMinute,
+    'endMinute': endMinute,
+    'colorHex': colorHex,
+    'repeatRule': repeatRule,
+    'category': category,
+    'notes': notes,
+    'reminderEnabled': reminderEnabled,
+    'reminderOffsetMinutes': reminderOffsetMinutes,
+    'createdAt': createdAt,
+    'updatedAt': updatedAt,
+  };
 
   FixedScheduleTemplate toTemplate() {
     final now = DateTime.now().toIso8601String();
@@ -481,43 +477,43 @@ class FixedBlock {
   }
 
   factory FixedBlock.fromTemplate(FixedScheduleTemplate template) => FixedBlock(
-        id: template.templateId,
-        title: template.title,
-        emoji: _emojiForRoutineTitle(template.title),
-        startMinute: _routineMinutesFromTime(template.startTime),
-        endMinute: _routineMinutesFromTime(template.endTime),
-        colorHex: '#CBD5E1',
-        repeatRule: template.repeatRule,
-        category: template.category,
-        notes: template.notes,
-        reminderEnabled: template.reminderEnabled,
-        reminderOffsetMinutes: template.reminderOffsetMinutes,
-        createdAt: template.createdAt,
-        updatedAt: template.updatedAt,
-        extra: template.extra,
-      );
+    id: template.templateId,
+    title: template.title,
+    emoji: _emojiForRoutineTitle(template.title),
+    startMinute: _routineMinutesFromTime(template.startTime),
+    endMinute: _routineMinutesFromTime(template.endTime),
+    colorHex: '#CBD5E1',
+    repeatRule: template.repeatRule,
+    category: template.category,
+    notes: template.notes,
+    reminderEnabled: template.reminderEnabled,
+    reminderOffsetMinutes: template.reminderOffsetMinutes,
+    createdAt: template.createdAt,
+    updatedAt: template.updatedAt,
+    extra: template.extra,
+  );
 
   factory FixedBlock.fromMap(Map<String, dynamic> m) => FixedBlock(
-        id: _cleanRoutineString(m['id']),
-        title: _cleanRoutineString(m['title']),
-        emoji: _cleanRoutineString(m['emoji']).isNotEmpty
-            ? _cleanRoutineString(m['emoji'])
-            : _emojiForRoutineTitle(_cleanRoutineString(m['title'])),
-        startMinute: ((m['startMinute'] as num?)?.toInt() ?? 0).clamp(0, 1439),
-        endMinute: ((m['endMinute'] as num?)?.toInt() ?? 0).clamp(0, 1439),
-        colorHex: _cleanRoutineString(m['colorHex']).isNotEmpty
-            ? _cleanRoutineString(m['colorHex'])
-            : '#CBD5E1',
-        repeatRule: _cleanRoutineString(m['repeatRule']).isNotEmpty
-            ? _cleanRoutineString(m['repeatRule'])
-            : 'daily',
-        category: _cleanRoutineString(m['category']),
-        notes: _cleanRoutineString(m['notes']),
-        reminderEnabled: m['reminderEnabled'] == true,
-        reminderOffsetMinutes:
-            ((m['reminderOffsetMinutes'] as num?)?.toInt() ?? 5).clamp(0, 180),
-        createdAt: _cleanRoutineString(m['createdAt']),
-        updatedAt: _cleanRoutineString(m['updatedAt']),
-        extra: _fixedBlockExtra(m),
-      );
+    id: _cleanRoutineString(m['id']),
+    title: _cleanRoutineString(m['title']),
+    emoji: _cleanRoutineString(m['emoji']).isNotEmpty
+        ? _cleanRoutineString(m['emoji'])
+        : _emojiForRoutineTitle(_cleanRoutineString(m['title'])),
+    startMinute: ((m['startMinute'] as num?)?.toInt() ?? 0).clamp(0, 1439),
+    endMinute: ((m['endMinute'] as num?)?.toInt() ?? 0).clamp(0, 1439),
+    colorHex: _cleanRoutineString(m['colorHex']).isNotEmpty
+        ? _cleanRoutineString(m['colorHex'])
+        : '#CBD5E1',
+    repeatRule: _cleanRoutineString(m['repeatRule']).isNotEmpty
+        ? _cleanRoutineString(m['repeatRule'])
+        : 'daily',
+    category: _cleanRoutineString(m['category']),
+    notes: _cleanRoutineString(m['notes']),
+    reminderEnabled: m['reminderEnabled'] == true,
+    reminderOffsetMinutes: ((m['reminderOffsetMinutes'] as num?)?.toInt() ?? 5)
+        .clamp(0, 180),
+    createdAt: _cleanRoutineString(m['createdAt']),
+    updatedAt: _cleanRoutineString(m['updatedAt']),
+    extra: _fixedBlockExtra(m),
+  );
 }

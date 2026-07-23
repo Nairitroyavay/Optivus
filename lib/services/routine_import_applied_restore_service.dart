@@ -1,3 +1,4 @@
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -65,7 +66,9 @@ class RoutineImportAppliedRestoreService {
         .where((item) => !currentIds.contains(item.id))
         .toList(growable: false);
 
-    read(mockRoutineProvider.notifier).mergeMissing(expectedItems);
+    if (read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
+      read(mockRoutineProvider.notifier).mergeMissing(expectedItems);
+    }
     final restoredIds = await read(
       routineNotifierProvider.notifier,
     ).addMissingItems(missing);

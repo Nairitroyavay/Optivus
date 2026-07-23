@@ -106,18 +106,8 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
     weeklyRoutines = {};
     for (int i = 0; i < 7; i++) {
       weeklyRoutines[i] = [
-        ClassRoutineBlock(
-          id: 'add1_$i',
-          subject: '',
-          start: 3.0,
-          isAdd: true,
-        ),
-        ClassRoutineBlock(
-          id: 'add2_$i',
-          subject: '',
-          start: 7.0,
-          isAdd: true,
-        ),
+        ClassRoutineBlock(id: 'add1_$i', subject: '', start: 3.0, isAdd: true),
+        ClassRoutineBlock(id: 'add2_$i', subject: '', start: 7.0, isAdd: true),
       ];
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -151,12 +141,14 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
 
       for (int i = 0; i < 7; i++) {
         next[i]!.sort((a, b) => a.start.compareTo(b.start));
-        next[i]!.add(ClassRoutineBlock(
-          id: 'add_saved_$i',
-          subject: '',
-          start: 7.0,
-          isAdd: true,
-        ));
+        next[i]!.add(
+          ClassRoutineBlock(
+            id: 'add_saved_$i',
+            subject: '',
+            start: 7.0,
+            isAdd: true,
+          ),
+        );
       }
 
       setState(() => weeklyRoutines = next);
@@ -225,241 +217,278 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
   Future<void> _showEditDialog(int index) async {
     final item = items[index];
 
-    TextEditingController subjectCtrl =
-        TextEditingController(text: item.subject);
+    TextEditingController subjectCtrl = TextEditingController(
+      text: item.subject,
+    );
     TextEditingController roomCtrl = TextEditingController(text: item.room);
-    TextEditingController profCtrl =
-        TextEditingController(text: item.professor);
-    TextEditingController startTimeCtrl =
-        TextEditingController(text: item.displayStartTime);
-    TextEditingController endTimeCtrl =
-        TextEditingController(text: item.displayEndTime);
+    TextEditingController profCtrl = TextEditingController(
+      text: item.professor,
+    );
+    TextEditingController startTimeCtrl = TextEditingController(
+      text: item.displayStartTime,
+    );
+    TextEditingController endTimeCtrl = TextEditingController(
+      text: item.displayEndTime,
+    );
     bool tempReminder = item.reminderEnabled;
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
-        context: context,
-        builder: (ctx) {
-          return StatefulBuilder(builder: (context, setDialogState) {
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
             return AlertDialog(
-                backgroundColor: Colors.white.withValues(alpha: 0.95),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24)),
-                title: Text(item.isAdd ? 'Add Class' : 'Edit Class Details',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w900, color: Color(0xFF0F111A))),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  child: SingleChildScrollView(
-                    child: Form(
-                      key: formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TextFormField(
-                            controller: subjectCtrl,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w700),
-                            decoration: InputDecoration(
-                              labelText: 'Subject',
-                              filled: true,
-                              fillColor: const Color(0xFFF1F5F9),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide.none),
+              backgroundColor: Colors.white.withValues(alpha: 0.95),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: Text(
+                item.isAdd ? 'Add Class' : 'Edit Class Details',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F111A),
+                ),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextFormField(
+                          controller: subjectCtrl,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'Subject',
+                            filled: true,
+                            fillColor: const Color(0xFFF1F5F9),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
                             ),
-                            validator: (v) => v == null || v.trim().isEmpty
-                                ? 'Subject is required'
-                                : null,
                           ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: roomCtrl,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600),
-                                  decoration: InputDecoration(
-                                    labelText: 'Room',
-                                    filled: true,
-                                    fillColor: const Color(0xFFF1F5F9),
-                                    border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide.none),
+                          validator: (v) => v == null || v.trim().isEmpty
+                              ? 'Subject is required'
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: roomCtrl,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: 'Room',
+                                  filled: true,
+                                  fillColor: const Color(0xFFF1F5F9),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: profCtrl,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600),
-                                  decoration: InputDecoration(
-                                    labelText: 'Professor',
-                                    filled: true,
-                                    fillColor: const Color(0xFFF1F5F9),
-                                    border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide.none),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: profCtrl,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: 'Professor',
+                                  filled: true,
+                                  fillColor: const Color(0xFFF1F5F9),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
                                   ),
                                 ),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: startTimeCtrl,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600),
-                                  decoration: InputDecoration(
-                                    labelText: 'Start (e.g. 9:00 AM)',
-                                    filled: true,
-                                    fillColor: const Color(0xFFF1F5F9),
-                                    border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide.none),
-                                  ),
-                                  validator: (v) {
-                                    if (v == null || v.trim().isEmpty) {
-                                      return 'Required';
-                                    }
-                                    final regex = RegExp(
-                                        r'^\d{1,2}:\d{2}(\s*(AM|PM|am|pm))?$');
-                                    if (!regex.hasMatch(v.trim())) {
-                                      return 'Use HH:mm';
-                                    }
-                                    return null;
-                                  },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: startTimeCtrl,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextFormField(
-                                  controller: endTimeCtrl,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600),
-                                  decoration: InputDecoration(
-                                    labelText: 'End (e.g. 10:00 AM)',
-                                    filled: true,
-                                    fillColor: const Color(0xFFF1F5F9),
-                                    border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide.none),
+                                decoration: InputDecoration(
+                                  labelText: 'Start (e.g. 9:00 AM)',
+                                  filled: true,
+                                  fillColor: const Color(0xFFF1F5F9),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
                                   ),
-                                  validator: (v) {
-                                    if (v == null || v.trim().isEmpty) {
-                                      return 'Required';
-                                    }
-                                    final regex = RegExp(
-                                        r'^\d{1,2}:\d{2}(\s*(AM|PM|am|pm))?$');
-                                    if (!regex.hasMatch(v.trim())) {
-                                      return 'Use HH:mm';
-                                    }
-                                    return null;
-                                  },
                                 ),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) {
+                                    return 'Required';
+                                  }
+                                  final regex = RegExp(
+                                    r'^\d{1,2}:\d{2}(\s*(AM|PM|am|pm))?$',
+                                  );
+                                  if (!regex.hasMatch(v.trim())) {
+                                    return 'Use HH:mm';
+                                  }
+                                  return null;
+                                },
                               ),
-                            ],
-                          ),
-                          SwitchListTile.adaptive(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Reminder'),
-                            value: tempReminder,
-                            onChanged: (value) {
-                              setDialogState(() => tempReminder = value);
-                            },
-                          ),
-                        ],
-                      ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: endTimeCtrl,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: 'End (e.g. 10:00 AM)',
+                                  filled: true,
+                                  fillColor: const Color(0xFFF1F5F9),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) {
+                                    return 'Required';
+                                  }
+                                  final regex = RegExp(
+                                    r'^\d{1,2}:\d{2}(\s*(AM|PM|am|pm))?$',
+                                  );
+                                  if (!regex.hasMatch(v.trim())) {
+                                    return 'Use HH:mm';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Reminder'),
+                          value: tempReminder,
+                          onChanged: (value) {
+                            setDialogState(() => tempReminder = value);
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                actions: [
-                  if (!item.isAdd)
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          items.removeAt(index);
-                        });
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('Delete',
-                          style: TextStyle(
-                              color: Color(0xFFEF4444),
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  if (!item.isAdd) const Spacer(),
+              ),
+              actions: [
+                if (!item.isAdd)
                   TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel')),
-                  ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F111A),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                    onPressed: () {
+                      setState(() {
+                        items.removeAt(index);
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontWeight: FontWeight.bold,
                       ),
-                      onPressed: () {
-                        if (!formKey.currentState!.validate()) return;
-                        setState(() {
-                          item.subject = subjectCtrl.text.trim();
-                          item.room = roomCtrl.text.trim();
-                          item.professor = profCtrl.text.trim();
-                          item.reminderEnabled = tempReminder;
+                    ),
+                  ),
+                if (!item.isAdd) const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F111A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    if (!formKey.currentState!.validate()) return;
+                    setState(() {
+                      item.subject = subjectCtrl.text.trim();
+                      item.room = roomCtrl.text.trim();
+                      item.professor = profCtrl.text.trim();
+                      item.reminderEnabled = tempReminder;
 
-                          double parsedStart =
-                              _parseHoursFrom6AM(startTimeCtrl.text);
-                          double parsedEnd =
-                              _parseHoursFrom6AM(endTimeCtrl.text);
-                          if (parsedEnd <= parsedStart && parsedEnd != 0.0) {
-                            parsedEnd += 24;
-                          }
-                          item.start = parsedStart;
-                          item.duration = parsedEnd - parsedStart > 0.5
-                              ? parsedEnd - parsedStart
-                              : 0.5;
+                      double parsedStart = _parseHoursFrom6AM(
+                        startTimeCtrl.text,
+                      );
+                      double parsedEnd = _parseHoursFrom6AM(endTimeCtrl.text);
+                      if (parsedEnd <= parsedStart && parsedEnd != 0.0) {
+                        parsedEnd += 24;
+                      }
+                      item.start = parsedStart;
+                      item.duration = parsedEnd - parsedStart > 0.5
+                          ? parsedEnd - parsedStart
+                          : 0.5;
 
-                          if (item.isAdd) {
-                            item.isAdd = false;
-                            item.hasTopTape = true;
-                            item.hasBottomTape = true;
-                            item.icon = Icons.school_rounded;
-                            item.duration = 1.0;
-                            item.color =
-                                _cycleColors[_colorIndex % _cycleColors.length];
-                            _colorIndex++;
-                            // Insert an Add button below this block
-                            items.insert(
-                                index + 1,
-                                ClassRoutineBlock(
-                                  id: 'add_${DateTime.now().millisecondsSinceEpoch}',
-                                  subject: '',
-                                  start: item.start + item.duration + 0.5,
-                                  isAdd: true,
-                                ));
-                          }
-                        });
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('Save')),
-                ]);
-          });
-        });
+                      if (item.isAdd) {
+                        item.isAdd = false;
+                        item.hasTopTape = true;
+                        item.hasBottomTape = true;
+                        item.icon = Icons.school_rounded;
+                        item.duration = 1.0;
+                        item.color =
+                            _cycleColors[_colorIndex % _cycleColors.length];
+                        _colorIndex++;
+                        // Insert an Add button below this block
+                        items.insert(
+                          index + 1,
+                          ClassRoutineBlock(
+                            id: 'add_${DateTime.now().millisecondsSinceEpoch}',
+                            subject: '',
+                            start: item.start + item.duration + 0.5,
+                            isAdd: true,
+                          ),
+                        );
+                      }
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
-  Widget _buildDroplet(double size,
-      {Color color = Colors.white, String text = '', bool isActive = false}) {
+  Widget _buildDroplet(
+    double size, {
+    Color color = Colors.white,
+    String text = '',
+    bool isActive = false,
+  }) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutBack,
@@ -470,15 +499,18 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
         color: isActive
             ? color.withValues(alpha: 0.15)
             : Colors.white.withValues(alpha: 0.25),
-        border:
-            Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-              color: isActive
-                  ? color.withValues(alpha: 0.2)
-                  : const Color(0x0F000000),
-              blurRadius: 8,
-              offset: const Offset(0, 4)),
+            color: isActive
+                ? color.withValues(alpha: 0.2)
+                : const Color(0x0F000000),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Stack(
@@ -495,7 +527,9 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                 borderRadius: BorderRadius.circular(size),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.4), blurRadius: 6)
+                    color: Colors.white.withValues(alpha: 0.4),
+                    blurRadius: 6,
+                  ),
                 ],
               ),
             ),
@@ -511,7 +545,9 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                 borderRadius: BorderRadius.circular(size),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.6), blurRadius: 4)
+                    color: Colors.white.withValues(alpha: 0.6),
+                    blurRadius: 4,
+                  ),
                 ],
               ),
             ),
@@ -549,12 +585,15 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                 color: Colors.white.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.95), width: 1.5),
+                  color: Colors.white.withValues(alpha: 0.95),
+                  width: 1.5,
+                ),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 4,
-                      offset: const Offset(0, 3)),
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 3),
+                  ),
                 ],
               ),
               child: ClipRRect(
@@ -599,20 +638,24 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                     end: Alignment.bottomRight,
                     colors: [
                       item.color!.withValues(alpha: 0.3),
-                      item.color!.withValues(alpha: 0.05)
+                      item.color!.withValues(alpha: 0.05),
                     ],
                   ),
                   border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+                    color: Colors.white.withValues(alpha: 0.9),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                        color: item.color!.withValues(alpha: 0.15),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6)),
+                      color: item.color!.withValues(alpha: 0.15),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
                     BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        blurRadius: 12,
-                        offset: const Offset(-4, -4)),
+                      color: Colors.white.withValues(alpha: 0.9),
+                      blurRadius: 12,
+                      offset: const Offset(-4, -4),
+                    ),
                   ],
                 ),
                 child: ClipRRect(
@@ -623,7 +666,9 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                       filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
@@ -631,19 +676,28 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                             Row(
                               children: [
                                 if (item.icon != null) ...[
-                                  Icon(item.icon,
-                                      color: item.color!.withValues(alpha: 0.9),
-                                      size: 24),
+                                  Icon(
+                                    item.icon,
+                                    color: item.color!.withValues(alpha: 0.9),
+                                    size: 24,
+                                  ),
                                   const SizedBox(width: 8),
                                 ],
                                 Expanded(
-                                    child: Text(item.subject,
-                                        style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                            color: Color(0xFF0F111A)))),
-                                const Icon(Icons.more_vert_rounded,
-                                    color: Color(0xFF64748B), size: 18),
+                                  child: Text(
+                                    item.subject,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF0F111A),
+                                    ),
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.more_vert_rounded,
+                                  color: Color(0xFF64748B),
+                                  size: 18,
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -654,59 +708,81 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 4),
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withValues(alpha: 0.6),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.8),
-                                        width: 1),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                      width: 1,
+                                    ),
                                   ),
                                   child: Text(
-                                      '${item.displayStartTime} - ${item.displayEndTime}',
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF334155))),
+                                    '${item.displayStartTime} - ${item.displayEndTime}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
                                 ),
                                 if (item.room.isNotEmpty)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 4),
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.45),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.45,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.8),
-                                          width: 1),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                        width: 1,
+                                      ),
                                     ),
-                                    child: Text(item.room,
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF1E293B))),
+                                    child: Text(
+                                      item.room,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
                                   ),
                                 if (item.professor.isNotEmpty)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 4),
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.45),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.45,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.8),
-                                          width: 1),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                        width: 1,
+                                      ),
                                     ),
-                                    child: Text(item.professor,
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF1E293B))),
+                                    child: Text(
+                                      item.professor,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
                                   ),
                               ],
                             ),
@@ -720,20 +796,26 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
             ),
             if (item.hasTopTape)
               Positioned(
-                  top: -8,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                      child: _buildTapeWithDrops(
-                          onDrag: (d) => _onTopTapeDrag(index, d)))),
+                top: -8,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _buildTapeWithDrops(
+                    onDrag: (d) => _onTopTapeDrag(index, d),
+                  ),
+                ),
+              ),
             if (item.hasBottomTape)
               Positioned(
-                  bottom: -8,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                      child: _buildTapeWithDrops(
-                          onDrag: (d) => _onBottomTapeDrag(index, d)))),
+                bottom: -8,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _buildTapeWithDrops(
+                    onDrag: (d) => _onBottomTapeDrag(index, d),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -755,16 +837,20 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
           child: Container(
             width: 60,
             decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(height / 2),
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.8), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 3))
-                ]),
+              color: Colors.white.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(height / 2),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.8),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(height / 2),
               child: BackdropFilter(
@@ -784,15 +870,19 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.black.withValues(alpha: 0.05),
-                              Colors.transparent
+                              Colors.transparent,
                             ],
                           ),
                         ),
                       ),
                     ),
                     const Center(
-                        child: Icon(Icons.add_rounded,
-                            color: Color(0xFF94A3B8), size: 28)),
+                      child: Icon(
+                        Icons.add_rounded,
+                        color: Color(0xFF94A3B8),
+                        size: 28,
+                      ),
+                    ),
                     Positioned(left: -4, top: 4, child: _buildDroplet(8)),
                     Positioned(right: -2, bottom: -2, child: _buildDroplet(12)),
                   ],
@@ -829,15 +919,17 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
             colorHex =
                 '#${(item.color!.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
           }
-          allClasses.add(ClassItem(
-            subject: item.subject,
-            room: item.room,
-            professor: item.professor,
-            startTime: format24h(item.start),
-            endTime: format24h(item.start + item.duration),
-            weekday: weekday,
-            colorHex: colorHex,
-          ));
+          allClasses.add(
+            ClassItem(
+              subject: item.subject,
+              room: item.room,
+              professor: item.professor,
+              startTime: format24h(item.start),
+              endTime: format24h(item.start + item.duration),
+              weekday: weekday,
+              colorHex: colorHex,
+            ),
+          );
           templates.add({
             'templateId': 'class_${weekday}_${item.id}',
             'title': item.subject,
@@ -913,12 +1005,13 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
       if (flags.routineImportWorkerReady) {
         // Worker-first: call remote AI endpoint for class text parsing.
         try {
-          final generated =
-              await ref.read(routineRepositoryProvider).previewRoutineImport(
-                    routineType: 'classes',
-                    mode: 'class_timetable_text',
-                    sourceText: text,
-                  );
+          final generated = await ref
+              .read(routineRepositoryProvider)
+              .previewRoutineImport(
+                routineType: 'classes',
+                mode: 'class_timetable_text',
+                sourceText: text,
+              );
           blocks = generated
               .asMap()
               .entries
@@ -937,8 +1030,10 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
           blocks = _parseClassTimetableTextLocally(text);
           mode = 'class_timetable_text_local';
           if (mounted) {
-            setState(() => _textImportError =
-                'AI endpoint failed. Showing a local draft you can still edit.');
+            setState(
+              () => _textImportError =
+                  'AI endpoint failed. Showing a local draft you can still edit.',
+            );
           }
         }
       } else {
@@ -956,11 +1051,13 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
 
       // Emit suggestion_generated for Worker-sourced suggestions.
       for (final suggestionId in suggestionIds) {
-        await ref.read(eventServiceProvider).emit(
-          eventName: EventNames.suggestionGenerated,
-          source: 'class_setup',
-          payload: {'suggestionId': suggestionId},
-        );
+        await ref
+            .read(eventServiceProvider)
+            .emit(
+              eventName: EventNames.suggestionGenerated,
+              source: 'class_setup',
+              payload: {'suggestionId': suggestionId},
+            );
       }
 
       final importMetadata = <String, dynamic>{
@@ -977,11 +1074,13 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
       } else if (suggestionIds.isNotEmpty) {
         // Review was dismissed — emit suggestion_dismissed.
         for (final suggestionId in suggestionIds) {
-          await ref.read(eventServiceProvider).emit(
-            eventName: EventNames.suggestionDismissed,
-            source: 'class_setup',
-            payload: {'suggestionId': suggestionId},
-          );
+          await ref
+              .read(eventServiceProvider)
+              .emit(
+                eventName: EventNames.suggestionDismissed,
+                source: 'class_setup',
+                payload: {'suggestionId': suggestionId},
+              );
         }
       }
     } catch (e) {
@@ -1013,9 +1112,9 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
       }
 
       final timeMatch = RegExp(
-              r'(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)',
-              caseSensitive: false)
-          .firstMatch(line);
+        r'(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)',
+        caseSensitive: false,
+      ).firstMatch(line);
       double start = 3.0; // 9:00 AM default
       double duration = 1.0;
 
@@ -1027,42 +1126,55 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
 
       String cleanedLine = line;
       if (timeMatch != null) {
-        cleanedLine =
-            cleanedLine.replaceRange(timeMatch.start, timeMatch.end, '');
+        cleanedLine = cleanedLine.replaceRange(
+          timeMatch.start,
+          timeMatch.end,
+          '',
+        );
       }
       if (foundWeekday != null) {
         final dayMatch = RegExp(
-                r'\b(?:mon|tue|wed|thu|fri|sat|sun)(?:day|nes)?(?:day)?\b',
-                caseSensitive: false)
-            .firstMatch(cleanedLine);
+          r'\b(?:mon|tue|wed|thu|fri|sat|sun)(?:day|nes)?(?:day)?\b',
+          caseSensitive: false,
+        ).firstMatch(cleanedLine);
         if (dayMatch != null) {
-          cleanedLine =
-              cleanedLine.replaceRange(dayMatch.start, dayMatch.end, '');
+          cleanedLine = cleanedLine.replaceRange(
+            dayMatch.start,
+            dayMatch.end,
+            '',
+          );
         }
       }
 
-      final roomMatch =
-          RegExp(r'\b(?:room|hall|lab)\s*([a-z0-9-]+)\b', caseSensitive: false)
-              .firstMatch(cleanedLine);
+      final roomMatch = RegExp(
+        r'\b(?:room|hall|lab)\s*([a-z0-9-]+)\b',
+        caseSensitive: false,
+      ).firstMatch(cleanedLine);
       String room = '';
       if (roomMatch != null) {
         room = roomMatch.group(1) ?? '';
-        cleanedLine =
-            cleanedLine.replaceRange(roomMatch.start, roomMatch.end, '');
+        cleanedLine = cleanedLine.replaceRange(
+          roomMatch.start,
+          roomMatch.end,
+          '',
+        );
       }
 
-      final subject =
-          cleanedLine.replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '').trim();
+      final subject = cleanedLine
+          .replaceAll(RegExp(r'[^a-zA-Z0-9\s]'), '')
+          .trim();
       if (subject.isEmpty && timeMatch == null) continue;
 
-      blocks.add(ClassRoutineBlock(
-        id: 'parsed_${DateTime.now().microsecondsSinceEpoch}_$classIndex',
-        subject: subject.isNotEmpty ? subject : 'Class ${classIndex + 1}',
-        start: start,
-        duration: duration,
-        room: room,
-        weekday: foundWeekday ?? _day + 1,
-      ));
+      blocks.add(
+        ClassRoutineBlock(
+          id: 'parsed_${DateTime.now().microsecondsSinceEpoch}_$classIndex',
+          subject: subject.isNotEmpty ? subject : 'Class ${classIndex + 1}',
+          start: start,
+          duration: duration,
+          room: room,
+          weekday: foundWeekday ?? _day + 1,
+        ),
+      );
       classIndex++;
     }
     return blocks;
@@ -1102,7 +1214,8 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-            'Timetable photo import is coming soon. Add classes manually.'),
+          'Timetable photo import is coming soon. Add classes manually.',
+        ),
       ),
     );
   }
@@ -1129,12 +1242,13 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
         'uploadedAt': DateTime.now().toIso8601String(),
       };
 
-      final generated =
-          await ref.read(routineRepositoryProvider).previewRoutineImport(
-                routineType: 'classes',
-                mode: 'class_timetable_photo',
-                imageMetadata: imageMetadata,
-              );
+      final generated = await ref
+          .read(routineRepositoryProvider)
+          .previewRoutineImport(
+            routineType: 'classes',
+            mode: 'class_timetable_photo',
+            imageMetadata: imageMetadata,
+          );
       if (!mounted) return;
 
       final blocks = generated
@@ -1160,11 +1274,13 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
           .toList();
 
       for (final suggestionId in suggestionIds) {
-        await ref.read(eventServiceProvider).emit(
-          eventName: EventNames.suggestionGenerated,
-          source: 'class_setup',
-          payload: {'suggestionId': suggestionId},
-        );
+        await ref
+            .read(eventServiceProvider)
+            .emit(
+              eventName: EventNames.suggestionGenerated,
+              source: 'class_setup',
+              payload: {'suggestionId': suggestionId},
+            );
       }
 
       final accepted = await _showClassReview(blocks, {
@@ -1177,11 +1293,13 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
         await _deleteUploadedImageQuietly(imageMetadata);
         // Emit suggestion_dismissed for Worker-sourced suggestions.
         for (final suggestionId in suggestionIds) {
-          await ref.read(eventServiceProvider).emit(
-            eventName: EventNames.suggestionDismissed,
-            source: 'class_setup',
-            payload: {'suggestionId': suggestionId},
-          );
+          await ref
+              .read(eventServiceProvider)
+              .emit(
+                eventName: EventNames.suggestionDismissed,
+                source: 'class_setup',
+                payload: {'suggestionId': suggestionId},
+              );
         }
       }
     } catch (e) {
@@ -1213,15 +1331,19 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
     int index,
   ) {
     final start = _parseHoursFrom6AM(
-        (template['start'] ?? template['startTime'])?.toString() ?? '9:00 AM');
+      (template['start'] ?? template['startTime'])?.toString() ?? '9:00 AM',
+    );
     var end = _parseHoursFrom6AM(
-        (template['end'] ?? template['endTime'])?.toString() ?? '10:00 AM');
+      (template['end'] ?? template['endTime'])?.toString() ?? '10:00 AM',
+    );
     if (end <= start) end += 24;
     final color = _cycleColors[(_colorIndex + index) % _cycleColors.length];
     return ClassRoutineBlock(
-      id: template['templateId']?.toString() ??
+      id:
+          template['templateId']?.toString() ??
           'generated_${DateTime.now().microsecondsSinceEpoch}',
-      subject: (template['subject'] ?? template['title'])?.toString() ??
+      subject:
+          (template['subject'] ?? template['title'])?.toString() ??
           'Imported Class',
       room: template['room']?.toString() ?? '',
       professor: template['professor']?.toString() ?? '',
@@ -1301,244 +1423,280 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
           builder: (ctx) {
             final review = List<ClassRoutineBlock>.from(blocks);
             var isAccepting = false;
-            return StatefulBuilder(builder: (context, setSheetState) {
-              return Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  MediaQuery.of(ctx).viewInsets.bottom + 20,
-                ),
-                child: SizedBox(
-                  height: MediaQuery.of(ctx).size.height * 0.78,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text('Review imported classes',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.separated(
-                          itemCount: review.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final item = review[index];
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                    color: const Color(0xFFE2E8F0), width: 1),
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: DropdownButtonFormField<int>(
-                                          initialValue: _clampWeekday(
-                                              item.weekday ?? _day + 1),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Day',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          items: List.generate(
-                                            7,
-                                            (dayIndex) => DropdownMenuItem(
-                                              value: dayIndex + 1,
-                                              child: Text(
-                                                  _weekdayLabel(dayIndex + 1)),
-                                            ),
-                                          ),
-                                          onChanged: (value) {
-                                            if (value != null) {
-                                              item.weekday = value;
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        flex: 2,
-                                        child: TextFormField(
-                                          initialValue: item.subject,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Subject',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) =>
-                                              item.subject = value.trim(),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: item.room,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Room',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) =>
-                                              item.room = value.trim(),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: item.professor,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Professor',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) =>
-                                              item.professor = value.trim(),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: _format24h(item.start),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Start',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) {
-                                            final parsed =
-                                                _parseHoursFrom6AM(value);
-                                            final currentEnd =
-                                                item.start + item.duration;
-                                            item.start = parsed;
-                                            item.duration =
-                                                (currentEnd - parsed)
-                                                    .clamp(0.5, 4.0)
-                                                    .toDouble();
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: _format24h(
-                                              item.start + item.duration),
-                                          decoration: const InputDecoration(
-                                            labelText: 'End',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) {
-                                            var parsed =
-                                                _parseHoursFrom6AM(value);
-                                            if (parsed <= item.start) {
-                                              parsed += 24;
-                                            }
-                                            item.duration =
-                                                (parsed - item.start)
-                                                    .clamp(0.5, 4.0)
-                                                    .toDouble();
-                                          },
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Remove',
-                                        onPressed: () => setSheetState(
-                                            () => review.removeAt(index)),
-                                        icon: const Icon(Icons
-                                            .remove_circle_outline_rounded),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(ctx, false);
-                              _showImportOptions();
-                            },
-                            child: const Text('Regenerate'),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: isAccepting
-                                ? null
-                                : () async {
-                                    setSheetState(() => isAccepting = true);
-                                    final accepted = review
-                                        .where((item) =>
-                                            item.subject.trim().isNotEmpty)
-                                        .toList();
-                                    try {
-                                      debugPrint('[ClassSetup] accept_start');
-                                      debugPrint(
-                                          '[ClassSetup] accept_templates_count=${accepted.length}');
-                                      await runRoutineAcceptWithTimeout(
-                                          () async {
-                                        await _markSuggestionsAccepted(
-                                            accepted);
-                                        if (!mounted) return;
-                                        setState(() {
-                                          _applyReviewedClasses(accepted);
-                                          _pendingImportMetadata =
-                                              importMetadata;
-                                          _colorIndex += accepted.length;
-                                        });
-                                      });
-                                      debugPrint(
-                                          '[ClassSetup] accept_save_success');
-                                      if (!ctx.mounted) return;
-                                      Navigator.pop(ctx, true);
-                                    } on RoutineAcceptTimeoutException {
-                                      debugPrint('[ClassSetup] accept_timeout');
-                                      if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'Could not save. Please try again.')),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      debugPrint(
-                                          '[ClassSetup] accept_save_failed: $e');
-                                      if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'Could not save. Please try again.')),
-                                        );
-                                      }
-                                    } finally {
-                                      if (ctx.mounted) {
-                                        setSheetState(
-                                            () => isAccepting = false);
-                                      }
-                                    }
-                                  },
-                            child: Text(
-                                isAccepting ? 'Accepting...' : 'Accept all'),
-                          ),
-                        ],
-                      ),
-                    ],
+            return StatefulBuilder(
+              builder: (context, setSheetState) {
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    MediaQuery.of(ctx).viewInsets.bottom + 20,
                   ),
-                ),
-              );
-            });
+                  child: SizedBox(
+                    height: MediaQuery.of(ctx).size.height * 0.78,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Review imported classes',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: review.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final item = review[index];
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: DropdownButtonFormField<int>(
+                                            initialValue: _clampWeekday(
+                                              item.weekday ?? _day + 1,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Day',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            items: List.generate(
+                                              7,
+                                              (dayIndex) => DropdownMenuItem(
+                                                value: dayIndex + 1,
+                                                child: Text(
+                                                  _weekdayLabel(dayIndex + 1),
+                                                ),
+                                              ),
+                                            ),
+                                            onChanged: (value) {
+                                              if (value != null) {
+                                                item.weekday = value;
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          flex: 2,
+                                          child: TextFormField(
+                                            initialValue: item.subject,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Subject',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) =>
+                                                item.subject = value.trim(),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextFormField(
+                                            initialValue: item.room,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Room',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) =>
+                                                item.room = value.trim(),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextFormField(
+                                            initialValue: item.professor,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Professor',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) =>
+                                                item.professor = value.trim(),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextFormField(
+                                            initialValue: _format24h(
+                                              item.start,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Start',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) {
+                                              final parsed = _parseHoursFrom6AM(
+                                                value,
+                                              );
+                                              final currentEnd =
+                                                  item.start + item.duration;
+                                              item.start = parsed;
+                                              item.duration =
+                                                  (currentEnd - parsed)
+                                                      .clamp(0.5, 4.0)
+                                                      .toDouble();
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextFormField(
+                                            initialValue: _format24h(
+                                              item.start + item.duration,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              labelText: 'End',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) {
+                                              var parsed = _parseHoursFrom6AM(
+                                                value,
+                                              );
+                                              if (parsed <= item.start) {
+                                                parsed += 24;
+                                              }
+                                              item.duration =
+                                                  (parsed - item.start)
+                                                      .clamp(0.5, 4.0)
+                                                      .toDouble();
+                                            },
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Remove',
+                                          onPressed: () => setSheetState(
+                                            () => review.removeAt(index),
+                                          ),
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline_rounded,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(ctx, false);
+                                _showImportOptions();
+                              },
+                              child: const Text('Regenerate'),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: isAccepting
+                                  ? null
+                                  : () async {
+                                      setSheetState(() => isAccepting = true);
+                                      final accepted = review
+                                          .where(
+                                            (item) =>
+                                                item.subject.trim().isNotEmpty,
+                                          )
+                                          .toList();
+                                      try {
+                                        debugPrint('[ClassSetup] accept_start');
+                                        debugPrint(
+                                          '[ClassSetup] accept_templates_count=${accepted.length}',
+                                        );
+                                        await runRoutineAcceptWithTimeout(
+                                          () async {
+                                            await _markSuggestionsAccepted(
+                                              accepted,
+                                            );
+                                            if (!mounted) return;
+                                            setState(() {
+                                              _applyReviewedClasses(accepted);
+                                              _pendingImportMetadata =
+                                                  importMetadata;
+                                              _colorIndex += accepted.length;
+                                            });
+                                          },
+                                        );
+                                        debugPrint(
+                                          '[ClassSetup] accept_save_success',
+                                        );
+                                        if (!ctx.mounted) return;
+                                        Navigator.pop(ctx, true);
+                                      } on RoutineAcceptTimeoutException {
+                                        debugPrint(
+                                          '[ClassSetup] accept_timeout',
+                                        );
+                                        if (ctx.mounted) {
+                                          ScaffoldMessenger.of(
+                                            ctx,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Could not save. Please try again.',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        debugPrint(
+                                          '[ClassSetup] accept_save_failed: $e',
+                                        );
+                                        if (ctx.mounted) {
+                                          ScaffoldMessenger.of(
+                                            ctx,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Could not save. Please try again.',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      } finally {
+                                        if (ctx.mounted) {
+                                          setSheetState(
+                                            () => isAccepting = false,
+                                          );
+                                        }
+                                      }
+                                    },
+                              child: Text(
+                                isAccepting ? 'Accepting...' : 'Accept all',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
           },
         ) ??
         false;
@@ -1546,51 +1704,54 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
 
   void _applyReviewedClasses(List<ClassRoutineBlock> review) {
     for (int d = 0; d < 7; d++) {
-      final existing =
-          (weeklyRoutines[d] ?? []).where((item) => !item.isAdd).toList();
+      final existing = (weeklyRoutines[d] ?? [])
+          .where((item) => !item.isAdd)
+          .toList();
       final imported = review
           .where((item) => (item.weekday ?? _day + 1) == d + 1)
           .map((item) {
-        item.weekday = d + 1;
-        item.isAdd = false;
-        item.hasTopTape = true;
-        item.hasBottomTape = true;
-        item.icon = Icons.school_rounded;
-        item.color ??= _cycleColors[_colorIndex % _cycleColors.length];
-        return item;
-      }).toList();
+            item.weekday = d + 1;
+            item.isAdd = false;
+            item.hasTopTape = true;
+            item.hasBottomTape = true;
+            item.icon = Icons.school_rounded;
+            item.color ??= _cycleColors[_colorIndex % _cycleColors.length];
+            return item;
+          })
+          .toList();
       final next = [...existing, ...imported]
         ..sort((a, b) => a.start.compareTo(b.start));
-      next.add(ClassRoutineBlock(
-        id: 'add_imported_${d}_${DateTime.now().microsecondsSinceEpoch}',
-        subject: '',
-        start: next.isEmpty ? 7.0 : next.last.start + next.last.duration + 0.5,
-        isAdd: true,
-      ));
+      next.add(
+        ClassRoutineBlock(
+          id: 'add_imported_${d}_${DateTime.now().microsecondsSinceEpoch}',
+          subject: '',
+          start: next.isEmpty
+              ? 7.0
+              : next.last.start + next.last.duration + 0.5,
+          isAdd: true,
+        ),
+      );
       weeklyRoutines[d] = next;
     }
   }
 
-  Future<void> _markSuggestionsAccepted(
-    List<ClassRoutineBlock> blocks,
-  ) async {
+  Future<void> _markSuggestionsAccepted(List<ClassRoutineBlock> blocks) async {
     final ids = blocks
         .map((block) => block.suggestionId ?? '')
         .where((id) => id.isNotEmpty)
         .toSet();
     for (final suggestionId in ids) {
-      await ref.read(firestoreServiceProvider).saveSuggestion(
-        suggestionId,
-        {
-          'status': 'accepted',
-          'acceptedAt': DateTime.now().toIso8601String(),
-        },
-      );
-      await ref.read(eventServiceProvider).emit(
-        eventName: EventNames.suggestionAccepted,
-        source: 'class_setup',
-        payload: {'suggestionId': suggestionId},
-      );
+      await ref.read(firestoreServiceProvider).saveSuggestion(suggestionId, {
+        'status': 'accepted',
+        'acceptedAt': DateTime.now().toIso8601String(),
+      });
+      await ref
+          .read(eventServiceProvider)
+          .emit(
+            eventName: EventNames.suggestionAccepted,
+            source: 'class_setup',
+            payload: {'suggestionId': suggestionId},
+          );
     }
   }
 
@@ -1616,9 +1777,11 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon,
-                    size: 18,
-                    color: selected ? Colors.white : const Color(0xFF475569)),
+                Icon(
+                  icon,
+                  size: 18,
+                  color: selected ? Colors.white : const Color(0xFF475569),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   label,
@@ -1642,8 +1805,10 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(18),
-          border:
-              Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.9),
+            width: 1,
+          ),
         ),
         child: Row(
           children: [
@@ -1668,15 +1833,19 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.55),
           borderRadius: BorderRadius.circular(18),
-          border:
-              Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.9),
+            width: 1,
+          ),
         ),
         child: Row(
           children: [
-            Icon(Icons.document_scanner_rounded,
-                color: _isImportingPhoto
-                    ? const Color(0xFF64748B)
-                    : const Color(0xFF2563EB)),
+            Icon(
+              Icons.document_scanner_rounded,
+              color: _isImportingPhoto
+                  ? const Color(0xFF64748B)
+                  : const Color(0xFF2563EB),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -1685,9 +1854,9 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                         .classTimetableImageImportReady
                     ? 'Photo OCR is coming soon. Manual class setup still works.'
                     : _photoImportError ??
-                        (_isImportingPhoto
-                            ? 'Uploading and reading timetable...'
-                            : 'Pick a timetable photo to extract weekly classes.'),
+                          (_isImportingPhoto
+                              ? 'Uploading and reading timetable...'
+                              : 'Pick a timetable photo to extract weekly classes.'),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -1699,7 +1868,8 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
             ),
             const SizedBox(width: 10),
             FilledButton.icon(
-              onPressed: _isImportingPhoto ||
+              onPressed:
+                  _isImportingPhoto ||
                       !ref
                           .watch(appFeatureFlagsProvider)
                           .classTimetableImageImportReady
@@ -1798,302 +1968,347 @@ class _ClassSetupScreenState extends ConsumerState<ClassSetupScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Icon(Icons.document_scanner_rounded),
-        label: Text(_isImportingPhoto
-            ? 'Reading'
-            : ref.watch(appFeatureFlagsProvider).classTimetableImageImportReady
-                ? 'Photo OCR'
-                : 'Coming soon'),
+        label: Text(
+          _isImportingPhoto
+              ? 'Reading'
+              : ref
+                    .watch(appFeatureFlagsProvider)
+                    .classTimetableImageImportReady
+              ? 'Photo OCR'
+              : 'Coming soon',
+        ),
       ),
       body: LiquidBg(
-        child: Stack(children: [
-          SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      LiquidIconBtn(
-                        icon: Icons.arrow_back_ios_new_rounded,
-                        size: 44,
-                        onTap: () => Navigator.pop(context),
-                      ),
-                      const Text(
-                        'CLASS SETUP',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: kSub,
-                          letterSpacing: 1.5,
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        LiquidIconBtn(
+                          icon: Icons.arrow_back_ios_new_rounded,
+                          size: 44,
+                          onTap: () => Navigator.pop(context),
                         ),
-                      ),
-                      LiquidIconBtn(
-                        icon: Icons.check_rounded,
-                        size: 44,
-                        onTap: () async {
-                          final saved = await _save(ref);
-                          if (!context.mounted || !saved) return;
-                          Navigator.pop(context);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(7, (i) {
-                    final isSel = i == _day;
-                    const days = [
-                      "MON",
-                      "TUE",
-                      "WED",
-                      "THU",
-                      "FRI",
-                      "SAT",
-                      "SUN"
-                    ];
-                    return GestureDetector(
-                      onTap: () => setState(() => _day = i),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                        child: _buildDroplet(
-                          isSel ? 44 : 36,
-                          color: const Color(0xFF378ADD),
-                          text: days[i],
-                          isActive: isSel,
+                        const Text(
+                          'CLASS SETUP',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: kSub,
+                            letterSpacing: 1.5,
+                          ),
                         ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 12),
-                _buildModeTabs(),
-                _buildPhotoOcrPanel(),
-                _buildTextAiPanel(),
-                const SizedBox(height: 12),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Container(
-                    width: double.infinity,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2))
+                        LiquidIconBtn(
+                          icon: Icons.check_rounded,
+                          size: 44,
+                          onTap: () async {
+                            final saved = await _save(ref);
+                            if (!context.mounted || !saved) return;
+                            Navigator.pop(context);
+                          },
+                        ),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Row(
-                              children: headerColors
-                                  .map((color) => Expanded(
-                                          child: Container(
-                                        decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                          begin: Alignment.centerLeft,
-                                          end: Alignment.centerRight,
-                                          colors: [
-                                            color.withValues(alpha: 0.1),
-                                            color.withValues(alpha: 0.35),
-                                            color.withValues(alpha: 0.1)
-                                          ],
-                                        )),
-                                      )))
-                                  .toList(),
-                            ),
-                          ),
-                          BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                            child: const Center(
-                              child: Text(
-                                'Set Your Weekly Class Schedule',
-                                style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF64748B),
-                                    letterSpacing: 0.2),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(7, (i) {
+                      final isSel = i == _day;
+                      const days = [
+                        "MON",
+                        "TUE",
+                        "WED",
+                        "THU",
+                        "FRI",
+                        "SAT",
+                        "SUN",
+                      ];
+                      return GestureDetector(
+                        onTap: () => setState(() => _day = i),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                          child: _buildDroplet(
+                            isSel ? 44 : 36,
+                            color: const Color(0xFF378ADD),
+                            text: days[i],
+                            isActive: isSel,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildModeTabs(),
+                  _buildPhotoOcrPanel(),
+                  _buildTextAiPanel(),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
                       width: double.infinity,
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(32)),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            width: 1.5),
+                          color: Colors.white.withValues(alpha: 0.9),
+                          width: 1.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.02),
-                              blurRadius: 12,
-                              offset: const Offset(0, -4)),
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
                       child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(32)),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.fromLTRB(24, 28, 24, 16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Your Fixed Classes.',
-                                        style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w800,
-                                            color: Color(0xFF1E293B),
-                                            letterSpacing: -0.5)),
-                                    SizedBox(height: 6),
-                                    Text(
-                                        'Stay on top of your semester with a clear timetable.',
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF475569))),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: ShaderMask(
-                                  shaderCallback: (Rect bounds) {
-                                    return const LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.white,
-                                        Colors.white,
-                                        Colors.transparent
-                                      ],
-                                      stops: [0.0, 0.05, 0.9, 1.0],
-                                    ).createShader(bounds);
-                                  },
-                                  blendMode: BlendMode.dstIn,
-                                  child: SingleChildScrollView(
-                                    physics: const BouncingScrollPhysics(),
-                                    padding: const EdgeInsets.only(bottom: 120),
-                                    child: SizedBox(
-                                      height: 24 * kHourHeight,
-                                      child: Stack(
-                                        clipBehavior: Clip.none,
-                                        children: [
-                                          Positioned(
-                                            top: 0,
-                                            bottom: 0,
-                                            left: 48,
-                                            width: 8,
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: Colors.white
-                                                    .withValues(alpha: 0.35),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                    color: Colors.white
-                                                        .withValues(alpha: 0.9),
-                                                    width: 1.2),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                      color: Colors.black
-                                                          .withValues(
-                                                              alpha: 0.04),
-                                                      blurRadius: 4,
-                                                      offset:
-                                                          const Offset(2, 2))
-                                                ],
-                                              ),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Row(
+                                children: headerColors
+                                    .map(
+                                      (color) => Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.centerLeft,
+                                              end: Alignment.centerRight,
+                                              colors: [
+                                                color.withValues(alpha: 0.1),
+                                                color.withValues(alpha: 0.35),
+                                                color.withValues(alpha: 0.1),
+                                              ],
                                             ),
                                           ),
-                                          ...List.generate(24, (i) {
-                                            final hour = (i + 6) % 24;
-                                            final ampm =
-                                                hour < 12 ? 'AM' : 'PM';
-                                            final displayHour = hour == 0
-                                                ? 12
-                                                : (hour > 12
-                                                    ? hour - 12
-                                                    : hour);
-                                            final label = "$displayHour $ampm";
-                                            return Positioned(
-                                              top: i * kHourHeight - 10,
-                                              left: 0,
-                                              width: 44,
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.end,
-                                                children: [
-                                                  Text(label,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                            BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                              child: const Center(
+                                child: Text(
+                                  'Set Your Weekly Class Schedule',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF64748B),
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(32),
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.02),
+                              blurRadius: 12,
+                              offset: const Offset(0, -4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(32),
+                          ),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.fromLTRB(24, 28, 24, 16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Your Fixed Classes.',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF1E293B),
+                                          letterSpacing: -0.5,
+                                        ),
+                                      ),
+                                      SizedBox(height: 6),
+                                      Text(
+                                        'Stay on top of your semester with a clear timetable.',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ShaderMask(
+                                    shaderCallback: (Rect bounds) {
+                                      return const LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.white,
+                                          Colors.white,
+                                          Colors.transparent,
+                                        ],
+                                        stops: [0.0, 0.05, 0.9, 1.0],
+                                      ).createShader(bounds);
+                                    },
+                                    blendMode: BlendMode.dstIn,
+                                    child: SingleChildScrollView(
+                                      physics: const BouncingScrollPhysics(),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 120,
+                                      ),
+                                      child: SizedBox(
+                                        height: 24 * kHourHeight,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            Positioned(
+                                              top: 0,
+                                              bottom: 0,
+                                              left: 48,
+                                              width: 8,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.35),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.9),
+                                                    width: 1.2,
+                                                  ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.04,
+                                                          ),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(
+                                                        2,
+                                                        2,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            ...List.generate(24, (i) {
+                                              final hour = (i + 6) % 24;
+                                              final ampm = hour < 12
+                                                  ? 'AM'
+                                                  : 'PM';
+                                              final displayHour = hour == 0
+                                                  ? 12
+                                                  : (hour > 12
+                                                        ? hour - 12
+                                                        : hour);
+                                              final label =
+                                                  "$displayHour $ampm";
+                                              return Positioned(
+                                                top: i * kHourHeight - 10,
+                                                left: 0,
+                                                width: 44,
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      label,
                                                       style: const TextStyle(
-                                                          fontSize: 11,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: Color(
-                                                              0xFF64748B))),
-                                                  const SizedBox(width: 6),
-                                                  Container(
+                                                        fontSize: 11,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: Color(
+                                                          0xFF64748B,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Container(
                                                       width: 4,
                                                       height: 1.5,
                                                       color: const Color(
-                                                          0xFFCBD5E1)),
-                                                ],
-                                              ),
-                                            );
-                                          }),
-                                          ...items.asMap().entries.map((entry) {
-                                            int idx = entry.key;
-                                            ClassRoutineBlock item =
-                                                entry.value;
-                                            if (item.isAdd) {
-                                              return _buildAddButton(idx, item);
-                                            } else {
-                                              return _buildColoredBlock(
-                                                  idx, item);
-                                            }
-                                          }),
-                                        ],
+                                                        0xFFCBD5E1,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }),
+                                            ...items.asMap().entries.map((
+                                              entry,
+                                            ) {
+                                              int idx = entry.key;
+                                              ClassRoutineBlock item =
+                                                  entry.value;
+                                              if (item.isAdd) {
+                                                return _buildAddButton(
+                                                  idx,
+                                                  item,
+                                                );
+                                              } else {
+                                                return _buildColoredBlock(
+                                                  idx,
+                                                  item,
+                                                );
+                                              }
+                                            }),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }

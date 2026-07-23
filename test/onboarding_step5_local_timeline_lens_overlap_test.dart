@@ -29,7 +29,11 @@ void main() {
         pxPerMinute: 1.0,
         topPadding: 10.0,
         segments: const [
-          StretchedSegment(startMinute: 600, endMinute: 620, extraStretch: 50.0),
+          StretchedSegment(
+            startMinute: 600,
+            endMinute: 620,
+            extraStretch: 50.0,
+          ),
         ],
       );
 
@@ -48,30 +52,41 @@ void main() {
       }
     });
 
-    test('overlapping segments merge and preserve monotonicity and stability', () {
-      // Segment 1: 600 - 620, extra: 50
-      // Segment 2: 615 - 635, extra: 30
-      // Union: 600 - 635, combined extra: 80
-      final layout = OnboardingTimelineLayout(
-        startMinute: 480,
-        rangeMinutes: 720,
-        pxPerMinute: 1.0,
-        topPadding: 10.0,
-        segments: const [
-          StretchedSegment(startMinute: 600, endMinute: 620, extraStretch: 50.0),
-          StretchedSegment(startMinute: 615, endMinute: 635, extraStretch: 30.0),
-        ],
-      );
+    test(
+      'overlapping segments merge and preserve monotonicity and stability',
+      () {
+        // Segment 1: 600 - 620, extra: 50
+        // Segment 2: 615 - 635, extra: 30
+        // Union: 600 - 635, combined extra: 80
+        final layout = OnboardingTimelineLayout(
+          startMinute: 480,
+          rangeMinutes: 720,
+          pxPerMinute: 1.0,
+          topPadding: 10.0,
+          segments: const [
+            StretchedSegment(
+              startMinute: 600,
+              endMinute: 620,
+              extraStretch: 50.0,
+            ),
+            StretchedSegment(
+              startMinute: 615,
+              endMinute: 635,
+              extraStretch: 30.0,
+            ),
+          ],
+        );
 
-      // Union range: 600 - 635.
-      // Normal height: 35. Combined extra stretch: 80. Total: 115.
-      expect(layout.yFor(635) - layout.yFor(600), closeTo(115.0, 0.001));
+        // Union range: 600 - 635.
+        // Normal height: 35. Combined extra stretch: 80. Total: 115.
+        expect(layout.yFor(635) - layout.yFor(600), closeTo(115.0, 0.001));
 
-      // Check monotonicity
-      for (int m = 480; m < 1200; m += 1) {
-        expect(layout.yFor(m) < layout.yFor(m + 1), true);
-      }
-    });
+        // Check monotonicity
+        for (int m = 480; m < 1200; m += 1) {
+          expect(layout.yFor(m) < layout.yFor(m + 1), true);
+        }
+      },
+    );
 
     test('adjacent segments merge and preserve monotonicity and stability', () {
       // Segment 1: 600 - 620, extra: 50
@@ -83,8 +98,16 @@ void main() {
         pxPerMinute: 1.0,
         topPadding: 10.0,
         segments: const [
-          StretchedSegment(startMinute: 600, endMinute: 620, extraStretch: 50.0),
-          StretchedSegment(startMinute: 620, endMinute: 640, extraStretch: 40.0),
+          StretchedSegment(
+            startMinute: 600,
+            endMinute: 620,
+            extraStretch: 50.0,
+          ),
+          StretchedSegment(
+            startMinute: 620,
+            endMinute: 640,
+            extraStretch: 40.0,
+          ),
         ],
       );
 

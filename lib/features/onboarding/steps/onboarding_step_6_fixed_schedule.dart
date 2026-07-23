@@ -22,7 +22,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
   static const double _kPixelsPerMinute = _kHourHeight / 60.0;
   static const double _kLeftOffset = 64.0;
   static const double _kTimelineBottomPadding = 420.0;
-  
+
   final ScrollController _scrollController = ScrollController();
   String? _frontBlockId;
 
@@ -39,16 +39,20 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
     final draft = ref.read(mockOnboardingProvider).draft;
     final base = draft.baseTimeline.withRequiredFixedBlocks();
     if (draft.baseTimeline != base) {
-      ref.read(mockOnboardingProvider.notifier).updateDraft(
-        (d) => d.copyWith(baseTimeline: base),
-      );
-      ref.read(mockOnboardingProvider.notifier).setStepDirty(onboardingFixedStepIndex, true);
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .updateDraft((d) => d.copyWith(baseTimeline: base));
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setStepDirty(onboardingFixedStepIndex, true);
     }
   }
 
   List<ClassRoutineBlock> _getBlocks(BaseTimelineDraft baseTimeline) {
-    final timelineBlocks = baseTimeline.blocks.where((b) => b.section == 'fixed').toList();
-    
+    final timelineBlocks = baseTimeline.blocks
+        .where((b) => b.section == 'fixed')
+        .toList();
+
     return timelineBlocks.map((entry) {
       return ClassRoutineBlock(
         id: entry.id,
@@ -68,8 +72,10 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
   void _setBlocks(List<ClassRoutineBlock> blocks) {
     ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
       final base = draft.baseTimeline;
-      final existingBlocks = base.blocks.where((b) => b.section != 'fixed').toList();
-      
+      final existingBlocks = base.blocks
+          .where((b) => b.section != 'fixed')
+          .toList();
+
       final fixedBlocks = blocks.map((b) {
         if (b.id == BaseTimelineDraft.fixedSleepId) {
           return TimelineBlockDraft(
@@ -111,24 +117,34 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
       }).toList();
 
       existingBlocks.addAll(fixedBlocks);
-      
-      return draft.copyWith(baseTimeline: base.copyWith(blocks: existingBlocks));
+
+      return draft.copyWith(
+        baseTimeline: base.copyWith(blocks: existingBlocks),
+      );
     });
-    ref.read(mockOnboardingProvider.notifier).setStepDirty(onboardingFixedStepIndex, true);
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepDirty(onboardingFixedStepIndex, true);
     _validate();
   }
 
   void _validate() {
     final draft = ref.read(mockOnboardingProvider).draft;
     final blocks = _getBlocks(draft.baseTimeline);
-    final sleep = blocks.where((b) => b.id == BaseTimelineDraft.fixedSleepId).toList();
-    final bath = blocks.where((b) => b.id == BaseTimelineDraft.fixedBathId).toList();
-    
+    final sleep = blocks
+        .where((b) => b.id == BaseTimelineDraft.fixedSleepId)
+        .toList();
+    final bath = blocks
+        .where((b) => b.id == BaseTimelineDraft.fixedBathId)
+        .toList();
+
     if (sleep.isEmpty || bath.isEmpty) {
-      ref.read(mockOnboardingProvider.notifier).setValidationMessage('Missing required Sleep or Bath block.');
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage('Missing required Sleep or Bath block.');
       return;
     }
-    
+
     ref.read(mockOnboardingProvider.notifier).setValidationMessage(null);
   }
 
@@ -142,7 +158,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
   Widget build(BuildContext context) {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final blocks = _getBlocks(draft.baseTimeline);
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -188,37 +204,33 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
             ],
           ),
         ),
-        
+
         // Timeline Area
-        Expanded(
-          child: _buildTimeline(blocks),
-        ),
+        Expanded(child: _buildTimeline(blocks)),
       ],
     );
   }
-  
+
   Widget _buildTimeline(List<ClassRoutineBlock> allBlocks) {
     const topPadding = 18.0;
-    
+
     // Expand overnight blocks visually
     final visualBlocks = <ClassRoutineBlock>[];
     for (final block in allBlocks) {
       if (block.startMinute > block.endMinute) {
         // Crosses midnight, split into two visual blocks
-        visualBlocks.add(block.copyWith(
-          id: '${block.id}-part1',
-          endMinute: 1440,
-        ));
-        visualBlocks.add(block.copyWith(
-          id: '${block.id}-part2',
-          startMinute: 0,
-        ));
+        visualBlocks.add(
+          block.copyWith(id: '${block.id}-part1', endMinute: 1440),
+        );
+        visualBlocks.add(
+          block.copyWith(id: '${block.id}-part2', startMinute: 0),
+        );
       } else {
         visualBlocks.add(block);
       }
     }
     visualBlocks.sort((a, b) => a.startMinute.compareTo(b.startMinute));
-    
+
     int startMinute = 24 * 60;
     int endMinute = 0;
     if (visualBlocks.isEmpty) {
@@ -235,19 +247,20 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
         endMinute = math.min(24 * 60, startMinute + 10 * 60);
       }
     }
-    
+
     final hourCount = (endMinute - startMinute) ~/ 60;
-    
+
     double yFor(int minute) {
       return topPadding + (minute - startMinute) * _kPixelsPerMinute;
     }
-    
+
     double hFor(int start, int end) {
       return (end - start) * _kPixelsPerMinute;
     }
 
     final maxCardBottom = visualBlocks.fold<double>(0, (max, item) {
-      final bottom = yFor(item.startMinute) + hFor(item.startMinute, item.endMinute);
+      final bottom =
+          yFor(item.startMinute) + hFor(item.startMinute, item.endMinute);
       return bottom > max ? bottom : max;
     });
 
@@ -304,12 +317,16 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                       color: OptivusColors.purpleAccent.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(
-                        color: OptivusColors.purpleAccent.withValues(alpha: 0.40),
+                        color: OptivusColors.purpleAccent.withValues(
+                          alpha: 0.40,
+                        ),
                         width: 1.2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: OptivusColors.purpleAccent.withValues(alpha: 0.18),
+                          color: OptivusColors.purpleAccent.withValues(
+                            alpha: 0.18,
+                          ),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -317,16 +334,18 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                     ),
                   ),
                 ),
-                
+
                 // Hour labels and minute ticks
                 ...List.generate(hourCount + 1, (i) {
                   final minute = startMinute + i * 60;
                   final hour = (minute ~/ 60) % 24;
                   final ampm = hour < 12 ? 'AM' : 'PM';
-                  final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+                  final displayHour = hour == 0
+                      ? 12
+                      : (hour > 12 ? hour - 12 : hour);
                   final label = '$displayHour $ampm';
                   final y = yFor(minute);
-                  
+
                   return Positioned(
                     top: y - 10,
                     left: 0,
@@ -356,7 +375,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                           height: 1.5,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: OptivusColors.purpleAccent.withValues(alpha: 0.35),
+                              color: OptivusColors.purpleAccent.withValues(
+                                alpha: 0.35,
+                              ),
                             ),
                           ),
                         ),
@@ -364,13 +385,13 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                     ),
                   );
                 }),
-                
+
                 // Blocks
                 ...visualBlocks.map((block) {
                   final y = yFor(block.startMinute);
                   final h = hFor(block.startMinute, block.endMinute);
                   final isFront = _frontBlockId == block.id;
-                  
+
                   // For rendering split blocks, map back to original for editing
                   final originalBlock = allBlocks.firstWhere(
                     (b) => block.id.startsWith(b.id),
@@ -388,25 +409,38 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                         setState(() => _frontBlockId = block.id);
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(24),
-                          color: Colors.white.withValues(alpha: isFront ? 0.72 : 0.58),
+                          color: Colors.white.withValues(
+                            alpha: isFront ? 0.72 : 0.58,
+                          ),
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [
-                              OptivusColors.purpleAccent.withValues(alpha: isFront ? 0.26 : 0.18),
-                              OptivusColors.purpleAccent.withValues(alpha: isFront ? 0.08 : 0.04),
+                              OptivusColors.purpleAccent.withValues(
+                                alpha: isFront ? 0.26 : 0.18,
+                              ),
+                              OptivusColors.purpleAccent.withValues(
+                                alpha: isFront ? 0.08 : 0.04,
+                              ),
                             ],
                           ),
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: isFront ? 0.96 : 0.82),
+                            color: Colors.white.withValues(
+                              alpha: isFront ? 0.96 : 0.82,
+                            ),
                             width: isFront ? 1.6 : 1.2,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: OptivusColors.purpleAccent.withValues(alpha: isFront ? 0.18 : 0.09),
+                              color: OptivusColors.purpleAccent.withValues(
+                                alpha: isFront ? 0.18 : 0.09,
+                              ),
                               blurRadius: isFront ? 14 : 10,
                               offset: Offset(0, isFront ? 5 : 3),
                             ),
@@ -492,7 +526,11 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
         width: 30,
         height: 30,
         child: Center(
-          child: Icon(Icons.more_vert_rounded, color: OptivusColors.textSecondary, size: 18),
+          child: Icon(
+            Icons.more_vert_rounded,
+            color: OptivusColors.textSecondary,
+            size: 18,
+          ),
         ),
       ),
       onSelected: (value) {
@@ -503,7 +541,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
         }
       },
       itemBuilder: (context) {
-        final isMandatory = item.id == BaseTimelineDraft.fixedSleepId || item.id == BaseTimelineDraft.fixedBathId;
+        final isMandatory =
+            item.id == BaseTimelineDraft.fixedSleepId ||
+            item.id == BaseTimelineDraft.fixedBathId;
         return [
           const PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
           if (!isMandatory)
@@ -533,7 +573,10 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
     );
   }
 
-  Future<void> _showEditDialog(ClassRoutineBlock item, {bool isNew = false}) async {
+  Future<void> _showEditDialog(
+    ClassRoutineBlock item, {
+    bool isNew = false,
+  }) async {
     final isSleep = item.id == BaseTimelineDraft.fixedSleepId;
     final isBath = item.id == BaseTimelineDraft.fixedBathId;
     final isMandatory = isSleep || isBath;
@@ -586,7 +629,13 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isNew ? 'Add fixed block' : (isSleep ? 'Edit Sleep' : (isBath ? 'Edit Bath' : 'Edit fixed block')),
+                              isNew
+                                  ? 'Add fixed block'
+                                  : (isSleep
+                                        ? 'Edit Sleep'
+                                        : (isBath
+                                              ? 'Edit Bath'
+                                              : 'Edit fixed block')),
                               style: const TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w900,
@@ -602,10 +651,14 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                   vertical: 10,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: OptivusColors.danger.withValues(alpha: 0.08),
+                                  color: OptivusColors.danger.withValues(
+                                    alpha: 0.08,
+                                  ),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: OptivusColors.danger.withValues(alpha: 0.22),
+                                    color: OptivusColors.danger.withValues(
+                                      alpha: 0.22,
+                                    ),
                                   ),
                                 ),
                                 child: Text(
@@ -632,7 +685,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                   borderSide: BorderSide.none,
                                 ),
                               ),
-                              validator: (v) => v == null || v.trim().isEmpty ? 'Fixed block name is required.' : null,
+                              validator: (v) => v == null || v.trim().isEmpty
+                                  ? 'Fixed block name is required.'
+                                  : null,
                             ),
                             const SizedBox(height: 12),
                             Row(
@@ -642,7 +697,11 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     key: const ValueKey('start_time_input'),
                                     controller: startTimeCtrl,
                                     decoration: InputDecoration(
-                                      labelText: isSleep ? 'Sleep time' : (isBath ? 'Bath start' : 'Start time'),
+                                      labelText: isSleep
+                                          ? 'Sleep time'
+                                          : (isBath
+                                                ? 'Bath start'
+                                                : 'Start time'),
                                       filled: true,
                                       fillColor: Colors.white,
                                       border: OutlineInputBorder(
@@ -650,7 +709,10 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                         borderSide: BorderSide.none,
                                       ),
                                     ),
-                                    validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                    validator: (v) =>
+                                        v == null || v.trim().isEmpty
+                                        ? 'Required'
+                                        : null,
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -659,7 +721,9 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     key: const ValueKey('end_time_input'),
                                     controller: endTimeCtrl,
                                     decoration: InputDecoration(
-                                      labelText: isSleep ? 'Wake time' : (isBath ? 'Bath end' : 'End time'),
+                                      labelText: isSleep
+                                          ? 'Wake time'
+                                          : (isBath ? 'Bath end' : 'End time'),
                                       filled: true,
                                       fillColor: Colors.white,
                                       border: OutlineInputBorder(
@@ -667,7 +731,10 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                         borderSide: BorderSide.none,
                                       ),
                                     ),
-                                    validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                                    validator: (v) =>
+                                        v == null || v.trim().isEmpty
+                                        ? 'Required'
+                                        : null,
                                   ),
                                 ),
                               ],
@@ -689,12 +756,17 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     ),
                                   ),
                                   onPressed: () {
-                                    if (!formKey.currentState!.validate()) return;
-                                    
+                                    if (!formKey.currentState!.validate())
+                                      return;
+
                                     final subject = subjectCtrl.text.trim();
-                                    final parsedStart = _parseClockMinute(startTimeCtrl.text);
-                                    final parsedEnd = _parseClockMinute(endTimeCtrl.text);
-                                    
+                                    final parsedStart = _parseClockMinute(
+                                      startTimeCtrl.text,
+                                    );
+                                    final parsedEnd = _parseClockMinute(
+                                      endTimeCtrl.text,
+                                    );
+
                                     String? error;
                                     if (subject.isEmpty) {
                                       error = 'Fixed block name is required.';
@@ -702,13 +774,20 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                       error = 'Invalid start time.';
                                     } else if (parsedEnd == null) {
                                       error = 'Invalid end time.';
-                                    } else if (isSleep && parsedStart == parsedEnd) {
-                                      error = 'Sleep and wake time cannot be the same.';
-                                    } else if (isBath && parsedEnd <= parsedStart) {
-                                      error = 'Bath end time must be after bath start time.';
-                                    } else if (!isSleep && parsedEnd <= parsedStart) {
-                                      error = 'End time must be after start time.';
-                                    } else if (!isSleep && parsedEnd - parsedStart > 12 * 60) {
+                                    } else if (isSleep &&
+                                        parsedStart == parsedEnd) {
+                                      error =
+                                          'Sleep and wake time cannot be the same.';
+                                    } else if (isBath &&
+                                        parsedEnd <= parsedStart) {
+                                      error =
+                                          'Bath end time must be after bath start time.';
+                                    } else if (!isSleep &&
+                                        parsedEnd <= parsedStart) {
+                                      error =
+                                          'End time must be after start time.';
+                                    } else if (!isSleep &&
+                                        parsedEnd - parsedStart > 12 * 60) {
                                       error = 'Block duration is too long.';
                                     }
 
@@ -718,18 +797,26 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
                                     }
 
                                     final updated = item.copyWith(
-                                      subject: isSleep ? 'Sleep' : (isBath ? 'Bath' : subject),
+                                      subject: isSleep
+                                          ? 'Sleep'
+                                          : (isBath ? 'Bath' : subject),
                                       startMinute: parsedStart,
                                       endMinute: parsedEnd,
                                       repeatDays: const [1, 2, 3, 4, 5, 6, 7],
                                     );
 
-                                    final draft = ref.read(mockOnboardingProvider).draft;
-                                    final blocks = _getBlocks(draft.baseTimeline).toList();
+                                    final draft = ref
+                                        .read(mockOnboardingProvider)
+                                        .draft;
+                                    final blocks = _getBlocks(
+                                      draft.baseTimeline,
+                                    ).toList();
                                     if (isNew) {
                                       blocks.add(updated);
                                     } else {
-                                      final index = blocks.indexWhere((b) => b.id == item.id);
+                                      final index = blocks.indexWhere(
+                                        (b) => b.id == item.id,
+                                      );
                                       if (index >= 0) blocks[index] = updated;
                                     }
                                     _setBlocks(blocks);
@@ -761,13 +848,16 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
   }
 
   static int? _parseClockMinute(String value) {
-    final match = RegExp(r'^\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?\s*$').firstMatch(value);
+    final match = RegExp(
+      r'^\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)?\s*$',
+    ).firstMatch(value);
     if (match == null) return null;
 
     final hour = int.tryParse(match.group(1) ?? '');
     final minute = int.tryParse(match.group(2) ?? '0');
     final period = match.group(3)?.toUpperCase();
-    if (hour == null || minute == null || minute < 0 || minute > 59) return null;
+    if (hour == null || minute == null || minute < 0 || minute > 59)
+      return null;
 
     var h = hour;
     if (period != null) {

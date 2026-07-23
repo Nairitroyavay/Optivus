@@ -40,7 +40,7 @@ void main() {
       expect(state.draft.baseTimeline.eatingSetupStep, 1);
       expect(state.stepDirty[5], false);
       expect(state.stepCompleted[5], true);
-      
+
       final blocks = state.draft.baseTimeline.blocks;
       expect(blocks.length, 2);
       expect(blocks.any((b) => b.section == 'classes'), true);

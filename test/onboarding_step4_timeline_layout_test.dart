@@ -575,9 +575,7 @@ void main() {
     expect(find.text('Saved Work'), findsOneWidget);
   });
 
-  testWidgets('student only generated card shows correct copy', (
-    tester,
-  ) async {
+  testWidgets('student only generated card shows correct copy', (tester) async {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
       baseTimeline: BaseTimelineDraft(
@@ -618,11 +616,12 @@ void main() {
     );
   });
 
-  testWidgets('work only generated card shows correct copy', (
-    tester,
-  ) async {
+  testWidgets('work only generated card shows correct copy', (tester) async {
     final draft = OnboardingDraft(
-      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.workingKey, workType: 'full_time'),
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.workingKey,
+        workType: 'full_time',
+      ),
       baseTimeline: BaseTimelineDraft(
         blocks: [
           _timelineBlock(
@@ -1174,20 +1173,20 @@ void main() {
         'AI model is not available. Check worker model config.',
       ],
       const ['provider_unauthorized', 'AI key is invalid or unauthorized.'],
-      const ['provider_quota_exceeded', 'AI is busy right now. Please try again.'],
       const [
-        'provider_timeout',
-        'AI import failed. Please try again.',
+        'provider_quota_exceeded',
+        'AI is busy right now. Please try again.',
       ],
+      const ['provider_timeout', 'AI import failed. Please try again.'],
       const [
         'provider_invalid_image_payload',
         'AI could not process this image format.',
       ],
-      const ['provider_empty_candidates', 'AI could not read this timetable. Please upload a clearer image and try again.'],
       const [
-        'provider_request_failed',
-        'AI import failed. Please try again.',
+        'provider_empty_candidates',
+        'AI could not read this timetable. Please upload a clearer image and try again.',
       ],
+      const ['provider_request_failed', 'AI import failed. Please try again.'],
     ];
 
     for (final entry in cases) {
@@ -1555,8 +1554,14 @@ void main() {
                       return OnboardingStageBackButton(
                         key: const ValueKey('onboarding-step5-back'),
                         onTap: () {
-                          ref.read(mockOnboardingProvider.notifier).clearValidation();
-                          updateBaseTimelineDraft(ref, 5, (base) => base.copyWith(eatingSetupStep: 0));
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .clearValidation();
+                          updateBaseTimelineDraft(
+                            ref,
+                            5,
+                            (base) => base.copyWith(eatingSetupStep: 0),
+                          );
                         },
                       );
                     }
@@ -1675,8 +1680,14 @@ void main() {
                       return OnboardingStageBackButton(
                         key: const ValueKey('onboarding-step5-back'),
                         onTap: () {
-                          ref.read(mockOnboardingProvider.notifier).clearValidation();
-                          updateBaseTimelineDraft(ref, 5, (base) => base.copyWith(eatingSetupStep: 0));
+                          ref
+                              .read(mockOnboardingProvider.notifier)
+                              .clearValidation();
+                          updateBaseTimelineDraft(
+                            ref,
+                            5,
+                            (base) => base.copyWith(eatingSetupStep: 0),
+                          );
                         },
                       );
                     }
@@ -1735,7 +1746,9 @@ void main() {
             notifier = MockOnboardingNotifier()..loadSeedData(draft);
             return notifier;
           }),
-          nutritionAiClientProvider.overrideWithValue(const FakeNutritionAiClient()),
+          nutritionAiClientProvider.overrideWithValue(
+            const FakeNutritionAiClient(),
+          ),
         ],
         child: const MaterialApp(home: OnboardingFlow()),
       ),
@@ -1775,10 +1788,12 @@ void main() {
     expect(nextDraft.currentStep, onboardingFixedStepIndex);
     expect(nextDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
     expect(nextDraft.stepDirty[onboardingEatingStepIndex], isFalse);
-    expect(
-      eatingBlocks.map((b) => b.title).toList(),
-      ['Breakfast', 'Lunch', 'Snack', 'Dinner'],
-    );
+    expect(eatingBlocks.map((b) => b.title).toList(), [
+      'Breakfast',
+      'Lunch',
+      'Snack',
+      'Dinner',
+    ]);
     expect(
       eatingBlocks.every(
         (block) =>
@@ -1797,10 +1812,12 @@ void main() {
     expect(restoredDraft.currentStep, onboardingFixedStepIndex);
     expect(restoredDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
     expect(restoredDraft.stepDirty[onboardingEatingStepIndex], isFalse);
-    expect(
-      restoredEatingBlocks.map((block) => block.title).toList(),
-      ['Breakfast', 'Lunch', 'Snack', 'Dinner'],
-    );
+    expect(restoredEatingBlocks.map((block) => block.title).toList(), [
+      'Breakfast',
+      'Lunch',
+      'Snack',
+      'Dinner',
+    ]);
   });
 
   testWidgets('Eating has-routine path saves AI blocks without review screen', (
@@ -1971,8 +1988,6 @@ void main() {
     },
   );
 
-
-
   test(
     'business class/job step validation asks for work/business timeline',
     () {
@@ -1999,7 +2014,10 @@ void main() {
     final draft = OnboardingDraft(
       currentStep: onboardingClassJobStepIndex,
       stepCompleted: completed,
-      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.workingKey, workType: 'full_time'),
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.workingKey,
+        workType: 'full_time',
+      ),
       baseTimeline: const BaseTimelineDraft(),
     );
     final workBlocks = [
@@ -2007,7 +2025,7 @@ void main() {
         id: 'late-shift',
         title: 'Late Shift',
         startMinute: 22 * 60, // 10 PM
-        endMinute: 24 * 60,   // Midnight
+        endMinute: 24 * 60, // Midnight
         config: ScheduleSetupConfig.workSetup,
       ),
     ];
@@ -2025,15 +2043,15 @@ void main() {
           ),
           onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
         ],
-        child: const MaterialApp(
-          home: OnboardingFlow(),
-        ),
+        child: const MaterialApp(home: OnboardingFlow()),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
 
-    final lateBlock = find.byKey(const ValueKey('onboarding-step4-block-late-shift'));
+    final lateBlock = find.byKey(
+      const ValueKey('onboarding-step4-block-late-shift'),
+    );
     await tester.ensureVisible(lateBlock);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -2094,115 +2112,121 @@ void main() {
       sourceTextSnippet: 'DS Lab 2',
     );
 
-    final roomSnippet = extractRoomLabelFromOnboarding4Candidate(candidateSnippet);
+    final roomSnippet = extractRoomLabelFromOnboarding4Candidate(
+      candidateSnippet,
+    );
     expect(roomSnippet, 'Lab 2');
   });
 
-  testWidgets('Compact front class block shows room beside subject without overflow', (WidgetTester tester) async {
-    final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
-    completed[onboardingClassJobStepIndex] = false;
-    final draft = OnboardingDraft(
-      currentStep: onboardingClassJobStepIndex,
-      stepCompleted: completed,
-      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey, workType: 'full_time'),
-      baseTimeline: const BaseTimelineDraft(),
-    );
-
-    final classBlocks = [
-      _scheduleBlock(
-        id: 'ps',
-        title: 'PS',
-        startMinute: 9 * 60,
-        endMinute: 10 * 60,
-        room: 'C25-A-109',
-        config: ScheduleSetupConfig.classSetup,
-      ),
-      _scheduleBlock(
-        id: 'afl',
-        title: 'AFL',
-        startMinute: 10 * 60,
-        endMinute: 11 * 60,
-        room: 'C25-B-108',
-        config: ScheduleSetupConfig.classSetup,
-      ),
-      _scheduleBlock(
-        id: 'ds',
-        title: 'DS',
-        startMinute: 11 * 60,
-        endMinute: 12 * 60,
-        room: 'C25-B-108',
-        config: ScheduleSetupConfig.classSetup,
-      ),
-      _scheduleBlock(
-        id: 'ind4',
-        title: 'IND4',
-        startMinute: 12 * 60,
-        endMinute: 13 * 60,
-        room: 'C25-B-109',
-        config: ScheduleSetupConfig.classSetup,
-      ),
-    ];
-
-    final workBlocks = [
-      _scheduleBlock(
-        id: 'office',
-        title: 'Office Work',
-        startMinute: 9 * 60,
-        endMinute: 12 * 60,
-        config: ScheduleSetupConfig.workSetup,
-      ),
-      _scheduleBlock(
-        id: 'job',
-        title: 'Job',
-        startMinute: 12 * 60,
-        endMinute: 15 * 60,
-        config: ScheduleSetupConfig.workSetup,
-      ),
-    ];
-
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
-          ),
-          onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
-          onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
-        ],
-        child: const MaterialApp(
-          home: OnboardingFlow(),
+  testWidgets(
+    'Compact front class block shows room beside subject without overflow',
+    (WidgetTester tester) async {
+      final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+      completed[onboardingClassJobStepIndex] = false;
+      final draft = OnboardingDraft(
+        currentStep: onboardingClassJobStepIndex,
+        stepCompleted: completed,
+        lifeRole: const LifeRoleDraft(
+          lifeRole: LifeRoleDraft.studentWorkingKey,
+          workType: 'full_time',
         ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 1));
+        baseTimeline: const BaseTimelineDraft(),
+      );
 
-    // The front class blocks are extremely compact (height ~ 60)
-    // Their room numbers must still be visible beside the subject
-    expect(find.text('PS'), findsOneWidget);
-    expect(find.text('C25-A-109'), findsOneWidget);
-    
-    expect(find.text('AFL'), findsOneWidget);
-    expect(find.text('C25-B-108'), findsNWidgets(2)); // AFL and DS
-    expect(find.text('DS'), findsOneWidget);
-    
-    expect(find.text('IND4'), findsOneWidget);
-    expect(find.text('C25-B-109'), findsOneWidget);
+      final classBlocks = [
+        _scheduleBlock(
+          id: 'ps',
+          title: 'PS',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+          room: 'C25-A-109',
+          config: ScheduleSetupConfig.classSetup,
+        ),
+        _scheduleBlock(
+          id: 'afl',
+          title: 'AFL',
+          startMinute: 10 * 60,
+          endMinute: 11 * 60,
+          room: 'C25-B-108',
+          config: ScheduleSetupConfig.classSetup,
+        ),
+        _scheduleBlock(
+          id: 'ds',
+          title: 'DS',
+          startMinute: 11 * 60,
+          endMinute: 12 * 60,
+          room: 'C25-B-108',
+          config: ScheduleSetupConfig.classSetup,
+        ),
+        _scheduleBlock(
+          id: 'ind4',
+          title: 'IND4',
+          startMinute: 12 * 60,
+          endMinute: 13 * 60,
+          room: 'C25-B-109',
+          config: ScheduleSetupConfig.classSetup,
+        ),
+      ];
 
-    // The back/down overlap label is just "Office", no room
-    expect(find.text('Office'), findsWidgets);
-    
-    // There shouldn't be any truncated versions
-    expect(find.text('C25-'), findsNothing);
+      final workBlocks = [
+        _scheduleBlock(
+          id: 'office',
+          title: 'Office Work',
+          startMinute: 9 * 60,
+          endMinute: 12 * 60,
+          config: ScheduleSetupConfig.workSetup,
+        ),
+        _scheduleBlock(
+          id: 'job',
+          title: 'Job',
+          startMinute: 12 * 60,
+          endMinute: 15 * 60,
+          config: ScheduleSetupConfig.workSetup,
+        ),
+      ];
 
-    // Menu may be hidden for very narrow spaces, but RenderFlex shouldn't crash
-    expect(tester.takeException(), isNull);
-  });
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            onboardingClassTimelineProvider.overrideWith((_) => classBlocks),
+            onboardingWorkTimelineProvider.overrideWith((_) => workBlocks),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      // The front class blocks are extremely compact (height ~ 60)
+      // Their room numbers must still be visible beside the subject
+      expect(find.text('PS'), findsOneWidget);
+      expect(find.text('C25-A-109'), findsOneWidget);
+
+      expect(find.text('AFL'), findsOneWidget);
+      expect(find.text('C25-B-108'), findsNWidgets(2)); // AFL and DS
+      expect(find.text('DS'), findsOneWidget);
+
+      expect(find.text('IND4'), findsOneWidget);
+      expect(find.text('C25-B-109'), findsOneWidget);
+
+      // The back/down overlap label is just "Office", no room
+      expect(find.text('Office'), findsWidgets);
+
+      // There shouldn't be any truncated versions
+      expect(find.text('C25-'), findsNothing);
+
+      // Menu may be hidden for very narrow spaces, but RenderFlex shouldn't crash
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 ClassRoutineBlock _scheduleBlock({

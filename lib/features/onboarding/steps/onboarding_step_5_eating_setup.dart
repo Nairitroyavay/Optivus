@@ -21,7 +21,6 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
-
 const String onboardingEatingPathHasRoutine = 'has_routine';
 const String onboardingEatingPathCreate = 'create';
 const String onboardingEatingGeneratedSource = 'ai_generated_meal_setup';
@@ -53,14 +52,11 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
     if (isChoice) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(
-          24,
-          10,
-          24,
-          0,
-        ),
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: OnboardingStepShell.bottomCtaHeight + 38),
+          padding: const EdgeInsets.only(
+            bottom: OnboardingStepShell.bottomCtaHeight + 38,
+          ),
           child: const _EatingChoiceScreen(),
         ),
       );
@@ -71,12 +67,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         .toList(growable: false);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        24,
-        10,
-        24,
-        0,
-      ),
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
       child: path == onboardingEatingPathHasRoutine
           ? _EatingUploadTimelineScreen(
               asset: _uploadedAsset,
@@ -145,7 +136,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
   Future<void> _runAiExtraction() async {
     if (kDebugMode) {
-      debugPrint('[Onboarding5] AI mode: ${OptivusAiWorkersConfig.mode.name.toUpperCase()}');
+      debugPrint(
+        '[Onboarding5] AI mode: ${OptivusAiWorkersConfig.mode.name.toUpperCase()}',
+      );
     }
     final asset = _uploadedAsset;
     setState(() => _generationError = null);
@@ -271,7 +264,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       'targetCalories=${bodyContext.targetCalories}',
     );
     final uid = ref.read(authProvider).user?.uid ?? draft.uid;
-    final idToken = await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+    final idToken =
+        await ref.read(authRepositoryProvider).currentIdToken() ?? '';
     final nutritionClient = ref.read(nutritionAiClientProvider);
 
     try {
@@ -298,7 +292,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           'age': bodyContext.age,
           'gender': bodyContext.gender,
           'bmi': bodyContext.bmi,
-          'estimatedMaintenanceCalories': bodyContext.estimatedMaintenanceCalories,
+          'estimatedMaintenanceCalories':
+              bodyContext.estimatedMaintenanceCalories,
           'targetMode': bodyContext.targetMode,
           'lifestyle': bodyContext.lifestyle,
           'country': bodyContext.country,
@@ -307,12 +302,16 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
       if (!mounted) return;
 
-      if (result.id.trim().isEmpty || result.uid != uid || result.candidates.isEmpty) {
+      if (result.id.trim().isEmpty ||
+          result.uid != uid ||
+          result.candidates.isEmpty) {
         setState(() {
           _creatingRoutine = false;
           _createError = onboarding5FriendlyAiMessage(
             null,
-            result.warnings.isNotEmpty ? result.warnings : ['no_blocks_generated'],
+            result.warnings.isNotEmpty
+                ? result.warnings
+                : ['no_blocks_generated'],
           );
         });
         return;
@@ -351,7 +350,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       if (!mounted) return;
       setState(() {
         _creatingRoutine = false;
-        _createError = onboarding5FriendlyAiMessage(null, ['provider_unavailable']);
+        _createError = onboarding5FriendlyAiMessage(null, [
+          'provider_unavailable',
+        ]);
       });
     }
   }
@@ -549,8 +550,6 @@ class _EatingPathCard extends StatelessWidget {
   }
 }
 
-
-
 class _EatingUploadTimelineScreen extends ConsumerWidget {
   final UploadedAsset? asset;
   final String? uploadError;
@@ -673,145 +672,135 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
                 tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
                 padding: const EdgeInsets.all(12),
                 radius: 20,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Create your meal intelligence',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            const Text(
-                              'Optivus will build a weekly meal timeline using your body goal, calorie need, food culture, and usual meal times.',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                height: 1.25,
-                                fontWeight: FontWeight.w700,
-                                color: OptivusColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            _EatingBodyContextLine(
-                              hasBodyBasics: bodyContext.hasBodyBasics,
-                            ),
-                            const SizedBox(height: 9),
-                            _EatingChipGroup(
-                              label: 'Goal',
-                              children: [
-                                for (final option in const [
-                                  _EatingModeOption('gain', 'Gain'),
-                                  _EatingModeOption('lose', 'Lose'),
-                                  _EatingModeOption('maintain', 'Maintain'),
-                                ])
-                                  _EatingPreferenceChip(
-                                    label: option.label,
-                                    selected: bodyGoal == option.key,
-                                    accent: OptivusColors.roseAccent,
-                                    onTap: () => _updateCreateDraft(
-                                      ref,
-                                      (base) => base.copyWith(
-                                        mealPlanningGoal: option.key,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 7),
-                            _EatingChipGroup(
-                              label: 'Meals',
-                              children: [
-                                for (final count in const [3, 4, 5])
-                                  _EatingPreferenceChip(
-                                    label: '$count',
-                                    selected: mealsPerDay == count,
-                                    accent: OptivusColors.roseAccent,
-                                    onTap: () => _updateCreateDraft(
-                                      ref,
-                                      (base) =>
-                                          base.copyWith(mealsPerDay: count),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 7),
-                            _EatingChipGroup(
-                              label: 'Style',
-                              children: [
-                                for (final option in const [
-                                  _EatingModeOption('india', 'India'),
-                                  _EatingModeOption('us', 'US'),
-                                  _EatingModeOption('germany', 'Germany'),
-                                  _EatingModeOption('mixed', 'Mixed'),
-                                  _EatingModeOption('custom', 'Custom'),
-                                ])
-                                  _EatingPreferenceChip(
-                                    label: option.label,
-                                    selected:
-                                        (base.eatingMode ?? 'india') ==
-                                        option.key,
-                                    accent: OptivusColors.roseAccent,
-                                    onTap: () => _updateCreateDraft(
-                                      ref,
-                                      (base) =>
-                                          base.copyWith(eatingMode: option.key),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            if ((base.eatingMode ?? 'india') == 'custom') ...[
-                              const SizedBox(height: 7),
-                              _EatingCustomStyleField(base: base),
-                            ],
-                            const SizedBox(height: 7),
-                            _EatingChipGroup(
-                              label: 'Type',
-                              children: [
-                                for (final option in const [
-                                  _EatingModeOption('veg', 'Veg'),
-                                  _EatingModeOption('non_veg', 'Non-veg'),
-                                  _EatingModeOption('mixed', 'Mixed'),
-                                ])
-                                  _EatingPreferenceChip(
-                                    label: option.label,
-                                    selected:
-                                        (base.foodType ?? 'mixed') ==
-                                        option.key,
-                                    accent: OptivusColors.roseAccent,
-                                    onTap: () => _updateCreateDraft(
-                                      ref,
-                                      (base) =>
-                                          base.copyWith(foodType: option.key),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            _CompactMealTimeRows(
-                              base: base,
-                              mealsPerDay: mealsPerDay,
-                            ),
-                            const SizedBox(height: 9),
-                            _EatingGenerateRoutineButton(
-                              isGenerating: isGenerating,
-                              onTap: onGenerate,
-                            ),
-                            if (isGenerating) ...[
-                              const SizedBox(height: 14),
-                              AiThinkingCard(
-                                title: 'AI is creating your weekly meal plan',
-                                detail: 'Planning meals around your daily routine',
-                                accent: OptivusColors.roseAccent,
-                                isActive: isGenerating,
-                              ),
-                            ],
-                          ],
-                        ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Create your meal intelligence',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 3),
+                    const Text(
+                      'Optivus will build a weekly meal timeline using your body goal, calorie need, food culture, and usual meal times.',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                        color: OptivusColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _EatingBodyContextLine(
+                      hasBodyBasics: bodyContext.hasBodyBasics,
+                    ),
+                    const SizedBox(height: 9),
+                    _EatingChipGroup(
+                      label: 'Goal',
+                      children: [
+                        for (final option in const [
+                          _EatingModeOption('gain', 'Gain'),
+                          _EatingModeOption('lose', 'Lose'),
+                          _EatingModeOption('maintain', 'Maintain'),
+                        ])
+                          _EatingPreferenceChip(
+                            label: option.label,
+                            selected: bodyGoal == option.key,
+                            accent: OptivusColors.roseAccent,
+                            onTap: () => _updateCreateDraft(
+                              ref,
+                              (base) =>
+                                  base.copyWith(mealPlanningGoal: option.key),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    _EatingChipGroup(
+                      label: 'Meals',
+                      children: [
+                        for (final count in const [3, 4, 5])
+                          _EatingPreferenceChip(
+                            label: '$count',
+                            selected: mealsPerDay == count,
+                            accent: OptivusColors.roseAccent,
+                            onTap: () => _updateCreateDraft(
+                              ref,
+                              (base) => base.copyWith(mealsPerDay: count),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    _EatingChipGroup(
+                      label: 'Style',
+                      children: [
+                        for (final option in const [
+                          _EatingModeOption('india', 'India'),
+                          _EatingModeOption('us', 'US'),
+                          _EatingModeOption('germany', 'Germany'),
+                          _EatingModeOption('mixed', 'Mixed'),
+                          _EatingModeOption('custom', 'Custom'),
+                        ])
+                          _EatingPreferenceChip(
+                            label: option.label,
+                            selected:
+                                (base.eatingMode ?? 'india') == option.key,
+                            accent: OptivusColors.roseAccent,
+                            onTap: () => _updateCreateDraft(
+                              ref,
+                              (base) => base.copyWith(eatingMode: option.key),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if ((base.eatingMode ?? 'india') == 'custom') ...[
+                      const SizedBox(height: 7),
+                      _EatingCustomStyleField(base: base),
+                    ],
+                    const SizedBox(height: 7),
+                    _EatingChipGroup(
+                      label: 'Type',
+                      children: [
+                        for (final option in const [
+                          _EatingModeOption('veg', 'Veg'),
+                          _EatingModeOption('non_veg', 'Non-veg'),
+                          _EatingModeOption('mixed', 'Mixed'),
+                        ])
+                          _EatingPreferenceChip(
+                            label: option.label,
+                            selected: (base.foodType ?? 'mixed') == option.key,
+                            accent: OptivusColors.roseAccent,
+                            onTap: () => _updateCreateDraft(
+                              ref,
+                              (base) => base.copyWith(foodType: option.key),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _CompactMealTimeRows(base: base, mealsPerDay: mealsPerDay),
+                    const SizedBox(height: 9),
+                    _EatingGenerateRoutineButton(
+                      isGenerating: isGenerating,
+                      onTap: onGenerate,
+                    ),
+                    if (isGenerating) ...[
+                      const SizedBox(height: 14),
+                      AiThinkingCard(
+                        title: 'AI is creating your weekly meal plan',
+                        detail: 'Planning meals around your daily routine',
+                        accent: OptivusColors.roseAccent,
+                        isActive: isGenerating,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
         if (error != null) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: error!),
@@ -1422,7 +1411,8 @@ class _EatingTimelineSection extends StatelessWidget {
                 ? OnboardingTimelineEmptyCard(label: emptyLabel)
                 : OnboardingVerticalTimeline(
                     blocks: dayBlocks,
-                    blockBuilder: (context, block) => _EatingTimelineBlock(block: block),
+                    blockBuilder: (context, block) =>
+                        _EatingTimelineBlock(block: block),
                   ),
           ),
         ],
@@ -1448,68 +1438,76 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-              children: [
-                Icon(_mealIcon(block.mealCategory), color: OptivusColors.roseAccent),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _mealTitleForDisplay(block),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: OptivusColors.ink,
+                children: [
+                  Icon(
+                    _mealIcon(block.mealCategory),
+                    color: OptivusColors.roseAccent,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _mealTitleForDisplay(block),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: OptivusColors.ink,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: OptivusColors.ink.withValues(alpha: 0.6),
-              ),
-            ),
-            if (block.dishes.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const Text(
-                'Menu / Dishes',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  color: OptivusColors.roseAccent,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final dish in block.dishes)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: OptivusColors.roseAccent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        dish,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.ink,
-                        ),
-                      ),
-                    ),
                 ],
               ),
+              const SizedBox(height: 8),
+              Text(
+                '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: OptivusColors.ink.withValues(alpha: 0.6),
+                ),
+              ),
+              if (block.dishes.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text(
+                  'Menu / Dishes',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.roseAccent,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final dish in block.dishes)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: OptivusColors.roseAccent.withValues(
+                            alpha: 0.1,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          dish,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.ink,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 16),
             ],
-            const SizedBox(height: 16),
-          ],
-        ),
+          ),
         ),
       ),
     ),
@@ -1519,9 +1517,7 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
 class _EatingTimelineBlock extends StatelessWidget {
   final TimelineBlockDraft block;
 
-  const _EatingTimelineBlock({
-    required this.block,
-  });
+  const _EatingTimelineBlock({required this.block});
 
   @override
   Widget build(BuildContext context) {
@@ -1532,187 +1528,204 @@ class _EatingTimelineBlock extends StatelessWidget {
 
     return GestureDetector(
       onTap: () => _showEatingBlockDetails(context, block),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            color: Colors.white.withValues(alpha: 0.44),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                OptivusColors.roseAccent.withValues(alpha: 0.22),
-                OptivusColors.roseAccent.withValues(alpha: 0.06),
-              ],
-            ),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.88),
-              width: 1.4,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: OptivusColors.roseAccent.withValues(alpha: 0.14),
-                blurRadius: 13,
-                offset: const Offset(0, 5),
-              ),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(22),
+          color: Colors.white.withValues(alpha: 0.44),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              OptivusColors.roseAccent.withValues(alpha: 0.22),
+              OptivusColors.roseAccent.withValues(alpha: 0.06),
             ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      _mealIcon(block.mealCategory),
-                      color: OptivusColors.roseAccent,
-                      size: 17,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _mealTitleForDisplay(block),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w900,
-                              color: OptivusColors.ink,
-                            ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.88),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: OptivusColors.roseAccent.withValues(alpha: 0.14),
+              blurRadius: 13,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    _mealIcon(block.mealCategory),
+                    color: OptivusColors.roseAccent,
+                    size: 17,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _mealTitleForDisplay(block),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: OptivusColors.ink,
                           ),
-                          const SizedBox(height: 5),
-                          Expanded(
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final textScaler = MediaQuery.textScalerOf(context);
-                                final textDirection = Directionality.of(context);
-                                final wrapWidth = constraints.maxWidth;
-                                final availableHeight = constraints.maxHeight;
+                        ),
+                        const SizedBox(height: 5),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final textScaler = MediaQuery.textScalerOf(
+                                context,
+                              );
+                              final textDirection = Directionality.of(context);
+                              final wrapWidth = constraints.maxWidth;
+                              final availableHeight = constraints.maxHeight;
 
-                                final List<String> labels = [
-                                  '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                                  ...allDishes,
-                                ];
+                              final List<String> labels = [
+                                '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                                ...allDishes,
+                              ];
 
-                                List<Widget> children = [];
-                                double currentX = 0.0;
-                                double currentY = 0.0;
-                                double rowHeight = 0.0;
-                                int visibleCount = 0;
-                                bool overflowed = false;
+                              List<Widget> children = [];
+                              double currentX = 0.0;
+                              double currentY = 0.0;
+                              double rowHeight = 0.0;
+                              int visibleCount = 0;
+                              bool overflowed = false;
 
-                                for (int i = 0; i < labels.length; i++) {
-                                  final label = labels[i];
-                                  final textPainter = TextPainter(
-                                    text: TextSpan(
-                                      text: label,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                                    textDirection: textDirection,
-                                    textScaler: textScaler,
-                                  )..layout(maxWidth: math.max(10.0, wrapWidth - 16.0));
-
-                                  final chipWidth = textPainter.width + 16.0;
-                                  final chipHeight = textPainter.height + 8.0;
-
-                                  double nextX;
-                                  double nextY;
-                                  double nextRowHeight;
-
-                                  if (currentX == 0) {
-                                    nextX = chipWidth;
-                                    nextY = currentY;
-                                    nextRowHeight = chipHeight;
-                                  } else {
-                                    if (currentX + 6.0 + chipWidth <= wrapWidth) {
-                                      nextX = currentX + 6.0 + chipWidth;
-                                      nextY = currentY;
-                                      nextRowHeight = math.max(rowHeight, chipHeight);
-                                    } else {
-                                      nextY = currentY + rowHeight + 5.0;
-                                      nextX = chipWidth;
-                                      nextRowHeight = chipHeight;
-                                    }
-                                  }
-
-                                  if (nextY + nextRowHeight > availableHeight) {
-                                    overflowed = true;
-                                    break;
-                                  }
-
-                                  currentX = nextX;
-                                  currentY = nextY;
-                                  rowHeight = nextRowHeight;
-                                  visibleCount++;
-                                }
-
-                                if (overflowed && visibleCount < labels.length) {
-                                  final int toShow = math.max(1, visibleCount - 1);
-                                  for (int i = 0; i < toShow; i++) {
-                                    children.add(OnboardingInfoChip(labels[i]));
-                                  }
-                                  final remaining = labels.length - toShow;
-                                  children.add(
-                                    GestureDetector(
-                                      onTap: () => _showEatingBlockDetails(context, block),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: OptivusColors.roseAccent.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: OptivusColors.roseAccent.withValues(alpha: 0.5)),
-                                        ),
-                                        child: Text(
-                                          '+$remaining more',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w900,
-                                            color: OptivusColors.roseAccent,
-                                          ),
+                              for (int i = 0; i < labels.length; i++) {
+                                final label = labels[i];
+                                final textPainter =
+                                    TextPainter(
+                                      text: TextSpan(
+                                        text: label,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
                                         ),
                                       ),
-                                    ),
-                                  );
+                                      textDirection: textDirection,
+                                      textScaler: textScaler,
+                                    )..layout(
+                                      maxWidth: math.max(
+                                        10.0,
+                                        wrapWidth - 16.0,
+                                      ),
+                                    );
+
+                                final chipWidth = textPainter.width + 16.0;
+                                final chipHeight = textPainter.height + 8.0;
+
+                                double nextX;
+                                double nextY;
+                                double nextRowHeight;
+
+                                if (currentX == 0) {
+                                  nextX = chipWidth;
+                                  nextY = currentY;
+                                  nextRowHeight = chipHeight;
                                 } else {
-                                  for (final label in labels) {
-                                    children.add(OnboardingInfoChip(label));
+                                  if (currentX + 6.0 + chipWidth <= wrapWidth) {
+                                    nextX = currentX + 6.0 + chipWidth;
+                                    nextY = currentY;
+                                    nextRowHeight = math.max(
+                                      rowHeight,
+                                      chipHeight,
+                                    );
+                                  } else {
+                                    nextY = currentY + rowHeight + 5.0;
+                                    nextX = chipWidth;
+                                    nextRowHeight = chipHeight;
                                   }
                                 }
 
-                                return Wrap(
-                                  spacing: 6,
-                                  runSpacing: 5,
-                                  children: children,
+                                if (nextY + nextRowHeight > availableHeight) {
+                                  overflowed = true;
+                                  break;
+                                }
+
+                                currentX = nextX;
+                                currentY = nextY;
+                                rowHeight = nextRowHeight;
+                                visibleCount++;
+                              }
+
+                              if (overflowed && visibleCount < labels.length) {
+                                final int toShow = math.max(
+                                  1,
+                                  visibleCount - 1,
                                 );
-                              },
-                            ),
+                                for (int i = 0; i < toShow; i++) {
+                                  children.add(OnboardingInfoChip(labels[i]));
+                                }
+                                final remaining = labels.length - toShow;
+                                children.add(
+                                  GestureDetector(
+                                    onTap: () =>
+                                        _showEatingBlockDetails(context, block),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: OptivusColors.roseAccent
+                                            .withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: OptivusColors.roseAccent
+                                              .withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '+$remaining more',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w900,
+                                          color: OptivusColors.roseAccent,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                for (final label in labels) {
+                                  children.add(OnboardingInfoChip(label));
+                                }
+                              }
+
+                              return Wrap(
+                                spacing: 6,
+                                runSpacing: 5,
+                                children: children,
+                              );
+                            },
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }
-
-
 
 class _EatingInlineMessage extends StatelessWidget {
   final String message;
@@ -1920,13 +1933,15 @@ Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
   );
 }
 
-
-
 List<TimelineBlockDraft> onboarding5MealBlocksFromCandidates(
   List<RoutineImportCandidateBlock> candidates, {
   DateTime? now,
 }) {
-  return mapOnboarding5MealCandidates(candidates, now: now, baseTimeline: null).blocks;
+  return mapOnboarding5MealCandidates(
+    candidates,
+    now: now,
+    baseTimeline: null,
+  ).blocks;
 }
 
 @visibleForTesting
@@ -1952,7 +1967,7 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
     }
 
     final defaultTime = _defaultMealTimeForCategory(mealCategory);
-    
+
     int? overrideStart;
     int? overrideEnd;
     if (baseTimeline != null) {
@@ -1965,10 +1980,12 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
       } else if (mealCategory == 'snack' && baseTimeline.snackMinute != null) {
         overrideStart = baseTimeline.snackMinute;
         overrideEnd = overrideStart! + 20;
-      } else if (mealCategory == 'extra-snack' && baseTimeline.extraSnackMinute != null) {
+      } else if (mealCategory == 'extra-snack' &&
+          baseTimeline.extraSnackMinute != null) {
         overrideStart = baseTimeline.extraSnackMinute;
         overrideEnd = overrideStart! + 20;
-      } else if (mealCategory == 'dinner' && baseTimeline.dinnerMinute != null) {
+      } else if (mealCategory == 'dinner' &&
+          baseTimeline.dinnerMinute != null) {
         overrideStart = baseTimeline.dinnerMinute;
         overrideEnd = overrideStart! + 45;
       }
@@ -1979,8 +1996,8 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
     final startMinute = hasCandidateTime
         ? candidate.startMinute
         : (overrideStart ?? defaultTime?.$1);
-    final endMinute = hasCandidateTime 
-        ? candidate.endMinute 
+    final endMinute = hasCandidateTime
+        ? candidate.endMinute
         : (overrideEnd ?? defaultTime?.$2);
     if (startMinute == null || endMinute == null) {
       droppedNoMealTime++;
@@ -2108,8 +2125,6 @@ Map<String, int> _mealTimesForBase(BaseTimelineDraft base, int mealsPerDay) {
   };
 }
 
-
-
 String _inferMealCategoryForCandidate(RoutineImportCandidateBlock candidate) {
   for (final value in [
     candidate.mealCategory,
@@ -2175,7 +2190,10 @@ List<String> _dishesForEatingCandidate(RoutineImportCandidateBlock candidate) {
     if (text == null || text.trim().isEmpty) return;
     final withoutMealWords = text
         .replaceAll(
-          RegExp(r'\b(Breakfast|Lunch|Brunch|Supper|Snacks?|Dinner)\b', caseSensitive: false),
+          RegExp(
+            r'\b(Breakfast|Lunch|Brunch|Supper|Snacks?|Dinner)\b',
+            caseSensitive: false,
+          ),
           ' ',
         )
         .replaceAll(
@@ -2268,11 +2286,15 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
         .where((warning) => warning.isNotEmpty),
   ];
   final text = messages.join(' ').toLowerCase();
-  
-  if (text.contains('worker is not configured') || text.contains('worker url') || text.contains('missing_worker_url')) {
+
+  if (text.contains('worker is not configured') ||
+      text.contains('worker url') ||
+      text.contains('missing_worker_url')) {
     return 'Real AI is not configured. Missing nutrition worker URL.';
   }
-  if (text.contains('network_unavailable') || text.contains('provider_unavailable') || text.contains('provider_timeout')) {
+  if (text.contains('network_unavailable') ||
+      text.contains('provider_unavailable') ||
+      text.contains('provider_timeout')) {
     return 'AI service is unavailable. Try again after a moment.';
   }
   if (text.contains('provider_model_not_found')) {
@@ -2295,7 +2317,8 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
       text.contains('format')) {
     return 'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
   }
-  if (text.contains('provider_empty_candidates') || text.contains('no_blocks_generated')) {
+  if (text.contains('provider_empty_candidates') ||
+      text.contains('no_blocks_generated')) {
     return 'AI could not read meals clearly. Try a clearer photo.';
   }
   if (text.contains('too large') || text.contains('image too large')) {
@@ -2304,11 +2327,14 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('not found') || text.contains('r2_image_missing')) {
     return 'Uploaded meal photo could not be found. Please upload again.';
   }
-  if (text.contains('unauthorized') || text.contains('invalid key') || text.contains('invalid_api_key')) {
+  if (text.contains('unauthorized') ||
+      text.contains('invalid key') ||
+      text.contains('invalid_api_key')) {
     return 'AI key is invalid or unauthorized.';
   }
   if (text.contains('invalid structured') ||
-      text.contains('could not be read safely') || text.contains('provider_invalid_json')) {
+      text.contains('could not be read safely') ||
+      text.contains('provider_invalid_json')) {
     return 'AI response could not be read safely. Please try again.';
   }
   if (messages.isNotEmpty && !messages.first.startsWith('provider_')) {
@@ -2393,8 +2419,6 @@ String _inferMealCategory(String title) {
   return 'meal';
 }
 
-
-
 String _normalizedFoodStyle(String? value, String? customText) {
   final style = value?.trim().toLowerCase();
   if (style == 'custom' && customText?.trim().isNotEmpty == true) {
@@ -2416,8 +2440,6 @@ String _normalizedEatingType(String? value) {
     _ => 'mixed',
   };
 }
-
-
 
 String _goalLabel(String value) {
   return switch (value) {
@@ -2480,7 +2502,3 @@ IconData _mealIcon(String? category) {
     _ => Icons.restaurant_menu_rounded,
   };
 }
-
-
-
-

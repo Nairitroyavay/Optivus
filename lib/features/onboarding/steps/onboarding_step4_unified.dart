@@ -19,7 +19,6 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
 
-
 // ---------------------------------------------------------------------------
 // Photo slot model — tracks one uploaded photo with its label & section.
 // ---------------------------------------------------------------------------
@@ -113,7 +112,7 @@ class _TimelineRange {
 class _BackLabelSegment {
   final double top;
   final double height;
-  
+
   _BackLabelSegment(this.top, this.height);
 }
 
@@ -608,7 +607,8 @@ String onboarding4SourceFailureMessage({
   if (joined.contains('provider_unauthorized')) {
     return 'AI key is invalid or unauthorized.';
   }
-  if (joined.contains('provider_quota_exceeded') || joined.contains('provider_high_demand')) {
+  if (joined.contains('provider_quota_exceeded') ||
+      joined.contains('provider_high_demand')) {
     return 'AI is busy right now. Please try again.';
   }
   if (joined.contains('provider_timeout')) {
@@ -617,21 +617,28 @@ String onboarding4SourceFailureMessage({
   if (joined.contains('provider_invalid_image_payload')) {
     return 'AI could not process this image format.';
   }
-  if (joined.contains('upload a photo before running ai extraction') || joined.contains('missing photo')) {
-    if (source == RoutineImportReviewSource.classes) return 'Please upload your class timetable.';
-    if (source == RoutineImportReviewSource.work) return 'Please upload your work/job timetable.';
+  if (joined.contains('upload a photo before running ai extraction') ||
+      joined.contains('missing photo')) {
+    if (source == RoutineImportReviewSource.classes)
+      return 'Please upload your class timetable.';
+    if (source == RoutineImportReviewSource.work)
+      return 'Please upload your work/job timetable.';
     return 'Please upload your timetable.';
   }
-  if (joined.contains('upload incomplete') || joined.contains('missing r2 object') || joined.contains('r2_image_missing')) {
+  if (joined.contains('upload incomplete') ||
+      joined.contains('missing r2 object') ||
+      joined.contains('r2_image_missing')) {
     return 'Upload incomplete. Please upload again.';
   }
   if (joined.contains('upload failed') || joined.contains('connection')) {
     return 'Upload failed. Please check your connection and try again.';
   }
-  if (joined.contains('provider_empty_candidates') || joined.contains('no_blocks_generated')) {
+  if (joined.contains('provider_empty_candidates') ||
+      joined.contains('no_blocks_generated')) {
     return 'AI could not read this timetable. Please upload a clearer image and try again.';
   }
-  if (joined.contains('provider_invalid_json') || joined.contains('provider_invalid_response')) {
+  if (joined.contains('provider_invalid_json') ||
+      joined.contains('provider_invalid_response')) {
     return 'AI could not read this image. Please upload a clearer timetable.';
   }
   if (joined.contains('provider_request_failed')) {
@@ -824,7 +831,11 @@ class _OnboardingStep4UnifiedState
 
   // ---- Init from draft ----
   void _initFromDraft() {
-    final currentRole = ref.read(mockOnboardingProvider).draft.lifeRole.lifeRole;
+    final currentRole = ref
+        .read(mockOnboardingProvider)
+        .draft
+        .lifeRole
+        .lifeRole;
     if (_didInitFromDraft && _initializedRole == currentRole) return;
 
     if (_didInitFromDraft && _initializedRole != currentRole) {
@@ -1095,7 +1106,7 @@ class _OnboardingStep4UnifiedState
       if (aFront != bFront) {
         return aFront ? 1 : -1;
       }
-      
+
       final aDuration = a.block.endMinute - a.block.startMinute;
       final bDuration = b.block.endMinute - b.block.startMinute;
       if (aDuration != bDuration) {
@@ -1608,7 +1619,8 @@ class _OnboardingStep4UnifiedState
 
         if (photo.asset.r2Key.trim().isEmpty) {
           failedSources.add(photo.source);
-          failureMessages[photo.source] = 'Upload incomplete. Please upload again.';
+          failureMessages[photo.source] =
+              'Upload incomplete. Please upload again.';
           continue;
         }
 
@@ -2264,8 +2276,6 @@ class _OnboardingStep4UnifiedState
               const SizedBox(height: 6),
               _buildSwapControl(),
             ],
-
-
 
             // Generation error
             if (_generationError != null) ...[
@@ -3279,7 +3289,8 @@ class _OnboardingStep4UnifiedState
 
     for (final candidate in visualBlocks) {
       if (candidate == backVisual) continue;
-      if (_visualsOverlap(backVisual, candidate) && _isFrontVisual(candidate, visualBlocks)) {
+      if (_visualsOverlap(backVisual, candidate) &&
+          _isFrontVisual(candidate, visualBlocks)) {
         final segmentStartMinute = math.max(
           backVisual.block.startMinute,
           candidate.block.startMinute,
@@ -3290,13 +3301,15 @@ class _OnboardingStep4UnifiedState
           candidate.block.endMinute,
         );
 
-        final segmentTop = _timelineY(
+        final segmentTop =
+            _timelineY(
               minuteOfDay: segmentStartMinute,
               visibleStartMinute: visibleStartMinute,
               topPadding: topPadding,
             ) -
             backTop;
-        final segmentBottom = _timelineY(
+        final segmentBottom =
+            _timelineY(
               minuteOfDay: segmentEndMinute,
               visibleStartMinute: visibleStartMinute,
               topPadding: topPadding,
@@ -3407,7 +3420,7 @@ class _OnboardingStep4UnifiedState
                 child: LayoutBuilder(
                   builder: (context, cardConstraints) {
                     final cardWidth = cardConstraints.maxWidth;
-                    
+
                     return Padding(
                       padding: EdgeInsets.symmetric(
                         horizontal: isBackOverlap
@@ -3520,7 +3533,12 @@ class _OnboardingStep4UnifiedState
           _buildBlockInfoChip(timeStr, compact: compactChips),
           if (roomLabel != null && !_isWorkBlock(item)) ...[
             const SizedBox(height: 4),
-            _buildRoomBadge(roomLabel, compact: compactChips, availableWidth: cardWidth, tiny: false),
+            _buildRoomBadge(
+              roomLabel,
+              compact: compactChips,
+              availableWidth: cardWidth,
+              tiny: false,
+            ),
           ],
         ] else
           Wrap(
@@ -3529,7 +3547,12 @@ class _OnboardingStep4UnifiedState
             children: [
               _buildBlockInfoChip(timeStr, compact: compactChips),
               if (roomLabel != null && !_isWorkBlock(item))
-                _buildRoomBadge(roomLabel, compact: compactChips, availableWidth: cardWidth, tiny: false),
+                _buildRoomBadge(
+                  roomLabel,
+                  compact: compactChips,
+                  availableWidth: cardWidth,
+                  tiny: false,
+                ),
             ],
           ),
       ],
@@ -3615,7 +3638,12 @@ class _OnboardingStep4UnifiedState
             firstRow,
             if (!roomInFirstRow && roomLabel != null) ...[
               const SizedBox(height: 5),
-              _buildRoomBadge(roomLabel, compact: true, availableWidth: cardWidth, tiny: tiny),
+              _buildRoomBadge(
+                roomLabel,
+                compact: true,
+                availableWidth: cardWidth,
+                tiny: tiny,
+              ),
             ],
             if (showTime) const SizedBox(height: 5),
             if (showTime) _buildBlockInfoChip(timeStr, compact: true),
@@ -3684,7 +3712,11 @@ class _OnboardingStep4UnifiedState
                   compact: true,
                 ),
                 if (item.room.isNotEmpty)
-                  _buildBlockInfoChip(item.room, compact: true, maxWidth: cardWidth),
+                  _buildBlockInfoChip(
+                    item.room,
+                    compact: true,
+                    maxWidth: cardWidth,
+                  ),
               ],
             ),
         ],
@@ -3771,7 +3803,7 @@ class _OnboardingStep4UnifiedState
         ],
       );
     }
-    
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _frontBlockId = item.id),
@@ -3797,7 +3829,11 @@ class _OnboardingStep4UnifiedState
     return config.source == RoutineImportReviewSource.work;
   }
 
-  Widget _buildBlockInfoChip(String text, {bool compact = false, double? maxWidth}) {
+  Widget _buildBlockInfoChip(
+    String text, {
+    bool compact = false,
+    double? maxWidth,
+  }) {
     Widget content = Text(
       text,
       maxLines: 1,
@@ -3831,10 +3867,10 @@ class _OnboardingStep4UnifiedState
 
   String? _displayRoomForBlock(ClassRoutineBlock item) {
     var room = item.room.trim();
-    
+
     // Clean up trailing dashes or punctuation that the AI might have left
     room = room.replaceAll(RegExp(r'[-.,\s]+$'), '');
-    
+
     final lower = room.toLowerCase();
     if (lower.isEmpty ||
         lower == 'blank' ||
@@ -3844,7 +3880,7 @@ class _OnboardingStep4UnifiedState
         lower == 'null') {
       return null;
     }
-    
+
     return room;
   }
 
@@ -3863,8 +3899,10 @@ class _OnboardingStep4UnifiedState
     }
 
     // Only extremely tiny cards may compact.
-    final match = RegExp(r'^([A-Z]+\d+)', caseSensitive: false)
-        .firstMatch(normalized);
+    final match = RegExp(
+      r'^([A-Z]+\d+)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
     return match?.group(1)?.toUpperCase() ?? normalized;
   }
 
@@ -3883,9 +3921,7 @@ class _OnboardingStep4UnifiedState
     final fontSize = compact ? 10.0 : 11.0;
 
     return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: availableWidth.clamp(72.0, 140.0),
-      ),
+      constraints: BoxConstraints(maxWidth: availableWidth.clamp(72.0, 140.0)),
       child: Container(
         padding: EdgeInsets.symmetric(
           horizontal: compact ? 6 : 8,

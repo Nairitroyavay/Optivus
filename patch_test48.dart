@@ -5,7 +5,7 @@ void main() {
   var content = file.readAsStringSync();
   content = content.replaceFirst(
     "expect(find.textContaining('• Wed, Sun - Exfoliation Night: AHA BHA'), findsOneWidget);",
-    "final finder = find.byType(Text); print('Test 48 text: \${tester.widgetList<Text>(finder).map((t) => t.data).toList()}'); expect(find.textContaining('• Wed, Sun - Exfoliation Night: AHA BHA'), findsOneWidget);"
+    "final finder = find.byType(Text); print('Test 48 text: \${tester.widgetList<Text>(finder).map((t) => t.data).toList()}'); expect(find.textContaining('• Wed, Sun - Exfoliation Night: AHA BHA'), findsOneWidget);",
   );
   file.writeAsStringSync(content);
 }

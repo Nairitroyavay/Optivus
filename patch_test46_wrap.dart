@@ -1,14 +1,16 @@
 import 'dart:io';
 
 void main() {
-  var file = File('lib/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart');
+  var file = File(
+    'lib/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart',
+  );
   var content = file.readAsStringSync();
   content = content.replaceFirst(
     "label: 'Rebuild',",
-    "label: 'Rebuild / Edit',"
+    "label: 'Rebuild / Edit',",
   );
   content = content.replaceAll(
-'''                    Expanded(
+    '''                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -47,7 +49,7 @@ void main() {
                         ),
                       ),
                     ),''',
-'''                    Expanded(
+    '''                    Expanded(
                       child: Wrap(
                         alignment: WrapAlignment.spaceBetween,
                         crossAxisAlignment: WrapCrossAlignment.center,
@@ -93,7 +95,7 @@ void main() {
                           ),
                         ],
                       ),
-                    ),'''
+                    ),''',
   );
   file.writeAsStringSync(content);
 }

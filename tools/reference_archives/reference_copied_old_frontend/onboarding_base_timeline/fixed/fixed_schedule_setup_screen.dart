@@ -37,16 +37,18 @@ class _FixedScheduleSetupScreenState
   Future<bool> _save() async {
     if (_isSaving) return false;
     setState(() => _isSaving = true);
-    final normalizedTemplates =
-        canonicalizeFixedScheduleTemplates(_currentTemplates);
+    final normalizedTemplates = canonicalizeFixedScheduleTemplates(
+      _currentTemplates,
+    );
 
     try {
       debugPrint('[FixedScheduleSetup] accept_start');
       debugPrint(
-          '[FixedScheduleSetup] accept_templates_count=${normalizedTemplates.length}');
-      ref.read(routineProvider.notifier).setFixedScheduleTemplates(
-            normalizedTemplates,
-          );
+        '[FixedScheduleSetup] accept_templates_count=${normalizedTemplates.length}',
+      );
+      ref
+          .read(routineProvider.notifier)
+          .setFixedScheduleTemplates(normalizedTemplates);
       await runRoutineAcceptWithTimeout(
         () => ref
             .read(routineRepositoryProvider)
@@ -87,8 +89,10 @@ class _FixedScheduleSetupScreenState
             children: [
               // App bar
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24.0,
+                  vertical: 16,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

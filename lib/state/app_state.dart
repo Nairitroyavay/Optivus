@@ -1542,14 +1542,20 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     final invalidation = state.draft.baseTimeline.invalidateForRole(roleKey);
 
     // Clear class and work blocks from the timeline (Step 4 is invalidated)
-    final cleanBlocks = invalidation.timeline.blocks.where((block) {
-      return block.section != 'classes' && block.section != 'job_work_business';
-    }).toList(growable: false);
+    final cleanBlocks = invalidation.timeline.blocks
+        .where((block) {
+          return block.section != 'classes' &&
+              block.section != 'job_work_business';
+        })
+        .toList(growable: false);
 
     // Clear pending future imports for classes and work
-    final cleanPendingImports = invalidation.timeline.pendingFutureImports.where((entry) {
-      return entry.section != 'classes' && entry.section != 'job_work_business';
-    }).toList(growable: false);
+    final cleanPendingImports = invalidation.timeline.pendingFutureImports
+        .where((entry) {
+          return entry.section != 'classes' &&
+              entry.section != 'job_work_business';
+        })
+        .toList(growable: false);
 
     var nextTimeline = invalidation.timeline.copyWith(
       blocks: cleanBlocks,
@@ -1561,7 +1567,9 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     final eatingError = nextTimeline.validateEatingSetup();
     if (eatingError != null) {
       nextTimeline = nextTimeline.copyWith(
-        blocks: nextTimeline.blocks.where((block) => block.section != 'eating').toList(growable: false),
+        blocks: nextTimeline.blocks
+            .where((block) => block.section != 'eating')
+            .toList(growable: false),
         eatingSetupStep: 0,
       );
     }
@@ -1590,20 +1598,23 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     dirty[onboardingClassJobStepIndex] = true;
 
     // Step 5 is preserved if valid and was completed, otherwise marked incomplete/dirty
-    completed[onboardingEatingStepIndex] = eatingError == null && completed[onboardingEatingStepIndex];
-    dirty[onboardingEatingStepIndex] = eatingError != null || dirty[onboardingEatingStepIndex];
+    completed[onboardingEatingStepIndex] =
+        eatingError == null && completed[onboardingEatingStepIndex];
+    dirty[onboardingEatingStepIndex] =
+        eatingError != null || dirty[onboardingEatingStepIndex];
 
     // Downstream steps (> 5) are invalidated (marked incomplete and dirty)
-    for (var i = onboardingEatingStepIndex + 1; i < OnboardingDraft.stepCount; i++) {
+    for (
+      var i = onboardingEatingStepIndex + 1;
+      i < OnboardingDraft.stepCount;
+      i++
+    ) {
       completed[i] = false;
       dirty[i] = true;
     }
 
     state = state.copyWith(
-      draft: nextDraft.copyWith(
-        stepCompleted: completed,
-        stepDirty: dirty,
-      ),
+      draft: nextDraft.copyWith(stepCompleted: completed, stepDirty: dirty),
       validationMessage: invalidation.warnings.isEmpty
           ? null
           : invalidation.warnings.join(' '),

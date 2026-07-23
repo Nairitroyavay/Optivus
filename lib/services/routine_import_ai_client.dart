@@ -8,14 +8,12 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
 
-
 abstract class RoutineImportAiClient {
   Future<RoutineImportExtractionResult> extract({
     required String uid,
     required String idToken,
     required RoutineImportReviewDraft review,
   });
-
 }
 
 class FakeRoutineImportAiClient implements RoutineImportAiClient {
@@ -180,7 +178,6 @@ class FakeRoutineImportAiClient implements RoutineImportAiClient {
       ],
     };
   }
-
 }
 
 class WorkerRoutineImportAiClient implements RoutineImportAiClient {
@@ -288,10 +285,6 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
       _ => '/v1/routine-import/extract',
     };
   }
-
-
-
-
 
   void _debugLogInvalidWorkerResponse({
     required String reason,
@@ -483,14 +476,11 @@ class MissingConfigRoutineImportAiClient implements RoutineImportAiClient {
   }
 }
 
-enum RoutineImportAiClientMode {
-  worker,
-  fake,
-  disabled,
-  missingConfig,
-}
+enum RoutineImportAiClientMode { worker, fake, disabled, missingConfig }
 
-final routineImportAiClientModeProvider = Provider<RoutineImportAiClientMode>((ref) {
+final routineImportAiClientModeProvider = Provider<RoutineImportAiClientMode>((
+  ref,
+) {
   if (OptivusRoutineImportAiConfig.mode == OptivusRoutineImportAiMode.worker) {
     if (OptivusRoutineImportAiConfig.workerBaseUrl.trim().isEmpty) {
       return RoutineImportAiClientMode.missingConfig;

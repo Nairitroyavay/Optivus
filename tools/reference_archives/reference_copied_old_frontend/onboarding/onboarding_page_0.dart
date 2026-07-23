@@ -114,7 +114,12 @@ class _AnimatedLogoState extends State<_AnimatedLogo>
       animation: _controller,
       builder: (_, __) => Transform.scale(
         scale: _scale.value,
-        child: Image.asset('assets/images/logo.png', width: 48, height: 48, fit: BoxFit.contain),
+        child: Image.asset(
+          'assets/images/logo.png',
+          width: 48,
+          height: 48,
+          fit: BoxFit.contain,
+        ),
       ),
     );
   }

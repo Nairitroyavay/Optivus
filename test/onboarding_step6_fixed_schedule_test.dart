@@ -9,12 +9,16 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/models/routine_projection_receipt.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 
 void main() {
   ProviderContainer makeContainer({OnboardingDraft? draft}) {
-    final d = draft ?? const OnboardingDraft().copyWith(
-      baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks()
-    );
+    final d =
+        draft ??
+        const OnboardingDraft().copyWith(
+          baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
+        );
     final container = ProviderContainer(
       overrides: [
         mockOnboardingProvider.overrideWith(
@@ -28,11 +32,7 @@ void main() {
   Widget buildTestWidget(ProviderContainer container) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
-        home: Scaffold(
-          body: OnboardingStep6(),
-        ),
-      ),
+      child: const MaterialApp(home: Scaffold(body: OnboardingStep6())),
     );
   }
 
@@ -60,12 +60,17 @@ void main() {
 
     final headerFinder = find.text('Fixed Schedule');
     expect(headerFinder, findsOneWidget);
-    
-    final scrollable = find.byKey(const ValueKey('onboarding-step6-timeline-scroll'));
+
+    final scrollable = find.byKey(
+      const ValueKey('onboarding-step6-timeline-scroll'),
+    );
     expect(scrollable, findsOneWidget);
 
     // Ensure the header is not found inside the scrollable content
-    expect(find.descendant(of: scrollable, matching: headerFinder), findsNothing);
+    expect(
+      find.descendant(of: scrollable, matching: headerFinder),
+      findsNothing,
+    );
   });
 
   testWidgets('Test 3: defaults inserted', (tester) async {
@@ -74,17 +79,29 @@ void main() {
     await tester.pumpAndSettle();
 
     final draft = container.read(mockOnboardingProvider).draft;
-    final fixedBlocks = draft.baseTimeline.blocks.where((b) => b.section == 'fixed').toList();
-    
-    expect(fixedBlocks.any((b) => b.id == BaseTimelineDraft.fixedSleepId), isTrue);
-    expect(fixedBlocks.any((b) => b.id == BaseTimelineDraft.fixedBathId), isTrue);
-    
-    final sleep = fixedBlocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedSleepId);
+    final fixedBlocks = draft.baseTimeline.blocks
+        .where((b) => b.section == 'fixed')
+        .toList();
+
+    expect(
+      fixedBlocks.any((b) => b.id == BaseTimelineDraft.fixedSleepId),
+      isTrue,
+    );
+    expect(
+      fixedBlocks.any((b) => b.id == BaseTimelineDraft.fixedBathId),
+      isTrue,
+    );
+
+    final sleep = fixedBlocks.firstWhere(
+      (b) => b.id == BaseTimelineDraft.fixedSleepId,
+    );
     expect(sleep.blockType, TimelineBlockDraft.hardBlockKey);
     expect(sleep.repeatDays, [1, 2, 3, 4, 5, 6, 7]);
     expect(sleep.crossesMidnight, isTrue);
 
-    final bath = fixedBlocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedBathId);
+    final bath = fixedBlocks.firstWhere(
+      (b) => b.id == BaseTimelineDraft.fixedBathId,
+    );
     expect(bath.blockType, TimelineBlockDraft.hardBlockKey);
     expect(bath.repeatDays, [1, 2, 3, 4, 5, 6, 7]);
   });
@@ -94,10 +111,12 @@ void main() {
     await tester.pumpWidget(buildTestWidget(container));
     await tester.pumpAndSettle();
 
-    final menuFinder = find.byKey(const ValueKey('onboarding-step6-menu-fixed-sleep')).first;
+    final menuFinder = find
+        .byKey(const ValueKey('onboarding-step6-menu-fixed-sleep'))
+        .first;
     await tester.ensureVisible(menuFinder);
     await tester.pumpAndSettle();
-    
+
     await tester.tap(menuFinder);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit').last);
@@ -112,13 +131,21 @@ void main() {
     final textFieldWidget = tester.widget<TextFormField>(titleField);
     expect(textFieldWidget.enabled, isFalse);
 
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '10:00 PM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '6:00 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '10:00 PM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '6:00 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
     final draft = container.read(mockOnboardingProvider).draft;
-    final sleep = draft.baseTimeline.blocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedSleepId);
+    final sleep = draft.baseTimeline.blocks.firstWhere(
+      (b) => b.id == BaseTimelineDraft.fixedSleepId,
+    );
     expect(sleep.id, BaseTimelineDraft.fixedSleepId);
     expect(sleep.title, 'Sleep');
     expect(sleep.startMinute, 22 * 60);
@@ -134,21 +161,32 @@ void main() {
     await tester.pumpWidget(buildTestWidget(container));
     await tester.pumpAndSettle();
 
-    final menuFinder = find.byKey(const ValueKey('onboarding-step6-menu-fixed-sleep')).first;
+    final menuFinder = find
+        .byKey(const ValueKey('onboarding-step6-menu-fixed-sleep'))
+        .first;
     await tester.ensureVisible(menuFinder);
     await tester.pumpAndSettle();
-    
+
     await tester.tap(menuFinder);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit').last);
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '10:00 PM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '10:00 PM');
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '10:00 PM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '10:00 PM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Sleep and wake time cannot be the same.'), findsOneWidget);
+    expect(
+      find.text('Sleep and wake time cannot be the same.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Test 6: edit Bath time only', (tester) async {
@@ -156,10 +194,12 @@ void main() {
     await tester.pumpWidget(buildTestWidget(container));
     await tester.pumpAndSettle();
 
-    final menuFinder = find.byKey(const ValueKey('onboarding-step6-menu-fixed-bath'));
+    final menuFinder = find.byKey(
+      const ValueKey('onboarding-step6-menu-fixed-bath'),
+    );
     await tester.ensureVisible(menuFinder);
     await tester.pumpAndSettle();
-    
+
     await tester.tap(menuFinder);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit').last);
@@ -170,13 +210,21 @@ void main() {
     expect(find.text('Bath end'), findsOneWidget);
     expect(find.text('Delete'), findsNothing);
 
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '8:00 AM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '8:30 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '8:00 AM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '8:30 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
     final draft = container.read(mockOnboardingProvider).draft;
-    final bath = draft.baseTimeline.blocks.firstWhere((b) => b.id == BaseTimelineDraft.fixedBathId);
+    final bath = draft.baseTimeline.blocks.firstWhere(
+      (b) => b.id == BaseTimelineDraft.fixedBathId,
+    );
     expect(bath.id, BaseTimelineDraft.fixedBathId);
     expect(bath.title, 'Bath');
     expect(bath.startMinute, 8 * 60);
@@ -192,21 +240,32 @@ void main() {
     await tester.pumpWidget(buildTestWidget(container));
     await tester.pumpAndSettle();
 
-    final menuFinder = find.byKey(const ValueKey('onboarding-step6-menu-fixed-bath'));
+    final menuFinder = find.byKey(
+      const ValueKey('onboarding-step6-menu-fixed-bath'),
+    );
     await tester.ensureVisible(menuFinder);
     await tester.pumpAndSettle();
-    
+
     await tester.tap(menuFinder);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit').last);
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '8:30 AM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '8:00 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '8:30 AM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '8:00 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Bath end time must be after bath start time.'), findsOneWidget);
+    expect(
+      find.text('Bath end time must be after bath start time.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Test 8: add custom fixed block with +', (tester) async {
@@ -218,13 +277,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Add fixed block'), findsOneWidget);
-    
+
     final titleField = find.byKey(const ValueKey('block_name_input'));
-    expect((tester.widget<TextFormField>(titleField).controller?.text), 'Fixed Block');
+    expect(
+      (tester.widget<TextFormField>(titleField).controller?.text),
+      'Fixed Block',
+    );
 
     await tester.enterText(titleField, 'Reading');
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '10:00 AM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '11:00 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '10:00 AM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '11:00 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
@@ -252,9 +320,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Fixed block name is required.'), findsOneWidget);
 
-    await tester.enterText(find.byKey(const ValueKey('block_name_input')), 'Custom');
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '11:00 AM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '10:00 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('block_name_input')),
+      'Custom',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '11:00 AM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '10:00 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
     expect(find.text('End time must be after start time.'), findsOneWidget);
@@ -267,27 +344,38 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '10:00 AM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '11:00 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '10:00 AM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '11:00 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
     final draft = container.read(mockOnboardingProvider).draft;
     final customBlockId = draft.baseTimeline.blocks.last.id;
-    final menuFinder = find.byKey(ValueKey('onboarding-step6-menu-$customBlockId'));
-    
+    final menuFinder = find.byKey(
+      ValueKey('onboarding-step6-menu-$customBlockId'),
+    );
+
     await tester.ensureVisible(menuFinder);
     await tester.pumpAndSettle();
-    
+
     await tester.tap(menuFinder);
     await tester.pumpAndSettle();
-    
+
     expect(find.text('Delete'), findsOneWidget);
 
     await tester.tap(find.text('Edit').last);
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const ValueKey('block_name_input')), 'Renamed');
+    await tester.enterText(
+      find.byKey(const ValueKey('block_name_input')),
+      'Renamed',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
     expect(find.text('Renamed'), findsOneWidget);
@@ -307,18 +395,22 @@ void main() {
     await tester.pumpWidget(buildTestWidget(container));
     await tester.pumpAndSettle();
 
-    final sleepMenuFinder = find.byKey(const ValueKey('onboarding-step6-menu-fixed-sleep')).first;
+    final sleepMenuFinder = find
+        .byKey(const ValueKey('onboarding-step6-menu-fixed-sleep'))
+        .first;
     await tester.ensureVisible(sleepMenuFinder);
     await tester.pumpAndSettle();
     await tester.tap(sleepMenuFinder);
     await tester.pumpAndSettle();
     expect(find.text('Delete'), findsNothing);
-    
+
     // Tap anywhere to close menu
     await tester.tapAt(const Offset(0, 0));
     await tester.pumpAndSettle();
 
-    final bathMenuFinder = find.byKey(const ValueKey('onboarding-step6-menu-fixed-bath'));
+    final bathMenuFinder = find.byKey(
+      const ValueKey('onboarding-step6-menu-fixed-bath'),
+    );
     await tester.ensureVisible(bathMenuFinder);
     await tester.pumpAndSettle();
     await tester.tap(bathMenuFinder);
@@ -337,8 +429,12 @@ void main() {
       return b;
     }).toList();
     expect(
-      draft.copyWith(baseTimeline: draft.baseTimeline.copyWith(blocks: invalidSleep)).validateStep(6, []),
-      'Sleep and wake time cannot be the same.'
+      draft
+          .copyWith(
+            baseTimeline: draft.baseTimeline.copyWith(blocks: invalidSleep),
+          )
+          .validateStep(6, []),
+      'Sleep and wake time cannot be the same.',
     );
 
     var invalidBath = draft.baseTimeline.blocks.map((b) {
@@ -348,35 +444,103 @@ void main() {
       return b;
     }).toList();
     expect(
-      draft.copyWith(baseTimeline: draft.baseTimeline.copyWith(blocks: invalidBath)).validateStep(6, []),
-      'Bath end time must be after bath start time.'
+      draft
+          .copyWith(
+            baseTimeline: draft.baseTimeline.copyWith(blocks: invalidBath),
+          )
+          .validateStep(6, []),
+      'Bath end time must be after bath start time.',
     );
 
-    var invalidCustomTitle = [...draft.baseTimeline.blocks, TimelineBlockDraft(id: 'c1', title: ' ', section: 'fixed', startMinute: 60, endMinute: 120, repeatDays: const [1,2,3,4,5,6,7], blockType: TimelineBlockDraft.hardBlockKey)];
+    var invalidCustomTitle = [
+      ...draft.baseTimeline.blocks,
+      TimelineBlockDraft(
+        id: 'c1',
+        title: ' ',
+        section: 'fixed',
+        startMinute: 60,
+        endMinute: 120,
+        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+    ];
     expect(
-      draft.copyWith(baseTimeline: draft.baseTimeline.copyWith(blocks: invalidCustomTitle)).validateStep(6, []),
-      'Fixed block name is required.'
+      draft
+          .copyWith(
+            baseTimeline: draft.baseTimeline.copyWith(
+              blocks: invalidCustomTitle,
+            ),
+          )
+          .validateStep(6, []),
+      'Fixed block name is required.',
     );
 
-    var invalidCustomTime = [...draft.baseTimeline.blocks, TimelineBlockDraft(id: 'c2', title: 'X', section: 'fixed', startMinute: 120, endMinute: 60, repeatDays: const [1,2,3,4,5,6,7], blockType: TimelineBlockDraft.hardBlockKey)];
+    var invalidCustomTime = [
+      ...draft.baseTimeline.blocks,
+      TimelineBlockDraft(
+        id: 'c2',
+        title: 'X',
+        section: 'fixed',
+        startMinute: 120,
+        endMinute: 60,
+        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+    ];
     expect(
-      draft.copyWith(baseTimeline: draft.baseTimeline.copyWith(blocks: invalidCustomTime)).validateStep(6, []),
-      'End time must be after start time.'
+      draft
+          .copyWith(
+            baseTimeline: draft.baseTimeline.copyWith(
+              blocks: invalidCustomTime,
+            ),
+          )
+          .validateStep(6, []),
+      'End time must be after start time.',
     );
 
-    var notHard = [...draft.baseTimeline.blocks, TimelineBlockDraft(id: 'c3', title: 'X', section: 'fixed', startMinute: 60, endMinute: 120, repeatDays: const [1,2,3,4,5,6,7], blockType: TimelineBlockDraft.softBlockKey)];
+    var notHard = [
+      ...draft.baseTimeline.blocks,
+      TimelineBlockDraft(
+        id: 'c3',
+        title: 'X',
+        section: 'fixed',
+        startMinute: 60,
+        endMinute: 120,
+        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.softBlockKey,
+      ),
+    ];
     expect(
-      draft.copyWith(baseTimeline: draft.baseTimeline.copyWith(blocks: notHard)).validateStep(6, []),
-      'Fixed blocks must be non-negotiable.'
+      draft
+          .copyWith(baseTimeline: draft.baseTimeline.copyWith(blocks: notHard))
+          .validateStep(6, []),
+      'Fixed blocks must be non-negotiable.',
     );
 
-    var missingDay = [...draft.baseTimeline.blocks, TimelineBlockDraft(id: 'c4', title: 'X', section: 'fixed', startMinute: 60, endMinute: 120, repeatDays: const [1,2,3,4,5,6], blockType: TimelineBlockDraft.hardBlockKey)];
+    var missingDay = [
+      ...draft.baseTimeline.blocks,
+      TimelineBlockDraft(
+        id: 'c4',
+        title: 'X',
+        section: 'fixed',
+        startMinute: 60,
+        endMinute: 120,
+        repeatDays: const [1, 2, 3, 4, 5, 6],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+    ];
     expect(
-      draft.copyWith(baseTimeline: draft.baseTimeline.copyWith(blocks: missingDay)).validateStep(6, []),
-      'Fixed blocks must repeat every day.'
+      draft
+          .copyWith(
+            baseTimeline: draft.baseTimeline.copyWith(blocks: missingDay),
+          )
+          .validateStep(6, []),
+      'Fixed blocks must repeat every day.',
     );
   });
-  testWidgets('Step 6 Next Step saves and advances directly to Step 7', (tester) async {
+  testWidgets('Step 6 Next Step saves and advances directly to Step 7', (
+    tester,
+  ) async {
     final draft = const OnboardingDraft().copyWith(
       baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
       currentStep: 6,
@@ -388,26 +552,24 @@ void main() {
           (_) => MockOnboardingNotifier()..loadSeedData(draft),
         ),
         authProvider.overrideWith((ref) => FakeAuthNotifier()),
-        onboardingRepositoryProvider.overrideWithValue(FakeOnboardingRepository()),
+        onboardingRepositoryProvider.overrideWithValue(
+          FakeOnboardingRepository(),
+        ),
       ],
     );
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: OnboardingFlow(),
-          ),
-        ),
+        child: const MaterialApp(home: Scaffold(body: OnboardingFlow())),
       ),
     );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
-    
+
     // We should be on Step 6
     expect(find.text('Fixed Schedule'), findsOneWidget);
-    
+
     // Tap Next Step
     await tester.tap(find.text('Next Step'));
     await tester.pump();
@@ -422,15 +584,21 @@ void main() {
 
   testWidgets('Step 6 invalid fixed schedule blocks Next Step', (tester) async {
     // Sleep start == end
-    final invalidSleepBlocks = const BaseTimelineDraft().withRequiredFixedBlocks().blocks.map((b) {
-      if (b.id == BaseTimelineDraft.fixedSleepId) {
-        return b.copyWith(startMinute: 10 * 60, endMinute: 10 * 60);
-      }
-      return b;
-    }).toList();
+    final invalidSleepBlocks = const BaseTimelineDraft()
+        .withRequiredFixedBlocks()
+        .blocks
+        .map((b) {
+          if (b.id == BaseTimelineDraft.fixedSleepId) {
+            return b.copyWith(startMinute: 10 * 60, endMinute: 10 * 60);
+          }
+          return b;
+        })
+        .toList();
 
     final draft = const OnboardingDraft().copyWith(
-      baseTimeline: const BaseTimelineDraft().copyWith(blocks: invalidSleepBlocks),
+      baseTimeline: const BaseTimelineDraft().copyWith(
+        blocks: invalidSleepBlocks,
+      ),
       currentStep: 6,
       stepCompleted: List.generate(15, (i) => i < 6),
     );
@@ -440,26 +608,24 @@ void main() {
           (_) => MockOnboardingNotifier()..loadSeedData(draft),
         ),
         authProvider.overrideWith((ref) => FakeAuthNotifier()),
-        onboardingRepositoryProvider.overrideWithValue(FakeOnboardingRepository()),
+        onboardingRepositoryProvider.overrideWithValue(
+          FakeOnboardingRepository(),
+        ),
       ],
     );
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(
-            body: OnboardingFlow(),
-          ),
-        ),
+        child: const MaterialApp(home: Scaffold(body: OnboardingFlow())),
       ),
     );
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 100));
-    
+
     // We should be on Step 6
     expect(find.text('Fixed Schedule'), findsOneWidget);
-    
+
     // Tap Next Step
     await tester.tap(find.text('Next Step'));
     await tester.pump();
@@ -467,7 +633,10 @@ void main() {
 
     final newDraft = container.read(mockOnboardingProvider).draft;
     expect(newDraft.currentStep, 6);
-    expect(find.text('Sleep and wake time cannot be the same.'), findsOneWidget);
+    expect(
+      find.text('Sleep and wake time cannot be the same.'),
+      findsOneWidget,
+    );
     expect(newDraft.stepCompleted[6], isFalse);
   });
 
@@ -477,24 +646,41 @@ void main() {
     await tester.pumpAndSettle();
 
     // Edit sleep
-    final sleepMenuFinder = find.byKey(const ValueKey('onboarding-step6-menu-fixed-sleep')).first;
+    final sleepMenuFinder = find
+        .byKey(const ValueKey('onboarding-step6-menu-fixed-sleep'))
+        .first;
     await tester.ensureVisible(sleepMenuFinder);
     await tester.pumpAndSettle();
     await tester.tap(sleepMenuFinder);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit').last);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '11:00 PM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '7:00 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '11:00 PM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '7:00 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
     // Add custom
     await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('block_name_input')), 'Reading');
-    await tester.enterText(find.byKey(const ValueKey('start_time_input')), '10:00 AM');
-    await tester.enterText(find.byKey(const ValueKey('end_time_input')), '11:00 AM');
+    await tester.enterText(
+      find.byKey(const ValueKey('block_name_input')),
+      'Reading',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('start_time_input')),
+      '10:00 AM',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('end_time_input')),
+      '11:00 AM',
+    );
     await tester.tap(find.text('Save Changes'));
     await tester.pumpAndSettle();
 
@@ -506,10 +692,16 @@ void main() {
     await tester.pumpAndSettle();
 
     final draft2 = container2.read(mockOnboardingProvider).draft;
-    final fixedBlocks = draft2.baseTimeline.blocks.where((b) => b.section == 'fixed').toList();
-    
-    final sleep = fixedBlocks.where((b) => b.id == BaseTimelineDraft.fixedSleepId).toList();
-    final bath = fixedBlocks.where((b) => b.id == BaseTimelineDraft.fixedBathId).toList();
+    final fixedBlocks = draft2.baseTimeline.blocks
+        .where((b) => b.section == 'fixed')
+        .toList();
+
+    final sleep = fixedBlocks
+        .where((b) => b.id == BaseTimelineDraft.fixedSleepId)
+        .toList();
+    final bath = fixedBlocks
+        .where((b) => b.id == BaseTimelineDraft.fixedBathId)
+        .toList();
     final custom = fixedBlocks.where((b) => b.title == 'Reading').toList();
 
     expect(sleep.length, 1);
@@ -519,31 +711,62 @@ void main() {
   });
 }
 
-class FakeAuthNotifier extends StateNotifier<AuthState> implements AuthNotifier {
-  FakeAuthNotifier() : super(const AuthState(
-    user: AuthUser(uid: 'test-uid', email: 'test@example.com', emailVerified: true),
-    status: AuthFlowStatus.signedInOnboardingIncomplete,
-  ));
-  @override Future<void> checkEmailVerification() async {}
-  @override Future<void> login(String email, String password) async {}
-  @override Future<void> logout() async {}
-  @override Future<void> markOnboardingComplete(AuthUser user) async {}
-  @override Future<void> markOnboardingIncomplete(AuthUser user) async {}
+class FakeAuthNotifier extends StateNotifier<AuthState>
+    implements AuthNotifier {
+  FakeAuthNotifier()
+    : super(
+        const AuthState(
+          user: AuthUser(
+            uid: 'test-uid',
+            email: 'test@example.com',
+            emailVerified: true,
+          ),
+          status: AuthFlowStatus.signedInOnboardingIncomplete,
+        ),
+      );
+  @override
+  Future<void> checkEmailVerification() async {}
+  @override
+  Future<void> login(String email, String password) async {}
+  @override
+  Future<void> logout() async {}
+  @override
+  Future<void> markOnboardingComplete(AuthUser user) async {}
+  @override
+  Future<void> markOnboardingIncomplete(AuthUser user) async {}
   Future<void> refreshProfile() async {}
   Future<void> register(String email, String password) async {}
-  @override Future<void> sendPasswordResetEmail(String email) async {}
-  @override Future<void> resendEmailVerification() async {}
-  @override Future<void> retryBackendRestore() async {}
-  @override Future<void> signup(String name, String email, String password) async {}
+  @override
+  Future<void> sendPasswordResetEmail(String email) async {}
+  @override
+  Future<void> resendEmailVerification() async {}
+  @override
+  Future<void> retryBackendRestore() async {}
+  @override
+  Future<void> signup(String name, String email, String password) async {}
 }
 
 class FakeOnboardingRepository implements OnboardingRepository {
-  @override Future<void> saveDraft(OnboardingDraft draft) async {}
+  @override
+  Future<void> saveDraft(OnboardingDraft draft) async {}
   Future<OnboardingDraft?> getDraft(String uid) async => null;
   Future<void> deleteDraft(String uid) async {}
-  @override Future<void> completeOnboarding({required OnboardingCompletionBundle bundle, required OnboardingDraft finalDraft}) async {}
-  @override Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid) async => null;
-  @override Future<OnboardingDraft?> fetchDraft(String uid) async => null;
-  @override Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) async {}
-}
+  @override
+  Future<RoutineProjectionResult> completeOnboarding({
+    required OnboardingCompletionBundle bundle,
+    required OnboardingDraft finalDraft,
+  }) async {
+    return RoutineProjectionResult(
+      outcome: RoutineProjectionOutcome.projected,
+      receipt: RoutineOnboardingProjection.build(bundle).receipt,
+    );
+  }
 
+  @override
+  Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid) async =>
+      null;
+  @override
+  Future<OnboardingDraft?> fetchDraft(String uid) async => null;
+  @override
+  Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) async {}
+}

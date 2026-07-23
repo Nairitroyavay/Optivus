@@ -43,7 +43,9 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
   final Map<String, Color> _blockColors = {};
 
   Color _colorFor(String id) => _blockColors.putIfAbsent(
-      id, () => _cycleColors[_colorIndex++ % _cycleColors.length]);
+    id,
+    () => _cycleColors[_colorIndex++ % _cycleColors.length],
+  );
 
   @override
   void initState() {
@@ -124,15 +126,22 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
       'yoga',
       'run',
       'sport',
-      'train'
+      'train',
     ])) {
       return Icons.fitness_center_rounded;
     }
     if (_any(text, ['work', 'office', 'job', 'meeting', 'desk', 'task'])) {
       return Icons.work_rounded;
     }
-    if (_any(text,
-        ['school', 'study', 'learn', 'class', 'course', 'read', 'book'])) {
+    if (_any(text, [
+      'school',
+      'study',
+      'learn',
+      'class',
+      'course',
+      'read',
+      'book',
+    ])) {
       return Icons.school_rounded;
     }
     if (_any(text, [
@@ -143,7 +152,7 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
       'lunch',
       'dinner',
       'cook',
-      'snack'
+      'snack',
     ])) {
       return Icons.restaurant_rounded;
     }
@@ -199,22 +208,25 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
 
   // ── Events ────────────────────────────────────────────────────────────────
 
-  Future<void> _emitCreated(FixedScheduleTemplate t) =>
-      ref.read(eventServiceProvider).emit(
+  Future<void> _emitCreated(FixedScheduleTemplate t) => ref
+      .read(eventServiceProvider)
+      .emit(
         eventName: EventNames.routineTemplateCreated,
         source: 'fixed_schedule_editor',
         payload: {'templateId': t.templateId, 'routineType': 'fixed_schedule'},
       );
 
-  Future<void> _emitUpdated(FixedScheduleTemplate t) =>
-      ref.read(eventServiceProvider).emit(
+  Future<void> _emitUpdated(FixedScheduleTemplate t) => ref
+      .read(eventServiceProvider)
+      .emit(
         eventName: EventNames.routineTemplateUpdated,
         source: 'fixed_schedule_editor',
         payload: {'templateId': t.templateId, 'routineType': 'fixed_schedule'},
       );
 
-  Future<void> _emitDeleted(String templateId) =>
-      ref.read(eventServiceProvider).emit(
+  Future<void> _emitDeleted(String templateId) => ref
+      .read(eventServiceProvider)
+      .emit(
         eventName: EventNames.routineTemplateDeleted,
         source: 'fixed_schedule_editor',
         payload: {'templateId': templateId, 'routineType': 'fixed_schedule'},
@@ -238,8 +250,9 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
             minute: initialStart?.minute ?? 0,
           )
         : _parseTod(existing.endTime);
-    String repeatRule =
-        _safeRepeat(normalizeFixedScheduleRepeatRule(existing?.repeatRule));
+    String repeatRule = _safeRepeat(
+      normalizeFixedScheduleRepeatRule(existing?.repeatRule),
+    );
 
     final titleCtrl = TextEditingController(text: existing?.title ?? '');
     final categoryCtrl = TextEditingController(text: existing?.category ?? '');
@@ -247,7 +260,8 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
     bool reminderEnabled = existing?.reminderEnabled ?? false;
 
     int curDurMin() {
-      int d = (endTod.hour * 60 + endTod.minute) -
+      int d =
+          (endTod.hour * 60 + endTod.minute) -
           (startTod.hour * 60 + startTod.minute);
       if (d <= 0) d += 1440;
       return d;
@@ -270,280 +284,324 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return StatefulBuilder(builder: (_, setModal) {
-          return Padding(
-            padding:
-                EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(color: Color(0x1A000000), blurRadius: 20)
-                ],
+        return StatefulBuilder(
+          builder: (_, setModal) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
               ),
-              padding: const EdgeInsets.all(24),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isNew ? 'Add Task' : 'Edit Task',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F111A),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(color: Color(0x1A000000), blurRadius: 20),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isNew ? 'Add Task' : 'Edit Task',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F111A),
+                            ),
                           ),
-                        ),
-                        if (!isNew)
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: Colors.red),
-                            onPressed: () {
-                              final id = existing.templateId;
-                              setState(() => _templates.removeAt(index));
-                              _notify();
-                              unawaited(_emitDeleted(id));
-                              Navigator.pop(ctx);
-                            },
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: titleCtrl,
-                      decoration: _inputDecor('Task Title'),
-                      onChanged: (_) {
-                        if (errorMsg != null) setModal(() => errorMsg = null);
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final t = await showTimePicker(
-                                  context: ctx, initialTime: startTod);
-                              if (t != null) {
-                                setModal(() {
-                                  startTod = t;
-                                  final dur =
-                                      int.tryParse(durationCtrl.text.trim());
-                                  if (dur != null && dur > 0 && dur < 1440) {
-                                    final total =
-                                        (t.hour * 60 + t.minute + dur) % 1440;
-                                    endTod = TimeOfDay(
-                                        hour: total ~/ 60, minute: total % 60);
-                                  }
-                                  errorMsg = null;
-                                });
-                              }
-                            },
-                            child: _timeTile(ctx, 'Start Time', startTod),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final t = await showTimePicker(
-                                  context: ctx, initialTime: endTod);
-                              if (t != null) {
-                                setModal(() {
-                                  endTod = t;
-                                  durationCtrl.text = curDurMin().toString();
-                                  errorMsg = null;
-                                });
-                              }
-                            },
-                            child: _timeTile(ctx, 'End Time', endTod),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'Duration: ${curDurStr()}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF94A3B8),
-                        ),
+                          if (!isNew)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              onPressed: () {
+                                final id = existing.templateId;
+                                setState(() => _templates.removeAt(index));
+                                _notify();
+                                unawaited(_emitDeleted(id));
+                                Navigator.pop(ctx);
+                              },
+                            ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: durationCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: _inputDecor('Duration (minutes)'),
-                      onChanged: (v) {
-                        final dur = int.tryParse(v.trim());
-                        if (dur == null || dur <= 0 || dur >= 1440) {
-                          setModal(() =>
-                              errorMsg = 'Duration must be 1 to 1439 minutes.');
-                          return;
-                        }
-                        final total =
-                            (startTod.hour * 60 + startTod.minute + dur) % 1440;
-                        setModal(() {
-                          endTod =
-                              TimeOfDay(hour: total ~/ 60, minute: total % 60);
-                          errorMsg = null;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    InputDecorator(
-                      decoration: _inputDecor('Repeat'),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: repeatRule,
-                          isExpanded: true,
-                          items: const [
-                            DropdownMenuItem(
-                                value: 'daily', child: Text('Daily')),
-                            DropdownMenuItem(
-                                value: 'weekly:1,2,3,4,5',
-                                child: Text('Weekdays')),
-                            DropdownMenuItem(
-                                value: 'weekly:6,7', child: Text('Weekends')),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setModal(() => repeatRule = v);
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: categoryCtrl,
-                      decoration: _inputDecor('Category (Optional)'),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: notesCtrl,
-                      maxLines: 2,
-                      decoration: _inputDecor('Notes (Optional)'),
-                    ),
-                    const SizedBox(height: 16),
-                    SwitchListTile.adaptive(
-                      title: const Text('Reminder',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF0F111A))),
-                      subtitle: const Text('5 minutes before start',
-                          style: TextStyle(
-                              fontSize: 13, color: Color(0xFF64748B))),
-                      value: reminderEnabled,
-                      onChanged: (v) => setModal(() => reminderEnabled = v),
-                      contentPadding: EdgeInsets.zero,
-                      activeTrackColor: const Color(0xFF3B82F6),
-                    ),
-                    if (errorMsg != null) ...[
                       const SizedBox(height: 16),
-                      Text(errorMsg!,
+                      TextField(
+                        controller: titleCtrl,
+                        decoration: _inputDecor('Task Title'),
+                        onChanged: (_) {
+                          if (errorMsg != null) setModal(() => errorMsg = null);
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final t = await showTimePicker(
+                                  context: ctx,
+                                  initialTime: startTod,
+                                );
+                                if (t != null) {
+                                  setModal(() {
+                                    startTod = t;
+                                    final dur = int.tryParse(
+                                      durationCtrl.text.trim(),
+                                    );
+                                    if (dur != null && dur > 0 && dur < 1440) {
+                                      final total =
+                                          (t.hour * 60 + t.minute + dur) % 1440;
+                                      endTod = TimeOfDay(
+                                        hour: total ~/ 60,
+                                        minute: total % 60,
+                                      );
+                                    }
+                                    errorMsg = null;
+                                  });
+                                }
+                              },
+                              child: _timeTile(ctx, 'Start Time', startTod),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () async {
+                                final t = await showTimePicker(
+                                  context: ctx,
+                                  initialTime: endTod,
+                                );
+                                if (t != null) {
+                                  setModal(() {
+                                    endTod = t;
+                                    durationCtrl.text = curDurMin().toString();
+                                    errorMsg = null;
+                                  });
+                                }
+                              },
+                              child: _timeTile(ctx, 'End Time', endTod),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Duration: ${curDurStr()}',
                           style: const TextStyle(
-                              color: Colors.red, fontWeight: FontWeight.w500)),
-                    ],
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF94A3B8),
+                          ),
                         ),
-                        onPressed: () {
-                          final dur = int.tryParse(durationCtrl.text.trim());
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: durationCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: _inputDecor('Duration (minutes)'),
+                        onChanged: (v) {
+                          final dur = int.tryParse(v.trim());
                           if (dur == null || dur <= 0 || dur >= 1440) {
-                            setModal(() => errorMsg =
-                                'Duration must be 1 to 1439 minutes.');
+                            setModal(
+                              () => errorMsg =
+                                  'Duration must be 1 to 1439 minutes.',
+                            );
                             return;
                           }
                           final total =
                               (startTod.hour * 60 + startTod.minute + dur) %
-                                  1440;
-                          endTod =
-                              TimeOfDay(hour: total ~/ 60, minute: total % 60);
-
-                          final startTime = _formatTod(startTod);
-                          final endTime = _formatTod(endTod);
-                          final validationError =
-                              validateFixedScheduleTemplateDraft(
-                            title: titleCtrl.text,
-                            startTime: startTime,
-                            endTime: endTime,
-                            existingTemplates: _templates,
-                            currentTemplateId: existing?.templateId,
-                            allowOverlap: _allowOverlap,
-                          );
-                          if (validationError != null) {
-                            setModal(() => errorMsg = validationError);
-                            return;
-                          }
-
-                          final now = DateTime.now().toIso8601String();
-                          final templateMap = normalizeFixedScheduleTemplateMap(
-                            {
-                              ...?existing?.toMap(),
-                              'templateId': existing?.templateId ??
-                                  'sched_${DateTime.now().microsecondsSinceEpoch}',
-                              'title': titleCtrl.text.trim(),
-                              'startTime': startTime,
-                              'endTime': endTime,
-                              'repeatRule': repeatRule,
-                              'category': categoryCtrl.text.trim(),
-                              'notes': notesCtrl.text.trim(),
-                              'isActive': existing?.isActive ?? true,
-                              'reminderEnabled': reminderEnabled,
-                              'reminderOffsetMinutes':
-                                  existing?.reminderOffsetMinutes ?? 5,
-                              'createdAt': existing?.createdAt ?? now,
-                              'updatedAt': existing?.updatedAt ?? now,
-                            },
-                            index: isNew ? _templates.length : index,
-                            touchUpdatedAt: true,
-                          );
-                          final template =
-                              FixedScheduleTemplate.fromMap(templateMap);
-
-                          setState(() {
-                            if (isNew) {
-                              _templates.add(template);
-                              _colorFor(template.templateId);
-                            } else {
-                              _templates[index] = template;
-                            }
+                              1440;
+                          setModal(() {
+                            endTod = TimeOfDay(
+                              hour: total ~/ 60,
+                              minute: total % 60,
+                            );
+                            errorMsg = null;
                           });
-                          _notify();
-                          unawaited(isNew
-                              ? _emitCreated(template)
-                              : _emitUpdated(template));
-                          Navigator.pop(ctx);
                         },
-                        child: Text(
-                          isNew ? 'Create Task' : 'Save Task',
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      InputDecorator(
+                        decoration: _inputDecor('Repeat'),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: repeatRule,
+                            isExpanded: true,
+                            items: const [
+                              DropdownMenuItem(
+                                value: 'daily',
+                                child: Text('Daily'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'weekly:1,2,3,4,5',
+                                child: Text('Weekdays'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'weekly:6,7',
+                                child: Text('Weekends'),
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) setModal(() => repeatRule = v);
+                            },
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: categoryCtrl,
+                        decoration: _inputDecor('Category (Optional)'),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: notesCtrl,
+                        maxLines: 2,
+                        decoration: _inputDecor('Notes (Optional)'),
+                      ),
+                      const SizedBox(height: 16),
+                      SwitchListTile.adaptive(
+                        title: const Text(
+                          'Reminder',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF0F111A),
+                          ),
+                        ),
+                        subtitle: const Text(
+                          '5 minutes before start',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                        value: reminderEnabled,
+                        onChanged: (v) => setModal(() => reminderEnabled = v),
+                        contentPadding: EdgeInsets.zero,
+                        activeTrackColor: const Color(0xFF3B82F6),
+                      ),
+                      if (errorMsg != null) ...[
+                        const SizedBox(height: 16),
+                        Text(
+                          errorMsg!,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF3B82F6),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          onPressed: () {
+                            final dur = int.tryParse(durationCtrl.text.trim());
+                            if (dur == null || dur <= 0 || dur >= 1440) {
+                              setModal(
+                                () => errorMsg =
+                                    'Duration must be 1 to 1439 minutes.',
+                              );
+                              return;
+                            }
+                            final total =
+                                (startTod.hour * 60 + startTod.minute + dur) %
+                                1440;
+                            endTod = TimeOfDay(
+                              hour: total ~/ 60,
+                              minute: total % 60,
+                            );
+
+                            final startTime = _formatTod(startTod);
+                            final endTime = _formatTod(endTod);
+                            final validationError =
+                                validateFixedScheduleTemplateDraft(
+                                  title: titleCtrl.text,
+                                  startTime: startTime,
+                                  endTime: endTime,
+                                  existingTemplates: _templates,
+                                  currentTemplateId: existing?.templateId,
+                                  allowOverlap: _allowOverlap,
+                                );
+                            if (validationError != null) {
+                              setModal(() => errorMsg = validationError);
+                              return;
+                            }
+
+                            final now = DateTime.now().toIso8601String();
+                            final templateMap = normalizeFixedScheduleTemplateMap(
+                              {
+                                ...?existing?.toMap(),
+                                'templateId':
+                                    existing?.templateId ??
+                                    'sched_${DateTime.now().microsecondsSinceEpoch}',
+                                'title': titleCtrl.text.trim(),
+                                'startTime': startTime,
+                                'endTime': endTime,
+                                'repeatRule': repeatRule,
+                                'category': categoryCtrl.text.trim(),
+                                'notes': notesCtrl.text.trim(),
+                                'isActive': existing?.isActive ?? true,
+                                'reminderEnabled': reminderEnabled,
+                                'reminderOffsetMinutes':
+                                    existing?.reminderOffsetMinutes ?? 5,
+                                'createdAt': existing?.createdAt ?? now,
+                                'updatedAt': existing?.updatedAt ?? now,
+                              },
+                              index: isNew ? _templates.length : index,
+                              touchUpdatedAt: true,
+                            );
+                            final template = FixedScheduleTemplate.fromMap(
+                              templateMap,
+                            );
+
+                            setState(() {
+                              if (isNew) {
+                                _templates.add(template);
+                                _colorFor(template.templateId);
+                              } else {
+                                _templates[index] = template;
+                              }
+                            });
+                            _notify();
+                            unawaited(
+                              isNew
+                                  ? _emitCreated(template)
+                                  : _emitUpdated(template),
+                            );
+                            Navigator.pop(ctx);
+                          },
+                          child: Text(
+                            isNew ? 'Create Task' : 'Save Task',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        });
+            );
+          },
+        );
       },
     );
 
@@ -556,139 +614,149 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
   // ── UI helpers ────────────────────────────────────────────────────────────
 
   InputDecoration _inputDecor(String label) => InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: const Color(0xFFF1F5F9),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-      );
+    labelText: label,
+    filled: true,
+    fillColor: const Color(0xFFF1F5F9),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide.none,
+    ),
+  );
 
   Widget _timeTile(BuildContext ctx, String label, TimeOfDay time) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(12),
+    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF1F5F9),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-            const SizedBox(height: 4),
-            Text(time.format(ctx),
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          ],
+        const SizedBox(height: 4),
+        Text(
+          time.format(ctx),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-      );
+      ],
+    ),
+  );
 
   // ── Timeline building ─────────────────────────────────────────────────────
 
   Widget _buildHeader() => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Row(
         children: [
-          Row(
-            children: [
-              Checkbox(
-                value: _allowOverlap,
-                onChanged: (v) => setState(() => _allowOverlap = v ?? false),
-                activeColor: const Color(0xFF3B82F6),
-              ),
-              const Text(
-                'Allow Overlaps',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600, color: Color(0xFF334155)),
-              ),
-            ],
+          Checkbox(
+            value: _allowOverlap,
+            onChanged: (v) => setState(() => _allowOverlap = v ?? false),
+            activeColor: const Color(0xFF3B82F6),
           ),
-          FilledButton.icon(
-            onPressed: () => _showEditDialog(index: _templates.length),
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add Task'),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF3B82F6),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+          const Text(
+            'Allow Overlaps',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF334155),
             ),
           ),
         ],
-      );
+      ),
+      FilledButton.icon(
+        onPressed: () => _showEditDialog(index: _templates.length),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add Task'),
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFF3B82F6),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+    ],
+  );
 
   List<Widget> _buildRulerLines() => List.generate(24, (i) {
-        final label = i == 0
-            ? '12 AM'
-            : (i < 12 ? '$i AM' : (i == 12 ? '12 PM' : '${i - 12} PM'));
-        return Positioned(
-          top: i * kHourHeight - 10,
-          left: 16,
-          width: 44,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              Text(label,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF64748B),
-                  )),
-              const SizedBox(width: 8),
-              Container(width: 4, height: 1.5, color: const Color(0xFFCBD5E1)),
-            ],
+    final label = i == 0
+        ? '12 AM'
+        : (i < 12 ? '$i AM' : (i == 12 ? '12 PM' : '${i - 12} PM'));
+    return Positioned(
+      top: i * kHourHeight - 10,
+      left: 16,
+      width: 44,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF64748B),
+            ),
           ),
-        );
-      });
+          const SizedBox(width: 8),
+          Container(width: 4, height: 1.5, color: const Color(0xFFCBD5E1)),
+        ],
+      ),
+    );
+  });
 
   Widget _buildGlassPillar() => Positioned(
-        top: 0,
-        bottom: 0,
-        left: 60,
-        width: 10,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-                color: Colors.white.withValues(alpha: 0.9), width: 1.2),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(5),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: Stack(
-                children: List.generate(
-                    24,
-                    (i) => Positioned(
-                          top: i * kHourHeight - 0.75,
-                          left: 0,
-                          right: 0,
-                          child: Center(
-                            child: Container(
-                              width: 4,
-                              height: 1.5,
-                              color: Colors.white.withValues(alpha: 0.8),
-                            ),
-                          ),
-                        )),
+    top: 0,
+    bottom: 0,
+    left: 60,
+    width: 10,
+    child: Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.2,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          child: Stack(
+            children: List.generate(
+              24,
+              (i) => Positioned(
+                top: i * kHourHeight - 0.75,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    width: 4,
+                    height: 1.5,
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
 
   Widget _buildDroplet(double size) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(size),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.white.withValues(alpha: 0.4), blurRadius: 6),
-          ],
-        ),
-      );
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(size),
+      boxShadow: [
+        BoxShadow(color: Colors.white.withValues(alpha: 0.4), blurRadius: 6),
+      ],
+    ),
+  );
 
   Widget _buildTapeWithDrops({GestureDragUpdateCallback? onDrag}) =>
       MouseRegion(
@@ -706,12 +774,15 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
                   color: Colors.white.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.95), width: 1.5),
+                    color: Colors.white.withValues(alpha: 0.95),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 4,
-                        offset: const Offset(0, 3)),
+                      color: Colors.black.withValues(alpha: 0.06),
+                      blurRadius: 4,
+                      offset: const Offset(0, 3),
+                    ),
                   ],
                 ),
                 child: ClipRRect(
@@ -763,16 +834,20 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
                     ],
                   ),
                   border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+                    color: Colors.white.withValues(alpha: 0.8),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                        color: color.withValues(alpha: 0.2),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6)),
+                      color: color.withValues(alpha: 0.2),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
                     BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        blurRadius: 8,
-                        offset: const Offset(-2, -2)),
+                      color: Colors.white.withValues(alpha: 0.7),
+                      blurRadius: 8,
+                      offset: const Offset(-2, -2),
+                    ),
                   ],
                 ),
                 child: ClipRRect(
@@ -783,16 +858,20 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
                       filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
                               children: [
-                                Icon(icon,
-                                    color: color.withValues(alpha: 0.9),
-                                    size: 24),
+                                Icon(
+                                  icon,
+                                  color: color.withValues(alpha: 0.9),
+                                  size: 24,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
@@ -805,21 +884,26 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const Icon(Icons.more_vert_rounded,
-                                    color: Color(0xFF64748B), size: 20),
+                                const Icon(
+                                  Icons.more_vert_rounded,
+                                  color: Color(0xFF64748B),
+                                  size: 20,
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             Container(
                               height: 32,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    width: 1),
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  width: 1,
+                                ),
                               ),
                               child: Center(
                                 child: Text(
@@ -847,7 +931,8 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
               right: 0,
               child: Center(
                 child: _buildTapeWithDrops(
-                    onDrag: (d) => _onTopTapeDrag(index, d)),
+                  onDrag: (d) => _onTopTapeDrag(index, d),
+                ),
               ),
             ),
             // Bottom tape
@@ -857,7 +942,8 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
               right: 0,
               child: Center(
                 child: _buildTapeWithDrops(
-                    onDrag: (d) => _onBottomTapeDrag(index, d)),
+                  onDrag: (d) => _onBottomTapeDrag(index, d),
+                ),
               ),
             ),
           ],
@@ -885,16 +971,20 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
             color: Colors.white.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(height / 2),
             border: Border.all(
-                color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+              color: Colors.white.withValues(alpha: 0.8),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2)),
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
               BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  blurRadius: 4,
-                  offset: const Offset(-1, -1)),
+                color: Colors.white.withValues(alpha: 0.6),
+                blurRadius: 4,
+                offset: const Offset(-1, -1),
+              ),
             ],
           ),
           child: ClipRRect(
@@ -918,8 +1008,11 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Icon(Icons.more_vert_rounded,
-                        color: Color(0xFF94A3B8), size: 18),
+                    const Icon(
+                      Icons.more_vert_rounded,
+                      color: Color(0xFF94A3B8),
+                      size: 18,
+                    ),
                   ],
                 ),
               ),
@@ -944,21 +1037,22 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
       right: 0,
       height: height,
       child: GestureDetector(
-        onTap: () => _showEditDialog(
-          index: _templates.length,
-          initialStart: startTod,
-        ),
+        onTap: () =>
+            _showEditDialog(index: _templates.length, initialStart: startTod),
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(height / 2),
             border: Border.all(
-                color: Colors.white.withValues(alpha: 0.7), width: 1.5),
+              color: Colors.white.withValues(alpha: 0.7),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2)),
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           child: ClipRRect(
@@ -966,8 +1060,11 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: const Center(
-                child:
-                    Icon(Icons.add_rounded, color: Color(0xFF8B5CF6), size: 28),
+                child: Icon(
+                  Icons.add_rounded,
+                  color: Color(0xFF8B5CF6),
+                  size: 28,
+                ),
               ),
             ),
           ),
@@ -991,11 +1088,7 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
 
   List<Widget> _buildAddButtons() {
     if (_templates.isNotEmpty) return [];
-    return [
-      _buildAddButton(7.5),
-      _buildAddButton(12.5),
-      _buildAddButton(18.0),
-    ];
+    return [_buildAddButton(7.5), _buildAddButton(12.5), _buildAddButton(18.0)];
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -1012,20 +1105,25 @@ class _FixedScheduleEditorState extends ConsumerState<FixedScheduleEditor> {
             width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.4),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(32)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
               border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+                color: Colors.white.withValues(alpha: 0.8),
+                width: 1.5,
+              ),
               boxShadow: [
                 BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.02),
-                    blurRadius: 12,
-                    offset: const Offset(0, -4)),
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 12,
+                  offset: const Offset(0, -4),
+                ),
               ],
             ),
             child: ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(32)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                 child: SingleChildScrollView(

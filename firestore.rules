@@ -142,6 +142,364 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function validRoutineTemplateKeys(data) {
+      return data.keys().hasOnly([
+        "id",
+        "ownerUid",
+        "title",
+        "category",
+        "source",
+        "blockType",
+        "priority",
+        "startMinute",
+        "endMinute",
+        "repeatRule",
+        "repeatDays",
+        "dateKey",
+        "endDateKey",
+        "crossesMidnight",
+        "endsNextDay",
+        "location",
+        "isTrackerLinked",
+        "trackerType",
+        "notes",
+        "bestTime",
+        "subtasks",
+        "steps",
+        "mealCategory",
+        "dishes",
+        "caloriesEstimate",
+        "proteinEstimate",
+        "hardBlock",
+        "allowOverlap",
+        "onboardingProjectionId",
+        "onboardingSourceItemId",
+        "createdByOperationId",
+        "lastMutationOperationId",
+        "createdAt",
+        "updatedAt",
+        "schemaVersion"
+      ])
+      && !data.keys().hasAny([
+        "status",
+        "isCompleted",
+        "isMissed",
+        "hasConflict",
+        "conflictMessage",
+        "isContinuation",
+        "subtasksCompleted",
+        "imageBytes",
+        "bytes",
+        "localPath",
+        "localFilePath",
+        "localPreviewPath"
+      ]);
+    }
+
+    function validRoutineBlockType(value) {
+      return value == "hardBlock"
+        || value == "softBlock"
+        || value == "flexibleTask"
+        || value == "trackerTask"
+        || value == "checkIn"
+        || value == "moneyTask";
+    }
+
+    function validRoutineCategory(value) {
+      return value == "classBlock"
+        || value == "job"
+        || value == "eating"
+        || value == "fixed"
+        || value == "skinCare"
+        || value == "sleep"
+        || value == "habit"
+        || value == "badHabit"
+        || value == "identity"
+        || value == "finance"
+        || value == "health"
+        || value == "focus"
+        || value == "meditation"
+        || value == "hydration"
+        || value == "screenTime";
+    }
+
+    function validRoutineSource(value) {
+      return value == "onboarding"
+        || value == "manual"
+        || value == "aiSuggestion"
+        || value == "tracker"
+        || value == "imported";
+    }
+
+    function validRoutineTrackerType(value) {
+      return value == "meditation"
+        || value == "workout"
+        || value == "focus"
+        || value == "money"
+        || value == "hydration"
+        || value == "smoking"
+        || value == "none";
+    }
+
+    function validRoutineDateKey(value) {
+      return value is string
+        && value.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
+    }
+
+    function validRoutineRepeatDays(days) {
+      return days is list
+        && days.size() <= 7
+        && days.size() == days.toSet().size()
+        && days.toSet().hasOnly([1, 2, 3, 4, 5, 6, 7]);
+    }
+
+    function validRoutineTime(data) {
+      return data.startMinute is int
+        && data.startMinute >= 0
+        && data.startMinute <= 1439
+        && data.endMinute is int
+        && data.endMinute >= 0
+        && data.endMinute <= 1440
+        && data.startMinute != data.endMinute
+        && ((data.crossesMidnight == true || data.endsNextDay == true)
+          ? data.endMinute < data.startMinute
+          : data.endMinute > data.startMinute);
+    }
+
+    function validRoutineTemplate(data, itemId) {
+      return validRoutineTemplateKeys(data)
+        && data.keys().hasAll([
+          "id",
+          "ownerUid",
+          "title",
+          "category",
+          "source",
+          "blockType",
+          "priority",
+          "startMinute",
+          "endMinute",
+          "repeatRule",
+          "repeatDays",
+          "crossesMidnight",
+          "endsNextDay",
+          "isTrackerLinked",
+          "trackerType",
+          "hardBlock",
+          "allowOverlap",
+          "createdAt",
+          "updatedAt",
+          "schemaVersion"
+        ])
+        && data.id == itemId
+        && data.ownerUid == request.auth.uid
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 200
+        && validRoutineCategory(data.category)
+        && validRoutineSource(data.source)
+        && validRoutineBlockType(data.blockType)
+        && (data.priority == "mustDo" || data.priority == "goodToDo")
+        && validRoutineTime(data)
+        && validRoutineRepeatDays(data.repeatDays)
+        && (data.repeatRule == "once"
+          || data.repeatRule == "daily"
+          || data.repeatRule == "weekly"
+          || data.repeatRule == "weekdays"
+          || data.repeatRule == "weekends")
+        && (data.repeatRule == "once"
+          ? data.repeatDays.size() == 0
+            && data.keys().hasAll(["dateKey"])
+            && validRoutineDateKey(data.dateKey)
+          : data.repeatDays.size() > 0)
+        && (!data.keys().hasAny(["dateKey"])
+          || validRoutineDateKey(data.dateKey))
+        && (!data.keys().hasAny(["endDateKey"])
+          || validRoutineDateKey(data.endDateKey))
+        && (!data.keys().hasAny(["endDateKey"])
+          || (data.keys().hasAll(["dateKey"])
+            && data.endDateKey >= data.dateKey))
+        && data.crossesMidnight is bool
+        && data.endsNextDay is bool
+        && data.isTrackerLinked is bool
+        && validRoutineTrackerType(data.trackerType)
+        && data.hardBlock is bool
+        && data.allowOverlap is bool
+        && (!data.keys().hasAny(["location"]) || data.location is string)
+        && (!data.keys().hasAny(["notes"]) || data.notes is string)
+        && (!data.keys().hasAny(["bestTime"]) || data.bestTime is string)
+        && (!data.keys().hasAny(["subtasks"]) || data.subtasks is list)
+        && (!data.keys().hasAny(["steps"]) || data.steps is list)
+        && (!data.keys().hasAny(["mealCategory"])
+          || data.mealCategory is string)
+        && (!data.keys().hasAny(["dishes"]) || data.dishes is list)
+        && (!data.keys().hasAny(["caloriesEstimate"])
+          || data.caloriesEstimate is number)
+        && (!data.keys().hasAny(["proteinEstimate"])
+          || data.proteinEstimate is number)
+        && (!data.keys().hasAny(["onboardingProjectionId"])
+          || data.onboardingProjectionId is string)
+        && (!data.keys().hasAny(["onboardingSourceItemId"])
+          || data.onboardingSourceItemId is string)
+        && (!data.keys().hasAny(["createdByOperationId"])
+          || (data.createdByOperationId is string && data.createdByOperationId.size() > 0 && data.createdByOperationId.size() <= 128))
+        && (!data.keys().hasAny(["lastMutationOperationId"])
+          || (data.lastMutationOperationId is string && data.lastMutationOperationId.size() > 0 && data.lastMutationOperationId.size() <= 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    function validRoutineOccurrenceStatus(value) {
+      return value == "active"
+        || value == "inTracker"
+        || value == "completed"
+        || value == "skipped"
+        || value == "missed"
+        || value == "moved";
+    }
+
+    function validRoutineOccurrence(data, occurrenceId) {
+      return data.keys().hasOnly([
+          "id",
+          "ownerUid",
+          "routineItemId",
+          "occurrenceDateKey",
+          "status",
+          "source",
+          "action",
+          "operationKey",
+          "movedToDateKey",
+          "movedStartMinute",
+          "movedEndMinute",
+          "completedSubtaskIndexes",
+          "note",
+          "displayTitleOverride",
+          "createdAt",
+          "updatedAt",
+          "schemaVersion"
+        ])
+        && data.keys().hasAll([
+          "id",
+          "ownerUid",
+          "routineItemId",
+          "occurrenceDateKey",
+          "status",
+          "source",
+          "action",
+          "operationKey",
+          "completedSubtaskIndexes",
+          "createdAt",
+          "updatedAt",
+          "schemaVersion"
+        ])
+        && data.id == occurrenceId
+        && data.ownerUid == request.auth.uid
+        && data.routineItemId is string
+        && data.routineItemId.size() > 0
+        && validRoutineDateKey(data.occurrenceDateKey)
+        && validRoutineOccurrenceStatus(data.status)
+        && (data.source == "routine"
+          || data.source == "tracker"
+          || data.source == "checkIn"
+          || data.source == "money"
+          || data.source == "system")
+        && (data.action == "start"
+          || data.action == "startTracker"
+          || data.action == "complete"
+          || data.action == "skip"
+          || data.action == "miss"
+          || data.action == "move"
+          || data.action == "checkIn"
+          || data.action == "toggleSubtask"
+          || data.action == "makeTiny")
+        && data.operationKey is string
+        && data.operationKey.size() > 0
+        && data.operationKey.size() <= 256
+        && data.completedSubtaskIndexes is list
+        && data.completedSubtaskIndexes.size() <= 100
+        && data.completedSubtaskIndexes.size()
+          == data.completedSubtaskIndexes.toSet().size()
+        && data.completedSubtaskIndexes.toSet().hasOnly([
+          0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+          10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+          20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+          30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+          40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+          50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+          60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+          70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+          80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+          90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+        ])
+        && (!data.keys().hasAny(["note"]) || data.note is string)
+        && (!data.keys().hasAny(["displayTitleOverride"])
+          || data.displayTitleOverride is string)
+        && (data.status == "moved"
+          ? data.keys().hasAll([
+              "movedToDateKey",
+              "movedStartMinute",
+              "movedEndMinute"
+            ])
+            && validRoutineDateKey(data.movedToDateKey)
+            && data.movedStartMinute is int
+            && data.movedStartMinute >= 0
+            && data.movedStartMinute <= 1439
+            && data.movedEndMinute is int
+            && data.movedEndMinute > data.movedStartMinute
+            && data.movedEndMinute <= 1440
+          : true)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    function validRoutineProjectionReceipt(data, projectionId) {
+      return projectionId == "onboarding-initial-v1"
+        && data.keys().hasOnly([
+          "id",
+          "ownerUid",
+          "source",
+          "sourceBundleSchemaVersion",
+          "sourceBundleId",
+          "sourceBundleFingerprint",
+          "projectedItemIds",
+          "status",
+          "createdAt",
+          "completedAt",
+          "schemaVersion"
+        ])
+        && data.keys().hasAll([
+          "id",
+          "ownerUid",
+          "source",
+          "sourceBundleSchemaVersion",
+          "sourceBundleId",
+          "sourceBundleFingerprint",
+          "projectedItemIds",
+          "status",
+          "createdAt",
+          "completedAt",
+          "schemaVersion"
+        ])
+        && data.id == projectionId
+        && data.ownerUid == request.auth.uid
+        && data.source == "onboarding"
+        && data.sourceBundleSchemaVersion is int
+        && data.sourceBundleSchemaVersion > 0
+        && data.sourceBundleId is string
+        && data.sourceBundleId.size() > 0
+        && data.sourceBundleId.size() <= 128
+        && data.sourceBundleFingerprint is string
+        && data.sourceBundleFingerprint.matches("^[a-f0-9]{64}$")
+        && data.projectedItemIds is list
+        && data.projectedItemIds.size() <= 450
+        && data.projectedItemIds.size() == data.projectedItemIds.toSet().size()
+        && data.status == "completed"
+        && data.createdAt is timestamp
+        && data.completedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
     // Strict Phase 2A upload metadata rule. R2 bytes are owned by the Worker;
     // Firestore stores only verified owner metadata.
     match /users/{uid}/uploads/{assetId} {
@@ -178,6 +536,51 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /users/{uid}/routineItems/{itemId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validRoutineTemplate(request.resource.data, itemId);
+      allow update: if verifiedOwner(uid)
+        && validRoutineTemplate(request.resource.data, itemId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.id == resource.data.id
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (!resource.data.keys().hasAny(["onboardingProjectionId"]) 
+            || request.resource.data.onboardingProjectionId == resource.data.onboardingProjectionId)
+        && (!resource.data.keys().hasAny(["onboardingSourceItemId"]) 
+            || request.resource.data.onboardingSourceItemId == resource.data.onboardingSourceItemId)
+        && (!resource.data.keys().hasAny(["createdByOperationId"]) 
+            || request.resource.data.createdByOperationId == resource.data.createdByOperationId);
+      allow delete: if verifiedOwner(uid)
+        && resource.data.ownerUid == request.auth.uid
+        && resource.data.id == itemId;
+    }
+
+    match /users/{uid}/routineHistory/{occurrenceId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validRoutineOccurrence(request.resource.data, occurrenceId);
+      allow update: if verifiedOwner(uid)
+        && validRoutineOccurrence(request.resource.data, occurrenceId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.routineItemId == resource.data.routineItemId
+        && request.resource.data.occurrenceDateKey
+          == resource.data.occurrenceDateKey
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if verifiedOwner(uid)
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /users/{uid}/routineProjections/{projectionId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validRoutineProjectionReceipt(
+          request.resource.data,
+          projectionId
+        );
+      allow update, delete: if false;
+    }
+
     // Phase 2B onboarding draft/completion bundle. Validation stays light for
     // early development; production backend modules must add specific schemas.
     match /users/{uid}/onboarding/{docId} {
@@ -195,7 +598,10 @@ service cloud.firestore {
     match /users/{uid}/{collectionId}/{document=**} {
       allow read, write: if verifiedOwner(uid)
         && collectionId != "uploads"
-        && collectionId != "routineImportReviews";
+        && collectionId != "routineImportReviews"
+        && collectionId != "routineItems"
+        && collectionId != "routineHistory"
+        && collectionId != "routineProjections";
     }
   }
 }

@@ -15,7 +15,7 @@ class CoachAiResult {
   final List<dynamic> cards;
   final List<String> warnings;
   final String? errorMessage;
-  
+
   bool get hasError => errorMessage != null;
 
   const CoachAiResult({
@@ -24,7 +24,7 @@ class CoachAiResult {
     this.warnings = const [],
     this.errorMessage,
   });
-  
+
   factory CoachAiResult.error(String msg) {
     return CoachAiResult(reply: '', errorMessage: msg);
   }
@@ -84,9 +84,11 @@ class WorkerCoachAiClient implements CoachAiClient {
         body: jsonEncode(context),
       );
       final body = _jsonObject(response.body);
-      
+
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        return CoachAiResult.error(_friendlyErrorMessage(response.statusCode, body));
+        return CoachAiResult.error(
+          _friendlyErrorMessage(response.statusCode, body),
+        );
       }
 
       final cards = body['cards'];
@@ -95,16 +97,22 @@ class WorkerCoachAiClient implements CoachAiClient {
       return CoachAiResult(
         reply: body['reply'] as String? ?? "I'm here to help.",
         cards: cards is List ? cards : [],
-        warnings: warnings is List ? warnings.map((e) => e.toString()).toList() : [],
+        warnings: warnings is List
+            ? warnings.map((e) => e.toString()).toList()
+            : [],
       );
     } catch (_) {
-      return CoachAiResult.error('AI coach service is unavailable. Try again later.');
+      return CoachAiResult.error(
+        'AI coach service is unavailable. Try again later.',
+      );
     }
   }
 
   Uri _workerUri(String path) {
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
-    return Uri.parse('${baseUrl.trim().replaceFirst(RegExp(r'/+\$'), '')}/$normalizedPath');
+    return Uri.parse(
+      '${baseUrl.trim().replaceFirst(RegExp(r'/+\$'), '')}/$normalizedPath',
+    );
   }
 
   Map<String, dynamic> _jsonObject(String source) {
@@ -121,17 +129,22 @@ class WorkerCoachAiClient implements CoachAiClient {
 
   String _friendlyErrorMessage(int statusCode, Map<String, dynamic> body) {
     final rawError = body['error'] as String?;
-    
-    if (statusCode == 503 || statusCode == 429 || rawError == 'provider_high_demand' || rawError == 'provider_quota_exceeded' || rawError == 'provider_request_failed') {
+
+    if (statusCode == 503 ||
+        statusCode == 429 ||
+        rawError == 'provider_high_demand' ||
+        rawError == 'provider_quota_exceeded' ||
+        rawError == 'provider_request_failed') {
       return 'AI is busy right now. Try again in a moment.';
     }
     if (rawError == 'provider_invalid_response') {
       return 'AI response could not be safely read. Please try again.';
     }
-    if (rawError?.startsWith('invalid_') == true && rawError?.endsWith('_request') == true) {
+    if (rawError?.startsWith('invalid_') == true &&
+        rawError?.endsWith('_request') == true) {
       return 'The request was invalid. Please try again.';
     }
-    
+
     return 'AI coach service could not process this request.';
   }
 }

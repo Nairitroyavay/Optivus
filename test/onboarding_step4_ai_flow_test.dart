@@ -18,59 +18,74 @@ import 'package:optivus/state/upload_state.dart';
 
 void main() {
   group('Onboarding Step 4 AI Flow Logic', () {
-    test('onboarding4SourceFailureMessage returns strict upload error for 0 candidates', () {
-      final message = onboarding4SourceFailureMessage(
-        source: RoutineImportReviewSource.classes,
-        role: 'student',
-        rawCandidateCount: 0,
-        mappedBlockCount: 0,
-        warnings: const [],
-      );
+    test(
+      'onboarding4SourceFailureMessage returns strict upload error for 0 candidates',
+      () {
+        final message = onboarding4SourceFailureMessage(
+          source: RoutineImportReviewSource.classes,
+          role: 'student',
+          rawCandidateCount: 0,
+          mappedBlockCount: 0,
+          warnings: const [],
+        );
 
-      expect(
-        message,
-        'AI could not read this timetable. Please upload a clearer image and try again.',
-      );
-    });
+        expect(
+          message,
+          'AI could not read this timetable. Please upload a clearer image and try again.',
+        );
+      },
+    );
 
-    test('onboarding4SourceFailureMessage returns strict upload error for 0 mapped candidates', () {
-      final message = onboarding4SourceFailureMessage(
-        source: RoutineImportReviewSource.classes,
-        role: 'student',
-        rawCandidateCount: 5, // AI read something
-        mappedBlockCount: 0, // but mapped nothing
-        warnings: const [],
-      );
+    test(
+      'onboarding4SourceFailureMessage returns strict upload error for 0 mapped candidates',
+      () {
+        final message = onboarding4SourceFailureMessage(
+          source: RoutineImportReviewSource.classes,
+          role: 'student',
+          rawCandidateCount: 5, // AI read something
+          mappedBlockCount: 0, // but mapped nothing
+          warnings: const [],
+        );
 
-      expect(
-        message,
-        'AI could not read this timetable. Please upload a clearer image and try again.',
-      );
-    });
+        expect(
+          message,
+          'AI could not read this timetable. Please upload a clearer image and try again.',
+        );
+      },
+    );
 
-    test('onboarding4SourceFailureMessage handles standard provider errors', () {
-      final message = onboarding4SourceFailureMessage(
-        source: RoutineImportReviewSource.work,
-        role: 'working',
-        rawCandidateCount: 0,
-        mappedBlockCount: 0,
-        warnings: const ['provider_request_failed'],
-      );
+    test(
+      'onboarding4SourceFailureMessage handles standard provider errors',
+      () {
+        final message = onboarding4SourceFailureMessage(
+          source: RoutineImportReviewSource.work,
+          role: 'working',
+          rawCandidateCount: 0,
+          mappedBlockCount: 0,
+          warnings: const ['provider_request_failed'],
+        );
 
-      expect(message, 'AI import failed. Please try again.');
-    });
+        expect(message, 'AI import failed. Please try again.');
+      },
+    );
 
-    test('onboarding4SourceFailureMessage surfaces missing worker url properly', () {
-      final message = onboarding4SourceFailureMessage(
-        source: RoutineImportReviewSource.classes,
-        role: 'student',
-        rawCandidateCount: 0,
-        mappedBlockCount: 0,
-        warnings: const ['worker is not configured'],
-      );
+    test(
+      'onboarding4SourceFailureMessage surfaces missing worker url properly',
+      () {
+        final message = onboarding4SourceFailureMessage(
+          source: RoutineImportReviewSource.classes,
+          role: 'student',
+          rawCandidateCount: 0,
+          mappedBlockCount: 0,
+          warnings: const ['worker is not configured'],
+        );
 
-      expect(message, 'Real AI is not configured. Missing routine import worker URL.');
-    });
+        expect(
+          message,
+          'Real AI is not configured. Missing routine import worker URL.',
+        );
+      },
+    );
 
     test('onboarding4SourceFailureMessage handles quota exceeded', () {
       final message = onboarding4SourceFailureMessage(
@@ -122,7 +137,9 @@ void main() {
   });
 
   group('Onboarding Step 4 AI Loading UI', () {
-    testWidgets('shows AiThinkingCard during class timetable extraction', (tester) async {
+    testWidgets('shows AiThinkingCard during class timetable extraction', (
+      tester,
+    ) async {
       final draft = OnboardingDraft(
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
       );
@@ -142,13 +159,14 @@ void main() {
               ),
             ),
             routineImportAiControllerProvider.overrideWith(
-              (ref) => MockRoutineImportAiController(ref, FakeDelayedRoutineImportAiClient()),
+              (ref) => MockRoutineImportAiController(
+                ref,
+                FakeDelayedRoutineImportAiClient(),
+              ),
             ),
           ],
           child: const MaterialApp(
-            home: Scaffold(
-              body: OnboardingStep4Unified(),
-            ),
+            home: Scaffold(body: OnboardingStep4Unified()),
           ),
         ),
       );
@@ -169,8 +187,16 @@ void main() {
 
       // Verify the thinking card appears
       expect(find.byType(AiThinkingCard), findsOneWidget);
-      expect(find.textContaining('AI is reading your class timetable'), findsOneWidget);
-      expect(find.textContaining('Looking for subjects, rooms, days, and time blocks'), findsOneWidget);
+      expect(
+        find.textContaining('AI is reading your class timetable'),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'Looking for subjects, rooms, days, and time blocks',
+        ),
+        findsOneWidget,
+      );
       expect(find.textContaining('Reading the timetable layout'), findsNothing);
       expect(find.textContaining('Checking weekly structure'), findsNothing);
 
@@ -223,24 +249,35 @@ class MockUploadController extends UploadController {
 }
 
 class DummyAssetRepo implements UploadedAssetRepository {
-  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
 class DummyAuthRepo implements AuthRepository {
-  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
 class DummyImageService implements ImagePrepareService {
-  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
 class DummyR2Client implements R2UploadClient {
-  @override dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class MockRoutineImportAiController extends RoutineImportAiController {
   MockRoutineImportAiController(super.ref, super.client);
 
   @override
-  Future<RoutineImportExtractionResult?> runExtraction(RoutineImportReviewDraft review) async {
-    state = const RoutineImportAiState(status: RoutineImportAiStatus.extracting);
+  Future<RoutineImportExtractionResult?> runExtraction(
+    RoutineImportReviewDraft review,
+  ) async {
+    state = const RoutineImportAiState(
+      status: RoutineImportAiStatus.extracting,
+    );
     // Hang forever so _isGenerating stays true
     return Completer<RoutineImportExtractionResult>().future;
   }

@@ -328,19 +328,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       await ref
           .read(onboardingRepositoryProvider)
           .completeOnboarding(finalDraft: finalDraft, bundle: bundle);
+      await const OnboardingFrontendHydrationService().hydrate(
+        read: ref.read,
+        bundle: bundle,
+      );
     } catch (_) {
       ref
           .read(mockOnboardingProvider.notifier)
           .setValidationMessage(
-            'Could not finish setup. Please check your connection and try again.',
+            'Could not finish and load your Routine setup. '
+            'Please check your connection and try again.',
           );
       return;
     }
-
-    await const OnboardingFrontendHydrationService().hydrate(
-      read: ref.read,
-      bundle: bundle,
-    );
     ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
 
     // Initialize the coach tab with a starter session so it doesn't crash empty

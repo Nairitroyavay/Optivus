@@ -60,19 +60,19 @@ class LiquidGlassPanel extends StatelessWidget {
                       stops: const [0.0, 0.2, 0.4, 1.0],
                       colors: [
                         Colors.white.withValues(alpha: 0.8), // Bright gleam
-                        Colors.white.withValues(alpha: 0.2), 
-                        Colors.white.withValues(alpha: 0.0), // Transparent center
+                        Colors.white.withValues(alpha: 0.2),
+                        Colors.white.withValues(
+                          alpha: 0.0,
+                        ), // Transparent center
                         Colors.black.withValues(alpha: 0.05), // Darker edge
                       ],
                     ),
                   ),
                 ),
               ),
-              if (hasScrews) ..._buildScrews(), // Inject corner pins if requested
-              Padding(
-                padding: padding,
-                child: child,
-              ),
+              if (hasScrews)
+                ..._buildScrews(), // Inject corner pins if requested
+              Padding(padding: padding, child: child),
             ],
           ),
         ),
@@ -91,7 +91,12 @@ class LiquidGlassPanel extends StatelessWidget {
     ];
   }
 
-  Widget _buildScrew({double? top, double? left, double? right, double? bottom}) {
+  Widget _buildScrew({
+    double? top,
+    double? left,
+    double? right,
+    double? bottom,
+  }) {
     return Positioned(
       top: top,
       left: left,

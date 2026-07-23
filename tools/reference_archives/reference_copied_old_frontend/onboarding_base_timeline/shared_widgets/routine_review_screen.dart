@@ -56,7 +56,8 @@ class _RoutineReviewScreenState extends State<RoutineReviewScreen> {
     template['routineType'] = template['routineType'] ?? widget.routineType;
     template['startTime'] = startTime;
     template['time'] = startTime;
-    template['endTime'] = endTime ??
+    template['endTime'] =
+        endTime ??
         (startTime == null ? null : _endTime(startTime, _durationMinutes()));
     template['repeatRule'] = _repeatRule(template);
     template['relativeTimingRule'] = relativeRule;
@@ -64,8 +65,8 @@ class _RoutineReviewScreenState extends State<RoutineReviewScreen> {
         relativeRule ?? (startTime == null ? '' : _timingRuleFor(startTime));
     template['weekdayRule'] =
         template['weekdayRule']?.toString().trim().isNotEmpty == true
-            ? template['weekdayRule'].toString().trim()
-            : template['repeatRule'];
+        ? template['weekdayRule'].toString().trim()
+        : template['repeatRule'];
     template['steps'] = _stepsFrom(template['steps'], template['notes']);
     template['warnings'] = _stringList(template['warnings']);
     template['confidence'] = _confidence(template['confidence']);
@@ -94,7 +95,8 @@ class _RoutineReviewScreenState extends State<RoutineReviewScreen> {
     if (raw is List) {
       for (final step in raw) {
         if (step is Map) {
-          final name = step['name']?.toString().trim() ??
+          final name =
+              step['name']?.toString().trim() ??
               step['title']?.toString().trim() ??
               '';
           if (name.isNotEmpty) values.add(name);
@@ -105,10 +107,12 @@ class _RoutineReviewScreenState extends State<RoutineReviewScreen> {
       }
     }
     if (values.isEmpty) {
-      values.addAll((notes?.toString() ?? '')
-          .split(RegExp(r',|\n'))
-          .map((step) => step.trim())
-          .where((step) => step.isNotEmpty));
+      values.addAll(
+        (notes?.toString() ?? '')
+            .split(RegExp(r',|\n'))
+            .map((step) => step.trim())
+            .where((step) => step.isNotEmpty),
+      );
     }
     return values.map((name) => {'name': name}).toList();
   }
@@ -202,20 +206,22 @@ class _RoutineReviewScreenState extends State<RoutineReviewScreen> {
 
   void _addTemplate() {
     setState(() {
-      _templates.add(_normalizeTemplate({
-        'templateId':
-            '${widget.routineType}_${DateTime.now().microsecondsSinceEpoch}',
-        'title': 'New routine block',
-        'startTime': '07:30',
-        'endTime': '07:45',
-        'repeatRule': 'daily',
-        'steps': [
-          {'name': 'Cleanse'}
-        ],
-        'notes': '',
-        'confidence': 0.75,
-        'warnings': const [],
-      }));
+      _templates.add(
+        _normalizeTemplate({
+          'templateId':
+              '${widget.routineType}_${DateTime.now().microsecondsSinceEpoch}',
+          'title': 'New routine block',
+          'startTime': '07:30',
+          'endTime': '07:45',
+          'repeatRule': 'daily',
+          'steps': [
+            {'name': 'Cleanse'},
+          ],
+          'notes': '',
+          'confidence': 0.75,
+          'warnings': const [],
+        }),
+      );
     });
   }
 
@@ -264,7 +270,8 @@ class _RoutineReviewScreenState extends State<RoutineReviewScreen> {
                       template: _templates[index],
                       onChanged: (next) {
                         setState(
-                            () => _templates[index] = _normalizeTemplate(next));
+                          () => _templates[index] = _normalizeTemplate(next),
+                        );
                       },
                       onRemove: () =>
                           setState(() => _templates.removeAt(index)),
@@ -294,8 +301,9 @@ class _RoutineReviewScreenState extends State<RoutineReviewScreen> {
                   ),
                   const Spacer(),
                   FilledButton.icon(
-                    onPressed:
-                        _saving || _templates.isEmpty ? null : _acceptAll,
+                    onPressed: _saving || _templates.isEmpty
+                        ? null
+                        : _acceptAll,
                     icon: _saving
                         ? const SizedBox(
                             width: 16,
@@ -485,11 +493,7 @@ class _RoutineReviewCard extends StatelessWidget {
                   ),
                   onChanged: (value) {
                     final time = normalizeRoutineTimeOrNull(value);
-                    onChanged({
-                      ...template,
-                      'time': time,
-                      'startTime': time,
-                    });
+                    onChanged({...template, 'time': time, 'startTime': time});
                   },
                 ),
               ),
@@ -517,7 +521,8 @@ class _RoutineReviewCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: TextFormField(
-                  initialValue: template['weekdayRule']?.toString() ??
+                  initialValue:
+                      template['weekdayRule']?.toString() ??
                       template['repeatRule']?.toString() ??
                       '',
                   decoration: const InputDecoration(labelText: 'Weekday rule'),
@@ -597,8 +602,9 @@ class _RoutineReviewCard extends StatelessWidget {
     final resolved = normalizeRoutineTimeOrNull(template['resolvedStart']);
     if (resolved != null) return '$label - $resolved';
     if (relativeRuleRequiresAnchor(rule)) {
-      final anchor =
-          label.replaceFirst('After ', '').replaceFirst('Before ', '');
+      final anchor = label
+          .replaceFirst('After ', '')
+          .replaceFirst('Before ', '');
       return '$label - set $anchor time or choose time manually';
     }
     return label;

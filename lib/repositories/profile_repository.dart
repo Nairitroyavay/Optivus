@@ -86,10 +86,7 @@ class FirestoreProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<void> saveProfileSettings(
-    String uid,
-    UserProfileSettings settings,
-  ) {
+  Future<void> saveProfileSettings(String uid, UserProfileSettings settings) {
     final data = <String, Object?>{
       ...settings.toFirestoreMap(),
       'updatedAt': Timestamp.fromDate(DateTime.now()),

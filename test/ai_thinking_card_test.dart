@@ -103,7 +103,9 @@ void main() {
       expect(find.text('Test Title.'), findsOneWidget);
     });
 
-    testWidgets('Long-wait helper appears after the configured delay', (tester) async {
+    testWidgets('Long-wait helper appears after the configured delay', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -119,11 +121,17 @@ void main() {
         ),
       );
 
-      expect(find.text('Detailed photos can take a little longer'), findsNothing);
+      expect(
+        find.text('Detailed photos can take a little longer'),
+        findsNothing,
+      );
       expect(find.text('Still working. Keep this screen open'), findsNothing);
 
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Detailed photos can take a little longer'), findsOneWidget);
+      expect(
+        find.text('Detailed photos can take a little longer'),
+        findsOneWidget,
+      );
 
       await tester.pump(const Duration(seconds: 1));
       expect(find.text('Still working. Keep this screen open'), findsOneWidget);
@@ -198,7 +206,8 @@ void main() {
               width: 200,
               child: AiThinkingCard(
                 title: 'This is a very long title that should wrap safely',
-                detail: 'This is a very long detail that should also wrap safely without any overflow exceptions.',
+                detail:
+                    'This is a very long detail that should also wrap safely without any overflow exceptions.',
                 accent: OptivusColors.aquaAccent,
                 isActive: true,
               ),

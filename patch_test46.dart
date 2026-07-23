@@ -9,7 +9,7 @@ void main() {
     final finder = find.byType(Text);
     print('Text widgets found: \${tester.widgetList<Text>(finder).map((t) => t.data).toList()}');
     expect(find.text('Routine built'), findsOneWidget);
-    """
+    """,
   );
   file.writeAsStringSync(content);
 }

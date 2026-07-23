@@ -257,9 +257,15 @@ void main() {
   test('completed onboarding bundle hydrates local frontend state', () async {
     final container = ProviderContainer();
     addTearDown(container.dispose);
-    final bundle = OnboardingCompletionService.buildBundle(
-      _completedHydrationDraft(),
+    final finalDraft = _completedHydrationDraft().copyWith(
+      onboardingCompleted: true,
+      currentStep: OnboardingDraft.lastStepIndex,
+      stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
     );
+    final bundle = OnboardingCompletionService.buildBundle(finalDraft);
+    await container
+        .read(onboardingRepositoryProvider)
+        .completeOnboarding(finalDraft: finalDraft, bundle: bundle);
 
     final result = await const OnboardingFrontendHydrationService().hydrate(
       read: container.read,
@@ -299,13 +305,13 @@ void main() {
       container
           .read(routineNotifierProvider)
           .items
-          .where((item) => item.id == 'class-main'),
+          .where((item) => item.onboardingSourceItemId == 'class-main'),
       hasLength(1),
     );
     expect(
       container
           .read(mockRoutineProvider)
-          .where((item) => item.id == 'class-main'),
+          .where((item) => item.onboardingSourceItemId == 'class-main'),
       hasLength(1),
     );
   });
@@ -320,7 +326,7 @@ void main() {
   });
 
   test(
-    'completed firebase login tolerates missing completion bundle',
+    'completed firebase login blocks on a missing completion snapshot',
     () async {
       final user = AuthUser(
         uid: 'phase2b-user',
@@ -372,9 +378,12 @@ void main() {
 
       expect(
         container.read(authProvider).status,
-        AuthFlowStatus.signedInOnboardingComplete,
+        AuthFlowStatus.backendRestoreFailed,
       );
-      expect(container.read(mockUserProfileProvider).onboardingCompleted, true);
+      expect(
+        container.read(authProvider).errorMessage,
+        contains('completion snapshot is missing'),
+      );
       expect(container.read(routineNotifierProvider).items, isEmpty);
     },
   );

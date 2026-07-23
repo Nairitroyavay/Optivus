@@ -59,5 +59,4 @@ class DefaultFirebaseOptions {
     projectId: 'optivus-lifeos',
     storageBucket: 'optivus-lifeos.firebasestorage.app',
   );
-
 }

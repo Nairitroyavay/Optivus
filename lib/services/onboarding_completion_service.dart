@@ -242,7 +242,7 @@ class OnboardingCompletionService {
             userId: draft.uid,
             title: '[Tiny] ${flex.title}',
             startMinute: 0,
-            endMinute: 0,
+            endMinute: 5,
             repeatDays: flex.repeatDays,
             blockType: RoutineBlockType.flexibleTask,
             category: _categoryForTimelineSource(

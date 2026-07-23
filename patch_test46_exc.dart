@@ -5,7 +5,7 @@ void main() {
   var content = file.readAsStringSync();
   content = content.replaceFirst(
     "expect(tester.takeException(), isNull);",
-    "final exc = tester.takeException(); print('Exception: \$exc'); expect(exc, isNull);"
+    "final exc = tester.takeException(); print('Exception: \$exc'); expect(exc, isNull);",
   );
   file.writeAsStringSync(content);
 }

@@ -205,224 +205,259 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
     TextEditingController nameCtrl = TextEditingController(text: item.mealName);
     TextEditingController foodCtrl = TextEditingController(text: item.foodName);
     TextEditingController emojiCtrl = TextEditingController(text: item.emoji);
-    TextEditingController startTimeCtrl =
-        TextEditingController(text: item.displayStartTime);
-    TextEditingController endTimeCtrl =
-        TextEditingController(text: item.displayEndTime);
+    TextEditingController startTimeCtrl = TextEditingController(
+      text: item.displayStartTime,
+    );
+    TextEditingController endTimeCtrl = TextEditingController(
+      text: item.displayEndTime,
+    );
     bool tempReminder = item.reminderEnabled;
     String? dialogError;
 
     await showDialog(
-        context: context,
-        builder: (ctx) {
-          return StatefulBuilder(builder: (context, setDialogState) {
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
             return AlertDialog(
-                backgroundColor: Colors.white.withValues(alpha: 0.95),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24)),
-                title: Text(item.isAdd ? 'Add Meal' : 'Edit Meal Details',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w900, color: Color(0xFF0F111A))),
-                content: SizedBox(
-                  width: double.maxFinite,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            SizedBox(
-                              width: 60,
-                              child: TextField(
-                                controller: emojiCtrl,
-                                style: const TextStyle(
-                                    fontSize: 24, fontWeight: FontWeight.w700),
-                                textAlign: TextAlign.center,
-                                decoration: InputDecoration(
-                                  labelText: 'Icon',
-                                  filled: true,
-                                  fillColor: const Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none),
+              backgroundColor: Colors.white.withValues(alpha: 0.95),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: Text(
+                item.isAdd ? 'Add Meal' : 'Edit Meal Details',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F111A),
+                ),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 60,
+                            child: TextField(
+                              controller: emojiCtrl,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                labelText: 'Icon',
+                                filled: true,
+                                fillColor: const Color(0xFFF1F5F9),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: nameCtrl,
-                                style: const TextStyle(
-                                    fontSize: 16, fontWeight: FontWeight.w700),
-                                decoration: InputDecoration(
-                                  labelText: 'Meal Name (e.g. Lunch)',
-                                  filled: true,
-                                  fillColor: const Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: foodCtrl,
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600),
-                          decoration: InputDecoration(
-                            labelText: isSensitive
-                                ? 'Notes (optional — how did this meal feel?)'
-                                : 'Food Detail (e.g. Grilled Chicken Salad)',
-                            hintText: isSensitive
-                                ? 'e.g. felt calm, felt rushed…'
-                                : 'e.g. Rice, Dal, Salad',
-                            filled: true,
-                            fillColor: const Color(0xFFF1F5F9),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: startTimeCtrl,
-                                style: const TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.w600),
-                                decoration: InputDecoration(
-                                  labelText: 'Start (e.g. 1:00 PM)',
-                                  filled: true,
-                                  fillColor: const Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: nameCtrl,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Meal Name (e.g. Lunch)',
+                                filled: true,
+                                fillColor: const Color(0xFFF1F5F9),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: endTimeCtrl,
-                                style: const TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.w600),
-                                decoration: InputDecoration(
-                                  labelText: 'End (e.g. 2:00 PM)',
-                                  filled: true,
-                                  fillColor: const Color(0xFFF1F5F9),
-                                  border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                      borderSide: BorderSide.none),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Reminder'),
-                          value: tempReminder,
-                          onChanged: (value) {
-                            setDialogState(() => tempReminder = value);
-                          },
-                        ),
-                        if (dialogError != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            dialogError!,
-                            style: const TextStyle(
-                              color: Color(0xFFEF4444),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: foodCtrl,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: isSensitive
+                              ? 'Notes (optional — how did this meal feel?)'
+                              : 'Food Detail (e.g. Grilled Chicken Salad)',
+                          hintText: isSensitive
+                              ? 'e.g. felt calm, felt rushed…'
+                              : 'e.g. Rice, Dal, Salad',
+                          filled: true,
+                          fillColor: const Color(0xFFF1F5F9),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: startTimeCtrl,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Start (e.g. 1:00 PM)',
+                                filled: true,
+                                fillColor: const Color(0xFFF1F5F9),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: endTimeCtrl,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'End (e.g. 2:00 PM)',
+                                filled: true,
+                                fillColor: const Color(0xFFF1F5F9),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Reminder'),
+                        value: tempReminder,
+                        onChanged: (value) {
+                          setDialogState(() => tempReminder = value);
+                        },
+                      ),
+                      if (dialogError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          dialogError!,
+                          style: const TextStyle(
+                            color: Color(0xFFEF4444),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
-                actions: [
-                  if (!item.isAdd)
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          items.removeAt(index);
-                        });
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('Delete',
-                          style: TextStyle(
-                              color: Color(0xFFEF4444),
-                              fontWeight: FontWeight.bold)),
-                    ),
-                  if (!item.isAdd) const Spacer(),
+              ),
+              actions: [
+                if (!item.isAdd)
                   TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel')),
-                  ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F111A),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                    onPressed: () {
+                      setState(() {
+                        items.removeAt(index);
+                      });
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(
+                        color: Color(0xFFEF4444),
+                        fontWeight: FontWeight.bold,
                       ),
-                      onPressed: () {
-                        // Validate inputs before saving.
-                        final nameText = nameCtrl.text.trim();
-                        if (nameText.isEmpty) {
-                          setDialogState(
-                              () => dialogError = 'Meal name cannot be empty.');
-                          return;
-                        }
-                        final parsedStart =
-                            _parseHoursFrom6AM(startTimeCtrl.text);
-                        var parsedEnd = _parseHoursFrom6AM(endTimeCtrl.text);
-                        if (parsedEnd <= parsedStart) parsedEnd += 24;
-                        if (parsedEnd - parsedStart < 0.1) {
-                          setDialogState(() => dialogError =
-                              'End time must be after start time.');
-                          return;
-                        }
-                        setState(() {
-                          item.mealName = nameText;
-                          item.foodName = foodCtrl.text.trim();
-                          item.emoji = emojiCtrl.text.trim().isEmpty
-                              ? '🍽️'
-                              : emojiCtrl.text.trim();
-                          item.reminderEnabled = tempReminder;
-                          item.start = parsedStart;
-                          item.duration = (parsedEnd - parsedStart)
-                              .clamp(0.5, 12.0)
-                              .toDouble();
+                    ),
+                  ),
+                if (!item.isAdd) const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F111A),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () {
+                    // Validate inputs before saving.
+                    final nameText = nameCtrl.text.trim();
+                    if (nameText.isEmpty) {
+                      setDialogState(
+                        () => dialogError = 'Meal name cannot be empty.',
+                      );
+                      return;
+                    }
+                    final parsedStart = _parseHoursFrom6AM(startTimeCtrl.text);
+                    var parsedEnd = _parseHoursFrom6AM(endTimeCtrl.text);
+                    if (parsedEnd <= parsedStart) parsedEnd += 24;
+                    if (parsedEnd - parsedStart < 0.1) {
+                      setDialogState(
+                        () =>
+                            dialogError = 'End time must be after start time.',
+                      );
+                      return;
+                    }
+                    setState(() {
+                      item.mealName = nameText;
+                      item.foodName = foodCtrl.text.trim();
+                      item.emoji = emojiCtrl.text.trim().isEmpty
+                          ? '🍽️'
+                          : emojiCtrl.text.trim();
+                      item.reminderEnabled = tempReminder;
+                      item.start = parsedStart;
+                      item.duration = (parsedEnd - parsedStart)
+                          .clamp(0.5, 12.0)
+                          .toDouble();
 
-                          if (item.isAdd) {
-                            item.isAdd = false;
-                            item.hasTopTape = true;
-                            item.hasBottomTape = true;
-                            item.color =
-                                _cycleColors[_colorIndex % _cycleColors.length];
-                            _colorIndex++;
-                            // Insert an Add button below this block
-                            items.insert(
-                                index + 1,
-                                EatingRoutineBlock(
-                                  id: 'add_${DateTime.now().millisecondsSinceEpoch}',
-                                  mealName: '',
-                                  start: item.start + item.duration + 0.5,
-                                  isAdd: true,
-                                ));
-                          }
-                        });
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('Save')),
-                ]);
-          });
-        });
+                      if (item.isAdd) {
+                        item.isAdd = false;
+                        item.hasTopTape = true;
+                        item.hasBottomTape = true;
+                        item.color =
+                            _cycleColors[_colorIndex % _cycleColors.length];
+                        _colorIndex++;
+                        // Insert an Add button below this block
+                        items.insert(
+                          index + 1,
+                          EatingRoutineBlock(
+                            id: 'add_${DateTime.now().millisecondsSinceEpoch}',
+                            mealName: '',
+                            start: item.start + item.duration + 0.5,
+                            isAdd: true,
+                          ),
+                        );
+                      }
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   // ── Local mess-menu text parser (hostel fallback when Worker is off) ────────
@@ -492,17 +527,19 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
       }
       lastEnd = start + duration + 0.5;
 
-      blocks.add(EatingRoutineBlock(
-        id: 'local_parsed_${_day}_${idx}_${DateTime.now().microsecondsSinceEpoch}',
-        mealName: mealName.isEmpty ? 'Meal' : mealName,
-        foodName: foodDetail,
-        start: start,
-        duration: duration,
-        emoji: '🍽️',
-        color: _cycleColors[(_colorIndex + idx) % _cycleColors.length],
-        hasTopTape: true,
-        hasBottomTape: true,
-      ));
+      blocks.add(
+        EatingRoutineBlock(
+          id: 'local_parsed_${_day}_${idx}_${DateTime.now().microsecondsSinceEpoch}',
+          mealName: mealName.isEmpty ? 'Meal' : mealName,
+          foodName: foodDetail,
+          start: start,
+          duration: duration,
+          emoji: '🍽️',
+          color: _cycleColors[(_colorIndex + idx) % _cycleColors.length],
+          hasTopTape: true,
+          hasBottomTape: true,
+        ),
+      );
       idx++;
     }
     return blocks;
@@ -518,14 +555,18 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF60D4A0).withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(14),
-          border:
-              Border.all(color: const Color(0xFF60D4A0).withValues(alpha: 0.6)),
+          border: Border.all(
+            color: const Color(0xFF60D4A0).withValues(alpha: 0.6),
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.health_and_safety_rounded,
-                size: 18, color: Color(0xFF22C55E)),
+            const Icon(
+              Icons.health_and_safety_rounded,
+              size: 18,
+              color: Color(0xFF22C55E),
+            ),
             const SizedBox(width: 10),
             const Expanded(
               child: Text(
@@ -546,8 +587,12 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
     );
   }
 
-  Widget _buildDroplet(double size,
-      {Color color = Colors.white, String text = '', bool isActive = false}) {
+  Widget _buildDroplet(
+    double size, {
+    Color color = Colors.white,
+    String text = '',
+    bool isActive = false,
+  }) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutBack,
@@ -558,15 +603,18 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
         color: isActive
             ? color.withValues(alpha: 0.15)
             : Colors.white.withValues(alpha: 0.25),
-        border:
-            Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.2),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(
-              color: isActive
-                  ? color.withValues(alpha: 0.2)
-                  : const Color(0x0F000000),
-              blurRadius: 8,
-              offset: const Offset(0, 4)),
+            color: isActive
+                ? color.withValues(alpha: 0.2)
+                : const Color(0x0F000000),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Stack(
@@ -583,7 +631,9 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                 borderRadius: BorderRadius.circular(size),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.4), blurRadius: 6)
+                    color: Colors.white.withValues(alpha: 0.4),
+                    blurRadius: 6,
+                  ),
                 ],
               ),
             ),
@@ -599,7 +649,9 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                 borderRadius: BorderRadius.circular(size),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.white.withValues(alpha: 0.6), blurRadius: 4)
+                    color: Colors.white.withValues(alpha: 0.6),
+                    blurRadius: 4,
+                  ),
                 ],
               ),
             ),
@@ -637,12 +689,15 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                 color: Colors.white.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.95), width: 1.5),
+                  color: Colors.white.withValues(alpha: 0.95),
+                  width: 1.5,
+                ),
                 boxShadow: [
                   BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.06),
-                      blurRadius: 4,
-                      offset: const Offset(0, 3)),
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 3),
+                  ),
                 ],
               ),
               child: ClipRRect(
@@ -687,20 +742,24 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                     end: Alignment.bottomRight,
                     colors: [
                       item.color!.withValues(alpha: 0.3),
-                      item.color!.withValues(alpha: 0.05)
+                      item.color!.withValues(alpha: 0.05),
                     ],
                   ),
                   border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+                    color: Colors.white.withValues(alpha: 0.9),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                        color: item.color!.withValues(alpha: 0.15),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6)),
+                      color: item.color!.withValues(alpha: 0.15),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
                     BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        blurRadius: 12,
-                        offset: const Offset(-4, -4)),
+                      color: Colors.white.withValues(alpha: 0.9),
+                      blurRadius: 12,
+                      offset: const Offset(-4, -4),
+                    ),
                   ],
                 ),
                 child: ClipRRect(
@@ -711,24 +770,35 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                       filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
                               children: [
-                                Text(item.emoji,
-                                    style: const TextStyle(fontSize: 24)),
+                                Text(
+                                  item.emoji,
+                                  style: const TextStyle(fontSize: 24),
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                    child: Text(item.mealName,
-                                        style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                            color: Color(0xFF0F111A)))),
-                                const Icon(Icons.more_vert_rounded,
-                                    color: Color(0xFF64748B), size: 18),
+                                  child: Text(
+                                    item.mealName,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFF0F111A),
+                                    ),
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.more_vert_rounded,
+                                  color: Color(0xFF64748B),
+                                  size: 18,
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -739,40 +809,54 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 4),
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withValues(alpha: 0.6),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.8),
-                                        width: 1),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                      width: 1,
+                                    ),
                                   ),
                                   child: Text(
-                                      '${item.displayStartTime} - ${item.displayEndTime}',
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF334155))),
+                                    '${item.displayStartTime} - ${item.displayEndTime}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF334155),
+                                    ),
+                                  ),
                                 ),
                                 if (item.foodName.isNotEmpty)
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 4),
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.45),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.45,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.8),
-                                          width: 1),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.8,
+                                        ),
+                                        width: 1,
+                                      ),
                                     ),
-                                    child: Text(item.foodName,
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF1E293B))),
+                                    child: Text(
+                                      item.foodName,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
                                   ),
                               ],
                             ),
@@ -786,20 +870,26 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
             ),
             if (item.hasTopTape)
               Positioned(
-                  top: -8,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                      child: _buildTapeWithDrops(
-                          onDrag: (d) => _onTopTapeDrag(index, d)))),
+                top: -8,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _buildTapeWithDrops(
+                    onDrag: (d) => _onTopTapeDrag(index, d),
+                  ),
+                ),
+              ),
             if (item.hasBottomTape)
               Positioned(
-                  bottom: -8,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                      child: _buildTapeWithDrops(
-                          onDrag: (d) => _onBottomTapeDrag(index, d)))),
+                bottom: -8,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _buildTapeWithDrops(
+                    onDrag: (d) => _onBottomTapeDrag(index, d),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -821,16 +911,20 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
           child: Container(
             width: 60,
             decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.25),
-                borderRadius: BorderRadius.circular(height / 2),
-                border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.8), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 3))
-                ]),
+              color: Colors.white.withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(height / 2),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.8),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(height / 2),
               child: BackdropFilter(
@@ -850,15 +944,19 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                             end: Alignment.bottomCenter,
                             colors: [
                               Colors.black.withValues(alpha: 0.05),
-                              Colors.transparent
+                              Colors.transparent,
                             ],
                           ),
                         ),
                       ),
                     ),
                     const Center(
-                        child: Icon(Icons.add_rounded,
-                            color: Color(0xFF94A3B8), size: 28)),
+                      child: Icon(
+                        Icons.add_rounded,
+                        color: Color(0xFF94A3B8),
+                        size: 28,
+                      ),
+                    ),
                     Positioned(left: -4, top: 4, child: _buildDroplet(8)),
                     Positioned(right: -2, bottom: -2, child: _buildDroplet(12)),
                   ],
@@ -878,7 +976,8 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Routine is still loading. Please wait.')),
+            content: Text('Routine is still loading. Please wait.'),
+          ),
         );
       }
       return false;
@@ -897,13 +996,15 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
       for (final item in itemsForDay) {
         if (!item.isAdd) {
           templates.add(_templateFromBlock(item, d, isSensitive, now));
-          meals.add(MealItem(
-            emoji: item.emoji,
-            name: item.foodName.trim().isNotEmpty
-                ? item.foodName.trim()
-                : item.mealName.trim(),
-            time: item.displayStartTime,
-          ));
+          meals.add(
+            MealItem(
+              emoji: item.emoji,
+              name: item.foodName.trim().isNotEmpty
+                  ? item.foodName.trim()
+                  : item.mealName.trim(),
+              time: item.displayStartTime,
+            ),
+          );
         }
       }
       notifier.setMealPlan(d, DayMealPlan(meals: meals));
@@ -1091,16 +1192,18 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
       }
 
       // Worker is ready — call remote endpoint.
-      final generated =
-          await ref.read(routineRepositoryProvider).previewRoutineImport(
-                routineType: 'eating',
-                mode: 'eating_mess_text',
-                sourceText: text,
-                sensitiveContext: eatFlag,
-              );
+      final generated = await ref
+          .read(routineRepositoryProvider)
+          .previewRoutineImport(
+            routineType: 'eating',
+            mode: 'eating_mess_text',
+            sourceText: text,
+            sensitiveContext: eatFlag,
+          );
       if (!mounted) return;
-      await _processImportedTemplates(
-          generated, null, {'mode': 'eating_mess_text'});
+      await _processImportedTemplates(generated, null, {
+        'mode': 'eating_mess_text',
+      });
     } catch (e) {
       debugPrint('[EatingSetup] mess text import failed: $e');
       if (mounted) {
@@ -1151,27 +1254,21 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
       };
 
       final eatFlag = ref.read(eatingDisorderFlagProvider).valueOrNull ?? false;
-      final generated =
-          await ref.read(routineRepositoryProvider).previewRoutineImport(
-        routineType: 'eating',
-        mode: 'eating_mess_photo',
-        sensitiveContext: eatFlag,
-        imageMetadata: {
-          ...imageMetadata,
-          'storagePath': storagePath,
-        },
-      );
+      final generated = await ref
+          .read(routineRepositoryProvider)
+          .previewRoutineImport(
+            routineType: 'eating',
+            mode: 'eating_mess_photo',
+            sensitiveContext: eatFlag,
+            imageMetadata: {...imageMetadata, 'storagePath': storagePath},
+          );
       if (!mounted) return;
 
-      await _processImportedTemplates(
-        generated,
-        imageMetadata,
-        {
-          'mode': 'eating_mess_photo',
-          'storagePath': storagePath,
-          'imageMetadata': imageMetadata,
-        },
-      );
+      await _processImportedTemplates(generated, imageMetadata, {
+        'mode': 'eating_mess_photo',
+        'storagePath': storagePath,
+        'imageMetadata': imageMetadata,
+      });
     } catch (e) {
       debugPrint('[EatingSetup] mess photo import failed: $e');
       await _deleteUploadedImageQuietly(imageMetadata);
@@ -1215,11 +1312,13 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
         .toList();
 
     for (final suggestionId in suggestionIds) {
-      await ref.read(eventServiceProvider).emit(
-        eventName: EventNames.suggestionGenerated,
-        source: 'eating_setup',
-        payload: {'suggestionId': suggestionId},
-      );
+      await ref
+          .read(eventServiceProvider)
+          .emit(
+            eventName: EventNames.suggestionGenerated,
+            source: 'eating_setup',
+            payload: {'suggestionId': suggestionId},
+          );
     }
     final accepted = await _showMessMenuReview(grid, {
       ...metadataBase,
@@ -1232,11 +1331,13 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
       }
       // Emit suggestion_dismissed for Worker-sourced suggestions.
       for (final suggestionId in suggestionIds) {
-        await ref.read(eventServiceProvider).emit(
-          eventName: EventNames.suggestionDismissed,
-          source: 'eating_setup',
-          payload: {'suggestionId': suggestionId},
-        );
+        await ref
+            .read(eventServiceProvider)
+            .emit(
+              eventName: EventNames.suggestionDismissed,
+              source: 'eating_setup',
+              payload: {'suggestionId': suggestionId},
+            );
       }
     }
   }
@@ -1256,19 +1357,21 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
       template,
       fallbackRoutineType: 'eating',
     ).toMap();
-    final start =
-        _parseHoursFrom6AM(template['startTime']?.toString() ?? '8:00 AM');
+    final start = _parseHoursFrom6AM(
+      template['startTime']?.toString() ?? '8:00 AM',
+    );
     var end = _parseHoursFrom6AM(template['endTime']?.toString() ?? '8:30 AM');
     if (end <= start) end += 24;
     final mealTime = template['mealTime']?.toString().trim().isNotEmpty == true
         ? template['mealTime'].toString().trim()
         : template['mealType']?.toString().trim().isNotEmpty == true
-            ? template['mealType'].toString().trim()
-            : template['title']?.toString().trim().isNotEmpty == true
-                ? template['title'].toString().trim()
-                : 'Meal';
+        ? template['mealType'].toString().trim()
+        : template['title']?.toString().trim().isNotEmpty == true
+        ? template['title'].toString().trim()
+        : 'Meal';
     return EatingRoutineBlock(
-      id: template['templateId']?.toString() ??
+      id:
+          template['templateId']?.toString() ??
           'generated_${DateTime.now().microsecondsSinceEpoch}',
       mealName: mealTime,
       foodName: _menuItemsText(template),
@@ -1308,8 +1411,7 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
 
   Map<int, List<EatingRoutineBlock>> _blocksFromEatingTemplates(
     List<Map<String, dynamic>> templates,
-  ) =>
-      _weeklyBlocksFromTemplates(templates);
+  ) => _weeklyBlocksFromTemplates(templates);
 
   Map<int, List<EatingRoutineBlock>> _weeklyBlocksFromTemplates(
     List<Map<String, dynamic>> templates,
@@ -1336,8 +1438,9 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
     final repeatRule = template['repeatRule']?.toString() ?? '';
     final match = RegExp(r'mess_menu_weekday:(\d)').firstMatch(repeatRule);
     if (match != null) return _clampWeekday(int.parse(match.group(1)!));
-    final weekdayMatch =
-        RegExp(r'^(?:weekday|weekly):(\d)').firstMatch(repeatRule);
+    final weekdayMatch = RegExp(
+      r'^(?:weekday|weekly):(\d)',
+    ).firstMatch(repeatRule);
     if (weekdayMatch != null) {
       return _clampWeekday(int.parse(weekdayMatch.group(1)!));
     }
@@ -1412,11 +1515,13 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
         original['routineType']?.toString().trim() ?? '';
     final template = <String, dynamic>{
       ...original,
-      'templateId':
-          existingId.isNotEmpty ? existingId : _newEatingTemplateId(item, day),
+      'templateId': existingId.isNotEmpty
+          ? existingId
+          : _newEatingTemplateId(item, day),
       'title': title,
-      'routineType':
-          originalRoutineType.isNotEmpty ? originalRoutineType : 'eating',
+      'routineType': originalRoutineType.isNotEmpty
+          ? originalRoutineType
+          : 'eating',
       'startTime': _format24h(item.start),
       'endTime': _format24h(item.start + item.duration),
       'repeatRule': _repeatRuleForBlock(item, day, original),
@@ -1490,231 +1595,268 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
                 .where((block) => !block.isAdd)
                 .toList();
             var isAccepting = false;
-            return StatefulBuilder(builder: (context, setSheetState) {
-              return Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  MediaQuery.of(ctx).viewInsets.bottom + 20,
-                ),
-                child: SizedBox(
-                  height: MediaQuery.of(ctx).size.height * 0.78,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text('Review mess menu',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.w900)),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: ListView.separated(
-                          itemCount: review.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final item = review[index];
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                    color: const Color(0xFFE2E8F0), width: 1),
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: DropdownButtonFormField<int>(
-                                          initialValue: _clampWeekday(
-                                              item.weekday ?? _day + 1),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Day',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          items: List.generate(
-                                            7,
-                                            (dayIndex) => DropdownMenuItem(
-                                              value: dayIndex + 1,
-                                              child: Text(
-                                                  _weekdayLabel(dayIndex + 1)),
-                                            ),
-                                          ),
-                                          onChanged: (value) {
-                                            if (value != null) {
-                                              item.weekday = value;
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        flex: 2,
-                                        child: TextFormField(
-                                          initialValue: item.mealName,
-                                          decoration: const InputDecoration(
-                                            labelText: 'Meal',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) {
-                                            final next = value.trim();
-                                            if (next.isNotEmpty) {
-                                              item.mealName = next;
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextFormField(
-                                    initialValue: item.foodName,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Items',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    onChanged: (value) =>
-                                        item.foodName = value.trim(),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: _format24h(item.start),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Start',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) {
-                                            final parsed =
-                                                _parseHoursFrom6AM(value);
-                                            final currentEnd =
-                                                item.start + item.duration;
-                                            item.start = parsed;
-                                            item.duration =
-                                                (currentEnd - parsed)
-                                                    .clamp(0.5, 3.0)
-                                                    .toDouble();
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextFormField(
-                                          initialValue: _format24h(
-                                              item.start + item.duration),
-                                          decoration: const InputDecoration(
-                                            labelText: 'End',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          onChanged: (value) {
-                                            var parsed =
-                                                _parseHoursFrom6AM(value);
-                                            if (parsed <= item.start) {
-                                              parsed += 24;
-                                            }
-                                            item.duration =
-                                                (parsed - item.start)
-                                                    .clamp(0.5, 3.0)
-                                                    .toDouble();
-                                          },
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: 'Remove',
-                                        onPressed: () => setSheetState(
-                                            () => review.removeAt(index)),
-                                        icon: const Icon(Icons
-                                            .remove_circle_outline_rounded),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(ctx, false);
-                              _showImportOptions();
-                            },
-                            child: const Text('Regenerate'),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: isAccepting
-                                ? null
-                                : () async {
-                                    setSheetState(() => isAccepting = true);
-                                    final accepted = review
-                                        .where((item) =>
-                                            item.mealName.trim().isNotEmpty)
-                                        .toList();
-                                    try {
-                                      debugPrint('[EatingSetup] accept_start');
-                                      debugPrint(
-                                          '[EatingSetup] accept_templates_count=${accepted.length}');
-                                      await runRoutineAcceptWithTimeout(
-                                          () async {
-                                        await _markSuggestionsAccepted(
-                                            accepted);
-                                        if (!mounted) return;
-                                        setState(() {
-                                          _applyReviewedMessMenu(accepted);
-                                          _pendingImportMetadata =
-                                              importMetadata;
-                                          _colorIndex += accepted.length;
-                                        });
-                                      });
-                                      debugPrint(
-                                          '[EatingSetup] accept_save_success');
-                                      if (!ctx.mounted) return;
-                                      Navigator.pop(ctx, true);
-                                    } on RoutineAcceptTimeoutException {
-                                      debugPrint(
-                                          '[EatingSetup] accept_timeout');
-                                      if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'Could not save. Please try again.')),
-                                        );
-                                      }
-                                    } catch (e) {
-                                      debugPrint(
-                                          '[EatingSetup] accept_save_failed: $e');
-                                      if (ctx.mounted) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'Could not save. Please try again.')),
-                                        );
-                                      }
-                                    } finally {
-                                      if (ctx.mounted) {
-                                        setSheetState(
-                                            () => isAccepting = false);
-                                      }
-                                    }
-                                  },
-                            child: Text(
-                                isAccepting ? 'Accepting...' : 'Accept all'),
-                          ),
-                        ],
-                      ),
-                    ],
+            return StatefulBuilder(
+              builder: (context, setSheetState) {
+                return Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    20,
+                    20,
+                    MediaQuery.of(ctx).viewInsets.bottom + 20,
                   ),
-                ),
-              );
-            });
+                  child: SizedBox(
+                    height: MediaQuery.of(ctx).size.height * 0.78,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Review mess menu',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: review.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final item = review[index];
+                              return Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFFE2E8F0),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: DropdownButtonFormField<int>(
+                                            initialValue: _clampWeekday(
+                                              item.weekday ?? _day + 1,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Day',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            items: List.generate(
+                                              7,
+                                              (dayIndex) => DropdownMenuItem(
+                                                value: dayIndex + 1,
+                                                child: Text(
+                                                  _weekdayLabel(dayIndex + 1),
+                                                ),
+                                              ),
+                                            ),
+                                            onChanged: (value) {
+                                              if (value != null) {
+                                                item.weekday = value;
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          flex: 2,
+                                          child: TextFormField(
+                                            initialValue: item.mealName,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Meal',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) {
+                                              final next = value.trim();
+                                              if (next.isNotEmpty) {
+                                                item.mealName = next;
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextFormField(
+                                      initialValue: item.foodName,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Items',
+                                        border: OutlineInputBorder(),
+                                      ),
+                                      onChanged: (value) =>
+                                          item.foodName = value.trim(),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: TextFormField(
+                                            initialValue: _format24h(
+                                              item.start,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Start',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) {
+                                              final parsed = _parseHoursFrom6AM(
+                                                value,
+                                              );
+                                              final currentEnd =
+                                                  item.start + item.duration;
+                                              item.start = parsed;
+                                              item.duration =
+                                                  (currentEnd - parsed)
+                                                      .clamp(0.5, 3.0)
+                                                      .toDouble();
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextFormField(
+                                            initialValue: _format24h(
+                                              item.start + item.duration,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              labelText: 'End',
+                                              border: OutlineInputBorder(),
+                                            ),
+                                            onChanged: (value) {
+                                              var parsed = _parseHoursFrom6AM(
+                                                value,
+                                              );
+                                              if (parsed <= item.start) {
+                                                parsed += 24;
+                                              }
+                                              item.duration =
+                                                  (parsed - item.start)
+                                                      .clamp(0.5, 3.0)
+                                                      .toDouble();
+                                            },
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Remove',
+                                          onPressed: () => setSheetState(
+                                            () => review.removeAt(index),
+                                          ),
+                                          icon: const Icon(
+                                            Icons.remove_circle_outline_rounded,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(ctx, false);
+                                _showImportOptions();
+                              },
+                              child: const Text('Regenerate'),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: isAccepting
+                                  ? null
+                                  : () async {
+                                      setSheetState(() => isAccepting = true);
+                                      final accepted = review
+                                          .where(
+                                            (item) =>
+                                                item.mealName.trim().isNotEmpty,
+                                          )
+                                          .toList();
+                                      try {
+                                        debugPrint(
+                                          '[EatingSetup] accept_start',
+                                        );
+                                        debugPrint(
+                                          '[EatingSetup] accept_templates_count=${accepted.length}',
+                                        );
+                                        await runRoutineAcceptWithTimeout(
+                                          () async {
+                                            await _markSuggestionsAccepted(
+                                              accepted,
+                                            );
+                                            if (!mounted) return;
+                                            setState(() {
+                                              _applyReviewedMessMenu(accepted);
+                                              _pendingImportMetadata =
+                                                  importMetadata;
+                                              _colorIndex += accepted.length;
+                                            });
+                                          },
+                                        );
+                                        debugPrint(
+                                          '[EatingSetup] accept_save_success',
+                                        );
+                                        if (!ctx.mounted) return;
+                                        Navigator.pop(ctx, true);
+                                      } on RoutineAcceptTimeoutException {
+                                        debugPrint(
+                                          '[EatingSetup] accept_timeout',
+                                        );
+                                        if (ctx.mounted) {
+                                          ScaffoldMessenger.of(
+                                            ctx,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Could not save. Please try again.',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        debugPrint(
+                                          '[EatingSetup] accept_save_failed: $e',
+                                        );
+                                        if (ctx.mounted) {
+                                          ScaffoldMessenger.of(
+                                            ctx,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Could not save. Please try again.',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      } finally {
+                                        if (ctx.mounted) {
+                                          setSheetState(
+                                            () => isAccepting = false,
+                                          );
+                                        }
+                                      }
+                                    },
+                              child: Text(
+                                isAccepting ? 'Accepting...' : 'Accept all',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
           },
         ) ??
         false;
@@ -1746,44 +1888,47 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
     for (var index = 0; index < blocks.length; index++) {
       final block = blocks[index];
       result.add(block);
-      result.add(EatingRoutineBlock(
-        id: 'add_${day}_${index}_${DateTime.now().microsecondsSinceEpoch}',
-        mealName: '',
-        start: (block.start + block.duration + 0.5).clamp(0.0, 23.5).toDouble(),
-        isAdd: true,
-      ));
+      result.add(
+        EatingRoutineBlock(
+          id: 'add_${day}_${index}_${DateTime.now().microsecondsSinceEpoch}',
+          mealName: '',
+          start: (block.start + block.duration + 0.5)
+              .clamp(0.0, 23.5)
+              .toDouble(),
+          isAdd: true,
+        ),
+      );
     }
     if (result.isEmpty) {
-      result.add(EatingRoutineBlock(
-        id: 'add_${day}_${DateTime.now().microsecondsSinceEpoch}',
-        mealName: '',
-        start: 2.0,
-        isAdd: true,
-      ));
+      result.add(
+        EatingRoutineBlock(
+          id: 'add_${day}_${DateTime.now().microsecondsSinceEpoch}',
+          mealName: '',
+          start: 2.0,
+          isAdd: true,
+        ),
+      );
     }
     return result;
   }
 
-  Future<void> _markSuggestionsAccepted(
-    List<EatingRoutineBlock> blocks,
-  ) async {
+  Future<void> _markSuggestionsAccepted(List<EatingRoutineBlock> blocks) async {
     final ids = blocks
         .map((block) => block.suggestionId ?? '')
         .where((id) => id.isNotEmpty)
         .toSet();
     for (final suggestionId in ids) {
-      await ref.read(firestoreServiceProvider).saveSuggestion(
-        suggestionId,
-        {
-          'status': 'accepted',
-          'acceptedAt': DateTime.now().toIso8601String(),
-        },
-      );
-      await ref.read(eventServiceProvider).emit(
-        eventName: EventNames.suggestionAccepted,
-        source: 'eating_setup',
-        payload: {'suggestionId': suggestionId},
-      );
+      await ref.read(firestoreServiceProvider).saveSuggestion(suggestionId, {
+        'status': 'accepted',
+        'acceptedAt': DateTime.now().toIso8601String(),
+      });
+      await ref
+          .read(eventServiceProvider)
+          .emit(
+            eventName: EventNames.suggestionAccepted,
+            source: 'eating_setup',
+            payload: {'suggestionId': suggestionId},
+          );
     }
   }
 
@@ -1808,352 +1953,397 @@ class _EatingSetupScreenState extends ConsumerState<EatingSetupScreen> {
         label: const Text('Add / Import Menu'),
       ),
       body: LiquidBg(
-        child: Stack(children: [
-          SafeArea(
-            child: Column(
-              children: [
-                const SizedBox(height: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      LiquidIconBtn(
-                        icon: Icons.arrow_back_ios_new_rounded,
-                        size: 44,
-                        onTap: () => Navigator.pop(context),
-                      ),
-                      const Text(
-                        'EATING SETUP',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: kSub,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      Opacity(
-                        opacity: canSave ? 1 : 0.45,
-                        child: LiquidIconBtn(
-                          icon: Icons.check_rounded,
+        child: Stack(
+          children: [
+            SafeArea(
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        LiquidIconBtn(
+                          icon: Icons.arrow_back_ios_new_rounded,
                           size: 44,
-                          onTap: canSave
-                              ? () async {
-                                  final saved = await _save(ref);
-                                  if (!context.mounted || !saved) return;
-                                  Navigator.pop(context);
-                                }
-                              : null,
+                          onTap: () => Navigator.pop(context),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(7, (i) {
-                    final isSel = i == _day;
-                    const days = [
-                      "MON",
-                      "TUE",
-                      "WED",
-                      "THU",
-                      "FRI",
-                      "SAT",
-                      "SUN"
-                    ];
-                    return GestureDetector(
-                      onTap: () => setState(() => _day = i),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                        child: _buildDroplet(
-                          isSel ? 44 : 36,
-                          color: const Color(0xFFFF9560),
-                          text: days[i],
-                          isActive: isSel,
+                        const Text(
+                          'EATING SETUP',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: kSub,
+                            letterSpacing: 1.5,
+                          ),
                         ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Container(
-                    width: double.infinity,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2))
+                        Opacity(
+                          opacity: canSave ? 1 : 0.45,
+                          child: LiquidIconBtn(
+                            icon: Icons.check_rounded,
+                            size: 44,
+                            onTap: canSave
+                                ? () async {
+                                    final saved = await _save(ref);
+                                    if (!context.mounted || !saved) return;
+                                    Navigator.pop(context);
+                                  }
+                                : null,
+                          ),
+                        ),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Row(
-                              children: headerColors
-                                  .map((color) => Expanded(
-                                          child: Container(
-                                        decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                          begin: Alignment.centerLeft,
-                                          end: Alignment.centerRight,
-                                          colors: [
-                                            color.withValues(alpha: 0.1),
-                                            color.withValues(alpha: 0.35),
-                                            color.withValues(alpha: 0.1)
-                                          ],
-                                        )),
-                                      )))
-                                  .toList(),
-                            ),
-                          ),
-                          BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                            child: const Center(
-                              child: Text(
-                                'Set Your Daily Eating Routine',
-                                style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: Color(0xFF64748B),
-                                    letterSpacing: 0.2),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                // Safety banner for sensitive users
-                if (_sensitiveMode) _buildSensitiveBanner(),
-                if (_isImportingPhoto || _importError != null)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(7, (i) {
+                      final isSel = i == _day;
+                      const days = [
+                        "MON",
+                        "TUE",
+                        "WED",
+                        "THU",
+                        "FRI",
+                        "SAT",
+                        "SUN",
+                      ];
+                      return GestureDetector(
+                        onTap: () => setState(() => _day = i),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                          child: _buildDroplet(
+                            isSel ? 44 : 36,
+                            color: const Color(0xFFFF9560),
+                            text: days[i],
+                            isActive: isSel,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 20),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                      height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.9)),
-                      ),
-                      child: Row(
-                        children: [
-                          if (_isImportingPhoto)
-                            const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          else
-                            const Icon(Icons.error_outline_rounded,
-                                size: 18, color: Color(0xFFEF4444)),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _isImportingPhoto
-                                  ? 'Reading mess menu photo...'
-                                  : _importError!,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF475569),
-                              ),
-                            ),
+                          color: Colors.white.withValues(alpha: 0.9),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                if (_isImportingPhoto || _importError != null)
-                  const SizedBox(height: 12),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.4),
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(32)),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.8),
-                            width: 1.5),
-                        boxShadow: [
-                          BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.02),
-                              blurRadius: 12,
-                              offset: const Offset(0, -4)),
-                        ],
-                      ),
                       child: ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(32)),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.fromLTRB(24, 28, 24, 16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Your Fixed Meals.',
-                                        style: TextStyle(
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w800,
-                                            color: Color(0xFF1E293B),
-                                            letterSpacing: -0.5)),
-                                    SizedBox(height: 6),
-                                    Text(
-                                        'Maintain a healthy metabolism with regular eating times.',
-                                        style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF475569))),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: ShaderMask(
-                                  shaderCallback: (Rect bounds) {
-                                    return const LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      colors: [
-                                        Colors.transparent,
-                                        Colors.white,
-                                        Colors.white,
-                                        Colors.transparent
-                                      ],
-                                      stops: [0.0, 0.05, 0.9, 1.0],
-                                    ).createShader(bounds);
-                                  },
-                                  blendMode: BlendMode.dstIn,
-                                  child: SingleChildScrollView(
-                                    physics: const BouncingScrollPhysics(),
-                                    padding: const EdgeInsets.only(bottom: 120),
-                                    child: SizedBox(
-                                      height: 24 * kHourHeight,
-                                      child: Stack(
-                                        clipBehavior: Clip.none,
-                                        children: [
-                                          Positioned(
-                                            top: 0,
-                                            bottom: 0,
-                                            left: 48,
-                                            width: 8,
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: Colors.white
-                                                    .withValues(alpha: 0.35),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                    color: Colors.white
-                                                        .withValues(alpha: 0.9),
-                                                    width: 1.2),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                      color: Colors.black
-                                                          .withValues(
-                                                              alpha: 0.04),
-                                                      blurRadius: 4,
-                                                      offset:
-                                                          const Offset(2, 2))
-                                                ],
-                                              ),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Row(
+                                children: headerColors
+                                    .map(
+                                      (color) => Expanded(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              begin: Alignment.centerLeft,
+                                              end: Alignment.centerRight,
+                                              colors: [
+                                                color.withValues(alpha: 0.1),
+                                                color.withValues(alpha: 0.35),
+                                                color.withValues(alpha: 0.1),
+                                              ],
                                             ),
                                           ),
-                                          ...List.generate(24, (i) {
-                                            final hour = (i + 6) % 24;
-                                            final ampm =
-                                                hour < 12 ? 'AM' : 'PM';
-                                            final displayHour = hour == 0
-                                                ? 12
-                                                : (hour > 12
-                                                    ? hour - 12
-                                                    : hour);
-                                            final label = "$displayHour $ampm";
-                                            return Positioned(
-                                              top: i * kHourHeight - 10,
-                                              left: 0,
-                                              width: 44,
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.end,
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      label,
-                                                      textAlign:
-                                                          TextAlign.right,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.clip,
-                                                      style: const TextStyle(
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        color:
-                                                            Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ),
+                            BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                              child: const Center(
+                                child: Text(
+                                  'Set Your Daily Eating Routine',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF64748B),
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Safety banner for sensitive users
+                  if (_sensitiveMode) _buildSensitiveBanner(),
+                  if (_isImportingPhoto || _importError != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            if (_isImportingPhoto)
+                              const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            else
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                size: 18,
+                                color: Color(0xFFEF4444),
+                              ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _isImportingPhoto
+                                    ? 'Reading mess menu photo...'
+                                    : _importError!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (_isImportingPhoto || _importError != null)
+                    const SizedBox(height: 12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(32),
+                          ),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.02),
+                              blurRadius: 12,
+                              offset: const Offset(0, -4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(32),
+                          ),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.fromLTRB(24, 28, 24, 16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Your Fixed Meals.',
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFF1E293B),
+                                          letterSpacing: -0.5,
+                                        ),
+                                      ),
+                                      SizedBox(height: 6),
+                                      Text(
+                                        'Maintain a healthy metabolism with regular eating times.',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF475569),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  child: ShaderMask(
+                                    shaderCallback: (Rect bounds) {
+                                      return const LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.white,
+                                          Colors.white,
+                                          Colors.transparent,
+                                        ],
+                                        stops: [0.0, 0.05, 0.9, 1.0],
+                                      ).createShader(bounds);
+                                    },
+                                    blendMode: BlendMode.dstIn,
+                                    child: SingleChildScrollView(
+                                      physics: const BouncingScrollPhysics(),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 120,
+                                      ),
+                                      child: SizedBox(
+                                        height: 24 * kHourHeight,
+                                        child: Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            Positioned(
+                                              top: 0,
+                                              bottom: 0,
+                                              left: 48,
+                                              width: 8,
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.35),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.9),
+                                                    width: 1.2,
+                                                  ),
+                                                  boxShadow: [
+                                                    BoxShadow(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.04,
+                                                          ),
+                                                      blurRadius: 4,
+                                                      offset: const Offset(
+                                                        2,
+                                                        2,
                                                       ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Container(
-                                                    width: 4,
-                                                    height: 1.5,
-                                                    color:
-                                                        const Color(0xFFCBD5E1),
-                                                  ),
-                                                ],
+                                                  ],
+                                                ),
                                               ),
-                                            );
-                                          }),
-                                          ...items.asMap().entries.map((entry) {
-                                            int idx = entry.key;
-                                            EatingRoutineBlock item =
-                                                entry.value;
-                                            if (item.isAdd) {
-                                              return _buildAddButton(idx, item);
-                                            } else {
-                                              return _buildColoredBlock(
-                                                  idx, item);
-                                            }
-                                          }),
-                                        ],
+                                            ),
+                                            ...List.generate(24, (i) {
+                                              final hour = (i + 6) % 24;
+                                              final ampm = hour < 12
+                                                  ? 'AM'
+                                                  : 'PM';
+                                              final displayHour = hour == 0
+                                                  ? 12
+                                                  : (hour > 12
+                                                        ? hour - 12
+                                                        : hour);
+                                              final label =
+                                                  "$displayHour $ampm";
+                                              return Positioned(
+                                                top: i * kHourHeight - 10,
+                                                left: 0,
+                                                width: 44,
+                                                child: Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.end,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        label,
+                                                        textAlign:
+                                                            TextAlign.right,
+                                                        maxLines: 1,
+                                                        overflow:
+                                                            TextOverflow.clip,
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: Color(
+                                                            0xFF64748B,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      width: 4,
+                                                      height: 1.5,
+                                                      color: const Color(
+                                                        0xFFCBD5E1,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }),
+                                            ...items.asMap().entries.map((
+                                              entry,
+                                            ) {
+                                              int idx = entry.key;
+                                              EatingRoutineBlock item =
+                                                  entry.value;
+                                              if (item.isAdd) {
+                                                return _buildAddButton(
+                                                  idx,
+                                                  item,
+                                                );
+                                              } else {
+                                                return _buildColoredBlock(
+                                                  idx,
+                                                  item,
+                                                );
+                                              }
+                                            }),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }

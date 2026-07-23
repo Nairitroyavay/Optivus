@@ -34,12 +34,7 @@ class MissingConfigNutritionAiClient implements NutritionAiClient {
   }
 }
 
-enum NutritionAiClientMode {
-  worker,
-  fake,
-  disabled,
-  missingConfig,
-}
+enum NutritionAiClientMode { worker, fake, disabled, missingConfig }
 
 final nutritionAiClientModeProvider = Provider<NutritionAiClientMode>((ref) {
   if (OptivusAiWorkersConfig.useWorker) {
@@ -70,7 +65,6 @@ final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
   }
 });
 
-
 abstract class NutritionAiClient {
   Future<RoutineImportExtractionResult> generateEatingRoutine({
     required String uid,
@@ -93,95 +87,103 @@ class FakeNutritionAiClient implements NutritionAiClient {
     final List<RoutineImportCandidateBlock> candidates = [];
 
     if (mealsPerDay >= 1) {
-      candidates.add(RoutineImportCandidateBlock(
-        id: 'ai_breakfast_gen',
-        title: 'Breakfast',
-        startMinute: start,
-        endMinute: start + 30,
-        hasFixedTime: true,
-        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-        blockType: 'soft_block',
-        category: 'eating',
-        hardBlock: false,
-        selected: true,
-        candidateType: RoutineImportCandidateType.block,
-        confidenceScore: 0.90,
-        confidenceLabel: 'high',
-        extractionEngine: 'fake',
-        extractionVersion: 'phase2d',
-        needsManualReview: false,
-        steps: const ['Oatmeal', 'Banana'],
-        mealCategory: 'breakfast',
-      ));
+      candidates.add(
+        RoutineImportCandidateBlock(
+          id: 'ai_breakfast_gen',
+          title: 'Breakfast',
+          startMinute: start,
+          endMinute: start + 30,
+          hasFixedTime: true,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          blockType: 'soft_block',
+          category: 'eating',
+          hardBlock: false,
+          selected: true,
+          candidateType: RoutineImportCandidateType.block,
+          confidenceScore: 0.90,
+          confidenceLabel: 'high',
+          extractionEngine: 'fake',
+          extractionVersion: 'phase2d',
+          needsManualReview: false,
+          steps: const ['Oatmeal', 'Banana'],
+          mealCategory: 'breakfast',
+        ),
+      );
     }
-    
+
     if (mealsPerDay >= 2) {
-      candidates.add(RoutineImportCandidateBlock(
-        id: 'ai_lunch_gen',
-        title: 'Lunch',
-        startMinute: (params['lunchMinute'] as int?) ?? 13 * 60,
-        endMinute: ((params['lunchMinute'] as int?) ?? 13 * 60) + 45,
-        hasFixedTime: true,
-        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-        blockType: 'soft_block',
-        category: 'eating',
-        hardBlock: false,
-        selected: true,
-        candidateType: RoutineImportCandidateType.block,
-        confidenceScore: 0.90,
-        confidenceLabel: 'high',
-        extractionEngine: 'fake',
-        extractionVersion: 'phase2d',
-        needsManualReview: false,
-        steps: const ['Rice', 'Dal'],
-        mealCategory: 'lunch',
-      ));
+      candidates.add(
+        RoutineImportCandidateBlock(
+          id: 'ai_lunch_gen',
+          title: 'Lunch',
+          startMinute: (params['lunchMinute'] as int?) ?? 13 * 60,
+          endMinute: ((params['lunchMinute'] as int?) ?? 13 * 60) + 45,
+          hasFixedTime: true,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          blockType: 'soft_block',
+          category: 'eating',
+          hardBlock: false,
+          selected: true,
+          candidateType: RoutineImportCandidateType.block,
+          confidenceScore: 0.90,
+          confidenceLabel: 'high',
+          extractionEngine: 'fake',
+          extractionVersion: 'phase2d',
+          needsManualReview: false,
+          steps: const ['Rice', 'Dal'],
+          mealCategory: 'lunch',
+        ),
+      );
     }
 
     if (mealsPerDay >= 4) {
-      candidates.add(RoutineImportCandidateBlock(
-        id: 'ai_snack_gen',
-        title: 'Snack',
-        startMinute: (params['snackMinute'] as int?) ?? 17 * 60,
-        endMinute: ((params['snackMinute'] as int?) ?? 17 * 60) + 20,
-        hasFixedTime: true,
-        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-        blockType: 'soft_block',
-        category: 'eating',
-        hardBlock: false,
-        selected: true,
-        candidateType: RoutineImportCandidateType.block,
-        confidenceScore: 0.90,
-        confidenceLabel: 'high',
-        extractionEngine: 'fake',
-        extractionVersion: 'phase2d',
-        needsManualReview: false,
-        steps: const ['Apple'],
-        mealCategory: 'snack',
-      ));
+      candidates.add(
+        RoutineImportCandidateBlock(
+          id: 'ai_snack_gen',
+          title: 'Snack',
+          startMinute: (params['snackMinute'] as int?) ?? 17 * 60,
+          endMinute: ((params['snackMinute'] as int?) ?? 17 * 60) + 20,
+          hasFixedTime: true,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          blockType: 'soft_block',
+          category: 'eating',
+          hardBlock: false,
+          selected: true,
+          candidateType: RoutineImportCandidateType.block,
+          confidenceScore: 0.90,
+          confidenceLabel: 'high',
+          extractionEngine: 'fake',
+          extractionVersion: 'phase2d',
+          needsManualReview: false,
+          steps: const ['Apple'],
+          mealCategory: 'snack',
+        ),
+      );
     }
 
     if (mealsPerDay >= 3) {
-      candidates.add(RoutineImportCandidateBlock(
-        id: 'ai_dinner_gen',
-        title: 'Dinner',
-        startMinute: (params['dinnerMinute'] as int?) ?? 20 * 60 + 30,
-        endMinute: ((params['dinnerMinute'] as int?) ?? 20 * 60 + 30) + 45,
-        hasFixedTime: true,
-        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-        blockType: 'soft_block',
-        category: 'eating',
-        hardBlock: false,
-        selected: true,
-        candidateType: RoutineImportCandidateType.block,
-        confidenceScore: 0.90,
-        confidenceLabel: 'high',
-        extractionEngine: 'fake',
-        extractionVersion: 'phase2d',
-        needsManualReview: false,
-        steps: const ['Roti', 'Curry'],
-        mealCategory: 'dinner',
-      ));
+      candidates.add(
+        RoutineImportCandidateBlock(
+          id: 'ai_dinner_gen',
+          title: 'Dinner',
+          startMinute: (params['dinnerMinute'] as int?) ?? 20 * 60 + 30,
+          endMinute: ((params['dinnerMinute'] as int?) ?? 20 * 60 + 30) + 45,
+          hasFixedTime: true,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          blockType: 'soft_block',
+          category: 'eating',
+          hardBlock: false,
+          selected: true,
+          candidateType: RoutineImportCandidateType.block,
+          confidenceScore: 0.90,
+          confidenceLabel: 'high',
+          extractionEngine: 'fake',
+          extractionVersion: 'phase2d',
+          needsManualReview: false,
+          steps: const ['Roti', 'Curry'],
+          mealCategory: 'dinner',
+        ),
+      );
     }
 
     return RoutineImportExtractionResult(
@@ -243,9 +245,7 @@ class WorkerNutritionAiClient implements NutritionAiClient {
           engine: 'worker',
           engineVersion: 'phase2d',
           candidates: const [],
-          warnings: [
-            body['error'] as String? ?? 'provider_request_failed'
-          ],
+          warnings: [body['error'] as String? ?? 'provider_request_failed'],
           createdAt: DateTime.now(),
         );
       }
@@ -278,7 +278,9 @@ class WorkerNutritionAiClient implements NutritionAiClient {
         engine: 'worker',
         engineVersion: 'phase2d',
         candidates: const [],
-        warnings: const ['AI generation service is unavailable. Try again later.'],
+        warnings: const [
+          'AI generation service is unavailable. Try again later.',
+        ],
         createdAt: DateTime.now(),
       );
     }
@@ -302,6 +304,4 @@ class WorkerNutritionAiClient implements NutritionAiClient {
       return const {};
     }
   }
-
-
 }

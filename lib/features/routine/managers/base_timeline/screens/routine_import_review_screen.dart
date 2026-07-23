@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/config/routine_import_ai_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
@@ -1075,7 +1076,9 @@ class _RoutineImportReviewScreenState
         await routineController.addItem(itemWithUser);
         existingIds.add(item.id);
       }
-      ref.read(mockRoutineProvider.notifier).mergeMissing(appliedItems);
+      if (ref.read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
+        ref.read(mockRoutineProvider.notifier).mergeMissing(appliedItems);
+      }
 
       final selected = candidatesWithValidation
           .where((candidate) => candidate.selected)

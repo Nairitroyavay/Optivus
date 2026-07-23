@@ -1,3 +1,5 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 enum OptivusBackendMode { fake, firebase }
 
 class OptivusBackendConfig {
@@ -22,3 +24,8 @@ class OptivusBackendConfig {
     OptivusBackendMode.fake => 'fake',
   };
 }
+
+/// One overridable backend-mode source for repository selection and auth.
+final optivusBackendModeProvider = Provider<OptivusBackendMode>((ref) {
+  return OptivusBackendConfig.mode;
+});

@@ -6,8 +6,8 @@ Inspection baseline: `main` at
 `b1372a2fbbbf6605dd6afd4586fa6ce48c36d70a`, plus the documented uncommitted
 Phase 3 stabilization working tree
 
-Phase status: **Phase 0 documentation foundation complete**; active work remains
-**Phase 3 Stabilization**, not Phase 4
+Phase status: **Phase 4 Steps 4.1 and 4.2 implemented locally**; Phase 3 remote
+staging/device gates and Phase 4 Firebase/emulator acceptance remain open
 
 Product: Optivus 1.0.0+1
 
@@ -73,7 +73,7 @@ command, but must not create a competing source of truth.
 | Area | Owns | Does not own | Current data-source status |
 | --- | --- | --- | --- |
 | **Home** | Concise daily summary, Now/Next, Today's Mission, Coming Up, Mind Timeline, Mind Notes/Notebook, and derived cross-feature insights | Routine schedules, Tracker measurements/sessions, Goal records, or Coach conversations | **Production Live:** none. **Local/in-memory:** active Mind Note UI and selected money values. **Seeded/demo:** most dashboard values and insights. **Pending/unavailable:** durable Mind Notes and the production aggregation contract. |
-| **Routine** | Schedules, timeline and base-timeline items, movement/editing, conflicts, habit-system scheduling, occurrence status/history, and Tracker launch requests | Tracker measurement/session records, Goal meaning/proofs, or Home summaries | **Production Live:** none. **Configurable durable setup:** onboarding bundle/import metadata in Firebase/Worker modes. **Local/in-memory:** post-onboarding CRUD in `routineNotifierProvider` and its fake repository. **Seeded/demo:** optional `mockRoutineProvider` data. **Pending/unavailable:** durable Routine CRUD, history, habit systems, and one canonical store. |
+| **Routine** | Schedules, timeline and base-timeline items, movement/editing, conflicts, habit-system scheduling, occurrence status/history, and Tracker launch requests | Tracker measurement/session records, Goal meaning/proofs, or Home summaries | **Production Live:** none. **Configurable Firebase:** canonical templates, dated occurrences, per-document writes, and atomic onboarding projection/receipt. **Local/in-memory:** the same owner through fake repositories. **Seeded/demo:** fake-only compatibility data. **Pending/unavailable:** habit-system durability, complete Phase 4 UX, emulator/deployed/device/cross-device acceptance. |
 | **Tracker** | Measurements, timers, sessions, health/behavior logs, money, focus, hydration, sleep, nutrition, meditation, fitness, bad-habit tracking, history, and connected/native ingestion | Routine schedules or occurrence policy; identity/Goal definitions | **Production Live:** none. **Local/in-memory:** manual actions in `mockTrackerProvider`; Fitness has additional feature-local state. **Seeded/demo:** screen-time, meditation, Fitness history/metrics, and some tracker summaries. **Pending/unavailable:** durable sessions/history and native Usage Access, Health Connect, GPS, and Mapbox ingestion. |
 | **Goals** | Identities, goals, systems, milestones, proofs, streaks, weekly reviews, progress history, archive, and restore | Routine scheduling or Tracker session records | **Production Live:** none. **Local/in-memory:** goal/proof/archive interactions in `mockGoalProvider`. **Seeded/demo:** sample goals and calculated presentation values where loaded. **Pending/unavailable:** durable proofs, reviews, milestones, evidence consumption, and progress aggregation. |
 | **Coach** | Conversation sessions/messages, advice, explanations, suggestions, recovery guidance, and explicitly permitted context assembly | Silent writes to Routine, Tracker, Goals, Home/Mind, Profile, or any Mind Note that was not explicitly shared | **Production Live:** none. **Local/in-memory:** `mockCoachProvider` sessions and messages. **Seeded/demo:** local reply content. **Pending/unavailable:** active `CoachAiClient` wiring, durable sessions/messages, and enforced context grants. |
@@ -146,12 +146,13 @@ configuration, never as permission to invent AI results.
 - onboarding completion bundle;
 - upload metadata;
 - routine-import review metadata; and
-- hydration of a saved onboarding completion bundle back into frontend state.
+- canonical Routine templates, dated occurrence/history records, and initial
+  onboarding-to-Routine projection receipts; and
+- receipt-verified loading of saved canonical Routine data.
 
 **Still fake/local in the active repositories:**
 
-- post-onboarding Routine CRUD;
-- Routine history and habit systems;
+- Routine habit systems;
 - Tracker data and history;
 - Focus, bad-habit, sleep, nutrition, fitness, and money repositories;
 - Goals;
@@ -552,12 +553,16 @@ In Firebase mode, the active completion transaction writes:
 
 - final onboarding draft;
 - onboarding completion bundle; and
-- profile patch.
+- profile patch;
+- absent normalized initial Routine templates with deterministic IDs; and
+- a create-only `onboarding-initial-v1` Routine projection receipt.
 
-The bundle is then hydrated into both Routine state representations, Goals,
-Tracker setup, Coach preferences, notification preferences, and profile state.
-On later login, the saved completion bundle is restored and accepted Routine
-imports are repaired if missing.
+Routine templates are then loaded from their canonical repository. Firebase
+mode does not hydrate `mockRoutineProvider`, and later login verifies the
+receipt and loads templates/occurrences without replaying the bundle. The
+bundle still hydrates other local feature owners until their own durable
+phases. Normal authentication no longer repairs missing Routine imports;
+explicit review-flow recovery remains available.
 
 ## 8. App shell and navigation
 
@@ -669,9 +674,18 @@ launch listener currently handles only the first four.
 
 ### 10.5 Current data status
 
-The active `RoutineRepository` is still in-memory in all backend modes. The
-Firestore path is defined and onboarding can restore its completion bundle, but
-post-onboarding Routine edits are not yet production-persistent.
+`routineNotifierProvider` is the canonical owner. Fake mode uses in-memory
+repositories; Firebase mode selects Firestore repositories for templates and
+dated occurrences and uses per-document create/update/delete operations.
+Daily completion/skip/miss/move state is projected from occurrence records and
+is not written to repeating templates. Onboarding projection is atomic and
+idempotent with a fixed receipt, so sign-in preserves later edits and
+deletions.
+
+This is not yet **Live**: Firestore emulator tests, deployed-rule verification,
+physical-device restart, another-device restore, full Routine CRUD acceptance,
+and habit-system durability remain pending. The authoritative schema is
+[the Routine data contract](ROUTINE_DATA_CONTRACT.md).
 
 ## 11. Tracker — Track, Measure, Improve
 
@@ -928,6 +942,7 @@ The defined user-scoped paths include:
 - `users/{uid}/routineImportReviews/{reviewId}`
 - `users/{uid}/routineItems/{itemId}`
 - `users/{uid}/routineHistory/{eventId}`
+- `users/{uid}/routineProjections/onboarding-initial-v1`
 - `users/{uid}/habitSystems/{systemId}`
 - `users/{uid}/habitTemplates/{habitId}`
 - `users/{uid}/badHabitCheckins/{habitId}`
@@ -981,9 +996,9 @@ Collection-specific production schemas and rules are still required.
 The screen/navigation structure follows the six-area model, but these current
 implementations do not yet satisfy the target ownership rules:
 
-- Routine is duplicated between `routineNotifierProvider` in
-  `lib/features/routine/routine_state.dart` and `mockRoutineProvider` in
-  `lib/state/app_state.dart`. Onboarding hydration writes to both.
+- `mockRoutineProvider` remains as fake-development compatibility state, but
+  production-capable Routine consumers and Firebase hydration use
+  `routineNotifierProvider` only.
 - Home/Mind has two models and state paths: the active `HomeMindNote`/
   `homeMindNoteProvider` path and the older `MindNote`/`mockMindNoteProvider`
   plus an unused repository boundary.
@@ -1070,6 +1085,10 @@ Phase 3 working tree named at the top of this document:
   router, persistence/restore, upload, Routine Import, Nutrition, Skin Care,
   AI configuration, and fail-closed runtime configuration.
 - `flutter test`: all 392 tests passed.
+- Phase 4 Steps 4.1/4.2 verification: `flutter analyze` passed, all 31 focused
+  Routine contract/state tests passed, all 80 focused onboarding regression
+  tests passed, all 19 backend/runtime configuration tests passed, and the
+  complete `flutter test` suite passed all 414 tests.
 - All five Workers passed TypeScript typechecking and all 102 request tests.
 - Wrangler staging environment type generation and non-deploying dry runs
   passed for all five Worker templates.

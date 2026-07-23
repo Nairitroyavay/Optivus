@@ -15,7 +15,7 @@ void main() {
         const [],
       );
       expect(message2, 'AI key is invalid or unauthorized.');
-      
+
       final message3 = onboarding5FriendlyAiMessage(
         'provider_rate_limit_exceeded',
         const [],

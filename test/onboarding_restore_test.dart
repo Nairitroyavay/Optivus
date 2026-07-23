@@ -8,6 +8,7 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -15,8 +16,11 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
+import 'package:optivus/repositories/routine_history_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 
 void main() {
   test(
@@ -278,6 +282,10 @@ List<Override> _firebaseOverrides({
     routineImportReviewRepositoryProvider.overrideWithValue(
       FakeRoutineImportReviewRepository(),
     ),
+    routineRepositoryProvider.overrideWithValue(FakeRoutineRepository()),
+    routineHistoryRepositoryProvider.overrideWithValue(
+      FakeRoutineHistoryRepository(),
+    ),
   ];
 }
 
@@ -415,10 +423,14 @@ class _ControlledOnboardingRepository implements OnboardingRepository {
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) async {}
 
   @override
-  Future<void> completeOnboarding({
+  Future<RoutineProjectionResult> completeOnboarding({
     required OnboardingDraft finalDraft,
     required OnboardingCompletionBundle bundle,
   }) async {
     draft = finalDraft;
+    return RoutineProjectionResult(
+      outcome: RoutineProjectionOutcome.projected,
+      receipt: RoutineOnboardingProjection.build(bundle).receipt,
+    );
   }
 }

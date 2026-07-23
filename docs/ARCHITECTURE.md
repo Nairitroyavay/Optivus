@@ -40,6 +40,8 @@ Related contracts:
 - [Design system](DESIGN_SYSTEM.md) is token and shared-component truth.
 - [Data-source contract](DATA_SOURCE_CONTRACT.md) is capability provenance
   truth.
+- [Routine data contract](ROUTINE_DATA_CONTRACT.md) is Routine template,
+  occurrence, projection, codec, and restore truth.
 - [Technical-debt register](TECHNICAL_DEBT.md) is stable debt/planning truth.
 
 ## 2. Application structure
@@ -135,25 +137,21 @@ These deviations are tracked in Section 9.
 | Area | Current active state | Target canonical owner | Non-canonical/derived state |
 | --- | --- | --- | --- |
 | Home | `homeDashboardProvider` (seeded presentation) and `homeMindNoteProvider` (local notes) | A Home aggregation controller for derived summaries; one Home-owned Mind Note controller backed by `MindNoteRepository` | Dashboard projections/caches; no source Routine/Tracker/Goal/Coach record |
-| Routine | `routineNotifierProvider`; `mockRoutineProvider` is also hydrated and consumed by compatibility/profile paths | `routineNotifierProvider`, or a named future replacement, backed by `RoutineRepository` | Filters, selected day, conflict projections, Home summaries |
+| Routine | `routineNotifierProvider`, backed by fake or Firestore repositories; `mockRoutineProvider` remains fake-mode compatibility only | `routineNotifierProvider` backed by `RoutineRepository` and `RoutineHistoryRepository` | Filters, selected day, conflict projections, Home summaries |
 | Tracker | `mockTrackerProvider`, `trackerSettingsProvider`, and feature-local `fitnessCenterProvider`; hydration totals are derived | Tracker-owned controllers backed by tracker/session repositories, with one owner per tracker record type | Progress cards, history summaries, and Home/Goal evidence views |
 | Goals | `mockGoalProvider` | One Goals controller backed by `GoalRepository` and proof/history repositories | Home identity/progress summary and Coach context |
 | Coach | `mockCoachProvider` plus local preferences | One Coach session controller backed by `CoachSessionRepository` and `CoachAiClient` | Typing/loading state and permitted context snapshots |
 | Profile | `mockUserProfileProvider`, `profileSettingsProvider`, `regionSettingsProvider`, and local permission/service state | Profile/settings controllers backed by their repositories; native status remains queried through adapters | Display-name projections and setup-readiness summaries |
 
-Routine has a confirmed duplicate owner today:
+Routine now has one canonical active owner:
 
 - `routineNotifierProvider` in `lib/features/routine/routine_state.dart` drives
-  the active Routine tab and uses `RoutineRepository`.
-- `mockRoutineProvider` in `lib/state/app_state.dart` is a separate list store.
-- `OnboardingFrontendHydrationService` projects the same completion bundle into
-  both stores, and tests assert both copies.
-
-The target rule is non-negotiable: `routineNotifierProvider`, or its future
-replacement, becomes the only canonical Routine state owner. Onboarding
-projects accepted output into that store. `OnboardingCompletionBundle` remains
-a versioned setup snapshot/bootstrap input, not a competing live Routine
-database. The same single-owner rule applies to every other area.
+  the active Routine tab and uses the mode-selected repositories.
+- Firebase onboarding and import flows do not write `mockRoutineProvider`.
+- `mockRoutineProvider` is retained only for explicit fake/development
+  compatibility and has no production Routine consumer.
+- `OnboardingCompletionBundle` remains a versioned setup snapshot/bootstrap
+  input, not a competing live Routine database.
 
 Home/Mind also has competing types and providers: the active Home flow uses
 `HomeMindNote`/`homeMindNoteProvider`, while `MindNote`/
@@ -170,7 +168,7 @@ durable.
 | Area | Current source | Target durable source | Repository boundary | Data role and derived consumers |
 | --- | --- | --- | --- | --- |
 | Home | Seeded `homeDashboardProvider`; local Mind Notes; selected values read from local profile/Tracker/Goals | Pending aggregation contract over durable sources; reserved `users/{uid}/home/dashboard` cache and `users/{uid}/mindNotes/{noteId}` | `HomeDashboardRepository`, `MindNoteRepository` | Home summary is derived; Mind Notes are Home-canonical. Coach consumes only explicitly shared notes. |
-| Routine | Fake `RoutineRepository`, `routineNotifierProvider`, duplicate `mockRoutineProvider`; Onboarding bundle/import restoration | `users/{uid}/routineItems/{itemId}`, `users/{uid}/routineHistory/{eventId}`, `users/{uid}/habitSystems/{systemId}` | `RoutineRepository`, `RoutineHistoryRepository`, `HabitSystemsRepository` | Routine items/status are canonical; Home and Goals consume derived occurrence/evidence views. |
+| Routine | Fake repositories in fake mode; Firestore-capable templates, dated occurrences, and initial onboarding projection/receipt in Firebase mode; habit systems remain fake | `users/{uid}/routineItems/{itemId}`, `users/{uid}/routineHistory/{occurrenceId}`, `users/{uid}/routineProjections/onboarding-initial-v1`; future durable `users/{uid}/habitSystems/{systemId}` | `RoutineRepository`, `RoutineHistoryRepository`, `HabitSystemsRepository` | Templates and occurrences are canonical; completion/conflict views are derived; Home and Goals consume derived occurrence/evidence views. |
 | Tracker | `mockTrackerProvider`, local fitness/settings state, fake tracker repositories | Tracker config/history plus money, focus, bad-habit, sleep, nutrition, and fitness user collections reserved by `FirestoreUserPaths` | `TrackerRepository`, `TrackerHistoryRepository`, `MoneyRepository`, `FocusRepository`, `BadHabitRepository`, `SleepRepository`, `NutritionRepository`, `FitnessRepository` | Session/log records are canonical; Routine and Goals receive idempotent result/evidence references. |
 | Goals | `mockGoalProvider`, fake `GoalRepository` | `users/{uid}/goals/{goalId}` plus a pending proof/history schema | `GoalRepository` | Goal/proof/progress records are canonical; Home and Coach receive derived, permission-appropriate views. |
 | Coach | `mockCoachProvider`, fake session/reply repositories; real Worker client exists but is inactive in the tab | `users/{uid}/coach/sessions/{sessionId}` and `users/{uid}/coach/preferences/main`; AI reply through Worker | `CoachSessionRepository`, `CoachAiRepository`/`CoachAiClient` | Sessions/messages are canonical. Allowed context is a bounded snapshot, not ownership of source data. |
@@ -223,9 +221,10 @@ typed controller methods/services rather than introducing one. Regardless of
 mechanism, every retryable cross-feature result needs stable identifiers and an
 acceptance test proving duplicate delivery is harmless.
 
-Current direct mutations in `RoutineNotifier`, `FitnessCenterNotifier`, and
-Onboarding hydration are transitional shortcuts; they are not precedent for
-new cross-feature writes.
+Current direct mutations in `RoutineNotifier` and `FitnessCenterNotifier` are
+transitional shortcuts for Tracker integration; they are not precedent for
+new cross-feature writes. Onboarding no longer mutates a second Routine owner
+in Firebase mode.
 
 ## 7. External-system boundaries
 
@@ -332,8 +331,7 @@ The Spark-only and prohibited-service constraints in the
 ### 9.2 Unresolved decisions
 
 - The production Home aggregation query/cache contract is not defined.
-- The normalized projection schema and retry marker for Onboarding completion
-  into all feature collections is not finalized.
+- Projection contracts for non-Routine feature collections are not finalized.
 - The offline queue/conflict policy for durable Firebase repositories is not
   defined.
 - The durable event/result envelope for Routine, Tracker, and Goals idempotency
@@ -453,7 +451,7 @@ inside one feature do not make a file globally shared.
 | Structural exception | Evidence | Assigned phase | Acceptance condition |
 | --- | --- | --- | --- |
 | Multi-area global state | `lib/state/app_state.dart` defines mock Profile, Routine, Tracker, Goals, Mind, Coach, notification, permission, and Onboarding owners. | Phases 4–10, one owner at a time (TD-008) | Each migrated provider and all consumers live behind its area boundary; the global definition is removed only after restore/logout/tests move. |
-| Providers outside eventual owners and duplicate state | `mockRoutineProvider` competes with `routineNotifierProvider`; Tracker/Fitness and Home/Mind also have split paths. | Routine Phase 4, Tracker Phase 6, Home/Mind Phase 8; Goals/Coach in their durable Phases 5/7 | One documented owner per record; compatibility copies are removed; idempotent restore/session tests pass. |
+| Providers outside eventual owners and duplicate state | Routine now has one production-capable owner; fake-only `mockRoutineProvider` compatibility remains. Tracker/Fitness and Home/Mind still have split paths. | Routine compatibility removal in the next Phase 4 cleanup; Tracker Phase 6, Home/Mind Phase 8; Goals/Coach in their durable Phases 5/7 | One documented owner per record; compatibility copies are removed; idempotent restore/session tests pass. |
 | Shared widgets in the transitional directory | `lib/widgets/` is imported by the shell and multiple areas despite the canonical `lib/core/widgets/` library. | Scoped migrations in feature phases; final Phase 12 (TD-007) | New shared UI is added only to core; legacy consumers migrate with tests; duplicates are removed without broad visual diffs. |
 | Feature-oriented repository contracts in the global repository directory | `routine_repository.dart`, `tracker_repository.dart`, `goal_repository.dart`, `coach_session_repository.dart`, and `home_repository.dart` are globally located while each is primarily area-owned. | Ownership decision/move, if warranted, in Routine 4, Goals 5, Tracker 6, Coach 7, Home/Mind 8 | Consumer audit proves whether each contract is feature-only or genuinely shared; any move updates providers/tests atomically and leaves one import direction. |
 | Feature-oriented services in the global service directory | `coach_ai_client.dart` is Coach-owned; Routine-import services are shared by Onboarding bootstrap and Routine review but their long-term owner is not yet classified. | Coach Phase 7; Routine import classification in Phase 4 | Services sit with the owning feature or have a documented cross-feature/platform contract; widgets do not call HTTP/Workers directly. |
