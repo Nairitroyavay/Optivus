@@ -100,6 +100,7 @@ class RoutineState {
   final List<RoutineItem> items;
   final List<RoutineOccurrenceRecord> occurrences;
   final List<RoutineEventRecord> events;
+  final List<RoutineCorruptEvent> corruptEvents;
   final DateTime selectedDay;
   final String selectedPrimaryFilter;
   final String selectedCategoryFilter;
@@ -130,6 +131,7 @@ class RoutineState {
     required this.items,
     this.occurrences = const [],
     this.events = const [],
+    this.corruptEvents = const [],
     required this.selectedDay,
     this.selectedPrimaryFilter = 'all',
     this.selectedCategoryFilter = 'all',
@@ -160,6 +162,7 @@ class RoutineState {
     List<RoutineItem>? items,
     List<RoutineOccurrenceRecord>? occurrences,
     List<RoutineEventRecord>? events,
+    List<RoutineCorruptEvent>? corruptEvents,
     DateTime? selectedDay,
     String? selectedPrimaryFilter,
     String? selectedCategoryFilter,
@@ -193,6 +196,7 @@ class RoutineState {
       items: items ?? this.items,
       occurrences: occurrences ?? this.occurrences,
       events: events ?? this.events,
+      corruptEvents: corruptEvents ?? this.corruptEvents,
       selectedDay: selectedDay ?? this.selectedDay,
       selectedPrimaryFilter:
           selectedPrimaryFilter ?? this.selectedPrimaryFilter,
@@ -377,6 +381,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         eventsLoading: true,
         occurrences: const [],
         events: const [],
+        corruptEvents: const [],
         pendingItemIds: const {},
         pendingOccurrenceIds: const {},
         failedIntentsByItemId: const {},
@@ -453,10 +458,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       _eventsSubscription = _transactionRepository
           .watchEvents(uid)
           .listen(
-            (events) {
+            (feed) {
               if (mounted && _ownerUid == uid) {
                 state = state.copyWith(
-                  events: events,
+                  events: feed.validEvents,
+                  corruptEvents: feed.corruptEvents,
                   eventsLoading: false,
                   clearEventsError: true,
                 );
@@ -488,10 +494,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _eventsSubscription = _transactionRepository
         .watchEvents(uid)
         .listen(
-          (events) {
+          (feed) {
             if (mounted && _ownerUid == uid) {
               state = state.copyWith(
-                events: events,
+                events: feed.validEvents,
+                corruptEvents: feed.corruptEvents,
                 eventsLoading: false,
                 clearEventsError: true,
               );

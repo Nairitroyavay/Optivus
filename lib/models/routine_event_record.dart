@@ -71,6 +71,15 @@ class RoutineEventRecord {
 
 class RoutineEventFirestoreCodec {
   static Map<String, dynamic> toFirestore(RoutineEventRecord record) {
+    if (record.ownerUid.isEmpty) throw const FormatException('ownerUid is required');
+    if (record.eventId.isEmpty) throw const FormatException('eventId is required');
+    if (record.routineItemId.isEmpty) throw const FormatException('routineItemId is required');
+    if (record.operationKey.isEmpty) throw const FormatException('operationKey is required');
+    if (record.source.isEmpty) throw const FormatException('source is required');
+    if (record.itemSnapshot.isEmpty) throw const FormatException('itemSnapshot is required');
+    if (record.itemSnapshot['title'] is! String) throw const FormatException('itemSnapshot title is required');
+    if (record.itemSnapshot['startMinute'] is! num) throw const FormatException('itemSnapshot startMinute is required');
+
     return {
       'schemaVersion': record.schemaVersion,
       'eventId': record.eventId,
@@ -141,8 +150,14 @@ class RoutineEventFirestoreCodec {
     }
     final itemSnapshot = (data['itemSnapshot'] as Map?)
         ?.cast<String, dynamic>();
-    if (itemSnapshot == null) {
+    if (itemSnapshot == null || itemSnapshot.isEmpty) {
       throw const FormatException('itemSnapshot is required');
+    }
+    if (itemSnapshot['title'] is! String) {
+      throw const FormatException('itemSnapshot title is required');
+    }
+    if (itemSnapshot['startMinute'] is! num) {
+      throw const FormatException('itemSnapshot startMinute is required');
     }
 
     return RoutineEventRecord(
