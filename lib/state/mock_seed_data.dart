@@ -114,7 +114,6 @@ class MockSeedData {
       dishes: ['Rice', 'Dal', 'Sabji', 'Chicken curry', 'Curd'],
       caloriesEstimate: 720.0,
       proteinEstimate: 28.0,
-      allowOverlap: true,
       notes: 'Lunch break during class.',
     ),
     RoutineItem(
@@ -209,6 +208,8 @@ class MockSeedData {
       source: RoutineSource.onboarding,
       priority: RoutinePriority.mustDo,
       hardBlock: true,
+      allowedOverlaps: const [],
+      repeatRule: 'weekly',
       crossesMidnight: true,
       endsNextDay: true,
       notes: 'Sleep and night recovery.',

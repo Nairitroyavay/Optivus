@@ -2,6 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/domain/routine_conflict.dart';
+import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
+import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 void main() {
   group('routine materialization', () {
@@ -81,7 +84,7 @@ void main() {
           endMinute: 11 * 60,
           blockType: RoutineBlockType.flexibleTask,
         ),
-      ]);
+      ], DateTime.now());
 
       expect(conflicts, isNotEmpty);
       expect(conflicts.first.type, RoutineConflictType.hardBlockConflict);
@@ -105,7 +108,7 @@ void main() {
           endMinute: 11 * 60,
           blockType: RoutineBlockType.flexibleTask,
         ),
-      ]);
+      ], DateTime.now());
 
       expect(conflicts, isNotEmpty);
       expect(conflicts.first.canKeepBoth, isFalse);
@@ -113,7 +116,7 @@ void main() {
   });
 
   group('tracker and money sync', () {
-    test('Tracker task start sets inTracker and launch intent', () {
+    test('Tracker task start sets inTracker and launch intent', () async {
       final container = ProviderContainer();
       final controller = container.read(routineNotifierProvider.notifier);
       final item = RoutineItem(
@@ -124,9 +127,9 @@ void main() {
         blockType: RoutineBlockType.trackerTask,
         trackerType: TrackerType.meditation,
       );
-      controller.addItem(item);
+      await controller.addItem(item);
 
-      controller.startTrackerTask(item);
+      await controller.startTrackerTask(item);
 
       final intent = container
           .read(routineNotifierProvider)
@@ -141,7 +144,7 @@ void main() {
       expect(updated.status, RoutineStatus.inTracker);
     });
 
-    test('Tracker completion marks Routine completed', () {
+    test('Tracker completion marks Routine completed', () async {
       final container = ProviderContainer();
       final controller = container.read(routineNotifierProvider.notifier);
       final item = RoutineItem(
@@ -151,10 +154,10 @@ void main() {
         endMinute: 11 * 60,
         blockType: RoutineBlockType.trackerTask,
       );
-      controller.addItem(item);
-      controller.startTrackerTask(item);
+      await controller.addItem(item);
+      await controller.startTrackerTask(item);
 
-      controller.completeTrackerSession('tracker-task');
+      await controller.completeTrackerSession('tracker-task');
 
       final updated = container
           .read(selectedDayRoutineItemsProvider)
@@ -168,7 +171,7 @@ void main() {
       expect(intent, isNull);
     });
 
-    test('Money already saved logs saving and completes item', () {
+    test('Money already saved logs saving and completes item', () async {
       final container = ProviderContainer();
       final controller = container.read(routineNotifierProvider.notifier);
       final item = RoutineItem(
@@ -178,9 +181,9 @@ void main() {
         endMinute: 11 * 60,
         blockType: RoutineBlockType.moneyTask,
       );
-      controller.addItem(item);
+      await controller.addItem(item);
 
-      controller.alreadySaved('money-task');
+      await controller.alreadySaved('money-task');
 
       final updated = container
           .read(selectedDayRoutineItemsProvider)

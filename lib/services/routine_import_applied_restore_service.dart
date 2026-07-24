@@ -69,9 +69,13 @@ class RoutineImportAppliedRestoreService {
     if (read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
       read(mockRoutineProvider.notifier).mergeMissing(expectedItems);
     }
-    final restoredIds = await read(
+    final batchResult = await read(
       routineNotifierProvider.notifier,
     ).addMissingItems(missing);
+
+    final restoredIds = batchResult.isValid
+        ? missing.map((item) => item.id).toList(growable: false)
+        : const <String>[];
 
     return RoutineImportAppliedRestoreResult(
       expectedItemIds: expectedItemIds,

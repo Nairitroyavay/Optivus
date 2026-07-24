@@ -5,6 +5,7 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/domain/routine_conflict.dart';
 
 /// Conflict notification banner shown at the top of the timeline.
 class ConflictBanner extends StatelessWidget {

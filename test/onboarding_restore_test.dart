@@ -17,6 +17,7 @@ import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
@@ -285,6 +286,12 @@ List<Override> _firebaseOverrides({
     routineRepositoryProvider.overrideWithValue(FakeRoutineRepository()),
     routineHistoryRepositoryProvider.overrideWithValue(
       FakeRoutineHistoryRepository(),
+    ),
+    routineTransactionRepositoryProvider.overrideWithValue(
+      FakeRoutineTransactionRepository(
+        routineRepository: FakeRoutineRepository(),
+        historyRepository: FakeRoutineHistoryRepository(),
+      ),
     ),
   ];
 }

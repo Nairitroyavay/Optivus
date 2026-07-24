@@ -6,6 +6,7 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
 
 class FailingFakeRoutineRepository extends FakeRoutineRepository {
   bool failNextCreate = false;
@@ -91,6 +92,12 @@ void main() {
           ),
           optivusBackendModeProvider.overrideWithValue(
             OptivusBackendMode.firebase,
+          ),
+          routineTransactionRepositoryProvider.overrideWith(
+            (ref) => FakeRoutineTransactionRepository(
+              routineRepository: ref.read(routineRepositoryProvider),
+              historyRepository: ref.read(routineHistoryRepositoryProvider),
+            ),
           ),
         ],
       );
@@ -186,6 +193,8 @@ void main() {
       );
 
       final createFuture = notifier.addItem(item);
+      // Yield to let addItem pass await _initialLoad and reach the pause point
+      await Future.microtask(() {});
 
       await notifier.loadForOwner('user-b');
       repo.unpauseCreate();

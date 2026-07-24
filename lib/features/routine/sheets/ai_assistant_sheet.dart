@@ -269,7 +269,10 @@ class _AIAssistantSheetBodyState extends ConsumerState<_AIAssistantSheetBody> {
   _FreeGap _largestFreeGap(List<RoutineItem> items) {
     final sorted =
         items
-            .where((item) => !item.allowOverlap && item.durationMinutes > 0)
+            .where(
+              (item) =>
+                  item.allowedOverlaps.isEmpty && item.durationMinutes > 0,
+            )
             .toList()
           ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
     var cursor = 6 * 60;

@@ -27,6 +27,7 @@ class RoutineOccurrenceFirestoreCodec {
     'completedSubtaskIndexes',
     'note',
     'displayTitleOverride',
+    'undoToPlannedAllowed',
     'createdAt',
     'updatedAt',
     'schemaVersion',
@@ -80,6 +81,7 @@ class RoutineOccurrenceFirestoreCodec {
       if (record.note?.trim().isNotEmpty == true) 'note': record.note!.trim(),
       if (record.displayTitleOverride?.trim().isNotEmpty == true)
         'displayTitleOverride': record.displayTitleOverride!.trim(),
+      'undoToPlannedAllowed': record.undoToPlannedAllowed,
       'createdAt': Timestamp.fromDate(record.createdAt.toUtc()),
       'updatedAt': Timestamp.fromDate(record.updatedAt.toUtc()),
       'schemaVersion': record.schemaVersion,
@@ -128,6 +130,7 @@ class RoutineOccurrenceFirestoreCodec {
           const [],
       note: data['note'] as String?,
       displayTitleOverride: data['displayTitleOverride'] as String?,
+      undoToPlannedAllowed: data['undoToPlannedAllowed'] as bool? ?? false,
       createdAt:
           readRoutineDateTime(data['createdAt']) ??
           (throw const FormatException(
@@ -184,6 +187,7 @@ const _occurrenceActions = {
   'skip',
   'miss',
   'move',
+  'reschedule',
   'checkIn',
   'toggleSubtask',
   'makeTiny',
@@ -242,6 +246,7 @@ abstract class RoutineHistoryRepository {
   Future<List<RoutineOccurrenceRecord>> fetchHistory(String uid);
 
   Future<void> appendHistory(String uid, RoutineOccurrenceRecord record);
+  Future<void> deleteHistory(String uid, String occurrenceId);
 }
 
 abstract class HabitSystemsRepository {
@@ -267,8 +272,19 @@ class FakeRoutineHistoryRepository implements RoutineHistoryRepository {
     if (record.ownerUid != uid) {
       throw ArgumentError('Routine occurrence owner mismatch.');
     }
+    final existing = _history[uid]?[record.id];
+    if (existing?.operationKey == record.operationKey) {
+      return;
+    }
     codec.toFirestore(record);
     _history.putIfAbsent(uid, () => {})[record.id] = record;
+  }
+
+  @override
+  Future<void> deleteHistory(String uid, String occurrenceId) async {
+    validateOwnerUid(uid);
+    validateDocumentId(occurrenceId);
+    _history[uid]?.remove(occurrenceId);
   }
 }
 
@@ -310,6 +326,10 @@ class FirestoreRoutineHistoryRepository implements RoutineHistoryRepository {
     );
     await _firestore.runTransaction((transaction) async {
       final existing = await transaction.get(reference);
+      if (existing.exists &&
+          existing.data()?['operationKey'] == record.operationKey) {
+        return;
+      }
       final data = _codec.toFirestore(record);
       data['createdAt'] = existing.exists
           ? existing.data()!['createdAt']
@@ -317,6 +337,16 @@ class FirestoreRoutineHistoryRepository implements RoutineHistoryRepository {
       data['updatedAt'] = FieldValue.serverTimestamp();
       transaction.set(reference, data);
     });
+  }
+
+  @override
+  Future<void> deleteHistory(String uid, String occurrenceId) async {
+    validateOwnerUid(uid);
+    validateDocumentId(occurrenceId);
+    final reference = _firestore.doc(
+      FirestoreUserPaths.routineHistoryEvent(uid, occurrenceId),
+    );
+    await reference.delete();
   }
 }
 

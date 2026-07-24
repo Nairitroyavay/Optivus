@@ -21,11 +21,13 @@ import 'package:optivus/repositories/routine_firestore_codec.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 void main() {
   group('Routine template Firestore contract', () {
@@ -471,6 +473,12 @@ void main() {
             routineHistoryRepositoryProvider.overrideWithValue(
               FakeRoutineHistoryRepository(),
             ),
+            routineTransactionRepositoryProvider.overrideWith(
+              (ref) => FakeRoutineTransactionRepository(
+                routineRepository: ref.read(routineRepositoryProvider),
+                historyRepository: ref.read(routineHistoryRepositoryProvider),
+              ),
+            ),
           ],
         );
         addTearDown(container.dispose);
@@ -521,6 +529,12 @@ void main() {
             routineRepositoryProvider.overrideWithValue(harness.routines),
             routineHistoryRepositoryProvider.overrideWithValue(
               FakeRoutineHistoryRepository(),
+            ),
+            routineTransactionRepositoryProvider.overrideWith(
+              (ref) => FakeRoutineTransactionRepository(
+                routineRepository: ref.read(routineRepositoryProvider),
+                historyRepository: ref.read(routineHistoryRepositoryProvider),
+              ),
             ),
             profileRepositoryProvider.overrideWithValue(profileRepository),
             regionSettingsRepositoryProvider.overrideWithValue(
@@ -581,6 +595,12 @@ void main() {
           routineRepositoryProvider.overrideWithValue(FakeRoutineRepository()),
           routineHistoryRepositoryProvider.overrideWithValue(
             FakeRoutineHistoryRepository(),
+          ),
+          routineTransactionRepositoryProvider.overrideWith(
+            (ref) => FakeRoutineTransactionRepository(
+              routineRepository: ref.read(routineRepositoryProvider),
+              historyRepository: ref.read(routineHistoryRepositoryProvider),
+            ),
           ),
         ],
       );

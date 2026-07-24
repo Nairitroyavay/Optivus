@@ -1,0 +1,331 @@
+import 'package:flutter/material.dart';
+import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_occurrence.dart';
+import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/routine/utils/routine_date_utils.dart';
+import 'package:optivus/features/routine/domain/routine_conflict.dart';
+import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
+import 'package:optivus/features/routine/services/routine_materializer.dart';
+
+enum RoutineValidationErrorType {
+  none,
+  invalidTime,
+  overlappingBlocking,
+  missingData,
+  duplicateId,
+  batchConflict,
+  staleConflict,
+}
+
+enum RoutineValidationOperation { create, update, move, batch }
+
+class RoutineValidationContext {
+  final RoutineItem candidate;
+  final List<RoutineItem> existingTemplates;
+  final List<RoutineOccurrenceRecord> occurrences;
+  final DateTime evaluationDate;
+  final DateTime? explicitNow;
+  final RoutineValidationOperation operation;
+  final List<RoutineItem> batchCandidates;
+  final String authenticatedOwnerUid;
+
+  const RoutineValidationContext({
+    required this.candidate,
+    required this.existingTemplates,
+    required this.occurrences,
+    required this.evaluationDate,
+    this.explicitNow,
+    required this.operation,
+    this.batchCandidates = const [],
+    required this.authenticatedOwnerUid,
+  });
+}
+
+class RoutineValidationResult {
+  final bool isValid;
+  final RoutineValidationErrorType errorType;
+  final String? userSafeMessage;
+  final List<String> affectedItemIds;
+  final List<RoutineConflict> conflicts;
+
+  const RoutineValidationResult.valid()
+    : isValid = true,
+      errorType = RoutineValidationErrorType.none,
+      userSafeMessage = null,
+      affectedItemIds = const [],
+      conflicts = const [];
+
+  const RoutineValidationResult.invalid({
+    required this.errorType,
+    required this.userSafeMessage,
+    this.affectedItemIds = const [],
+    this.conflicts = const [],
+  }) : isValid = false;
+}
+
+class RoutineBatchValidationResult {
+  final bool isValid;
+  final List<RoutineValidationResult> itemFailures;
+
+  const RoutineBatchValidationResult.valid()
+    : isValid = true,
+      itemFailures = const [];
+
+  const RoutineBatchValidationResult.invalid(this.itemFailures)
+    : isValid = false;
+}
+
+class RoutineValidationService {
+  RoutineValidationService._();
+
+  static RoutineValidationResult validate(RoutineValidationContext context) {
+    final item = context.candidate;
+
+    // A. Explicit validation invariants
+
+    if (item.startMinute < 0 || item.startMinute > 1439) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.invalidTime,
+        userSafeMessage: 'Start time must be between 0 and 1439.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    if (item.endMinute < 0 || item.endMinute > 1440) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.invalidTime,
+        userSafeMessage: 'End time must be between 0 and 1440.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    if (item.startMinute == item.endMinute) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.invalidTime,
+        userSafeMessage: 'Start and end time cannot be equal.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    final overnightFlag = item.crossesMidnight || item.endsNextDay;
+
+    if (!overnightFlag) {
+      if (item.endMinute <= item.startMinute) {
+        return RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.invalidTime,
+          userSafeMessage:
+              'Non-overnight items require end time to be strictly after start time.',
+          affectedItemIds: [item.id],
+        );
+      }
+    } else {
+      if (item.endMinute >= item.startMinute) {
+        return RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.invalidTime,
+          userSafeMessage:
+              'Overnight items require end time to be strictly before start time.',
+          affectedItemIds: [item.id],
+        );
+      }
+    }
+
+    final expectedDuration = overnightFlag
+        ? (1440 - item.startMinute) + item.endMinute
+        : item.endMinute - item.startMinute;
+
+    if (item.durationMinutes <= 0 || item.durationMinutes != expectedDuration) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.invalidTime,
+        userSafeMessage:
+            'Duration must be positive and match the normalized time range.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    // Validate explicit dates vs recurrence
+    if (item.repeatRule == 'once' && item.date == null) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.missingData,
+        userSafeMessage: 'One-time tasks require a date.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    if (item.id.isEmpty) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.missingData,
+        userSafeMessage: 'Item ID cannot be empty.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    // Validate document ID format (no slashes, reasonable length)
+    if (item.id.contains('/') || item.id.length > 128) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.missingData,
+        userSafeMessage: 'Item ID format is invalid.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    if (item.userId != null && item.userId != context.authenticatedOwnerUid) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.missingData,
+        userSafeMessage: 'Item owner UID does not match authenticated user.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    if (item.userId != null && item.userId!.trim().isEmpty) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.missingData,
+        userSafeMessage: 'Owner UID cannot be empty if provided.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    bool hasTimeComponent(DateTime dt) {
+      return dt.hour != 0 ||
+          dt.minute != 0 ||
+          dt.second != 0 ||
+          dt.millisecond != 0 ||
+          dt.microsecond != 0;
+    }
+
+    if ((item.date != null && hasTimeComponent(item.date!)) ||
+        (item.endDate != null && hasTimeComponent(item.endDate!))) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.invalidTime,
+        userSafeMessage: 'Dates must have zero time component.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    // Validate title is not blank
+    if (item.title.trim().isEmpty) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.missingData,
+        userSafeMessage: 'Routine title cannot be empty.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    final uniqueDays = item.repeatDays.toSet();
+    if (uniqueDays.length != item.repeatDays.length ||
+        uniqueDays.any(
+          (day) => day < DateTime.monday || day > DateTime.sunday,
+        )) {
+      return RoutineValidationResult.invalid(
+        errorType: RoutineValidationErrorType.missingData,
+        userSafeMessage: 'Routine repeat days must be unique values 1-7.',
+        affectedItemIds: [item.id],
+      );
+    }
+
+    // 2. Conflict validation across all applicable dates
+    final datesToCheck = <DateTime>[
+      routineDateOnly(context.evaluationDate),
+    ];
+    if (item.repeatDays.isNotEmpty) {
+      final monday = context.evaluationDate.subtract(
+        Duration(days: context.evaluationDate.weekday - 1),
+      );
+      for (final weekday in item.repeatDays) {
+        final dayDate = routineDateOnly(
+          monday.add(Duration(days: weekday - 1)),
+        );
+        if (!datesToCheck.any((d) => DateUtils.isSameDay(d, dayDate))) {
+          datesToCheck.add(dayDate);
+        }
+      }
+    }
+
+    // Include batch candidates into the template pool if it's a batch operation.
+    final effectiveTemplates = [
+      ...context.existingTemplates,
+      ...context.batchCandidates.where((b) => b.id != item.id), // Exclude self
+    ];
+
+    for (final checkDate in datesToCheck) {
+      // Use RoutineOccurrenceProjector directly since it considers overrides/moves/deletions.
+      final projectedDayItems = RoutineOccurrenceProjector.itemsForDay(
+        effectiveTemplates,
+        context.occurrences,
+        checkDate,
+      ).where((candidate) => candidate.id != item.id).toList(growable: false);
+
+      final conflicts =
+          RoutineConflictEngine.detect(
+                [...projectedDayItems, item],
+                checkDate,
+                now:
+                    context.explicitNow, // Explicit time for tracker evaluation
+              )
+              .where(
+                (conflict) =>
+                    conflict.itemId == item.id ||
+                    conflict.otherItemId == item.id,
+              )
+              .toList(growable: false);
+
+      if (conflicts.any((c) => c.blocking)) {
+        return RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.overlappingBlocking,
+          userSafeMessage: 'Blocking conflict detected.',
+          conflicts: conflicts,
+          affectedItemIds: [item.id],
+        );
+      }
+    }
+
+    return const RoutineValidationResult.valid();
+  }
+
+  static RoutineBatchValidationResult validateBatch({
+    required List<RoutineItem> itemsToAdd,
+    required List<RoutineItem> existingTemplates,
+    required List<RoutineOccurrenceRecord> occurrences,
+    required DateTime evaluationDate,
+    DateTime? explicitNow,
+  }) {
+    if (itemsToAdd.isEmpty) {
+      return const RoutineBatchValidationResult.valid();
+    }
+
+    final failures = <RoutineValidationResult>[];
+    final idSet = <String>{};
+
+    for (final item in itemsToAdd) {
+      if (!idSet.add(item.id)) {
+        failures.add(
+          RoutineValidationResult.invalid(
+            errorType: RoutineValidationErrorType.duplicateId,
+            userSafeMessage: 'Duplicate item ID within batch.',
+            affectedItemIds: [item.id],
+          ),
+        );
+        continue;
+      }
+
+      final context = RoutineValidationContext(
+        candidate: item,
+        existingTemplates: existingTemplates,
+        occurrences: occurrences,
+        evaluationDate: item.date ?? evaluationDate,
+        explicitNow: explicitNow,
+        operation: RoutineValidationOperation.batch,
+        batchCandidates: itemsToAdd,
+      );
+
+      final v = validate(context);
+      if (!v.isValid) {
+        failures.add(v);
+      }
+    }
+
+    if (failures.isNotEmpty) {
+      return RoutineBatchValidationResult.invalid(failures);
+    }
+    return const RoutineBatchValidationResult.valid();
+  }
+}

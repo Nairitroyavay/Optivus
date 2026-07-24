@@ -67,6 +67,14 @@ class FirestoreUserPaths {
     return 'users/$uid/routineHistory';
   }
 
+  static String routineEvent(String uid, String eventId) {
+    return 'users/$uid/routineEvents/$eventId';
+  }
+
+  static String routineEvents(String uid) {
+    return 'users/$uid/routineEvents';
+  }
+
   static String routineProjection(String uid, String projectionId) {
     return 'users/$uid/routineProjections/$projectionId';
   }

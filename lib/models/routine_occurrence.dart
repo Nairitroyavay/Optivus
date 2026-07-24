@@ -20,6 +20,7 @@ class RoutineOccurrenceRecord {
   final List<int> completedSubtaskIndexes;
   final String? note;
   final String? displayTitleOverride;
+  final bool undoToPlannedAllowed;
 
   const RoutineOccurrenceRecord({
     required this.id,
@@ -39,6 +40,7 @@ class RoutineOccurrenceRecord {
     this.completedSubtaskIndexes = const [],
     this.note,
     this.displayTitleOverride,
+    this.undoToPlannedAllowed = false,
   });
 
   RoutineOccurrenceRecord copyWith({
@@ -53,6 +55,7 @@ class RoutineOccurrenceRecord {
     List<int>? completedSubtaskIndexes,
     String? note,
     String? displayTitleOverride,
+    bool? undoToPlannedAllowed,
   }) {
     return RoutineOccurrenceRecord(
       id: id,
@@ -73,6 +76,7 @@ class RoutineOccurrenceRecord {
           completedSubtaskIndexes ?? this.completedSubtaskIndexes,
       note: note ?? this.note,
       displayTitleOverride: displayTitleOverride ?? this.displayTitleOverride,
+      undoToPlannedAllowed: undoToPlannedAllowed ?? this.undoToPlannedAllowed,
     );
   }
 }

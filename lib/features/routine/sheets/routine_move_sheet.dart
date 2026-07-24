@@ -4,6 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/domain/routine_conflict.dart';
 
 void showRoutineMoveSheet(
   BuildContext context,

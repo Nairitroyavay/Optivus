@@ -4,6 +4,8 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
+import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 void showRoutineWeekPlannerSheet(BuildContext context, WidgetRef ref) {
   showModalBottomSheet(
@@ -88,7 +90,7 @@ class _WeekPlannerSheet extends ConsumerWidget {
               const SizedBox(height: 16),
               ...days.map((day) {
                 final items = RoutineMaterializer.itemsForDay(allItems, day);
-                final conflicts = RoutineConflictEngine.detect(items, day: day);
+                final conflicts = RoutineConflictEngine.detect(items, day);
                 final hardBlocks = items
                     .where((item) => item.isHardBlock)
                     .length;
@@ -133,7 +135,6 @@ class _WeekPlannerSheet extends ConsumerWidget {
 
   int _freeMinutes(List<RoutineItem> items) {
     final busy = items.fold<int>(0, (sum, item) {
-      if (item.allowOverlap) return sum;
       return sum + item.durationMinutes.clamp(0, 24 * 60).toInt();
     });
     return (24 * 60 - busy).clamp(0, 24 * 60).toInt();

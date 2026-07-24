@@ -3,6 +3,9 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/timeline_layout.dart';
+import 'package:optivus/features/routine/domain/routine_conflict.dart';
+import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
+import 'package:optivus/features/routine/services/routine_materializer.dart';
 
 void main() {
   // Spec example sleep item: 28 May 10:30 PM → 29 May 7:30 AM
@@ -241,7 +244,7 @@ void main() {
       final conflicts = RoutineConflictEngine.detect([
         sleepStart,
         sleepContinuation,
-      ], day: DateTime(2026, 5, 29));
+      ], DateTime(2026, 5, 29));
       expect(
         conflicts
             .where((c) => c.type == RoutineConflictType.sleepConflict)

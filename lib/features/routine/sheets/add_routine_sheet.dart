@@ -4,6 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/domain/routine_conflict.dart';
 
 void showAddRoutineSheet(
   BuildContext context,
@@ -42,7 +43,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   late RoutineCategory _category;
   late TrackerType _trackerType;
   late bool _hard;
-  late bool _allowOverlap;
+
   late List<int> _repeatDays;
   late String _bestTime;
   String _fixedKind = 'Class';
@@ -76,7 +77,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     _category = item?.category ?? RoutineCategory.habit;
     _trackerType = item?.trackerType ?? TrackerType.none;
     _hard = item?.isHardBlock ?? false;
-    _allowOverlap = item?.allowOverlap ?? false;
+
     _repeatDays = List<int>.from(item?.repeatDays ?? const []);
     _bestTime = item?.bestTime ?? 'Morning';
 
@@ -507,17 +508,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
           ),
         ),
-        SwitchListTile.adaptive(
-          value: _allowOverlap,
-          onChanged: (value) => setState(() => _allowOverlap = value),
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          activeTrackColor: OptivusColors.routineAccent,
-          title: const Text(
-            'Allow overlap',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-          ),
-        ),
       ],
     );
   }
@@ -918,7 +908,6 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
       steps: steps.isEmpty ? null : steps,
       dishes: dishes.isEmpty ? null : dishes,
       hardBlock: _hard,
-      allowOverlap: _allowOverlap,
       repeatRule: _repeatDays.isEmpty ? 'once' : 'weekly',
       createdAt: widget.editItem?.createdAt,
     );

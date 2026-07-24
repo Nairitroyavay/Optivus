@@ -695,7 +695,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _resetUserScopedMockState() {
-    _ref.read(mockRoutineProvider.notifier).resetEmpty();
+    _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
+    if (!_useFirebaseBackend) {
+      _ref.read(mockRoutineProvider.notifier).resetEmpty();
+    }
     _ref.read(mockTrackerProvider.notifier).resetEmpty();
     _ref.read(mockGoalProvider.notifier).resetEmpty();
     _ref.read(mockMindNoteProvider.notifier).resetEmpty();

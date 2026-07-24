@@ -4,9 +4,10 @@ import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
-import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_event_record.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 
 class RoutineHistoryScreen extends ConsumerStatefulWidget {
   final VoidCallback onBack;
@@ -24,7 +25,9 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final allItems = _historyRows(ref.watch(routineNotifierProvider).items);
+    final state = ref.watch(routineNotifierProvider);
+    final events = state.events;
+    final allItems = _historyRows(events);
     final filtered = allItems.where(_matchesFilters).toList();
 
     return LiquidDetailScaffold(
@@ -59,9 +62,51 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
             ),
           ],
         ),
-        if (filtered.isEmpty)
+        if (state.eventsError != null)
           LiquidDetailSection(
-            children: const [
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: OptivusColors.danger.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: OptivusColors.danger.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Failed to load history: ${state.eventsError}',
+                      style: const TextStyle(
+                        color: OptivusColors.danger,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () => ref
+                          .read(routineNotifierProvider.notifier)
+                          .refreshEvents(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: OptivusColors.danger,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          )
+        else if (state.eventsLoading)
+          const LiquidDetailSection(
+            children: [Center(child: CircularProgressIndicator())],
+          )
+        else if (filtered.isEmpty)
+          const LiquidDetailSection(
+            children: [
               Text(
                 'No routine history rows match this filter yet.',
                 style: TextStyle(
@@ -71,119 +116,156 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
               ),
             ],
           )
-        else ...[
-          _HistoryStatusSection(
-            title: 'Completed',
-            rows: filtered
-                .where((row) => row.status == RoutineStatus.completed)
-                .toList(),
-            onTap: _showRow,
+        else
+          Column(
+            children: [
+              _HistoryStatusSection(
+                title: 'Created',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.created)
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Edited',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.edited)
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Deleted',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.deleted)
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Started',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.started)
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Completed',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.completed)
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Skipped',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.skipped)
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Missed',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.missed)
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Rescheduled',
+                rows: filtered
+                    .where(
+                      (row) =>
+                          row.eventType == RoutineEventType.moved ||
+                          row.eventType == RoutineEventType.rescheduled,
+                    )
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Tracker-completed',
+                rows: filtered
+                    .where(
+                      (row) =>
+                          row.eventType == RoutineEventType.completed &&
+                          row.linkedTracker != null,
+                    )
+                    .toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Check-ins',
+                rows: filtered.where((row) => row.type == 'check-in').toList(),
+                onTap: _showRow,
+              ),
+              _HistoryStatusSection(
+                title: 'Undone',
+                rows: filtered
+                    .where((row) => row.eventType == RoutineEventType.undone)
+                    .toList(),
+                onTap: _showRow,
+              ),
+            ],
           ),
-          _HistoryStatusSection(
-            title: 'Skipped',
-            rows: filtered
-                .where((row) => row.status == RoutineStatus.skipped)
-                .toList(),
-            onTap: _showRow,
-          ),
-          _HistoryStatusSection(
-            title: 'Missed',
-            rows: filtered
-                .where((row) => row.status == RoutineStatus.missed)
-                .toList(),
-            onTap: _showRow,
-          ),
-          _HistoryStatusSection(
-            title: 'Rescheduled',
-            rows: filtered
-                .where((row) => row.status == RoutineStatus.moved)
-                .toList(),
-            onTap: _showRow,
-          ),
-          _HistoryStatusSection(
-            title: 'Tracker-completed',
-            rows: filtered.where((row) => row.linkedTracker != null).toList(),
-            onTap: _showRow,
-          ),
-          _HistoryStatusSection(
-            title: 'Check-ins',
-            rows: filtered.where((row) => row.type == 'check-in').toList(),
-            onTap: _showRow,
-          ),
-        ],
       ],
     );
   }
 
-  List<_RoutineHistoryRow> _historyRows(List<RoutineItem> items) {
-    final rows = items
-        .where(
-          (item) =>
-              item.status == RoutineStatus.completed ||
-              item.status == RoutineStatus.skipped ||
-              item.status == RoutineStatus.missed ||
-              item.status == RoutineStatus.moved ||
-              item.isCompleted ||
-              item.isMissed ||
-              item.isTrackerLinked ||
-              item.blockType == RoutineBlockType.checkIn,
-        )
-        .map(
-          (item) => _RoutineHistoryRow(
-            item: item,
-            title: item.title,
-            originalTime: TimelineUtils.formatTimeRange(
-              item.startMinute,
-              item.endMinute,
-            ),
-            status: item.status,
-            source: item.source.name,
-            type: _typeFor(item.blockType),
-            linkedTracker: item.trackerType == TrackerType.none
-                ? null
-                : item.trackerType.name,
-            date: item.date ?? DateTime.now(),
-          ),
-        )
-        .toList();
+  List<_RoutineHistoryRow> _historyRows(List<RoutineEventRecord> events) {
+    final sortedEvents = List<RoutineEventRecord>.from(events)
+      ..sort((a, b) {
+        final cmp = b.occurredAt.compareTo(a.occurredAt);
+        if (cmp != 0) return cmp;
+        return b.eventId.compareTo(a.eventId);
+      });
 
-    if (rows.isNotEmpty) return rows;
-    final now = DateTime.now();
-    return [
-      _RoutineHistoryRow.example(
-        title: 'Morning meditation',
-        status: RoutineStatus.completed,
-        type: 'tracker',
-        linkedTracker: 'meditation',
-        date: now,
-      ),
-      _RoutineHistoryRow.example(
-        title: 'Money System',
-        status: RoutineStatus.completed,
-        type: 'money',
-        linkedTracker: 'money',
-        date: now,
-      ),
-      _RoutineHistoryRow.example(
-        title: 'Cigarettes check-in',
-        status: RoutineStatus.skipped,
-        type: 'check-in',
-        linkedTracker: 'smoking',
-        date: now.subtract(const Duration(days: 1)),
-      ),
-      _RoutineHistoryRow.example(
-        title: 'Workout block',
-        status: RoutineStatus.missed,
-        type: 'hard',
-        date: now.subtract(const Duration(days: 2)),
-      ),
-      _RoutineHistoryRow.example(
-        title: 'Reading practice',
-        status: RoutineStatus.moved,
-        type: 'flexible',
-        date: now.subtract(const Duration(days: 4)),
-      ),
-    ];
+    return sortedEvents.map((event) {
+      final snap = event.itemSnapshot;
+
+      final title = snap['title'] as String?;
+      final startMinute = snap['startMinute'] as int?;
+      final endMinuteRaw = snap['endMinute'] as int?;
+      final durationMinutes = snap['durationMinutes'] as int?;
+      final blockTypeRaw = snap['blockType'] as String?;
+
+      // If critical fields are missing, this is a corrupt event snapshot
+      final isCorrupt = title == null || startMinute == null;
+
+      if (isCorrupt) {
+        return _RoutineHistoryRow(
+          title: 'Event data unavailable',
+          originalTime: '--:--',
+          eventType: event.eventType,
+          source: event.source,
+          type: 'Unknown',
+          date: event.occurredAt,
+          isCorrupt: true,
+          eventId: event.eventId,
+        );
+      }
+
+      final displayTitle = title;
+      final effectiveStart = startMinute;
+      final effectiveEnd =
+          endMinuteRaw ?? (effectiveStart + (durationMinutes ?? 0));
+      final blockType =
+          RoutineBlockType.values
+              .where((e) => e.name == blockTypeRaw)
+              .firstOrNull ??
+          RoutineBlockType.flexibleTask;
+      final trackerRaw = snap['trackerTaskType'] as String?;
+
+      return _RoutineHistoryRow(
+        title: displayTitle,
+        originalTime: TimelineUtils.formatTimeRange(
+          effectiveStart,
+          effectiveEnd,
+        ),
+        eventType: event.eventType,
+        source: event.source,
+        type: _typeFor(blockType),
+        linkedTracker: trackerRaw,
+        date: event.occurredAt,
+        eventId: event.eventId,
+      );
+    }).toList();
   }
 
   bool _matchesFilters(_RoutineHistoryRow row) {
@@ -192,7 +274,9 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
         row.date.year == now.year &&
         row.date.month == now.month &&
         row.date.day == now.day;
-    final isThisWeek = now.difference(row.date).inDays < 7;
+    final weekday = now.weekday; // Monday = 1
+    final monday = DateTime(now.year, now.month, now.day - (weekday - 1));
+    final isThisWeek = !row.date.isAfter(now) && !row.date.isBefore(monday);
     final dateOk = switch (_dateFilter) {
       'Today' => isToday,
       'This Week' => isThisWeek,
@@ -245,7 +329,7 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${row.originalTime} · ${row.status.name} · source ${row.source}',
+                  '${row.originalTime} · ${row.eventType.name} · source ${row.source}',
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     color: OptivusColors.textSecondary,
@@ -256,11 +340,6 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _SheetButton(
-                      label: 'Restore / repeat',
-                      color: OptivusColors.routineAccent,
-                      onTap: () => Navigator.of(context).pop(),
-                    ),
                     _SheetButton(
                       label: 'Ask Coach',
                       color: OptivusColors.coachAccent,
@@ -306,8 +385,8 @@ class _HistoryStatusSection extends StatelessWidget {
               icon: _iconFor(row),
               title: row.title,
               subtitle:
-                  '${row.originalTime} · ${row.status.name} · source ${row.source}${row.linkedTracker == null ? '' : ' · ${row.linkedTracker}'}',
-              accentColor: _colorFor(row.status),
+                  '${row.originalTime} · ${row.eventType.name} · source ${row.source}${row.linkedTracker == null ? '' : ' · ${row.linkedTracker}'}',
+              accentColor: _colorFor(row.eventType),
               onTap: () => onTap(row),
             ),
           )
@@ -326,12 +405,15 @@ class _HistoryStatusSection extends StatelessWidget {
     };
   }
 
-  Color _colorFor(RoutineStatus status) {
-    return switch (status) {
-      RoutineStatus.completed => OptivusColors.success,
-      RoutineStatus.skipped => OptivusColors.warning,
-      RoutineStatus.missed => OptivusColors.danger,
-      RoutineStatus.moved => OptivusColors.routineAccent,
+  Color _colorFor(RoutineEventType type) {
+    return switch (type) {
+      RoutineEventType.completed => OptivusColors.success,
+      RoutineEventType.skipped => OptivusColors.warning,
+      RoutineEventType.missed => OptivusColors.danger,
+      RoutineEventType.moved => OptivusColors.routineAccent,
+      RoutineEventType.deleted => OptivusColors.danger,
+      RoutineEventType.created => OptivusColors.success,
+      RoutineEventType.started => OptivusColors.aquaAccent,
       _ => OptivusColors.routineAccent,
     };
   }
@@ -402,42 +484,25 @@ class _SheetButton extends StatelessWidget {
 }
 
 class _RoutineHistoryRow {
-  final RoutineItem? item;
   final String title;
   final String originalTime;
-  final RoutineStatus status;
+  final RoutineEventType eventType;
   final String source;
   final String type;
   final String? linkedTracker;
   final DateTime date;
+  final bool isCorrupt;
+  final String eventId;
 
   const _RoutineHistoryRow({
-    required this.item,
     required this.title,
     required this.originalTime,
-    required this.status,
+    required this.eventType,
     required this.source,
     required this.type,
     this.linkedTracker,
     required this.date,
+    this.isCorrupt = false,
+    required this.eventId,
   });
-
-  factory _RoutineHistoryRow.example({
-    required String title,
-    required RoutineStatus status,
-    required String type,
-    String? linkedTracker,
-    required DateTime date,
-  }) {
-    return _RoutineHistoryRow(
-      item: null,
-      title: title,
-      originalTime: '8:00 PM - 8:15 PM',
-      status: status,
-      source: 'fake-seed',
-      type: type,
-      linkedTracker: linkedTracker,
-      date: date,
-    );
-  }
 }

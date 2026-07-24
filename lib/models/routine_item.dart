@@ -8,6 +8,40 @@ enum RoutineBlockType {
   moneyTask, // Region-aware tiny saving task
 }
 
+class RoutineConflictAllowance {
+  final String canonicalPairId;
+  final String evaluatedDateKey;
+  final String conflictType;
+  final String scheduleFingerprint;
+  final int schemaVersion;
+
+  const RoutineConflictAllowance({
+    required this.canonicalPairId,
+    required this.evaluatedDateKey,
+    required this.conflictType,
+    required this.scheduleFingerprint,
+    this.schemaVersion = 1,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'canonicalPairId': canonicalPairId,
+    'evaluatedDateKey': evaluatedDateKey,
+    'conflictType': conflictType,
+    'scheduleFingerprint': scheduleFingerprint,
+    'schemaVersion': schemaVersion,
+  };
+
+  factory RoutineConflictAllowance.fromMap(Map<String, dynamic> map) {
+    return RoutineConflictAllowance(
+      canonicalPairId: map['canonicalPairId'] as String? ?? '',
+      evaluatedDateKey: map['evaluatedDateKey'] as String? ?? '',
+      conflictType: map['conflictType'] as String? ?? '',
+      scheduleFingerprint: map['scheduleFingerprint'] as String? ?? '',
+      schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? 1,
+    );
+  }
+}
+
 // ── Category ────────────────────────────────────────────────
 enum RoutineCategory {
   classBlock,
@@ -96,7 +130,8 @@ class RoutineItem {
 
   // Block configuration
   final bool hardBlock;
-  final bool allowOverlap;
+  final List<String> allowedOverlaps; // Legacy string-based IDs
+  final List<RoutineConflictAllowance> allowedConflicts;
   final String? repeatRule;
 
   // Status attributes
@@ -104,6 +139,7 @@ class RoutineItem {
   final bool isMissed;
   final bool hasConflict;
   final String? conflictMessage;
+  final bool undoToPlannedAllowed;
 
   // Timestamps
   final DateTime createdAt;
@@ -145,12 +181,14 @@ class RoutineItem {
     this.proteinEstimate,
     this.skincareProducts,
     this.hardBlock = false,
-    this.allowOverlap = false,
+    this.allowedOverlaps = const [],
+    this.allowedConflicts = const [],
     this.repeatRule,
     this.isCompleted = false,
     this.isMissed = false,
     this.hasConflict = false,
     this.conflictMessage,
+    this.undoToPlannedAllowed = false,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) : repeatDays = repeatDays ?? const [1, 2, 3, 4, 5, 6, 7],
@@ -275,13 +313,15 @@ class RoutineItem {
     double? proteinEstimate,
     List<String>? skincareProducts,
     bool? hardBlock,
-    bool? allowOverlap,
+    List<String>? allowedOverlaps,
+    List<RoutineConflictAllowance>? allowedConflicts,
     String? repeatRule,
     bool? isCompleted,
     bool? isMissed,
     bool? hasConflict,
     String? conflictMessage,
     bool clearConflict = false,
+    bool? undoToPlannedAllowed,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -324,7 +364,8 @@ class RoutineItem {
       proteinEstimate: proteinEstimate ?? this.proteinEstimate,
       skincareProducts: skincareProducts ?? this.skincareProducts,
       hardBlock: hardBlock ?? this.hardBlock,
-      allowOverlap: allowOverlap ?? this.allowOverlap,
+      allowedOverlaps: allowedOverlaps ?? this.allowedOverlaps,
+      allowedConflicts: allowedConflicts ?? this.allowedConflicts,
       repeatRule: repeatRule ?? this.repeatRule,
       isCompleted: isCompleted ?? this.isCompleted,
       isMissed: isMissed ?? this.isMissed,
@@ -332,6 +373,7 @@ class RoutineItem {
       conflictMessage: clearConflict
           ? null
           : (conflictMessage ?? this.conflictMessage),
+      undoToPlannedAllowed: undoToPlannedAllowed ?? this.undoToPlannedAllowed,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -376,7 +418,8 @@ class RoutineItem {
       'proteinEstimate': proteinEstimate,
       'skincareProducts': skincareProducts,
       'hardBlock': hardBlock,
-      'allowOverlap': allowOverlap,
+      'allowedOverlaps': allowedOverlaps,
+      'allowedConflicts': allowedConflicts.map((c) => c.toMap()).toList(),
       'repeatRule': repeatRule,
       'isCompleted': isCompleted,
       'isMissed': isMissed,
@@ -457,7 +500,16 @@ class RoutineItem {
       proteinEstimate: (map['proteinEstimate'] as num?)?.toDouble(),
       skincareProducts: (map['skincareProducts'] as List?)?.cast<String>(),
       hardBlock: map['hardBlock'] as bool? ?? false,
-      allowOverlap: map['allowOverlap'] as bool? ?? false,
+      allowedOverlaps:
+          (map['allowedOverlaps'] as List?)?.cast<String>() ?? const [],
+      allowedConflicts:
+          (map['allowedConflicts'] as List?)
+              ?.map(
+                (e) =>
+                    RoutineConflictAllowance.fromMap(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          const [],
       repeatRule: map['repeatRule'] as String?,
       isCompleted: map['isCompleted'] as bool? ?? false,
       isMissed: map['isMissed'] as bool? ?? false,

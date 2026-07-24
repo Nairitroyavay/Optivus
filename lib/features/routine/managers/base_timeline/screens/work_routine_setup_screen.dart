@@ -119,6 +119,7 @@ class _WorkRoutineSetupScreenState
                   final conflicts = BaseTimelineConflictUtils.findConflicts(
                     item,
                     allItems,
+                    day: ref.read(routineNotifierProvider).selectedDay,
                   );
                   if (conflicts.isNotEmpty) {
                     setModal(

@@ -184,7 +184,25 @@ occ_{first 40 hex characters of SHA-256(
 ```
 
 The document ID plus `operationKey` makes repeated status delivery
-idempotent.
+idempotent. The `operationKey` is generated as a collision-resistant UUID v4
+for each new user action. When a write fails and enters the retry state,
+the exact same `operationKey` is re-sent.
+
+### Undo to Planned
+
+Undo is supported ONLY when the occurrence was previously in the `planned` state,
+meaning there was no prior persisted occurrence override. When a new occurrence
+override is created from `planned`, it persists `undoToPlannedAllowed = true`.
+Calling `undo` deletes the occurrence override (`deleteHistory()`), returning the
+item to the `planned` state. If an earlier explicit state exists (e.g. going
+from `completed` to `skipped`), `undoToPlannedAllowed` is `false` and undo is not allowed.
+
+### Provider Ownership
+
+In Firebase production mode, `routineNotifierProvider` is the sole authoritative
+owner of the Routine state (templates, occurrences, loading, refresh, mutations,
+and offline retry). `mockRoutineProvider` is strictly excluded from production
+use and is only permitted in `OptivusBackendMode.fake` or test environments.
 
 ### Projection ID
 
@@ -259,8 +277,9 @@ Required version 1 fields:
 | `status` | string enum | Durable occurrence status |
 | `source` | string enum | `routine`, `tracker`, `checkIn`, `money`, or `system` |
 | `action` | string enum | The command that produced the current state |
-| `operationKey` | string | Stable retry/idempotency key |
+| `operationKey` | string | Stable retry/idempotency key (UUID v4) |
 | `completedSubtaskIndexes` | integer list | Dated subtask completion |
+| `undoToPlannedAllowed` | boolean | True if this occurrence overrides a planned state |
 | `createdAt`, `updatedAt` | Firestore timestamp | Audit instants |
 | `schemaVersion` | integer | `1` |
 

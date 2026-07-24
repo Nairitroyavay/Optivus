@@ -414,37 +414,56 @@ class _RoutineDetailSheetBody extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SheetButton(
-                      label: 'Done',
-                      icon: Icons.check_rounded,
-                      color: OptivusColors.success,
-                      onTap: () {
-                        parentRef
-                            .read(routineNotifierProvider.notifier)
-                            .markCompleted(item.id);
-                        Navigator.of(context).pop();
-                      },
+              if (item.undoToPlannedAllowed)
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SheetButton(
+                        label: 'Undo Action',
+                        icon: Icons.undo_rounded,
+                        color: OptivusColors.textSecondary,
+                        onTap: () {
+                          parentRef
+                              .read(routineNotifierProvider.notifier)
+                              .undoOccurrenceAction(item.id);
+                          Navigator.of(context).pop();
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _SheetButton(
-                      label: 'Skip',
-                      icon: Icons.skip_next_rounded,
-                      color: OptivusColors.textSecondary,
-                      onTap: () {
-                        parentRef
-                            .read(routineNotifierProvider.notifier)
-                            .markSkipped(item.id);
-                        Navigator.of(context).pop();
-                      },
+                  ],
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SheetButton(
+                        label: 'Done',
+                        icon: Icons.check_rounded,
+                        color: OptivusColors.success,
+                        onTap: () {
+                          parentRef
+                              .read(routineNotifierProvider.notifier)
+                              .markCompleted(item.id);
+                          Navigator.of(context).pop();
+                        },
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SheetButton(
+                        label: 'Skip',
+                        icon: Icons.skip_next_rounded,
+                        color: OptivusColors.textSecondary,
+                        onTap: () {
+                          parentRef
+                              .read(routineNotifierProvider.notifier)
+                              .markSkipped(item.id);
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         );

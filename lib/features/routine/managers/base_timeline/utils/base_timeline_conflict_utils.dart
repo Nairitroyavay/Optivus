@@ -1,53 +1,45 @@
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
 
+/// Thin adapter that delegates all conflict detection to [RoutineConflictEngine].
+///
+/// All overlap and classification rules live in [RoutineConflictEngine].
+/// This class must not maintain independent overlap rules.
 class BaseTimelineConflictUtils {
   BaseTimelineConflictUtils._();
 
-  /// Validates a new or updated item to see if it introduces hard block conflicts
-  /// against the existing list of items. Returns a list of conflicting items.
+  /// Returns a list of [RoutineItem]s from [allItems] that conflict with
+  /// [candidate] according to the canonical [RoutineConflictEngine].
+  ///
+  /// The [day] parameter is required so that the engine can compute anchored
+  /// date-time intervals without calling [DateTime.now] internally.
   static List<RoutineItem> findConflicts(
     RoutineItem candidate,
-    List<RoutineItem> allItems,
-  ) {
-    if (!candidate.isHardBlock &&
-        candidate.blockType != RoutineBlockType.hardBlock) {
-      return [];
-    }
+    List<RoutineItem> allItems, {
+    required DateTime day,
+  }) {
+    // Build the full list including the candidate so the engine sees all items.
+    final allWithCandidate = [
+      ...allItems.where((i) => i.id != candidate.id),
+      candidate,
+    ];
 
-    final List<RoutineItem> conflicts = [];
+    final conflicts = RoutineConflictEngine.detect(allWithCandidate, day);
 
-    for (final existing in allItems) {
-      if (existing.id == candidate.id) continue;
-      if (!existing.isHardBlock &&
-          existing.blockType != RoutineBlockType.hardBlock) {
-        continue;
-      }
-
-      // Check if they share any days
-      if (candidate.repeatDays.isNotEmpty && existing.repeatDays.isNotEmpty) {
-        final shareDays = candidate.repeatDays.any(
-          (day) => existing.repeatDays.contains(day),
-        );
-        if (!shareDays) {
-          continue;
-        }
-      }
-
-      // Time overlap check
-      final cStart = candidate.startMinute;
-      final cEnd = candidate.isOvernight
-          ? candidate.endMinute + 1440
-          : candidate.endMinute;
-      final eStart = existing.startMinute;
-      final eEnd = existing.isOvernight
-          ? existing.endMinute + 1440
-          : existing.endMinute;
-
-      if (cStart < eEnd && cEnd > eStart) {
-        conflicts.add(existing);
+    // Return the items that the engine flagged as conflicting with the candidate.
+    final conflictingIds = <String>{};
+    for (final conflict in conflicts) {
+      if (conflict.itemId == candidate.id && conflict.otherItemId != null) {
+        conflictingIds.add(conflict.otherItemId!);
+      } else if (conflict.otherItemId == candidate.id) {
+        conflictingIds.add(conflict.itemId);
       }
     }
 
-    return conflicts;
+    return allItems
+        .where(
+          (item) => item.id != candidate.id && conflictingIds.contains(item.id),
+        )
+        .toList();
   }
 }

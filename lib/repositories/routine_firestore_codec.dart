@@ -34,7 +34,8 @@ class RoutineTemplateFirestoreCodec {
     'caloriesEstimate',
     'proteinEstimate',
     'hardBlock',
-    'allowOverlap',
+    'allowedOverlaps',
+    'allowedConflicts',
     'onboardingProjectionId',
     'onboardingSourceItemId',
     'createdAt',
@@ -86,7 +87,7 @@ class RoutineTemplateFirestoreCodec {
         'caloriesEstimate': item.caloriesEstimate,
       if (item.proteinEstimate != null) 'proteinEstimate': item.proteinEstimate,
       'hardBlock': item.hardBlock,
-      'allowOverlap': item.allowOverlap,
+      'allowedConflicts': item.allowedConflicts.map((c) => c.toMap()).toList(),
       if (_notBlank(item.onboardingProjectionId))
         'onboardingProjectionId': item.onboardingProjectionId,
       if (_notBlank(item.onboardingSourceItemId))
@@ -211,7 +212,15 @@ class RoutineTemplateFirestoreCodec {
       hardBlock:
           data['hardBlock'] as bool? ??
           data['blockType'] == RoutineBlockType.hardBlock.name,
-      allowOverlap: data['allowOverlap'] as bool? ?? false,
+      allowedOverlaps: _readStringList(data['allowedOverlaps']) ?? const [],
+      allowedConflicts:
+          (data['allowedConflicts'] as List?)
+              ?.map(
+                (e) =>
+                    RoutineConflictAllowance.fromMap(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          const [],
       repeatRule:
           _optionalString(data['repeatRule']) ??
           (date != null && repeatDays.isEmpty ? 'once' : 'weekly'),
