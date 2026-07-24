@@ -21,6 +21,7 @@ import 'package:optivus/features/routine/widgets/routine_title_filter_row.dart';
 import 'package:optivus/features/routine/widgets/routine_day_selector.dart';
 import 'package:optivus/features/routine/widgets/routine_timeline_viewport.dart';
 import 'package:optivus/features/routine/widgets/conflict_banner.dart';
+import 'package:optivus/features/routine/widgets/routine_write_status_banner.dart';
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/features/routine/sheets/ai_assistant_sheet.dart';
 import 'package:optivus/features/routine/sheets/routine_detail_sheet.dart';
@@ -150,6 +151,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                   conflictCount: conflictCount,
                   onTap: () => showRoutineConflictResolverSheet(context, ref),
                 ),
+                
+                // ── Write Status Banner ──
+                const RoutineWriteStatusBanner(),
 
                 // Add a small spacing if there are conflicts so timeline doesn't touch it
                 if (conflictCount > 0) const SizedBox(height: 12),

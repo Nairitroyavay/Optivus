@@ -4,6 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 
 void showRoutineMoveSheet(
   BuildContext context,
@@ -213,8 +214,8 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  onPressed: () {
-                    ref
+                  onPressed: () async {
+                    final result = await ref
                         .read(routineNotifierProvider.notifier)
                         .moveItem(
                           itemId: widget.item.id,
@@ -222,7 +223,12 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                           startMinute: _startMinute,
                           durationMinutes: _duration,
                         );
-                    Navigator.of(context).pop();
+                    if (!context.mounted) return;
+                    if (result.outcome == RoutineWriteOutcome.saved || result.outcome == RoutineWriteOutcome.noOp) {
+                      Navigator.of(context).pop();
+                    } else if (result.outcome != RoutineWriteOutcome.validationFailed) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.errorMessage ?? 'Failed to move item')));
+                    }
                   },
                   child: Text(
                     conflicts.any((item) => item.blocking)
