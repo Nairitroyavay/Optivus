@@ -198,10 +198,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           );
         }
 
-        final itemSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
-        for (final reference in itemReferences) {
-          itemSnapshots.add(await transaction.get(reference));
-        }
+        // No need to get item snapshots in transaction
 
         transaction.set(
           _firestore.doc(FirestoreUserPaths.onboardingDraft(bundle.uid)),
@@ -218,16 +215,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           bundle.userProfilePatch,
           SetOptions(merge: true),
         );
-        for (var index = 0; index < plan.items.length; index++) {
-          if (itemSnapshots[index].exists) continue;
-          final data = _routineCodec.toFirestore(
-            ownerUid: bundle.uid,
-            item: plan.items[index],
-          );
-          data['createdAt'] = FieldValue.serverTimestamp();
-          data['updatedAt'] = FieldValue.serverTimestamp();
-          transaction.set(itemReferences[index], data);
-        }
+        // Items are no longer written here, the Outbox Projector handles it.
         final receiptData = _receiptCodec.toFirestore(plan.receipt);
         receiptData['createdAt'] = FieldValue.serverTimestamp();
         receiptData['completedAt'] = FieldValue.serverTimestamp();
