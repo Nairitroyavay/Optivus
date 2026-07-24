@@ -27,6 +27,7 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(routineNotifierProvider);
     final events = state.events;
+    final corruptCount = state.corruptEvents.length;
     final allItems = _historyRows(events);
     final filtered = allItems.where(_matchesFilters).toList();
 
@@ -62,6 +63,36 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
             ),
           ],
         ),
+        if (corruptCount > 0)
+          LiquidDetailSection(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: OptivusColors.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: OptivusColors.warning.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: OptivusColors.warning),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Some history entries are unavailable ($corruptCount)',
+                        style: const TextStyle(
+                          color: OptivusColors.warning,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         if (state.eventsError != null)
           LiquidDetailSection(
             children: [
@@ -225,21 +256,10 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
       final durationMinutes = snap['durationMinutes'] as int?;
       final blockTypeRaw = snap['blockType'] as String?;
 
-      // If critical fields are missing, this is a corrupt event snapshot
-      final isCorrupt = title == null || startMinute == null;
+      // We no longer synthesize "Unknown task" or "Event data unavailable" for corrupt records
+      // Corrupt records should be caught in RoutineEventFeed.corruptEvents, and this method only receives validEvents.
+      // So we can assume all required fields exist.
 
-      if (isCorrupt) {
-        return _RoutineHistoryRow(
-          title: 'Event data unavailable',
-          originalTime: '--:--',
-          eventType: event.eventType,
-          source: event.source,
-          type: 'Unknown',
-          date: event.occurredAt,
-          isCorrupt: true,
-          eventId: event.eventId,
-        );
-      }
 
       final displayTitle = title;
       final effectiveStart = startMinute;
