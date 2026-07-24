@@ -87,6 +87,10 @@ class FirestoreUserPaths {
     return 'users/$uid/habitSystems/$systemId';
   }
 
+  static String habitSystems(String uid) {
+    return 'users/$uid/habitSystems';
+  }
+
   static String goal(String uid, String goalId) {
     return 'users/$uid/goals/$goalId';
   }

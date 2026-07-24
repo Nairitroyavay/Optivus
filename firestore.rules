@@ -778,6 +778,23 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
+    function validHabitSystem(data, systemId) {
+      return data.ownerUid == request.auth.uid
+        && data.systemId == systemId
+        && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+        && data.description is string
+        && data.category is string
+        && (data.systemType == "goodHabit" || data.systemType == "badHabit" || data.systemType == "identity")
+        && (data.status == "active" || data.status == "paused" || data.status == "archived")
+        && data.linkedRoutineIds is list
+        && data.source is string
+        && (!data.keys().hasAny(["onboardingSourceId"]) || data.onboardingSourceId is string)
+        && (!data.keys().hasAny(["archivedAt"]) || data.archivedAt is string)
+        && data.schemaVersion is int && data.schemaVersion >= 1
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+
     // Strict Phase 2A upload metadata rule. R2 bytes are owned by the Worker;
     // Firestore stores only verified owner metadata.
     match /users/{uid}/uploads/{assetId} {
@@ -879,6 +896,19 @@ service cloud.firestore {
     }
 
 
+    match /users/{uid}/habitSystems/{systemId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validHabitSystem(request.resource.data, systemId);
+      allow update: if verifiedOwner(uid)
+        && validHabitSystem(request.resource.data, systemId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.systemId == resource.data.systemId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if verifiedOwner(uid)
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
     match /users/{uid}/syncAllowances/{allowanceId} {
       allow read: if verifiedOwner(uid);
       allow create: if verifiedOwner(uid) && validSyncAllowance(request.resource.data, allowanceId);
@@ -911,6 +941,7 @@ service cloud.firestore {
         && collectionId != "routineHistory"
         && collectionId != "routineEvents"
         && collectionId != "routineProjections"
+        && collectionId != "habitSystems"
         && collectionId != "syncAllowances"
         && collectionId != "syncEvents";
     }

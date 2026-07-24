@@ -5,6 +5,7 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
+import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -364,7 +365,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    await _loadOrCreateBackendUserState(user);
+    try {
+      await _loadOrCreateBackendUserState(user);
+    } catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.backendRestoreFailed,
+        errorMessage: e.toString(),
+      );
+    }
   }
 
   Future<void> _loadOrCreateBackendUserState(AuthUser user) async {
@@ -374,6 +384,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } else {
         await _loadFakeUserState(user);
       }
+      if (!mounted) return;
       state = state.copyWith(
         user: user,
         status: statusFor(
@@ -399,6 +410,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       clearError: true,
     );
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
+    _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
 
     try {
       var profile = await profileRepository.fetchUserProfile(user.uid);
@@ -643,6 +655,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (savedDraft == null) {
       _resetNormalUserState(user);
       await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
+      await _ref
+          .read(habitSystemsNotifierProvider.notifier)
+          .loadForOwner(user.uid);
       return;
     }
 
@@ -691,11 +706,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     } else {
       await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
+      await _ref
+          .read(habitSystemsNotifierProvider.notifier)
+          .loadForOwner(user.uid);
     }
   }
 
   void _resetSignedOutState() {
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
+    _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
     _ref.read(mockUserProfileProvider.notifier).resetEmpty();
     _ref.read(mockOnboardingProvider.notifier).reset('');
     _ref.read(profileSettingsProvider.notifier).resetForSignedOut();

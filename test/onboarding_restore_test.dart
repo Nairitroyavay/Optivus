@@ -223,7 +223,7 @@ void main() {
 
     container.read(authProvider);
     authRepository.emit(user);
-    await pumpEventQueue(times: 10);
+    await pumpEventQueue(times: 20);
 
     final auth = container.read(authProvider);
     final draft = container.read(mockOnboardingProvider).draft;
@@ -254,7 +254,7 @@ void main() {
 
     container.read(authProvider);
     authRepository.emit(user);
-    await pumpEventQueue(times: 10);
+    await pumpEventQueue(times: 20);
 
     expect(
       container.read(authProvider).status,

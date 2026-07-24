@@ -1,0 +1,173 @@
+import 'package:optivus/models/routine_item.dart';
+
+enum HabitSystemType { goodHabit, badHabit, identity }
+
+enum HabitSystemStatus { active, paused, archived }
+
+class HabitSystemRecord {
+  final String systemId;
+  final String ownerUid;
+  final String title;
+  final String description;
+  final RoutineCategory category;
+  final HabitSystemType systemType;
+  final HabitSystemStatus status;
+  final List<String> linkedRoutineIds;
+  final String source;
+  final String? onboardingSourceId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? archivedAt;
+  final int schemaVersion;
+
+  const HabitSystemRecord({
+    required this.systemId,
+    required this.ownerUid,
+    required this.title,
+    this.description = '',
+    required this.category,
+    required this.systemType,
+    this.status = HabitSystemStatus.active,
+    this.linkedRoutineIds = const [],
+    this.source = 'user',
+    this.onboardingSourceId,
+    required this.createdAt,
+    required this.updatedAt,
+    this.archivedAt,
+    this.schemaVersion = 1,
+  });
+
+  bool get isActive => status == HabitSystemStatus.active;
+  bool get isPaused => status == HabitSystemStatus.paused;
+  bool get isArchived => status == HabitSystemStatus.archived;
+
+  HabitSystemRecord copyWith({
+    String? systemId,
+    String? ownerUid,
+    String? title,
+    String? description,
+    RoutineCategory? category,
+    HabitSystemType? systemType,
+    HabitSystemStatus? status,
+    List<String>? linkedRoutineIds,
+    String? source,
+    String? onboardingSourceId,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? archivedAt,
+    bool clearArchivedAt = false,
+    int? schemaVersion,
+  }) {
+    return HabitSystemRecord(
+      systemId: systemId ?? this.systemId,
+      ownerUid: ownerUid ?? this.ownerUid,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      category: category ?? this.category,
+      systemType: systemType ?? this.systemType,
+      status: status ?? this.status,
+      linkedRoutineIds: linkedRoutineIds ?? this.linkedRoutineIds,
+      source: source ?? this.source,
+      onboardingSourceId: onboardingSourceId ?? this.onboardingSourceId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
+      schemaVersion: schemaVersion ?? this.schemaVersion,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'systemId': systemId,
+      'ownerUid': ownerUid,
+      'title': title,
+      'description': description,
+      'category': category.name,
+      'systemType': systemType.name,
+      'status': status.name,
+      'linkedRoutineIds': linkedRoutineIds,
+      'source': source,
+      if (onboardingSourceId != null) 'onboardingSourceId': onboardingSourceId,
+      'createdAt': createdAt.toUtc().toIso8601String(),
+      'updatedAt': updatedAt.toUtc().toIso8601String(),
+      if (archivedAt != null)
+        'archivedAt': archivedAt!.toUtc().toIso8601String(),
+      'schemaVersion': schemaVersion,
+    };
+  }
+
+  factory HabitSystemRecord.fromMap(
+    Map<String, dynamic> map, {
+    String? documentId,
+  }) {
+    final rawSystemId = (map['systemId'] as String?) ?? documentId ?? '';
+    final rawOwnerUid = (map['ownerUid'] as String?) ?? '';
+    final rawTitle = (map['title'] as String?) ?? 'Untitled System';
+    final rawDescription = (map['description'] as String?) ?? '';
+
+    RoutineCategory parsedCategory;
+    try {
+      parsedCategory = RoutineCategory.values.byName(map['category'] as String);
+    } catch (_) {
+      parsedCategory = RoutineCategory.habit;
+    }
+
+    HabitSystemType parsedType;
+    try {
+      parsedType = HabitSystemType.values.byName(map['systemType'] as String);
+    } catch (_) {
+      parsedType = HabitSystemType.goodHabit;
+    }
+
+    HabitSystemStatus parsedStatus;
+    try {
+      parsedStatus = HabitSystemStatus.values.byName(map['status'] as String);
+    } catch (_) {
+      parsedStatus = HabitSystemStatus.active;
+    }
+
+    final linkedList =
+        (map['linkedRoutineIds'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .where((e) => e.isNotEmpty)
+            .toList() ??
+        const [];
+
+    DateTime parseDate(dynamic value) {
+      if (value == null) return DateTime.now().toUtc();
+      if (value is String) return DateTime.parse(value).toUtc();
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value).toUtc();
+      }
+      // Handle Firestore Timestamp if passed as object
+      try {
+        final dynamic t = value;
+        return (t.toDate() as DateTime).toUtc();
+      } catch (_) {
+        return DateTime.now().toUtc();
+      }
+    }
+
+    DateTime? parseNullableDate(dynamic value) {
+      if (value == null) return null;
+      return parseDate(value);
+    }
+
+    return HabitSystemRecord(
+      systemId: rawSystemId,
+      ownerUid: rawOwnerUid,
+      title: rawTitle,
+      description: rawDescription,
+      category: parsedCategory,
+      systemType: parsedType,
+      status: parsedStatus,
+      linkedRoutineIds: List.unmodifiable(linkedList),
+      source: (map['source'] as String?) ?? 'user',
+      onboardingSourceId: map['onboardingSourceId'] as String?,
+      createdAt: parseDate(map['createdAt']),
+      updatedAt: parseDate(map['updatedAt']),
+      archivedAt: parseNullableDate(map['archivedAt']),
+      schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? 1,
+    );
+  }
+}

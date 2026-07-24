@@ -121,9 +121,27 @@ function projectionData(uid = "user123", overrides = {}) {
   };
 }
 
+function habitSystemData(uid = "user123", id = "habitsys-1", overrides = {}) {
+  return {
+    systemId: id,
+    ownerUid: uid,
+    title: "Daily Meditation",
+    description: "10m morning mindfulness",
+    category: "meditation",
+    systemType: "goodHabit",
+    status: "active",
+    linkedRoutineIds: ["routine-item-1"],
+    source: "user",
+    createdAt: "2026-07-24T00:00:00.000Z",
+    updatedAt: "2026-07-24T00:00:00.000Z",
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: "demo-project-1234",
+    projectId: "optivus-lifeos",
     firestore: {
       rules: fs.readFileSync("firestore.rules", "utf8"),
     },
@@ -338,6 +356,30 @@ describe("Firestore Rules for Routine durability", () => {
     })));
   });
 
+  it("allows verified owner Habit System reads, writes, and updates", async () => {
+    const db = ownerDb();
+    const docRef = db.collection("users").doc("user123").collection("habitSystems").doc("habitsys-1");
+
+    await assertSucceeds(docRef.set(habitSystemData()));
+    await assertSucceeds(docRef.update({ title: "Updated Meditation", status: "paused" }));
+    await assertSucceeds(docRef.delete());
+  });
+
+  it("rejects cross-user Habit System access and ownerUid mutation", async () => {
+    const db = ownerDb("other_user");
+    const docRef = db.collection("users").doc("user123").collection("habitSystems").doc("habitsys-1");
+
+    await assertFails(docRef.set(habitSystemData("user123")));
+    await assertFails(docRef.get());
+
+    const owner = ownerDb("user123");
+    const ownerDoc = owner.collection("users").doc("user123").collection("habitSystems").doc("habitsys-1");
+    await assertSucceeds(ownerDoc.set(habitSystemData("user123")));
+
+    await assertFails(ownerDoc.update({ ownerUid: "hacker" }));
+    await assertFails(ownerDoc.update({ systemId: "other_id" }));
+  });
+
   it("does not let the catch-all bypass strict Routine collections", async () => {
     const db = ownerDb();
 
@@ -354,6 +396,14 @@ describe("Firestore Rules for Routine durability", () => {
       db.collection("users").doc("user123").collection("routineProjections").doc("other-projection").set(projectionData("user123", {
         id: "other-projection",
       }))
+    );
+
+    await assertFails(
+      db.collection("users").doc("user123").collection("habitSystems").doc("habitsys-1").set({
+        systemId: "habitsys-1",
+        ownerUid: "user123",
+        unknownField: true,
+      })
     );
   });
 });
