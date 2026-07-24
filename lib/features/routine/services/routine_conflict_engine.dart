@@ -263,10 +263,36 @@ class RoutineConflictEngine {
         );
 
         if (aTitle == bTitle && a.category == b.category) {
+          final conflictType = RoutineConflictType.duplicateRoutine;
+          
+          final fingerprint = '${a.startMinute}-${a.endMinute}_${b.startMinute}-${b.endMinute}_${conflictType.name}';
+          final dateKey = routineLocalDateKey(day);
+          final canonicalPairId = ([a.id, b.id]..sort()).join('_');
+
+          final aAllows = a.allowedConflicts.any(
+            (c) =>
+                c.canonicalPairId == canonicalPairId &&
+                c.conflictType == conflictType.name &&
+                c.scheduleFingerprint == fingerprint &&
+                c.evaluatedDateKey == dateKey,
+          );
+
+          final bAllows = b.allowedConflicts.any(
+            (c) =>
+                c.canonicalPairId == canonicalPairId &&
+                c.conflictType == conflictType.name &&
+                c.scheduleFingerprint == fingerprint &&
+                c.evaluatedDateKey == dateKey,
+          );
+
+          if (aAllows && bAllows) {
+            continue; // Authorized Keep Both
+          }
+
           conflicts.add(
             RoutineConflict(
               id: 'duplicate-${a.id}-${b.id}',
-              type: RoutineConflictType.duplicateRoutine,
+              type: conflictType,
               itemId: a.id,
               otherItemId: b.id,
               title: 'Duplicate task',
