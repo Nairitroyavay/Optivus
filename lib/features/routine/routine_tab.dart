@@ -151,7 +151,7 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
                   conflictCount: conflictCount,
                   onTap: () => showRoutineConflictResolverSheet(context, ref),
                 ),
-                
+
                 // ── Write Status Banner ──
                 const RoutineWriteStatusBanner(),
 

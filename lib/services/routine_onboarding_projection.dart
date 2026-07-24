@@ -85,8 +85,10 @@ class RoutineOnboardingProjection {
       projectedItemIds: projectedItems
           .map((item) => item.id)
           .toList(growable: false),
+      status: 'pending',
+      cursor: 0,
       createdAt: timestamp,
-      completedAt: timestamp,
+      updatedAt: timestamp,
     );
 
     return RoutineOnboardingProjectionPlan(

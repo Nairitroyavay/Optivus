@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
-import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/routine/utils/routine_date_utils.dart';
 import 'package:optivus/features/routine/domain/routine_conflict.dart';
 import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
@@ -66,13 +65,40 @@ class RoutineValidationResult {
 class RoutineBatchValidationResult {
   final bool isValid;
   final List<RoutineValidationResult> itemFailures;
+  final bool durableSaved;
+  final bool retryRequired;
+  final String? message;
+  final String? operationId;
 
-  const RoutineBatchValidationResult.valid()
-    : isValid = true,
-      itemFailures = const [];
+  const RoutineBatchValidationResult.valid({
+    this.durableSaved = true,
+    this.retryRequired = false,
+    this.message,
+    this.operationId,
+  }) : isValid = true,
+       itemFailures = const [];
 
-  const RoutineBatchValidationResult.invalid(this.itemFailures)
-    : isValid = false;
+  const RoutineBatchValidationResult.invalid(this.itemFailures, {this.message})
+    : isValid = false,
+      durableSaved = false,
+      retryRequired = false,
+      operationId = null;
+
+  const RoutineBatchValidationResult.retryRequired({
+    required this.message,
+    required this.operationId,
+  }) : isValid = true,
+       itemFailures = const [],
+       durableSaved = false,
+       retryRequired = true;
+
+  const RoutineBatchValidationResult.superseded({
+    required this.operationId,
+    this.message,
+  }) : isValid = true,
+       itemFailures = const [],
+       durableSaved = false,
+       retryRequired = false;
 }
 
 class RoutineValidationService {
@@ -223,9 +249,7 @@ class RoutineValidationService {
     }
 
     // 2. Conflict validation across all applicable dates
-    final datesToCheck = <DateTime>[
-      routineDateOnly(context.evaluationDate),
-    ];
+    final datesToCheck = <DateTime>[routineDateOnly(context.evaluationDate)];
     if (item.repeatDays.isNotEmpty) {
       final monday = context.evaluationDate.subtract(
         Duration(days: context.evaluationDate.weekday - 1),
@@ -287,6 +311,7 @@ class RoutineValidationService {
     required List<RoutineOccurrenceRecord> occurrences,
     required DateTime evaluationDate,
     DateTime? explicitNow,
+    required String authenticatedOwnerUid,
   }) {
     if (itemsToAdd.isEmpty) {
       return const RoutineBatchValidationResult.valid();
@@ -315,6 +340,7 @@ class RoutineValidationService {
         explicitNow: explicitNow,
         operation: RoutineValidationOperation.batch,
         batchCandidates: itemsToAdd,
+        authenticatedOwnerUid: authenticatedOwnerUid,
       );
 
       final v = validate(context);

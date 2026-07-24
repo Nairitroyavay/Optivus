@@ -78,14 +78,16 @@ class FakeOnboardingRepository implements OnboardingRepository {
     nextDrafts[bundle.uid] = finalDraft;
     nextBundles[bundle.uid] = bundle;
     final userItems = nextItemsByUid.putIfAbsent(bundle.uid, () => {});
+    final createdItemIds = <String>[];
     const codec = RoutineTemplateFirestoreCodec();
     for (final item in plan.items) {
       if (userItems.containsKey(item.id)) continue;
       codec.toFirestore(ownerUid: bundle.uid, item: item);
       userItems[item.id] = item;
+      createdItemIds.add(item.id);
     }
     nextReceiptsByUid.putIfAbsent(bundle.uid, () => {})[plan.projectionId] =
-        plan.receipt;
+        _receiptForCreatedItems(plan.receipt, createdItemIds);
 
     if (_failNextCompletionBeforeCommit) {
       _failNextCompletionBeforeCommit = false;
@@ -100,7 +102,7 @@ class FakeOnboardingRepository implements OnboardingRepository {
     routineDatabase.receiptsByUid = nextReceiptsByUid;
     return RoutineProjectionResult(
       outcome: RoutineProjectionOutcome.projected,
-      receipt: plan.receipt,
+      receipt: _receiptForCreatedItems(plan.receipt, createdItemIds),
     );
   }
 
@@ -218,6 +220,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           bundle.userProfilePatch,
           SetOptions(merge: true),
         );
+        final createdItemIds = <String>[];
         for (var index = 0; index < plan.items.length; index++) {
           if (itemSnapshots[index].exists) continue;
           final data = _routineCodec.toFirestore(
@@ -227,15 +230,17 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           data['createdAt'] = FieldValue.serverTimestamp();
           data['updatedAt'] = FieldValue.serverTimestamp();
           transaction.set(itemReferences[index], data);
+          createdItemIds.add(plan.items[index].id);
         }
-        final receiptData = _receiptCodec.toFirestore(plan.receipt);
+        final receipt = _receiptForCreatedItems(plan.receipt, createdItemIds);
+        final receiptData = _receiptCodec.toFirestore(receipt);
         receiptData['createdAt'] = FieldValue.serverTimestamp();
-        receiptData['completedAt'] = FieldValue.serverTimestamp();
+        receiptData['updatedAt'] = FieldValue.serverTimestamp();
         transaction.set(receiptReference, receiptData);
 
         return RoutineProjectionResult(
           outcome: RoutineProjectionOutcome.projected,
-          receipt: plan.receipt,
+          receipt: receipt,
         );
       });
     } on RoutineProjectionRetryRequiredException {
@@ -248,6 +253,28 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
       throw RoutineProjectionRetryRequiredException(error);
     }
   }
+}
+
+RoutineProjectionReceipt _receiptForCreatedItems(
+  RoutineProjectionReceipt receipt,
+  List<String> createdItemIds,
+) {
+  return RoutineProjectionReceipt(
+    id: receipt.id,
+    ownerUid: receipt.ownerUid,
+    source: receipt.source,
+    sourceBundleSchemaVersion: receipt.sourceBundleSchemaVersion,
+    sourceBundleId: receipt.sourceBundleId,
+    sourceBundleFingerprint: receipt.sourceBundleFingerprint,
+    projectedItemIds: createdItemIds.toSet().toList(growable: false)..sort(),
+    eventSchemaVersion: receipt.eventSchemaVersion,
+    status: 'pending',
+    cursor: 0,
+    createdAt: receipt.createdAt,
+    updatedAt: receipt.updatedAt,
+    completedAt: null,
+    schemaVersion: receipt.schemaVersion,
+  );
 }
 
 void _validateCompletion(

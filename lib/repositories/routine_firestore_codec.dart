@@ -34,7 +34,6 @@ class RoutineTemplateFirestoreCodec {
     'caloriesEstimate',
     'proteinEstimate',
     'hardBlock',
-    'allowedOverlaps',
     'allowedConflicts',
     'onboardingProjectionId',
     'onboardingSourceItemId',
@@ -114,6 +113,15 @@ class RoutineTemplateFirestoreCodec {
       );
     }
     final strict = schemaVersion == RoutineItem.currentSchemaVersion;
+    if (strict) {
+      final unknownKeys = data.keys.toSet().difference(allowedFields);
+      if (unknownKeys.isNotEmpty) {
+        throw FormatException(
+          'Routine template contains unsupported fields: '
+          '${unknownKeys.join(', ')}.',
+        );
+      }
+    }
     final id = _requiredString(data, 'id', fallback: documentId);
     if (id != documentId) {
       throw const FormatException(
@@ -328,8 +336,13 @@ class RoutineProjectionReceiptFirestoreCodec {
         RoutineProjectionReceipt.currentSchemaVersion) {
       throw ArgumentError('Unsupported Routine projection receipt schema.');
     }
-    if (receipt.status != 'completed' || receipt.source != 'onboarding') {
+    if ((receipt.status != 'pending' && receipt.status != 'completed') ||
+        receipt.source != 'onboarding') {
       throw ArgumentError('Invalid Routine projection receipt status/source.');
+    }
+    if (receipt.eventSchemaVersion !=
+        RoutineProjectionReceipt.currentEventSchemaVersion) {
+      throw ArgumentError('Unsupported Routine projection event schema.');
     }
     if (receipt.sourceBundleSchemaVersion < 1 ||
         receipt.sourceBundleId.trim().isEmpty ||
@@ -347,6 +360,22 @@ class RoutineProjectionReceiptFirestoreCodec {
     for (final itemId in receipt.projectedItemIds) {
       validateDocumentId(itemId);
     }
+    if (receipt.totalCount != receipt.projectedItemIds.length ||
+        receipt.cursor < 0 ||
+        receipt.cursor > receipt.totalCount) {
+      throw ArgumentError('Invalid Routine projection cursor.');
+    }
+    if (receipt.status == 'completed') {
+      if (receipt.completedAt == null || receipt.cursor != receipt.totalCount) {
+        throw ArgumentError('Completed projection receipt is inconsistent.');
+      }
+    } else if (receipt.completedAt != null) {
+      throw ArgumentError('Pending projection receipt cannot be completed.');
+    }
+    final lastSafeError = receipt.lastSafeError?.trim();
+    if (lastSafeError != null && lastSafeError.length > 500) {
+      throw ArgumentError('Projection receipt error is too long.');
+    }
     return {
       'id': receipt.id,
       'ownerUid': receipt.ownerUid,
@@ -355,9 +384,16 @@ class RoutineProjectionReceiptFirestoreCodec {
       'sourceBundleId': receipt.sourceBundleId,
       'sourceBundleFingerprint': receipt.sourceBundleFingerprint,
       'projectedItemIds': receipt.projectedItemIds,
+      'eventSchemaVersion': receipt.eventSchemaVersion,
+      'totalCount': receipt.totalCount,
+      'cursor': receipt.cursor,
       'status': receipt.status,
       'createdAt': Timestamp.fromDate(receipt.createdAt.toUtc()),
-      'completedAt': Timestamp.fromDate(receipt.completedAt.toUtc()),
+      'updatedAt': Timestamp.fromDate(receipt.updatedAt.toUtc()),
+      if (receipt.completedAt != null)
+        'completedAt': Timestamp.fromDate(receipt.completedAt!.toUtc()),
+      if (lastSafeError != null && lastSafeError.isNotEmpty)
+        'lastSafeError': lastSafeError,
       'schemaVersion': receipt.schemaVersion,
     };
   }
@@ -371,6 +407,8 @@ class RoutineProjectionReceiptFirestoreCodec {
     if (id != documentId) {
       throw const FormatException('Projection receipt ID mismatch.');
     }
+    final projectedItemIds =
+        _readStringList(data['projectedItemIds']) ?? const <String>[];
     final receipt = RoutineProjectionReceipt(
       id: id,
       ownerUid: _requiredString(data, 'ownerUid'),
@@ -381,14 +419,26 @@ class RoutineProjectionReceiptFirestoreCodec {
       ),
       sourceBundleId: _requiredString(data, 'sourceBundleId'),
       sourceBundleFingerprint: _requiredString(data, 'sourceBundleFingerprint'),
-      projectedItemIds: _readStringList(data['projectedItemIds']) ?? const [],
+      projectedItemIds: projectedItemIds,
+      eventSchemaVersion: _readInt(
+        data['eventSchemaVersion'],
+        fallback: RoutineProjectionReceipt.currentEventSchemaVersion,
+      ),
+      totalCount: _readInt(
+        data['totalCount'],
+        fallback: projectedItemIds.length,
+      ),
+      cursor: _readInt(data['cursor'], fallback: 0),
       status: _requiredString(data, 'status'),
       createdAt:
           readRoutineDateTime(data['createdAt']) ??
           (throw const FormatException('Projection createdAt is required.')),
-      completedAt:
-          readRoutineDateTime(data['completedAt']) ??
-          (throw const FormatException('Projection completedAt is required.')),
+      updatedAt:
+          readRoutineDateTime(data['updatedAt']) ??
+          readRoutineDateTime(data['createdAt']) ??
+          (throw const FormatException('Projection updatedAt is required.')),
+      completedAt: readRoutineDateTime(data['completedAt']),
+      lastSafeError: _optionalString(data['lastSafeError']),
       schemaVersion: _readInt(data['schemaVersion'], fallback: 0),
     );
     // Reuse write validation without retaining its result.

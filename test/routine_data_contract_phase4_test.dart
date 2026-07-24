@@ -56,6 +56,21 @@ void main() {
       expect(map, isNot(contains('subtasksCompleted')));
       expect(map, isNot(contains('isContinuation')));
       expect(map, isNot(contains('skincareProducts')));
+      expect(map, isNot(contains('allowedOverlaps')));
+      expect(
+        RoutineTemplateFirestoreCodec.allowedFields,
+        isNot(contains('allowedOverlaps')),
+      );
+    });
+
+    test('rejects legacy allowedOverlaps in current Firestore schema', () {
+      final map = codec.toFirestore(ownerUid: 'user-a', item: _routineItem());
+      map['allowedOverlaps'] = ['routine-b'];
+
+      expect(
+        () => codec.fromFirestore(documentId: 'routine-a', data: map),
+        throwsFormatException,
+      );
     });
 
     test('reads Firestore Timestamp values', () {

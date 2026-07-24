@@ -49,6 +49,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   late String _bestTime;
   String _fixedKind = 'Class';
   String? _error;
+  bool _saving = false;
 
   bool get _editing => widget.editItem != null;
 
@@ -331,7 +332,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed: _letAiPlace,
+                onPressed: _saving ? null : _letAiPlace,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: OptivusColors.routineAccent),
                   shape: RoundedRectangleBorder(
@@ -352,7 +353,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
             const SizedBox(width: 10),
             Expanded(
               child: ElevatedButton(
-                onPressed: blockingConflict ? null : _save,
+                onPressed: blockingConflict || _saving ? null : _save,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: OptivusColors.routineAccent,
                   disabledBackgroundColor: OptivusColors.disabled,
@@ -362,13 +363,22 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: Text(
-                  _editing ? 'Save changes' : 'Save at this time',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        _editing ? 'Save changes' : 'Save at this time',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
               ),
             ),
           ],
@@ -915,6 +925,7 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   }
 
   void _letAiPlace() {
+    if (_saving) return;
     final draft = _draftItem();
     final slot = ref
         .read(routineNotifierProvider.notifier)
@@ -934,24 +945,38 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final validation = _validate();
     if (validation != null) {
       setState(() => _error = validation);
       return;
     }
     final item = _draftItem();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     RoutineWriteResult result;
     if (_editing) {
-      result = await ref.read(routineNotifierProvider.notifier).updateItem(item);
+      result = await ref
+          .read(routineNotifierProvider.notifier)
+          .updateItem(item);
     } else {
       result = await ref.read(routineNotifierProvider.notifier).addItem(item);
     }
     if (!mounted) return;
-    if (result.outcome == RoutineWriteOutcome.saved || result.outcome == RoutineWriteOutcome.noOp) {
+    if (result.outcome == RoutineWriteOutcome.saved ||
+        result.outcome == RoutineWriteOutcome.noOp) {
       Navigator.of(context).pop();
-    } else if (result.outcome != RoutineWriteOutcome.validationFailed) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.errorMessage ?? 'Failed to save item')));
+      return;
     }
+    setState(() {
+      _saving = false;
+      _error =
+          result.validation?.userSafeMessage ??
+          result.message ??
+          'Failed to save item. Please adjust the form and retry.';
+    });
   }
 
   String? _validate() {

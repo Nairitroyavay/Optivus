@@ -1075,11 +1075,12 @@ class _RoutineImportReviewScreenState
         appliedItems.add(itemWithUser);
         if (existingIds.contains(item.id)) continue;
         final result = await routineController.addItem(itemWithUser);
-        if (result.outcome != RoutineWriteOutcome.saved && result.outcome != RoutineWriteOutcome.noOp) {
+        if (result.outcome != RoutineWriteOutcome.saved &&
+            result.outcome != RoutineWriteOutcome.noOp) {
           if (!mounted) return;
           setState(() {
             _saving = false;
-            _errorMessage = result.errorMessage ?? 'Failed to save item.';
+            _errorMessage = result.message ?? 'Failed to save item.';
           });
           return;
         }

@@ -53,9 +53,7 @@ class RoutineTemplateModel {
   }) {
     final title = _cleanString(map['title'] ?? map['name']);
     return RoutineTemplateModel(
-      templateId: _cleanString(
-        map['templateId'] ?? map['id'] ?? fallbackId,
-      ),
+      templateId: _cleanString(map['templateId'] ?? map['id'] ?? fallbackId),
       title: title,
       routineType: _cleanString(map['routineType']).isNotEmpty
           ? _cleanString(map['routineType'])
@@ -70,14 +68,16 @@ class RoutineTemplateModel {
       ),
       repeatRule:
           _cleanString(map['repeatRule'] ?? map['weekdayRule']).isNotEmpty
-              ? _cleanString(map['repeatRule'] ?? map['weekdayRule'])
-              : 'daily',
+          ? _cleanString(map['repeatRule'] ?? map['weekdayRule'])
+          : 'daily',
       category: _cleanString(map['category']),
       notes: _cleanString(map['notes']),
       steps: _mapList(map['steps']),
       warnings: _stringList(map['warnings']),
-      confidence:
-          _asDouble(map['confidence'], fallback: 1).clamp(0, 1).toDouble(),
+      confidence: _asDouble(
+        map['confidence'],
+        fallback: 1,
+      ).clamp(0, 1).toDouble(),
       reminderEnabled: map['reminderEnabled'] == true,
       reminderOffsetMinutes: _asInt(
         map['reminderOffsetMinutes'],
@@ -195,7 +195,7 @@ class RoutineTemplateModel {
   }
 
   static Map<String, dynamic> _sortMap(Map<String, dynamic> map) {
-    final sortedKeys = map.keys.toList()....sort();
+    final sortedKeys = map.keys.toList()..sort();
     return {
       for (final key in sortedKeys)
         key: map[key] is Map
@@ -281,14 +281,16 @@ bool _asActive(Map<String, dynamic> map) {
 
 List<Map<String, dynamic>> _mapList(Object? value) {
   if (value is! List) return const [];
-  return value.map((item) {
-    if (item is Map) {
-      return {
-        for (final entry in item.entries) entry.key.toString(): entry.value
-      };
-    }
-    return {'name': item.toString()};
-  }).toList(growable: false);
+  return value
+      .map((item) {
+        if (item is Map) {
+          return {
+            for (final entry in item.entries) entry.key.toString(): entry.value,
+          };
+        }
+        return {'name': item.toString()};
+      })
+      .toList(growable: false);
 }
 
 List<String> _stringList(Object? value) {
@@ -304,9 +306,7 @@ List<String> _stringList(Object? value) {
 
 Map<String, dynamic> _stringKeyMap(Object? value) {
   if (value is! Map) return const {};
-  return {
-    for (final entry in value.entries) entry.key.toString(): entry.value,
-  };
+  return {for (final entry in value.entries) entry.key.toString(): entry.value};
 }
 
 int _asInt(Object? value, {required int fallback}) {

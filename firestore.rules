@@ -171,7 +171,7 @@ service cloud.firestore {
         "caloriesEstimate",
         "proteinEstimate",
         "hardBlock",
-        "allowOverlap",
+        "allowedConflicts",
         "onboardingProjectionId",
         "onboardingSourceItemId",
         "createdByOperationId",
@@ -266,6 +266,62 @@ service cloud.firestore {
           : data.endMinute > data.startMinute);
     }
 
+    function validRoutineDocumentId(value) {
+      return value is string
+        && value.size() > 0
+        && value.size() <= 128
+        && value.matches("^[^/]+$");
+    }
+
+    function validRoutineConflictType(value) {
+      return value == "timeOverlap"
+        || value == "duplicateRoutine"
+        || value == "trackerTaskNotCompleted"
+        || value == "tooManyTasks";
+    }
+
+    function validRoutineAllowedConflict(data) {
+      return data is map
+        && data.keys().hasOnly([
+          "schemaVersion",
+          "canonicalPairId",
+          "conflictType",
+          "evaluatedDateKey",
+          "scheduleFingerprint"
+        ])
+        && data.keys().hasAll([
+          "schemaVersion",
+          "canonicalPairId",
+          "conflictType",
+          "evaluatedDateKey",
+          "scheduleFingerprint"
+        ])
+        && data.schemaVersion == 1
+        && data.canonicalPairId is string
+        && data.canonicalPairId.size() > 0
+        && data.canonicalPairId.size() <= 260
+        && validRoutineConflictType(data.conflictType)
+        && validRoutineDateKey(data.evaluatedDateKey)
+        && data.scheduleFingerprint is string
+        && data.scheduleFingerprint.size() > 0
+        && data.scheduleFingerprint.size() <= 512;
+    }
+
+    function validRoutineAllowedConflicts(allowances) {
+      return allowances is list
+        && allowances.size() <= 10
+        && (allowances.size() <= 0 || validRoutineAllowedConflict(allowances[0]))
+        && (allowances.size() <= 1 || validRoutineAllowedConflict(allowances[1]))
+        && (allowances.size() <= 2 || validRoutineAllowedConflict(allowances[2]))
+        && (allowances.size() <= 3 || validRoutineAllowedConflict(allowances[3]))
+        && (allowances.size() <= 4 || validRoutineAllowedConflict(allowances[4]))
+        && (allowances.size() <= 5 || validRoutineAllowedConflict(allowances[5]))
+        && (allowances.size() <= 6 || validRoutineAllowedConflict(allowances[6]))
+        && (allowances.size() <= 7 || validRoutineAllowedConflict(allowances[7]))
+        && (allowances.size() <= 8 || validRoutineAllowedConflict(allowances[8]))
+        && (allowances.size() <= 9 || validRoutineAllowedConflict(allowances[9]));
+    }
+
     function validRoutineTemplate(data, itemId) {
       return validRoutineTemplateKeys(data)
         && data.keys().hasAll([
@@ -285,7 +341,7 @@ service cloud.firestore {
           "isTrackerLinked",
           "trackerType",
           "hardBlock",
-          "allowOverlap",
+          "allowedConflicts",
           "createdAt",
           "updatedAt",
           "schemaVersion"
@@ -323,7 +379,7 @@ service cloud.firestore {
         && data.isTrackerLinked is bool
         && validRoutineTrackerType(data.trackerType)
         && data.hardBlock is bool
-        && data.allowOverlap is bool
+        && validRoutineAllowedConflicts(data.allowedConflicts)
         && (!data.keys().hasAny(["location"]) || data.location is string)
         && (!data.keys().hasAny(["notes"]) || data.notes is string)
         && (!data.keys().hasAny(["bestTime"]) || data.bestTime is string)
@@ -374,6 +430,7 @@ service cloud.firestore {
           "completedSubtaskIndexes",
           "note",
           "displayTitleOverride",
+          "undoToPlannedAllowed",
           "createdAt",
           "updatedAt",
           "schemaVersion"
@@ -388,6 +445,7 @@ service cloud.firestore {
           "action",
           "operationKey",
           "completedSubtaskIndexes",
+          "undoToPlannedAllowed",
           "createdAt",
           "updatedAt",
           "schemaVersion"
@@ -409,6 +467,7 @@ service cloud.firestore {
           || data.action == "skip"
           || data.action == "miss"
           || data.action == "move"
+          || data.action == "reschedule"
           || data.action == "checkIn"
           || data.action == "toggleSubtask"
           || data.action == "makeTiny")
@@ -431,6 +490,7 @@ service cloud.firestore {
           80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
           90, 91, 92, 93, 94, 95, 96, 97, 98, 99
         ])
+        && data.undoToPlannedAllowed is bool
         && (!data.keys().hasAny(["note"]) || data.note is string)
         && (!data.keys().hasAny(["displayTitleOverride"])
           || data.displayTitleOverride is string)
@@ -453,6 +513,120 @@ service cloud.firestore {
         && data.schemaVersion == 1;
     }
 
+    function validRoutineEventType(value) {
+      return value == "created"
+        || value == "edited"
+        || value == "deleted"
+        || value == "started"
+        || value == "completed"
+        || value == "skipped"
+        || value == "missed"
+        || value == "moved"
+        || value == "rescheduled"
+        || value == "undone";
+    }
+
+    function validRoutineEventSource(value) {
+      return value == "app"
+        || value == "routine"
+        || value == "tracker"
+        || value == "checkIn"
+        || value == "money"
+        || value == "system"
+        || value == "onboarding";
+    }
+
+    function validRoutineEventSnapshot(snapshot, routineItemId) {
+      return snapshot is map
+        && snapshot.keys().hasOnly([
+          "id",
+          "title",
+          "startMinute",
+          "durationMinutes",
+          "blockType",
+          "trackerTaskType",
+          "hardBlock",
+          "onboardingProjectionId"
+        ])
+        && snapshot.keys().hasAll([
+          "id",
+          "title",
+          "startMinute",
+          "durationMinutes",
+          "blockType",
+          "trackerTaskType",
+          "hardBlock"
+        ])
+        && snapshot.id == routineItemId
+        && validRoutineDocumentId(snapshot.id)
+        && snapshot.title is string
+        && snapshot.title.size() > 0
+        && snapshot.title.size() <= 200
+        && snapshot.startMinute is int
+        && snapshot.startMinute >= 0
+        && snapshot.startMinute <= 1439
+        && snapshot.durationMinutes is int
+        && snapshot.durationMinutes > 0
+        && snapshot.durationMinutes <= 1440
+        && validRoutineBlockType(snapshot.blockType)
+        && validRoutineTrackerType(snapshot.trackerTaskType)
+        && snapshot.hardBlock is bool
+        && (!snapshot.keys().hasAny(["onboardingProjectionId"])
+          || snapshot.onboardingProjectionId is string);
+    }
+
+    function validRoutineEvent(data, eventId) {
+      return data.keys().hasOnly([
+          "schemaVersion",
+          "eventId",
+          "ownerUid",
+          "routineItemId",
+          "occurrenceId",
+          "occurrenceDateKey",
+          "eventType",
+          "operationKey",
+          "source",
+          "occurredAt",
+          "itemSnapshot"
+        ])
+        && data.keys().hasAll([
+          "schemaVersion",
+          "eventId",
+          "ownerUid",
+          "routineItemId",
+          "eventType",
+          "operationKey",
+          "source",
+          "occurredAt",
+          "itemSnapshot"
+        ])
+        && data.schemaVersion == 1
+        && data.eventId == eventId
+        && validRoutineDocumentId(data.eventId)
+        && data.ownerUid == request.auth.uid
+        && validRoutineDocumentId(data.routineItemId)
+        && (!data.keys().hasAny(["occurrenceId"])
+          || validRoutineDocumentId(data.occurrenceId))
+        && (!data.keys().hasAny(["occurrenceDateKey"])
+          || validRoutineDateKey(data.occurrenceDateKey))
+        && validRoutineEventType(data.eventType)
+        && data.operationKey is string
+        && data.operationKey.size() > 0
+        && data.operationKey.size() <= 256
+        && validRoutineEventSource(data.source)
+        && data.occurredAt is timestamp
+        && validRoutineEventSnapshot(data.itemSnapshot, data.routineItemId)
+        && ((data.eventType == "started"
+              || data.eventType == "completed"
+              || data.eventType == "skipped"
+              || data.eventType == "missed"
+              || data.eventType == "moved"
+              || data.eventType == "rescheduled"
+              || data.eventType == "undone")
+          ? data.keys().hasAll(["occurrenceId", "occurrenceDateKey"])
+          : true);
+    }
+
     function validRoutineProjectionReceipt(data, projectionId) {
       return projectionId == "onboarding-initial-v1"
         && data.keys().hasOnly([
@@ -463,9 +637,14 @@ service cloud.firestore {
           "sourceBundleId",
           "sourceBundleFingerprint",
           "projectedItemIds",
+          "eventSchemaVersion",
+          "totalCount",
+          "cursor",
           "status",
           "createdAt",
+          "updatedAt",
           "completedAt",
+          "lastSafeError",
           "schemaVersion"
         ])
         && data.keys().hasAll([
@@ -478,7 +657,6 @@ service cloud.firestore {
           "projectedItemIds",
           "status",
           "createdAt",
-          "completedAt",
           "schemaVersion"
         ])
         && data.id == projectionId
@@ -494,10 +672,53 @@ service cloud.firestore {
         && data.projectedItemIds is list
         && data.projectedItemIds.size() <= 450
         && data.projectedItemIds.size() == data.projectedItemIds.toSet().size()
-        && data.status == "completed"
+        && (data.status == "pending" || data.status == "completed")
+        && (!data.keys().hasAny(["eventSchemaVersion"])
+          || data.eventSchemaVersion == 1)
+        && (!data.keys().hasAny(["totalCount"])
+          || (data.totalCount is int
+            && data.totalCount == data.projectedItemIds.size()))
+        && (!data.keys().hasAny(["cursor"])
+          || (data.cursor is int
+            && data.cursor >= 0
+            && (!data.keys().hasAny(["totalCount"]) || data.cursor <= data.totalCount)))
         && data.createdAt is timestamp
-        && data.completedAt is timestamp
+        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp)
+        && (data.status == "completed"
+          ? data.keys().hasAll(["completedAt"])
+            && data.completedAt is timestamp
+            && (!data.keys().hasAny(["totalCount", "cursor"])
+              || (data.keys().hasAll(["totalCount", "cursor"])
+                && data.cursor == data.totalCount))
+          : !data.keys().hasAny(["completedAt"]))
+        && (!data.keys().hasAny(["lastSafeError"])
+          || (data.lastSafeError is string
+            && data.lastSafeError.size() <= 500))
         && data.schemaVersion == 1;
+    }
+
+    function validRoutineProjectionTransition(before, after, projectionId) {
+      return validRoutineProjectionReceipt(after, projectionId)
+        && before.id == after.id
+        && before.ownerUid == after.ownerUid
+        && before.source == after.source
+        && before.sourceBundleSchemaVersion == after.sourceBundleSchemaVersion
+        && before.sourceBundleId == after.sourceBundleId
+        && before.sourceBundleFingerprint == after.sourceBundleFingerprint
+        && before.projectedItemIds == after.projectedItemIds
+        && before.createdAt == after.createdAt
+        && before.schemaVersion == after.schemaVersion
+        && before.status == "pending"
+        && (after.status == "pending" || after.status == "completed")
+        && (!before.keys().hasAny(["eventSchemaVersion"])
+          || (after.keys().hasAll(["eventSchemaVersion"])
+            && after.eventSchemaVersion == before.eventSchemaVersion))
+        && (!before.keys().hasAny(["totalCount"])
+          || (after.keys().hasAll(["totalCount"])
+            && after.totalCount == before.totalCount))
+        && (!before.keys().hasAny(["cursor"])
+          || (after.keys().hasAll(["cursor"])
+            && after.cursor >= before.cursor));
     }
 
 
@@ -628,6 +849,13 @@ service cloud.firestore {
         && resource.data.ownerUid == request.auth.uid;
     }
 
+    match /users/{uid}/routineEvents/{eventId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validRoutineEvent(request.resource.data, eventId);
+      allow update, delete: if false;
+    }
+
     match /users/{uid}/routineProjections/{projectionId} {
       allow read: if verifiedOwner(uid);
       allow create: if verifiedOwner(uid)
@@ -635,7 +863,13 @@ service cloud.firestore {
           request.resource.data,
           projectionId
         );
-      allow update, delete: if false;
+      allow update: if verifiedOwner(uid)
+        && validRoutineProjectionTransition(
+          resource.data,
+          request.resource.data,
+          projectionId
+        );
+      allow delete: if false;
     }
 
     // Phase 2B onboarding draft/completion bundle. Validation stays light for
@@ -675,6 +909,7 @@ service cloud.firestore {
         && collectionId != "routineImportReviews"
         && collectionId != "routineItems"
         && collectionId != "routineHistory"
+        && collectionId != "routineEvents"
         && collectionId != "routineProjections"
         && collectionId != "syncAllowances"
         && collectionId != "syncEvents";

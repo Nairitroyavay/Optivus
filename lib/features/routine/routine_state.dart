@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
@@ -12,13 +14,20 @@ import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/state/app_state.dart';
-import 'package:uuid/uuid.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
 import 'package:optivus/features/routine/domain/routine_conflict.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 
-enum RoutineWriteAction { create, update, delete, moveTemplate }
+enum RoutineWriteAction {
+  create,
+  update,
+  delete,
+  moveTemplate,
+  batchCreate,
+  keepBoth,
+}
 
 enum RoutineOccurrenceAction {
   start,
@@ -43,7 +52,7 @@ class RoutineOccurrenceWriteIntent {
   final RoutineOccurrenceRecord? previousRecord;
   final DateTime createdAt;
   final RoutineEventRecord? event;
-  final Completer<void>? completer;
+  final Completer<RoutineWriteResult>? completer;
 
   const RoutineOccurrenceWriteIntent({
     required this.action,
@@ -83,14 +92,18 @@ class RoutineWriteIntent {
 class RoutineBatchWriteIntent {
   final String ownerUid;
   final String operationId;
+  final RoutineWriteAction action;
   final List<RoutineItem> attemptedItems;
+  final List<RoutineItem> previousItems;
   final List<RoutineEventRecord> events;
   final DateTime createdAt;
 
   const RoutineBatchWriteIntent({
     required this.ownerUid,
     required this.operationId,
+    required this.action,
     required this.attemptedItems,
+    this.previousItems = const [],
     required this.events,
     required this.createdAt,
   });
@@ -326,7 +339,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
   Future<void> _initialLoad = Future<void>.value();
   String? _ownerUid;
   int _loadGeneration = 0;
-  StreamSubscription<List<RoutineEventRecord>>? _eventsSubscription;
+  int _eventsGeneration = 0;
+  StreamSubscription<RoutineEventFeed>? _eventsSubscription;
 
   Map<String, dynamic> _boundedHistorySnapshot(RoutineItem item, String uid) {
     // Only capture the fields required to render history reliably
@@ -342,6 +356,76 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       if (item.onboardingProjectionId != null)
         'onboardingProjectionId': item.onboardingProjectionId,
     };
+  }
+
+  Map<String, dynamic>? _historySnapshotForItemId(String itemId, String uid) {
+    final item = state.items
+        .where((candidate) => candidate.id == itemId)
+        .firstOrNull;
+    return item == null ? null : _boundedHistorySnapshot(item, uid);
+  }
+
+  String _stableOperationId(String prefix, Iterable<Object?> parts) {
+    final digest = sha256.convert(
+      utf8.encode(
+        [prefix, ...parts.map((part) => part?.toString() ?? '')].join('\u001f'),
+      ),
+    );
+    return '${prefix}_${digest.toString().substring(0, 32)}';
+  }
+
+  String _itemMutationFingerprint(RoutineItem item) {
+    final map = item.toMap();
+    map.remove('createdAt');
+    map.remove('updatedAt');
+    map.remove('createdByOperationId');
+    map.remove('lastMutationOperationId');
+    final entries = map.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return jsonEncode(Map<String, dynamic>.fromEntries(entries));
+  }
+
+  String _stableEventId({
+    required String operationId,
+    required String itemId,
+    required RoutineEventType eventType,
+  }) {
+    final digest = sha256.convert(
+      utf8.encode(
+        'routine-event-v1\u001f$operationId\u001f$itemId\u001f${eventType.name}',
+      ),
+    );
+    return 'evt_${digest.toString().substring(0, 40)}';
+  }
+
+  RoutineWriteResult _supersededWriteResult(String operationId) {
+    return RoutineWriteResult.superseded(
+      operationId: operationId,
+      message: 'Routine owner changed before the write completed.',
+    );
+  }
+
+  List<RoutineItem> _replaceItemsPreservingOrder(
+    List<RoutineItem> current,
+    List<RoutineItem> replacements,
+  ) {
+    final byId = {for (final item in replacements) item.id: item};
+    final seen = <String>{};
+    final merged = <RoutineItem>[];
+    for (final item in current) {
+      final replacement = byId[item.id];
+      if (replacement == null) {
+        merged.add(item);
+        continue;
+      }
+      if (seen.add(item.id)) {
+        merged.add(replacement);
+      }
+    }
+    for (final item in replacements) {
+      if (seen.add(item.id)) merged.add(item);
+    }
+    return merged;
   }
 
   RoutineNotifier(
@@ -455,11 +539,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         eventsLoading: true,
       );
       _recalculateConflicts();
+      final eventsGeneration = ++_eventsGeneration;
       _eventsSubscription = _transactionRepository
           .watchEvents(uid)
           .listen(
             (feed) {
-              if (mounted && _ownerUid == uid) {
+              if (mounted &&
+                  _ownerUid == uid &&
+                  _eventsGeneration == eventsGeneration &&
+                  _loadGeneration == generation) {
                 state = state.copyWith(
                   events: feed.validEvents,
                   corruptEvents: feed.corruptEvents,
@@ -469,7 +557,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               }
             },
             onError: (Object error) {
-              if (mounted && _ownerUid == uid) {
+              if (mounted &&
+                  _ownerUid == uid &&
+                  _eventsGeneration == eventsGeneration &&
+                  _loadGeneration == generation) {
                 state = state.copyWith(
                   eventsLoading: false,
                   eventsError: error.toString(),
@@ -491,11 +582,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _eventsSubscription?.cancel();
     state = state.copyWith(eventsLoading: true, clearEventsError: true);
 
+    final eventsGeneration = ++_eventsGeneration;
     _eventsSubscription = _transactionRepository
         .watchEvents(uid)
         .listen(
           (feed) {
-            if (mounted && _ownerUid == uid) {
+            if (mounted &&
+                _ownerUid == uid &&
+                _eventsGeneration == eventsGeneration) {
               state = state.copyWith(
                 events: feed.validEvents,
                 corruptEvents: feed.corruptEvents,
@@ -505,7 +599,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             }
           },
           onError: (Object error) {
-            if (mounted && _ownerUid == uid) {
+            if (mounted &&
+                _ownerUid == uid &&
+                _eventsGeneration == eventsGeneration) {
               state = state.copyWith(
                 eventsLoading: false,
                 eventsError: error.toString(),
@@ -519,6 +615,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _eventsSubscription?.cancel();
     _eventsSubscription = null;
     _loadGeneration++;
+    _eventsGeneration++;
     _ownerUid = null;
     _ref.read(trackerSessionLinksProvider.notifier).reset();
     state = RoutineState(
@@ -592,22 +689,28 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         evaluationDate: date,
         explicitNow: DateTime.now(),
         operation: operation,
+        authenticatedOwnerUid: _ownerUid ?? '',
       ),
     );
   }
 
-  Future<RoutineValidationResult> addItem(RoutineItem item) async {
+  Future<RoutineWriteResult> addItem(RoutineItem item) async {
     await _initialLoad;
+    final uid = _requireOwnerUid();
     final validation = _validate(
       item,
       item.date ?? state.selectedDay,
       operation: RoutineValidationOperation.create,
     );
-    if (!validation.isValid) return validation;
+    if (!validation.isValid) {
+      return RoutineWriteResult.validationFailed(validation);
+    }
 
-    final uid = _requireOwnerUid();
-    final operationId =
-        'create_${item.id}_${DateTime.now().millisecondsSinceEpoch}';
+    final operationId = _stableOperationId('create', [
+      uid,
+      item.id,
+      _itemMutationFingerprint(item),
+    ]);
     final ownedItem = item.copyWith(
       userId: uid,
       createdByOperationId: operationId,
@@ -621,7 +724,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _recalculateConflicts();
 
     final event = RoutineEventRecord(
-      eventId: const Uuid().v4(),
+      eventId: _stableEventId(
+        operationId: operationId,
+        itemId: ownedItem.id,
+        eventType: RoutineEventType.created,
+      ),
       ownerUid: uid,
       routineItemId: ownedItem.id,
       eventType: RoutineEventType.created,
@@ -638,7 +745,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         addEvent: event,
       );
       final canonical = ownedItem;
-      if (_ownerUid != uid) return const RoutineValidationResult.valid();
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
@@ -649,8 +756,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             .toList(),
       );
       _recalculateConflicts();
+      return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
-      if (_ownerUid != uid) return const RoutineValidationResult.valid();
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       bool isSuccess = false;
       RoutineItem? recoveredItem;
@@ -674,6 +782,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               .map((e) => e.id == ownedItem.id ? recoveredItem! : e)
               .toList(),
         );
+        _recalculateConflicts();
+        return RoutineWriteResult.saved(operationId: operationId);
       } else {
         final intent = RoutineWriteIntent(
           action: RoutineWriteAction.create,
@@ -695,8 +805,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
       }
       _recalculateConflicts();
+      return RoutineWriteResult.retryRequired(
+        message: 'Failed to save routine item.',
+        operationId: operationId,
+      );
     }
-    return const RoutineValidationResult.valid();
   }
 
   Future<RoutineBatchValidationResult> addMissingItems(
@@ -711,19 +824,24 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         .toList();
     if (toAdd.isEmpty) return const RoutineBatchValidationResult.valid();
 
+    final uid = _requireOwnerUid();
     final validation = RoutineValidationService.validateBatch(
       itemsToAdd: toAdd,
       existingTemplates: state.items,
       occurrences: state.occurrences,
       evaluationDate: state.selectedDay,
       explicitNow: DateTime.now(),
+      authenticatedOwnerUid: uid,
     );
     if (!validation.isValid) {
       return validation;
     }
 
-    final uid = _requireOwnerUid();
-    final operationId = 'batch_add_${DateTime.now().millisecondsSinceEpoch}';
+    final batchIdentity = toAdd.map(_itemMutationFingerprint).toList()..sort();
+    final operationId = _stableOperationId('batch_add', [
+      uid,
+      ...batchIdentity,
+    ]);
     final ownedItems = <RoutineItem>[];
     final events = <RoutineEventRecord>[];
     for (final item in toAdd) {
@@ -735,7 +853,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       ownedItems.add(owned);
       events.add(
         RoutineEventRecord(
-          eventId: const Uuid().v4(),
+          eventId: _stableEventId(
+            operationId: operationId,
+            itemId: owned.id,
+            eventType: RoutineEventType.created,
+          ),
           ownerUid: uid,
           routineItemId: owned.id,
           eventType: RoutineEventType.created,
@@ -762,7 +884,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         setItems: ownedItems,
         addEvents: events,
       );
-      if (_ownerUid != uid) return const RoutineBatchValidationResult.valid();
+      if (_ownerUid != uid) {
+        return RoutineBatchValidationResult.superseded(
+          operationId: operationId,
+          message: 'Routine owner changed before the batch write completed.',
+        );
+      }
 
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
@@ -770,12 +897,19 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             .toSet(),
       );
       _recalculateConflicts();
+      return RoutineBatchValidationResult.valid(operationId: operationId);
     } catch (error) {
-      if (_ownerUid != uid) return const RoutineBatchValidationResult.valid();
+      if (_ownerUid != uid) {
+        return RoutineBatchValidationResult.superseded(
+          operationId: operationId,
+          message: 'Routine owner changed before the batch write completed.',
+        );
+      }
 
       final intent = RoutineBatchWriteIntent(
         ownerUid: uid,
         operationId: operationId,
+        action: RoutineWriteAction.batchCreate,
         attemptedItems: ownedItems,
         events: events,
         createdAt: DateTime.now().toUtc(),
@@ -794,26 +928,35 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         },
       );
       _recalculateConflicts();
-      return const RoutineBatchValidationResult.valid(); // Zero writes, handled via intent.
+      return RoutineBatchValidationResult.retryRequired(
+        message: 'Failed to add routine items.',
+        operationId: operationId,
+      );
     }
-    return const RoutineBatchValidationResult.valid();
   }
 
-  Future<RoutineValidationResult> updateItem(RoutineItem item) async {
-    final validation = _validate(item, item.date ?? state.selectedDay);
-    if (!validation.isValid) return validation;
-
+  Future<RoutineWriteResult> updateItem(RoutineItem item) async {
     final uid = _requireOwnerUid();
-    final operationId =
-        'update_${item.id}_${DateTime.now().millisecondsSinceEpoch}';
+    final validation = _validate(item, item.date ?? state.selectedDay);
+    if (!validation.isValid) {
+      return RoutineWriteResult.validationFailed(validation);
+    }
+
+    final operationId = _stableOperationId('update', [
+      uid,
+      item.id,
+      _itemMutationFingerprint(item),
+    ]);
     final previousItem = state.items.cast<RoutineItem?>().firstWhere(
       (e) => e?.id == item.id,
       orElse: () => null,
     );
     if (previousItem == null) {
-      return const RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.missingData,
-        userSafeMessage: 'Item not found.',
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'Item not found.',
+        ),
       );
     }
 
@@ -829,7 +972,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _recalculateConflicts();
 
     final event = RoutineEventRecord(
-      eventId: const Uuid().v4(),
+      eventId: _stableEventId(
+        operationId: operationId,
+        itemId: ownedItem.id,
+        eventType: RoutineEventType.edited,
+      ),
       ownerUid: uid,
       routineItemId: ownedItem.id,
       eventType: RoutineEventType.edited,
@@ -846,7 +993,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         addEvent: event,
       );
       final canonical = ownedItem;
-      if (_ownerUid != uid) return const RoutineValidationResult.valid();
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
@@ -857,8 +1004,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             .toList(),
       );
       _recalculateConflicts();
+      return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
-      if (_ownerUid != uid) return const RoutineValidationResult.valid();
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       final intent = RoutineWriteIntent(
         action: RoutineWriteAction.update,
@@ -885,24 +1033,35 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         error: 'Failed to update routine item.',
       );
       _recalculateConflicts();
+      return RoutineWriteResult.retryRequired(
+        message: 'Failed to update routine item.',
+        operationId: operationId,
+      );
     }
-    return const RoutineValidationResult.valid();
   }
 
-  Future<void> deleteItem(String itemId) async {
+  Future<RoutineWriteResult> deleteItem(String itemId) async {
     final uid = _requireOwnerUid();
-    final operationId =
-        'delete_${itemId}_${DateTime.now().millisecondsSinceEpoch}';
     final previousItem = state.items.cast<RoutineItem?>().firstWhere(
       (e) => e?.id == itemId,
       orElse: () => null,
     );
-    if (previousItem == null) return;
+    if (previousItem == null) return const RoutineWriteResult.noOp();
+    final operationId = _stableOperationId('delete', [
+      uid,
+      itemId,
+      previousItem.lastMutationOperationId ?? previousItem.createdByOperationId,
+      _itemMutationFingerprint(previousItem),
+    ]);
 
     state = state.copyWith(pendingItemIds: {...state.pendingItemIds, itemId});
 
     final event = RoutineEventRecord(
-      eventId: const Uuid().v4(),
+      eventId: _stableEventId(
+        operationId: operationId,
+        itemId: itemId,
+        eventType: RoutineEventType.deleted,
+      ),
       ownerUid: uid,
       routineItemId: itemId,
       eventType: RoutineEventType.deleted,
@@ -918,7 +1077,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         deleteItemId: itemId,
         addEvent: event,
       );
-      if (_ownerUid != uid) return;
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       _ref.read(trackerSessionLinksProvider.notifier).clearForRoutine(itemId);
       state = state.copyWith(
@@ -928,8 +1087,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         items: state.items.where((e) => e.id != itemId).toList(),
       );
       _recalculateConflicts();
+      return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
-      if (_ownerUid != uid) return;
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       bool isSuccess = false;
       try {
@@ -947,6 +1107,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               .toSet(),
           items: state.items.where((e) => e.id != itemId).toList(),
         );
+        _recalculateConflicts();
+        return RoutineWriteResult.saved(operationId: operationId);
       } else {
         final intent = RoutineWriteIntent(
           action: RoutineWriteAction.delete,
@@ -969,17 +1131,26 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         );
       }
       _recalculateConflicts();
+      return RoutineWriteResult.retryRequired(
+        message: 'Failed to delete item.',
+        operationId: operationId,
+      );
     }
   }
 
-  Future<void> retryFailedOperation(String itemId) async {
+  Future<RoutineWriteResult> retryFailedOperation(String itemId) async {
     final intent = state.failedIntentsByItemId[itemId];
-    if (intent == null) return;
+    if (intent == null) {
+      return const RoutineWriteResult.noOp(message: 'No failed operation.');
+    }
 
     final uid = _ownerUid;
-    if (uid == null || uid != intent.ownerUid) return;
-
-    dismissFailedOperation(itemId);
+    if (uid == null || uid != intent.ownerUid) {
+      return RoutineWriteResult.superseded(
+        operationId: intent.operationId,
+        message: 'Routine owner changed before retry.',
+      );
+    }
 
     if (intent.action == RoutineWriteAction.create &&
         intent.attemptedItem != null) {
@@ -996,18 +1167,21 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           addEvent: intent.event,
         );
         final canonical = intent.attemptedItem!;
-        if (_ownerUid != uid) return;
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
               .toSet(),
+          failedIntentsByItemId: {...state.failedIntentsByItemId}
+            ..remove(itemId),
           items: state.items
               .map((e) => e.id == itemId ? canonical : e)
               .toList(),
         );
         _recalculateConflicts();
+        return RoutineWriteResult.saved(operationId: intent.operationId);
       } catch (error) {
-        if (_ownerUid != uid) return;
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
@@ -1016,6 +1190,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             ...state.failedIntentsByItemId,
             itemId: intent,
           },
+          error: 'Failed to save routine item.',
+        );
+        return RoutineWriteResult.retryRequired(
+          operationId: intent.operationId,
+          message: 'Failed to save routine item.',
         );
       }
     } else if (intent.action == RoutineWriteAction.update &&
@@ -1034,18 +1213,21 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           addEvent: intent.event,
         );
         final canonical = intent.attemptedItem!;
-        if (_ownerUid != uid) return;
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
               .toSet(),
+          failedIntentsByItemId: {...state.failedIntentsByItemId}
+            ..remove(itemId),
           items: state.items
               .map((e) => e.id == itemId ? canonical : e)
               .toList(),
         );
         _recalculateConflicts();
+        return RoutineWriteResult.saved(operationId: intent.operationId);
       } catch (error) {
-        if (_ownerUid != uid) return;
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
@@ -1064,6 +1246,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           error: 'Failed to update routine item.',
         );
         _recalculateConflicts();
+        return RoutineWriteResult.retryRequired(
+          operationId: intent.operationId,
+          message: 'Failed to update routine item.',
+        );
       }
     } else if (intent.action == RoutineWriteAction.delete) {
       state = state.copyWith(pendingItemIds: {...state.pendingItemIds, itemId});
@@ -1073,17 +1259,20 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           deleteItemId: itemId,
           addEvent: intent.event,
         );
-        if (_ownerUid != uid) return;
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
         _ref.read(trackerSessionLinksProvider.notifier).clearForRoutine(itemId);
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
               .toSet(),
+          failedIntentsByItemId: {...state.failedIntentsByItemId}
+            ..remove(itemId),
           items: state.items.where((e) => e.id != itemId).toList(),
         );
         _recalculateConflicts();
+        return RoutineWriteResult.saved(operationId: intent.operationId);
       } catch (error) {
-        if (_ownerUid != uid) return;
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
         state = state.copyWith(
           pendingItemIds: state.pendingItemIds
               .where((id) => id != itemId)
@@ -1094,8 +1283,16 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           },
           error: 'Failed to delete routine item.',
         );
+        return RoutineWriteResult.retryRequired(
+          operationId: intent.operationId,
+          message: 'Failed to delete routine item.',
+        );
       }
     }
+    return RoutineWriteResult.noOp(
+      operationId: intent.operationId,
+      message: 'Failed operation could not be replayed.',
+    );
   }
 
   void discardFailedCreate(String itemId) {
@@ -1124,22 +1321,38 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> retryFailedBatchOperation(String operationId) async {
+  void dismissFailedOccurrenceAction(String occurrenceId) {
+    state = state.copyWith(
+      failedOccurrenceIntentsById: Map.fromEntries(
+        state.failedOccurrenceIntentsById.entries.where(
+          (e) => e.key != occurrenceId,
+        ),
+      ),
+      error: null,
+    );
+  }
+
+  Future<RoutineWriteResult> retryFailedBatchOperation(
+    String operationId,
+  ) async {
     final intent = state.failedBatchIntentsByOperationId[operationId];
-    if (intent == null) return;
+    if (intent == null) {
+      return const RoutineWriteResult.noOp(
+        message: 'No failed batch operation.',
+      );
+    }
 
     final uid = _requireOwnerUid();
-    if (uid != intent.ownerUid) return;
+    if (uid != intent.ownerUid) {
+      return _supersededWriteResult(operationId);
+    }
 
     final addedIds = intent.attemptedItems.map((e) => e.id).toSet();
 
-    // Remove from failed map and optimistically apply
+    // Keep the original failed intent visible until durable retry success.
     state = state.copyWith(
-      failedBatchIntentsByOperationId: {
-        ...state.failedBatchIntentsByOperationId,
-      }..remove(operationId),
       pendingItemIds: {...state.pendingItemIds, ...addedIds},
-      items: [...state.items, ...intent.attemptedItems],
+      items: _replaceItemsPreservingOrder(state.items, intent.attemptedItems),
     );
     _recalculateConflicts();
 
@@ -1150,18 +1363,25 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         addEvents: intent.events,
       );
 
-      if (_ownerUid != uid) return;
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
             .where((id) => !addedIds.contains(id))
             .toSet(),
+        failedBatchIntentsByOperationId: {
+          ...state.failedBatchIntentsByOperationId,
+        }..remove(operationId),
       );
       _recalculateConflicts();
+      return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
-      if (_ownerUid != uid) return;
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       // Retrying must reuse the original intent rather than generating new identities
+      final rollbackItems = intent.previousItems.isEmpty
+          ? state.items.where((e) => !addedIds.contains(e.id)).toList()
+          : _replaceItemsPreservingOrder(state.items, intent.previousItems);
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
             .where((id) => !addedIds.contains(id))
@@ -1170,10 +1390,18 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           ...state.failedBatchIntentsByOperationId,
           operationId: intent,
         },
-        items: state.items.where((e) => !addedIds.contains(e.id)).toList(),
-        error: 'Failed to add batch items.',
+        items: rollbackItems,
+        error: intent.action == RoutineWriteAction.keepBoth
+            ? 'Failed to resolve conflict atomically.'
+            : 'Failed to add batch items.',
       );
       _recalculateConflicts();
+      return RoutineWriteResult.retryRequired(
+        operationId: operationId,
+        message: intent.action == RoutineWriteAction.keepBoth
+            ? 'Failed to resolve conflict atomically. You can retry.'
+            : 'Failed to add batch items.',
+      );
     }
   }
 
@@ -1197,7 +1425,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     super.dispose();
   }
 
-  Future<RoutineValidationResult> _updateById(
+  Future<RoutineWriteResult> _updateById(
     String itemId,
     RoutineItem Function(RoutineItem) update,
   ) async {
@@ -1206,7 +1434,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         return await updateItem(update(item));
       }
     }
-    return const RoutineValidationResult.valid();
+    return const RoutineWriteResult.noOp(message: 'Item not found.');
   }
 
   RoutineOccurrenceRecord? _occurrenceFor(String itemId, DateTime date) {
@@ -1243,7 +1471,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return true;
   }
 
-  Future<void> _writeOccurrence(
+  Future<RoutineWriteResult> _writeOccurrence(
     String itemId, {
     required RoutineStatus status,
     required String source,
@@ -1269,7 +1497,20 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final now = DateTime.now().toUtc();
     final existing = _occurrenceFor(itemId, date);
 
-    final operationId = const Uuid().v4();
+    final operationId = _stableOperationId('occurrence', [
+      uid,
+      itemId,
+      dateKey,
+      action,
+      status.name,
+      movedToDateKey ?? '',
+      movedStartMinute ?? '',
+      movedEndMinute ?? '',
+      completedSubtaskIndexes?.join(',') ?? '',
+      note ?? '',
+      displayTitleOverride ?? '',
+      existing?.operationKey ?? '',
+    ]);
     final occAction = RoutineOccurrenceAction.values.firstWhere(
       (e) => e.name == action,
       orElse: () =>
@@ -1329,13 +1570,22 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     // Capture a snapshot of the template at the moment of the occurrence
     // action so that history rows can render the item's title, time, and type
     // even after the template is edited or deleted.
-    final template = state.items.where((i) => i.id == itemId).firstOrNull;
-    final occurrenceSnapshot = template == null
-        ? <String, dynamic>{}
-        : _boundedHistorySnapshot(template, uid);
+    final occurrenceSnapshot = _historySnapshotForItemId(itemId, uid);
+    if (occurrenceSnapshot == null) {
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'Item not found.',
+        ),
+      );
+    }
 
     final event = RoutineEventRecord(
-      eventId: const Uuid().v4(),
+      eventId: _stableEventId(
+        operationId: operationId,
+        itemId: itemId,
+        eventType: eventType,
+      ),
       ownerUid: uid,
       routineItemId: itemId,
       occurrenceId: id,
@@ -1347,7 +1597,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       itemSnapshot: occurrenceSnapshot,
     );
 
-    final completer = Completer<void>();
+    final completer = Completer<RoutineWriteResult>();
     final intent = RoutineOccurrenceWriteIntent(
       action: occAction,
       ownerUid: uid,
@@ -1368,7 +1618,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           state.occurrences.where((e) => e.id == id).lastOrNull;
 
       if (lastRecord != null && _isSemanticDuplicate(record, lastRecord)) {
-        return;
+        return RoutineWriteResult.noOp(operationId: operationId);
       }
 
       state = state.copyWith(
@@ -1377,8 +1627,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           id: [...queue, intent],
         },
       );
-      await completer.future;
-      return;
+      return await completer.future;
     }
 
     final previous = state.occurrences;
@@ -1398,17 +1647,21 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         setOccurrence: record,
         addEvent: event,
       );
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) return _supersededWriteResult(operationId);
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       state = state.copyWith(
         failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
           ..remove(id),
       );
       await _processNextQueuedOccurrence(uid, id);
+      if (!completer.isCompleted) {
+        completer.complete(RoutineWriteResult.saved(operationId: operationId));
+      }
+      return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) return _supersededWriteResult(operationId);
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
       state = state.copyWith(
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
@@ -1423,10 +1676,14 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
       _recalculateConflicts();
       await _processNextQueuedOccurrence(uid, id);
-    }
-
-    if (!completer.isCompleted) {
-      completer.complete();
+      final result = RoutineWriteResult.retryRequired(
+        message: error.toString(),
+        operationId: operationId,
+      );
+      if (!completer.isCompleted) {
+        completer.complete(result);
+      }
+      return result;
     }
   }
 
@@ -1464,18 +1721,32 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         setOccurrence: intent.attemptedRecord,
         addEvent: intent.event,
       );
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) {
+        intent.completer?.complete(_supersededWriteResult(intent.operationId));
+        return;
+      }
+      if (_ownerUid != uid) {
+        intent.completer?.complete(_supersededWriteResult(intent.operationId));
+        return;
+      }
 
       state = state.copyWith(
         failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
           ..remove(id),
       );
-      intent.completer?.complete();
+      intent.completer?.complete(
+        RoutineWriteResult.saved(operationId: intent.operationId),
+      );
       await _processNextQueuedOccurrence(uid, id);
     } catch (error) {
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) {
+        intent.completer?.complete(_supersededWriteResult(intent.operationId));
+        return;
+      }
+      if (_ownerUid != uid) {
+        intent.completer?.complete(_supersededWriteResult(intent.operationId));
+        return;
+      }
       state = state.copyWith(
         failedOccurrenceIntentsById: {
           ...state.failedOccurrenceIntentsById,
@@ -1489,12 +1760,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         error: error.toString(),
       );
       _recalculateConflicts();
-      intent.completer?.complete();
+      intent.completer?.complete(
+        RoutineWriteResult.retryRequired(
+          message: error.toString(),
+          operationId: intent.operationId,
+        ),
+      );
       await _processNextQueuedOccurrence(uid, id);
     }
   }
 
-  Future<void> undoOccurrenceAction(
+  Future<RoutineWriteResult> undoOccurrenceAction(
     String itemId, [
     DateTime? occurrenceDate,
   ]) async {
@@ -1509,12 +1785,41 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
 
     final existing = _occurrenceFor(itemId, date);
-    if (existing == null) return;
-    if (!existing.undoToPlannedAllowed) return;
+    if (existing == null) {
+      return const RoutineWriteResult.noOp(
+        message: 'No occurrence action to undo.',
+      );
+    }
+    if (!existing.undoToPlannedAllowed) {
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'This action can no longer be undone.',
+        ),
+      );
+    }
 
-    final operationId = const Uuid().v4();
+    final operationId = _stableOperationId('occurrence_undo', [
+      uid,
+      itemId,
+      dateKey,
+      existing.operationKey,
+    ]);
+    final snapshot = _historySnapshotForItemId(itemId, uid);
+    if (snapshot == null) {
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'Item not found.',
+        ),
+      );
+    }
     final event = RoutineEventRecord(
-      eventId: const Uuid().v4(),
+      eventId: _stableEventId(
+        operationId: operationId,
+        itemId: itemId,
+        eventType: RoutineEventType.undone,
+      ),
       ownerUid: uid,
       routineItemId: itemId,
       occurrenceId: id,
@@ -1523,6 +1828,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       operationKey: operationId,
       source: 'app',
       occurredAt: DateTime.now().toUtc(),
+      itemSnapshot: snapshot,
     );
 
     final intent = RoutineOccurrenceWriteIntent(
@@ -1549,8 +1855,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         deleteOccurrenceId: id,
         addEvent: event,
       );
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) return _supersededWriteResult(operationId);
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
@@ -1559,9 +1865,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
           ..remove(id),
       );
+      return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) return _supersededWriteResult(operationId);
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
             .where((e) => e != id)
@@ -1574,15 +1881,27 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         error: error.toString(),
       );
       _recalculateConflicts();
+      return RoutineWriteResult.retryRequired(
+        operationId: operationId,
+        message: error.toString(),
+      );
     }
   }
 
-  Future<void> retryFailedOccurrenceAction(String occurrenceId) async {
+  Future<RoutineWriteResult> retryFailedOccurrenceAction(
+    String occurrenceId,
+  ) async {
     final intent = state.failedOccurrenceIntentsById[occurrenceId];
-    if (intent == null) return;
+    if (intent == null) {
+      return const RoutineWriteResult.noOp(
+        message: 'No failed occurrence action.',
+      );
+    }
 
     final uid = _requireOwnerUid();
-    if (intent.ownerUid != uid) return;
+    if (intent.ownerUid != uid) {
+      return _supersededWriteResult(intent.operationId);
+    }
 
     if (intent.action == RoutineOccurrenceAction.undo) {
       state = state.copyWith(
@@ -1600,8 +1919,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           deleteOccurrenceId: occurrenceId,
           addEvent: intent.event,
         );
-        if (!mounted) return;
-        if (_ownerUid != uid) return;
+        if (!mounted) return _supersededWriteResult(intent.operationId);
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
 
         state = state.copyWith(
           pendingOccurrenceIds: state.pendingOccurrenceIds
@@ -1610,19 +1929,27 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
             ..remove(occurrenceId),
         );
+        return RoutineWriteResult.saved(operationId: intent.operationId);
       } catch (error) {
-        if (!mounted) return;
-        if (_ownerUid != uid) return;
+        if (!mounted) return _supersededWriteResult(intent.operationId);
+        if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
         state = state.copyWith(
           pendingOccurrenceIds: state.pendingOccurrenceIds
               .where((e) => e != occurrenceId)
               .toSet(),
           occurrences: [...state.occurrences, intent.previousRecord!],
+          failedOccurrenceIntentsById: {
+            ...state.failedOccurrenceIntentsById,
+            occurrenceId: intent,
+          },
           error: error.toString(),
         );
         _recalculateConflicts();
+        return RoutineWriteResult.retryRequired(
+          operationId: intent.operationId,
+          message: error.toString(),
+        );
       }
-      return;
     }
 
     final record = intent.attemptedRecord;
@@ -1644,8 +1971,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         setOccurrence: record,
         addEvent: intent.event,
       );
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) return _supersededWriteResult(intent.operationId);
+      if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
 
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
@@ -1654,9 +1981,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         failedOccurrenceIntentsById: {...state.failedOccurrenceIntentsById}
           ..remove(occurrenceId),
       );
+      return RoutineWriteResult.saved(operationId: intent.operationId);
     } catch (error) {
-      if (!mounted) return;
-      if (_ownerUid != uid) return;
+      if (!mounted) return _supersededWriteResult(intent.operationId);
+      if (_ownerUid != uid) return _supersededWriteResult(intent.operationId);
       state = state.copyWith(
         pendingOccurrenceIds: state.pendingOccurrenceIds
             .where((e) => e != occurrenceId)
@@ -1666,9 +1994,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
               ..addAll(
                 intent.previousRecord != null ? [intent.previousRecord!] : [],
               ),
+        failedOccurrenceIntentsById: {
+          ...state.failedOccurrenceIntentsById,
+          occurrenceId: intent,
+        },
         error: error.toString(),
       );
       _recalculateConflicts();
+      return RoutineWriteResult.retryRequired(
+        operationId: intent.operationId,
+        message: error.toString(),
+      );
     }
   }
 
@@ -1693,8 +2029,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     return selected;
   }
 
-  Future<void> startFlexibleTask(String itemId) async {
-    await _writeOccurrence(
+  Future<RoutineWriteResult> startFlexibleTask(String itemId) async {
+    return await _writeOccurrence(
       itemId,
       status: RoutineStatus.active,
       source: 'routine',
@@ -1702,7 +2038,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> toggleSubtask(String itemId, int subtaskIndex) async {
+  Future<RoutineWriteResult> toggleSubtask(
+    String itemId,
+    int subtaskIndex,
+  ) async {
     RoutineItem? item;
     for (final candidate in state.items) {
       if (candidate.id == itemId) {
@@ -1714,7 +2053,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     if (subtasks == null ||
         subtaskIndex < 0 ||
         subtaskIndex >= subtasks.length) {
-      return;
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'Subtask not found.',
+        ),
+      );
     }
     final completed = {
       ...?_occurrenceFor(
@@ -1723,7 +2067,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       )?.completedSubtaskIndexes,
     };
     if (!completed.add(subtaskIndex)) completed.remove(subtaskIndex);
-    await _writeOccurrence(
+    return await _writeOccurrence(
       itemId,
       status:
           _occurrenceFor(
@@ -1737,8 +2081,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> markCompleted(String itemId) async {
-    await _writeOccurrence(
+  Future<RoutineWriteResult> markCompleted(String itemId) async {
+    return await _writeOccurrence(
       itemId,
       status: RoutineStatus.completed,
       source: 'routine',
@@ -1746,7 +2090,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> markSkipped(String itemId) async {
+  Future<RoutineWriteResult> markSkipped(String itemId) async {
     try {
       final item = state.items.firstWhere((e) => e.id == itemId);
       if (item.blockType == RoutineBlockType.moneyTask) {
@@ -1756,7 +2100,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       }
     } catch (_) {}
 
-    await _writeOccurrence(
+    return await _writeOccurrence(
       itemId,
       status: RoutineStatus.skipped,
       source: 'routine',
@@ -1764,8 +2108,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> markMissed(String itemId) async {
-    await _writeOccurrence(
+  Future<RoutineWriteResult> markMissed(String itemId) async {
+    return await _writeOccurrence(
       itemId,
       status: RoutineStatus.missed,
       source: 'routine',
@@ -1773,8 +2117,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> markFlexible(String itemId) async {
-    await _updateById(
+  Future<RoutineWriteResult> markFlexible(String itemId) async {
+    return await _updateById(
       itemId,
       (item) => item.copyWith(
         blockType: RoutineBlockType.flexibleTask,
@@ -1784,12 +2128,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> checkIn(String itemId, String response) async {
+  Future<RoutineWriteResult> checkIn(String itemId, String response) async {
     final normalized = response.toLowerCase();
     final status = normalized == 'relapsed'
         ? RoutineStatus.missed
         : RoutineStatus.completed;
-    await _writeOccurrence(
+    return await _writeOccurrence(
       itemId,
       status: status,
       source: 'checkIn',
@@ -1798,7 +2142,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> alreadySaved(String itemId, {double? amount}) async {
+  Future<RoutineWriteResult> alreadySaved(
+    String itemId, {
+    double? amount,
+  }) async {
     final moneyGoal = _ref.read(mockTrackerProvider).moneyGoal;
     _ref
         .read(mockTrackerProvider.notifier)
@@ -1809,7 +2156,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           description: 'Routine Money System task',
           routineTaskId: itemId,
         );
-    await _writeOccurrence(
+    return await _writeOccurrence(
       itemId,
       status: RoutineStatus.completed,
       source: 'money',
@@ -1817,7 +2164,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> startTrackerTask(RoutineItem item) async {
+  Future<RoutineWriteResult> startTrackerTask(RoutineItem item) async {
     final now = DateTime.now();
     final sessionId = 'tracker-${item.id}-${now.millisecondsSinceEpoch}';
     final trackerType = item.trackerType == TrackerType.none
@@ -1843,7 +2190,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
 
     _ref.read(appNavigationProvider.notifier).goToTracker();
-    await _writeOccurrence(
+    return await _writeOccurrence(
       item.id,
       status: RoutineStatus.inTracker,
       source: 'tracker',
@@ -1851,7 +2198,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> completeTrackerSession(String routineTaskId) async {
+  Future<RoutineWriteResult> completeTrackerSession(
+    String routineTaskId,
+  ) async {
     final links = _ref.read(trackerSessionLinksProvider);
     TrackerSessionLink? link;
     for (final candidate in links) {
@@ -1874,28 +2223,33 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             ),
           );
     }
-    await _writeOccurrence(
+    final result = await _writeOccurrence(
       routineTaskId,
       status: RoutineStatus.completed,
       source: 'tracker',
       action: 'complete',
     );
-    if (state.activeTrackerLaunchIntent?.routineTaskId == routineTaskId) {
+    if (result.closesUserFlow &&
+        state.activeTrackerLaunchIntent?.routineTaskId == routineTaskId) {
       state = state.copyWith(clearTrackerIntent: true);
     }
+    return result;
   }
 
-  Future<RoutineValidationResult> moveItem({
+  Future<RoutineWriteResult> moveItem({
     required String itemId,
     required DateTime date,
     required int startMinute,
     required int durationMinutes,
   }) async {
+    _requireOwnerUid();
     final targetIndex = state.items.indexWhere((e) => e.id == itemId);
     if (targetIndex == -1) {
-      return const RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.missingData,
-        userSafeMessage: 'Item not found.',
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'Item not found.',
+        ),
       );
     }
     final item = state.items[targetIndex];
@@ -1914,11 +2268,13 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       date,
       operation: RoutineValidationOperation.move,
     );
-    if (!validation.isValid) return validation;
+    if (!validation.isValid) {
+      return RoutineWriteResult.validationFailed(validation);
+    }
 
     final anchor = _occurrenceAnchorDate(itemId, state.selectedDay);
     if (routineLocalDateKey(date) == routineLocalDateKey(anchor)) {
-      await _writeOccurrence(
+      return await _writeOccurrence(
         itemId,
         status: RoutineStatus.moved,
         source: 'routine',
@@ -1929,7 +2285,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         movedEndMinute: endMinute,
       );
     } else {
-      await _writeOccurrence(
+      return await _writeOccurrence(
         itemId,
         status: RoutineStatus.moved,
         source: 'routine',
@@ -1940,11 +2296,10 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         movedEndMinute: endMinute,
       );
     }
-    return const RoutineValidationResult.valid();
   }
 
-  Future<void> moveToTomorrow(RoutineItem item) async {
-    await moveItem(
+  Future<RoutineWriteResult> moveToTomorrow(RoutineItem item) async {
+    return await moveItem(
       itemId: item.id,
       date: TimelineUtils.dateOnly(DateTime.now()).add(const Duration(days: 1)),
       startMinute: item.startMinute,
@@ -1952,9 +2307,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     );
   }
 
-  Future<void> makeTinyVersion(RoutineItem item) async {
+  Future<RoutineWriteResult> makeTinyVersion(RoutineItem item) async {
     final tinyDuration = item.durationMinutes.clamp(5, 10);
-    await _writeOccurrence(
+    return await _writeOccurrence(
       item.id,
       status: RoutineStatus.moved,
       source: 'routine',
@@ -2028,30 +2383,34 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         .toList(growable: false);
   }
 
-  Future<RoutineValidationResult> keepConflictPair(
-    RoutineConflict conflict,
-  ) async {
+  Future<RoutineWriteResult> keepConflictPair(RoutineConflict conflict) async {
     // Guard: reject conflicts that don't support Keep Both.
     if (!conflict.canKeepBoth) {
-      return const RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.staleConflict,
-        userSafeMessage: 'This conflict type does not support Keep Both.',
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.staleConflict,
+          userSafeMessage: 'This conflict type does not support Keep Both.',
+        ),
       );
     }
 
     // Guard: require two items.
     if (conflict.otherItemId == null) {
-      return const RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.staleConflict,
-        userSafeMessage: 'Keep Both requires two items.',
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.staleConflict,
+          userSafeMessage: 'Keep Both requires two items.',
+        ),
       );
     }
 
     final item1 = state.items.where((e) => e.id == conflict.itemId).firstOrNull;
     if (item1 == null) {
-      return const RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.missingData,
-        userSafeMessage: 'Item not found.',
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'Item not found.',
+        ),
       );
     }
 
@@ -2059,9 +2418,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         .where((e) => e.id == conflict.otherItemId)
         .firstOrNull;
     if (item2 == null) {
-      return const RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.missingData,
-        userSafeMessage: 'The other item no longer exists.',
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.missingData,
+          userSafeMessage: 'The other item no longer exists.',
+        ),
       );
     }
 
@@ -2078,45 +2439,71 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final matchingConflict = currentConflicts
         .where(
           (c) =>
-              (c.itemId == conflict.itemId &&
-                  c.otherItemId == conflict.otherItemId) ||
-              (c.itemId == conflict.otherItemId &&
-                  c.otherItemId == conflict.itemId),
+              c.type == conflict.type &&
+              c.canKeepBoth &&
+              ((c.itemId == conflict.itemId &&
+                      c.otherItemId == conflict.otherItemId) ||
+                  (c.itemId == conflict.otherItemId &&
+                      c.otherItemId == conflict.itemId)),
         )
         .firstOrNull;
 
     if (matchingConflict == null) {
-      return const RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.staleConflict,
-        userSafeMessage: 'This conflict has already been resolved.',
+      return RoutineWriteResult.validationFailed(
+        const RoutineValidationResult.invalid(
+          errorType: RoutineValidationErrorType.staleConflict,
+          userSafeMessage: 'This conflict has already been resolved.',
+        ),
       );
     }
 
-    // Create Fingerprint
-    final fingerprint =
-        '${item1.startMinute}-${item1.endMinute}_${item2.startMinute}-${item2.endMinute}_${conflict.type.name}';
+    final fingerprint = RoutineConflictEngine.scheduleFingerprint(
+      item1,
+      item2,
+      matchingConflict.type,
+    );
     final dateKey = routineLocalDateKey(state.selectedDay);
+    final canonicalPairId = ([item1.id, item2.id]..sort()).join('_');
 
     final allowance = RoutineConflictAllowance(
-      canonicalPairId: ([item1.id, item2.id]..sort()).join('_'),
+      canonicalPairId: canonicalPairId,
       evaluatedDateKey: dateKey,
-      conflictType: conflict.type.name,
+      conflictType: matchingConflict.type.name,
       scheduleFingerprint: fingerprint,
     );
 
     final uid = _requireOwnerUid();
-    final operationId = 'keepboth_${conflict.itemId}_${conflict.otherItemId}';
+    final operationId = _stableOperationId('keepboth', [
+      uid,
+      canonicalPairId,
+      dateKey,
+      matchingConflict.type.name,
+      fingerprint,
+    ]);
+
+    List<RoutineConflictAllowance> replaceAllowance(
+      List<RoutineConflictAllowance> allowances,
+    ) {
+      return [
+        for (final current in allowances)
+          if (current.canonicalPairId != allowance.canonicalPairId ||
+              current.evaluatedDateKey != allowance.evaluatedDateKey ||
+              current.conflictType != allowance.conflictType)
+            current,
+        allowance,
+      ];
+    }
 
     final ownedItem1 = item1.copyWith(
       userId: uid,
-      allowedConflicts: [...item1.allowedConflicts, allowance],
+      allowedConflicts: replaceAllowance(item1.allowedConflicts),
       clearConflict: true,
       lastMutationOperationId: operationId,
     );
 
     final ownedItem2 = item2.copyWith(
       userId: uid,
-      allowedConflicts: [...item2.allowedConflicts, allowance],
+      allowedConflicts: replaceAllowance(item2.allowedConflicts),
       clearConflict: true,
       lastMutationOperationId: operationId,
     );
@@ -2124,7 +2511,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     final itemsToUpdate = <RoutineItem>[ownedItem1, ownedItem2];
     final eventsToUpdate = <RoutineEventRecord>[
       RoutineEventRecord(
-        eventId: const Uuid().v4(),
+        eventId: _stableEventId(
+          operationId: operationId,
+          itemId: ownedItem1.id,
+          eventType: RoutineEventType.edited,
+        ),
         ownerUid: uid,
         routineItemId: ownedItem1.id,
         eventType: RoutineEventType.edited,
@@ -2134,7 +2525,11 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         itemSnapshot: _boundedHistorySnapshot(ownedItem1, uid),
       ),
       RoutineEventRecord(
-        eventId: const Uuid().v4(),
+        eventId: _stableEventId(
+          operationId: operationId,
+          itemId: ownedItem2.id,
+          eventType: RoutineEventType.edited,
+        ),
         ownerUid: uid,
         routineItemId: ownedItem2.id,
         eventType: RoutineEventType.edited,
@@ -2162,7 +2557,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         setItems: itemsToUpdate,
         addEvents: eventsToUpdate,
       );
-      if (_ownerUid != uid) return const RoutineValidationResult.valid();
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
 
       state = state.copyWith(
         pendingItemIds: state.pendingItemIds
@@ -2170,13 +2565,15 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             .toSet(),
       );
       _recalculateConflicts();
-      return const RoutineValidationResult.valid();
+      return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
-      if (_ownerUid != uid) return const RoutineValidationResult.valid();
+      if (_ownerUid != uid) return _supersededWriteResult(operationId);
       final intent = RoutineBatchWriteIntent(
         ownerUid: uid,
         operationId: operationId,
+        action: RoutineWriteAction.keepBoth,
         attemptedItems: itemsToUpdate,
+        previousItems: [item1, item2],
         events: eventsToUpdate,
         createdAt: DateTime.now().toUtc(),
       );
@@ -2197,10 +2594,9 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         error: 'Failed to resolve conflict atomically.',
       );
       _recalculateConflicts();
-      return RoutineValidationResult.invalid(
-        errorType: RoutineValidationErrorType.staleConflict,
-        userSafeMessage:
-            'Failed to resolve conflict atomically. You can retry.',
+      return RoutineWriteResult.retryRequired(
+        operationId: operationId,
+        message: 'Failed to resolve conflict atomically. You can retry.',
       );
     }
   }

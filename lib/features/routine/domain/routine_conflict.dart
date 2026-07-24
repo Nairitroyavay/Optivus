@@ -1,4 +1,3 @@
-
 enum RoutineConflictType {
   hardBlockConflict,
   unavailableTime,

@@ -1,6 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:optivus/core/timeline/timeline_visual_layout.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -48,6 +50,7 @@ class _RoutineTimelineViewportState
   double _dragTop = 0.0;
   double _dragStartTop = 0.0;
   double _dragInitialGlobalY = 0.0;
+  String? _focusedItemId;
 
   @override
   void initState() {
@@ -85,8 +88,22 @@ class _RoutineTimelineViewportState
   @override
   Widget build(BuildContext context) {
     final bottomPadding = liquidTabBarReserve(context) + 24;
-    final timelineHeight = widget.layout.totalHeight;
-    final itemLayouts = _buildItemLayouts();
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final visualBuild = _buildItemLayouts(viewportWidth);
+    final itemLayouts = visualBuild.entries;
+    final visualScale = visualBuild.scale;
+    final timelineHeight = max(
+      visualBuild.totalHeight,
+      itemLayouts.fold<double>(
+        visualBuild.totalHeight,
+        (height, entry) => max(height, entry.cardTop + entry.cardHeight),
+      ),
+    );
+    final paintedItemLayouts = [...itemLayouts]
+      ..sort((a, b) {
+        if (a.isFront != b.isFront) return a.isFront ? 1 : -1;
+        return a.order.compareTo(b.order);
+      });
     final routineState = ref.watch(routineNotifierProvider);
 
     return SingleChildScrollView(
@@ -129,7 +146,10 @@ class _RoutineTimelineViewportState
                   kTimelineTimeRailWidth +
                   kTimelineRailDotColumnWidth +
                   kTimelineContentGap,
-              child: RoutineTimeRuler(layout: widget.layout),
+              child: RoutineTimeRuler(
+                layout: widget.layout,
+                visualScale: visualScale,
+              ),
             ),
 
             // ── Time anchor layer: exact duration rails and start/end lines ──
@@ -141,7 +161,7 @@ class _RoutineTimelineViewportState
               child: IgnorePointer(
                 child: CustomPaint(
                   painter: _TimelineAnchorPainter(
-                    layout: widget.layout,
+                    scale: visualScale,
                     entries: itemLayouts,
                   ),
                 ),
@@ -150,7 +170,7 @@ class _RoutineTimelineViewportState
 
             // ── Content card layer: readable overlays that do not affect anchors ──
             // Long press drag moves cards with 5 min or precision-mode snapping.
-            ...itemLayouts.map((entry) {
+            ...paintedItemLayouts.map((entry) {
               final item = entry.item;
               final now = DateTime.now();
               final currentMinute = now.hour * 60 + now.minute;
@@ -163,16 +183,13 @@ class _RoutineTimelineViewportState
 
               return Positioned(
                 top: top,
-                left:
-                    kTimelineTimeRailWidth +
-                    kTimelineRailDotColumnWidth +
-                    kTimelineContentGap +
-                    entry.laneOffset,
-                right: 12,
+                left: entry.left,
+                right: entry.right,
                 child: GestureDetector(
                   onLongPressStart: (details) {
                     setState(() {
                       _dragItemId = item.id;
+                      _focusedItemId = item.id;
                       _dragStartTop = entry.cardTop;
                       _dragTop = entry.cardTop;
                       _dragInitialGlobalY = details.globalPosition.dy;
@@ -187,18 +204,20 @@ class _RoutineTimelineViewportState
                       });
                     }
                   },
-                  onLongPressEnd: (details) {
+                  onLongPressEnd: (details) async {
                     if (_dragItemId == item.id) {
                       final snap =
                           ref.read(routineNotifierProvider).precisionMode
                           ? 1
                           : 5;
                       int newMinute = widget.layout
-                          .minuteForTop(_dragTop)
+                          .clampMinuteToVisibleRange(
+                            visualScale.minuteForY(_dragTop).round(),
+                          )
                           .clamp(0, 1439);
                       newMinute = (newMinute / snap).round() * snap;
 
-                      ref
+                      final result = await ref
                           .read(routineNotifierProvider.notifier)
                           .moveItem(
                             itemId: item.id,
@@ -209,6 +228,17 @@ class _RoutineTimelineViewportState
                             durationMinutes: item.durationMinutes,
                           );
 
+                      if (!context.mounted) return;
+                      if (!result.closesUserFlow) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              result.message ?? 'Failed to move item.',
+                            ),
+                          ),
+                        );
+                      }
+                      if (!mounted) return;
                       setState(() {
                         _dragItemId = null;
                       });
@@ -243,8 +273,64 @@ class _RoutineTimelineViewportState
                                 railHeight: entry.railHeight,
                                 onTap: isPending
                                     ? null
-                                    : () => widget.onCardTap?.call(item),
+                                    : () {
+                                        if (entry.hasOverlap &&
+                                            !entry.isFront) {
+                                          setState(
+                                            () => _focusedItemId = item.id,
+                                          );
+                                          return;
+                                        }
+                                        widget.onCardTap?.call(item);
+                                      },
                               ),
+                              if (entry.hiddenOverlapCount > 0 && entry.isFront)
+                                Positioned(
+                                  right: 10,
+                                  bottom: 10,
+                                  child: Semantics(
+                                    button: true,
+                                    label:
+                                        'Show ${entry.hiddenOverlapCount} hidden overlapping routine tasks',
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: () => _showHiddenOverlapChooser(
+                                        entry,
+                                        itemLayouts,
+                                      ),
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          minWidth: 44,
+                                          minHeight: 44,
+                                        ),
+                                        child: Align(
+                                          alignment: Alignment.bottomRight,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.56,
+                                              ),
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              '+${entry.hiddenOverlapCount} more',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               if (isPending)
                                 const Positioned(
                                   top: 12,
@@ -384,7 +470,10 @@ class _RoutineTimelineViewportState
                 right: 0,
                 height: timelineHeight,
                 child: IgnorePointer(
-                  child: RoutineCurrentTimeLine(layout: widget.layout),
+                  child: RoutineCurrentTimeLine(
+                    layout: widget.layout,
+                    visualScale: visualScale,
+                  ),
                 ),
               ),
           ],
@@ -393,9 +482,8 @@ class _RoutineTimelineViewportState
     );
   }
 
-  List<_TimelineItemLayout> _buildItemLayouts() {
-    final laneEndMinutes = <int>[];
-    final entries = <_TimelineItemLayout>[];
+  _TimelineBuildResult _buildItemLayouts(double viewportWidth) {
+    final visualItems = <_RoutineTimelineVisualItem>[];
 
     for (final item in widget.items) {
       final normalizedEndMinute = TimelineUtils.normalizedEndMinute(item);
@@ -415,67 +503,247 @@ class _RoutineTimelineViewportState
         widget.layout.visibleEndMinute,
       );
 
-      var lane = 0;
-      while (lane < laneEndMinutes.length &&
-          laneEndMinutes[lane] > startMinute) {
-        lane++;
-      }
-
-      if (lane == laneEndMinutes.length) {
-        laneEndMinutes.add(normalizedEndMinute);
-      } else {
-        laneEndMinutes[lane] = normalizedEndMinute;
-      }
-
-      entries.add(
-        _TimelineItemLayout(
+      visualItems.add(
+        _RoutineTimelineVisualItem(
           item: item,
-          lane: lane,
-          top: widget.layout.topForMinute(visibleStartMinute),
-          cardTop: widget.layout.topForMinute(visibleStartMinute),
-          railHeight: widget.layout.heightForRange(
-            visibleStartMinute,
-            visibleEndMinute,
-          ),
-          normalizedEndMinute: visibleEndMinute,
+          startMinute: visibleStartMinute,
+          endMinute: visibleEndMinute,
+          minHeight: _minimumCardHeightFor(item),
+          priority: _priorityFor(item),
         ),
       );
     }
 
-    return entries;
+    final visualLayout = TimelineVisualLayout.build<_RoutineTimelineVisualItem>(
+      items: visualItems,
+      pixelsPerMinute: widget.layout.minuteHeight,
+      timelineWidth: viewportWidth,
+      focusedItemId: _focusedItemId,
+      visibleStartMinute: widget.layout.visibleStartMinute,
+      visibleEndMinute: widget.layout.visibleEndMinute,
+      leftOffset:
+          kTimelineTimeRailWidth +
+          kTimelineRailDotColumnWidth +
+          kTimelineContentGap,
+      rightPadding: 12,
+      maxOverlapLane: 2,
+    );
+    final overlapCounts = _overlapCounts(visualLayout.entries);
+
+    final entries = [
+      for (final entry in visualLayout.entries)
+        _TimelineItemLayout(
+          item: entry.item.item,
+          lane: entry.lane,
+          order: entry.order,
+          top: entry.top,
+          cardTop: entry.top,
+          cardHeight: entry.height,
+          railHeight:
+              visualLayout.scale.yForMinute(entry.item.endMinute) -
+              visualLayout.scale.yForMinute(entry.item.startMinute),
+          normalizedEndMinute: entry.item.endMinute,
+          left: entry.left,
+          right: entry.right,
+          hasOverlap: entry.hasOverlap,
+          isFront: entry.isFront,
+          hiddenOverlapCount: max(0, (overlapCounts[entry.item.id] ?? 1) - 1),
+        ),
+    ];
+    return _TimelineBuildResult(
+      entries: entries,
+      scale: visualLayout.scale,
+      totalHeight: visualLayout.totalHeight,
+    );
   }
 
   double _minimumCardHeightFor(RoutineItem item) {
     if (widget.layout.compactMode) return 88;
     return kTimelineMinimumTaskCardHeight;
   }
+
+  int _priorityFor(RoutineItem item) {
+    return switch (item.blockType) {
+      RoutineBlockType.hardBlock => 90,
+      RoutineBlockType.trackerTask => 80,
+      RoutineBlockType.checkIn => 70,
+      RoutineBlockType.moneyTask => 65,
+      RoutineBlockType.softBlock => 60,
+      RoutineBlockType.flexibleTask => 50,
+    };
+  }
+
+  Map<String, int> _overlapCounts(
+    List<TimelineVisualEntry<_RoutineTimelineVisualItem>> entries,
+  ) {
+    final counts = <String, int>{};
+    for (final entry in entries) {
+      var count = 1;
+      for (final other in entries) {
+        if (entry.item.id == other.item.id) continue;
+        if (entry.item.startMinute < other.item.endMinute &&
+            entry.item.endMinute > other.item.startMinute) {
+          count++;
+        }
+      }
+      counts[entry.item.id] = count;
+    }
+    return counts;
+  }
+
+  void _showHiddenOverlapChooser(
+    _TimelineItemLayout entry,
+    List<_TimelineItemLayout> layouts,
+  ) {
+    final overlapping =
+        layouts
+            .where(
+              (candidate) =>
+                  candidate.item.id != entry.item.id &&
+                  entry.item.startMinute < candidate.normalizedEndMinute &&
+                  entry.normalizedEndMinute > candidate.item.startMinute,
+            )
+            .toList()
+          ..sort((a, b) {
+            final start = a.item.startMinute.compareTo(b.item.startMinute);
+            if (start != 0) return start;
+            return a.item.title.compareTo(b.item.title);
+          });
+    if (overlapping.isEmpty) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Overlapping tasks',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final candidate in overlapping)
+                  Semantics(
+                    button: true,
+                    label:
+                        'Select ${candidate.item.title}, ${TimelineUtils.formatTimeRange(candidate.item.startMinute, candidate.normalizedEndMinute)}',
+                    child: ListTile(
+                      minVerticalPadding: 12,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        candidate.item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        TimelineUtils.formatTimeRange(
+                          candidate.item.startMinute,
+                          candidate.normalizedEndMinute,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        setState(() => _focusedItemId = candidate.item.id);
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TimelineBuildResult {
+  final List<_TimelineItemLayout> entries;
+  final TimelineVisualScale scale;
+  final double totalHeight;
+
+  const _TimelineBuildResult({
+    required this.entries,
+    required this.scale,
+    required this.totalHeight,
+  });
 }
 
 class _TimelineItemLayout {
   final RoutineItem item;
   final int lane;
+  final int order;
   final double top;
   final double cardTop;
+  final double cardHeight;
   final double railHeight;
   final int normalizedEndMinute;
+  final double left;
+  final double right;
+  final bool hasOverlap;
+  final bool isFront;
+  final int hiddenOverlapCount;
 
   const _TimelineItemLayout({
     required this.item,
     required this.lane,
+    required this.order,
     required this.top,
     required this.cardTop,
+    required this.cardHeight,
     required this.railHeight,
     required this.normalizedEndMinute,
+    required this.left,
+    required this.right,
+    required this.hasOverlap,
+    required this.isFront,
+    required this.hiddenOverlapCount,
+  });
+}
+
+class _RoutineTimelineVisualItem implements TimelineVisualItem {
+  final RoutineItem item;
+  @override
+  final int startMinute;
+  @override
+  final int endMinute;
+  @override
+  final double minHeight;
+  @override
+  final int priority;
+
+  const _RoutineTimelineVisualItem({
+    required this.item,
+    required this.startMinute,
+    required this.endMinute,
+    required this.minHeight,
+    required this.priority,
   });
 
-  double get laneOffset => lane * 20.0;
+  @override
+  String get id => item.id;
 }
 
 class _TimelineAnchorPainter extends CustomPainter {
-  final TimelineLayout layout;
+  final TimelineVisualScale scale;
   final List<_TimelineItemLayout> entries;
 
-  const _TimelineAnchorPainter({required this.layout, required this.entries});
+  const _TimelineAnchorPainter({required this.scale, required this.entries});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -484,16 +752,11 @@ class _TimelineAnchorPainter extends CustomPainter {
 
       final color = RoutineCardFactory.colorForType(entry.item.blockType);
       final startY = entry.top;
-      final endY = layout.topForMinute(entry.normalizedEndMinute);
+      final endY = scale.yForMinute(entry.normalizedEndMinute);
 
       if (endY < -20 || startY > size.height + 20) continue;
 
-      final railX =
-          kTimelineTimeRailWidth +
-          kTimelineRailDotColumnWidth +
-          kTimelineContentGap +
-          entry.laneOffset -
-          6;
+      final railX = entry.left - 6;
 
       final railPaint = Paint()
         ..color = color.withValues(alpha: 0.82)
@@ -533,6 +796,6 @@ class _TimelineAnchorPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TimelineAnchorPainter oldDelegate) {
-    return layout != oldDelegate.layout || entries != oldDelegate.entries;
+    return scale != oldDelegate.scale || entries != oldDelegate.entries;
   }
 }

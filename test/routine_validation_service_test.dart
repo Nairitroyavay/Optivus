@@ -19,6 +19,7 @@ void main() {
         occurrences: [],
         evaluationDate: DateTime.utc(2026, 1, 1),
         operation: RoutineValidationOperation.create,
+        authenticatedOwnerUid: '   ',
       );
       final result = RoutineValidationService.validate(context);
       expect(result.isValid, isFalse);
@@ -41,11 +42,12 @@ void main() {
         occurrences: [],
         evaluationDate: DateTime.utc(2026, 1, 1),
         operation: RoutineValidationOperation.create,
+        authenticatedOwnerUid: 'test-uid',
       );
       final result = RoutineValidationService.validate(context);
       expect(result.isValid, isFalse);
       expect(result.errorType, RoutineValidationErrorType.invalidTime);
-      expect(result.userSafeMessage, contains('UTC with no time'));
+      expect(result.userSafeMessage, contains('zero time component'));
     });
   });
 }

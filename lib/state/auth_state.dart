@@ -514,7 +514,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
             .fetchProjectionReceipt(user.uid, plan.projectionId);
         if (!_isCurrentRestore(restoreGeneration)) return;
         if (receipt == null ||
-            receipt.status != 'completed' ||
             receipt.sourceBundleFingerprint != plan.fingerprint) {
           throw const _RoutineProjectionRestoreException(
             'Routine setup recovery is required because its projection '
@@ -526,6 +525,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
           bundle: bundle,
         );
         if (!_isCurrentRestore(restoreGeneration)) return;
+        final projectedReceipt = await _ref
+            .read(routineRepositoryProvider)
+            .fetchProjectionReceipt(user.uid, plan.projectionId);
+        if (!_isCurrentRestore(restoreGeneration)) return;
+        if (projectedReceipt == null ||
+            projectedReceipt.status != 'completed' ||
+            projectedReceipt.sourceBundleFingerprint != plan.fingerprint) {
+          throw const _RoutineProjectionRestoreException(
+            'Routine setup recovery is required because History projection '
+            'did not complete.',
+          );
+        }
       } else {
         await _ref
             .read(routineNotifierProvider.notifier)

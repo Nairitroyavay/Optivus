@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:optivus/core/timeline/timeline_visual_layout.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/models/timeline_layout.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -21,18 +23,19 @@ const double kTimelineContentGap = 12.0;
 /// - Horizontal lines: 1px, OptivusColors.sub@0.055
 class RoutineTimeRuler extends StatelessWidget {
   final TimelineLayout layout;
+  final TimelineVisualScale? visualScale;
 
-  const RoutineTimeRuler({super.key, required this.layout});
+  const RoutineTimeRuler({super.key, required this.layout, this.visualScale});
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: _TimeRulerPainter(layout: layout),
+      painter: _TimeRulerPainter(layout: layout, visualScale: visualScale),
       size: Size(
         kTimelineTimeRailWidth +
             kTimelineRailDotColumnWidth +
             kTimelineContentGap,
-        layout.totalHeight,
+        visualScale?.yForMinute(layout.visibleEndMinute) ?? layout.totalHeight,
       ),
     );
   }
@@ -40,8 +43,9 @@ class RoutineTimeRuler extends StatelessWidget {
 
 class _TimeRulerPainter extends CustomPainter {
   final TimelineLayout layout;
+  final TimelineVisualScale? visualScale;
 
-  _TimeRulerPainter({required this.layout});
+  _TimeRulerPainter({required this.layout, this.visualScale});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -52,7 +56,7 @@ class _TimeRulerPainter extends CustomPainter {
     final showTicks = layout.showMinuteTicks;
 
     for (int m = startMinute; m <= endMinute; m++) {
-      final y = layout.topForMinute(m);
+      final y = visualScale?.yForMinute(m) ?? layout.topForMinute(m);
 
       if (y < -20 || y > size.height + 20) continue;
 
@@ -149,6 +153,7 @@ class _TimeRulerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _TimeRulerPainter oldDelegate) {
-    return layout != oldDelegate.layout;
+    return layout != oldDelegate.layout ||
+        visualScale != oldDelegate.visualScale;
   }
 }

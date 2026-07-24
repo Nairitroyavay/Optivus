@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:optivus/core/timeline/timeline_visual_layout.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/timeline_layout.dart';
@@ -11,8 +13,13 @@ import 'package:optivus/features/routine/widgets/routine_time_ruler.dart';
 /// Matches old Optivus `_CurrentTimeLineAtY` exactly.
 class RoutineCurrentTimeLine extends StatefulWidget {
   final TimelineLayout layout;
+  final TimelineVisualScale? visualScale;
 
-  const RoutineCurrentTimeLine({super.key, required this.layout});
+  const RoutineCurrentTimeLine({
+    super.key,
+    required this.layout,
+    this.visualScale,
+  });
 
   @override
   State<RoutineCurrentTimeLine> createState() => _RoutineCurrentTimeLineState();
@@ -53,7 +60,9 @@ class _RoutineCurrentTimeLineState extends State<RoutineCurrentTimeLine> {
 
     if (widget.layout.totalMinutes <= 0) return const SizedBox.shrink();
 
-    final topOffset = widget.layout.topForMinute(_currentMinute);
+    final topOffset =
+        widget.visualScale?.yForMinute(_currentMinute) ??
+        widget.layout.topForMinute(_currentMinute);
     const dotSize = 8.0;
 
     final displayTimeStr =

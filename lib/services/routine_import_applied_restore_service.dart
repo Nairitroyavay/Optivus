@@ -54,6 +54,10 @@ class RoutineImportAppliedRestoreService {
     required OptivusProviderReader read,
     required RoutineImportReviewDraft review,
   }) async {
+    final notifier = read(routineNotifierProvider.notifier);
+    if (review.uid.trim().isNotEmpty) {
+      await notifier.loadForOwner(review.uid);
+    }
     final expectedItems = restorableItemsForReview(
       review,
     ).map((item) => item.copyWith(userId: review.uid)).toList(growable: false);
@@ -66,16 +70,18 @@ class RoutineImportAppliedRestoreService {
         .where((item) => !currentIds.contains(item.id))
         .toList(growable: false);
 
-    if (read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
-      read(mockRoutineProvider.notifier).mergeMissing(expectedItems);
-    }
-    final batchResult = await read(
-      routineNotifierProvider.notifier,
-    ).addMissingItems(missing);
+    final batchResult = await notifier.addMissingItems(missing);
 
-    final restoredIds = batchResult.isValid
+    final restoredIds = batchResult.isValid && batchResult.durableSaved
         ? missing.map((item) => item.id).toList(growable: false)
         : const <String>[];
+
+    if (restoredIds.isNotEmpty &&
+        read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
+      read(mockRoutineProvider.notifier).mergeMissing(
+        missing.where((item) => restoredIds.contains(item.id)).toList(),
+      );
+    }
 
     return RoutineImportAppliedRestoreResult(
       expectedItemIds: expectedItemIds,

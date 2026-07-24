@@ -6,6 +6,7 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/routine_event_record.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
+import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/routine_firestore_codec.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
@@ -22,10 +23,7 @@ class RoutineEventFeed {
   final List<RoutineEventRecord> validEvents;
   final List<RoutineCorruptEvent> corruptEvents;
 
-  RoutineEventFeed({
-    required this.validEvents,
-    this.corruptEvents = const [],
-  });
+  RoutineEventFeed({required this.validEvents, this.corruptEvents = const []});
 }
 
 abstract class RoutineTransactionRepository {
@@ -40,6 +38,13 @@ abstract class RoutineTransactionRepository {
     List<RoutineEventRecord>? addEvents,
   });
 
+  Future<void> commitProjectionEventBatch({
+    required String uid,
+    required RoutineProjectionReceipt fromReceipt,
+    required RoutineProjectionReceipt toReceipt,
+    required List<RoutineEventRecord> addEvents,
+  });
+
   Stream<RoutineEventFeed> watchEvents(String uid);
 }
 
@@ -48,6 +53,7 @@ class FirestoreRoutineTransactionRepository
   final FirebaseFirestore? _injectedFirestore;
   final RoutineTemplateFirestoreCodec _itemCodec;
   final RoutineOccurrenceFirestoreCodec _occurrenceCodec;
+  final RoutineProjectionReceiptFirestoreCodec _receiptCodec;
 
   FirestoreRoutineTransactionRepository({
     FirebaseFirestore? firestore,
@@ -55,9 +61,12 @@ class FirestoreRoutineTransactionRepository
         const RoutineTemplateFirestoreCodec(),
     RoutineOccurrenceFirestoreCodec occurrenceCodec =
         const RoutineOccurrenceFirestoreCodec(),
+    RoutineProjectionReceiptFirestoreCodec receiptCodec =
+        const RoutineProjectionReceiptFirestoreCodec(),
   }) : _injectedFirestore = firestore,
        _itemCodec = itemCodec,
-       _occurrenceCodec = occurrenceCodec;
+       _occurrenceCodec = occurrenceCodec,
+       _receiptCodec = receiptCodec;
 
   FirebaseFirestore get _firestore =>
       _injectedFirestore ?? FirebaseFirestore.instance;
@@ -95,7 +104,7 @@ class FirestoreRoutineTransactionRepository
     List<RoutineEventRecord>? addEvents,
   }) async {
     await _firestore.runTransaction((transaction) async {
-      final eventsToWrite = [if (addEvent != null) addEvent, if (addEvents != null) ...addEvents];
+      final eventsToWrite = [?addEvent, ...?addEvents];
       final missingEvents = <RoutineEventRecord>[];
 
       // Idempotency: verify ALL events exist with matching content.
@@ -108,7 +117,7 @@ class FirestoreRoutineTransactionRepository
           if (!eventDoc.exists) {
             missingEvents.add(event);
           } else {
-            final existingData = eventDoc.data()!;
+            final existingData = eventDoc.data();
             final incomingData = RoutineEventFirestoreCodec.toFirestore(event);
             if (!_isDeepEqual(existingData, incomingData)) {
               throw StateError(
@@ -119,7 +128,7 @@ class FirestoreRoutineTransactionRepository
         }
       }
 
-      final itemsToWrite = [if (setItem != null) setItem, if (setItems != null) ...setItems];
+      final itemsToWrite = [?setItem, ...?setItems];
 
       for (final item in itemsToWrite) {
         final docRef = _firestore.doc(
@@ -166,28 +175,119 @@ class FirestoreRoutineTransactionRepository
   }
 
   @override
+  Future<void> commitProjectionEventBatch({
+    required String uid,
+    required RoutineProjectionReceipt fromReceipt,
+    required RoutineProjectionReceipt toReceipt,
+    required List<RoutineEventRecord> addEvents,
+  }) async {
+    validateOwnerUid(uid);
+    _receiptCodec.toFirestore(fromReceipt);
+    _receiptCodec.toFirestore(toReceipt);
+    if (fromReceipt.ownerUid != uid ||
+        toReceipt.ownerUid != uid ||
+        fromReceipt.id != toReceipt.id ||
+        fromReceipt.sourceBundleFingerprint !=
+            toReceipt.sourceBundleFingerprint ||
+        fromReceipt.projectedItemIds.join('\u001f') !=
+            toReceipt.projectedItemIds.join('\u001f') ||
+        fromReceipt.cursor > toReceipt.cursor) {
+      throw StateError('Invalid Routine projection receipt transition.');
+    }
+
+    await _firestore.runTransaction((transaction) async {
+      final receiptRef = _firestore.doc(
+        FirestoreUserPaths.routineProjection(uid, fromReceipt.id),
+      );
+      final receiptSnapshot = await transaction.get(receiptRef);
+      if (!receiptSnapshot.exists || receiptSnapshot.data() == null) {
+        throw StateError('Routine projection receipt is missing.');
+      }
+      final currentReceipt = _receiptCodec.fromFirestore(
+        documentId: receiptSnapshot.id,
+        data: receiptSnapshot.data()!,
+      );
+      final currentCursor = currentReceipt.cursor;
+      final targetAlreadyReached =
+          currentReceipt.status == toReceipt.status &&
+          currentReceipt.cursor == toReceipt.cursor;
+      final canAdvance =
+          currentReceipt.status == 'pending' &&
+          currentReceipt.cursor == fromReceipt.cursor &&
+          currentReceipt.sourceBundleFingerprint ==
+              fromReceipt.sourceBundleFingerprint &&
+          currentReceipt.projectedItemIds.join('\u001f') ==
+              fromReceipt.projectedItemIds.join('\u001f');
+      if (!targetAlreadyReached && !canAdvance) {
+        throw StateError(
+          'Routine projection receipt changed before event batch commit '
+          '(cursor $currentCursor).',
+        );
+      }
+
+      final missingEvents = <RoutineEventRecord>[];
+      for (final event in addEvents) {
+        final eventRef = _firestore.doc(
+          FirestoreUserPaths.routineEvent(uid, event.eventId),
+        );
+        final eventSnapshot = await transaction.get(eventRef);
+        final incomingData = RoutineEventFirestoreCodec.toFirestore(event);
+        if (!eventSnapshot.exists) {
+          missingEvents.add(event);
+          continue;
+        }
+        if (!_isDeepEqual(eventSnapshot.data(), incomingData)) {
+          throw StateError(
+            'Event ${event.eventId} exists with different content.',
+          );
+        }
+      }
+
+      for (final event in missingEvents) {
+        final eventRef = _firestore.doc(
+          FirestoreUserPaths.routineEvent(uid, event.eventId),
+        );
+        transaction.set(
+          eventRef,
+          RoutineEventFirestoreCodec.toFirestore(event),
+        );
+      }
+
+      if (!targetAlreadyReached) {
+        final receiptData = _receiptCodec.toFirestore(toReceipt);
+        receiptData['createdAt'] = receiptSnapshot.data()!['createdAt'];
+        receiptData['updatedAt'] = FieldValue.serverTimestamp();
+        if (toReceipt.status == 'completed') {
+          receiptData['completedAt'] = FieldValue.serverTimestamp();
+        }
+        transaction.set(receiptRef, receiptData);
+      }
+    });
+  }
+
+  @override
   Stream<RoutineEventFeed> watchEvents(String uid) {
     return _firestore
         .collection(FirestoreUserPaths.routineEvents(uid))
         .orderBy('occurredAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      final validEvents = <RoutineEventRecord>[];
-      final corruptEvents = <RoutineCorruptEvent>[];
-      for (final doc in snapshot.docs) {
-        try {
-          validEvents.add(
-            RoutineEventFirestoreCodec.fromFirestore(doc.id, doc.data()),
+          final validEvents = <RoutineEventRecord>[];
+          final corruptEvents = <RoutineCorruptEvent>[];
+          for (final doc in snapshot.docs) {
+            try {
+              validEvents.add(
+                RoutineEventFirestoreCodec.fromFirestore(doc.id, doc.data()),
+              );
+            } catch (e) {
+              corruptEvents.add(RoutineCorruptEvent(doc.id, e));
+            }
+          }
+          return RoutineEventFeed(
+            validEvents: validEvents,
+            corruptEvents: corruptEvents,
           );
-        } catch (e) {
-          corruptEvents.add(RoutineCorruptEvent(doc.id, e));
-        }
-      }
-      return RoutineEventFeed(
-        validEvents: validEvents,
-        corruptEvents: corruptEvents,
-      );
-    });
+        });
   }
 }
 
@@ -213,6 +313,39 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
   }) : _routineRepository = routineRepository,
        _historyRepository = historyRepository;
 
+  bool _deepEqual(dynamic a, dynamic b) {
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final key in a.keys) {
+        if (!_deepEqual(a[key], b[key])) return false;
+      }
+      return true;
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var index = 0; index < a.length; index++) {
+        if (!_deepEqual(a[index], b[index])) return false;
+      }
+      return true;
+    }
+    if (a is Timestamp && b is Timestamp) {
+      return a.microsecondsSinceEpoch == b.microsecondsSinceEpoch;
+    }
+    return a == b;
+  }
+
+  bool _eventsEqual(RoutineEventRecord a, RoutineEventRecord b) {
+    return _deepEqual(
+      RoutineEventFirestoreCodec.toFirestore(a),
+      RoutineEventFirestoreCodec.toFirestore(b),
+    );
+  }
+
+  void _publishEvents(String uid, List<RoutineEventRecord> list) {
+    _events[uid] = list;
+    _controllers[uid]?.add(RoutineEventFeed(validEvents: list));
+  }
+
   @override
   Future<void> commitWrite({
     required String uid,
@@ -231,14 +364,14 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
     try {
       await previousMutex;
 
-      final itemsToWrite = [if (setItem != null) setItem, if (setItems != null) ...setItems];
-      final eventsToWrite = [if (addEvent != null) addEvent, if (addEvents != null) ...addEvents];
+      final itemsToWrite = [?setItem, ...?setItems];
+      final eventsToWrite = [?addEvent, ...?addEvents];
 
       final initialItems = _routineRepository != null
-          ? await _routineRepository!.fetchRoutineItems(uid)
+          ? await _routineRepository.fetchRoutineItems(uid)
           : <RoutineItem>[];
       final initialOccurrences = _historyRepository != null
-          ? await _historyRepository!.fetchHistory(uid)
+          ? await _historyRepository.fetchHistory(uid)
           : <RoutineOccurrenceRecord>[];
       final initialEvents = List<RoutineEventRecord>.from(_events[uid] ?? []);
 
@@ -248,13 +381,14 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
         final futures = <Future<void>>[];
 
         for (final item in itemsToWrite) {
-          if (_routineRepository != null) {
+          final routineRepository = _routineRepository;
+          if (routineRepository != null) {
             futures.add(
-              _routineRepository!.updateRoutineItem(uid, item).catchError((
+              routineRepository.updateRoutineItem(uid, item).catchError((
                 Object e,
               ) async {
                 if (e.toString().contains('Routine item does not exist.')) {
-                  return await _routineRepository!.createRoutineItem(uid, item);
+                  return await routineRepository.createRoutineItem(uid, item);
                 } else {
                   throw e;
                 }
@@ -263,16 +397,18 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
           }
         }
 
-        if (deleteItemId != null && _routineRepository != null) {
-          futures.add(_routineRepository!.deleteRoutineItem(uid, deleteItemId));
+        final routineRepository = _routineRepository;
+        if (deleteItemId != null && routineRepository != null) {
+          futures.add(routineRepository.deleteRoutineItem(uid, deleteItemId));
         }
 
-        if (setOccurrence != null && _historyRepository != null) {
-          futures.add(_historyRepository!.appendHistory(uid, setOccurrence));
+        final historyRepository = _historyRepository;
+        if (setOccurrence != null && historyRepository != null) {
+          futures.add(historyRepository.appendHistory(uid, setOccurrence));
         }
 
-        if (deleteOccurrenceId != null && _historyRepository != null) {
-          futures.add(_historyRepository!.deleteHistory(uid, deleteOccurrenceId));
+        if (deleteOccurrenceId != null && historyRepository != null) {
+          futures.add(historyRepository.deleteHistory(uid, deleteOccurrenceId));
         }
 
         // Execute all underlying writes FIRST.
@@ -284,51 +420,149 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
           final list = List<RoutineEventRecord>.from(_events[uid] ?? []);
           bool changed = false;
           for (final event in eventsToWrite) {
-            if (!list.any((e) => e.eventId == event.eventId)) {
+            final existing = list
+                .where((candidate) => candidate.eventId == event.eventId)
+                .firstOrNull;
+            if (existing == null) {
               list.insert(0, event);
               changed = true;
+            } else if (!_eventsEqual(existing, event)) {
+              throw StateError(
+                'Event ${event.eventId} exists with different content.',
+              );
             }
           }
+          await onAfterEvents?.call();
           if (changed) {
-            _events[uid] = list;
-            _controllers[uid]?.add(RoutineEventFeed(validEvents: list));
+            _publishEvents(uid, list);
           }
+        } else {
+          await onAfterEvents?.call();
         }
-        await onAfterEvents?.call();
       } catch (error) {
-        // Rollback items
-        if (_routineRepository is FakeRoutineRepository) {
-          final repo = _routineRepository as FakeRoutineRepository;
-          repo.database.itemsByUid[uid] = {
-            for (final item in initialItems) item.id: item
-          };
-        }
+        if (!error.toString().contains('_SKIP_ROLLBACK')) {
+          // Rollback items
+          if (_routineRepository is FakeRoutineRepository) {
+            final repo = _routineRepository;
+            repo.database.itemsByUid[uid] = {
+              for (final item in initialItems) item.id: item,
+            };
+          }
 
-        // Rollback occurrences
-        if (_historyRepository != null) {
-          if (setOccurrence != null) {
-            final old = initialOccurrences
-                .where((o) => o.id == setOccurrence.id)
-                .firstOrNull;
-            if (old != null) {
-              await _historyRepository!.appendHistory(uid, old);
-            } else {
-              await _historyRepository!.deleteHistory(uid, setOccurrence.id);
+          // Rollback occurrences
+          final historyRepository = _historyRepository;
+          if (historyRepository != null) {
+            if (setOccurrence != null) {
+              final old = initialOccurrences
+                  .where((o) => o.id == setOccurrence.id)
+                  .firstOrNull;
+              if (old != null) {
+                await historyRepository.appendHistory(uid, old);
+              } else {
+                await historyRepository.deleteHistory(uid, setOccurrence.id);
+              }
+            }
+            if (deleteOccurrenceId != null) {
+              final old = initialOccurrences
+                  .where((o) => o.id == deleteOccurrenceId)
+                  .firstOrNull;
+              if (old != null) {
+                await historyRepository.appendHistory(uid, old);
+              }
             }
           }
-          if (deleteOccurrenceId != null) {
-            final old = initialOccurrences
-                .where((o) => o.id == deleteOccurrenceId)
-                .firstOrNull;
-            if (old != null) {
-              await _historyRepository!.appendHistory(uid, old);
-            }
+
+          // Rollback events
+          _publishEvents(uid, initialEvents);
+        }
+
+        rethrow;
+      }
+    } finally {
+      completer.complete();
+    }
+  }
+
+  @override
+  Future<void> commitProjectionEventBatch({
+    required String uid,
+    required RoutineProjectionReceipt fromReceipt,
+    required RoutineProjectionReceipt toReceipt,
+    required List<RoutineEventRecord> addEvents,
+  }) async {
+    final completer = Completer<void>();
+    final previousMutex = _mutex;
+    _mutex = completer.future;
+
+    try {
+      await previousMutex;
+      validateOwnerUid(uid);
+      const receiptCodec = RoutineProjectionReceiptFirestoreCodec();
+      receiptCodec.toFirestore(fromReceipt);
+      receiptCodec.toFirestore(toReceipt);
+      final routineRepository = _routineRepository;
+      if (routineRepository is! FakeRoutineRepository) {
+        throw StateError('Fake Routine database is required for projection.');
+      }
+
+      final initialEvents = List<RoutineEventRecord>.from(_events[uid] ?? []);
+      final initialReceipts = Map<String, RoutineProjectionReceipt>.from(
+        routineRepository.database.receiptsByUid[uid] ?? const {},
+      );
+
+      try {
+        await onBeforeMutation?.call();
+
+        final receipts = routineRepository.database.receiptsByUid.putIfAbsent(
+          uid,
+          () => {},
+        );
+        final current = receipts[fromReceipt.id];
+        if (current == null) {
+          throw StateError('Routine projection receipt is missing.');
+        }
+        final targetAlreadyReached =
+            current.status == toReceipt.status &&
+            current.cursor == toReceipt.cursor;
+        final canAdvance =
+            current.status == 'pending' &&
+            current.cursor == fromReceipt.cursor &&
+            current.sourceBundleFingerprint ==
+                fromReceipt.sourceBundleFingerprint &&
+            current.projectedItemIds.join('\u001f') ==
+                fromReceipt.projectedItemIds.join('\u001f');
+        if (!targetAlreadyReached && !canAdvance) {
+          throw StateError('Routine projection receipt changed before retry.');
+        }
+
+        final list = List<RoutineEventRecord>.from(_events[uid] ?? []);
+        var changed = false;
+        for (final event in addEvents) {
+          final existing = list
+              .where((candidate) => candidate.eventId == event.eventId)
+              .firstOrNull;
+          if (existing == null) {
+            list.insert(0, event);
+            changed = true;
+          } else if (!_eventsEqual(existing, event)) {
+            throw StateError(
+              'Event ${event.eventId} exists with different content.',
+            );
           }
         }
 
-        // Rollback events
-        _events[uid] = initialEvents;
-
+        await onAfterMutation?.call();
+        receipts[toReceipt.id] = toReceipt;
+        await onAfterEvents?.call();
+        if (changed) {
+          list.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+          _publishEvents(uid, list);
+        }
+      } catch (error) {
+        if (!error.toString().contains('_SKIP_ROLLBACK')) {
+          routineRepository.database.receiptsByUid[uid] = initialReceipts;
+          _publishEvents(uid, initialEvents);
+        }
         rethrow;
       }
     } finally {
@@ -344,7 +578,9 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
     // Yield the initial value immediately when listening
     Future.microtask(() {
       if (_controllers[uid] != null && _controllers[uid]!.hasListener) {
-        _controllers[uid]!.add(RoutineEventFeed(validEvents: _events[uid] ?? []));
+        _controllers[uid]!.add(
+          RoutineEventFeed(validEvents: _events[uid] ?? []),
+        );
       }
     });
     return _controllers[uid]!.stream;

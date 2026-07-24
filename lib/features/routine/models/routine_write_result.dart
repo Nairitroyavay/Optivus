@@ -5,6 +5,7 @@ enum RoutineWriteOutcome {
   validationFailed,
   retryRequired,
   noOp,
+  superseded,
 }
 
 class RoutineWriteResult {
@@ -43,4 +44,14 @@ class RoutineWriteResult {
     this.message,
     this.operationId,
   }) : outcome = RoutineWriteOutcome.noOp;
+
+  const RoutineWriteResult.superseded({
+    this.validation,
+    this.message,
+    this.operationId,
+  }) : outcome = RoutineWriteOutcome.superseded;
+
+  bool get closesUserFlow =>
+      outcome == RoutineWriteOutcome.saved ||
+      outcome == RoutineWriteOutcome.noOp;
 }

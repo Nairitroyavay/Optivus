@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:optivus/core/timeline/timeline_visual_layout.dart';
+import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
@@ -204,12 +206,8 @@ class OnboardingVerticalTimeline extends StatelessWidget {
       builder: (context, constraints) {
         final blockWidth = constraints.maxWidth - 64 - 16;
 
-        final List<StretchedSegment> segments = [];
+        final visualItems = <_OnboardingTimelineVisualItem>[];
         for (final block in blocks) {
-          final normalHeight =
-              (block.endMinute - block.startMinute) * pxPerMinute;
-          // To keep it generic, we use a fixed estimated required height or pass items directly
-          // For now, let's assume all generic blocks need to evaluate their items
           final requiredHeight = requiredHeightBuilder != null
               ? requiredHeightBuilder!(context, block, blockWidth)
               : calculateRequiredBlockHeight(
@@ -226,27 +224,39 @@ class OnboardingVerticalTimeline extends StatelessWidget {
                       '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
                   blockWidth: blockWidth,
                 );
-          if (requiredHeight > normalHeight) {
-            segments.add(
-              StretchedSegment(
-                startMinute: block.startMinute,
-                endMinute: block.endMinute,
-                extraStretch: requiredHeight - normalHeight,
-              ),
-            );
-          }
+          visualItems.add(
+            _OnboardingTimelineVisualItem(
+              block: block,
+              minHeight: requiredHeight,
+            ),
+          );
         }
 
-        final layout = OnboardingTimelineLayout(
-          startMinute: startMinute,
-          rangeMinutes: rangeMinutes,
-          pxPerMinute: pxPerMinute,
-          topPadding: topPadding,
-          segments: segments,
-        );
+        final visualLayout =
+            TimelineVisualLayout.build<_OnboardingTimelineVisualItem>(
+              items: visualItems,
+              pixelsPerMinute: pxPerMinute,
+              timelineWidth: constraints.maxWidth,
+              focusedItemId: null,
+              visibleStartMinute: startMinute,
+              visibleEndMinute: startMinute + rangeMinutes,
+              topPadding: topPadding,
+              leftOffset: 64,
+              rightPadding: 16,
+              maxOverlapLane: 0,
+              overlapMinFrontWidth: 0,
+              overlapMinLabelWidth: 0,
+              overlapMaxLabelWidth: 0,
+            );
+        final scale = visualLayout.scale;
+        final entryById = {
+          for (final entry in visualLayout.entries) entry.item.id: entry,
+        };
 
-        final timelineHeight =
-            rangeMinutes * pxPerMinute + topPadding + layout.totalExtraStretch;
+        final timelineHeight = math.max(
+          visualLayout.totalHeight,
+          scale.yForMinute(startMinute + rangeMinutes),
+        );
 
         return Container(
           key: const ValueKey('onboarding-generic-timeline'),
@@ -310,7 +320,7 @@ class OnboardingVerticalTimeline extends StatelessWidget {
                     ))
                       OnboardingMinuteIndicator(
                         minute: minute,
-                        top: layout.yFor(minute),
+                        top: scale.yForMinute(minute),
                         accent: accent,
                       ),
                     for (
@@ -320,19 +330,18 @@ class OnboardingVerticalTimeline extends StatelessWidget {
                     )
                       OnboardingTimelineTick(
                         minute: minute,
-                        top: layout.yFor(minute),
+                        top: scale.yForMinute(minute),
                         accent: accent,
                       ),
                     for (final block in blocks)
-                      Positioned(
-                        top: layout.yFor(block.startMinute),
-                        left: 64,
-                        right: 16,
-                        height:
-                            layout.yFor(block.endMinute) -
-                            layout.yFor(block.startMinute),
-                        child: blockBuilder(context, block),
-                      ),
+                      if (entryById[block.id] != null)
+                        Positioned(
+                          top: entryById[block.id]!.top,
+                          left: 64,
+                          right: 16,
+                          height: entryById[block.id]!.height,
+                          child: blockBuilder(context, block),
+                        ),
                   ],
                 ),
               ),
@@ -342,6 +351,30 @@ class OnboardingVerticalTimeline extends StatelessWidget {
       },
     );
   }
+}
+
+class _OnboardingTimelineVisualItem implements TimelineVisualItem {
+  final TimelineBlockDraft block;
+  @override
+  final double minHeight;
+
+  const _OnboardingTimelineVisualItem({
+    required this.block,
+    required this.minHeight,
+  });
+
+  @override
+  String get id => block.id;
+
+  @override
+  int get startMinute => block.startMinute;
+
+  @override
+  int get endMinute => block.endMinute;
+
+  @override
+  int get priority =>
+      block.blockType == TimelineBlockDraft.hardBlockKey ? 90 : 50;
 }
 
 class OnboardingTimelineTick extends StatelessWidget {

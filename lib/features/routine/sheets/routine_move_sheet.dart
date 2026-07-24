@@ -33,6 +33,8 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
   late DateTime _date;
   late int _startMinute;
   late int _duration;
+  bool _pending = false;
+  String? _error;
 
   @override
   void initState() {
@@ -54,6 +56,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
           startMinute: _startMinute,
           durationMinutes: _duration,
         );
+    final blockingConflict = conflicts.any((item) => item.blocking);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.72,
@@ -176,70 +179,90 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
                     label: 'Find free slot',
                     color: OptivusColors.routineAccent,
                     icon: Icons.search_rounded,
-                    onTap: _findFreeSlot,
+                    onTap: _pending ? null : _findFreeSlot,
                   ),
                   _ActionPill(
                     label: 'Make tiny version',
                     color: OptivusColors.warning,
                     icon: Icons.compress_rounded,
-                    onTap: () {
-                      ref
-                          .read(routineNotifierProvider.notifier)
-                          .makeTinyVersion(widget.item);
-                      Navigator.of(context).pop();
-                    },
+                    pending: _pending,
+                    onTap: _pending
+                        ? null
+                        : () => _runWrite(
+                            () => ref
+                                .read(routineNotifierProvider.notifier)
+                                .makeTinyVersion(widget.item),
+                          ),
                   ),
                   _ActionPill(
                     label: 'Move to tomorrow',
                     color: OptivusColors.textSecondary,
                     icon: Icons.today_rounded,
-                    onTap: () {
-                      ref
-                          .read(routineNotifierProvider.notifier)
-                          .moveToTomorrow(widget.item);
-                      Navigator.of(context).pop();
-                    },
+                    pending: _pending,
+                    onTap: _pending
+                        ? null
+                        : () => _runWrite(
+                            () => ref
+                                .read(routineNotifierProvider.notifier)
+                                .moveToTomorrow(widget.item),
+                          ),
                   ),
                 ],
               ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.25,
+                    fontWeight: FontWeight.w800,
+                    color: OptivusColors.danger,
+                  ),
+                ),
+              ],
               const SizedBox(height: 18),
               SizedBox(
                 height: 48,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: conflicts.any((item) => item.blocking)
-                        ? OptivusColors.warning
-                        : OptivusColors.routineAccent,
+                    backgroundColor: OptivusColors.routineAccent,
+                    disabledBackgroundColor: OptivusColors.disabled,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  onPressed: () async {
-                    final result = await ref
-                        .read(routineNotifierProvider.notifier)
-                        .moveItem(
-                          itemId: widget.item.id,
-                          date: _date,
-                          startMinute: _startMinute,
-                          durationMinutes: _duration,
-                        );
-                    if (!context.mounted) return;
-                    if (result.outcome == RoutineWriteOutcome.saved || result.outcome == RoutineWriteOutcome.noOp) {
-                      Navigator.of(context).pop();
-                    } else if (result.outcome != RoutineWriteOutcome.validationFailed) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.errorMessage ?? 'Failed to move item')));
-                    }
-                  },
-                  child: Text(
-                    conflicts.any((item) => item.blocking)
-                        ? 'Move with warning'
-                        : 'Move task',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
+                  onPressed: blockingConflict || _pending
+                      ? null
+                      : () => _runWrite(
+                          () => ref
+                              .read(routineNotifierProvider.notifier)
+                              .moveItem(
+                                itemId: widget.item.id,
+                                date: _date,
+                                startMinute: _startMinute,
+                                durationMinutes: _duration,
+                              ),
+                        ),
+                  child: _pending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          blockingConflict
+                              ? 'Resolve blocking conflict'
+                              : 'Move task',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -275,6 +298,7 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
   }
 
   void _findFreeSlot() {
+    if (_pending) return;
     final start = ref
         .read(routineNotifierProvider.notifier)
         .findFreeSlot(
@@ -284,7 +308,32 @@ class _RoutineMoveSheetState extends ConsumerState<_RoutineMoveSheet> {
         );
     if (start != null) {
       setState(() => _startMinute = start);
+    } else {
+      setState(() => _error = 'No free slot found for this duration.');
     }
+  }
+
+  Future<void> _runWrite(Future<RoutineWriteResult> Function() write) async {
+    if (_pending) return;
+    setState(() {
+      _pending = true;
+      _error = null;
+    });
+    final result = await write();
+    if (!mounted) return;
+    if (result.outcome == RoutineWriteOutcome.saved ||
+        (result.outcome == RoutineWriteOutcome.noOp &&
+            result.validation?.isValid != false)) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _pending = false;
+      _error =
+          result.validation?.userSafeMessage ??
+          result.message ??
+          'Failed to update this item. Please adjust the move and retry.';
+    });
   }
 
   String _formatDate(DateTime date) {
@@ -461,40 +510,57 @@ class _ActionPill extends StatelessWidget {
   final String label;
   final Color color;
   final IconData icon;
-  final VoidCallback onTap;
+  final bool pending;
+  final VoidCallback? onTap;
 
   const _ActionPill({
     required this.label,
     required this.color,
     required this.icon,
+    this.pending = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: color,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.48,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 5),
+              if (pending && enabled) ...[
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

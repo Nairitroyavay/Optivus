@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:optivus/models/routine_item.dart';
 
 enum RoutineEventType {
   created,
@@ -71,14 +72,25 @@ class RoutineEventRecord {
 
 class RoutineEventFirestoreCodec {
   static Map<String, dynamic> toFirestore(RoutineEventRecord record) {
-    if (record.ownerUid.isEmpty) throw const FormatException('ownerUid is required');
-    if (record.eventId.isEmpty) throw const FormatException('eventId is required');
-    if (record.routineItemId.isEmpty) throw const FormatException('routineItemId is required');
-    if (record.operationKey.isEmpty) throw const FormatException('operationKey is required');
-    if (record.source.isEmpty) throw const FormatException('source is required');
-    if (record.itemSnapshot.isEmpty) throw const FormatException('itemSnapshot is required');
-    if (record.itemSnapshot['title'] is! String) throw const FormatException('itemSnapshot title is required');
-    if (record.itemSnapshot['startMinute'] is! num) throw const FormatException('itemSnapshot startMinute is required');
+    if (record.ownerUid.isEmpty) {
+      throw const FormatException('ownerUid is required');
+    }
+    if (record.eventId.isEmpty) {
+      throw const FormatException('eventId is required');
+    }
+    if (record.routineItemId.isEmpty) {
+      throw const FormatException('routineItemId is required');
+    }
+    if (record.operationKey.isEmpty) {
+      throw const FormatException('operationKey is required');
+    }
+    if (record.source.isEmpty) {
+      throw const FormatException('source is required');
+    }
+    if (record.itemSnapshot.isEmpty) {
+      throw const FormatException('itemSnapshot is required');
+    }
+    _validateItemSnapshot(record.itemSnapshot, record.routineItemId);
 
     return {
       'schemaVersion': record.schemaVersion,
@@ -153,12 +165,7 @@ class RoutineEventFirestoreCodec {
     if (itemSnapshot == null || itemSnapshot.isEmpty) {
       throw const FormatException('itemSnapshot is required');
     }
-    if (itemSnapshot['title'] is! String) {
-      throw const FormatException('itemSnapshot title is required');
-    }
-    if (itemSnapshot['startMinute'] is! num) {
-      throw const FormatException('itemSnapshot startMinute is required');
-    }
+    _validateItemSnapshot(itemSnapshot, routineItemId);
 
     return RoutineEventRecord(
       schemaVersion: schemaVersion,
@@ -177,5 +184,98 @@ class RoutineEventFirestoreCodec {
       occurredAt: occurredAtTimestamp.toDate().toUtc(),
       itemSnapshot: itemSnapshot,
     );
+  }
+
+  static void _validateItemSnapshot(
+    Map<String, dynamic> snapshot,
+    String routineItemId,
+  ) {
+    const allowedKeys = {
+      'id',
+      'title',
+      'startMinute',
+      'durationMinutes',
+      'blockType',
+      'trackerTaskType',
+      'hardBlock',
+      'onboardingProjectionId',
+    };
+    const requiredKeys = {
+      'id',
+      'title',
+      'startMinute',
+      'durationMinutes',
+      'blockType',
+      'trackerTaskType',
+      'hardBlock',
+    };
+
+    final unknownKeys = snapshot.keys.toSet().difference(allowedKeys);
+    if (unknownKeys.isNotEmpty) {
+      throw FormatException(
+        'itemSnapshot contains unsupported fields: ${unknownKeys.join(', ')}',
+      );
+    }
+    final missingKeys = requiredKeys.difference(snapshot.keys.toSet());
+    if (missingKeys.isNotEmpty) {
+      throw FormatException(
+        'itemSnapshot missing required fields: ${missingKeys.join(', ')}',
+      );
+    }
+
+    final id = snapshot['id'];
+    if (id is! String || !_validDocumentId(id) || id != routineItemId) {
+      throw const FormatException('itemSnapshot id is invalid');
+    }
+
+    final title = snapshot['title'];
+    if (title is! String || title.isEmpty || title.length > 200) {
+      throw const FormatException('itemSnapshot title is required');
+    }
+
+    final startMinute = snapshot['startMinute'];
+    if (startMinute is! int || startMinute < 0 || startMinute > 1439) {
+      throw const FormatException('itemSnapshot startMinute is invalid');
+    }
+
+    final durationMinutes = snapshot['durationMinutes'];
+    if (durationMinutes is! int ||
+        durationMinutes <= 0 ||
+        durationMinutes > 1440) {
+      throw const FormatException('itemSnapshot durationMinutes is invalid');
+    }
+
+    final blockType = snapshot['blockType'];
+    if (blockType is! String ||
+        !RoutineBlockType.values.any((value) => value.name == blockType)) {
+      throw const FormatException('itemSnapshot blockType is invalid');
+    }
+
+    final trackerTaskType = snapshot['trackerTaskType'];
+    if (trackerTaskType is! String ||
+        !TrackerType.values.any((value) => value.name == trackerTaskType)) {
+      throw const FormatException('itemSnapshot trackerTaskType is invalid');
+    }
+
+    if (snapshot['hardBlock'] is! bool) {
+      throw const FormatException('itemSnapshot hardBlock is required');
+    }
+
+    final onboardingProjectionId = snapshot['onboardingProjectionId'];
+    if (onboardingProjectionId != null && onboardingProjectionId is! String) {
+      throw const FormatException(
+        'itemSnapshot onboardingProjectionId is invalid',
+      );
+    }
+  }
+
+  static bool _validDocumentId(String id) {
+    final value = id.trim();
+    return value.isNotEmpty &&
+        value.length <= 128 &&
+        !value.contains('/') &&
+        value != '.' &&
+        value != '..' &&
+        value == id;
   }
 }

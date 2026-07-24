@@ -77,7 +77,10 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, color: OptivusColors.warning),
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: OptivusColors.warning,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -211,22 +214,6 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
                 onTap: _showRow,
               ),
               _HistoryStatusSection(
-                title: 'Tracker-completed',
-                rows: filtered
-                    .where(
-                      (row) =>
-                          row.eventType == RoutineEventType.completed &&
-                          row.linkedTracker != null,
-                    )
-                    .toList(),
-                onTap: _showRow,
-              ),
-              _HistoryStatusSection(
-                title: 'Check-ins',
-                rows: filtered.where((row) => row.type == 'check-in').toList(),
-                onTap: _showRow,
-              ),
-              _HistoryStatusSection(
                 title: 'Undone',
                 rows: filtered
                     .where((row) => row.eventType == RoutineEventType.undone)
@@ -246,12 +233,15 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
         if (cmp != 0) return cmp;
         return b.eventId.compareTo(a.eventId);
       });
+    final seenEventIds = <String>{};
 
-    return sortedEvents.map((event) {
+    return sortedEvents.where((event) => seenEventIds.add(event.eventId)).map((
+      event,
+    ) {
       final snap = event.itemSnapshot;
 
-      final title = snap['title'] as String?;
-      final startMinute = snap['startMinute'] as int?;
+      final title = snap['title'] as String? ?? 'History entry unavailable';
+      final startMinute = (snap['startMinute'] as int?) ?? 0;
       final endMinuteRaw = snap['endMinute'] as int?;
       final durationMinutes = snap['durationMinutes'] as int?;
       final blockTypeRaw = snap['blockType'] as String?;
@@ -259,7 +249,6 @@ class _RoutineHistoryScreenState extends ConsumerState<RoutineHistoryScreen> {
       // We no longer synthesize "Unknown task" or "Event data unavailable" for corrupt records
       // Corrupt records should be caught in RoutineEventFeed.corruptEvents, and this method only receives validEvents.
       // So we can assume all required fields exist.
-
 
       final displayTitle = title;
       final effectiveStart = startMinute;
@@ -511,7 +500,6 @@ class _RoutineHistoryRow {
   final String type;
   final String? linkedTracker;
   final DateTime date;
-  final bool isCorrupt;
   final String eventId;
 
   const _RoutineHistoryRow({
@@ -522,7 +510,6 @@ class _RoutineHistoryRow {
     required this.type,
     this.linkedTracker,
     required this.date,
-    this.isCorrupt = false,
     required this.eventId,
   });
 }

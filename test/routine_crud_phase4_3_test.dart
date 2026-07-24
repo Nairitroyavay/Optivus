@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
@@ -31,7 +32,7 @@ class FailingFakeRoutineRepository extends FakeRoutineRepository {
     if (simulateAmbiguousCreate) {
       simulateAmbiguousCreate = false;
       await super.createRoutineItem(uid, item);
-      throw Exception('Ambiguous network timeout');
+      throw Exception('Ambiguous network timeout_SKIP_ROLLBACK');
     }
     if (failNextCreate) {
       failNextCreate = false;
@@ -446,6 +447,39 @@ void main() {
           verifySaved.firstWhere((e) => e.id == 'item-8u').title,
           'Updated Idempotent',
         );
+      },
+    );
+
+    test(
+      '9. long valid document IDs still produce bounded operation keys',
+      () async {
+        final longId = 'routine-${'x' * 120}';
+        final item = RoutineItem(
+          id: longId,
+          title: 'Long ID item',
+          startMinute: 600,
+          endMinute: 660,
+          blockType: RoutineBlockType.flexibleTask,
+        );
+
+        final addResult = await notifier.addItem(item);
+        expect(addResult.outcome, RoutineWriteOutcome.saved);
+        expect(addResult.operationId, isNotNull);
+        expect(addResult.operationId!.length, lessThanOrEqualTo(128));
+
+        final saved = (await repo.fetchRoutineItems('user-a')).single;
+        expect(saved.createdByOperationId, addResult.operationId);
+        expect(saved.lastMutationOperationId, addResult.operationId);
+
+        final updateResult = await notifier.updateItem(
+          saved.copyWith(title: 'Long ID item updated'),
+        );
+        expect(updateResult.outcome, RoutineWriteOutcome.saved);
+        expect(updateResult.operationId!.length, lessThanOrEqualTo(128));
+
+        final deleteResult = await notifier.deleteItem(longId);
+        expect(deleteResult.outcome, RoutineWriteOutcome.saved);
+        expect(deleteResult.operationId!.length, lessThanOrEqualTo(128));
       },
     );
   });

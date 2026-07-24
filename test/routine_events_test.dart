@@ -15,7 +15,7 @@ void main() {
       operationKey: 'op_1',
       source: 'manual',
       occurredAt: now,
-      itemSnapshot: {'id': 'item_1', 'title': 'Test Item'},
+      itemSnapshot: _snapshot(),
     );
 
     test('toFirestore returns correct map', () {
@@ -29,7 +29,7 @@ void main() {
       expect(data['eventType'], 'completed');
       expect(data['operationKey'], 'op_1');
       expect(data['source'], 'manual');
-      expect(data['itemSnapshot'], {'id': 'item_1', 'title': 'Test Item'});
+      expect(data['itemSnapshot'], _snapshot());
       expect(data['occurredAt'], isA<Timestamp>());
     });
 
@@ -45,7 +45,7 @@ void main() {
         'source': 'manual',
         'eventId': 'evt_1',
         'occurredAt': Timestamp.fromDate(now),
-        'itemSnapshot': {'id': 'item_1', 'title': 'Test Item'},
+        'itemSnapshot': _snapshot(),
       };
 
       final parsed = RoutineEventFirestoreCodec.fromFirestore('evt_1', docData);
@@ -59,7 +59,58 @@ void main() {
       expect(parsed.operationKey, 'op_1');
       expect(parsed.source, 'manual');
       expect(parsed.occurredAt, now);
-      expect(parsed.itemSnapshot, {'id': 'item_1', 'title': 'Test Item'});
+      expect(parsed.itemSnapshot, _snapshot());
+    });
+
+    test('rejects missing and malformed required snapshot fields', () {
+      for (final field in [
+        'id',
+        'title',
+        'startMinute',
+        'durationMinutes',
+        'blockType',
+        'trackerTaskType',
+        'hardBlock',
+      ]) {
+        final snapshot = Map<String, dynamic>.from(_snapshot())..remove(field);
+        expect(
+          () => RoutineEventFirestoreCodec.toFirestore(
+            event.copyWith(itemSnapshot: snapshot),
+          ),
+          throwsFormatException,
+          reason: 'missing $field should be corrupt',
+        );
+      }
+
+      for (final snapshot in [
+        {..._snapshot(), 'id': 'other-item'},
+        {..._snapshot(), 'title': ''},
+        {..._snapshot(), 'startMinute': 1440},
+        {..._snapshot(), 'durationMinutes': 0},
+        {..._snapshot(), 'blockType': 'unknown'},
+        {..._snapshot(), 'trackerTaskType': 'unknown'},
+        {..._snapshot(), 'hardBlock': 'false'},
+        {..._snapshot(), 'extra': true},
+      ]) {
+        expect(
+          () => RoutineEventFirestoreCodec.toFirestore(
+            event.copyWith(itemSnapshot: snapshot),
+          ),
+          throwsFormatException,
+        );
+      }
     });
   });
+}
+
+Map<String, dynamic> _snapshot() {
+  return {
+    'id': 'item_1',
+    'title': 'Test Item',
+    'startMinute': 600,
+    'durationMinutes': 60,
+    'blockType': 'flexibleTask',
+    'trackerTaskType': 'none',
+    'hardBlock': false,
+  };
 }

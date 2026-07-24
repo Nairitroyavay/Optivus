@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/sheets/routine_move_sheet.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -85,7 +86,58 @@ void showRoutineConflictResolverSheet(
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (context) {
-      return DraggableScrollableSheet(
+      return _RoutineConflictResolverSheetContent(
+        conflicts: conflicts,
+        items: items,
+        ref: ref,
+        parentContext: parentContext,
+      );
+    },
+  );
+}
+
+class _RoutineConflictResolverSheetContent extends StatefulWidget {
+  final List<RoutineConflict> conflicts;
+  final Map<String, RoutineItem> items;
+  final WidgetRef ref;
+  final BuildContext parentContext;
+
+  const _RoutineConflictResolverSheetContent({
+    required this.conflicts,
+    required this.items,
+    required this.ref,
+    required this.parentContext,
+  });
+
+  @override
+  State<_RoutineConflictResolverSheetContent> createState() =>
+      _RoutineConflictResolverSheetContentState();
+}
+
+class _RoutineConflictResolverSheetContentState
+    extends State<_RoutineConflictResolverSheetContent> {
+  int _pendingCount = 0;
+
+  bool get _isPending => _pendingCount > 0;
+
+  void _onPendingChanged(bool pending) {
+    setState(() {
+      if (pending) {
+        _pendingCount++;
+      } else if (_pendingCount > 0) {
+        _pendingCount--;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final conflicts = widget.conflicts;
+    final items = widget.items;
+
+    return PopScope(
+      canPop: !_isPending,
+      child: DraggableScrollableSheet(
         initialChildSize: conflicts.length > 2 ? 0.72 : 0.48,
         minChildSize: 0.34,
         maxChildSize: 0.88,
@@ -135,7 +187,9 @@ void showRoutineConflictResolverSheet(
                     _ResolverIconButton(
                       icon: Icons.close_rounded,
                       color: OptivusColors.textSecondary,
-                      onTap: () => Navigator.of(context).pop(),
+                      onTap: _isPending
+                          ? null
+                          : () => Navigator.of(context).pop(),
                     ),
                   ],
                 ),
@@ -149,8 +203,10 @@ void showRoutineConflictResolverSheet(
                       other: conflict.otherItemId == null
                           ? null
                           : items[conflict.otherItemId],
-                      ref: ref,
-                      parentContext: parentContext,
+                      ref: widget.ref,
+                      parentContext: widget.parentContext,
+                      isSheetPending: _isPending,
+                      onPendingChanged: _onPendingChanged,
                     ),
                   ),
                 ),
@@ -158,17 +214,19 @@ void showRoutineConflictResolverSheet(
             ),
           );
         },
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
-class _ConflictResolverCard extends StatelessWidget {
+class _ConflictResolverCard extends StatefulWidget {
   final RoutineConflict conflict;
   final RoutineItem? item;
   final RoutineItem? other;
   final WidgetRef ref;
   final BuildContext parentContext;
+  final bool isSheetPending;
+  final ValueChanged<bool> onPendingChanged;
 
   const _ConflictResolverCard({
     required this.conflict,
@@ -176,10 +234,108 @@ class _ConflictResolverCard extends StatelessWidget {
     required this.other,
     required this.ref,
     required this.parentContext,
+    required this.isSheetPending,
+    required this.onPendingChanged,
   });
 
   @override
+  State<_ConflictResolverCard> createState() => _ConflictResolverCardState();
+}
+
+class _ConflictResolverCardState extends State<_ConflictResolverCard> {
+  bool _pending = false;
+  String? _statusMessage;
+
+  Future<void> _runWrite(Future<RoutineWriteResult> Function() write) async {
+    if (_pending || widget.isSheetPending) return;
+    setState(() {
+      _pending = true;
+      _statusMessage = null;
+    });
+    widget.onPendingChanged(true);
+    try {
+      final result = await write();
+      if (!mounted) return;
+      setState(() {
+        _pending = false;
+        _statusMessage = _messageForResult(result);
+      });
+      widget.onPendingChanged(false);
+      if (_shouldClose(result)) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _pending = false;
+        });
+        widget.onPendingChanged(false);
+      }
+      rethrow;
+    }
+  }
+
+  bool _shouldClose(RoutineWriteResult result) {
+    if (result.outcome == RoutineWriteOutcome.saved) return true;
+    if (result.outcome == RoutineWriteOutcome.noOp &&
+        result.validation?.isValid != false) {
+      return true;
+    }
+    return false;
+  }
+
+  String? _messageForResult(RoutineWriteResult result) {
+    if (_shouldClose(result)) return null;
+    return result.validation?.userSafeMessage ??
+        result.message ??
+        switch (result.outcome) {
+          RoutineWriteOutcome.validationFailed =>
+            'This conflict could not be resolved. Adjust the item and try again.',
+          RoutineWriteOutcome.retryRequired =>
+            'The save did not reach storage. Please retry.',
+          RoutineWriteOutcome.superseded =>
+            'The routine changed before this action completed.',
+          _ => null,
+        };
+  }
+
+  Future<bool> _confirmDelete({
+    required RoutineItem keep,
+    required RoutineItem delete,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Delete ${delete.title}?'),
+          content: Text(
+            'Keeping "${keep.title}" will delete "${delete.title}". This cannot be silently undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: OptivusColors.danger,
+                foregroundColor: Colors.white,
+              ),
+              child: Text('Delete ${_shortTitle(delete)}'),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed ?? false;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final conflict = widget.conflict;
+    final item = widget.item;
+    final other = widget.other;
     final color = conflict.blocking
         ? OptivusColors.danger
         : OptivusColors.warning;
@@ -246,13 +402,14 @@ class _ConflictResolverCard extends StatelessWidget {
                 label: 'Keep both',
                 icon: Icons.layers_rounded,
                 color: OptivusColors.success,
-                onTap: conflict.canKeepBoth
-                    ? () {
-                        ref
+                pending: _pending,
+                onTap:
+                    conflict.canKeepBoth && !_pending && !widget.isSheetPending
+                    ? () => _runWrite(
+                        () => widget.ref
                             .read(routineNotifierProvider.notifier)
-                            .keepConflictPair(conflict);
-                        Navigator.of(context).pop();
-                      }
+                            .keepConflictPair(conflict),
+                      )
                     : null,
               ),
               if (item != null)
@@ -260,49 +417,80 @@ class _ConflictResolverCard extends StatelessWidget {
                   label: 'Edit time',
                   icon: Icons.schedule_rounded,
                   color: OptivusColors.textSecondary,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (parentContext.mounted) {
-                        showRoutineMoveSheet(parentContext, ref, item!);
-                      }
-                    });
-                  },
+                  pending: _pending,
+                  onTap: _pending || widget.isSheetPending
+                      ? null
+                      : () {
+                          Navigator.of(context).pop();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (widget.parentContext.mounted) {
+                              showRoutineMoveSheet(
+                                widget.parentContext,
+                                widget.ref,
+                                item,
+                              );
+                            }
+                          });
+                        },
                 ),
               if (item != null)
                 _ResolverAction(
                   label: 'Mark flexible',
                   icon: Icons.flare_rounded,
                   color: OptivusColors.warning,
-                  onTap: () async {
-                    await ref
-                        .read(routineNotifierProvider.notifier)
-                        .markFlexible(item!.id);
-                    if (context.mounted) Navigator.of(context).pop();
-                  },
+                  pending: _pending,
+                  onTap: _pending || widget.isSheetPending
+                      ? null
+                      : () => _runWrite(
+                          () => widget.ref
+                              .read(routineNotifierProvider.notifier)
+                              .markFlexible(item.id),
+                        ),
                 ),
               if (other != null)
                 _ResolverAction(
-                  label: 'Keep ${_shortTitle(other!)}',
+                  label: 'Keep ${_shortTitle(other)}',
                   icon: Icons.check_rounded,
                   color: OptivusColors.aquaAccent,
-                  onTap: () async {
-                    if (item != null) {
-                      await ref
-                          .read(routineNotifierProvider.notifier)
-                          .deleteItem(item!.id);
-                    }
-                    if (context.mounted) Navigator.of(context).pop();
-                  },
+                  pending: _pending,
+                  onTap: item == null || _pending || widget.isSheetPending
+                      ? null
+                      : () async {
+                          final confirmed = await _confirmDelete(
+                            keep: other,
+                            delete: item,
+                          );
+                          if (!confirmed || !mounted) return;
+                          await _runWrite(
+                            () => widget.ref
+                                .read(routineNotifierProvider.notifier)
+                                .deleteItem(item.id),
+                          );
+                        },
                 ),
               _ResolverAction(
                 label: 'Resolve later',
                 icon: Icons.history_rounded,
                 color: OptivusColors.textSecondary,
-                onTap: () => Navigator.of(context).pop(),
+                pending: _pending,
+                onTap: _pending || widget.isSheetPending
+                    ? null
+                    : () => Navigator.of(context).pop(),
               ),
             ],
           ),
+          if (_statusMessage != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _statusMessage!,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.25,
+                fontWeight: FontWeight.w800,
+                color: OptivusColors.danger,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -313,12 +501,14 @@ class _ResolverAction extends StatelessWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final bool pending;
   final VoidCallback? onTap;
 
   const _ResolverAction({
     required this.label,
     required this.icon,
     required this.color,
+    this.pending = false,
     required this.onTap,
   });
 
@@ -341,6 +531,17 @@ class _ResolverAction extends StatelessWidget {
             children: [
               Icon(icon, size: 14, color: color),
               const SizedBox(width: 5),
+              if (pending && enabled) ...[
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(width: 5),
+              ],
               Text(
                 label,
                 style: TextStyle(
@@ -360,26 +561,30 @@ class _ResolverAction extends StatelessWidget {
 class _ResolverIconButton extends StatelessWidget {
   final IconData icon;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _ResolverIconButton({
     required this.icon,
     required this.color,
-    required this.onTap,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.54),
-          borderRadius: BorderRadius.circular(14),
+      child: Opacity(
+        opacity: enabled ? 1 : 0.38,
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.54),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, size: 18, color: color),
         ),
-        child: Icon(icon, size: 18, color: color),
       ),
     );
   }

@@ -13,6 +13,35 @@ extension RoutineItemAppliesExt on RoutineItem {
 class RoutineConflictEngine {
   RoutineConflictEngine._();
 
+  static String scheduleFingerprint(
+    RoutineItem a,
+    RoutineItem b,
+    RoutineConflictType conflictType,
+  ) {
+    final ordered = [a, b]..sort((left, right) => left.id.compareTo(right.id));
+    String part(RoutineItem item) {
+      final repeatDays = [...item.repeatDays]..sort();
+      return [
+        item.id,
+        item.startMinute,
+        item.endMinute,
+        item.crossesMidnight,
+        item.endsNextDay,
+        item.date == null ? '' : routineLocalDateKey(item.date!),
+        item.endDate == null ? '' : routineLocalDateKey(item.endDate!),
+        repeatDays.join(','),
+        item.repeatRule ?? '',
+      ].join(':');
+    }
+
+    return [
+      'v1',
+      conflictType.name,
+      part(ordered[0]),
+      part(ordered[1]),
+    ].join('|');
+  }
+
   static List<RoutineConflict> detect(
     List<RoutineItem> items,
     DateTime day, {
@@ -82,12 +111,13 @@ class RoutineConflictEngine {
                   a.endsNextDay ||
                   b.endsNextDay)) {
             conflictType = RoutineConflictType.overnightConflict;
+            blocking = true;
+            canKeepBoth = false;
           }
 
           // Evaluate Conflict Allowance Contract AFTER classification
           if (canKeepBoth) {
-            final fingerprint =
-                '${a.startMinute}-${a.endMinute}_${b.startMinute}-${b.endMinute}_${conflictType.name}';
+            final fingerprint = scheduleFingerprint(a, b, conflictType);
             final dateKey = routineLocalDateKey(targetDay);
             final canonicalPairId = ([a.id, b.id]..sort()).join('_');
 
@@ -264,8 +294,8 @@ class RoutineConflictEngine {
 
         if (aTitle == bTitle && a.category == b.category) {
           final conflictType = RoutineConflictType.duplicateRoutine;
-          
-          final fingerprint = '${a.startMinute}-${a.endMinute}_${b.startMinute}-${b.endMinute}_${conflictType.name}';
+
+          final fingerprint = scheduleFingerprint(a, b, conflictType);
           final dateKey = routineLocalDateKey(day);
           final canonicalPairId = ([a.id, b.id]..sort()).join('_');
 
