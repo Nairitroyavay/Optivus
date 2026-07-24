@@ -13,6 +13,7 @@ import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/routine_import_review_repository.dart';
 import 'package:optivus/services/routine_import_applied_restore_service.dart';
@@ -1073,7 +1074,15 @@ class _RoutineImportReviewScreenState
         appliedRoutineItemIds.add(itemWithUser.id);
         appliedItems.add(itemWithUser);
         if (existingIds.contains(item.id)) continue;
-        await routineController.addItem(itemWithUser);
+        final result = await routineController.addItem(itemWithUser);
+        if (result.outcome != RoutineWriteOutcome.saved && result.outcome != RoutineWriteOutcome.noOp) {
+          if (!mounted) return;
+          setState(() {
+            _saving = false;
+            _errorMessage = result.errorMessage ?? 'Failed to save item.';
+          });
+          return;
+        }
         existingIds.add(item.id);
       }
       if (ref.read(optivusBackendModeProvider) == OptivusBackendMode.fake) {

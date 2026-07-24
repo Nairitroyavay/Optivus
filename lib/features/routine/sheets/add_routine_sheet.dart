@@ -5,6 +5,7 @@ import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/domain/routine_conflict.dart';
+import 'package:optivus/features/routine/models/routine_write_result.dart';
 
 void showAddRoutineSheet(
   BuildContext context,
@@ -932,19 +933,25 @@ class _AddRoutineSheetBodyState extends ConsumerState<_AddRoutineSheetBody> {
     });
   }
 
-  void _save() {
+  Future<void> _save() async {
     final validation = _validate();
     if (validation != null) {
       setState(() => _error = validation);
       return;
     }
     final item = _draftItem();
+    RoutineWriteResult result;
     if (_editing) {
-      ref.read(routineNotifierProvider.notifier).updateItem(item);
+      result = await ref.read(routineNotifierProvider.notifier).updateItem(item);
     } else {
-      ref.read(routineNotifierProvider.notifier).addItem(item);
+      result = await ref.read(routineNotifierProvider.notifier).addItem(item);
     }
-    Navigator.of(context).pop();
+    if (!mounted) return;
+    if (result.outcome == RoutineWriteOutcome.saved || result.outcome == RoutineWriteOutcome.noOp) {
+      Navigator.of(context).pop();
+    } else if (result.outcome != RoutineWriteOutcome.validationFailed) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.errorMessage ?? 'Failed to save item')));
+    }
   }
 
   String? _validate() {

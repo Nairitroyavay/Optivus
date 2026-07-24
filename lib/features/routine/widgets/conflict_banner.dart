@@ -274,11 +274,11 @@ class _ConflictResolverCard extends StatelessWidget {
                   label: 'Mark flexible',
                   icon: Icons.flare_rounded,
                   color: OptivusColors.warning,
-                  onTap: () {
-                    ref
+                  onTap: () async {
+                    await ref
                         .read(routineNotifierProvider.notifier)
                         .markFlexible(item!.id);
-                    Navigator.of(context).pop();
+                    if (context.mounted) Navigator.of(context).pop();
                   },
                 ),
               if (other != null)
@@ -286,13 +286,13 @@ class _ConflictResolverCard extends StatelessWidget {
                   label: 'Keep ${_shortTitle(other!)}',
                   icon: Icons.check_rounded,
                   color: OptivusColors.aquaAccent,
-                  onTap: () {
+                  onTap: () async {
                     if (item != null) {
-                      ref
+                      await ref
                           .read(routineNotifierProvider.notifier)
                           .deleteItem(item!.id);
                     }
-                    Navigator.of(context).pop();
+                    if (context.mounted) Navigator.of(context).pop();
                   },
                 ),
               _ResolverAction(
