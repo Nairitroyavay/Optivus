@@ -91,7 +91,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       category.name,
       systemType.name,
       source,
-      if (onboardingSourceId != null) onboardingSourceId,
+      ?onboardingSourceId,
     ];
     final digest = sha256.convert(
       utf8.encode(parts.join('\u001f')),
