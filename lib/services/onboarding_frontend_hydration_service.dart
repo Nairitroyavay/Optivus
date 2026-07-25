@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
+import 'package:optivus/repositories/habit_systems_repository.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/services/habit_system_onboarding_projection.dart';
@@ -67,23 +68,13 @@ class OnboardingFrontendHydrationService {
     ).updatePreferences(bundle.notificationPreferences);
 
     await read(habitSystemsNotifierProvider.notifier).loadForOwner(bundle.uid);
-    final existingHabitSystems = read(habitSystemsNotifierProvider).systems;
-    if (existingHabitSystems.isEmpty) {
-      final habitSystemProjections = HabitSystemOnboardingProjection.build(
-        bundle,
-        routineItems,
-      );
-      for (final system in habitSystemProjections) {
-        await read(habitSystemsNotifierProvider.notifier).createSystem(
-          title: system.title,
-          description: system.description,
-          category: system.category,
-          systemType: system.systemType,
-          linkedRoutineIds: system.linkedRoutineIds,
-          source: system.source,
-          onboardingSourceId: system.onboardingSourceId,
-        );
-      }
+    final habitSystemProjections = HabitSystemOnboardingProjection.build(
+      bundle,
+      routineItems,
+    );
+    final repo = read(habitSystemsRepositoryProvider);
+    for (final system in habitSystemProjections) {
+      await repo.reconcileProjectedSystem(system);
     }
 
     return OnboardingFrontendHydrationResult(

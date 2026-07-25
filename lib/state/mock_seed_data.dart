@@ -12,7 +12,7 @@ class MockSeedData {
   }
 
   static UserProfile get defaultUserProfile => UserProfile(
-    uid: 'mock-user-123',
+    uid: 'mock-user-seed',
     email: 'roy@optivus.app',
     displayName: 'Roy',
     lifeRole: '',

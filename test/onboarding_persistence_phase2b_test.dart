@@ -10,6 +10,7 @@ import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
+import 'package:optivus/repositories/habit_systems_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
@@ -18,6 +19,7 @@ import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'helpers/fake_habit_systems_repository.dart';
 
 void main() {
   test('OnboardingDraft toMap/fromMap preserves currentStep', () {
@@ -255,7 +257,11 @@ void main() {
   );
 
   test('completed onboarding bundle hydrates local frontend state', () async {
-    final container = ProviderContainer();
+    final container = ProviderContainer(
+      overrides: [
+        habitSystemsRepositoryProvider.overrideWithValue(FakeHabitSystemsRepository()),
+      ],
+    );
     addTearDown(container.dispose);
     final finalDraft = _completedHydrationDraft().copyWith(
       onboardingCompleted: true,

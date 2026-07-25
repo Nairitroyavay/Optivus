@@ -210,38 +210,6 @@ String stableRoutineOccurrenceId({
   return 'occ_${digest.toString().substring(0, 40)}';
 }
 
-class HabitSystemRecord {
-  final String id;
-  final String title;
-  final String category;
-  final List<String> routineItemIds;
-  final List<String> trackerTypes;
-  final bool paused;
-  final DateTime updatedAt;
-
-  const HabitSystemRecord({
-    required this.id,
-    required this.title,
-    required this.category,
-    this.routineItemIds = const [],
-    this.trackerTypes = const [],
-    this.paused = false,
-    required this.updatedAt,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'title': title,
-      'category': category,
-      'routineItemIds': routineItemIds,
-      'trackerTypes': trackerTypes,
-      'paused': paused,
-      'updatedAt': updatedAt.toIso8601String(),
-    };
-  }
-}
-
 abstract class RoutineHistoryRepository {
   Future<List<RoutineOccurrenceRecord>> fetchHistory(String uid);
 
@@ -249,10 +217,6 @@ abstract class RoutineHistoryRepository {
   Future<void> deleteHistory(String uid, String occurrenceId);
 }
 
-abstract class HabitSystemsRepository {
-  Future<List<HabitSystemRecord>> fetchHabitSystems(String uid);
-  Future<void> saveHabitSystem(String uid, HabitSystemRecord system);
-}
 
 class FakeRoutineHistoryRepository implements RoutineHistoryRepository {
   final Map<String, Map<String, RoutineOccurrenceRecord>> _history = {};
@@ -350,22 +314,6 @@ class FirestoreRoutineHistoryRepository implements RoutineHistoryRepository {
   }
 }
 
-class FakeHabitSystemsRepository implements HabitSystemsRepository {
-  final Map<String, List<HabitSystemRecord>> _systems = {};
-
-  @override
-  Future<List<HabitSystemRecord>> fetchHabitSystems(String uid) async {
-    return _systems[uid] ?? const [];
-  }
-
-  @override
-  Future<void> saveHabitSystem(String uid, HabitSystemRecord system) async {
-    final current = [...await fetchHabitSystems(uid)];
-    current.removeWhere((item) => item.id == system.id);
-    current.add(system);
-    _systems[uid] = current;
-  }
-}
 
 final routineHistoryRepositoryProvider = Provider<RoutineHistoryRepository>((
   ref,
@@ -374,8 +322,4 @@ final routineHistoryRepositoryProvider = Provider<RoutineHistoryRepository>((
     return FirestoreRoutineHistoryRepository();
   }
   return FakeRoutineHistoryRepository();
-});
-
-final habitSystemsRepositoryProvider = Provider<HabitSystemsRepository>((ref) {
-  return FakeHabitSystemsRepository();
 });

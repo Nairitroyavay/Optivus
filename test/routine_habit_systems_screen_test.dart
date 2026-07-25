@@ -5,13 +5,29 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/screens/routine_habit_systems_screen.dart';
 import 'package:optivus/models/habit_system_record.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/repositories/habit_system_repository.dart';
+import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/habit_systems_repository.dart';
+import 'helpers/fake_habit_systems_repository.dart';
+import 'package:optivus/state/auth_state.dart';
+
+class MockAuthNotifier extends StateNotifier<AuthState> implements AuthNotifier {
+  MockAuthNotifier()
+      : super(
+          const AuthState(
+            status: AuthFlowStatus.signedInOnboardingComplete,
+            user: AuthUser(uid: 'mock-user-123', email: 'test@test.com', emailVerified: true),
+          ),
+        );
+
+  @override
+  void noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
 
 void main() {
   testWidgets(
     'RoutineHabitSystemsScreen renders empty state truthfully and supports system creation',
     (tester) async {
-      final fakeRepo = FakeHabitSystemRepository();
+      final fakeRepo = FakeHabitSystemsRepository();
 
       await tester.pumpWidget(
         ProviderScope(
@@ -19,7 +35,8 @@ void main() {
             optivusBackendModeProvider.overrideWithValue(
               OptivusBackendMode.fake,
             ),
-            fakeHabitSystemRepositoryProvider.overrideWithValue(fakeRepo),
+            authProvider.overrideWith((ref) => MockAuthNotifier()),
+            habitSystemsRepositoryProvider.overrideWithValue(fakeRepo),
           ],
           child: MaterialApp(
             home: Scaffold(body: RoutineHabitSystemsScreen(onBack: () {})),
@@ -52,7 +69,7 @@ void main() {
   testWidgets('RoutineHabitSystemsScreen renders existing habit systems', (
     tester,
   ) async {
-    final fakeRepo = FakeHabitSystemRepository();
+    final fakeRepo = FakeHabitSystemsRepository();
     final now = DateTime.now().toUtc();
     final system = HabitSystemRecord(
       systemId: 'habitsys_1',
@@ -65,13 +82,14 @@ void main() {
       createdAt: now,
       updatedAt: now,
     );
-    await fakeRepo.saveHabitSystem('mock-user-123', system);
+    await fakeRepo.createSystem(system: system, operationId: 'test_op');
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
-          fakeHabitSystemRepositoryProvider.overrideWithValue(fakeRepo),
+          authProvider.overrideWith((ref) => MockAuthNotifier()),
+          habitSystemsRepositoryProvider.overrideWithValue(fakeRepo),
         ],
         child: MaterialApp(
           home: Scaffold(body: RoutineHabitSystemsScreen(onBack: () {})),

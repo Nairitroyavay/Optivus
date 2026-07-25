@@ -720,7 +720,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(profileSettingsProvider.notifier).resetForSignedOut();
     _ref
         .read(regionSettingsProvider.notifier)
-        .loadSettings(RegionSettings.defaultForUser('mock-user-123'));
+        .loadSettings(RegionSettings.defaultForUser('signed-out'));
     _resetUserScopedMockState();
   }
 

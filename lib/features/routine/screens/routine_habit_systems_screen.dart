@@ -28,11 +28,11 @@ class _RoutineHabitSystemsScreenState
     super.initState();
     Future.microtask(() {
       final currentUser = ref.read(authProvider).user;
-      final uid = (currentUser?.uid.isNotEmpty == true)
-          ? currentUser!.uid
-          : 'mock-user-123';
-      if (ref.read(habitSystemsNotifierProvider).systems.isEmpty) {
-        ref.read(habitSystemsNotifierProvider.notifier).loadForOwner(uid);
+      final uid = currentUser?.uid;
+      if (uid != null && uid.isNotEmpty) {
+        if (ref.read(habitSystemsNotifierProvider).systems.isEmpty) {
+          ref.read(habitSystemsNotifierProvider.notifier).loadForOwner(uid);
+        }
       }
     });
   }
@@ -42,9 +42,51 @@ class _RoutineHabitSystemsScreenState
     final habitState = ref.watch(habitSystemsNotifierProvider);
     final routineItems = ref.watch(routineNotifierProvider).items;
     final auth = ref.watch(authProvider);
-    final uid = (auth.user?.uid.isNotEmpty == true)
-        ? auth.user!.uid
-        : 'mock-user-123';
+
+    if (auth.isLoading) {
+      return LiquidDetailScaffold(
+        eyebrow: 'Routine',
+        title: 'Habit Systems',
+        subtitle: 'Loading your habit systems...',
+        accentColor: OptivusColors.routineAccent,
+        onBack: widget.onBack,
+        children: const [
+          LiquidDetailSection(
+            title: 'Loading...',
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            ],
+          )
+        ],
+      );
+    }
+
+    final user = auth.user;
+    if (user == null || user.uid.isEmpty) {
+      return LiquidDetailScaffold(
+        eyebrow: 'Routine',
+        title: 'Habit Systems',
+        subtitle: 'Sign in to manage your habit systems.',
+        accentColor: OptivusColors.routineAccent,
+        onBack: widget.onBack,
+        children: const [
+          LiquidDetailSection(
+            title: 'Authentication Required',
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text('You must be signed in to view and manage Habit Systems.'),
+              )
+            ],
+          )
+        ],
+      );
+    }
+
+    final uid = user.uid;
 
     final activeSystems = habitState.activeSystems;
     final pausedSystems = habitState.pausedSystems;
@@ -103,6 +145,47 @@ class _RoutineHabitSystemsScreenState
                 ],
               ),
             ],
+          ),
+        if (habitState.failedOperations.isNotEmpty)
+          LiquidDetailSection(
+            title: 'Failed Operations',
+            tint: OptivusColors.danger.withValues(alpha: 0.12),
+            children: habitState.failedOperations.values.map((failedOp) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: OptivusColors.danger,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Failed to ${failedOp.type.name}: ${failedOp.userMessage}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: OptivusColors.danger,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (habitState.pendingOperationKeys.contains(failedOp.operationId))
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16.0),
+                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    else
+                      TextButton(
+                        onPressed: () => ref
+                            .read(habitSystemsNotifierProvider.notifier)
+                            .retryOperation(failedOp.operationId),
+                        child: const Text('Retry'),
+                      ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
         LiquidDetailSection(
           title: 'System Management',
@@ -244,6 +327,8 @@ class _RoutineHabitSystemsScreenState
     final descController = TextEditingController();
     RoutineCategory selectedCategory = RoutineCategory.habit;
     HabitSystemType selectedType = HabitSystemType.goodHabit;
+    bool isSaving = false;
+    String? errorMsg;
 
     showModalBottomSheet<void>(
       context: context,
@@ -332,21 +417,33 @@ class _RoutineHabitSystemsScreenState
                         }
                       },
                     ),
+                    if (errorMsg != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorMsg!,
+                        style: const TextStyle(color: OptivusColors.danger, fontSize: 13),
+                      ),
+                    ],
                     const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
+                          onPressed: isSaving ? null : () => Navigator.of(context).pop(),
                           child: const Text('Cancel'),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: () async {
+                          onPressed: isSaving ? null : () async {
                             final title = titleController.text.trim();
                             if (title.isEmpty) return;
-                            Navigator.of(context).pop();
-                            await ref
+                            
+                            setStateModal(() {
+                              isSaving = true;
+                              errorMsg = null;
+                            });
+
+                            final success = await ref
                                 .read(habitSystemsNotifierProvider.notifier)
                                 .createSystem(
                                   title: title,
@@ -354,8 +451,17 @@ class _RoutineHabitSystemsScreenState
                                   category: selectedCategory,
                                   systemType: selectedType,
                                 );
+                            
+                            if (success && context.mounted) {
+                              Navigator.of(context).pop();
+                            } else if (context.mounted) {
+                              setStateModal(() {
+                                isSaving = false;
+                                errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Failed to create system. Please try again.';
+                              });
+                            }
                           },
-                          child: const Text('Create'),
+                          child: isSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create'),
                         ),
                       ],
                     ),
@@ -452,16 +558,16 @@ class _RoutineHabitSystemsScreenState
                   icon: system.isPaused
                       ? Icons.play_arrow_rounded
                       : Icons.pause_rounded,
-                  onTap: () {
+                  onTap: () async {
                     Navigator.of(context).pop();
-                    if (system.isPaused) {
-                      ref
-                          .read(habitSystemsNotifierProvider.notifier)
-                          .resumeSystem(system.systemId);
-                    } else {
-                      ref
-                          .read(habitSystemsNotifierProvider.notifier)
-                          .pauseSystem(system.systemId);
+                    final notifier = ref.read(habitSystemsNotifierProvider.notifier);
+                    final success = system.isPaused
+                        ? await notifier.resumeSystem(system.systemId)
+                        : await notifier.pauseSystem(system.systemId);
+                    
+                    if (!success && context.mounted) {
+                      final errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Operation failed';
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
                     }
                   },
                 ),
@@ -485,16 +591,16 @@ class _RoutineHabitSystemsScreenState
                   icon: system.isArchived
                       ? Icons.unarchive_rounded
                       : Icons.archive_rounded,
-                  onTap: () {
+                  onTap: () async {
                     Navigator.of(context).pop();
-                    if (system.isArchived) {
-                      ref
-                          .read(habitSystemsNotifierProvider.notifier)
-                          .restoreSystem(system.systemId);
-                    } else {
-                      ref
-                          .read(habitSystemsNotifierProvider.notifier)
-                          .archiveSystem(system.systemId);
+                    final notifier = ref.read(habitSystemsNotifierProvider.notifier);
+                    final success = system.isArchived
+                        ? await notifier.restoreSystem(system.systemId)
+                        : await notifier.archiveSystem(system.systemId);
+                    
+                    if (!success && context.mounted) {
+                      final errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Operation failed';
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
                     }
                   },
                 ),
@@ -637,11 +743,16 @@ class _RoutineHabitSystemsScreenState
               style: ElevatedButton.styleFrom(
                 backgroundColor: OptivusColors.danger,
               ),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(context).pop();
-                ref
+                final success = await ref
                     .read(habitSystemsNotifierProvider.notifier)
                     .deleteSystem(system.systemId);
+                
+                if (!success && context.mounted) {
+                  final errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Failed to delete system';
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+                }
               },
               child: const Text('Delete'),
             ),

@@ -3,9 +3,10 @@ import 'package:crypto/crypto.dart';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/models/habit_system_operation.dart';
 import 'package:optivus/models/habit_system_record.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/repositories/habit_system_repository.dart';
+import 'package:optivus/repositories/habit_systems_repository.dart';
 import 'package:optivus/state/app_state.dart';
 
 class HabitSystemsState {
@@ -14,7 +15,8 @@ class HabitSystemsState {
   final bool refreshing;
   final bool saving;
   final String? error;
-  final Set<String> pendingSystemIds;
+  final Set<String> pendingOperationKeys;
+  final Map<String, FailedHabitSystemOperation> failedOperations;
 
   const HabitSystemsState({
     this.systems = const [],
@@ -22,7 +24,8 @@ class HabitSystemsState {
     this.refreshing = false,
     this.saving = false,
     this.error,
-    this.pendingSystemIds = const {},
+    this.pendingOperationKeys = const {},
+    this.failedOperations = const {},
   });
 
   HabitSystemsState copyWith({
@@ -32,7 +35,8 @@ class HabitSystemsState {
     bool? saving,
     String? error,
     bool clearError = false,
-    Set<String>? pendingSystemIds,
+    Set<String>? pendingOperationKeys,
+    Map<String, FailedHabitSystemOperation>? failedOperations,
   }) {
     return HabitSystemsState(
       systems: systems ?? this.systems,
@@ -40,7 +44,8 @@ class HabitSystemsState {
       refreshing: refreshing ?? this.refreshing,
       saving: saving ?? this.saving,
       error: clearError ? null : (error ?? this.error),
-      pendingSystemIds: pendingSystemIds ?? this.pendingSystemIds,
+      pendingOperationKeys: pendingOperationKeys ?? this.pendingOperationKeys,
+      failedOperations: failedOperations ?? this.failedOperations,
     );
   }
 
@@ -55,13 +60,13 @@ class HabitSystemsState {
 }
 
 class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
-  final HabitSystemRepository _repository;
+  final HabitSystemsRepository _repository;
   final Ref _ref;
   String? _ownerUid;
   int _loadGeneration = 0;
 
   HabitSystemsNotifier(this._repository, this._ref)
-    : super(const HabitSystemsState()) {
+      : super(const HabitSystemsState()) {
     if (_ref.read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
       final initialUid = _ref.read(mockUserProfileProvider).uid.trim();
       if (initialUid.isNotEmpty) {
@@ -70,11 +75,26 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     }
   }
 
-  String _generateSystemId(String uid, String title) {
+  String _generateOperationId(
+    String uid,
+    String title,
+    RoutineCategory category,
+    HabitSystemType systemType,
+    String source,
+    String? onboardingSourceId,
+  ) {
+    final normalizedTitle = title.trim().toLowerCase();
+    final parts = [
+      'habitsys',
+      uid,
+      normalizedTitle,
+      category.name,
+      systemType.name,
+      source,
+      if (onboardingSourceId != null) onboardingSourceId,
+    ];
     final digest = sha256.convert(
-      utf8.encode(
-        'habitsys\u001f$uid\u001f$title\u001f${DateTime.now().microsecondsSinceEpoch}',
-      ),
+      utf8.encode(parts.join('\u001f')),
     );
     return 'habitsys_${digest.toString().substring(0, 24)}';
   }
@@ -92,7 +112,8 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       state = state.copyWith(
         loading: true,
         systems: const [],
-        pendingSystemIds: const {},
+        pendingOperationKeys: const {},
+        failedOperations: const {},
         clearError: true,
       );
     } else {
@@ -118,6 +139,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     List<String> linkedRoutineIds = const [],
     String source = 'user',
     String? onboardingSourceId,
+    String? operationIdOverride,
   }) async {
     final uid = _ownerUid;
     if (uid == null || uid.isEmpty) return false;
@@ -127,10 +149,24 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       return false;
     }
 
-    state = state.copyWith(saving: true, clearError: true);
+    final operationId = operationIdOverride ?? _generateOperationId(
+      uid,
+      title,
+      category,
+      systemType,
+      source,
+      onboardingSourceId,
+    );
+    if (state.pendingOperationKeys.contains(operationId)) return false;
+
+    state = state.copyWith(
+      saving: true,
+      clearError: true,
+      pendingOperationKeys: {...state.pendingOperationKeys, operationId},
+    );
 
     final now = DateTime.now().toUtc();
-    final systemId = _generateSystemId(uid, title);
+    final systemId = operationId; 
     final record = HabitSystemRecord(
       systemId: systemId,
       ownerUid: uid,
@@ -144,38 +180,85 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       onboardingSourceId: onboardingSourceId,
       createdAt: now,
       updatedAt: now,
+      version: 1,
     );
 
     final optimisticList = [...state.systems, record];
-    final updatedPending = {...state.pendingSystemIds, systemId};
-    state = state.copyWith(
-      systems: optimisticList,
-      pendingSystemIds: updatedPending,
+    state = state.copyWith(systems: optimisticList);
+
+    final result = await _repository.createSystem(
+      system: record,
+      operationId: operationId,
     );
 
-    try {
-      await _repository.saveHabitSystem(uid, record);
-      if (_ownerUid != uid) return false;
+    if (!mounted || _ownerUid != uid) return false;
+
+    if (result.success) {
+      final updatedFailed = Map<String, FailedHabitSystemOperation>.from(
+        state.failedOperations,
+      );
+      updatedFailed.remove(operationId);
 
       state = state.copyWith(
         saving: false,
-        pendingSystemIds: state.pendingSystemIds
-            .where((id) => id != systemId)
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
             .toSet(),
+        failedOperations: updatedFailed,
       );
       return true;
-    } catch (e) {
-      if (_ownerUid != uid) return false;
+    } else {
+      final failedOp = FailedHabitSystemOperation(
+        operationId: operationId,
+        type: HabitSystemOperationType.create,
+        userMessage: result.error ?? 'Failed to create system',
+        failedAt: DateTime.now().toUtc(),
+        retryPayload: RetryPayload({
+          'title': title,
+          'description': description,
+          'category': category.name,
+          'systemType': systemType.name,
+          'linkedRoutineIds': linkedRoutineIds,
+          'source': source,
+          'onboardingSourceId': onboardingSourceId,
+        }),
+      );
+
+      final rolledBack = state.systems
+          .where((s) => s.systemId != systemId)
+          .toList();
+
       state = state.copyWith(
-        systems: state.systems.where((s) => s.systemId != systemId).toList(),
-        pendingSystemIds: state.pendingSystemIds
-            .where((id) => id != systemId)
+        systems: rolledBack,
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
             .toSet(),
         saving: false,
-        error: e.toString(),
+        error: result.error,
+        failedOperations: {...state.failedOperations, operationId: failedOp},
       );
       return false;
     }
+  }
+
+  Future<bool> retryOperation(String operationId) async {
+    final failedOp = state.failedOperations[operationId];
+    if (failedOp == null) return false;
+
+    if (failedOp.type == HabitSystemOperationType.create) {
+      final data = failedOp.retryPayload.data;
+      return createSystem(
+        title: data['title'],
+        description: data['description'] ?? '',
+        category: RoutineCategory.values.byName(data['category']),
+        systemType: HabitSystemType.values.byName(data['systemType']),
+        linkedRoutineIds: List<String>.from(data['linkedRoutineIds'] ?? []),
+        source: data['source'] ?? 'user',
+        onboardingSourceId: data['onboardingSourceId'],
+        operationIdOverride: operationId,
+      );
+    }
+    return false; // Other retries can be added here
   }
 
   Future<bool> updateSystem(HabitSystemRecord updated) async {
@@ -188,42 +271,51 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     if (existingIndex < 0) return false;
 
     final previous = state.systems[existingIndex];
-    if (state.pendingSystemIds.contains(updated.systemId)) return false;
+    final operationId = 'upd_${updated.systemId}_${DateTime.now().millisecondsSinceEpoch}';
+    
+    if (state.pendingOperationKeys.contains(operationId)) return false;
 
     state = state.copyWith(
       saving: true,
-      pendingSystemIds: {...state.pendingSystemIds, updated.systemId},
+      pendingOperationKeys: {...state.pendingOperationKeys, operationId},
       clearError: true,
     );
 
-    final record = updated.copyWith(updatedAt: DateTime.now().toUtc());
+    final record = updated.copyWith(
+      updatedAt: DateTime.now().toUtc(),
+      version: previous.version + 1,
+    );
 
     final newSystems = [...state.systems];
     newSystems[existingIndex] = record;
     state = state.copyWith(systems: newSystems);
 
-    try {
-      await _repository.saveHabitSystem(uid, record);
-      if (_ownerUid != uid) return false;
+    final result = await _repository.updateSystem(
+      system: record,
+      expectedVersion: previous.version,
+      operationId: operationId,
+    );
 
+    if (!mounted || _ownerUid != uid) return false;
+
+    if (result.success) {
       state = state.copyWith(
         saving: false,
-        pendingSystemIds: state.pendingSystemIds
-            .where((id) => id != updated.systemId)
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
             .toSet(),
       );
       return true;
-    } catch (e) {
-      if (_ownerUid != uid) return false;
+    } else {
       final rolledBack = [...state.systems];
       rolledBack[existingIndex] = previous;
       state = state.copyWith(
         systems: rolledBack,
-        pendingSystemIds: state.pendingSystemIds
-            .where((id) => id != updated.systemId)
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
             .toSet(),
         saving: false,
-        error: e.toString(),
+        error: result.error,
       );
       return false;
     }
@@ -246,26 +338,95 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
   }
 
   Future<bool> archiveSystem(String systemId) async {
+    final uid = _ownerUid;
+    if (uid == null) return false;
+    
     final system = state.systems
         .where((s) => s.systemId == systemId)
         .firstOrNull;
     if (system == null) return false;
-    return updateSystem(
-      system.copyWith(
-        status: HabitSystemStatus.archived,
-        archivedAt: DateTime.now().toUtc(),
-      ),
+    
+    final operationId = 'arch_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
+    
+    state = state.copyWith(
+      saving: true,
+      pendingOperationKeys: {...state.pendingOperationKeys, operationId},
+      clearError: true,
     );
+    
+    final result = await _repository.archiveSystem(uid, systemId, system.version, operationId);
+    
+    if (!mounted || _ownerUid != uid) return false;
+    
+    if (result.success) {
+      final newSystems = [...state.systems];
+      final index = newSystems.indexWhere((s) => s.systemId == systemId);
+      if (index >= 0) newSystems[index] = result.system!;
+      
+      state = state.copyWith(
+        saving: false,
+        systems: newSystems,
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
+            .toSet(),
+      );
+      return true;
+    } else {
+      state = state.copyWith(
+        saving: false,
+        error: result.error,
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
+            .toSet(),
+      );
+      return false;
+    }
   }
 
   Future<bool> restoreSystem(String systemId) async {
+    final uid = _ownerUid;
+    if (uid == null) return false;
+    
     final system = state.systems
         .where((s) => s.systemId == systemId)
         .firstOrNull;
     if (system == null) return false;
-    return updateSystem(
-      system.copyWith(status: HabitSystemStatus.active, clearArchivedAt: true),
+    
+    final operationId = 'rest_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
+    
+    state = state.copyWith(
+      saving: true,
+      pendingOperationKeys: {...state.pendingOperationKeys, operationId},
+      clearError: true,
     );
+    
+    final result = await _repository.restoreSystem(uid, systemId, system.version, operationId);
+    
+    if (!mounted || _ownerUid != uid) return false;
+    
+    if (result.success) {
+      final newSystems = [...state.systems];
+      final index = newSystems.indexWhere((s) => s.systemId == systemId);
+      if (index >= 0) newSystems[index] = result.system!;
+      
+      state = state.copyWith(
+        saving: false,
+        systems: newSystems,
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
+            .toSet(),
+      );
+      return true;
+    } else {
+      state = state.copyWith(
+        saving: false,
+        error: result.error,
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
+            .toSet(),
+      );
+      return false;
+    }
   }
 
   Future<bool> linkRoutine(String systemId, String routineId) async {
@@ -300,9 +461,11 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     if (existingIndex < 0) return false;
 
     final previous = state.systems[existingIndex];
+    final operationId = 'del_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
+
     state = state.copyWith(
       saving: true,
-      pendingSystemIds: {...state.pendingSystemIds, systemId},
+      pendingOperationKeys: {...state.pendingOperationKeys, operationId},
       systems: state.systems.where((s) => s.systemId != systemId).toList(),
       clearError: true,
     );
@@ -313,8 +476,8 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
 
       state = state.copyWith(
         saving: false,
-        pendingSystemIds: state.pendingSystemIds
-            .where((id) => id != systemId)
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
             .toSet(),
       );
       return true;
@@ -322,8 +485,8 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       if (_ownerUid != uid) return false;
       state = state.copyWith(
         systems: [...state.systems, previous],
-        pendingSystemIds: state.pendingSystemIds
-            .where((id) => id != systemId)
+        pendingOperationKeys: state.pendingOperationKeys
+            .where((id) => id != operationId)
             .toSet(),
         saving: false,
         error: e.toString(),
@@ -341,6 +504,6 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
 
 final habitSystemsNotifierProvider =
     StateNotifierProvider<HabitSystemsNotifier, HabitSystemsState>((ref) {
-      final repo = ref.watch(habitSystemRepositoryProvider);
+      final repo = ref.watch(habitSystemsRepositoryProvider);
       return HabitSystemsNotifier(repo, ref);
     });

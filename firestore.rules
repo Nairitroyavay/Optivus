@@ -786,13 +786,48 @@ service cloud.firestore {
         && data.category is string
         && (data.systemType == "goodHabit" || data.systemType == "badHabit" || data.systemType == "identity")
         && (data.status == "active" || data.status == "paused" || data.status == "archived")
+        && (data.status == "archived" 
+            ? data.keys().hasAll(["archivedAt"]) && data.archivedAt is timestamp 
+            : !data.keys().hasAny(["archivedAt"]))
         && data.linkedRoutineIds is list
+        && data.linkedRoutineIds.size() <= 100
         && data.source is string
-        && (!data.keys().hasAny(["onboardingSourceId"]) || data.onboardingSourceId is string)
-        && (!data.keys().hasAny(["archivedAt"]) || data.archivedAt is string)
+        && (data.source == "onboarding"
+            ? data.keys().hasAll(["onboardingSourceId", "onboardingProjectionId"])
+              && data.onboardingSourceId is string && data.onboardingSourceId.size() > 0
+              && data.onboardingProjectionId is string && data.onboardingProjectionId.size() > 0
+            : data.source == "user"
+              ? !data.keys().hasAny(["onboardingSourceId", "onboardingProjectionId"])
+              : (!data.keys().hasAny(["onboardingSourceId"]) || data.onboardingSourceId is string)
+                && (!data.keys().hasAny(["onboardingProjectionId"]) || data.onboardingProjectionId is string))
         && data.schemaVersion is int && data.schemaVersion >= 1
-        && data.createdAt is string
-        && data.updatedAt is string;
+        && data.version is int && data.version >= 1
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function validHabitSystemProjectionReceipt(data, projectionId) {
+      return data.keys().hasOnly([
+        "projectionId", "ownerUid", "sourceVersion", "expectedSystemIds",
+        "appliedSystemIds", "failedSystemIds", "status", "createdAt",
+        "updatedAt", "completedAt", "schemaVersion"
+      ])
+      && data.keys().hasAll([
+        "projectionId", "ownerUid", "sourceVersion", "expectedSystemIds",
+        "appliedSystemIds", "failedSystemIds", "status", "createdAt",
+        "updatedAt", "schemaVersion"
+      ])
+      && data.projectionId == projectionId
+      && data.ownerUid == request.auth.uid
+      && data.sourceVersion is string
+      && data.expectedSystemIds is list
+      && data.appliedSystemIds is list
+      && data.failedSystemIds is list
+      && (data.status == "pending" || data.status == "applying" || data.status == "partial" || data.status == "completed" || data.status == "failed")
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp
+      && (!data.keys().hasAny(["completedAt"]) || data.completedAt is timestamp)
+      && data.schemaVersion == 1;
     }
 
     // Strict Phase 2A upload metadata rule. R2 bytes are owned by the Worker;
@@ -899,14 +934,28 @@ service cloud.firestore {
     match /users/{uid}/habitSystems/{systemId} {
       allow read: if verifiedOwner(uid);
       allow create: if verifiedOwner(uid)
-        && validHabitSystem(request.resource.data, systemId);
+        && validHabitSystem(request.resource.data, systemId)
+        && request.resource.data.version == 1;
       allow update: if verifiedOwner(uid)
         && validHabitSystem(request.resource.data, systemId)
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.systemId == resource.data.systemId
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.version == resource.data.version + 1;
       allow delete: if verifiedOwner(uid)
         && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /users/{uid}/habitSystemProjections/{projectionId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validHabitSystemProjectionReceipt(request.resource.data, projectionId);
+      allow update: if verifiedOwner(uid)
+        && validHabitSystemProjectionReceipt(request.resource.data, projectionId)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.projectionId == resource.data.projectionId
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
     }
 
     match /users/{uid}/syncAllowances/{allowanceId} {

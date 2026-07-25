@@ -15,10 +15,12 @@ class HabitSystemRecord {
   final List<String> linkedRoutineIds;
   final String source;
   final String? onboardingSourceId;
+  final String? onboardingProjectionId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? archivedAt;
   final int schemaVersion;
+  final int version;
 
   const HabitSystemRecord({
     required this.systemId,
@@ -31,10 +33,12 @@ class HabitSystemRecord {
     this.linkedRoutineIds = const [],
     this.source = 'user',
     this.onboardingSourceId,
+    this.onboardingProjectionId,
     required this.createdAt,
     required this.updatedAt,
     this.archivedAt,
     this.schemaVersion = 1,
+    this.version = 1,
   });
 
   bool get isActive => status == HabitSystemStatus.active;
@@ -52,11 +56,13 @@ class HabitSystemRecord {
     List<String>? linkedRoutineIds,
     String? source,
     String? onboardingSourceId,
+    String? onboardingProjectionId,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? archivedAt,
     bool clearArchivedAt = false,
     int? schemaVersion,
+    int? version,
   }) {
     return HabitSystemRecord(
       systemId: systemId ?? this.systemId,
@@ -69,10 +75,12 @@ class HabitSystemRecord {
       linkedRoutineIds: linkedRoutineIds ?? this.linkedRoutineIds,
       source: source ?? this.source,
       onboardingSourceId: onboardingSourceId ?? this.onboardingSourceId,
+      onboardingProjectionId: onboardingProjectionId ?? this.onboardingProjectionId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
       schemaVersion: schemaVersion ?? this.schemaVersion,
+      version: version ?? this.version,
     );
   }
 
@@ -88,11 +96,13 @@ class HabitSystemRecord {
       'linkedRoutineIds': linkedRoutineIds,
       'source': source,
       if (onboardingSourceId != null) 'onboardingSourceId': onboardingSourceId,
+      if (onboardingProjectionId != null) 'onboardingProjectionId': onboardingProjectionId,
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
       if (archivedAt != null)
         'archivedAt': archivedAt!.toUtc().toIso8601String(),
       'schemaVersion': schemaVersion,
+      'version': version,
     };
   }
 
@@ -164,10 +174,12 @@ class HabitSystemRecord {
       linkedRoutineIds: List.unmodifiable(linkedList),
       source: (map['source'] as String?) ?? 'user',
       onboardingSourceId: map['onboardingSourceId'] as String?,
+      onboardingProjectionId: map['onboardingProjectionId'] as String?,
       createdAt: parseDate(map['createdAt']),
       updatedAt: parseDate(map['updatedAt']),
       archivedAt: parseNullableDate(map['archivedAt']),
       schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? 1,
+      version: (map['version'] as num?)?.toInt() ?? 1,
     );
   }
 }

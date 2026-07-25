@@ -7,7 +7,9 @@ import 'package:optivus/models/habit_system_record.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_item.dart';
-import 'package:optivus/repositories/habit_system_repository.dart';
+import 'package:optivus/repositories/habit_systems_repository.dart';
+
+import 'helpers/fake_habit_systems_repository.dart';
 import 'package:optivus/services/habit_system_onboarding_projection.dart';
 
 void main() {
@@ -76,14 +78,14 @@ void main() {
 
   group('HabitSystemsNotifier CRUD and auth lifecycle', () {
     late ProviderContainer container;
-    late FakeHabitSystemRepository fakeRepo;
+    late FakeHabitSystemsRepository fakeRepo;
 
     setUp(() {
-      fakeRepo = FakeHabitSystemRepository();
+      fakeRepo = FakeHabitSystemsRepository();
       container = ProviderContainer(
         overrides: [
           optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
-          fakeHabitSystemRepositoryProvider.overrideWithValue(fakeRepo),
+          habitSystemsRepositoryProvider.overrideWithValue(fakeRepo),
         ],
       );
     });
