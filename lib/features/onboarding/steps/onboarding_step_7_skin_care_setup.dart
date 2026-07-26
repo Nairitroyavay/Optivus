@@ -1081,6 +1081,7 @@ class OnboardingStep7 extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(mockOnboardingProvider).draft.baseTimeline;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final hasActivePath =
         base.skinCareSetupPath == 'has_products' ||
         base.skinCareSetupPath == 'no_products' ||
@@ -1093,8 +1094,10 @@ class OnboardingStep7 extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SkinCareHeader(),
-          const SizedBox(height: 18),
+          if (!keyboardOpen) ...[
+            const _SkinCareHeader(),
+            const SizedBox(height: 18),
+          ],
           Expanded(
             child: isChoice
                 ? _SkinCareChoiceScreen(base: base)

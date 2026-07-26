@@ -149,7 +149,10 @@ class _WorkRoutineSetupScreenState
                     const SizedBox(height: 16),
                     const Text(
                       'Block Type',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     SegmentedButton<String>(
@@ -172,7 +175,10 @@ class _WorkRoutineSetupScreenState
                     const SizedBox(height: 24),
                     const Text(
                       'Time Range',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TimeRangePickerRow(
@@ -180,12 +186,16 @@ class _WorkRoutineSetupScreenState
                       endTime: endTime,
                       onStartTimeChanged: (time) =>
                           setModal(() => startTime = time),
-                      onEndTimeChanged: (time) => setModal(() => endTime = time),
+                      onEndTimeChanged: (time) =>
+                          setModal(() => endTime = time),
                     ),
                     const SizedBox(height: 24),
                     const Text(
                       'Repeat Days',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     DaySelectorChips(
@@ -193,9 +203,15 @@ class _WorkRoutineSetupScreenState
                       onChanged: (days) => setModal(() => selectedDays = days),
                     ),
                     const SizedBox(height: 24),
-                    _TextField(controller: locCtrl, label: 'Location (optional)'),
+                    _TextField(
+                      controller: locCtrl,
+                      label: 'Location (optional)',
+                    ),
                     const SizedBox(height: 16),
-                    _TextField(controller: notesCtrl, label: 'Notes (optional)'),
+                    _TextField(
+                      controller: notesCtrl,
+                      label: 'Notes (optional)',
+                    ),
                     if (errorMsg != null) ...[
                       const SizedBox(height: 24),
                       Text(

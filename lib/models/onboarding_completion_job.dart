@@ -20,6 +20,7 @@ class OnboardingCompletionJob {
   final OnboardingJobStatus status;
   final OnboardingCompletionStage stage;
   final Map<String, bool> stagesCompleted;
+  final String? sourceFingerprint;
   final int retryCount;
   final String? lastError;
   final DateTime createdAt;
@@ -32,6 +33,7 @@ class OnboardingCompletionJob {
     this.status = OnboardingJobStatus.pending,
     this.stage = OnboardingCompletionStage.init,
     this.stagesCompleted = const {},
+    this.sourceFingerprint,
     this.retryCount = 0,
     this.lastError,
     required this.createdAt,
@@ -49,6 +51,7 @@ class OnboardingCompletionJob {
     OnboardingJobStatus? status,
     OnboardingCompletionStage? stage,
     Map<String, bool>? stagesCompleted,
+    String? sourceFingerprint,
     int? retryCount,
     String? lastError,
     bool clearLastError = false,
@@ -62,6 +65,7 @@ class OnboardingCompletionJob {
       status: status ?? this.status,
       stage: stage ?? this.stage,
       stagesCompleted: stagesCompleted ?? this.stagesCompleted,
+      sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
       retryCount: retryCount ?? this.retryCount,
       lastError: clearLastError ? null : (lastError ?? this.lastError),
       createdAt: createdAt ?? this.createdAt,
@@ -77,6 +81,7 @@ class OnboardingCompletionJob {
       'status': status.name,
       'stage': stage.name,
       'stagesCompleted': stagesCompleted,
+      if (sourceFingerprint != null) 'sourceFingerprint': sourceFingerprint,
       'retryCount': retryCount,
       if (lastError != null) 'lastError': lastError,
       'createdAt': createdAt.toIso8601String(),
@@ -105,6 +110,7 @@ class OnboardingCompletionJob {
         OnboardingCompletionStage.init,
       ),
       stagesCompleted: stagesCompleted,
+      sourceFingerprint: map['sourceFingerprint'] as String?,
       retryCount: map['retryCount'] as int? ?? 0,
       lastError: map['lastError'] as String?,
       createdAt: _parseDateTime(map['createdAt']) ?? DateTime.now(),

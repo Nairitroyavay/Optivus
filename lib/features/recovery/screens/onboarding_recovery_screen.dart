@@ -4,6 +4,8 @@ import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart
 import 'package:optivus/features/recovery/services/diagnostic_bundle_service.dart';
 import 'package:optivus/features/recovery/services/recovery_retry_controller.dart';
 import 'package:optivus/features/recovery/widgets/partial_failure_status_banner.dart';
+import 'package:optivus/models/onboarding_completion_job.dart';
+import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/state/auth_state.dart';
 
 class OnboardingRecoveryScreen extends ConsumerWidget {
@@ -23,6 +25,74 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
         'Habits Projection Failed',
       OnboardingFailureReason.unhandledException => 'Unhandled Error',
     };
+  }
+
+  Map<String, bool> _stageStatuses(OnboardingCompletionJob job) {
+    return {
+      for (final stage in PartialFailureStatusBanner.defaultStages)
+        stage: job.stagesCompleted[stage] == true,
+    };
+  }
+
+  String? _currentStage(OnboardingCompletionJob job) {
+    return switch (job.stage) {
+      OnboardingCompletionStage.init ||
+      OnboardingCompletionStage.completed => null,
+      _ => job.stage.name,
+    };
+  }
+
+  Widget _buildJobProgressBanner({
+    required BuildContext context,
+    required WidgetRef ref,
+    required RecoveryRetryState retryState,
+    required AsyncValue<OnboardingCompletionJob?> jobState,
+  }) {
+    final resume = retryState.canRetry
+        ? () {
+            ref
+                .read(recoveryRetryControllerProvider.notifier)
+                .recordAttemptAndStartCooldown();
+            ref.read(authProvider.notifier).retryBackendRestore();
+          }
+        : null;
+
+    return jobState.when(
+      data: (job) {
+        if (job == null) {
+          return PartialFailureStatusBanner(
+            progressUnavailable: true,
+            stageStatuses: const {},
+            currentStage: null,
+            projectedItemCount: null,
+            failedItemCount: null,
+            onResume: resume,
+          );
+        }
+        return PartialFailureStatusBanner(
+          stageStatuses: _stageStatuses(job),
+          currentStage: _currentStage(job),
+          projectedItemCount: null,
+          failedItemCount: null,
+          onResume: job.status == OnboardingJobStatus.completed ? null : resume,
+        );
+      },
+      loading: () => const PartialFailureStatusBanner(
+        progressUnavailable: true,
+        stageStatuses: {},
+        currentStage: null,
+        projectedItemCount: null,
+        failedItemCount: null,
+      ),
+      error: (error, stackTrace) => PartialFailureStatusBanner(
+        progressUnavailable: true,
+        stageStatuses: const {},
+        currentStage: null,
+        projectedItemCount: null,
+        failedItemCount: null,
+        onResume: resume,
+      ),
+    );
   }
 
   Future<void> _exportDiagnostics(BuildContext context, WidgetRef ref) async {
@@ -54,6 +124,10 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final retryState = ref.watch(recoveryRetryControllerProvider);
+    final uid = authState.user?.uid;
+    final jobState = uid == null
+        ? const AsyncValue<OnboardingCompletionJob?>.data(null)
+        : ref.watch(onboardingCompletionJobProvider(uid));
 
     final failureReason = authState.onboardingFailureReason;
     final actions = authState.recoveryActions.isNotEmpty
@@ -124,30 +198,11 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
 
-                      // Partial Failure Status Banner
-                      PartialFailureStatusBanner(
-                        stageStatuses: const {
-                          'persistDraft': true,
-                          'persistBundle': true,
-                          'projectRoutines': false,
-                          'projectHabits': false,
-                          'updateProfile': false,
-                        },
-                        currentStage: 'projectRoutines',
-                        projectedItemCount: 2,
-                        failedItemCount: 1,
-                        onResume: retryState.canRetry
-                            ? () {
-                                ref
-                                    .read(
-                                      recoveryRetryControllerProvider.notifier,
-                                    )
-                                    .recordAttemptAndStartCooldown();
-                                ref
-                                    .read(authProvider.notifier)
-                                    .retryBackendRestore();
-                              }
-                            : null,
+                      _buildJobProgressBanner(
+                        context: context,
+                        ref: ref,
+                        retryState: retryState,
+                        jobState: jobState,
                       ),
 
                       if (retryState.isCoolingDown) ...[

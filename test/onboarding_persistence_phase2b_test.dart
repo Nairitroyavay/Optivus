@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -390,7 +391,11 @@ void main() {
       );
       expect(
         container.read(authProvider).errorMessage,
-        contains('completion snapshot is missing'),
+        contains('both draft and completion snapshot are missing'),
+      );
+      expect(
+        container.read(authProvider).onboardingFailureReason,
+        OnboardingFailureReason.missingDraftAndBundle,
       );
       expect(container.read(routineNotifierProvider).items, isEmpty);
     },

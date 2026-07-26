@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
@@ -60,7 +59,8 @@ void main() {
                   ),
                   child: OnboardingStepBody(
                     title: 'Adversarial Long Title For Header Overlap Testing',
-                    subtitle: 'Testing whether section title scrolls cleanly underneath header row.',
+                    subtitle:
+                        'Testing whether section title scrolls cleanly underneath header row.',
                     children: const [
                       Text('Step body item 1'),
                       Text('Step body item 2'),
@@ -74,8 +74,12 @@ void main() {
             await tester.pump(const Duration(milliseconds: 300));
 
             // Back button and title exist
-            final backButtonFinder = find.byKey(const Key('header_back_button'));
-            final titleFinder = find.text('Adversarial Long Title For Header Overlap Testing');
+            final backButtonFinder = find.byKey(
+              const Key('header_back_button'),
+            );
+            final titleFinder = find.text(
+              'Adversarial Long Title For Header Overlap Testing',
+            );
 
             expect(backButtonFinder, findsOneWidget);
             expect(titleFinder, findsOneWidget);
@@ -156,11 +160,7 @@ void main() {
 
             await tester.pumpWidget(
               const ProviderScope(
-                child: MaterialApp(
-                  home: Scaffold(
-                    body: OnboardingStep14(),
-                  ),
-                ),
+                child: MaterialApp(home: Scaffold(body: OnboardingStep14())),
               ),
             );
 
@@ -248,37 +248,28 @@ void main() {
             expect(dayText, findsOneWidget);
           }
 
-          // Traverse semantics tree nodes
-          // ignore: deprecated_member_use
-          final semanticsOwner = RendererBinding.instance.rootPipelineOwner.semanticsOwner;
-          expect(semanticsOwner, isNotNull);
-
-          bool foundSelectedButton = false;
-          int totalButtonsFound = 0;
-
-          void traverse(SemanticsNode node) {
-            final data = node.getSemanticsData();
-            // ignore: deprecated_member_use
-            if (data.hasFlag(SemanticsFlag.isButton)) {
-              totalButtonsFound++;
-              // ignore: deprecated_member_use
-              if (data.hasFlag(SemanticsFlag.isSelected)) {
-                foundSelectedButton = true;
-                expect(data.label, contains('Monday'));
-              }
-            }
-            node.visitChildren((child) {
-              traverse(child);
-              return true;
-            });
+          for (final day in const [
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+            'Saturday',
+            'Sunday',
+          ]) {
+            expect(find.bySemanticsLabel(day), findsOneWidget);
           }
-
-          if (semanticsOwner!.rootSemanticsNode != null) {
-            traverse(semanticsOwner.rootSemanticsNode!);
-          }
-
-          expect(totalButtonsFound, equals(7));
-          expect(foundSelectedButton, isTrue);
+          expect(
+            tester.getSemantics(find.bySemanticsLabel('Monday')),
+            matchesSemantics(
+              label: 'Monday',
+              hint: 'Currently selected',
+              isButton: true,
+              hasSelectedState: true,
+              isSelected: true,
+              hasTapAction: true,
+            ),
+          );
 
           handle.dispose();
         },
@@ -294,7 +285,7 @@ void main() {
               id: 'block-morning-routine',
               title: 'Morning Routine',
               startMinute: 420, // 07:00
-              endMinute: 480,   // 08:00
+              endMinute: 480, // 08:00
               repeatDays: const [1, 2, 3, 4, 5],
               section: 'routine',
               blockType: 'fixed',
@@ -303,7 +294,7 @@ void main() {
               id: 'block-deep-work',
               title: 'Deep Work Session',
               startMinute: 540, // 09:00
-              endMinute: 720,   // 12:00
+              endMinute: 720, // 12:00
               repeatDays: const [1, 2, 3, 4, 5],
               section: 'work',
               blockType: 'flex',
@@ -330,35 +321,32 @@ void main() {
           expect(find.text('Morning Routine'), findsOneWidget);
           expect(find.text('Deep Work Session'), findsOneWidget);
 
-          // ignore: deprecated_member_use
-          final semanticsOwner = RendererBinding.instance.rootPipelineOwner.semanticsOwner;
-          expect(semanticsOwner, isNotNull);
-
-          final blockLabels = <String>[];
-          bool foundTimelineContainer = false;
-
-          void traverse(SemanticsNode node) {
-            final data = node.getSemanticsData();
-            if (data.label.contains('Timeline')) {
-              foundTimelineContainer = true;
-            }
-            // ignore: deprecated_member_use
-            if (data.hasFlag(SemanticsFlag.isButton) && data.label.isNotEmpty) {
-              blockLabels.add(data.label);
-            }
-            node.visitChildren((child) {
-              traverse(child);
-              return true;
-            });
-          }
-
-          if (semanticsOwner!.rootSemanticsNode != null) {
-            traverse(semanticsOwner.rootSemanticsNode!);
-          }
-
-          expect(foundTimelineContainer, isTrue);
-          expect(blockLabels.any((l) => l.contains('Morning Routine')), isTrue);
-          expect(blockLabels.any((l) => l.contains('Deep Work Session')), isTrue);
+          expect(
+            find.bySemanticsLabel('Timeline schedule, 2 items'),
+            findsOneWidget,
+          );
+          expect(
+            tester.getSemantics(
+              find.bySemanticsLabel('Morning Routine, from 7:00 AM to 8:00 AM'),
+            ),
+            matchesSemantics(
+              label: 'Morning Routine, from 7:00 AM to 8:00 AM',
+              hint: 'Double tap to edit timeline item',
+              isButton: true,
+            ),
+          );
+          expect(
+            tester.getSemantics(
+              find.bySemanticsLabel(
+                'Deep Work Session, from 9:00 AM to 12:00 PM',
+              ),
+            ),
+            matchesSemantics(
+              label: 'Deep Work Session, from 9:00 AM to 12:00 PM',
+              hint: 'Double tap to edit timeline item',
+              isButton: true,
+            ),
+          );
 
           // Verify decorative ticks are excluded from semantics tree
           final excludedFinder = find.byType(ExcludeSemantics);

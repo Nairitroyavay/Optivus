@@ -435,6 +435,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
     );
   }
 
+  Future<void> acceptCanonicalOnboardingCompletion(AuthUser user) async {
+    if (_needsEmailVerification(user)) {
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.signedInEmailUnverified,
+        clearError: true,
+      );
+      return;
+    }
+    final profile = _ref
+        .read(mockUserProfileProvider)
+        .copyWith(
+          uid: user.uid,
+          email: user.email ?? _ref.read(mockUserProfileProvider).email,
+          displayName:
+              user.displayName ??
+              _ref.read(mockUserProfileProvider).displayName,
+          onboardingInputCompleted: true,
+          onboardingProjectionStatus: 'completed',
+          onboardingCompleted: true,
+          onboardingStep: OnboardingDraft.lastStepIndex,
+          updatedAt: DateTime.now(),
+        );
+    _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
+    state = state.copyWith(
+      user: user,
+      status: AuthFlowStatus.signedInOnboardingComplete,
+      clearError: true,
+    );
+  }
+
   Future<void> markOnboardingIncomplete(AuthUser user) async {
     final profile = _ref
         .read(mockUserProfileProvider)

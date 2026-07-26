@@ -12,6 +12,7 @@ import '../../features/recovery/screens/onboarding_recovery_screen.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import '../../state/auth_state.dart';
 import '../../state/app_state.dart';
+import '../../models/user_profile.dart';
 import '../../app/app_navigation_controller.dart';
 import '../../features/tracker/providers/tracker_navigation_provider.dart';
 import '../../features/profile/providers/profile_navigation_provider.dart';
@@ -30,6 +31,72 @@ class RouterNotifier extends ChangeNotifier {
 }
 
 final routerNotifierProvider = Provider((ref) => RouterNotifier(ref));
+
+@visibleForTesting
+String? optivusAuthRedirect({
+  required AuthState authState,
+  required UserProfile userProfile,
+  required Uri uri,
+}) {
+  final isSignedOutRoute =
+      uri.path == '/login' || uri.path == '/signup' || uri.path == '/';
+  final isVerifyRoute = uri.path == '/verify-email';
+
+  if (authState.isLoading) {
+    return uri.path == '/loading' ? null : '/loading';
+  }
+
+  if (!authState.isLoggedIn) {
+    return isSignedOutRoute ? null : '/';
+  }
+
+  final isProjectionFailed =
+      userProfile.onboardingProjectionStatus == 'failed' ||
+      authState.backendRestoreFailed ||
+      authState.onboardingFailureReason != null;
+
+  if (isProjectionFailed && authState.onboardingIncomplete != true) {
+    return uri.path == '/onboarding/recovery' ? null : '/onboarding/recovery';
+  }
+
+  final needsVerify =
+      authState.emailUnverified ||
+      (authState.user != null &&
+          authState.user!.providerId == 'password' &&
+          !authState.user!.emailVerified);
+
+  if (needsVerify) {
+    return isVerifyRoute ? null : '/verify-email';
+  }
+
+  if (isVerifyRoute) {
+    return authState.onboardingComplete ? '/app?tab=0' : '/onboarding';
+  }
+
+  final onboardingInputCompleted = userProfile.onboardingInputCompleted;
+  final onboardingCompleted = userProfile.onboardingCompleted;
+
+  if (!onboardingInputCompleted || authState.onboardingIncomplete) {
+    if (uri.path != '/onboarding') return '/onboarding';
+    return null;
+  }
+
+  if (onboardingInputCompleted && !onboardingCompleted) {
+    if (uri.path != '/onboarding/recovery' && uri.path != '/loading') {
+      return '/onboarding/recovery';
+    }
+    return null;
+  }
+
+  if (isSignedOutRoute ||
+      uri.path == '/loading' ||
+      uri.path == '/onboarding' ||
+      uri.path == '/onboarding/recovery') {
+    return '/app?tab=0';
+  }
+
+  return null;
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
@@ -77,75 +144,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/loading',
     redirect: (context, state) {
       final authState = ref.read(authProvider);
-
-      final isSignedOutRoute =
-          state.uri.path == '/login' ||
-          state.uri.path == '/signup' ||
-          state.uri.path == '/';
-      final isVerifyRoute = state.uri.path == '/verify-email';
-
-      // Still resolving auth/profile/onboarding draft state.
-      if (authState.isLoading) {
-        return state.uri.path == '/loading' ? null : '/loading';
-      }
-
-      // 1. Not signed in -> restricted to auth routes
-      if (!authState.isLoggedIn) {
-        return isSignedOutRoute ? null : '/';
-      }
-
       final userProfile = ref.read(mockUserProfileProvider);
-      final isProjectionFailed =
-          userProfile.onboardingProjectionStatus == 'failed' ||
-          authState.backendRestoreFailed ||
-          authState.onboardingFailureReason != null;
-
-      if (isProjectionFailed && authState.onboardingIncomplete != true) {
-        return state.uri.path == '/onboarding/recovery'
-            ? null
-            : '/onboarding/recovery';
-      }
-
-      final needsVerify =
-          authState.emailUnverified ||
-          (authState.user != null &&
-              authState.user!.providerId == 'password' &&
-              !authState.user!.emailVerified);
-
-      if (needsVerify) {
-        return isVerifyRoute ? null : '/verify-email';
-      }
-
-      if (isVerifyRoute) {
-        return authState.onboardingComplete ? '/app?tab=0' : '/onboarding';
-      }
-
-      // 2. Signed in: check onboarding input vs completion status
-      final onboardingInputCompleted = userProfile.onboardingInputCompleted;
-      final onboardingCompleted = userProfile.onboardingCompleted;
-
-      if (!onboardingInputCompleted || authState.onboardingIncomplete) {
-        if (state.uri.path != '/onboarding') return '/onboarding';
-        return null;
-      }
-
-      if (onboardingInputCompleted && !onboardingCompleted) {
-        if (state.uri.path != '/onboarding/recovery' &&
-            state.uri.path != '/loading') {
-          return '/onboarding/recovery';
-        }
-        return null;
-      }
-
-      // 3. Signed in & onboarding complete -> redirect away from auth/onboarding
-      if (isSignedOutRoute ||
-          state.uri.path == '/loading' ||
-          state.uri.path == '/onboarding' ||
-          state.uri.path == '/onboarding/recovery') {
-        return '/app?tab=0';
-      }
-
-      return null;
+      return optivusAuthRedirect(
+        authState: authState,
+        userProfile: userProfile,
+        uri: state.uri,
+      );
     },
     routes: [
       GoRoute(

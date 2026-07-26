@@ -17,6 +17,7 @@ abstract class OnboardingRepository {
   Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid);
   Future<void> saveDraft(OnboardingDraft draft);
   Future<void> flushPendingDraftSave() async {}
+  void dispose() {}
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle);
 
   Future<RoutineProjectionResult> completeOnboarding({
@@ -73,6 +74,11 @@ class FakeOnboardingRepository implements OnboardingRepository {
   @override
   Future<void> flushPendingDraftSave() async {
     await _draftDebouncer.flush();
+  }
+
+  @override
+  void dispose() {
+    _draftDebouncer.dispose();
   }
 
   @override
@@ -222,6 +228,11 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
   @override
   Future<void> flushPendingDraftSave() async {
     await _draftDebouncer.flush();
+  }
+
+  @override
+  void dispose() {
+    _draftDebouncer.dispose();
   }
 
   @override
@@ -451,10 +462,12 @@ Map<String, Map<String, RoutineProjectionReceipt>> _copyReceipts(
 }
 
 final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {
-  if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
-    return FirestoreOnboardingRepository();
-  }
-  return FakeOnboardingRepository(
-    routineDatabase: ref.watch(fakeRoutineDatabaseProvider),
-  );
+  final repository =
+      ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase
+      ? FirestoreOnboardingRepository()
+      : FakeOnboardingRepository(
+          routineDatabase: ref.watch(fakeRoutineDatabaseProvider),
+        );
+  ref.onDispose(repository.dispose);
+  return repository;
 });

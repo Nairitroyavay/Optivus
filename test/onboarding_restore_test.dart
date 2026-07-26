@@ -442,6 +442,9 @@ class _ControlledOnboardingRepository implements OnboardingRepository {
   Future<void> flushPendingDraftSave() async {}
 
   @override
+  void dispose() {}
+
+  @override
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) async {}
 
   @override

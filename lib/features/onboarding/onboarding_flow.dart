@@ -7,13 +7,12 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
-import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
-import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
-import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
@@ -41,6 +40,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   bool _initialDraftSyncScheduled = false;
   bool _isSaving = false; // Double-tap prevention for Save
   bool _isNavigating = false; // Double-tap prevention for Next
+  bool _isHandlingPopGesture = false;
 
   @override
   void initState() {
@@ -203,7 +203,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         _invalidateDownstreamStages(2);
       }
 
-      await ref.read(onboardingRepositoryProvider).saveDraft(savedDraft);
+      final onboardingRepository = ref.read(onboardingRepositoryProvider);
+      await onboardingRepository.saveDraft(savedDraft);
+      await onboardingRepository.flushPendingDraftSave();
 
       return true;
     } catch (e) {
@@ -341,26 +343,20 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     );
 
     try {
-      await ref
-          .read(onboardingRepositoryProvider)
-          .completeOnboarding(finalDraft: finalDraft, bundle: bundle);
-      await const OnboardingFrontendHydrationService().hydrate(
-        read: ref.read,
-        bundle: bundle,
-      );
-
-      final plan = RoutineOnboardingProjection.build(bundle);
-      final receipt = await ref
-          .read(routineRepositoryProvider)
-          .fetchProjectionReceipt(uid, plan.projectionId);
-      if (receipt == null ||
-          receipt.status != 'completed' ||
-          receipt.cursor != receipt.totalCount ||
-          receipt.sourceBundleFingerprint != plan.fingerprint) {
+      final job = await ref
+          .read(onboardingCompletionJobServiceProvider)
+          .runCompletionJob(
+            uid: uid,
+            finalDraft: finalDraft,
+            bundle: bundle,
+            reader: ref.read,
+          );
+      if (job.status != OnboardingJobStatus.completed ||
+          job.stage != OnboardingCompletionStage.completed) {
         ref
             .read(mockOnboardingProvider.notifier)
             .setValidationMessage(
-              'History event projection failed to complete. Please tap Enter Optivus to retry.',
+              'Setup is still finishing. Please tap Enter Optivus to resume.',
             );
         return;
       }
@@ -386,10 +382,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         );
 
     if (authUser != null) {
-      await ref.read(authProvider.notifier).markOnboardingComplete(authUser);
+      await ref
+          .read(authProvider.notifier)
+          .acceptCanonicalOnboardingCompletion(authUser);
     }
 
-    if (mounted) {
+    if (mounted && authUser == null) {
       context.go('/app?tab=0');
     }
   }
@@ -541,31 +539,45 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   Future<void> _handlePopGesture() async {
-    final currentFocus = FocusManager.instance.primaryFocus;
-    if (currentFocus != null && currentFocus.hasFocus) {
-      currentFocus.unfocus();
-      return;
-    }
-
-    if (_handleInternalBackIfNeeded()) {
-      return;
-    }
-
-    if (_currentPage <= 0) {
-      final confirmed = await _showExitConfirmationDialog(context);
-      if (confirmed && mounted) {
-        context.go('/');
+    if (_isHandlingPopGesture) return;
+    _isHandlingPopGesture = true;
+    try {
+      final currentFocus = FocusManager.instance.primaryFocus;
+      final focusContext = currentFocus?.context;
+      final hasEditableFocus =
+          currentFocus != null &&
+          currentFocus.hasFocus &&
+          focusContext != null &&
+          (focusContext.widget is EditableText ||
+              focusContext.findAncestorWidgetOfExactType<EditableText>() !=
+                  null);
+      if (hasEditableFocus) {
+        currentFocus.unfocus();
+        return;
       }
-      return;
-    }
 
-    final onboardingState = ref.read(mockOnboardingProvider);
-    if (onboardingState.stepDirty[_currentPage]) {
-      final proceed = await _showDiscardDraftDialog(context);
-      if (!proceed) return;
-    }
+      if (_handleInternalBackIfNeeded()) {
+        return;
+      }
 
-    _goToPreviousStepDirect();
+      if (_currentPage <= 0) {
+        final confirmed = await _showExitConfirmationDialog(context);
+        if (confirmed && mounted) {
+          context.go('/');
+        }
+        return;
+      }
+
+      final onboardingState = ref.read(mockOnboardingProvider);
+      if (onboardingState.stepDirty[_currentPage]) {
+        final proceed = await _showDiscardDraftDialog(context);
+        if (!proceed) return;
+      }
+
+      _goToPreviousStepDirect();
+    } finally {
+      _isHandlingPopGesture = false;
+    }
   }
 
   void _goToPreviousStepDirect() {

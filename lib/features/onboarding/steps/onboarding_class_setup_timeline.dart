@@ -1751,12 +1751,11 @@ class _OnboardingClassSetupWidgetState
                                     onPressed: () async {
                                       final currentList =
                                           _currentEditableBlocks();
-                                      ref.read(_provider.notifier).state =
-                                          currentList
-                                              .where(
-                                                (block) => block.id != item.id,
-                                              )
-                                              .toList(growable: false);
+                                      ref
+                                          .read(_provider.notifier)
+                                          .state = currentList
+                                          .where((block) => block.id != item.id)
+                                          .toList(growable: false);
                                       await _syncLocalBlocksToPending();
                                       if (!ctx.mounted) return;
                                       Navigator.pop(ctx);

@@ -25,7 +25,6 @@ class RecoveryCacheManager {
     // Clear stale memory repositories while preserving dirty draft edits
     read(routineNotifierProvider.notifier).resetForSignedOut();
     read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
-    read(mockRoutineProvider.notifier).resetEmpty();
     read(mockTrackerProvider.notifier).resetEmpty();
     read(mockGoalProvider.notifier).resetEmpty();
     read(mockMindNoteProvider.notifier).resetEmpty();

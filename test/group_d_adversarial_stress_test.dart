@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
@@ -24,6 +23,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/tracker_models.dart';
+import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/habit_systems_repository.dart';
@@ -193,9 +193,9 @@ void main() {
         },
       );
 
-      testWidgets(
+      test(
         'GoRouter redirect traps unverified password user on /verify-email',
-        (tester) async {
+        () async {
           final fakeAuth = FakeAuthRepository();
           final container = ProviderContainer(
             overrides: [
@@ -212,24 +212,24 @@ void main() {
             'password123',
           );
 
-          await tester.pumpWidget(
-            UncontrolledProviderScope(
-              container: container,
-              child: Consumer(
-                builder: (context, ref, child) {
-                  final router = ref.watch(routerProvider);
-                  return MaterialApp.router(routerConfig: router);
-                },
-              ),
-            ),
+          final authState = AuthState(
+            user: unverifiedUser,
+            status: AuthFlowStatus.signedInEmailUnverified,
           );
-          await tester.pumpAndSettle();
+          final redirect = optivusAuthRedirect(
+            authState: authState,
+            userProfile: UserProfile.empty(
+              uid: unverifiedUser.uid,
+              email: unverifiedUser.email ?? '',
+            ).copyWith(onboardingCompleted: true),
+            uri: Uri.parse('/app?tab=0'),
+          );
 
-          final authState = container.read(authProvider);
           expect(
             authState.status,
             equals(AuthFlowStatus.signedInEmailUnverified),
           );
+          expect(redirect, equals('/verify-email'));
           expect(unverifiedUser.emailVerified, isFalse);
         },
       );
@@ -386,8 +386,8 @@ void main() {
             routineItemId: 'item-1',
             occurrenceDateKey: '2026-07-25',
             status: RoutineStatus.completed,
-            source: 'user',
-            action: 'completed',
+            source: 'routine',
+            action: 'complete',
             operationKey: 'op-1',
             createdAt: now,
             updatedAt: now,

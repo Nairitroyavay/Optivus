@@ -238,6 +238,9 @@ class _TestAuthNotifier extends StateNotifier<AuthState>
   _TestAuthNotifier(super.state);
 
   @override
+  Future<void> acceptCanonicalOnboardingCompletion(AuthUser user) async {}
+
+  @override
   Future<void> checkEmailVerification() async {}
 
   @override

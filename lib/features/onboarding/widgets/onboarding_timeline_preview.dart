@@ -44,6 +44,7 @@ class OnboardingDayChips extends StatelessWidget {
           for (var index = 0; index < _labels.length; index++)
             Expanded(
               child: Semantics(
+                excludeSemantics: true,
                 button: true,
                 selected: selectedDay == index + 1,
                 label: _fullDayNames[index],
@@ -381,6 +382,7 @@ class OnboardingVerticalTimeline extends StatelessWidget {
                             right: 16,
                             height: entryById[block.id]!.height,
                             child: Semantics(
+                              excludeSemantics: true,
                               button: true,
                               label:
                                   '${block.title}, from ${onboardingTimeLabel(block.startMinute)} to ${onboardingTimeLabel(block.endMinute)}',

@@ -1881,7 +1881,9 @@ class _OnboardingStep4UnifiedState
                                       'Sun',
                                     ][index];
                                     final day = index + 1;
-                                    final isSelected = selectedDays.contains(day);
+                                    final isSelected = selectedDays.contains(
+                                      day,
+                                    );
                                     return GestureDetector(
                                       onTap: () => setSheetState(() {
                                         if (selectedDays.contains(day)) {
@@ -1902,7 +1904,9 @@ class _OnboardingStep4UnifiedState
                                               : Colors.white.withValues(
                                                   alpha: 0.5,
                                                 ),
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           border: Border.all(
                                             color: isSelected
                                                 ? config.accent
@@ -1951,7 +1955,9 @@ class _OnboardingStep4UnifiedState
                                         filled: true,
                                         fillColor: Colors.white,
                                         border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                           borderSide: BorderSide.none,
                                         ),
                                       ),
@@ -1970,7 +1976,9 @@ class _OnboardingStep4UnifiedState
                                         filled: true,
                                         fillColor: Colors.white,
                                         border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(16),
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
                                           borderSide: BorderSide.none,
                                         ),
                                       ),
@@ -2000,8 +2008,9 @@ class _OnboardingStep4UnifiedState
                                 children: [
                                   TextButton.icon(
                                     onPressed: () async {
-                                      final currentList =
-                                          _currentBlocks(config);
+                                      final currentList = _currentBlocks(
+                                        config,
+                                      );
                                       ref
                                           .read(_providerFor(config).notifier)
                                           .state = currentList
@@ -2064,7 +2073,8 @@ class _OnboardingStep4UnifiedState
                                           8 * 60) {
                                         error = config.durationTooLongText;
                                       } else if (selectedDays.isEmpty) {
-                                        error = 'Select at least one repeat day.';
+                                        error =
+                                            'Select at least one repeat day.';
                                       }
 
                                       if (error != null) {

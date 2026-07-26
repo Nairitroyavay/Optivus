@@ -132,9 +132,10 @@ function habitSystemData(uid = "user123", id = "habitsys-1", overrides = {}) {
     status: "active",
     linkedRoutineIds: ["routine-item-1"],
     source: "user",
-    createdAt: "2026-07-24T00:00:00.000Z",
-    updatedAt: "2026-07-24T00:00:00.000Z",
+    createdAt,
+    updatedAt,
     schemaVersion: 1,
+    version: 1,
     ...overrides,
   };
 }
@@ -385,7 +386,12 @@ describe("Firestore Rules for Routine durability", () => {
     const docRef = db.collection("users").doc("user123").collection("habitSystems").doc("habitsys-1");
 
     await assertSucceeds(docRef.set(habitSystemData()));
-    await assertSucceeds(docRef.update({ title: "Updated Meditation", status: "paused" }));
+    await assertSucceeds(docRef.update({
+      title: "Updated Meditation",
+      status: "paused",
+      updatedAt: completedAt,
+      version: 2,
+    }));
     await assertSucceeds(docRef.delete());
   });
 
@@ -400,8 +406,8 @@ describe("Firestore Rules for Routine durability", () => {
     const ownerDoc = owner.collection("users").doc("user123").collection("habitSystems").doc("habitsys-1");
     await assertSucceeds(ownerDoc.set(habitSystemData("user123")));
 
-    await assertFails(ownerDoc.update({ ownerUid: "hacker" }));
-    await assertFails(ownerDoc.update({ systemId: "other_id" }));
+    await assertFails(ownerDoc.update({ ownerUid: "hacker", version: 2 }));
+    await assertFails(ownerDoc.update({ systemId: "other_id", version: 2 }));
   });
 
   it("does not let the catch-all bypass strict Routine collections", async () => {
@@ -501,14 +507,25 @@ describe("Firestore Rules for Routine durability", () => {
       await assertFails(invalidProjIdRef.set(projectionData("user123", { id: "wrong-proj-id" })));
 
       const projRef = owner.collection("users").doc("user123").collection("routineProjections").doc("onboarding-initial-v1");
-      await assertSucceeds(projRef.set(projectionData("user123", { totalCount: 5, cursor: 2, status: "pending" })));
+      const projectedItemIds = [
+        "routine-item-1",
+        "routine-item-2",
+        "routine-item-3",
+        "routine-item-4",
+        "routine-item-5",
+      ];
+      await assertSucceeds(projRef.set(projectionData("user123", {
+        projectedItemIds,
+        totalCount: 5,
+        cursor: 2,
+        status: "pending",
+      })));
 
       // Transitioning status to completed when cursor (2) < totalCount (5) must fail
-      await assertFails(projRef.update({ status: "completed" }));
+      await assertFails(projRef.update({ status: "completed", completedAt }));
 
       // Regressing cursor (from 2 to 1) must fail
       await assertFails(projRef.update({ cursor: 1 }));
     });
   });
 });
-

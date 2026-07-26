@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class PartialFailureStatusBanner extends ConsumerWidget {
   final Map<String, bool>? stageStatuses;
   final String? currentStage;
-  final int projectedItemCount;
-  final int failedItemCount;
+  final int? projectedItemCount;
+  final int? failedItemCount;
+  final bool progressUnavailable;
   final VoidCallback? onResume;
 
   static const List<String> defaultStages = [
@@ -22,6 +23,7 @@ class PartialFailureStatusBanner extends ConsumerWidget {
     this.currentStage,
     this.projectedItemCount = 0,
     this.failedItemCount = 0,
+    this.progressUnavailable = false,
     this.onResume,
   });
 
@@ -58,7 +60,9 @@ class PartialFailureStatusBanner extends ConsumerWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Partial Completion Detected',
+                  progressUnavailable
+                      ? 'Setup Progress Unknown'
+                      : 'Partial Completion Detected',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Colors.amber.shade900,
@@ -69,6 +73,13 @@ class PartialFailureStatusBanner extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 12),
+          if (progressUnavailable) ...[
+            Text(
+              'We could not load the saved setup progress for this account.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+          ],
           // 5-Stage Job Indicators
           LayoutBuilder(
             builder: (context, constraints) {
@@ -130,7 +141,9 @@ class PartialFailureStatusBanner extends ConsumerWidget {
             runSpacing: 8,
             children: [
               Text(
-                'Items: $projectedItemCount projected, $failedItemCount failed',
+                projectedItemCount == null || failedItemCount == null
+                    ? 'Items: counts unavailable'
+                    : 'Items: $projectedItemCount projected, $failedItemCount failed',
                 style: Theme.of(
                   context,
                 ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),

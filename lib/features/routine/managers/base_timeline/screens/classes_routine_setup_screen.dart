@@ -154,7 +154,10 @@ class _ClassesRoutineSetupScreenState
                     const SizedBox(height: 24),
                     const Text(
                       'Time',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     TimeRangePickerRow(
@@ -162,12 +165,16 @@ class _ClassesRoutineSetupScreenState
                       endTime: endTime,
                       onStartTimeChanged: (time) =>
                           setModal(() => startTime = time),
-                      onEndTimeChanged: (time) => setModal(() => endTime = time),
+                      onEndTimeChanged: (time) =>
+                          setModal(() => endTime = time),
                     ),
                     const SizedBox(height: 24),
                     const Text(
                       'Repeat Days',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     DaySelectorChips(

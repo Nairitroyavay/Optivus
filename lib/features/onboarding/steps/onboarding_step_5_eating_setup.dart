@@ -2223,18 +2223,28 @@ List<int> _repeatDaysForEatingCandidate(RoutineImportCandidateBlock candidate) {
 
 List<String> _dishesForEatingCandidate(RoutineImportCandidateBlock candidate) {
   final dishes = <String>{};
-  dishes.addAll(
-    candidate.steps.map((s) => s.trim()).where((s) => s.isNotEmpty),
-  );
 
-  void extractFromRawText(String? text) {
+  void addDish(String text) {
+    final dish = text.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (dish.length < 2 || _looksLikeNonDishMealToken(dish)) return;
+    dishes.add(dish);
+  }
+
+  for (final step in candidate.steps) {
+    addDish(step);
+  }
+
+  void extractFromRawText(String? text, {bool stripMealWords = true}) {
     if (text == null || text.trim().isEmpty) return;
-    final withoutMealWords = text
+    final cleaned = text
+        .replaceAll(RegExp(r'[–—]'), '-')
         .replaceAll(
-          RegExp(
-            r'\b(Breakfast|Lunch|Brunch|Supper|Snacks?|Dinner)\b',
-            caseSensitive: false,
-          ),
+          stripMealWords
+              ? RegExp(
+                  r'\b(Breakfast|Lunch|Brunch|Supper|Snacks?|Dinner)\b',
+                  caseSensitive: false,
+                )
+              : RegExp(r'(?!)'),
           ' ',
         )
         .replaceAll(
@@ -2248,22 +2258,74 @@ List<String> _dishesForEatingCandidate(RoutineImportCandidateBlock candidate) {
           RegExp(r'\d{1,2}[:.]\d{2}\s*(AM|PM)?', caseSensitive: false),
           ' ',
         )
-        .replaceAll(RegExp(r'\d{1,2}\s*(AM|PM)', caseSensitive: false), ' ');
-    final items = withoutMealWords
+        .replaceAll(RegExp(r'\d{1,2}\s*(AM|PM)', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\s+-\s+'), ' ');
+    final items = cleaned
         .split(RegExp(r'[,;\n|•·]+'))
         .map((item) => item.trim())
         .where((item) => item.length >= 2);
-    dishes.addAll(items);
+    for (final item in items) {
+      addDish(item);
+    }
   }
 
-  if (dishes.isEmpty) {
-    extractFromRawText(candidate.sourceTextSnippet);
-    extractFromRawText(candidate.notes);
-    extractFromRawText(candidate.sourceColumnLabel);
-    extractFromRawText(candidate.title);
+  extractFromRawText(candidate.sourceTextSnippet);
+  extractFromRawText(candidate.notes);
+  extractFromRawText(candidate.sourceColumnLabel);
+  if (_candidateTitleCanBeDishHint(candidate.title)) {
+    extractFromRawText(candidate.title, stripMealWords: false);
   }
 
   return dishes.toList();
+}
+
+bool _candidateTitleCanBeDishHint(String title) {
+  final value = title.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (value.length < 2) return false;
+  if (_looksLikeNonDishMealToken(value)) return false;
+  final withoutMealWords = value
+      .replaceAll(
+        RegExp(
+          r'\b(Breakfast|Lunch|Brunch|Supper|Snacks?|Dinner|Meal)\b',
+          caseSensitive: false,
+        ),
+        ' ',
+      )
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (withoutMealWords.isEmpty) return false;
+  return !_looksLikeNonDishMealToken(withoutMealWords);
+}
+
+bool _looksLikeNonDishMealToken(String value) {
+  final lower = value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9\s/-]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (lower.isEmpty || !RegExp(r'[a-z]').hasMatch(lower)) return true;
+  if (RegExp(r'\bpart\s*\d+\b').hasMatch(lower)) return true;
+  const generic = {
+    'breakfast',
+    'lunch',
+    'brunch',
+    'supper',
+    'snack',
+    'snacks',
+    'dinner',
+    'extra snack',
+    'extra-snack',
+    'meal',
+    'meals',
+    'menu',
+    'mess menu',
+    'mess item',
+    'food',
+    'item',
+    'items',
+    'routine',
+  };
+  return generic.contains(lower);
 }
 
 List<int> _dayNumbersFromText(String text) {

@@ -5,6 +5,7 @@ import 'package:optivus/core/router/app_router.dart';
 import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/recovery/screens/onboarding_recovery_screen.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
@@ -19,118 +20,189 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 
 void main() {
-  group(
-    'Group A Stress Tests: Multi-stage Idempotency & Failure Injection',
-    () {
-      test(
-        'JobService resumes correctly when stage 1 and 2 are pre-completed',
-        () async {
-          final onboardingRepo = FakeOnboardingRepository();
-          final profileRepo = FakeProfileRepository();
-          final jobService = OnboardingCompletionJobService(
-            onboardingRepository: onboardingRepo,
-            profileRepository: profileRepo,
-          );
+  group('Group A Stress Tests: Multi-stage Idempotency & Failure Injection', () {
+    test(
+      'JobService resumes correctly when stage 1 and 2 are pre-completed',
+      () async {
+        final onboardingRepo = FakeOnboardingRepository();
+        final profileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: onboardingRepo,
+          profileRepository: profileRepo,
+        );
 
-          const uid = 'stress-resume-user';
-          final draft = OnboardingDraft(uid: uid).copyWith(
-            onboardingCompleted: true,
-            currentStep: OnboardingDraft.lastStepIndex,
-          );
-          final bundle = OnboardingCompletionService.buildBundle(draft);
+        const uid = 'stress-resume-user';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
 
-          // Save draft and bundle beforehand to simulate stages 1 & 2 done
-          await onboardingRepo.saveDraft(draft);
-          await onboardingRepo.saveCompletionBundle(bundle);
+        // Save draft and bundle beforehand to simulate stages 1 & 2 done
+        await onboardingRepo.saveDraft(draft);
+        await onboardingRepo.saveCompletionBundle(bundle);
 
-          final completedJob = await jobService.runCompletionJob(
+        final completedJob = await jobService.runCompletionJob(
+          uid: uid,
+          finalDraft: draft,
+          bundle: bundle,
+        );
+
+        expect(completedJob.status, equals(OnboardingJobStatus.completed));
+        expect(completedJob.stage, equals(OnboardingCompletionStage.completed));
+        expect(
+          completedJob.isStageCompleted(OnboardingCompletionStage.persistDraft),
+          isTrue,
+        );
+        expect(
+          completedJob.isStageCompleted(
+            OnboardingCompletionStage.persistBundle,
+          ),
+          isTrue,
+        );
+        expect(
+          completedJob.isStageCompleted(
+            OnboardingCompletionStage.projectRoutines,
+          ),
+          isTrue,
+        );
+        expect(
+          completedJob.isStageCompleted(
+            OnboardingCompletionStage.updateProfile,
+          ),
+          isTrue,
+        );
+
+        final profile = await profileRepo.fetchUserProfile(uid);
+        expect(profile?.onboardingCompleted, isTrue);
+      },
+    );
+
+    test(
+      'JobService handles injected failure during atomic routine projection',
+      () async {
+        final onboardingRepo = FakeOnboardingRepository();
+        final profileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: onboardingRepo,
+          profileRepository: profileRepo,
+        );
+
+        const uid = 'stress-fail-user';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+
+        // Inject failure on first attempt
+        onboardingRepo.failNextCompletionBeforeCommit();
+
+        await expectLater(
+          jobService.runCompletionJob(
             uid: uid,
             finalDraft: draft,
             bundle: bundle,
-          );
+          ),
+          throwsA(isA<RoutineProjectionRetryRequiredException>()),
+        );
 
-          expect(completedJob.status, equals(OnboardingJobStatus.completed));
-          expect(
-            completedJob.stage,
-            equals(OnboardingCompletionStage.completed),
-          );
-          expect(
-            completedJob.isStageCompleted(
-              OnboardingCompletionStage.persistDraft,
-            ),
-            isTrue,
-          );
-          expect(
-            completedJob.isStageCompleted(
-              OnboardingCompletionStage.persistBundle,
-            ),
-            isTrue,
-          );
-          expect(
-            completedJob.isStageCompleted(
-              OnboardingCompletionStage.projectRoutines,
-            ),
-            isTrue,
-          );
-          expect(
-            completedJob.isStageCompleted(
-              OnboardingCompletionStage.updateProfile,
-            ),
-            isTrue,
-          );
+        // Verify retry succeeds cleanly on second execution
+        final completedJob = await jobService.runCompletionJob(
+          uid: uid,
+          finalDraft: draft,
+          bundle: bundle,
+        );
 
-          final profile = await profileRepo.fetchUserProfile(uid);
-          expect(profile?.onboardingCompleted, isTrue);
-        },
-      );
+        expect(completedJob.status, equals(OnboardingJobStatus.completed));
+        expect(
+          completedJob.isStageCompleted(
+            OnboardingCompletionStage.projectRoutines,
+          ),
+          isTrue,
+        );
+      },
+    );
 
-      test(
-        'JobService handles injected failure during atomic routine projection',
-        () async {
-          final onboardingRepo = FakeOnboardingRepository();
-          final profileRepo = FakeProfileRepository();
-          final jobService = OnboardingCompletionJobService(
-            onboardingRepository: onboardingRepo,
-            profileRepository: profileRepo,
-          );
+    test(
+      'JobService retry preserves persisted stage progress after failure',
+      () async {
+        final onboardingRepo = _CountingOnboardingRepository();
+        final profileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: onboardingRepo,
+          profileRepository: profileRepo,
+        );
 
-          const uid = 'stress-fail-user';
-          final draft = OnboardingDraft(uid: uid).copyWith(
-            onboardingCompleted: true,
-            currentStep: OnboardingDraft.lastStepIndex,
-          );
-          final bundle = OnboardingCompletionService.buildBundle(draft);
+        const uid = 'stress-resume-persisted-stage-user';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
 
-          // Inject failure on first attempt
-          onboardingRepo.failNextCompletionBeforeCommit();
-
-          expect(
-            () => jobService.runCompletionJob(
-              uid: uid,
-              finalDraft: draft,
-              bundle: bundle,
-            ),
-            throwsA(isA<RoutineProjectionRetryRequiredException>()),
-          );
-
-          // Verify retry succeeds cleanly on second execution
-          final completedJob = await jobService.runCompletionJob(
+        onboardingRepo.failNextCompletionBeforeCommit();
+        await expectLater(
+          jobService.runCompletionJob(
             uid: uid,
             finalDraft: draft,
             bundle: bundle,
-          );
+          ),
+          throwsA(isA<RoutineProjectionRetryRequiredException>()),
+        );
 
-          expect(completedJob.status, equals(OnboardingJobStatus.completed));
-          expect(
-            completedJob.isStageCompleted(
-              OnboardingCompletionStage.projectRoutines,
-            ),
-            isTrue,
-          );
-        },
-      );
-    },
-  );
+        final completedJob = await jobService.runCompletionJob(
+          uid: uid,
+          finalDraft: draft,
+          bundle: bundle,
+        );
+
+        expect(completedJob.status, equals(OnboardingJobStatus.completed));
+        expect(
+          completedJob.isStageCompleted(OnboardingCompletionStage.persistDraft),
+          isTrue,
+        );
+        expect(
+          completedJob.isStageCompleted(
+            OnboardingCompletionStage.persistBundle,
+          ),
+          isTrue,
+        );
+        expect(onboardingRepo.saveDraftCount, equals(1));
+        expect(onboardingRepo.saveCompletionBundleCount, equals(1));
+        expect(onboardingRepo.completeOnboardingCount, equals(2));
+      },
+    );
+
+    test(
+      'JobService fails habit stage when frontend hydration is required and reader is absent',
+      () async {
+        final onboardingRepo = FakeOnboardingRepository();
+        final profileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: onboardingRepo,
+          profileRepository: profileRepo,
+          requireFrontendHydration: true,
+        );
+
+        const uid = 'stress-missing-reader-user';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+
+        await expectLater(
+          jobService.runCompletionJob(
+            uid: uid,
+            finalDraft: draft,
+            bundle: bundle,
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+  });
 
   group('Group A Stress Tests: Recovery Fallback Tier Transitions', () {
     test('Tier 1 fallback rejects bundle with mismatched UID', () async {
@@ -281,9 +353,39 @@ void main() {
   });
 }
 
+class _CountingOnboardingRepository extends FakeOnboardingRepository {
+  int saveDraftCount = 0;
+  int saveCompletionBundleCount = 0;
+  int completeOnboardingCount = 0;
+
+  @override
+  Future<void> saveDraft(OnboardingDraft draft) {
+    saveDraftCount++;
+    return super.saveDraft(draft);
+  }
+
+  @override
+  Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) {
+    saveCompletionBundleCount++;
+    return super.saveCompletionBundle(bundle);
+  }
+
+  @override
+  Future<RoutineProjectionResult> completeOnboarding({
+    required OnboardingDraft finalDraft,
+    required OnboardingCompletionBundle bundle,
+  }) {
+    completeOnboardingCount++;
+    return super.completeOnboarding(finalDraft: finalDraft, bundle: bundle);
+  }
+}
+
 class _FakeAuthNotifier extends StateNotifier<AuthState>
     implements AuthNotifier {
   _FakeAuthNotifier(super.state);
+
+  @override
+  Future<void> acceptCanonicalOnboardingCompletion(AuthUser user) async {}
 
   @override
   Future<void> checkEmailVerification() async {}

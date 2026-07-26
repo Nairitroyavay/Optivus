@@ -518,6 +518,9 @@ class _FakeAuthNotifier extends StateNotifier<AuthState>
   _FakeAuthNotifier(super.state);
 
   @override
+  Future<void> acceptCanonicalOnboardingCompletion(AuthUser user) async {}
+
+  @override
   Future<void> checkEmailVerification() async {}
 
   @override

@@ -725,6 +725,10 @@ class FakeAuthNotifier extends StateNotifier<AuthState>
           status: AuthFlowStatus.signedInOnboardingIncomplete,
         ),
       );
+
+  @override
+  Future<void> acceptCanonicalOnboardingCompletion(AuthUser user) async {}
+
   @override
   Future<void> checkEmailVerification() async {}
   @override
@@ -762,6 +766,8 @@ class FakeOnboardingRepository implements OnboardingRepository {
   Future<void> saveDraft(OnboardingDraft draft) async {}
   @override
   Future<void> flushPendingDraftSave() async {}
+  @override
+  void dispose() {}
   Future<OnboardingDraft?> getDraft(String uid) async => null;
   Future<void> deleteDraft(String uid) async {}
   @override
