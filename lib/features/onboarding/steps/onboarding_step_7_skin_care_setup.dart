@@ -513,11 +513,71 @@ SkinCareDetectedProduct? _typedProductFromLine(String rawLine) {
   if (name.isEmpty) return null;
   category = category.isEmpty ? _inferTypedProductCategory(name) : category;
 
+  final meta = _enrichTypedProductMetadata(category, name);
   return SkinCareDetectedProduct(
     name: name,
     category: category,
     source: 'typed',
+    keyIngredients: meta['keyIngredients'] as List<String>,
+    possibleActives: meta['possibleActives'] as List<String>,
+    usageHint: meta['usageHint'] as String,
+    warningIfAny: meta['warningIfAny'] as String,
+    confidence: 'high',
   );
+}
+
+Map<String, dynamic> _enrichTypedProductMetadata(String category, String name) {
+  final lower = name.toLowerCase();
+  final keyIngredients = <String>[];
+  final possibleActives = <String>[];
+  String usageHint = '';
+  String warningIfAny = '';
+
+  switch (category) {
+    case 'cleanser':
+      keyIngredients.addAll(['gentle surfactants', 'water']);
+      usageHint = 'Apply AM/PM to cleanse skin';
+      break;
+    case 'moisturizer':
+      keyIngredients.addAll(['ceramides', 'glycerin']);
+      usageHint = 'Apply AM/PM after cleansing/serums';
+      break;
+    case 'sunscreen':
+      keyIngredients.addAll(['UV filters']);
+      possibleActives.add('zinc oxide');
+      usageHint = 'Apply every morning as last step';
+      break;
+    case 'vitamin_c_serum':
+      keyIngredients.add('L-ascorbic acid');
+      possibleActives.add('Vitamin C');
+      usageHint = 'Apply AM before moisturizer';
+      break;
+    case 'treatment_serum':
+      if (lower.contains('retinol') || lower.contains('retinal')) {
+        possibleActives.add('Retinol');
+        usageHint = 'Apply PM 2-3x weekly';
+        warningIfAny = 'Use sunscreen during daytime';
+      } else if (lower.contains('niacinamide')) {
+        possibleActives.add('Niacinamide');
+        usageHint = 'Apply AM/PM';
+      } else {
+        possibleActives.add('active ingredient');
+        usageHint = 'Apply as directed';
+      }
+      break;
+    case 'exfoliant':
+      possibleActives.addAll(['AHA', 'BHA']);
+      usageHint = 'Use 1-3x weekly PM';
+      warningIfAny = 'Avoid combining with other strong acids in same routine';
+      break;
+  }
+
+  return {
+    'keyIngredients': keyIngredients,
+    'possibleActives': possibleActives,
+    'usageHint': usageHint,
+    'warningIfAny': warningIfAny,
+  };
 }
 
 String _normalizeTypedProductCategory(String value) {
@@ -916,6 +976,19 @@ String _friendlySkinCareUploadMessage(String? message) {
   final value = message?.trim();
   if (value == null || value.isEmpty) return 'Photo upload failed. Try again.';
   final lower = value.toLowerCase();
+  if (lower.contains('expired') ||
+      lower.contains('r2uploadexpiredurlexception')) {
+    return 'Upload URL expired. Tap retry to get a fresh upload link.';
+  }
+  if (lower.contains('network') ||
+      lower.contains('socketexception') ||
+      lower.contains('r2uploadnetworkexception')) {
+    return 'Network connection failed during photo upload. Please check your connection and retry.';
+  }
+  if (lower.contains('markcomplete') ||
+      lower.contains('r2uploadmarkcompleteexception')) {
+    return 'Failed to confirm photo upload. Please tap retry.';
+  }
   if (lower.contains('heic') ||
       lower.contains('heif') ||
       lower.contains('format') ||
@@ -1108,7 +1181,7 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
     }
 
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.only(
         bottom: OnboardingStepShell.bottomCtaHeight + 40,
       ),
@@ -1309,6 +1382,8 @@ class _HasProductsModeScreenState
   String? _generationError;
   late _ProductInputSource _inputSource;
   int _selectedDay = DateTime.now().weekday;
+  int _generationRequestId = 0;
+  final int _sourceEpoch = 0;
 
   @override
   void initState() {
@@ -1502,6 +1577,10 @@ class _HasProductsModeScreenState
       return;
     }
 
+    final currentRequestId = ++_generationRequestId;
+    final currentSourceEpoch = _sourceEpoch;
+    final currentSource = activeSource;
+
     setState(() {
       _generating = true;
       _generationError = null;
@@ -1556,6 +1635,17 @@ class _HasProductsModeScreenState
           idToken: idToken,
           productPhotos: [asset!.r2Key.trim()],
         );
+        if (!mounted ||
+            _generationRequestId != currentRequestId ||
+            _sourceEpoch != currentSourceEpoch ||
+            _inputSource != currentSource) {
+          if (kDebugMode) {
+            debugPrint(
+              '[Onboarding7] Discarding stale product analysis result.',
+            );
+          }
+          return;
+        }
         if (kDebugMode) {
           debugPrint(
             '[Onboarding7] product-analysis status='
@@ -1696,6 +1786,18 @@ class _HasProductsModeScreenState
         );
       }
 
+      if (!mounted ||
+          _generationRequestId != currentRequestId ||
+          _sourceEpoch != currentSourceEpoch ||
+          _inputSource != currentSource) {
+        if (kDebugMode) {
+          debugPrint(
+            '[Onboarding7] Discarding stale routine generation result.',
+          );
+        }
+        return;
+      }
+
       if (kDebugMode) {
         debugPrint(
           '[Onboarding7] routine-generate status='
@@ -1717,7 +1819,27 @@ class _HasProductsModeScreenState
           '[Onboarding7] rejectedPlanReasons=${result.rejectedPlanReasons}',
         );
       }
-      final routinePlans = result.routinePlans;
+      var routinePlans = result.routinePlans;
+
+      final isExplicitError =
+          result.errorCode == 'missing_worker_url' ||
+          result.errorMessage == 'missing_worker_url' ||
+          result.errorCode == 'client_payload_validation_error' ||
+          result.errorCode == 'too_many_photos' ||
+          (didCompactPayloadRetry &&
+              result.errorCode == 'json_payload_too_large');
+
+      if (result.hasError && !isExplicitError) {
+        if (kDebugMode) {
+          debugPrint(
+            '[Onboarding7] AI routine generation unreachable (${result.errorMessage}). Generating offline fallback routine...',
+          );
+        }
+        result = OfflineSkinCareRoutineGenerator.generateFallbackRoutine(
+          routineParams,
+        );
+        routinePlans = result.routinePlans;
+      }
 
       if (result.hasError || routinePlans.isEmpty) {
         if (!mounted) return;
@@ -3689,7 +3811,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                     const SizedBox(height: 10),
                     Expanded(
                       child: ListView.separated(
-                        physics: const BouncingScrollPhysics(),
+                        physics: const AlwaysScrollableScrollPhysics(),
                         itemCount: base.skinCareProductRecommendations.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
@@ -4459,7 +4581,7 @@ void _showSkinCareSelectedProductsSheet(
                 key: const ValueKey('onboarding-step7-selected-products-list'),
                 controller: scrollController,
                 padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
-                physics: const BouncingScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(),
                 itemCount: products.length,
                 separatorBuilder: (_, _) => const SizedBox(height: 9),
                 itemBuilder: (context, index) {

@@ -42,12 +42,12 @@ class HabitSystemWriteResult {
   final String? error;
 
   const HabitSystemWriteResult.success(this.system)
-      : success = true,
-        error = null;
+    : success = true,
+      error = null;
 
   const HabitSystemWriteResult.failure(this.error)
-      : success = false,
-        system = null;
+    : success = false,
+      system = null;
 }
 
 class RetryPayload {

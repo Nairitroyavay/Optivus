@@ -17,6 +17,8 @@ class AppNavigationController extends StateNotifier<int> {
   void goToCoach() => state = 3;
   void goToGoals() => state = 4;
   void goToProfile() => state = 5;
+
+  void resetForSignedOut() => state = 0;
 }
 
 final appNavigationProvider =

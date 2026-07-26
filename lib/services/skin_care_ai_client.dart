@@ -139,9 +139,6 @@ class SkinCareDetectedProduct {
     category,
     ...keyIngredients,
     ...possibleActives,
-    usageHint,
-    warningIfAny,
-    confidence,
   ];
 
   Map<String, dynamic> toMap() => {
@@ -212,24 +209,53 @@ class SkinCareRoutinePlan {
   });
 
   factory SkinCareRoutinePlan.fromMap(Map<String, dynamic> map) {
+    final slotLabel = _stringValue(
+      map['slotLabel'] ?? map['slot'] ?? map['timeOfDay'],
+    ).toLowerCase().trim();
+    final isNight = slotLabel == 'night' || slotLabel == 'evening';
+    final rawSteps = _stringListFromValue(
+      map['steps'] ?? map['orderedSteps'] ?? map['instructions'],
+    );
+    final rawProductNames = _stringListFromValue(
+      map['productNames'] ?? map['products'] ?? map['skincareProducts'],
+    );
+
+    final seqRes = SkinCareStepSequenceValidator.validateAndReorder(
+      rawSteps,
+      isNight: isNight,
+    );
+    final parsedWarnings = _stringListFromValue(
+      map['warnings'] ?? map['warningIfAny'],
+    );
+    final warnings = List<String>.from(parsedWarnings);
+    if (seqRes.sequenceAdjustedWarning != null &&
+        !warnings.contains(seqRes.sequenceAdjustedWarning)) {
+      warnings.add(seqRes.sequenceAdjustedWarning!);
+    }
+
+    final contraindications =
+        SkinCareContraindicationDetector.detectContraindications(
+          slotLabel: slotLabel,
+          productNamesOrSteps: [...rawProductNames, ...seqRes.steps],
+        );
+    for (final c in contraindications) {
+      if (!warnings.contains(c.message)) {
+        warnings.add(c.message);
+      }
+    }
+
     return SkinCareRoutinePlan(
-      slotLabel: _stringValue(
-        map['slotLabel'] ?? map['slot'] ?? map['timeOfDay'],
-      ).toLowerCase().trim(),
+      slotLabel: slotLabel,
       title: _stringValue(map['title'] ?? map['name']).trim(),
-      steps: _stringListFromValue(
-        map['steps'] ?? map['orderedSteps'] ?? map['instructions'],
-      ),
-      productNames: _stringListFromValue(
-        map['productNames'] ?? map['products'] ?? map['skincareProducts'],
-      ),
+      steps: seqRes.steps,
+      productNames: rawProductNames,
       missingItems: _missingItemsFromValue(
         map['missingItems'] ??
             map['missing_items'] ??
             map['missingProducts'] ??
             map['missing_products'],
       ),
-      warnings: _stringListFromValue(map['warnings'] ?? map['warningIfAny']),
+      warnings: warnings,
       repeatDays: _repeatDaysFromValue(map['repeatDays'] ?? map['days']),
     );
   }
@@ -293,6 +319,74 @@ class SkinCareMissingItem {
   };
 }
 
+enum SkinCareRoutineResultStatus {
+  generated,
+  accepted,
+  modified,
+  rejected,
+  partial,
+}
+
+class SkinCareRejectionExplanation {
+  final String ruleId;
+  final List<String> products;
+  final List<String> ingredients;
+  final String severity; // 'info', 'warning', 'high', 'critical'
+  final String reason;
+  final String repairSuggestion;
+
+  const SkinCareRejectionExplanation({
+    required this.ruleId,
+    this.products = const [],
+    this.ingredients = const [],
+    this.severity = 'warning',
+    required this.reason,
+    required this.repairSuggestion,
+  });
+
+  factory SkinCareRejectionExplanation.fromMap(Map<String, dynamic> map) {
+    return SkinCareRejectionExplanation(
+      ruleId:
+          _stringValue(
+            map['ruleId'] ?? map['rule_id'] ?? map['rule'],
+          ).trim().isEmpty
+          ? 'unknown_rule'
+          : _stringValue(map['ruleId'] ?? map['rule_id'] ?? map['rule']).trim(),
+      products: _stringListFromValue(map['products'] ?? map['productNames']),
+      ingredients: _stringListFromValue(
+        map['ingredients'] ?? map['activeIngredients'],
+      ),
+      severity: _stringValue(map['severity'] ?? map['level']).trim().isEmpty
+          ? 'warning'
+          : _stringValue(map['severity'] ?? map['level']).trim(),
+      reason: _stringValue(
+        map['reason'] ?? map['explanation'] ?? map['message'],
+      ).trim(),
+      repairSuggestion: _stringValue(
+        map['repairSuggestion'] ??
+            map['suggestion'] ??
+            map['fix'] ??
+            map['repair'],
+      ).trim(),
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'ruleId': ruleId,
+    'products': products,
+    'ingredients': ingredients,
+    'severity': severity,
+    'reason': reason,
+    'repairSuggestion': repairSuggestion,
+  };
+}
+
+const String skinCareCosmeticGuidanceDisclaimer =
+    'Cosmetic guidance only. This AI routine provides general skin-care suggestions and does not constitute medical diagnosis, treatment, or clinical advice.';
+
+const String skinCareIrritationEscalationGuidance =
+    'If you experience severe redness, burning, peeling, or irritation, discontinue use immediately and consult a board-certified dermatologist.';
+
 class SkinCareAiRoutineResult {
   final List<SkinCareRoutinePlan> routinePlans;
   final List<dynamic> morningRoutine;
@@ -303,8 +397,16 @@ class SkinCareAiRoutineResult {
   final List<String> suggestedProducts;
   final List<String> warnings;
   final List<String> rejectedPlanReasons;
+  final List<SkinCareRejectionExplanation> rejectionExplanations;
   final String? errorMessage;
   final String? errorCode;
+
+  final SkinCareRoutineResultStatus? _explicitResultStatus;
+  final int? _explicitGeneratedCount;
+  final int? _explicitAcceptedCount;
+  final int? _explicitModifiedCount;
+  final int? _explicitRejectedCount;
+  final bool? _explicitIsPartial;
 
   bool get hasError => errorMessage != null || errorCode != null;
 
@@ -318,9 +420,41 @@ class SkinCareAiRoutineResult {
     this.suggestedProducts = const [],
     this.warnings = const [],
     this.rejectedPlanReasons = const [],
+    this.rejectionExplanations = const [],
     this.errorMessage,
     this.errorCode,
-  });
+    SkinCareRoutineResultStatus? resultStatus,
+    int? generatedCount,
+    int? acceptedCount,
+    int? modifiedCount,
+    int? rejectedCount,
+    bool? isPartial,
+  }) : _explicitResultStatus = resultStatus,
+       _explicitGeneratedCount = generatedCount,
+       _explicitAcceptedCount = acceptedCount,
+       _explicitModifiedCount = modifiedCount,
+       _explicitRejectedCount = rejectedCount,
+       _explicitIsPartial = isPartial;
+
+  int get generatedCount => _explicitGeneratedCount ?? routinePlans.length;
+  int get acceptedCount => _explicitAcceptedCount ?? routinePlans.length;
+  int get modifiedCount => _explicitModifiedCount ?? 0;
+  int get rejectedCount => _explicitRejectedCount ?? rejectedPlanReasons.length;
+  bool get isPartial =>
+      _explicitIsPartial ??
+      (acceptedCount < generatedCount ||
+          rejectedPlanReasons.isNotEmpty ||
+          rejectionExplanations.isNotEmpty);
+
+  SkinCareRoutineResultStatus get resultStatus {
+    if (_explicitResultStatus != null) return _explicitResultStatus;
+    if (errorMessage != null || errorCode != null) {
+      return SkinCareRoutineResultStatus.rejected;
+    }
+    if (isPartial) return SkinCareRoutineResultStatus.partial;
+    if (modifiedCount > 0) return SkinCareRoutineResultStatus.modified;
+    return SkinCareRoutineResultStatus.accepted;
+  }
 
   factory SkinCareAiRoutineResult.error(String msg, {String? errorCode}) {
     return SkinCareAiRoutineResult(
@@ -332,8 +466,15 @@ class SkinCareAiRoutineResult {
       recommendedProducts: [],
       suggestedProducts: [],
       rejectedPlanReasons: [],
+      rejectionExplanations: [],
       errorMessage: msg,
       errorCode: errorCode,
+      resultStatus: SkinCareRoutineResultStatus.rejected,
+      generatedCount: 0,
+      acceptedCount: 0,
+      modifiedCount: 0,
+      rejectedCount: 0,
+      isPartial: false,
     );
   }
 }
@@ -615,10 +756,11 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     required String idToken,
     required List<String> productPhotos,
   }) async {
-    if (productPhotos.length > 10) {
-      return SkinCareAiProductResult.error(
-        'Upload your main 10 products first. You can add more later.',
-      );
+    final validation = SkinCareWorkerPayloadValidator.validateAnalyzeParams(
+      productPhotos,
+    );
+    if (!validation.isValid) {
+      return SkinCareAiProductResult.error(validation.errorMessage!);
     }
     if (baseUrl.trim().isEmpty) {
       return SkinCareAiProductResult.error('missing_worker_url');
@@ -670,6 +812,16 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     required String idToken,
     required Map<String, dynamic> params,
   }) async {
+    final validation = SkinCareWorkerPayloadValidator.validateRoutineParams(
+      params,
+    );
+    if (!validation.isValid) {
+      return SkinCareAiRoutineResult.error(
+        validation.errorMessage!,
+        errorCode: 'client_payload_validation_error',
+      );
+    }
+
     if (baseUrl.trim().isEmpty) {
       return SkinCareAiRoutineResult.error('missing_worker_url');
     }
@@ -884,7 +1036,20 @@ String _normalizeMissingItemImportance(dynamic value) {
       .toLowerCase()
       .replaceAll(RegExp(r'[_-]+'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ');
-  return text.isEmpty ? 'important' : text;
+  if (text.isEmpty) return 'important';
+  if (text == 'required' ||
+      text == 'must have' ||
+      text == 'essential' ||
+      text == 'critical') {
+    return 'required';
+  }
+  if (text == 'recommended' || text == 'suggested' || text == 'helpful') {
+    return 'recommended';
+  }
+  if (text == 'optional' || text == 'extra' || text == 'nice to have') {
+    return 'optional';
+  }
+  return 'important';
 }
 
 List<String> _stringListFromValue(dynamic value) {
@@ -997,3 +1162,616 @@ List<String> _rawProductFields(SkinCareDetectedProduct product) => [
   product.warningIfAny,
   product.confidence,
 ];
+
+class SkinCarePayloadValidationResult {
+  final bool isValid;
+  final String? errorMessage;
+
+  const SkinCarePayloadValidationResult.valid()
+    : isValid = true,
+      errorMessage = null;
+
+  const SkinCarePayloadValidationResult.invalid(this.errorMessage)
+    : isValid = false;
+}
+
+class SkinCareWorkerPayloadValidator {
+  static const int maxProductPhotos = 10;
+  static const int maxTypedProducts = 20;
+  static const Set<String> validSkinTypes = {
+    'normal',
+    'dry',
+    'oily',
+    'combination',
+    'sensitive',
+    'not_sure',
+  };
+  static const Set<String> validBudgets = {'budget', 'medium', 'luxury'};
+  static const Set<String> validPreferences = {
+    'simple',
+    'balanced',
+    'advanced',
+  };
+
+  static SkinCarePayloadValidationResult validateAnalyzeParams(
+    List<String> productPhotos,
+  ) {
+    if (productPhotos.isEmpty) {
+      return const SkinCarePayloadValidationResult.invalid(
+        'Product photos list cannot be empty.',
+      );
+    }
+    if (productPhotos.length > maxProductPhotos) {
+      return const SkinCarePayloadValidationResult.invalid(
+        'Upload your main 10 products first. You can add more later.',
+      );
+    }
+    for (final photo in productPhotos) {
+      if (photo.trim().isEmpty) {
+        return const SkinCarePayloadValidationResult.invalid(
+          'Product photo path/key cannot be empty.',
+        );
+      }
+    }
+    return const SkinCarePayloadValidationResult.valid();
+  }
+
+  static SkinCarePayloadValidationResult validateRoutineParams(
+    Map<String, dynamic> params,
+  ) {
+    if (params.containsKey('productPhotos')) {
+      final photos = params['productPhotos'];
+      if (photos is List) {
+        if (photos.length > maxProductPhotos) {
+          return const SkinCarePayloadValidationResult.invalid(
+            'Upload your main 10 products first. You can add more later.',
+          );
+        }
+        for (final photo in photos) {
+          if (photo == null || photo.toString().trim().isEmpty) {
+            return const SkinCarePayloadValidationResult.invalid(
+              'Product photo path cannot be empty.',
+            );
+          }
+        }
+      }
+    }
+
+    if (params.containsKey('desiredApplicationsPerDay')) {
+      final desired = params['desiredApplicationsPerDay'];
+      if (desired is num) {
+        final val = desired.toInt();
+        if (val < 2 || val > 4) {
+          return const SkinCarePayloadValidationResult.invalid(
+            'Desired applications per day must be between 2 and 4.',
+          );
+        }
+      }
+    }
+
+    if (params.containsKey('skinType')) {
+      final skinType = params['skinType']?.toString().toLowerCase().trim();
+      if (skinType != null &&
+          skinType.isNotEmpty &&
+          !validSkinTypes.contains(skinType)) {
+        return const SkinCarePayloadValidationResult.invalid(
+          'Invalid skin type provided.',
+        );
+      }
+    }
+
+    if (params.containsKey('budget')) {
+      final budget = params['budget']?.toString().toLowerCase().trim();
+      if (budget != null &&
+          budget.isNotEmpty &&
+          !validBudgets.contains(budget)) {
+        return const SkinCarePayloadValidationResult.invalid(
+          'Invalid budget option provided.',
+        );
+      }
+    }
+
+    if (params.containsKey('routinePreference')) {
+      final pref = params['routinePreference']?.toString().toLowerCase().trim();
+      if (pref != null && pref.isNotEmpty && !validPreferences.contains(pref)) {
+        return const SkinCarePayloadValidationResult.invalid(
+          'Invalid routine preference option provided.',
+        );
+      }
+    }
+
+    if (params.containsKey('typedProductDetails')) {
+      final details = params['typedProductDetails'];
+      if (details is List) {
+        if (details.length > maxTypedProducts) {
+          return const SkinCarePayloadValidationResult.invalid(
+            'Maximum of 20 products can be analyzed at once.',
+          );
+        }
+        for (final item in details) {
+          if (item is Map) {
+            final name = (item['name'] ?? item['brand'] ?? '')
+                .toString()
+                .trim();
+            if (name.isEmpty) {
+              return const SkinCarePayloadValidationResult.invalid(
+                'Product name in typed product details cannot be empty.',
+              );
+            }
+          }
+        }
+      }
+    }
+
+    return const SkinCarePayloadValidationResult.valid();
+  }
+}
+
+class SkinCareContraindicationWarning {
+  final String ingredientA;
+  final String ingredientB;
+  final String slotLabel;
+  final String message;
+  final String severity;
+
+  const SkinCareContraindicationWarning({
+    required this.ingredientA,
+    required this.ingredientB,
+    required this.slotLabel,
+    required this.message,
+    this.severity = 'warning',
+  });
+
+  Map<String, dynamic> toMap() => {
+    'ingredientA': ingredientA,
+    'ingredientB': ingredientB,
+    'slotLabel': slotLabel,
+    'message': message,
+    'severity': severity,
+  };
+}
+
+class SkinCareContraindicationDetector {
+  static List<SkinCareContraindicationWarning> detectContraindications({
+    required String slotLabel,
+    required List<String> productNamesOrSteps,
+    List<SkinCareDetectedProduct>? productDetails,
+  }) {
+    final warnings = <SkinCareContraindicationWarning>[];
+    final allText = productNamesOrSteps.map((s) => s.toLowerCase()).toList();
+
+    bool hasRetinol = false;
+    bool hasAhaBha = false;
+    bool hasVitC = false;
+    bool hasBpo = false;
+    int retinoidCount = 0;
+    int bhaCount = 0;
+
+    for (final text in allText) {
+      if (_matchesRetinol(text)) {
+        hasRetinol = true;
+        retinoidCount++;
+      }
+      if (_matchesAhaBha(text)) {
+        hasAhaBha = true;
+        if (text.contains('bha') || text.contains('salicylic')) bhaCount++;
+      }
+      if (_matchesVitC(text)) {
+        hasVitC = true;
+      }
+      if (_matchesBpo(text)) {
+        hasBpo = true;
+      }
+    }
+
+    if (productDetails != null) {
+      for (final p in productDetails) {
+        final combined =
+            '${p.displayName} ${p.category} ${p.keyIngredients.join(' ')} ${p.possibleActives.join(' ')}'
+                .toLowerCase();
+        if (_matchesRetinol(combined)) {
+          hasRetinol = true;
+          retinoidCount++;
+        }
+        if (_matchesAhaBha(combined)) {
+          hasAhaBha = true;
+          if (combined.contains('bha') || combined.contains('salicylic')) {
+            bhaCount++;
+          }
+        }
+        if (_matchesVitC(combined)) {
+          hasVitC = true;
+        }
+        if (_matchesBpo(combined)) {
+          hasBpo = true;
+        }
+      }
+    }
+
+    // 1. Retinol + AHA/BHA
+    if (hasRetinol && hasAhaBha) {
+      warnings.add(
+        SkinCareContraindicationWarning(
+          ingredientA: 'Retinol',
+          ingredientB: 'AHA/BHA Exfoliants',
+          slotLabel: slotLabel,
+          message:
+              'Combining Retinol and AHA/BHA exfoliants in the same routine slot can cause skin irritation.',
+        ),
+      );
+    }
+
+    // 2. Vitamin C + AHA/BHA
+    if (hasVitC && hasAhaBha) {
+      warnings.add(
+        SkinCareContraindicationWarning(
+          ingredientA: 'Vitamin C',
+          ingredientB: 'AHA/BHA',
+          slotLabel: slotLabel,
+          message:
+              'Vitamin C and AHA/BHA acids can destabilize each other and irritate skin when used together.',
+        ),
+      );
+    }
+
+    // 3. Retinol + Vitamin C
+    if (hasRetinol && hasVitC) {
+      warnings.add(
+        SkinCareContraindicationWarning(
+          ingredientA: 'Retinol',
+          ingredientB: 'Vitamin C',
+          slotLabel: slotLabel,
+          message:
+              'Using Retinol and Vitamin C together in the same slot increases skin sensitivity.',
+        ),
+      );
+    }
+
+    // 4. Benzoyl Peroxide + Retinol
+    if (hasBpo && hasRetinol) {
+      warnings.add(
+        SkinCareContraindicationWarning(
+          ingredientA: 'Benzoyl Peroxide',
+          ingredientB: 'Retinol',
+          slotLabel: slotLabel,
+          message:
+              'Benzoyl Peroxide can oxidize and deactivate Retinol while causing excessive dryness.',
+        ),
+      );
+    }
+
+    // 5. Duplicate Actives
+    if (retinoidCount > 1) {
+      warnings.add(
+        SkinCareContraindicationWarning(
+          ingredientA: 'Retinoid',
+          ingredientB: 'Duplicate Retinoid',
+          slotLabel: slotLabel,
+          message:
+              'Multiple retinoid products detected in the same routine slot.',
+        ),
+      );
+    } else if (bhaCount > 1) {
+      warnings.add(
+        SkinCareContraindicationWarning(
+          ingredientA: 'BHA Exfoliant',
+          ingredientB: 'Duplicate BHA Exfoliant',
+          slotLabel: slotLabel,
+          message:
+              'Multiple BHA/Salicylic Acid products detected in the same routine slot.',
+        ),
+      );
+    }
+
+    return warnings;
+  }
+
+  static bool _matchesRetinol(String t) =>
+      t.contains('retinol') ||
+      t.contains('retinoid') ||
+      t.contains('tretinoin') ||
+      t.contains('adapalene') ||
+      t.contains('granactive') ||
+      t.contains('retinal');
+
+  static bool _matchesAhaBha(String t) =>
+      t.contains('aha') ||
+      t.contains('bha') ||
+      t.contains('salicylic') ||
+      t.contains('glycolic') ||
+      t.contains('lactic acid') ||
+      t.contains('mandelic') ||
+      t.contains('exfolia');
+
+  static bool _matchesVitC(String t) =>
+      t.contains('vitamin c') ||
+      t.contains('ascorbic') ||
+      t.contains('l-ascorbic') ||
+      t.contains('ascorbyl');
+
+  static bool _matchesBpo(String t) =>
+      t.contains('benzoyl peroxide') || t.contains('bpo');
+}
+
+class SkinCareScheduleValidationResult {
+  final bool isValid;
+  final String? errorMessage;
+
+  const SkinCareScheduleValidationResult.valid()
+    : isValid = true,
+      errorMessage = null;
+
+  const SkinCareScheduleValidationResult.invalid(this.errorMessage)
+    : isValid = false;
+}
+
+class SkinCareScheduleEnforcer {
+  static const int minRestMinutes = 240; // 4 hours
+  static const int maxApplicationsPerDay = 4;
+
+  static SkinCareScheduleValidationResult validateSchedule({
+    required List<int> startMinutes,
+  }) {
+    if (startMinutes.length > maxApplicationsPerDay) {
+      return const SkinCareScheduleValidationResult.invalid(
+        'Maximum 4 skin care applications allowed per day.',
+      );
+    }
+    final sorted = List<int>.from(startMinutes)..sort();
+    for (int i = 0; i < sorted.length - 1; i++) {
+      final diff = sorted[i + 1] - sorted[i];
+      if (diff < minRestMinutes) {
+        return SkinCareScheduleValidationResult.invalid(
+          'Minimum 4 hours (240 minutes) rest required between skin care routines.',
+        );
+      }
+    }
+    return const SkinCareScheduleValidationResult.valid();
+  }
+
+  static List<int> enforceMinimumRestIntervals(List<int> startMinutes) {
+    if (startMinutes.isEmpty) return [];
+    final sorted = List<int>.from(startMinutes)..sort();
+    final result = <int>[sorted.first];
+    for (int i = 1; i < sorted.length; i++) {
+      int nextMin = sorted[i];
+      final prevMin = result.last;
+      if (nextMin - prevMin < minRestMinutes) {
+        nextMin = (prevMin + minRestMinutes).clamp(0, 1439);
+      }
+      result.add(nextMin);
+    }
+    return result;
+  }
+}
+
+class StepSequenceResult {
+  final List<String> steps;
+  final bool sequenceAdjusted;
+  final String? sequenceAdjustedWarning;
+
+  const StepSequenceResult({
+    required this.steps,
+    required this.sequenceAdjusted,
+    this.sequenceAdjustedWarning,
+  });
+}
+
+class SkinCareStepSequenceValidator {
+  static StepSequenceResult validateAndReorder(
+    List<String> steps, {
+    required bool isNight,
+  }) {
+    if (steps.length <= 1) {
+      return StepSequenceResult(steps: steps, sequenceAdjusted: false);
+    }
+
+    final ranked = <_RankedStep>[];
+    for (int i = 0; i < steps.length; i++) {
+      final rank = getStepRank(steps[i], isNight: isNight);
+      ranked.add(_RankedStep(originalIndex: i, text: steps[i], rank: rank));
+    }
+
+    final sorted = List<_RankedStep>.from(ranked);
+    sorted.sort((a, b) {
+      final cmp = a.rank.compareTo(b.rank);
+      if (cmp != 0) return cmp;
+      return a.originalIndex.compareTo(b.originalIndex);
+    });
+
+    final reorderedSteps = sorted.map((e) => e.text).toList();
+    bool adjusted = false;
+    for (int i = 0; i < steps.length; i++) {
+      if (steps[i] != reorderedSteps[i]) {
+        adjusted = true;
+        break;
+      }
+    }
+
+    return StepSequenceResult(
+      steps: reorderedSteps,
+      sequenceAdjusted: adjusted,
+      sequenceAdjustedWarning: adjusted
+          ? 'Steps were reordered for optimal skin absorption and sun protection.'
+          : null,
+    );
+  }
+
+  static int getStepRank(String stepName, {required bool isNight}) {
+    final lower = stepName.toLowerCase();
+    if (lower.contains('cleanse') ||
+        lower.contains('wash') ||
+        lower.contains('cleanser') ||
+        lower.contains('micellar')) {
+      return 1;
+    }
+    if (lower.contains('toner') ||
+        lower.contains('essence') ||
+        lower.contains('exfolia') ||
+        lower.contains('prep') ||
+        lower.contains('aha') ||
+        lower.contains('bha') ||
+        lower.contains('peel')) {
+      return 2;
+    }
+    if (lower.contains('serum') ||
+        lower.contains('treatment') ||
+        lower.contains('retinol') ||
+        lower.contains('vitamin c') ||
+        lower.contains('active') ||
+        lower.contains('niacinamide') ||
+        lower.contains('spot')) {
+      return 3;
+    }
+    if (lower.contains('moistur') ||
+        lower.contains('cream') ||
+        lower.contains('lotion') ||
+        lower.contains('barrier') ||
+        lower.contains('hydrat')) {
+      return 4;
+    }
+    if (lower.contains('sunscreen') ||
+        lower.contains('spf') ||
+        lower.contains('sunblock') ||
+        lower.contains('oil') ||
+        lower.contains('balm') ||
+        lower.contains('occlusive')) {
+      return 5;
+    }
+    return 3;
+  }
+}
+
+class _RankedStep {
+  final int originalIndex;
+  final String text;
+  final int rank;
+
+  const _RankedStep({
+    required this.originalIndex,
+    required this.text,
+    required this.rank,
+  });
+}
+
+class OfflineSkinCareRoutineGenerator {
+  static SkinCareAiRoutineResult generateFallbackRoutine(
+    Map<String, dynamic> params,
+  ) {
+    final rawDesired = params['desiredApplicationsPerDay'];
+    final desired = (rawDesired is num ? rawDesired.toInt() : 2).clamp(2, 4);
+
+    final rawDetails = params['typedProductDetails'];
+    final details = rawDetails is List
+        ? rawDetails.whereType<Map>().map(Map<String, dynamic>.from).toList()
+        : const <Map<String, dynamic>>[];
+
+    String findProduct(String category, String defaultName) {
+      for (final p in details) {
+        final cat = (p['category'] ?? '').toString().toLowerCase().trim();
+        if (cat == category) {
+          final name = (p['name'] ?? p['brand'] ?? '').toString().trim();
+          if (name.isNotEmpty) return name;
+        }
+      }
+      return defaultName;
+    }
+
+    final cleanser = findProduct('cleanser', 'Gentle Cleanser');
+    final moisturizer = findProduct('moisturizer', 'Hydrating Moisturizer');
+    final sunscreen = findProduct('sunscreen', 'Broad Spectrum SPF 50');
+
+    final rawMorningSteps = ['Cleanse face', 'Apply sunscreen'];
+    if (cleanser != 'Gentle Cleanser' ||
+        moisturizer != 'Hydrating Moisturizer') {
+      rawMorningSteps.insert(1, 'Apply moisturizer');
+    }
+    final morningRes = SkinCareStepSequenceValidator.validateAndReorder(
+      rawMorningSteps,
+      isNight: false,
+    );
+
+    final rawNightSteps = ['Cleanse face', 'Apply moisturizer'];
+    final nightRes = SkinCareStepSequenceValidator.validateAndReorder(
+      rawNightSteps,
+      isNight: true,
+    );
+
+    final plans = <SkinCareRoutinePlan>[
+      SkinCareRoutinePlan(
+        slotLabel: 'morning',
+        title: 'Morning Skin Care',
+        steps: morningRes.steps,
+        productNames: [cleanser, sunscreen],
+      ),
+    ];
+
+    if (desired >= 3) {
+      plans.add(
+        SkinCareRoutinePlan(
+          slotLabel: 'midday',
+          title: 'Midday Skin Care',
+          steps: ['Reapply sunscreen'],
+          productNames: [sunscreen],
+        ),
+      );
+    }
+    if (desired == 4) {
+      plans.add(
+        SkinCareRoutinePlan(
+          slotLabel: 'afternoon',
+          title: 'Afternoon Skin Care',
+          steps: ['Reapply sunscreen'],
+          productNames: [sunscreen],
+        ),
+      );
+    }
+
+    plans.add(
+      SkinCareRoutinePlan(
+        slotLabel: 'night',
+        title: 'Night Skin Care',
+        steps: nightRes.steps,
+        productNames: [cleanser, moisturizer],
+      ),
+    );
+
+    const warnings = [
+      'Offline routine generated while AI service was unavailable.',
+    ];
+
+    final timelineBlocks = <Map<String, dynamic>>[
+      {
+        "id": "skincare-offline-1",
+        "section": "skin_care",
+        "title": "Morning skin care",
+        "startMinute": 420,
+        "endMinute": 435,
+        "blockType": "soft_block",
+        "repeatDays": [1, 2, 3, 4, 5, 6, 7],
+        "skincareProducts": [cleanser, sunscreen],
+        "skincareSteps": morningRes.steps,
+      },
+      {
+        "id": "skincare-offline-2",
+        "section": "skin_care",
+        "title": "Night skin care",
+        "startMinute": 1260,
+        "endMinute": 1275,
+        "blockType": "soft_block",
+        "repeatDays": [1, 2, 3, 4, 5, 6, 7],
+        "skincareProducts": [cleanser, moisturizer],
+        "skincareSteps": nightRes.steps,
+      },
+    ];
+
+    return SkinCareAiRoutineResult(
+      routinePlans: plans,
+      morningRoutine: [cleanser, sunscreen],
+      nightRoutine: [cleanser, moisturizer],
+      weeklyRoutine: const [],
+      timelineBlocks: timelineBlocks,
+      warnings: warnings,
+    );
+  }
+}

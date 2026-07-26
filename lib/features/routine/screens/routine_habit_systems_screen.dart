@@ -57,9 +57,9 @@ class _RoutineHabitSystemsScreenState
               Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
                 child: Center(child: CircularProgressIndicator()),
-              )
+              ),
             ],
-          )
+          ),
         ],
       );
     }
@@ -78,10 +78,12 @@ class _RoutineHabitSystemsScreenState
             children: [
               Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
-                child: Text('You must be signed in to view and manage Habit Systems.'),
-              )
+                child: Text(
+                  'You must be signed in to view and manage Habit Systems.',
+                ),
+              ),
             ],
-          )
+          ),
         ],
       );
     }
@@ -170,10 +172,16 @@ class _RoutineHabitSystemsScreenState
                         ),
                       ),
                     ),
-                    if (habitState.pendingOperationKeys.contains(failedOp.operationId))
+                    if (habitState.pendingOperationKeys.contains(
+                      failedOp.operationId,
+                    ))
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 16.0),
-                        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       )
                     else
                       TextButton(
@@ -421,7 +429,10 @@ class _RoutineHabitSystemsScreenState
                       const SizedBox(height: 12),
                       Text(
                         errorMsg!,
-                        style: const TextStyle(color: OptivusColors.danger, fontSize: 13),
+                        style: const TextStyle(
+                          color: OptivusColors.danger,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                     const SizedBox(height: 20),
@@ -429,39 +440,59 @@ class _RoutineHabitSystemsScreenState
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton(
-                          onPressed: isSaving ? null : () => Navigator.of(context).pop(),
+                          onPressed: isSaving
+                              ? null
+                              : () => Navigator.of(context).pop(),
                           child: const Text('Cancel'),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: isSaving ? null : () async {
-                            final title = titleController.text.trim();
-                            if (title.isEmpty) return;
-                            
-                            setStateModal(() {
-                              isSaving = true;
-                              errorMsg = null;
-                            });
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  final title = titleController.text.trim();
+                                  if (title.isEmpty) return;
 
-                            final success = await ref
-                                .read(habitSystemsNotifierProvider.notifier)
-                                .createSystem(
-                                  title: title,
-                                  description: descController.text.trim(),
-                                  category: selectedCategory,
-                                  systemType: selectedType,
-                                );
-                            
-                            if (success && context.mounted) {
-                              Navigator.of(context).pop();
-                            } else if (context.mounted) {
-                              setStateModal(() {
-                                isSaving = false;
-                                errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Failed to create system. Please try again.';
-                              });
-                            }
-                          },
-                          child: isSaving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create'),
+                                  setStateModal(() {
+                                    isSaving = true;
+                                    errorMsg = null;
+                                  });
+
+                                  final success = await ref
+                                      .read(
+                                        habitSystemsNotifierProvider.notifier,
+                                      )
+                                      .createSystem(
+                                        title: title,
+                                        description: descController.text.trim(),
+                                        category: selectedCategory,
+                                        systemType: selectedType,
+                                      );
+
+                                  if (success && context.mounted) {
+                                    Navigator.of(context).pop();
+                                  } else if (context.mounted) {
+                                    setStateModal(() {
+                                      isSaving = false;
+                                      errorMsg =
+                                          ref
+                                              .read(
+                                                habitSystemsNotifierProvider,
+                                              )
+                                              .error ??
+                                          'Failed to create system. Please try again.';
+                                    });
+                                  }
+                                },
+                          child: isSaving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Create'),
                         ),
                       ],
                     ),
@@ -560,14 +591,20 @@ class _RoutineHabitSystemsScreenState
                       : Icons.pause_rounded,
                   onTap: () async {
                     Navigator.of(context).pop();
-                    final notifier = ref.read(habitSystemsNotifierProvider.notifier);
+                    final notifier = ref.read(
+                      habitSystemsNotifierProvider.notifier,
+                    );
                     final success = system.isPaused
                         ? await notifier.resumeSystem(system.systemId)
                         : await notifier.pauseSystem(system.systemId);
-                    
+
                     if (!success && context.mounted) {
-                      final errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Operation failed';
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+                      final errorMsg =
+                          ref.read(habitSystemsNotifierProvider).error ??
+                          'Operation failed';
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(errorMsg)));
                     }
                   },
                 ),
@@ -593,14 +630,20 @@ class _RoutineHabitSystemsScreenState
                       : Icons.archive_rounded,
                   onTap: () async {
                     Navigator.of(context).pop();
-                    final notifier = ref.read(habitSystemsNotifierProvider.notifier);
+                    final notifier = ref.read(
+                      habitSystemsNotifierProvider.notifier,
+                    );
                     final success = system.isArchived
                         ? await notifier.restoreSystem(system.systemId)
                         : await notifier.archiveSystem(system.systemId);
-                    
+
                     if (!success && context.mounted) {
-                      final errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Operation failed';
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+                      final errorMsg =
+                          ref.read(habitSystemsNotifierProvider).error ??
+                          'Operation failed';
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(errorMsg)));
                     }
                   },
                 ),
@@ -748,10 +791,14 @@ class _RoutineHabitSystemsScreenState
                 final success = await ref
                     .read(habitSystemsNotifierProvider.notifier)
                     .deleteSystem(system.systemId);
-                
+
                 if (!success && context.mounted) {
-                  final errorMsg = ref.read(habitSystemsNotifierProvider).error ?? 'Failed to delete system';
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+                  final errorMsg =
+                      ref.read(habitSystemsNotifierProvider).error ??
+                      'Failed to delete system';
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(errorMsg)));
                 }
               },
               child: const Text('Delete'),

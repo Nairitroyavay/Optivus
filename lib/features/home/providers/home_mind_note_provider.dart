@@ -42,6 +42,10 @@ class HomeMindNoteNotifier extends StateNotifier<List<HomeMindNote>> {
   void deleteNote(String id) {
     state = state.where((note) => note.id != id).toList();
   }
+
+  void resetForSignedOut() {
+    state = const [];
+  }
 }
 
 final homeMindNoteProvider =

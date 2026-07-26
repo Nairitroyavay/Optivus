@@ -217,7 +217,6 @@ abstract class RoutineHistoryRepository {
   Future<void> deleteHistory(String uid, String occurrenceId);
 }
 
-
 class FakeRoutineHistoryRepository implements RoutineHistoryRepository {
   final Map<String, Map<String, RoutineOccurrenceRecord>> _history = {};
 
@@ -313,7 +312,6 @@ class FirestoreRoutineHistoryRepository implements RoutineHistoryRepository {
     await reference.delete();
   }
 }
-
 
 final routineHistoryRepositoryProvider = Provider<RoutineHistoryRepository>((
   ref,

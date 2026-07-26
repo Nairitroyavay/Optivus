@@ -667,7 +667,7 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
         else
           Expanded(
             child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
+              physics: const AlwaysScrollableScrollPhysics(),
               child: OnboardingGlassCard(
                 tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
                 padding: const EdgeInsets.all(12),
@@ -1159,15 +1159,53 @@ class _EatingPreferenceChip extends StatelessWidget {
   }
 }
 
-class _EatingCustomStyleField extends ConsumerWidget {
+class _EatingCustomStyleField extends ConsumerStatefulWidget {
   final BaseTimelineDraft base;
 
   const _EatingCustomStyleField({required this.base});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_EatingCustomStyleField> createState() =>
+      __EatingCustomStyleFieldState();
+}
+
+class __EatingCustomStyleFieldState
+    extends ConsumerState<_EatingCustomStyleField> {
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (_focusNode.hasFocus) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted && context.mounted) {
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return TextFormField(
-      initialValue: base.foodStyleCustomText ?? '',
+      focusNode: _focusNode,
+      initialValue: widget.base.foodStyleCustomText ?? '',
       minLines: 1,
       maxLines: 1,
       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
@@ -2039,8 +2077,11 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
     if (day != 0) return day;
     return a.startMinute.compareTo(b.startMinute);
   });
+
+  final mergedBlocks = mergeOverlappingEatingBlocks(blocks);
+
   return Onboarding5MealCandidateMappingResult(
-    blocks: blocks,
+    blocks: mergedBlocks,
     droppedNoTitle: droppedNoTitle,
     droppedInvalidTime: droppedInvalidTime,
     droppedNoMealTime: droppedNoMealTime,
@@ -2215,10 +2256,12 @@ List<String> _dishesForEatingCandidate(RoutineImportCandidateBlock candidate) {
     dishes.addAll(items);
   }
 
-  extractFromRawText(candidate.sourceTextSnippet);
-  extractFromRawText(candidate.notes);
-  extractFromRawText(candidate.sourceColumnLabel);
-  extractFromRawText(candidate.title);
+  if (dishes.isEmpty) {
+    extractFromRawText(candidate.sourceTextSnippet);
+    extractFromRawText(candidate.notes);
+    extractFromRawText(candidate.sourceColumnLabel);
+    extractFromRawText(candidate.title);
+  }
 
   return dishes.toList();
 }

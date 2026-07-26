@@ -22,7 +22,7 @@ class HabitSystemRecord {
   final int schemaVersion;
   final int version;
 
-  const HabitSystemRecord({
+  HabitSystemRecord({
     required this.systemId,
     required this.ownerUid,
     required this.title,
@@ -39,7 +39,11 @@ class HabitSystemRecord {
     this.archivedAt,
     this.schemaVersion = 1,
     this.version = 1,
-  });
+  }) {
+    if (ownerUid.trim().isEmpty || ownerUid.contains('/')) {
+      throw ArgumentError('Valid owner UID is required.');
+    }
+  }
 
   bool get isActive => status == HabitSystemStatus.active;
   bool get isPaused => status == HabitSystemStatus.paused;
@@ -75,7 +79,8 @@ class HabitSystemRecord {
       linkedRoutineIds: linkedRoutineIds ?? this.linkedRoutineIds,
       source: source ?? this.source,
       onboardingSourceId: onboardingSourceId ?? this.onboardingSourceId,
-      onboardingProjectionId: onboardingProjectionId ?? this.onboardingProjectionId,
+      onboardingProjectionId:
+          onboardingProjectionId ?? this.onboardingProjectionId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
@@ -96,7 +101,8 @@ class HabitSystemRecord {
       'linkedRoutineIds': linkedRoutineIds,
       'source': source,
       if (onboardingSourceId != null) 'onboardingSourceId': onboardingSourceId,
-      if (onboardingProjectionId != null) 'onboardingProjectionId': onboardingProjectionId,
+      if (onboardingProjectionId != null)
+        'onboardingProjectionId': onboardingProjectionId,
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
       if (archivedAt != null)
@@ -112,6 +118,9 @@ class HabitSystemRecord {
   }) {
     final rawSystemId = (map['systemId'] as String?) ?? documentId ?? '';
     final rawOwnerUid = (map['ownerUid'] as String?) ?? '';
+    if (rawOwnerUid.trim().isEmpty || rawOwnerUid.contains('/')) {
+      throw ArgumentError('Valid owner UID is required.');
+    }
     final rawTitle = (map['title'] as String?) ?? 'Untitled System';
     final rawDescription = (map['description'] as String?) ?? '';
 

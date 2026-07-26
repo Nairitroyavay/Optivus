@@ -11,6 +11,7 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/views/screens/app_shell.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/views/screens/verify_email_screen.dart';
+import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/views/screens/welcome_screen.dart';
 
 void main() {
@@ -240,6 +241,16 @@ class _TestAuthNotifier extends StateNotifier<AuthState>
   Future<void> checkEmailVerification() async {}
 
   @override
+  Future<void> signInAnonymously() async {}
+
+  @override
+  Future<void> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async {}
+
+  @override
   Future<void> login(String email, String password) async {}
 
   @override
@@ -264,4 +275,7 @@ class _TestAuthNotifier extends StateNotifier<AuthState>
 
   @override
   Future<void> signup(String name, String email, String password) async {}
+
+  @override
+  Future<void> executeRecoveryAction(OnboardingRecoveryAction action) async {}
 }

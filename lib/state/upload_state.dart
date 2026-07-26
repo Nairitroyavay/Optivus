@@ -87,13 +87,19 @@ class UploadController extends StateNotifier<UploadState> {
        _r2UploadClient = r2UploadClient,
        super(const UploadState());
 
+  void resetForSignedOut() {
+    state = const UploadState();
+  }
+
   Future<UploadedAsset?> startUpload({
     required String uid,
     required UploadedAssetPurpose purpose,
     required String sourceFeature,
   }) async {
     if (state.isBusy) return null;
-    if (uid.trim().isEmpty) {
+    final currentAuthUser = _authRepository.currentUser;
+    if (uid.trim().isEmpty ||
+        (currentAuthUser != null && currentAuthUser.uid != uid)) {
       state = state.copyWith(
         status: UploadFlowStatus.failed,
         errorMessage: 'Please sign in before uploading a photo.',

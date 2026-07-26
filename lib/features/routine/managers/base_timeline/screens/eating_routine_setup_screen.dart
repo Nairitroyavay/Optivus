@@ -118,6 +118,42 @@ class _EatingRoutineSetupScreenState
                       hardBlock: false,
                     );
 
+                final allMeals = BaseTimelineFilterUtils.getEatingItems(
+                  ref.read(routineNotifierProvider).items,
+                ).where((m) => m.id != item.id).toList()..add(item);
+
+                for (int day = 1; day <= 7; day++) {
+                  final dayMeals = allMeals
+                      .where(
+                        (m) =>
+                            m.repeatDays.isEmpty || m.repeatDays.contains(day),
+                      )
+                      .toList();
+
+                  if (dayMeals.length > 6) {
+                    setModal(
+                      () => errorMsg = 'Maximum 6 meals allowed per day.',
+                    );
+                    return;
+                  }
+
+                  dayMeals.sort(
+                    (a, b) => a.startMinute.compareTo(b.startMinute),
+                  );
+
+                  for (int i = 0; i < dayMeals.length - 1; i++) {
+                    final currentStart = dayMeals[i].startMinute;
+                    final nextStart = dayMeals[i + 1].startMinute;
+                    if (nextStart - currentStart < 120) {
+                      setModal(
+                        () => errorMsg =
+                            'Meals must be spaced at least 120 minutes apart.',
+                      );
+                      return;
+                    }
+                  }
+                }
+
                 if (isEdit) {
                   ref.read(routineNotifierProvider.notifier).updateItem(item);
                 } else {

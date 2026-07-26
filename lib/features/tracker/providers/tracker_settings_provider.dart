@@ -94,6 +94,10 @@ class TrackerSettingsNotifier extends StateNotifier<TrackerSettingsState> {
   void resetMockSettings() {
     state = TrackerSettingsState.defaults();
   }
+
+  void resetForSignedOut() {
+    state = TrackerSettingsState.defaults();
+  }
 }
 
 final trackerSettingsProvider =

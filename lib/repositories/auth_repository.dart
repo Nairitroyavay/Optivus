@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:optivus/core/utils/auth_error_mapper.dart';
 
 /// A simple user model for authentication purposes.
 class AuthUser {
@@ -30,6 +31,14 @@ abstract class AuthRepository {
   Future<AuthUser> signIn(String email, String password);
 
   Future<AuthUser> signUp(String email, String password, {String? name});
+
+  Future<AuthUser> signInAnonymously();
+
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  });
 
   Future<void> sendEmailVerification();
 
@@ -109,7 +118,7 @@ class FakeAuthRepository implements AuthRepository {
     final normalizedEmail = email.trim();
 
     if (normalizedEmail.toLowerCase() == 'test@optivus.dev') {
-      throw Exception('email-already-in-use');
+      throw mapAuthError(Exception('email-already-in-use'));
     }
 
     _currentUser = AuthUser(
@@ -119,6 +128,51 @@ class FakeAuthRepository implements AuthRepository {
       emailVerified: false,
     );
 
+    _authStateController.add(_currentUser);
+    return _currentUser!;
+  }
+
+  @override
+  Future<AuthUser> signInAnonymously() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    _currentUser = AuthUser(
+      uid: 'anon-uid-${DateTime.now().millisecondsSinceEpoch}',
+      email: null,
+      displayName: 'Guest',
+      emailVerified: true,
+      isAnonymous: true,
+      providerId: 'anonymous',
+    );
+    _authStateController.add(_currentUser);
+    return _currentUser!;
+  }
+
+  @override
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final user = _currentUser;
+    if (user == null || !user.isAnonymous) {
+      throw const AuthFailureException(
+        reason: AuthFailureReason.unknown,
+        message: 'No anonymous user is currently signed in to link.',
+      );
+    }
+    final normalizedEmail = email.trim();
+    if (normalizedEmail.toLowerCase() == 'test@optivus.dev') {
+      throw mapAuthError(Exception('email-already-in-use'));
+    }
+    _currentUser = AuthUser(
+      uid: user.uid,
+      email: normalizedEmail,
+      displayName: name?.trim() ?? user.displayName,
+      emailVerified: false,
+      isAnonymous: false,
+      providerId: 'password',
+    );
     _authStateController.add(_currentUser);
     return _currentUser!;
   }
@@ -190,81 +244,158 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<AuthUser> signIn(String email, String password) async {
-    final credential = await _auth.signInWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
-    final user = credential.user;
-    if (user == null) {
-      throw firebase_auth.FirebaseAuthException(
-        code: 'missing-user',
-        message: 'Firebase sign-in did not return a user.',
+    try {
+      final credential = await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
       );
+      final user = credential.user;
+      if (user == null) {
+        throw firebase_auth.FirebaseAuthException(
+          code: 'missing-user',
+          message: 'Firebase sign-in did not return a user.',
+        );
+      }
+      return _authUserFromFirebase(user);
+    } catch (e) {
+      throw mapAuthError(e);
     }
-    return _authUserFromFirebase(user);
   }
 
   @override
   Future<AuthUser> signUp(String email, String password, {String? name}) async {
-    final credential = await _auth.createUserWithEmailAndPassword(
-      email: email.trim(),
-      password: password,
-    );
-    final user = credential.user;
-    if (user == null) {
-      throw firebase_auth.FirebaseAuthException(
-        code: 'missing-user',
-        message: 'Firebase sign-up did not return a user.',
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
       );
+      final user = credential.user;
+      if (user == null) {
+        throw firebase_auth.FirebaseAuthException(
+          code: 'missing-user',
+          message: 'Firebase sign-up did not return a user.',
+        );
+      }
+      final trimmedName = name?.trim();
+      if (trimmedName != null && trimmedName.isNotEmpty) {
+        await user.updateDisplayName(trimmedName);
+        await user.reload();
+        final refreshed = _auth.currentUser;
+        return refreshed == null
+            ? _authUserFromFirebase(user)
+            : _authUserFromFirebase(refreshed);
+      }
+      return _authUserFromFirebase(user);
+    } catch (e) {
+      throw mapAuthError(e);
     }
-    final trimmedName = name?.trim();
-    if (trimmedName != null && trimmedName.isNotEmpty) {
-      await user.updateDisplayName(trimmedName);
-      await user.reload();
-      final refreshed = _auth.currentUser;
-      return refreshed == null
-          ? _authUserFromFirebase(user)
-          : _authUserFromFirebase(refreshed);
+  }
+
+  @override
+  Future<AuthUser> signInAnonymously() async {
+    try {
+      final credential = await _auth.signInAnonymously();
+      final user = credential.user;
+      if (user == null) {
+        throw firebase_auth.FirebaseAuthException(
+          code: 'missing-user',
+          message: 'Firebase anonymous sign-in did not return a user.',
+        );
+      }
+      return _authUserFromFirebase(user);
+    } catch (e) {
+      throw mapAuthError(e);
     }
-    return _authUserFromFirebase(user);
+  }
+
+  @override
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw firebase_auth.FirebaseAuthException(
+          code: 'missing-user',
+          message: 'No anonymous user is currently signed in to link.',
+        );
+      }
+      final credential = firebase_auth.EmailAuthProvider.credential(
+        email: email.trim(),
+        password: password,
+      );
+      final result = await user.linkWithCredential(credential);
+      final linkedUser = result.user ?? _auth.currentUser!;
+      final trimmedName = name?.trim();
+      if (trimmedName != null && trimmedName.isNotEmpty) {
+        await linkedUser.updateDisplayName(trimmedName);
+        await linkedUser.reload();
+      }
+      final refreshed = _auth.currentUser ?? linkedUser;
+      return _authUserFromFirebase(refreshed);
+    } catch (e) {
+      throw mapAuthError(e);
+    }
   }
 
   @override
   Future<void> sendEmailVerification() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw firebase_auth.FirebaseAuthException(
-        code: 'missing-user',
-        message: 'No signed-in user for email verification.',
-      );
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw firebase_auth.FirebaseAuthException(
+          code: 'missing-user',
+          message: 'No signed-in user for email verification.',
+        );
+      }
+      await user.sendEmailVerification();
+    } catch (e) {
+      throw mapAuthError(e);
     }
-    await user.sendEmailVerification();
   }
 
   @override
   Future<AuthUser?> reloadCurrentUser() async {
-    final user = _auth.currentUser;
-    if (user == null) return null;
-    await user.reload();
-    final refreshed = _auth.currentUser;
-    if (refreshed == null) return null;
-    await refreshed.getIdToken(true);
-    return _authUserFromFirebase(refreshed);
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return null;
+      await user.reload();
+      final refreshed = _auth.currentUser;
+      if (refreshed == null) return null;
+      await refreshed.getIdToken(true);
+      return _authUserFromFirebase(refreshed);
+    } catch (e) {
+      throw mapAuthError(e);
+    }
   }
 
   @override
   Future<String?> currentIdToken() async {
-    final user = _auth.currentUser;
-    return user?.getIdToken(true);
+    try {
+      final user = _auth.currentUser;
+      return user?.getIdToken(true);
+    } catch (e) {
+      throw mapAuthError(e);
+    }
   }
 
   @override
-  Future<void> sendPasswordResetEmail(String email) {
-    return _auth.sendPasswordResetEmail(email: email.trim());
+  Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } catch (e) {
+      throw mapAuthError(e);
+    }
   }
 
   @override
-  Future<void> signOut() {
-    return _auth.signOut();
+  Future<void> signOut() async {
+    try {
+      await _auth.signOut();
+    } catch (e) {
+      throw mapAuthError(e);
+    }
   }
 }

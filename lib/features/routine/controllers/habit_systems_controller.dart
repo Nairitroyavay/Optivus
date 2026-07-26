@@ -5,8 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/habit_system_operation.dart';
 import 'package:optivus/models/habit_system_record.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/habit_systems_repository.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/services/habit_system_onboarding_projection.dart';
+import 'package:optivus/services/habit_system_schedule_reconciler.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/state/app_state.dart';
 
 class HabitSystemsState {
@@ -66,7 +71,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
   int _loadGeneration = 0;
 
   HabitSystemsNotifier(this._repository, this._ref)
-      : super(const HabitSystemsState()) {
+    : super(const HabitSystemsState()) {
     if (_ref.read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
       final initialUid = _ref.read(mockUserProfileProvider).uid.trim();
       if (initialUid.isNotEmpty) {
@@ -93,13 +98,19 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       source,
       ?onboardingSourceId,
     ];
-    final digest = sha256.convert(
-      utf8.encode(parts.join('\u001f')),
-    );
+    final digest = sha256.convert(utf8.encode(parts.join('\u001f')));
     return 'habitsys_${digest.toString().substring(0, 24)}';
   }
 
   Future<void> loadForOwner(String uid) async {
+    return loadForOwnerWithFallback(uid);
+  }
+
+  Future<void> loadForOwnerWithFallback(
+    String uid, {
+    OnboardingCompletionBundle? bundle,
+    List<RoutineItem>? projectedRoutines,
+  }) async {
     if (uid.trim().isEmpty || uid.contains('/')) {
       throw ArgumentError('Valid authenticated owner UID is required.');
     }
@@ -124,11 +135,76 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       final remoteSystems = await _repository.fetchHabitSystems(uid);
       if (!mounted || generation != _loadGeneration || _ownerUid != uid) return;
 
-      state = state.copyWith(systems: remoteSystems, loading: false);
+      OnboardingCompletionBundle? activeBundle = bundle;
+      if (activeBundle == null) {
+        try {
+          final repo = _ref.read(onboardingRepositoryProvider);
+          activeBundle = await repo.fetchCompletionBundle(uid);
+        } catch (_) {}
+      }
+
+      final routines = projectedRoutines ?? tryReadRoutineItems();
+
+      if (remoteSystems.isEmpty && activeBundle != null) {
+        final projectedSystems = HabitSystemOnboardingProjection.build(
+          activeBundle,
+          routines,
+        );
+        state = state.copyWith(systems: projectedSystems, loading: false);
+      } else if (activeBundle != null) {
+        final projectedSystems = HabitSystemOnboardingProjection.build(
+          activeBundle,
+          routines,
+        );
+        final merged = _mergeSystems(remoteSystems, projectedSystems);
+        state = state.copyWith(systems: merged, loading: false);
+      } else {
+        state = state.copyWith(systems: remoteSystems, loading: false);
+      }
     } catch (e) {
       if (!mounted || generation != _loadGeneration || _ownerUid != uid) return;
-      state = state.copyWith(loading: false, error: e.toString());
+
+      OnboardingCompletionBundle? activeBundle = bundle;
+      if (activeBundle == null) {
+        try {
+          final repo = _ref.read(onboardingRepositoryProvider);
+          activeBundle = await repo.fetchCompletionBundle(uid);
+        } catch (_) {}
+      }
+
+      if (activeBundle != null) {
+        final routines = projectedRoutines ?? tryReadRoutineItems();
+        final projectedSystems = HabitSystemOnboardingProjection.build(
+          activeBundle,
+          routines,
+        );
+        state = state.copyWith(systems: projectedSystems, loading: false);
+      } else {
+        state = state.copyWith(loading: false, error: e.toString());
+      }
     }
+  }
+
+  List<RoutineItem> tryReadRoutineItems() {
+    try {
+      return _ref.read(routineNotifierProvider).items;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  List<HabitSystemRecord> _mergeSystems(
+    List<HabitSystemRecord> remote,
+    List<HabitSystemRecord> fallback,
+  ) {
+    final map = <String, HabitSystemRecord>{};
+    for (final s in fallback) {
+      map[s.systemId] = s;
+    }
+    for (final s in remote) {
+      map[s.systemId] = s;
+    }
+    return map.values.toList();
   }
 
   Future<bool> createSystem({
@@ -149,14 +225,16 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       return false;
     }
 
-    final operationId = operationIdOverride ?? _generateOperationId(
-      uid,
-      title,
-      category,
-      systemType,
-      source,
-      onboardingSourceId,
-    );
+    final operationId =
+        operationIdOverride ??
+        _generateOperationId(
+          uid,
+          title,
+          category,
+          systemType,
+          source,
+          onboardingSourceId,
+        );
     if (state.pendingOperationKeys.contains(operationId)) return false;
 
     state = state.copyWith(
@@ -166,7 +244,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     );
 
     final now = DateTime.now().toUtc();
-    final systemId = operationId; 
+    final systemId = operationId;
     final record = HabitSystemRecord(
       systemId: systemId,
       ownerUid: uid,
@@ -264,6 +342,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
   Future<bool> updateSystem(HabitSystemRecord updated) async {
     final uid = _ownerUid;
     if (uid == null || uid.isEmpty) return false;
+    if (updated.ownerUid != uid) return false;
 
     final existingIndex = state.systems.indexWhere(
       (s) => s.systemId == updated.systemId,
@@ -271,8 +350,9 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     if (existingIndex < 0) return false;
 
     final previous = state.systems[existingIndex];
-    final operationId = 'upd_${updated.systemId}_${DateTime.now().millisecondsSinceEpoch}';
-    
+    final operationId =
+        'upd_${updated.systemId}_${DateTime.now().millisecondsSinceEpoch}';
+
     if (state.pendingOperationKeys.contains(operationId)) return false;
 
     state = state.copyWith(
@@ -305,6 +385,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
             .where((id) => id != operationId)
             .toSet(),
       );
+      _reconcileScheduleForSystem(record);
       return true;
     } else {
       final rolledBack = [...state.systems];
@@ -326,7 +407,12 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
         .where((s) => s.systemId == systemId)
         .firstOrNull;
     if (system == null) return false;
-    return updateSystem(system.copyWith(status: HabitSystemStatus.paused));
+    final updated = system.copyWith(status: HabitSystemStatus.paused);
+    final success = await updateSystem(updated);
+    if (success) {
+      _reconcileScheduleForSystem(updated);
+    }
+    return success;
   }
 
   Future<bool> resumeSystem(String systemId) async {
@@ -334,35 +420,46 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
         .where((s) => s.systemId == systemId)
         .firstOrNull;
     if (system == null) return false;
-    return updateSystem(system.copyWith(status: HabitSystemStatus.active));
+    final updated = system.copyWith(status: HabitSystemStatus.active);
+    final success = await updateSystem(updated);
+    if (success) {
+      _reconcileScheduleForSystem(updated);
+    }
+    return success;
   }
 
   Future<bool> archiveSystem(String systemId) async {
     final uid = _ownerUid;
     if (uid == null) return false;
-    
+
     final system = state.systems
         .where((s) => s.systemId == systemId)
         .firstOrNull;
     if (system == null) return false;
-    
-    final operationId = 'arch_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
-    
+
+    final operationId =
+        'arch_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
+
     state = state.copyWith(
       saving: true,
       pendingOperationKeys: {...state.pendingOperationKeys, operationId},
       clearError: true,
     );
-    
-    final result = await _repository.archiveSystem(uid, systemId, system.version, operationId);
-    
+
+    final result = await _repository.archiveSystem(
+      uid,
+      systemId,
+      system.version,
+      operationId,
+    );
+
     if (!mounted || _ownerUid != uid) return false;
-    
+
     if (result.success) {
       final newSystems = [...state.systems];
       final index = newSystems.indexWhere((s) => s.systemId == systemId);
       if (index >= 0) newSystems[index] = result.system!;
-      
+
       state = state.copyWith(
         saving: false,
         systems: newSystems,
@@ -370,6 +467,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
             .where((id) => id != operationId)
             .toSet(),
       );
+      _reconcileScheduleForSystem(result.system!);
       return true;
     } else {
       state = state.copyWith(
@@ -386,29 +484,35 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
   Future<bool> restoreSystem(String systemId) async {
     final uid = _ownerUid;
     if (uid == null) return false;
-    
+
     final system = state.systems
         .where((s) => s.systemId == systemId)
         .firstOrNull;
     if (system == null) return false;
-    
-    final operationId = 'rest_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
-    
+
+    final operationId =
+        'rest_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
+
     state = state.copyWith(
       saving: true,
       pendingOperationKeys: {...state.pendingOperationKeys, operationId},
       clearError: true,
     );
-    
-    final result = await _repository.restoreSystem(uid, systemId, system.version, operationId);
-    
+
+    final result = await _repository.restoreSystem(
+      uid,
+      systemId,
+      system.version,
+      operationId,
+    );
+
     if (!mounted || _ownerUid != uid) return false;
-    
+
     if (result.success) {
       final newSystems = [...state.systems];
       final index = newSystems.indexWhere((s) => s.systemId == systemId);
       if (index >= 0) newSystems[index] = result.system!;
-      
+
       state = state.copyWith(
         saving: false,
         systems: newSystems,
@@ -416,6 +520,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
             .where((id) => id != operationId)
             .toSet(),
       );
+      _reconcileScheduleForSystem(result.system!);
       return true;
     } else {
       state = state.copyWith(
@@ -427,6 +532,74 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
       );
       return false;
     }
+  }
+
+  void _reconcileScheduleForSystem(
+    HabitSystemRecord system, {
+    List<int>? repeatDays,
+  }) {
+    try {
+      final routines = tryReadRoutineItems();
+      if (routines.isEmpty) return;
+
+      const reconciler = HabitSystemScheduleReconciler();
+      final result = reconciler.reconcile(
+        system: system,
+        routines: routines,
+        repeatDays: repeatDays,
+      );
+
+      if (result.system.linkedRoutineIds.length !=
+          system.linkedRoutineIds.length) {
+        final index = state.systems.indexWhere(
+          (s) => s.systemId == system.systemId,
+        );
+        if (index >= 0) {
+          final newSystems = [...state.systems];
+          newSystems[index] = result.system;
+          state = state.copyWith(systems: newSystems);
+        }
+      }
+
+      try {
+        final routineNotifier = _ref.read(routineNotifierProvider.notifier);
+        for (final item in result.routines) {
+          routineNotifier.updateItem(item);
+        }
+      } catch (_) {}
+    } catch (_) {}
+  }
+
+  void reconcileWithRoutines(List<RoutineItem> routines) {
+    final existingIds = routines.map((r) => r.id).toSet();
+    const reconciler = HabitSystemScheduleReconciler();
+    final updatedSystems = <HabitSystemRecord>[];
+    bool changed = false;
+
+    for (final sys in state.systems) {
+      final pruned = reconciler.pruneOrphanedRoutineIds(sys, existingIds);
+      if (pruned != sys) changed = true;
+      updatedSystems.add(pruned);
+    }
+
+    if (changed) {
+      state = state.copyWith(systems: updatedSystems);
+    }
+  }
+
+  Future<bool> updateScheduleFrequency(
+    String systemId,
+    List<int> repeatDays,
+  ) async {
+    final system = state.systems
+        .where((s) => s.systemId == systemId)
+        .firstOrNull;
+    if (system == null) return false;
+    final success = await updateSystem(system);
+    if (success) {
+      _reconcileScheduleForSystem(system, repeatDays: repeatDays);
+    }
+    return success;
   }
 
   Future<bool> linkRoutine(String systemId, String routineId) async {
@@ -461,7 +634,8 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     if (existingIndex < 0) return false;
 
     final previous = state.systems[existingIndex];
-    final operationId = 'del_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
+    final operationId =
+        'del_${systemId}_${DateTime.now().millisecondsSinceEpoch}';
 
     state = state.copyWith(
       saving: true,

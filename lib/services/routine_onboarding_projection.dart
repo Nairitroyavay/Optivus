@@ -8,6 +8,8 @@ import 'package:optivus/repositories/routine_firestore_codec.dart';
 
 class RoutineOnboardingProjectionPlan {
   final String ownerUid;
+  final String slot;
+  final int revision;
   final String projectionId;
   final String fingerprint;
   final String sourceBundleId;
@@ -16,6 +18,8 @@ class RoutineOnboardingProjectionPlan {
 
   const RoutineOnboardingProjectionPlan({
     required this.ownerUid,
+    this.slot = 'onboarding-initial',
+    this.revision = 1,
     required this.projectionId,
     required this.fingerprint,
     required this.sourceBundleId,
@@ -29,6 +33,8 @@ class RoutineOnboardingProjection {
 
   static RoutineOnboardingProjectionPlan build(
     OnboardingCompletionBundle bundle, {
+    String slot = 'onboarding-initial',
+    int revision = 1,
     DateTime? now,
   }) {
     validateOwnerUid(bundle.uid);
@@ -67,9 +73,7 @@ class RoutineOnboardingProjection {
     }
 
     final fingerprint = _fingerprint(bundle, normalized);
-    // The initial setup slot is intentionally fixed. A changed bundle does not
-    // become an implicit rebuild that can resurrect deleted starter items.
-    const projectionId = 'onboarding-initial-v1';
+    final projectionId = '$slot-v$revision';
     final sourceBundleId =
         'bundle-v${bundle.version}-${fingerprint.substring(0, 32)}';
     final projectedItems = normalized
@@ -79,6 +83,8 @@ class RoutineOnboardingProjection {
     final receipt = RoutineProjectionReceipt(
       id: projectionId,
       ownerUid: bundle.uid,
+      slot: slot,
+      revision: revision,
       sourceBundleSchemaVersion: bundle.version,
       sourceBundleId: sourceBundleId,
       sourceBundleFingerprint: fingerprint,
@@ -93,6 +99,8 @@ class RoutineOnboardingProjection {
 
     return RoutineOnboardingProjectionPlan(
       ownerUid: bundle.uid,
+      slot: slot,
+      revision: revision,
       projectionId: projectionId,
       fingerprint: fingerprint,
       sourceBundleId: sourceBundleId,

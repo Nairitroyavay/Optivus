@@ -6,10 +6,17 @@ class RoutineProjectionReceipt {
 
   final String id;
   final String ownerUid;
+  final String slot;
+  final int revision;
   final String source;
   final int sourceBundleSchemaVersion;
   final String sourceBundleId;
   final String sourceBundleFingerprint;
+  final List<String> expectedItemIds;
+  final List<String> createdItemIds;
+  final List<String> existingItemIds;
+  final List<String> repairedItemIds;
+  final List<String> failedItemIds;
   final List<String> projectedItemIds;
   final int eventSchemaVersion;
   final int totalCount;
@@ -21,14 +28,23 @@ class RoutineProjectionReceipt {
   final String? lastSafeError;
   final int schemaVersion;
 
+  String get fingerprint => sourceBundleFingerprint;
+
   RoutineProjectionReceipt({
     required this.id,
     required this.ownerUid,
+    this.slot = 'onboarding-initial',
+    this.revision = 1,
     this.source = 'onboarding',
     required this.sourceBundleSchemaVersion,
     required this.sourceBundleId,
     required this.sourceBundleFingerprint,
-    required this.projectedItemIds,
+    List<String>? expectedItemIds,
+    List<String>? createdItemIds,
+    List<String>? existingItemIds,
+    List<String>? repairedItemIds,
+    List<String>? failedItemIds,
+    List<String>? projectedItemIds,
     this.eventSchemaVersion = currentEventSchemaVersion,
     int? totalCount,
     this.cursor = 0,
@@ -38,7 +54,38 @@ class RoutineProjectionReceipt {
     this.completedAt,
     this.lastSafeError,
     this.schemaVersion = currentSchemaVersion,
-  }) : totalCount = totalCount ?? projectedItemIds.length,
+  }) : createdItemIds = createdItemIds ?? projectedItemIds ?? const [],
+       existingItemIds = existingItemIds ?? const [],
+       repairedItemIds = repairedItemIds ?? const [],
+       failedItemIds = failedItemIds ?? const [],
+       projectedItemIds =
+           projectedItemIds ??
+           ({
+             ...createdItemIds ?? [],
+             ...existingItemIds ?? [],
+             ...repairedItemIds ?? [],
+           }.toList()..sort()),
+       expectedItemIds =
+           expectedItemIds ??
+           ({
+             ...createdItemIds ?? [],
+             ...existingItemIds ?? [],
+             ...repairedItemIds ?? [],
+             ...failedItemIds ?? [],
+             ...projectedItemIds ?? [],
+           }.toList()..sort()),
+       totalCount =
+           totalCount ??
+           (expectedItemIds != null
+               ? expectedItemIds.length
+               : (projectedItemIds != null
+                     ? projectedItemIds.length
+                     : ({
+                         ...createdItemIds ?? [],
+                         ...existingItemIds ?? [],
+                         ...repairedItemIds ?? [],
+                         ...failedItemIds ?? [],
+                       }.length))),
        updatedAt = updatedAt ?? createdAt;
 
   bool get isPending => status == 'pending';
@@ -47,10 +94,17 @@ class RoutineProjectionReceipt {
   RoutineProjectionReceipt copyWith({
     String? id,
     String? ownerUid,
+    String? slot,
+    int? revision,
     String? source,
     int? sourceBundleSchemaVersion,
     String? sourceBundleId,
     String? sourceBundleFingerprint,
+    List<String>? expectedItemIds,
+    List<String>? createdItemIds,
+    List<String>? existingItemIds,
+    List<String>? repairedItemIds,
+    List<String>? failedItemIds,
     List<String>? projectedItemIds,
     int? eventSchemaVersion,
     int? totalCount,
@@ -67,12 +121,19 @@ class RoutineProjectionReceipt {
     return RoutineProjectionReceipt(
       id: id ?? this.id,
       ownerUid: ownerUid ?? this.ownerUid,
+      slot: slot ?? this.slot,
+      revision: revision ?? this.revision,
       source: source ?? this.source,
       sourceBundleSchemaVersion:
           sourceBundleSchemaVersion ?? this.sourceBundleSchemaVersion,
       sourceBundleId: sourceBundleId ?? this.sourceBundleId,
       sourceBundleFingerprint:
           sourceBundleFingerprint ?? this.sourceBundleFingerprint,
+      expectedItemIds: expectedItemIds ?? this.expectedItemIds,
+      createdItemIds: createdItemIds ?? this.createdItemIds,
+      existingItemIds: existingItemIds ?? this.existingItemIds,
+      repairedItemIds: repairedItemIds ?? this.repairedItemIds,
+      failedItemIds: failedItemIds ?? this.failedItemIds,
       projectedItemIds: projectedItemIds ?? this.projectedItemIds,
       eventSchemaVersion: eventSchemaVersion ?? this.eventSchemaVersion,
       totalCount: totalCount ?? this.totalCount,

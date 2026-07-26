@@ -4,6 +4,8 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/app_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 
+import 'package:optivus/core/utils/asset_precache_service.dart';
+
 /// Shown while resolving the user's Auth and Firestore status.
 /// Prevents premature redirects and gives a polished first-launch experience.
 class LoadingScreen extends ConsumerStatefulWidget {
@@ -19,6 +21,7 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _pulse;
+  bool _precached = false;
 
   @override
   void initState() {
@@ -32,6 +35,15 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
       begin: 0.85,
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_precached) {
+      _precached = true;
+      SplashAssetCacheService.precacheSplashAssets(context);
+    }
   }
 
   @override

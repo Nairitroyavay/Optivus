@@ -360,7 +360,11 @@ class RoutineProjectionReceiptFirestoreCodec {
     for (final itemId in receipt.projectedItemIds) {
       validateDocumentId(itemId);
     }
-    if (receipt.totalCount != receipt.projectedItemIds.length ||
+    for (final itemId in receipt.expectedItemIds) {
+      validateDocumentId(itemId);
+    }
+    if ((receipt.totalCount != receipt.projectedItemIds.length &&
+            receipt.totalCount != receipt.expectedItemIds.length) ||
         receipt.cursor < 0 ||
         receipt.cursor > receipt.totalCount) {
       throw ArgumentError('Invalid Routine projection cursor.');
@@ -379,10 +383,17 @@ class RoutineProjectionReceiptFirestoreCodec {
     return {
       'id': receipt.id,
       'ownerUid': receipt.ownerUid,
+      'slot': receipt.slot,
+      'revision': receipt.revision,
       'source': receipt.source,
       'sourceBundleSchemaVersion': receipt.sourceBundleSchemaVersion,
       'sourceBundleId': receipt.sourceBundleId,
       'sourceBundleFingerprint': receipt.sourceBundleFingerprint,
+      'expectedItemIds': receipt.expectedItemIds,
+      'createdItemIds': receipt.createdItemIds,
+      'existingItemIds': receipt.existingItemIds,
+      'repairedItemIds': receipt.repairedItemIds,
+      'failedItemIds': receipt.failedItemIds,
       'projectedItemIds': receipt.projectedItemIds,
       'eventSchemaVersion': receipt.eventSchemaVersion,
       'totalCount': receipt.totalCount,
@@ -409,9 +420,21 @@ class RoutineProjectionReceiptFirestoreCodec {
     }
     final projectedItemIds =
         _readStringList(data['projectedItemIds']) ?? const <String>[];
+    final createdItemIds =
+        _readStringList(data['createdItemIds']) ?? projectedItemIds;
+    final expectedItemIds =
+        _readStringList(data['expectedItemIds']) ?? projectedItemIds;
+    final existingItemIds =
+        _readStringList(data['existingItemIds']) ?? const <String>[];
+    final repairedItemIds =
+        _readStringList(data['repairedItemIds']) ?? const <String>[];
+    final failedItemIds =
+        _readStringList(data['failedItemIds']) ?? const <String>[];
     final receipt = RoutineProjectionReceipt(
       id: id,
       ownerUid: _requiredString(data, 'ownerUid'),
+      slot: _optionalString(data['slot']) ?? 'onboarding-initial',
+      revision: _readInt(data['revision'], fallback: 1),
       source: _requiredString(data, 'source'),
       sourceBundleSchemaVersion: _readInt(
         data['sourceBundleSchemaVersion'],
@@ -419,6 +442,11 @@ class RoutineProjectionReceiptFirestoreCodec {
       ),
       sourceBundleId: _requiredString(data, 'sourceBundleId'),
       sourceBundleFingerprint: _requiredString(data, 'sourceBundleFingerprint'),
+      expectedItemIds: expectedItemIds,
+      createdItemIds: createdItemIds,
+      existingItemIds: existingItemIds,
+      repairedItemIds: repairedItemIds,
+      failedItemIds: failedItemIds,
       projectedItemIds: projectedItemIds,
       eventSchemaVersion: _readInt(
         data['eventSchemaVersion'],

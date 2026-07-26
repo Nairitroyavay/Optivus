@@ -29,7 +29,7 @@ class LiquidSafeScrollView extends StatelessWidget {
         bottomPadding + media.padding.bottom + media.viewInsets.bottom;
     return SingleChildScrollView(
       controller: controller,
-      physics: physics ?? const BouncingScrollPhysics(),
+      physics: physics ?? const AlwaysScrollableScrollPhysics(),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: padding.copyWith(bottom: effectiveBottomPadding),
       child: Column(

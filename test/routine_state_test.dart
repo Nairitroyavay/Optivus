@@ -67,7 +67,7 @@ void main() {
   });
 
   group('routine conflicts', () {
-    test('blocks flexible task inside hard block', () {
+    test('blocks overlapping hard blocks', () {
       final conflicts = RoutineConflictEngine.detect([
         RoutineItem(
           id: 'class',
@@ -82,7 +82,8 @@ void main() {
           title: 'Study',
           startMinute: 10 * 60,
           endMinute: 11 * 60,
-          blockType: RoutineBlockType.flexibleTask,
+          blockType: RoutineBlockType.hardBlock,
+          hardBlock: true,
         ),
       ], DateTime.now());
 
@@ -91,7 +92,7 @@ void main() {
       expect(conflicts.first.blocking, isTrue);
     });
 
-    test('Keep both disabled for hard-block flexible conflict', () {
+    test('Keep both disabled for hard-block conflict', () {
       final conflicts = RoutineConflictEngine.detect([
         RoutineItem(
           id: 'class',
@@ -106,13 +107,42 @@ void main() {
           title: 'Study',
           startMinute: 10 * 60,
           endMinute: 11 * 60,
-          blockType: RoutineBlockType.flexibleTask,
+          blockType: RoutineBlockType.hardBlock,
+          hardBlock: true,
         ),
       ], DateTime.now());
 
       expect(conflicts, isNotEmpty);
       expect(conflicts.first.canKeepBoth, isFalse);
     });
+
+    test(
+      'allows flexible task overlapping single hard block with soft warning',
+      () {
+        final conflicts = RoutineConflictEngine.detect([
+          RoutineItem(
+            id: 'class',
+            title: 'Class',
+            startMinute: 9 * 60,
+            endMinute: 17 * 60,
+            blockType: RoutineBlockType.hardBlock,
+            hardBlock: true,
+          ),
+          RoutineItem(
+            id: 'study',
+            title: 'Study',
+            startMinute: 10 * 60,
+            endMinute: 11 * 60,
+            blockType: RoutineBlockType.flexibleTask,
+          ),
+        ], DateTime.now());
+
+        expect(conflicts, isNotEmpty);
+        expect(conflicts.first.type, RoutineConflictType.timeOverlap);
+        expect(conflicts.first.blocking, isFalse);
+        expect(conflicts.first.canKeepBoth, isTrue);
+      },
+    );
   });
 
   group('tracker and money sync', () {

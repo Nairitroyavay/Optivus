@@ -405,6 +405,13 @@ List<int> _dayNumbersFromText(String text) {
 }
 
 @visibleForTesting
+bool isExamCandidateTitle(String title) {
+  final lower = title.toLowerCase();
+  const keywords = ['exam', 'midterm', 'final', 'quiz', 'test', 'assessment'];
+  return keywords.any((k) => lower.contains(k));
+}
+
+@visibleForTesting
 Onboarding4CandidateMappingResult mapOnboarding4Candidates({
   required List<RoutineImportCandidateBlock> candidates,
   required ScheduleSetupConfig config,
@@ -451,13 +458,22 @@ Onboarding4CandidateMappingResult mapOnboarding4Candidates({
       continue;
     }
 
+    final isExam = isExamCandidateTitle(title);
+    final effectiveCandidate = isExam
+        ? candidate.copyWith(
+            hardBlock: true,
+            blockType: TimelineBlockDraft.hardBlockKey,
+          )
+        : candidate;
+
     blocks.add(
       ClassRoutineBlock(
-        id: candidate.id,
+        id: effectiveCandidate.id,
         subject: title,
-        room: extractRoomLabelFromOnboarding4Candidate(candidate) ?? '',
-        startMinute: candidate.startMinute.clamp(0, 24 * 60 - 1),
-        endMinute: candidate.endMinute.clamp(1, 24 * 60),
+        room:
+            extractRoomLabelFromOnboarding4Candidate(effectiveCandidate) ?? '',
+        startMinute: effectiveCandidate.startMinute.clamp(0, 24 * 60 - 1),
+        endMinute: effectiveCandidate.endMinute.clamp(1, 24 * 60),
         repeatDays: repeatDays,
         icon: config.icon,
         color: config.colorCycle[blocks.length % config.colorCycle.length],
@@ -467,8 +483,13 @@ Onboarding4CandidateMappingResult mapOnboarding4Candidates({
     );
   }
 
+  // Issue 32: Exam schedule priority override
+  // Regular class schedule templates are kept intact in resolvedBlocks without mutating or stripping repeatDays.
+  // Exam blocks take precedence during date materialization/scheduling as hard blocks with mustDo priority.
+  final resolvedBlocks = List<ClassRoutineBlock>.unmodifiable(blocks);
+
   return Onboarding4CandidateMappingResult(
-    blocks: blocks,
+    blocks: resolvedBlocks,
     droppedNoTitle: droppedNoTitle,
     droppedInvalidTime: droppedInvalidTime,
     droppedNoRepeatDays: droppedNoRepeatDays,
@@ -1762,311 +1783,348 @@ class _OnboardingStep4UnifiedState
       ),
     };
     final formKey = GlobalKey<FormState>();
+    final editScrollController = ScrollController();
     String? sheetError;
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(ctx).bottom,
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.95),
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
-                  border: Border.all(color: Colors.white, width: 1.5),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (context, setSheetState) {
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(ctx).bottom,
                 ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(24),
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.95),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 20,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
                   ),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                    child: SingleChildScrollView(
-                      child: Form(
-                        key: formKey,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              config.editTitle,
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                color: Color(0xFF0F111A),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                            if (sheetError != null) ...[
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: SingleChildScrollView(
+                        controller: editScrollController,
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                config.editTitle,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF0F111A),
                                 ),
-                                decoration: BoxDecoration(
-                                  color: OptivusColors.danger.withValues(
-                                    alpha: 0.08,
+                              ),
+                              const SizedBox(height: 20),
+                              if (sheetError != null) ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
+                                  decoration: BoxDecoration(
                                     color: OptivusColors.danger.withValues(
-                                      alpha: 0.22,
+                                      alpha: 0.08,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: OptivusColors.danger.withValues(
+                                        alpha: 0.22,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    sheetError!,
+                                    style: const TextStyle(
+                                      color: OptivusColors.danger,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
                                     ),
                                   ),
                                 ),
-                                child: Text(
-                                  sheetError!,
-                                  style: const TextStyle(
-                                    color: OptivusColors.danger,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                            ],
-                            // Day chips
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: List.generate(7, (index) {
-                                  final dayName = [
-                                    'Mon',
-                                    'Tue',
-                                    'Wed',
-                                    'Thu',
-                                    'Fri',
-                                    'Sat',
-                                    'Sun',
-                                  ][index];
-                                  final day = index + 1;
-                                  final isSelected = selectedDays.contains(day);
-                                  return GestureDetector(
-                                    onTap: () => setSheetState(() {
-                                      if (selectedDays.contains(day)) {
-                                        selectedDays.remove(day);
-                                      } else {
-                                        selectedDays.add(day);
-                                      }
-                                    }),
-                                    child: Container(
-                                      margin: const EdgeInsets.only(right: 8),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? config.accent
-                                            : Colors.white.withValues(
-                                                alpha: 0.5,
-                                              ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
+                                const SizedBox(height: 14),
+                              ],
+                              // Day chips
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: List.generate(7, (index) {
+                                    final dayName = [
+                                      'Mon',
+                                      'Tue',
+                                      'Wed',
+                                      'Thu',
+                                      'Fri',
+                                      'Sat',
+                                      'Sun',
+                                    ][index];
+                                    final day = index + 1;
+                                    final isSelected = selectedDays.contains(day);
+                                    return GestureDetector(
+                                      onTap: () => setSheetState(() {
+                                        if (selectedDays.contains(day)) {
+                                          selectedDays.remove(day);
+                                        } else {
+                                          selectedDays.add(day);
+                                        }
+                                      }),
+                                      child: Container(
+                                        margin: const EdgeInsets.only(right: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
                                           color: isSelected
                                               ? config.accent
-                                              : const Color(0xFFE2E8F0),
+                                              : Colors.white.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? config.accent
+                                                : const Color(0xFFE2E8F0),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          dayName,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w800,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : const Color(0xFF475569),
+                                          ),
                                         ),
                                       ),
-                                      child: Text(
-                                        dayName,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          color: isSelected
-                                              ? Colors.white
-                                              : const Color(0xFF475569),
+                                    );
+                                  }),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextFormField(
+                                controller: subjectCtrl,
+                                decoration: InputDecoration(
+                                  labelText: config.subjectLabel,
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                validator: (v) => v == null || v.trim().isEmpty
+                                    ? 'Required'
+                                    : null,
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: startTimeCtrl,
+                                      decoration: InputDecoration(
+                                        labelText: 'Start (e.g. 9:00 AM)',
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                          borderSide: BorderSide.none,
                                         ),
                                       ),
+                                      validator: (v) =>
+                                          v == null || v.trim().isEmpty
+                                          ? 'Required'
+                                          : null,
                                     ),
-                                  );
-                                }),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: endTimeCtrl,
+                                      decoration: InputDecoration(
+                                        labelText: 'End (e.g. 10:00 AM)',
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(16),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                      ),
+                                      validator: (v) =>
+                                          v == null || v.trim().isEmpty
+                                          ? 'Required'
+                                          : null,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: subjectCtrl,
-                              decoration: InputDecoration(
-                                labelText: config.subjectLabel,
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: roomCtrl,
+                                decoration: InputDecoration(
+                                  labelText: 'Location / Room (Optional)',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
                                 ),
                               ),
-                              validator: (v) => v == null || v.trim().isEmpty
-                                  ? 'Required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: startTimeCtrl,
-                                    decoration: InputDecoration(
-                                      labelText: 'Start (e.g. 9:00 AM)',
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide.none,
+                              const SizedBox(height: 24),
+                              Row(
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: () async {
+                                      final currentList =
+                                          _currentBlocks(config);
+                                      ref
+                                          .read(_providerFor(config).notifier)
+                                          .state = currentList
+                                          .where((b) => b.id != item.id)
+                                          .toList(growable: false);
+                                      _markClassJobDirty();
+                                      if (!ctx.mounted) return;
+                                      Navigator.pop(ctx);
+                                    },
+                                    icon: const Icon(
+                                      Icons.delete_outline_rounded,
+                                      color: OptivusColors.danger,
+                                      size: 20,
+                                    ),
+                                    label: const Text(
+                                      'Delete',
+                                      style: TextStyle(
+                                        color: OptivusColors.danger,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
                                       ),
                                     ),
-                                    validator: (v) =>
-                                        v == null || v.trim().isEmpty
-                                        ? 'Required'
-                                        : null,
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextFormField(
-                                    controller: endTimeCtrl,
-                                    decoration: InputDecoration(
-                                      labelText: 'End (e.g. 10:00 AM)',
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      border: OutlineInputBorder(
+                                  const Spacer(),
+                                  FilledButton(
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: config.accent,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 24,
+                                        vertical: 14,
+                                      ),
+                                      shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(16),
-                                        borderSide: BorderSide.none,
                                       ),
                                     ),
-                                    validator: (v) =>
-                                        v == null || v.trim().isEmpty
-                                        ? 'Required'
-                                        : null,
+                                    onPressed: () {
+                                      if (!formKey.currentState!.validate()) {
+                                        return;
+                                      }
+                                      final subject = subjectCtrl.text.trim();
+                                      final parsedStart = _parseClockMinute(
+                                        startTimeCtrl.text,
+                                      );
+                                      final parsedEnd = _parseClockMinute(
+                                        endTimeCtrl.text,
+                                      );
+                                      String? error;
+                                      if (subject.isEmpty) {
+                                        error = config.subjectRequiredText;
+                                      } else if (parsedStart == null) {
+                                        error =
+                                            'Use a valid start time like 9:00 AM.';
+                                      } else if (parsedEnd == null) {
+                                        error =
+                                            'Use a valid end time like 10:00 AM.';
+                                      } else if (parsedEnd <= parsedStart) {
+                                        error = config.endAfterStartText;
+                                      } else if (parsedEnd - parsedStart >
+                                          8 * 60) {
+                                        error = config.durationTooLongText;
+                                      } else if (selectedDays.isEmpty) {
+                                        error = 'Select at least one repeat day.';
+                                      }
+
+                                      if (error != null) {
+                                        setSheetState(() => sheetError = error);
+                                        return;
+                                      }
+
+                                      final repeatDays = selectedDays.toList()
+                                        ..sort();
+                                      final updated = item.copyWith(
+                                        subject: subject,
+                                        room: roomCtrl.text.trim(),
+                                        startMinute: parsedStart,
+                                        endMinute: parsedEnd,
+                                        repeatDays: repeatDays,
+                                      );
+
+                                      final provider = _providerFor(config);
+                                      ref.read(provider.notifier).state = [
+                                        for (final block in _currentBlocks(
+                                          config,
+                                        ))
+                                          if (block.id == item.id)
+                                            updated
+                                          else
+                                            block,
+                                      ];
+                                      _markClassJobDirty();
+
+                                      Navigator.pop(ctx);
+                                    },
+                                    child: const Text(
+                                      'Save Changes',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              controller: roomCtrl,
-                              decoration: InputDecoration(
-                                labelText: 'Location / Room (Optional)',
-                                filled: true,
-                                fillColor: Colors.white,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
+                                ],
                               ),
-                            ),
-                            const SizedBox(height: 24),
-                            Row(
-                              children: [
-                                const Spacer(),
-                                FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: config.accent,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 14,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                  ),
-                                  onPressed: () {
-                                    if (!formKey.currentState!.validate()) {
-                                      return;
-                                    }
-                                    final subject = subjectCtrl.text.trim();
-                                    final parsedStart = _parseClockMinute(
-                                      startTimeCtrl.text,
-                                    );
-                                    final parsedEnd = _parseClockMinute(
-                                      endTimeCtrl.text,
-                                    );
-                                    String? error;
-                                    if (subject.isEmpty) {
-                                      error = config.subjectRequiredText;
-                                    } else if (parsedStart == null) {
-                                      error =
-                                          'Use a valid start time like 9:00 AM.';
-                                    } else if (parsedEnd == null) {
-                                      error =
-                                          'Use a valid end time like 10:00 AM.';
-                                    } else if (parsedEnd <= parsedStart) {
-                                      error = config.endAfterStartText;
-                                    } else if (parsedEnd - parsedStart >
-                                        8 * 60) {
-                                      error = config.durationTooLongText;
-                                    } else if (selectedDays.isEmpty) {
-                                      error = 'Select at least one repeat day.';
-                                    }
-
-                                    if (error != null) {
-                                      setSheetState(() => sheetError = error);
-                                      return;
-                                    }
-
-                                    final repeatDays = selectedDays.toList()
-                                      ..sort();
-                                    final updated = item.copyWith(
-                                      subject: subject,
-                                      room: roomCtrl.text.trim(),
-                                      startMinute: parsedStart,
-                                      endMinute: parsedEnd,
-                                      repeatDays: repeatDays,
-                                    );
-
-                                    final provider = _providerFor(config);
-                                    ref.read(provider.notifier).state = [
-                                      for (final block in _currentBlocks(
-                                        config,
-                                      ))
-                                        if (block.id == item.id)
-                                          updated
-                                        else
-                                          block,
-                                    ];
-                                    _markClassJobDirty();
-
-                                    Navigator.pop(ctx);
-                                  },
-                                  child: const Text(
-                                    'Save Changes',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      subjectCtrl.dispose();
+      startTimeCtrl.dispose();
+      endTimeCtrl.dispose();
+      roomCtrl.dispose();
+      editScrollController.dispose();
+    }
   }
 
   void _deleteBlock(ClassRoutineBlock item) {
@@ -3060,7 +3118,7 @@ class _OnboardingStep4UnifiedState
         },
         blendMode: BlendMode.dstIn,
         child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: _kTimelineBottomPadding),
           child: LayoutBuilder(
             builder: (context, constraints) {

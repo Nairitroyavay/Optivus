@@ -524,6 +524,16 @@ class _TokenAuthRepository implements AuthRepository {
   Future<String?> currentIdToken() async => 'token';
 
   @override
+  Future<AuthUser> signInAnonymously() async => currentUser!;
+
+  @override
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async => currentUser!;
+
+  @override
   Future<AuthUser?> reloadCurrentUser() async => currentUser;
 
   @override

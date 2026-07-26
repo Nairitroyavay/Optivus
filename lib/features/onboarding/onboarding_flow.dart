@@ -3,14 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
@@ -128,6 +131,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     try {
       await ref.read(onboardingRepositoryProvider).saveDraft(draft);
+      await ref.read(onboardingRepositoryProvider).flushPendingDraftSave();
     } catch (_) {
       if (!mounted) return;
       ref
@@ -285,6 +289,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     final savedDraft = ref.read(mockOnboardingProvider).draft;
+    final authUser = ref.read(authProvider).user;
+    if (authUser != null &&
+        authUser.providerId == 'password' &&
+        !authUser.emailVerified) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(
+            'Please verify your email before finishing onboarding.',
+          );
+      return;
+    }
+
     final uid = _currentPersistenceUid();
     if (uid == null) {
       ref
@@ -332,6 +348,22 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         read: ref.read,
         bundle: bundle,
       );
+
+      final plan = RoutineOnboardingProjection.build(bundle);
+      final receipt = await ref
+          .read(routineRepositoryProvider)
+          .fetchProjectionReceipt(uid, plan.projectionId);
+      if (receipt == null ||
+          receipt.status != 'completed' ||
+          receipt.cursor != receipt.totalCount ||
+          receipt.sourceBundleFingerprint != plan.fingerprint) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(
+              'History event projection failed to complete. Please tap Enter Optivus to retry.',
+            );
+        return;
+      }
     } catch (_) {
       ref
           .read(mockOnboardingProvider.notifier)
@@ -353,7 +385,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           bundle.coachPreferences.style,
         );
 
-    final authUser = ref.read(authProvider).user;
     if (authUser != null) {
       await ref.read(authProvider.notifier).markOnboardingComplete(authUser);
     }
@@ -459,11 +490,85 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     await _persistCurrentDraftAfterNavigation();
   }
 
-  void _goToPreviousStep() {
+  Future<bool> _showExitConfirmationDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Exit Onboarding?'),
+        content: const Text('Your progress will be saved. Exit to main menu?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Exit',
+              style: const TextStyle(color: OptivusColors.danger),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<bool> _showDiscardDraftDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unsaved Changes'),
+        content: const Text(
+          'You have unsaved changes on this step. Do you want to save or discard before going back?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Discard'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await _saveStep(_currentPage);
+              if (ctx.mounted) Navigator.of(ctx).pop(true);
+            },
+            child: const Text('Save & Go Back'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _handlePopGesture() async {
+    final currentFocus = FocusManager.instance.primaryFocus;
+    if (currentFocus != null && currentFocus.hasFocus) {
+      currentFocus.unfocus();
+      return;
+    }
+
     if (_handleInternalBackIfNeeded()) {
       return;
     }
 
+    if (_currentPage <= 0) {
+      final confirmed = await _showExitConfirmationDialog(context);
+      if (confirmed && mounted) {
+        context.go('/');
+      }
+      return;
+    }
+
+    final onboardingState = ref.read(mockOnboardingProvider);
+    if (onboardingState.stepDirty[_currentPage]) {
+      final proceed = await _showDiscardDraftDialog(context);
+      if (!proceed) return;
+    }
+
+    _goToPreviousStepDirect();
+  }
+
+  void _goToPreviousStepDirect() {
     if (_currentPage <= 0) {
       context.go('/');
       return;
@@ -479,6 +584,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     );
 
     _persistCurrentDraftAfterNavigation();
+  }
+
+  void _goToPreviousStep() {
+    _handlePopGesture();
   }
 
   bool _handleInternalBackIfNeeded() {
@@ -551,7 +660,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _goToPreviousStep();
+        if (!didPop) _handlePopGesture();
       },
       child: OnboardingStepShell(
         currentPage: _currentPage,

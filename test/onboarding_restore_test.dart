@@ -343,6 +343,18 @@ class _ControllableAuthRepository implements AuthRepository {
   @override
   AuthUser? get currentUser => _currentUser;
 
+  @override
+  Future<AuthUser> signInAnonymously() async =>
+      _currentUser ?? const AuthUser(uid: 'anon-id', email: 'anon@test.dev');
+
+  @override
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async =>
+      _currentUser ?? AuthUser(uid: 'anon-id', email: email, displayName: name);
+
   void emit(AuthUser? user) {
     _currentUser = user;
     _controller.add(user);
@@ -425,6 +437,9 @@ class _ControlledOnboardingRepository implements OnboardingRepository {
   Future<void> saveDraft(OnboardingDraft draft) async {
     this.draft = draft;
   }
+
+  @override
+  Future<void> flushPendingDraftSave() async {}
 
   @override
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) async {}

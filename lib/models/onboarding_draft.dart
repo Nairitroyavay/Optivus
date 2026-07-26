@@ -1709,8 +1709,38 @@ class BaseTimelineDraft {
     return null;
   }
 
+  String? validateMealScheduleDensity() {
+    final eatingBlocks = blocks
+        .where((b) => b.section == 'eating' && b.title.trim().isNotEmpty)
+        .toList();
+    if (eatingBlocks.isEmpty) return null;
+
+    for (int day = 1; day <= 7; day++) {
+      final dayMeals = eatingBlocks
+          .where((b) => b.repeatDays.isEmpty || b.repeatDays.contains(day))
+          .toList();
+
+      if (dayMeals.length > 6) {
+        return 'Maximum 6 meals allowed per day.';
+      }
+
+      dayMeals.sort((a, b) => a.startMinute.compareTo(b.startMinute));
+
+      for (int i = 0; i < dayMeals.length - 1; i++) {
+        final currentStart = dayMeals[i].startMinute;
+        final nextStart = dayMeals[i + 1].startMinute;
+        if (nextStart - currentStart < 120) {
+          return 'Meals must be spaced at least 120 minutes apart.';
+        }
+      }
+    }
+    return null;
+  }
+
   String? validateEatingSetup() {
-    if (_hasConfirmedSection('eating')) return null;
+    if (_hasConfirmedSection('eating')) {
+      return validateMealScheduleDensity();
+    }
     if (eatingSetupPath == null) {
       return 'Choose how to set up eating.';
     }
@@ -2924,4 +2954,80 @@ List<int> _readIntList(Object? value) {
           .toList() ??
       <int>[];
   return list.isEmpty ? const [1, 2, 3, 4, 5, 6, 7] : list;
+}
+
+List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
+  List<TimelineBlockDraft> blocks,
+) {
+  if (blocks.isEmpty) return blocks;
+
+  final eatingBlocks = blocks.where((b) => b.section == 'eating').toList();
+  final otherBlocks = blocks.where((b) => b.section != 'eating').toList();
+
+  if (eatingBlocks.isEmpty) return blocks;
+
+  eatingBlocks.sort((a, b) => a.startMinute.compareTo(b.startMinute));
+
+  final mergedEating = <TimelineBlockDraft>[];
+
+  for (final block in eatingBlocks) {
+    if (mergedEating.isEmpty) {
+      mergedEating.add(block);
+      continue;
+    }
+
+    final last = mergedEating.last;
+
+    final lastDays = last.repeatDays.isEmpty
+        ? const [1, 2, 3, 4, 5, 6, 7]
+        : last.repeatDays;
+    final blockDays = block.repeatDays.isEmpty
+        ? const [1, 2, 3, 4, 5, 6, 7]
+        : block.repeatDays;
+    final hasCommonDay = lastDays.any((d) => blockDays.contains(d));
+
+    if (hasCommonDay && block.startMinute < last.endMinute) {
+      final newEndMinute = block.endMinute > last.endMinute
+          ? block.endMinute
+          : last.endMinute;
+
+      List<int> newDays;
+      if (last.repeatDays.isEmpty || block.repeatDays.isEmpty) {
+        newDays = const [];
+      } else {
+        newDays = <int>{...last.repeatDays, ...block.repeatDays}.toList()
+          ..sort();
+      }
+
+      final combinedDishes = <String>{...last.dishes, ...block.dishes}.toList();
+
+      final newMerged = TimelineBlockDraft(
+        id: last.id,
+        section: last.section,
+        title: last.title,
+        startMinute: last.startMinute,
+        endMinute: newEndMinute,
+        repeatDays: newDays,
+        location: last.location ?? block.location,
+        blockType: last.blockType,
+        source: last.source,
+        needsTimeConfirmation:
+            last.needsTimeConfirmation || block.needsTimeConfirmation,
+        crossesMidnight: last.crossesMidnight || block.crossesMidnight,
+        endsNextDay: last.endsNextDay || block.endsNextDay,
+        mealCategory: last.mealCategory ?? block.mealCategory,
+        dishes: combinedDishes,
+        calories: last.calories ?? block.calories,
+        protein: last.protein ?? block.protein,
+      );
+
+      mergedEating[mergedEating.length - 1] = newMerged;
+    } else {
+      mergedEating.add(block);
+    }
+  }
+
+  final result = [...otherBlocks, ...mergedEating];
+  result.sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  return result;
 }

@@ -88,6 +88,10 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
     state = const RoutineImportAiState();
   }
 
+  void resetForSignedOut() {
+    state = const RoutineImportAiState();
+  }
+
   RoutineImportExtractionResult? _fail(String message) {
     state = RoutineImportAiState(
       status: RoutineImportAiStatus.failed,

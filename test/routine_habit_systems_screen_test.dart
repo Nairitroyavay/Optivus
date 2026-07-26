@@ -10,14 +10,19 @@ import 'package:optivus/repositories/habit_systems_repository.dart';
 import 'helpers/fake_habit_systems_repository.dart';
 import 'package:optivus/state/auth_state.dart';
 
-class MockAuthNotifier extends StateNotifier<AuthState> implements AuthNotifier {
+class MockAuthNotifier extends StateNotifier<AuthState>
+    implements AuthNotifier {
   MockAuthNotifier()
-      : super(
-          const AuthState(
-            status: AuthFlowStatus.signedInOnboardingComplete,
-            user: AuthUser(uid: 'mock-user-123', email: 'test@test.com', emailVerified: true),
+    : super(
+        const AuthState(
+          status: AuthFlowStatus.signedInOnboardingComplete,
+          user: AuthUser(
+            uid: 'mock-user-123',
+            email: 'test@test.com',
+            emailVerified: true,
           ),
-        );
+        ),
+      );
 
   @override
   void noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

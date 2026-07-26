@@ -32,7 +32,10 @@ class _LiquidPrimaryButtonState extends State<LiquidPrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final bg = widget.backgroundColor ?? OptivusColors.brandAccent;
-    final fg = widget.foregroundColor ?? Colors.white;
+    final isDisabled = widget.onPressed == null;
+    final fg = isDisabled
+        ? OptivusColors.textPrimary
+        : (widget.foregroundColor ?? Colors.white);
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),

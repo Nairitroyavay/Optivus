@@ -23,7 +23,7 @@ class ClassesRoutineSetupScreen extends ConsumerStatefulWidget {
 
 class _ClassesRoutineSetupScreenState
     extends ConsumerState<ClassesRoutineSetupScreen> {
-  void _showForm({RoutineItem? existingItem}) {
+  Future<void> _showForm({RoutineItem? existingItem}) async {
     final isEdit = existingItem != null;
     final titleCtrl = TextEditingController(text: existingItem?.title ?? '');
     final roomCtrl = TextEditingController(text: existingItem?.location ?? '');
@@ -46,150 +46,156 @@ class _ClassesRoutineSetupScreenState
     List<int> selectedDays = existingItem?.repeatDays ?? [];
     String? errorMsg;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModal) {
-            return BaseTimelineFormSheet(
-              title: isEdit ? 'Edit Class' : 'Add Class',
-              isEdit: isEdit,
-              onDelete: isEdit
-                  ? () {
-                      ref
-                          .read(routineNotifierProvider.notifier)
-                          .deleteItem(existingItem.id);
-                      Navigator.pop(ctx);
-                    }
-                  : null,
-              onSave: () {
-                final title = titleCtrl.text.trim();
-                if (title.isEmpty) {
-                  setModal(() => errorMsg = 'Class title is required.');
-                  return;
-                }
-                if (selectedDays.isEmpty) {
-                  setModal(() => errorMsg = 'Select at least one day.');
-                  return;
-                }
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (context, setModal) {
+              return BaseTimelineFormSheet(
+                title: isEdit ? 'Edit Class' : 'Add Class',
+                isEdit: isEdit,
+                onDelete: isEdit
+                    ? () {
+                        ref
+                            .read(routineNotifierProvider.notifier)
+                            .deleteItem(existingItem.id);
+                        Navigator.pop(ctx);
+                      }
+                    : null,
+                onSave: () {
+                  final title = titleCtrl.text.trim();
+                  if (title.isEmpty) {
+                    setModal(() => errorMsg = 'Class title is required.');
+                    return;
+                  }
+                  if (selectedDays.isEmpty) {
+                    setModal(() => errorMsg = 'Select at least one day.');
+                    return;
+                  }
 
-                final startMin = startTime.hour * 60 + startTime.minute;
-                final endMin = endTime.hour * 60 + endTime.minute;
+                  final startMin = startTime.hour * 60 + startTime.minute;
+                  final endMin = endTime.hour * 60 + endTime.minute;
 
-                final item =
-                    existingItem?.copyWith(
-                      title: title,
-                      location: roomCtrl.text.trim(),
-                      notes: profCtrl.text.trim(),
-                      startMinute: startMin,
-                      endMinute: endMin,
-                      repeatDays: selectedDays,
-                      crossesMidnight: endMin <= startMin,
-                    ) ??
-                    RoutineItem(
-                      id: 'class_${DateTime.now().millisecondsSinceEpoch}',
-                      title: title,
-                      startMinute: startMin,
-                      endMinute: endMin,
-                      crossesMidnight: endMin <= startMin,
-                      repeatDays: selectedDays,
-                      location: roomCtrl.text.trim(),
-                      notes: profCtrl.text.trim(),
-                      category: RoutineCategory.classBlock,
-                      blockType: RoutineBlockType.hardBlock,
-                      source: RoutineSource.manual,
-                      hardBlock: true,
-                    );
+                  final item =
+                      existingItem?.copyWith(
+                        title: title,
+                        location: roomCtrl.text.trim(),
+                        notes: profCtrl.text.trim(),
+                        startMinute: startMin,
+                        endMinute: endMin,
+                        repeatDays: selectedDays,
+                        crossesMidnight: endMin <= startMin,
+                      ) ??
+                      RoutineItem(
+                        id: 'class_${DateTime.now().millisecondsSinceEpoch}',
+                        title: title,
+                        startMinute: startMin,
+                        endMinute: endMin,
+                        crossesMidnight: endMin <= startMin,
+                        repeatDays: selectedDays,
+                        location: roomCtrl.text.trim(),
+                        notes: profCtrl.text.trim(),
+                        category: RoutineCategory.classBlock,
+                        blockType: RoutineBlockType.hardBlock,
+                        source: RoutineSource.manual,
+                        hardBlock: true,
+                      );
 
-                final allItems = ref.read(routineNotifierProvider).items;
-                final conflicts = BaseTimelineConflictUtils.findConflicts(
-                  item,
-                  allItems,
-                  day: ref.read(routineNotifierProvider).selectedDay,
-                );
-                if (conflicts.isNotEmpty) {
-                  setModal(
-                    () => errorMsg =
-                        'Conflict detected with ${conflicts.first.title}. Adjust times or days.',
+                  final allItems = ref.read(routineNotifierProvider).items;
+                  final conflicts = BaseTimelineConflictUtils.findConflicts(
+                    item,
+                    allItems,
+                    day: ref.read(routineNotifierProvider).selectedDay,
                   );
-                  return;
-                }
+                  if (conflicts.isNotEmpty) {
+                    setModal(
+                      () => errorMsg =
+                          'Conflict detected with ${conflicts.first.title}. Adjust times or days.',
+                    );
+                    return;
+                  }
 
-                if (isEdit) {
-                  ref.read(routineNotifierProvider.notifier).updateItem(item);
-                } else {
-                  ref.read(routineNotifierProvider.notifier).addItem(item);
-                }
+                  if (isEdit) {
+                    ref.read(routineNotifierProvider.notifier).updateItem(item);
+                  } else {
+                    ref.read(routineNotifierProvider.notifier).addItem(item);
+                  }
 
-                Navigator.pop(ctx);
-              },
-              content: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _TextField(
-                    controller: titleCtrl,
-                    label: 'Class / Subject Name',
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _TextField(
-                          controller: roomCtrl,
-                          label: 'Room (optional)',
+                  Navigator.pop(ctx);
+                },
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TextField(
+                      controller: titleCtrl,
+                      label: 'Class / Subject Name',
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _TextField(
+                            controller: roomCtrl,
+                            label: 'Room (optional)',
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _TextField(
-                          controller: profCtrl,
-                          label: 'Professor (optional)',
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _TextField(
+                            controller: profCtrl,
+                            label: 'Professor (optional)',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Time',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 12),
+                    TimeRangePickerRow(
+                      startTime: startTime,
+                      endTime: endTime,
+                      onStartTimeChanged: (time) =>
+                          setModal(() => startTime = time),
+                      onEndTimeChanged: (time) => setModal(() => endTime = time),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Repeat Days',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 12),
+                    DaySelectorChips(
+                      selectedDays: selectedDays,
+                      onChanged: (days) => setModal(() => selectedDays = days),
+                    ),
+                    if (errorMsg != null) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        errorMsg!,
+                        style: const TextStyle(
+                          color: OptivusColors.danger,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Time',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  TimeRangePickerRow(
-                    startTime: startTime,
-                    endTime: endTime,
-                    onStartTimeChanged: (time) =>
-                        setModal(() => startTime = time),
-                    onEndTimeChanged: (time) => setModal(() => endTime = time),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Repeat Days',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  DaySelectorChips(
-                    selectedDays: selectedDays,
-                    onChanged: (days) => setModal(() => selectedDays = days),
-                  ),
-                  if (errorMsg != null) ...[
-                    const SizedBox(height: 24),
-                    Text(
-                      errorMsg!,
-                      style: const TextStyle(
-                        color: OptivusColors.danger,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
                   ],
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+                ),
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      titleCtrl.dispose();
+      roomCtrl.dispose();
+      profCtrl.dispose();
+    }
   }
 
   @override

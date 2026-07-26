@@ -9,6 +9,7 @@ import 'package:optivus/features/routine/managers/base_timeline/widgets/day_sele
 import 'package:optivus/features/routine/managers/base_timeline/widgets/time_range_picker_row.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/services/skin_care_ai_client.dart';
 
 class SkinCareRoutineSetupScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBack;
@@ -27,7 +28,6 @@ class _SkinCareRoutineSetupScreenState
     final titleCtrl = TextEditingController(text: existingItem?.title ?? '');
     final notesCtrl = TextEditingController(text: existingItem?.notes ?? '');
 
-    // We can extract steps into a text field separated by commas
     final stepsCtrl = TextEditingController(
       text: existingItem?.steps?.join(', ') ?? '',
     );
@@ -56,6 +56,22 @@ class _SkinCareRoutineSetupScreenState
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModal) {
+            final title = titleCtrl.text.trim();
+            final startMin = startTime.hour * 60 + startTime.minute;
+            final endMin = endTime.hour * 60 + endTime.minute;
+
+            final rawSteps = stepsCtrl.text
+                .split(',')
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+
+            final warnings =
+                SkinCareContraindicationDetector.detectContraindications(
+                  slotLabel: startMin >= 1080 ? 'night' : 'morning',
+                  productNamesOrSteps: [title, ...rawSteps],
+                );
+
             return BaseTimelineFormSheet(
               title: isEdit ? 'Edit Skin Care' : 'Add Skin Care',
               isEdit: isEdit,
@@ -68,7 +84,6 @@ class _SkinCareRoutineSetupScreenState
                     }
                   : null,
               onSave: () {
-                final title = titleCtrl.text.trim();
                 if (title.isEmpty) {
                   setModal(() => errorMsg = 'Title is required.');
                   return;
@@ -78,20 +93,52 @@ class _SkinCareRoutineSetupScreenState
                   return;
                 }
 
-                final startMin = startTime.hour * 60 + startTime.minute;
-                final endMin = endTime.hour * 60 + endTime.minute;
+                // Check schedule frequency & rest hours against existing items
+                final allItems = ref.read(routineNotifierProvider).items;
+                final existingSkinCare =
+                    BaseTimelineFilterUtils.getSkinCareItems(
+                      allItems,
+                    ).where((i) => !isEdit || i.id != existingItem.id).toList();
 
-                final rawSteps = stepsCtrl.text
-                    .split(',')
-                    .map((s) => s.trim())
-                    .where((s) => s.isNotEmpty)
-                    .toList();
+                for (final day in selectedDays) {
+                  final sameDayCount = existingSkinCare
+                      .where((i) => i.repeatDays.contains(day))
+                      .length;
+                  if (sameDayCount >= 4) {
+                    setModal(
+                      () => errorMsg =
+                          'Maximum 4 skin care applications allowed per day on day $day.',
+                    );
+                    return;
+                  }
+                }
+
+                for (final other in existingSkinCare) {
+                  final sharesDay = other.repeatDays.any(
+                    (d) => selectedDays.contains(d),
+                  );
+                  if (sharesDay) {
+                    final diff = (startMin - other.startMinute).abs();
+                    if (diff < 240) {
+                      setModal(
+                        () => errorMsg =
+                            'Minimum 4 hours (240 minutes) rest required between skin care routines.',
+                      );
+                      return;
+                    }
+                  }
+                }
+
+                final seqRes = SkinCareStepSequenceValidator.validateAndReorder(
+                  rawSteps,
+                  isNight: startTime.hour >= 18,
+                );
 
                 final item =
                     existingItem?.copyWith(
                       title: title,
                       notes: notesCtrl.text.trim(),
-                      steps: rawSteps,
+                      steps: seqRes.steps,
                       startMinute: startMin,
                       endMinute: endMin,
                       repeatDays: selectedDays,
@@ -104,7 +151,7 @@ class _SkinCareRoutineSetupScreenState
                       endMinute: endMin,
                       crossesMidnight: endMin <= startMin,
                       repeatDays: selectedDays,
-                      steps: rawSteps,
+                      steps: seqRes.steps,
                       notes: notesCtrl.text.trim(),
                       category: RoutineCategory.skinCare,
                       blockType: RoutineBlockType.softBlock,
@@ -158,6 +205,42 @@ class _SkinCareRoutineSetupScreenState
                   ),
                   const SizedBox(height: 16),
                   _TextField(controller: notesCtrl, label: 'Notes (optional)'),
+                  if (warnings.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    ...warnings.map(
+                      (w) => Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: OptivusColors.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: OptivusColors.warning.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: OptivusColors.warning,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                w.message,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: OptivusColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                   if (errorMsg != null) ...[
                     const SizedBox(height: 24),
                     Text(

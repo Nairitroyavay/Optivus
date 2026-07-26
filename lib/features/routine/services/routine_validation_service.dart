@@ -248,6 +248,46 @@ class RoutineValidationService {
       );
     }
 
+    if (item.category == RoutineCategory.eating) {
+      final allEatingPool = <RoutineItem>[
+        ...context.existingTemplates.where(
+          (t) => t.category == RoutineCategory.eating && t.id != item.id,
+        ),
+        ...context.batchCandidates.where(
+          (b) => b.category == RoutineCategory.eating && b.id != item.id,
+        ),
+        item,
+      ];
+      for (int day = 1; day <= 7; day++) {
+        final dayMeals = allEatingPool
+            .where((m) => m.repeatDays.isEmpty || m.repeatDays.contains(day))
+            .toList();
+
+        if (dayMeals.length > 6) {
+          return RoutineValidationResult.invalid(
+            errorType: RoutineValidationErrorType.invalidTime,
+            userSafeMessage: 'Maximum 6 meals allowed per day.',
+            affectedItemIds: [item.id],
+          );
+        }
+
+        dayMeals.sort((a, b) => a.startMinute.compareTo(b.startMinute));
+
+        for (int i = 0; i < dayMeals.length - 1; i++) {
+          final currentStart = dayMeals[i].startMinute;
+          final nextStart = dayMeals[i + 1].startMinute;
+          if (nextStart - currentStart < 120) {
+            return RoutineValidationResult.invalid(
+              errorType: RoutineValidationErrorType.invalidTime,
+              userSafeMessage:
+                  'Meals must be spaced at least 120 minutes apart.',
+              affectedItemIds: [item.id],
+            );
+          }
+        }
+      }
+    }
+
     // 2. Conflict validation across all applicable dates
     final datesToCheck = <DateTime>[routineDateOnly(context.evaluationDate)];
     if (item.repeatDays.isNotEmpty) {

@@ -16,13 +16,32 @@ import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/services/routine_projection_receipt_validator.dart';
 
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/mock_seed_data.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/user_profile.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/state/region_settings_provider.dart';
+import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
+import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
+import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
+import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
+import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
+import 'package:optivus/features/home/providers/home_navigation_provider.dart';
+import 'package:optivus/features/profile/providers/profile_navigation_provider.dart';
+import 'package:optivus/features/routine/providers/routine_navigation_provider.dart';
+import 'package:optivus/features/tracker/fitness/providers/fitness_provider.dart';
+import 'package:optivus/features/tracker/providers/tracker_navigation_provider.dart';
+import 'package:optivus/features/tracker/providers/tracker_settings_provider.dart';
+import 'package:optivus/services/onboarding_account_migration_service.dart';
+import 'package:optivus/state/routine_import_ai_state.dart';
+import 'package:optivus/state/upload_state.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
@@ -47,11 +66,17 @@ class AuthState {
   final AuthUser? user;
   final AuthFlowStatus status;
   final String? errorMessage;
+  final AuthFailureReason? failureReason;
+  final OnboardingFailureReason? onboardingFailureReason;
+  final List<OnboardingRecoveryAction> recoveryActions;
 
   const AuthState({
     this.user,
     this.status = AuthFlowStatus.signedOut,
     this.errorMessage,
+    this.failureReason,
+    this.onboardingFailureReason,
+    this.recoveryActions = const [],
   });
 
   bool get isLoggedIn => user != null;
@@ -81,6 +106,9 @@ class AuthState {
     AuthUser? user,
     AuthFlowStatus? status,
     String? errorMessage,
+    AuthFailureReason? failureReason,
+    OnboardingFailureReason? onboardingFailureReason,
+    List<OnboardingRecoveryAction>? recoveryActions,
     bool clearUser = false,
     bool clearError = false,
   }) {
@@ -88,6 +116,13 @@ class AuthState {
       user: clearUser ? null : (user ?? this.user),
       status: status ?? this.status,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      failureReason: clearError ? null : (failureReason ?? this.failureReason),
+      onboardingFailureReason: clearError
+          ? null
+          : (onboardingFailureReason ?? this.onboardingFailureReason),
+      recoveryActions: clearError
+          ? const []
+          : (recoveryActions ?? this.recoveryActions),
     );
   }
 }
@@ -112,10 +147,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _authSubscription = _repository.authStateChanges.listen(
       _handleAuthStateChange,
     );
-    final currentUser = _repository.currentUser;
-    if (currentUser != null) {
-      scheduleMicrotask(() => _handleAuthStateChange(currentUser));
-    }
   }
 
   @override
@@ -142,10 +173,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       await _loadOrCreateBackendUserState(user);
     } catch (error) {
+      final mapped = mapAuthError(error);
       state = state.copyWith(
         user: previousUser,
         status: AuthFlowStatus.error,
-        errorMessage: friendlyAuthError(error),
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
       );
       rethrow;
     } finally {
@@ -165,18 +198,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       final user = await _repository.signUp(email, password, name: name);
-      await _repository.sendEmailVerification();
-
-      state = state.copyWith(
-        user: user,
-        status: statusFor(user, false),
-        clearError: true,
-      );
+      if (_needsEmailVerification(user)) {
+        state = state.copyWith(
+          user: user,
+          status: AuthFlowStatus.signedInEmailUnverified,
+          clearError: true,
+        );
+        await _repository.sendEmailVerification();
+        return;
+      }
+      await _loadOrCreateBackendUserState(user);
     } catch (error) {
+      final mapped = mapAuthError(error);
       state = state.copyWith(
         user: previousUser,
         status: AuthFlowStatus.error,
-        errorMessage: friendlyAuthError(error),
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
       );
       rethrow;
     } finally {
@@ -191,6 +229,73 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> signInAnonymously() async {
+    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
+    try {
+      final user = await _repository.signInAnonymously();
+      await _loadOrCreateBackendUserState(user);
+    } catch (error) {
+      final mapped = mapAuthError(error);
+      state = state.copyWith(
+        status: AuthFlowStatus.error,
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
+      );
+      rethrow;
+    }
+  }
+
+  Future<void> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async {
+    final oldUser = state.user;
+    final oldAnonUid = oldUser?.isAnonymous == true ? oldUser!.uid : null;
+
+    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
+    try {
+      final user = await _repository.linkAnonymousWithEmail(
+        email,
+        password,
+        name: name,
+      );
+
+      if (oldAnonUid != null && oldAnonUid != user.uid) {
+        await OnboardingAccountMigrationService.migrateAccountData(
+          oldAnonUid: oldAnonUid,
+          newUid: user.uid,
+          read: _ref.read,
+        );
+      }
+
+      if (_needsEmailVerification(user)) {
+        state = state.copyWith(
+          user: user,
+          status: AuthFlowStatus.signedInEmailUnverified,
+          clearError: true,
+        );
+        await _repository.sendEmailVerification();
+        return;
+      }
+
+      await _loadOrCreateBackendUserState(user);
+    } catch (error) {
+      final mapped = mapAuthError(error);
+      state = state.copyWith(
+        user: oldUser,
+        status: oldUser != null && oldUser.isAnonymous
+            ? (oldUser.emailVerified
+                  ? AuthFlowStatus.signedInOnboardingIncomplete
+                  : AuthFlowStatus.signedInEmailUnverified)
+            : AuthFlowStatus.error,
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
+      );
+      rethrow;
+    }
+  }
+
   Future<void> logout() async {
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
@@ -198,9 +303,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _resetSignedOutState();
       state = const AuthState(status: AuthFlowStatus.signedOut);
     } catch (error) {
+      final mapped = mapAuthError(error);
       state = state.copyWith(
         status: AuthFlowStatus.error,
-        errorMessage: friendlyAuthError(error),
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
       );
       rethrow;
     } finally {
@@ -215,9 +322,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _repository.sendEmailVerification();
       state = state.copyWith(clearError: true);
     } catch (error) {
+      final mapped = mapAuthError(error);
       state = state.copyWith(
         status: AuthFlowStatus.signedInEmailUnverified,
-        errorMessage: friendlyAuthError(error),
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
       );
       rethrow;
     }
@@ -258,6 +367,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           status: AuthFlowStatus.signedInEmailUnverified,
           errorMessage:
               'We could not confirm it yet. Tap the link in your email, then try again.',
+          failureReason: AuthFailureReason.invalidCredentials,
         );
         throw Exception('Email not verified yet.');
       }
@@ -267,9 +377,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (error.toString().contains('Email not verified yet.')) {
         rethrow;
       }
+      final mapped = mapAuthError(error);
       state = state.copyWith(
         status: AuthFlowStatus.signedInEmailUnverified,
-        errorMessage: friendlyAuthError(error),
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
       );
       rethrow;
     }
@@ -279,15 +391,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await _repository.sendPasswordResetEmail(email);
     } catch (error) {
+      final mapped = mapAuthError(error);
       state = state.copyWith(
         status: AuthFlowStatus.error,
-        errorMessage: friendlyAuthError(error),
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
       );
       rethrow;
     }
   }
 
   Future<void> markOnboardingComplete(AuthUser user) async {
+    if (_needsEmailVerification(user)) {
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.signedInEmailUnverified,
+        clearError: true,
+      );
+      return;
+    }
     final profile = _ref
         .read(mockUserProfileProvider)
         .copyWith(
@@ -296,12 +418,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
           displayName:
               user.displayName ??
               _ref.read(mockUserProfileProvider).displayName,
+          onboardingInputCompleted: true,
+          onboardingProjectionStatus: 'completed',
           onboardingCompleted: true,
           onboardingStep: OnboardingDraft.lastStepIndex,
           updatedAt: DateTime.now(),
         );
     _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
-    if (_useFirebaseBackend && !_needsEmailVerification(user)) {
+    if (_useFirebaseBackend) {
       await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
     }
     state = state.copyWith(
@@ -369,15 +493,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await _loadOrCreateBackendUserState(user);
     } catch (e) {
       if (!mounted) return;
+      final mapped = mapAuthError(e);
       state = state.copyWith(
         user: user,
         status: AuthFlowStatus.backendRestoreFailed,
-        errorMessage: e.toString(),
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
       );
     }
   }
 
   Future<void> _loadOrCreateBackendUserState(AuthUser user) async {
+    _resetSignedOutState(targetUserUid: user.uid);
+
     if (!_useFirebaseBackend) {
       if (user.uid == 'dev-user-12345') {
         await _loadDevSeedState(user);
@@ -385,6 +513,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await _loadFakeUserState(user);
       }
       if (!mounted) return;
+      _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
+      _ref.read(fitnessCenterProvider.notifier).setOwnerUid(user.uid);
       state = state.copyWith(
         user: user,
         status: statusFor(
@@ -510,43 +640,116 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _ref.read(regionSettingsProvider.notifier).loadSettings(regionSettings);
 
       if (profile.onboardingCompleted) {
-        final bundle = await _ref
-            .read(onboardingRepositoryProvider)
-            .fetchCompletionBundle(user.uid);
+        OnboardingCompletionBundle? bundle;
+        try {
+          bundle = await _ref
+              .read(onboardingRepositoryProvider)
+              .fetchCompletionBundle(user.uid);
+        } catch (_) {
+          throw const _RoutineProjectionRestoreException(
+            'Routine setup recovery is required because the completion snapshot is corrupted.',
+            reason: OnboardingFailureReason.corruptedBundle,
+            actions: [
+              RebuildBundleFromDraftAction(),
+              SynthesizeBundleAction(),
+              RestartOnboardingInputAction(),
+            ],
+          );
+        }
         if (!_isCurrentRestore(restoreGeneration)) return;
+
         if (bundle == null || bundle.uid != user.uid) {
-          throw const _RoutineProjectionRestoreException(
-            'Routine setup recovery is required because the completion '
-            'snapshot is missing.',
-          );
+          final draft = await _ref
+              .read(onboardingRepositoryProvider)
+              .fetchDraft(user.uid);
+          if (!_isCurrentRestore(restoreGeneration)) return;
+
+          if (draft == null) {
+            throw const _RoutineProjectionRestoreException(
+              'Routine setup recovery is required because both draft and completion snapshot are missing.',
+              reason: OnboardingFailureReason.missingDraftAndBundle,
+              actions: [
+                SynthesizeBundleAction(),
+                RestartOnboardingInputAction(),
+              ],
+            );
+          } else {
+            throw const _RoutineProjectionRestoreException(
+              'Routine setup recovery is required because the completion snapshot is missing.',
+              reason: OnboardingFailureReason.missingBundle,
+              actions: [
+                RebuildBundleFromDraftAction(),
+                RestartOnboardingInputAction(),
+              ],
+            );
+          }
         }
+
         final plan = RoutineOnboardingProjection.build(bundle);
-        final receipt = await _ref
-            .read(routineRepositoryProvider)
-            .fetchProjectionReceipt(user.uid, plan.projectionId);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-        if (receipt == null ||
-            receipt.sourceBundleFingerprint != plan.fingerprint) {
-          throw const _RoutineProjectionRestoreException(
-            'Routine setup recovery is required because its projection '
-            'receipt is missing or does not match.',
-          );
-        }
-        await const OnboardingFrontendHydrationService().hydrate(
-          read: _ref.read,
-          bundle: bundle,
+        final routineRepo = _ref.read(routineRepositoryProvider);
+        final receipt = await routineRepo.fetchProjectionReceipt(
+          user.uid,
+          plan.projectionId,
         );
         if (!_isCurrentRestore(restoreGeneration)) return;
-        final projectedReceipt = await _ref
-            .read(routineRepositoryProvider)
-            .fetchProjectionReceipt(user.uid, plan.projectionId);
+
+        final actualItems = await routineRepo.fetchRoutineItems(user.uid);
+        if (!_isCurrentRestore(restoreGeneration)) return;
+
+        final validation = const RoutineProjectionReceiptValidator().validate(
+          receipt: receipt,
+          actualItems: actualItems,
+          ownerUid: user.uid,
+          plan: plan,
+        );
+        if (!validation.isValid) {
+          throw _RoutineProjectionRestoreException(
+            'Routine setup recovery is required because its projection '
+            'receipt is invalid: ${validation.failureReason}',
+            reason: OnboardingFailureReason.projectionFailed,
+            actions: const [
+              ForceResyncProjectionsAction(),
+              RetryCompletionJobAction(),
+              RebuildBundleFromDraftAction(),
+            ],
+          );
+        }
+
+        try {
+          await const OnboardingFrontendHydrationService().hydrate(
+            read: _ref.read,
+            bundle: bundle,
+          );
+        } on RoutineProjectionFailureException catch (pe) {
+          throw _RoutineProjectionRestoreException(
+            'Routine setup recovery is required because projection failed: ${pe.message}',
+            reason: OnboardingFailureReason.projectionFailed,
+            actions: const [
+              ForceResyncProjectionsAction(),
+              RetryCompletionJobAction(),
+              RebuildBundleFromDraftAction(),
+            ],
+          );
+        }
+        if (!_isCurrentRestore(restoreGeneration)) return;
+        final projectedReceipt = await routineRepo.fetchProjectionReceipt(
+          user.uid,
+          plan.projectionId,
+        );
         if (!_isCurrentRestore(restoreGeneration)) return;
         if (projectedReceipt == null ||
             projectedReceipt.status != 'completed' ||
+            projectedReceipt.cursor != projectedReceipt.totalCount ||
             projectedReceipt.sourceBundleFingerprint != plan.fingerprint) {
           throw const _RoutineProjectionRestoreException(
             'Routine setup recovery is required because History projection '
             'did not complete.',
+            reason: OnboardingFailureReason.projectionFailed,
+            actions: [
+              ForceResyncProjectionsAction(),
+              RetryCompletionJobAction(),
+              RebuildBundleFromDraftAction(),
+            ],
           );
         }
       } else {
@@ -567,6 +770,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         user: user,
         status: AuthFlowStatus.backendRestoreFailed,
         errorMessage: error.message,
+        onboardingFailureReason: error.reason,
+        recoveryActions: error.actions,
       );
     } catch (_) {
       if (!_isCurrentRestore(restoreGeneration)) return;
@@ -575,6 +780,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         status: AuthFlowStatus.backendRestoreFailed,
         errorMessage:
             'Could not restore setup. Check your connection and try again.',
+        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+        recoveryActions: const [RetryCompletionJobAction()],
       );
     }
   }
@@ -712,16 +919,138 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  void _resetSignedOutState() {
+  void _resetSignedOutState({String? targetUserUid}) {
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
     _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
     _ref.read(mockUserProfileProvider.notifier).resetEmpty();
-    _ref.read(mockOnboardingProvider.notifier).reset('');
+    if (targetUserUid == null ||
+        _ref.read(mockOnboardingProvider).draft.uid != targetUserUid) {
+      _ref.read(mockOnboardingProvider.notifier).reset(targetUserUid ?? '');
+    }
     _ref.read(profileSettingsProvider.notifier).resetForSignedOut();
+    _ref.read(homeDashboardProvider.notifier).resetForSignedOut();
+    _ref.read(homeMindNoteProvider.notifier).resetForSignedOut();
+    _ref.read(fitnessCenterProvider.notifier).resetForSignedOut();
+    _ref.read(trackerSettingsProvider.notifier).resetForSignedOut();
+    _ref.read(routineImportAiControllerProvider.notifier).resetForSignedOut();
+    _ref.read(uploadControllerProvider.notifier).resetForSignedOut();
+    _ref.read(appNavigationProvider.notifier).resetForSignedOut();
+    _ref.read(homeDetailViewRequestProvider.notifier).state =
+        const HomeDetailTarget.none();
+    _ref.read(trackerDetailViewRequestProvider.notifier).state =
+        TrackerDetailTarget.none;
+    _ref.read(profileDetailViewRequestProvider.notifier).state =
+        ProfileDetailTarget.none;
+    _ref.read(routineDetailViewRequestProvider.notifier).state =
+        RoutineDetailTarget.none;
+    _ref.read(coachDetailViewRequestProvider.notifier).state =
+        CoachDetailView.none;
+    _ref.read(goalsDetailViewRequestProvider.notifier).state =
+        GoalsDetailTarget.none;
     _ref
         .read(regionSettingsProvider.notifier)
         .loadSettings(RegionSettings.defaultForUser('signed-out'));
     _resetUserScopedMockState();
+  }
+
+  Future<void> executeRecoveryAction(OnboardingRecoveryAction action) async {
+    final currentUser = state.user ?? _repository.currentUser;
+    if (currentUser == null) return;
+
+    if (action is RestartOnboardingInputAction) {
+      await markOnboardingIncomplete(currentUser);
+      return;
+    }
+
+    if (action is SynthesizeBundleAction) {
+      final synthesizedDraft = OnboardingDraft(uid: currentUser.uid).copyWith(
+        onboardingCompleted: true,
+        currentStep: OnboardingDraft.lastStepIndex,
+      );
+      final bundle = OnboardingCompletionService.buildBundle(synthesizedDraft);
+      await _ref.read(onboardingRepositoryProvider).saveDraft(synthesizedDraft);
+      await _ref
+          .read(onboardingRepositoryProvider)
+          .saveCompletionBundle(bundle);
+      await retryBackendRestore();
+      return;
+    }
+
+    if (action is RebuildBundleFromDraftAction) {
+      final draft = await _ref
+          .read(onboardingRepositoryProvider)
+          .fetchDraft(currentUser.uid);
+      if (draft != null) {
+        final completedDraft = draft.copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        await _ref.read(onboardingRepositoryProvider).saveDraft(completedDraft);
+        final bundle = OnboardingCompletionService.buildBundle(completedDraft);
+        await _ref
+            .read(onboardingRepositoryProvider)
+            .saveCompletionBundle(bundle);
+        await retryBackendRestore();
+        return;
+      } else {
+        final recoveryResult =
+            await OnboardingCompletionService.recoverCompletionState(
+              uid: currentUser.uid,
+              onboardingRepository: _ref.read(onboardingRepositoryProvider),
+              profileRepository: _ref.read(profileRepositoryProvider),
+            );
+        if (recoveryResult.tier == OnboardingRecoveryTier.tier4ResetRequired) {
+          await markOnboardingIncomplete(currentUser);
+          return;
+        }
+        await retryBackendRestore();
+        return;
+      }
+    }
+
+    if (action is RetryCompletionJobAction) {
+      final recoveryResult =
+          await OnboardingCompletionService.recoverCompletionState(
+            uid: currentUser.uid,
+            onboardingRepository: _ref.read(onboardingRepositoryProvider),
+            profileRepository: _ref.read(profileRepositoryProvider),
+          );
+      if (recoveryResult.tier == OnboardingRecoveryTier.tier4ResetRequired) {
+        await markOnboardingIncomplete(currentUser);
+        return;
+      }
+      await retryBackendRestore();
+      return;
+    }
+
+    if (action is ForceResyncProjectionsAction) {
+      var bundle = await _ref
+          .read(onboardingRepositoryProvider)
+          .fetchCompletionBundle(currentUser.uid);
+      if (bundle == null) {
+        final recoveryResult =
+            await OnboardingCompletionService.recoverCompletionState(
+              uid: currentUser.uid,
+              onboardingRepository: _ref.read(onboardingRepositoryProvider),
+              profileRepository: _ref.read(profileRepositoryProvider),
+            );
+        bundle = recoveryResult.bundle;
+      }
+      if (bundle != null) {
+        try {
+          await const OnboardingFrontendHydrationService().hydrate(
+            read: _ref.read,
+            bundle: bundle,
+          );
+        } on RoutineProjectionFailureException catch (_) {
+          // If receipt is missing or invalid, retryBackendRestore recovers it
+        } catch (_) {}
+      }
+      await retryBackendRestore();
+      return;
+    }
+
+    await retryBackendRestore();
   }
 
   void _resetUserScopedMockState() {
@@ -732,6 +1061,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(mockTrackerProvider.notifier).resetEmpty();
     _ref.read(mockGoalProvider.notifier).resetEmpty();
     _ref.read(mockMindNoteProvider.notifier).resetEmpty();
+    _ref.read(homeMindNoteProvider.notifier).resetForSignedOut();
     _ref.read(mockCoachProvider.notifier).resetEmpty();
     _ref.read(mockCoachPreferencesProvider.notifier).resetEmpty();
     _ref.read(mockNotificationPreferencesProvider.notifier).resetEmpty();
@@ -746,6 +1076,12 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 
 class _RoutineProjectionRestoreException implements Exception {
   final String message;
+  final OnboardingFailureReason? reason;
+  final List<OnboardingRecoveryAction> actions;
 
-  const _RoutineProjectionRestoreException(this.message);
+  const _RoutineProjectionRestoreException(
+    this.message, {
+    this.reason,
+    this.actions = const [],
+  });
 }

@@ -12,6 +12,9 @@ class HabitSystemOnboardingProjection {
     List<RoutineItem> projectedRoutines, {
     DateTime? now,
   }) {
+    if (bundle.uid.trim().isEmpty || bundle.uid.contains('/')) {
+      throw ArgumentError('Valid owner UID is required.');
+    }
     final timestamp = (now ?? DateTime.now()).toUtc();
     final systems = <HabitSystemRecord>[];
     final seenIds = <String>{};

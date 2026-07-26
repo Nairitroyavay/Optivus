@@ -55,6 +55,14 @@ class OptivusColors {
   // Onboarding & Auth
   static const Color onboardingTop = Color(0xFFFFF4D8);
   static const Color onboardingBottom = Color(0xFFFFFFFF);
+  static const Color onboardingDarkTop = Color(0xFF1A1C24);
+  static const Color onboardingDarkBottom = Color(0xFF0F1015);
+  static const Color darkGlassFill = Color(0x1FFFFFFF);
+  static const Color darkGlassBorder = Color(0x33FFFFFF);
+  static const Color textPrimaryDark = Color(0xFFF1F3F9);
+  static const Color textBodyDark = Color(0xFFE2E8F0);
+  static const Color textSecondaryDark = Color(0xFF94A3B8);
+  static const Color textMutedDark = Color(0xFF64748B);
   static const Color brandAccent = Color(0xFFE0B51F);
   static const Color aquaAccent = Color(0xFFF36F78);
 

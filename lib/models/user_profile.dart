@@ -11,8 +11,12 @@ class UserProfile {
   final DateTime? updatedAt;
 
   // Onboarding Status
-  final bool onboardingCompleted;
+  final bool onboardingInputCompleted;
+  final String onboardingProjectionStatus;
   final int onboardingStep;
+
+  bool get onboardingCompleted =>
+      onboardingInputCompleted && onboardingProjectionStatus == 'completed';
 
   // Lifestyle Role
   final String lifeRole;
@@ -48,7 +52,9 @@ class UserProfile {
     this.accountStatus = 'active',
     this.createdAt,
     this.updatedAt,
-    this.onboardingCompleted = false,
+    bool? onboardingInputCompleted,
+    String? onboardingProjectionStatus,
+    bool onboardingCompleted = false,
     this.onboardingStep = 0,
     this.lifeRole = '',
     this.workingExtra,
@@ -67,7 +73,11 @@ class UserProfile {
     this.coachName = '',
     this.coachStyle = '',
     this.slipUpStyle = '',
-  });
+  }) : onboardingInputCompleted =
+           onboardingInputCompleted ?? (onboardingCompleted || false),
+       onboardingProjectionStatus =
+           onboardingProjectionStatus ??
+           (onboardingCompleted ? 'completed' : 'none');
 
   factory UserProfile.empty({
     required String uid,
@@ -79,6 +89,8 @@ class UserProfile {
       email: email,
       displayName: displayName,
       accountStatus: 'active',
+      onboardingInputCompleted: false,
+      onboardingProjectionStatus: 'none',
       onboardingCompleted: false,
       onboardingStep: 0,
     );
@@ -92,6 +104,8 @@ class UserProfile {
       'accountStatus': accountStatus,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      'onboardingInputCompleted': onboardingInputCompleted,
+      'onboardingProjectionStatus': onboardingProjectionStatus,
       'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
       'lifeRole': lifeRole,
@@ -122,6 +136,8 @@ class UserProfile {
       'accountStatus': accountStatus,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+      'onboardingInputCompleted': onboardingInputCompleted,
+      'onboardingProjectionStatus': onboardingProjectionStatus,
       'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
       'lifeRole': lifeRole,
@@ -145,6 +161,7 @@ class UserProfile {
   }
 
   factory UserProfile.fromMap(Map<String, dynamic> map) {
+    final legacyCompleted = map['onboardingCompleted'] as bool? ?? false;
     return UserProfile(
       uid: map['uid'] as String? ?? '',
       email: map['email'] as String? ?? '',
@@ -152,7 +169,12 @@ class UserProfile {
       accountStatus: map['accountStatus'] as String? ?? 'active',
       createdAt: _dateTimeFromMapValue(map['createdAt']),
       updatedAt: _dateTimeFromMapValue(map['updatedAt']),
-      onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
+      onboardingInputCompleted:
+          map['onboardingInputCompleted'] as bool? ?? legacyCompleted,
+      onboardingProjectionStatus:
+          map['onboardingProjectionStatus'] as String? ??
+          (legacyCompleted ? 'completed' : 'none'),
+      onboardingCompleted: legacyCompleted,
       onboardingStep: map['onboardingStep'] as int? ?? 0,
       lifeRole: map['lifeRole'] as String? ?? '',
       workingExtra: map['workingExtra'] as String?,
@@ -185,6 +207,8 @@ class UserProfile {
     String? accountStatus,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? onboardingInputCompleted,
+    String? onboardingProjectionStatus,
     bool? onboardingCompleted,
     int? onboardingStep,
     String? lifeRole,
@@ -205,6 +229,15 @@ class UserProfile {
     String? coachStyle,
     String? slipUpStyle,
   }) {
+    final nextInputCompleted =
+        onboardingInputCompleted ??
+        onboardingCompleted ??
+        this.onboardingInputCompleted;
+    final nextProjectionStatus =
+        onboardingProjectionStatus ??
+        (onboardingCompleted != null
+            ? (onboardingCompleted ? 'completed' : 'none')
+            : this.onboardingProjectionStatus);
     return UserProfile(
       uid: uid ?? this.uid,
       email: email ?? this.email,
@@ -212,7 +245,8 @@ class UserProfile {
       accountStatus: accountStatus ?? this.accountStatus,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      onboardingInputCompleted: nextInputCompleted,
+      onboardingProjectionStatus: nextProjectionStatus,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       lifeRole: lifeRole ?? this.lifeRole,
       workingExtra: workingExtra ?? this.workingExtra,

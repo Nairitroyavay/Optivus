@@ -1,7 +1,9 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_spacing.dart';
 
 class OnboardingGlassCard extends StatelessWidget {
   final Widget child;
@@ -13,7 +15,7 @@ class OnboardingGlassCard extends StatelessWidget {
   const OnboardingGlassCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(18),
+    this.padding = const EdgeInsets.all(OptivusSpacing.base),
     this.radius = 24,
     this.tint,
     this.selected = false,
@@ -21,6 +23,16 @@ class OnboardingGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final glassColor =
+        tint ??
+        (isDark
+            ? OptivusColors.darkGlassFill
+            : Colors.white.withValues(alpha: selected ? 0.15 : 0.05));
+    final borderColor = isDark
+        ? OptivusColors.darkGlassBorder
+        : Colors.white.withValues(alpha: selected ? 0.95 : 0.65);
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
@@ -48,21 +60,18 @@ class OnboardingGlassCard extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
             decoration: BoxDecoration(
-              color:
-                  tint ??
-                  Colors.white.withValues(alpha: selected ? 0.15 : 0.05),
+              color: glassColor,
               borderRadius: BorderRadius.circular(radius),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: selected ? 0.95 : 0.65),
-                width: 1.5,
-              ),
+              border: Border.all(color: borderColor, width: 1.5),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.white.withValues(alpha: selected ? 0.25 : 0.15),
+                  Colors.white.withValues(
+                    alpha: selected ? 0.25 : (isDark ? 0.08 : 0.15),
+                  ),
                   Colors.white.withValues(alpha: 0.0),
-                  Colors.black.withValues(alpha: 0.02),
+                  Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
                 ],
                 stops: const [0.0, 0.5, 1.0],
               ),
@@ -82,7 +91,7 @@ class OnboardingGlassCard extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.white.withValues(alpha: 0.8),
+                          Colors.white.withValues(alpha: isDark ? 0.4 : 0.8),
                           Colors.white.withValues(alpha: 0.0),
                         ],
                       ),
@@ -132,8 +141,14 @@ class OnboardingScrollView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
+    final isLandscape =
+        media.orientation == Orientation.landscape || media.size.height < 500;
+    final ctaH = isLandscape ? 56.0 : 76.0;
     final bottomReserve =
-        76.0 + media.padding.bottom + media.viewInsets.bottom + 48.0;
+        ctaH +
+        media.padding.bottom +
+        media.viewInsets.bottom +
+        (isLandscape ? 20.0 : 48.0);
     final effectivePadding = padding.add(
       EdgeInsets.only(bottom: bottomReserve),
     );
@@ -142,12 +157,16 @@ class OnboardingScrollView extends StatelessWidget {
       builder: (context, constraints) {
         return SingleChildScrollView(
           physics: userScrollable
-              ? const BouncingScrollPhysics()
+              ? const AlwaysScrollableScrollPhysics()
               : const NeverScrollableScrollPhysics(),
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: effectivePadding,
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            constraints: BoxConstraints(
+              minHeight: isLandscape
+                  ? 0.0
+                  : math.max(0.0, constraints.maxHeight - bottomReserve),
+            ),
             child: child,
           ),
         );
@@ -356,12 +375,23 @@ class OnboardingChoiceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final clampedScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: 1.38);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = selected
+        ? accent
+        : (isDark ? OptivusColors.textPrimaryDark : OptivusColors.textPrimary);
+    final secondaryTextColor = isDark
+        ? OptivusColors.textSecondaryDark
+        : OptivusColors.textSecondary;
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: OnboardingGlassCard(
         selected: selected,
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(OptivusSpacing.base),
         tint: selected ? accent.withValues(alpha: 0.09) : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -375,16 +405,18 @@ class OnboardingChoiceTile extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: selected
                         ? accent
-                        : Colors.white.withValues(alpha: 0.62),
+                        : (isDark
+                              ? Colors.white.withValues(alpha: 0.15)
+                              : Colors.white.withValues(alpha: 0.62)),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.72),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.25)
+                          : Colors.white.withValues(alpha: 0.72),
                     ),
                   ),
                   child: Icon(
                     icon,
-                    color: selected
-                        ? Colors.white
-                        : OptivusColors.textSecondary,
+                    color: selected ? Colors.white : secondaryTextColor,
                     size: 21,
                   ),
                 ),
@@ -393,21 +425,25 @@ class OnboardingChoiceTile extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: selected
-                                  ? accent
-                                  : OptivusColors.textPrimary,
-                            ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textScaler: clampedScaler,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(color: primaryTextColor),
+                        ),
                       ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 3),
                         Text(
                           subtitle!,
-                          style: const TextStyle(
-                            color: OptivusColors.textSecondary,
+                          textScaler: clampedScaler,
+                          style: TextStyle(
+                            color: secondaryTextColor,
                             fontSize: 11,
                             height: 1.35,
                             fontWeight: FontWeight.w500,
@@ -424,13 +460,20 @@ class OnboardingChoiceTile extends StatelessWidget {
                           : Icons.circle_outlined,
                       color: selected
                           ? accent
-                          : Colors.black.withValues(alpha: 0.35),
+                          : (isDark
+                                ? Colors.white38
+                                : Colors.black.withValues(alpha: 0.35)),
                     ),
               ],
             ),
             if (expandedContent != null) ...[
               const SizedBox(height: 13),
-              Divider(color: Colors.white.withValues(alpha: 0.58), height: 1),
+              Divider(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : Colors.white.withValues(alpha: 0.58),
+                height: 1,
+              ),
               const SizedBox(height: 13),
               expandedContent!,
             ],
@@ -459,6 +502,14 @@ class OnboardingChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final clampedScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: 1.38);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = selected
+        ? accent
+        : (isDark ? OptivusColors.textPrimaryDark : OptivusColors.textPrimary);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -473,13 +524,13 @@ class OnboardingChip extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: selected
-                    ? Colors.white.withValues(alpha: 0.35)
-                    : Colors.white.withValues(alpha: 0.15),
+                    ? Colors.white.withValues(alpha: isDark ? 0.25 : 0.35)
+                    : Colors.white.withValues(alpha: isDark ? 0.08 : 0.15),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: selected
                       ? Colors.white.withValues(alpha: 0.85)
-                      : Colors.white.withValues(alpha: 0.4),
+                      : Colors.white.withValues(alpha: isDark ? 0.2 : 0.4),
                   width: selected ? 1.5 : 1.0,
                 ),
                 gradient: selected
@@ -488,7 +539,7 @@ class OnboardingChip extends StatelessWidget {
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.white.withValues(alpha: 0.25),
+                          Colors.white.withValues(alpha: isDark ? 0.15 : 0.25),
                           Colors.white.withValues(alpha: 0.0),
                         ],
                       ),
@@ -509,7 +560,7 @@ class OnboardingChip extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.white.withValues(alpha: 0.8),
+                            Colors.white.withValues(alpha: isDark ? 0.4 : 0.8),
                             Colors.white.withValues(alpha: 0.0),
                           ],
                         ),
@@ -523,12 +574,21 @@ class OnboardingChip extends StatelessWidget {
                         Icon(icon, size: 14, color: accent),
                         const SizedBox(width: 5),
                       ],
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color: selected ? accent : OptivusColors.textPrimary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textScaler: clampedScaler,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -565,6 +625,13 @@ class OnboardingActionPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     final radius = compact ? 16.0 : 20.0;
+    final clampedScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: 1.38);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = selected
+        ? accent
+        : (isDark ? OptivusColors.textPrimaryDark : OptivusColors.textPrimary);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -601,20 +668,24 @@ class OnboardingActionPill extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: selected
-                      ? Colors.white.withValues(alpha: 0.4)
-                      : Colors.white.withValues(alpha: 0.1),
+                      ? Colors.white.withValues(alpha: isDark ? 0.25 : 0.4)
+                      : Colors.white.withValues(alpha: isDark ? 0.08 : 0.1),
                   borderRadius: BorderRadius.circular(radius),
                   border: Border.all(
                     color: selected
                         ? Colors.white.withValues(alpha: 0.85)
-                        : Colors.white.withValues(alpha: 0.4),
+                        : Colors.white.withValues(alpha: isDark ? 0.2 : 0.4),
                     width: selected ? 1.5 : 1.0,
                   ),
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Colors.white.withValues(alpha: selected ? 0.4 : 0.2),
+                      Colors.white.withValues(
+                        alpha: selected
+                            ? (isDark ? 0.25 : 0.4)
+                            : (isDark ? 0.12 : 0.2),
+                      ),
                       Colors.white.withValues(alpha: 0.0),
                     ],
                   ),
@@ -635,7 +706,9 @@ class OnboardingActionPill extends StatelessWidget {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.white.withValues(alpha: 0.85),
+                              Colors.white.withValues(
+                                alpha: isDark ? 0.4 : 0.85,
+                              ),
                               Colors.white.withValues(alpha: 0.0),
                             ],
                           ),
@@ -647,24 +720,23 @@ class OnboardingActionPill extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         if (icon != null) ...[
-                          Icon(
-                            icon,
-                            size: compact ? 15 : 17,
-                            color: selected ? accent : accent,
-                          ),
+                          Icon(icon, size: compact ? 15 : 17, color: accent),
                           const SizedBox(width: 7),
                         ],
                         Flexible(
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: selected
-                                  ? accent
-                                  : OptivusColors.textPrimary,
-                              fontSize: compact ? 11 : 12,
-                              fontWeight: FontWeight.w900,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textScaler: clampedScaler,
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: compact ? 11 : 12,
+                                fontWeight: FontWeight.w900,
+                              ),
                             ),
                           ),
                         ),
@@ -675,6 +747,66 @@ class OnboardingActionPill extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class OnboardingCardSkeleton extends StatelessWidget {
+  final double height;
+  final double radius;
+
+  const OnboardingCardSkeleton({
+    super.key,
+    this.height = 140,
+    this.radius = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return OnboardingGlassCard(
+      radius: radius,
+      child: SizedBox(
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 140,
+              height: 16,
+              decoration: BoxDecoration(
+                color: (isDark ? Colors.white : Colors.black).withValues(
+                  alpha: 0.12,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              height: 12,
+              decoration: BoxDecoration(
+                color: (isDark ? Colors.white : Colors.black).withValues(
+                  alpha: 0.08,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: 200,
+              height: 12,
+              decoration: BoxDecoration(
+                color: (isDark ? Colors.white : Colors.black).withValues(
+                  alpha: 0.08,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+          ],
         ),
       ),
     );

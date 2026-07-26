@@ -7,6 +7,8 @@ import 'package:optivus/config/firebase_options.dart';
 import 'package:optivus/config/runtime_config.dart';
 import 'package:firebase_core/firebase_core.dart';
 
+import 'package:optivus/core/utils/platform_channel_boundary.dart';
+
 void main() async {
   // Ensure Flutter engine bindings are fully initialized before bootstrapping services
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +26,12 @@ void main() async {
   );
 
   // Enable true full screen (immersive mode, hides status and nav bars)
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  await safePlatformCall(
+    call: () =>
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
+    fallback: null,
+    operationName: 'setEnabledSystemUIMode',
+  );
 
   final firebaseOptions = OptivusBackendConfig.useFirebase
       ? DefaultFirebaseOptions.currentPlatform
@@ -34,8 +41,14 @@ void main() async {
   );
 
   if (firebaseOptions != null) {
-    await Firebase.initializeApp(options: firebaseOptions);
-    debugPrint('Optivus backend mode: Firebase initialized');
+    await safePlatformCall(
+      call: () async {
+        await Firebase.initializeApp(options: firebaseOptions);
+        debugPrint('Optivus backend mode: Firebase initialized');
+      },
+      fallback: null,
+      operationName: 'Firebase.initializeApp',
+    );
   } else {
     debugPrint('Optivus backend mode: fake frontend/dev mode');
   }

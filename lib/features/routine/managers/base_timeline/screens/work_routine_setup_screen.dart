@@ -23,7 +23,7 @@ class WorkRoutineSetupScreen extends ConsumerStatefulWidget {
 
 class _WorkRoutineSetupScreenState
     extends ConsumerState<WorkRoutineSetupScreen> {
-  void _showForm({RoutineItem? existingItem}) {
+  Future<void> _showForm({RoutineItem? existingItem}) async {
     final isEdit = existingItem != null;
     final titleCtrl = TextEditingController(text: existingItem?.title ?? '');
     final locCtrl = TextEditingController(text: existingItem?.location ?? '');
@@ -52,69 +52,71 @@ class _WorkRoutineSetupScreenState
     List<int> selectedDays = existingItem?.repeatDays ?? [];
     String? errorMsg;
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModal) {
-            return BaseTimelineFormSheet(
-              title: isEdit ? 'Edit Work Block' : 'Add Work Block',
-              isEdit: isEdit,
-              onDelete: isEdit
-                  ? () {
-                      ref
-                          .read(routineNotifierProvider.notifier)
-                          .deleteItem(existingItem.id);
-                      Navigator.pop(ctx);
-                    }
-                  : null,
-              onSave: () {
-                final title = titleCtrl.text.trim();
-                if (title.isEmpty) {
-                  setModal(() => errorMsg = 'Work title is required.');
-                  return;
-                }
-                if (selectedDays.isEmpty) {
-                  setModal(() => errorMsg = 'Select at least one day.');
-                  return;
-                }
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (context, setModal) {
+              return BaseTimelineFormSheet(
+                title: isEdit ? 'Edit Work Block' : 'Add Work Block',
+                isEdit: isEdit,
+                onDelete: isEdit
+                    ? () {
+                        ref
+                            .read(routineNotifierProvider.notifier)
+                            .deleteItem(existingItem.id);
+                        Navigator.pop(ctx);
+                      }
+                    : null,
+                onSave: () {
+                  final title = titleCtrl.text.trim();
+                  if (title.isEmpty) {
+                    setModal(() => errorMsg = 'Work title is required.');
+                    return;
+                  }
+                  if (selectedDays.isEmpty) {
+                    setModal(() => errorMsg = 'Select at least one day.');
+                    return;
+                  }
 
-                final startMin = startTime.hour * 60 + startTime.minute;
-                final endMin = endTime.hour * 60 + endTime.minute;
-                final bType = workMode == 'fixed'
-                    ? RoutineBlockType.hardBlock
-                    : RoutineBlockType.softBlock;
+                  final startMin = startTime.hour * 60 + startTime.minute;
+                  final endMin = endTime.hour * 60 + endTime.minute;
+                  final isFlexible = workMode == 'flexible';
 
-                final item =
-                    existingItem?.copyWith(
-                      title: title,
-                      location: locCtrl.text.trim(),
-                      notes: notesCtrl.text.trim(),
-                      startMinute: startMin,
-                      endMinute: endMin,
-                      repeatDays: selectedDays,
-                      crossesMidnight: endMin <= startMin,
-                      blockType: bType,
-                      hardBlock: bType == RoutineBlockType.hardBlock,
-                    ) ??
-                    RoutineItem(
-                      id: 'work_${DateTime.now().millisecondsSinceEpoch}',
-                      title: title,
-                      startMinute: startMin,
-                      endMinute: endMin,
-                      crossesMidnight: endMin <= startMin,
-                      repeatDays: selectedDays,
-                      location: locCtrl.text.trim(),
-                      notes: notesCtrl.text.trim(),
-                      category: RoutineCategory.job,
-                      blockType: bType,
-                      source: RoutineSource.manual,
-                      hardBlock: bType == RoutineBlockType.hardBlock,
-                    );
+                  final item =
+                      existingItem?.copyWith(
+                        title: title,
+                        location: locCtrl.text.trim(),
+                        notes: notesCtrl.text.trim(),
+                        startMinute: startMin,
+                        endMinute: endMin,
+                        repeatDays: selectedDays,
+                        crossesMidnight: endMin <= startMin,
+                        blockType: isFlexible
+                            ? RoutineBlockType.softBlock
+                            : RoutineBlockType.hardBlock,
+                        hardBlock: !isFlexible,
+                      ) ??
+                      RoutineItem(
+                        id: 'work_${DateTime.now().millisecondsSinceEpoch}',
+                        title: title,
+                        startMinute: startMin,
+                        endMinute: endMin,
+                        crossesMidnight: endMin <= startMin,
+                        repeatDays: selectedDays,
+                        location: locCtrl.text.trim(),
+                        notes: notesCtrl.text.trim(),
+                        category: RoutineCategory.job,
+                        blockType: isFlexible
+                            ? RoutineBlockType.softBlock
+                            : RoutineBlockType.hardBlock,
+                        source: RoutineSource.manual,
+                        hardBlock: !isFlexible,
+                      );
 
-                if (item.isHardBlock) {
                   final allItems = ref.read(routineNotifierProvider).items;
                   final conflicts = BaseTimelineConflictUtils.findConflicts(
                     item,
@@ -124,98 +126,98 @@ class _WorkRoutineSetupScreenState
                   if (conflicts.isNotEmpty) {
                     setModal(
                       () => errorMsg =
-                          'Conflict detected with ${conflicts.first.title}.',
+                          'Conflict detected with ${conflicts.first.title}. Adjust times or days.',
                     );
                     return;
                   }
-                }
 
-                if (isEdit) {
-                  ref.read(routineNotifierProvider.notifier).updateItem(item);
-                } else {
-                  ref.read(routineNotifierProvider.notifier).addItem(item);
-                }
+                  if (isEdit) {
+                    ref.read(routineNotifierProvider.notifier).updateItem(item);
+                  } else {
+                    ref.read(routineNotifierProvider.notifier).addItem(item);
+                  }
 
-                Navigator.pop(ctx);
-              },
-              content: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _TextField(
-                    controller: titleCtrl,
-                    label: 'Work Title (e.g. Office, Client Call)',
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Work Mode
-                  const Text(
-                    'Mode',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'fixed', label: Text('Fixed')),
-                      ButtonSegment(
-                        value: 'flexible',
-                        label: Text('Flexible / Mixed'),
+                  Navigator.pop(ctx);
+                },
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _TextField(
+                      controller: titleCtrl,
+                      label: 'Work / Job Title',
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Block Type',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'fixed',
+                          label: Text('Fixed Hours'),
+                          icon: Icon(Icons.lock_clock_rounded, size: 18),
+                        ),
+                        ButtonSegment(
+                          value: 'flexible',
+                          label: Text('Flexible Work'),
+                          icon: Icon(Icons.schedule_rounded, size: 18),
+                        ),
+                      ],
+                      selected: {workMode},
+                      onSelectionChanged: (val) =>
+                          setModal(() => workMode = val.first),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Time Range',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 12),
+                    TimeRangePickerRow(
+                      startTime: startTime,
+                      endTime: endTime,
+                      onStartTimeChanged: (time) =>
+                          setModal(() => startTime = time),
+                      onEndTimeChanged: (time) => setModal(() => endTime = time),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Repeat Days',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                    const SizedBox(height: 12),
+                    DaySelectorChips(
+                      selectedDays: selectedDays,
+                      onChanged: (days) => setModal(() => selectedDays = days),
+                    ),
+                    const SizedBox(height: 24),
+                    _TextField(controller: locCtrl, label: 'Location (optional)'),
+                    const SizedBox(height: 16),
+                    _TextField(controller: notesCtrl, label: 'Notes (optional)'),
+                    if (errorMsg != null) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        errorMsg!,
+                        style: const TextStyle(
+                          color: OptivusColors.danger,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
-                    selected: {workMode},
-                    onSelectionChanged: (set) =>
-                        setModal(() => workMode = set.first),
-                    style: SegmentedButton.styleFrom(
-                      backgroundColor: Colors.white.withValues(alpha: 0.5),
-                      selectedBackgroundColor: OptivusColors.routineAccent
-                          .withValues(alpha: 0.2),
-                      selectedForegroundColor: OptivusColors.routineAccent,
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Time',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  TimeRangePickerRow(
-                    startTime: startTime,
-                    endTime: endTime,
-                    onStartTimeChanged: (time) =>
-                        setModal(() => startTime = time),
-                    onEndTimeChanged: (time) => setModal(() => endTime = time),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Repeat Days',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                  ),
-                  const SizedBox(height: 12),
-                  DaySelectorChips(
-                    selectedDays: selectedDays,
-                    onChanged: (days) => setModal(() => selectedDays = days),
-                  ),
-                  const SizedBox(height: 24),
-                  _TextField(controller: locCtrl, label: 'Location (optional)'),
-                  const SizedBox(height: 16),
-                  _TextField(controller: notesCtrl, label: 'Notes (optional)'),
-                  if (errorMsg != null) ...[
-                    const SizedBox(height: 24),
-                    Text(
-                      errorMsg!,
-                      style: const TextStyle(
-                        color: OptivusColors.danger,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
                   ],
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+                ),
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      titleCtrl.dispose();
+      locCtrl.dispose();
+      notesCtrl.dispose();
+    }
   }
 
   @override

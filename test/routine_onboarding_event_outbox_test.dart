@@ -31,11 +31,13 @@ void main() {
       bundle: bundle,
     );
     expect(completion.outcome, RoutineProjectionOutcome.projected);
-    expect(completion.receipt.projectedItemIds, hasLength(2));
+    expect(completion.receipt.createdItemIds, hasLength(2));
     expect(
-      completion.receipt.projectedItemIds,
+      completion.receipt.createdItemIds,
       isNot(contains(plan.items.first.id)),
     );
+    expect(completion.receipt.existingItemIds, contains(plan.items.first.id));
+    expect(completion.receipt.projectedItemIds, hasLength(3));
 
     final result = await const RoutineOnboardingEventProjector()
         .projectCreatedEvents(read: harness.container.read, bundle: bundle);
@@ -46,7 +48,7 @@ void main() {
       plan.projectionId,
     );
     expect(receipt?.status, 'completed');
-    expect(receipt?.cursor, 2);
+    expect(receipt?.cursor, 3);
 
     final events = await harness.eventsFor('uid-a');
     expect(events, hasLength(2));

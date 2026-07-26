@@ -10,6 +10,7 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
+import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 
 void main() {
@@ -727,6 +728,14 @@ class FakeAuthNotifier extends StateNotifier<AuthState>
   @override
   Future<void> checkEmailVerification() async {}
   @override
+  Future<void> signInAnonymously() async {}
+  @override
+  Future<void> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async {}
+  @override
   Future<void> login(String email, String password) async {}
   @override
   Future<void> logout() async {}
@@ -736,6 +745,8 @@ class FakeAuthNotifier extends StateNotifier<AuthState>
   Future<void> markOnboardingIncomplete(AuthUser user) async {}
   Future<void> refreshProfile() async {}
   Future<void> register(String email, String password) async {}
+  @override
+  Future<void> executeRecoveryAction(OnboardingRecoveryAction action) async {}
   @override
   Future<void> sendPasswordResetEmail(String email) async {}
   @override
@@ -749,6 +760,8 @@ class FakeAuthNotifier extends StateNotifier<AuthState>
 class FakeOnboardingRepository implements OnboardingRepository {
   @override
   Future<void> saveDraft(OnboardingDraft draft) async {}
+  @override
+  Future<void> flushPendingDraftSave() async {}
   Future<OnboardingDraft?> getDraft(String uid) async => null;
   Future<void> deleteDraft(String uid) async {}
   @override

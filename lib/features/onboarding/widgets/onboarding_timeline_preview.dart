@@ -2,9 +2,11 @@ import 'dart:ui';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:optivus/core/timeline/timeline_visual_layout.dart';
 import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
@@ -23,6 +25,15 @@ class OnboardingDayChips extends StatelessWidget {
   });
 
   static const _labels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  static const _fullDayNames = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -32,15 +43,38 @@ class OnboardingDayChips extends StatelessWidget {
         children: [
           for (var index = 0; index < _labels.length; index++)
             Expanded(
-              child: SizedBox(
-                height: 42,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onChanged(index + 1),
-                  child: _OnboardingDayChip(
-                    label: _labels[index],
-                    selected: selectedDay == index + 1,
-                    accent: accent,
+              child: Semantics(
+                button: true,
+                selected: selectedDay == index + 1,
+                label: _fullDayNames[index],
+                hint: selectedDay == index + 1
+                    ? 'Currently selected'
+                    : 'Double tap to select ${_fullDayNames[index]} schedule',
+                onTap: () {
+                  onChanged(index + 1);
+                  // ignore: deprecated_member_use
+                  SemanticsService.announce(
+                    '${_fullDayNames[index]} schedule selected',
+                    TextDirection.ltr,
+                  );
+                },
+                child: SizedBox(
+                  height: 42,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      onChanged(index + 1);
+                      // ignore: deprecated_member_use
+                      SemanticsService.announce(
+                        '${_fullDayNames[index]} schedule selected',
+                        TextDirection.ltr,
+                      );
+                    },
+                    child: _OnboardingDayChip(
+                      label: _labels[index],
+                      selected: selectedDay == index + 1,
+                      accent: accent,
+                    ),
                   ),
                 ),
               ),
@@ -193,12 +227,15 @@ class OnboardingVerticalTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (blocks.isEmpty) {
+      return const SizedBox.shrink();
+    }
     final minStart = blocks.map((block) => block.startMinute).reduce(math.min);
     final maxEnd = blocks.map((block) => block.endMinute).reduce(math.max);
     final startMinute = math.max(5 * 60, ((minStart - 45) ~/ 60) * 60);
     final endMinute = math.min(24 * 60, (((maxEnd + 75) / 60).ceil()) * 60);
     final rangeMinutes = math.max(180, endMinute - startMinute);
-    const topPadding = 18.0;
+    const topPadding = OptivusSpacing.base;
     const bottomPadding = OnboardingStepShell.bottomCtaHeight + 40;
     const pxPerMinute = 0.82;
 
@@ -283,66 +320,76 @@ class OnboardingVerticalTimeline extends StatelessWidget {
             ).createShader(bounds),
             blendMode: BlendMode.dstIn,
             child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: bottomPadding),
               child: SizedBox(
                 height: timelineHeight,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      left: 48,
-                      width: 8,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.17),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: accent.withValues(alpha: 0.36),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: accent.withValues(alpha: 0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
+                child: Semantics(
+                  container: true,
+                  label: 'Timeline schedule, ${blocks.length} items',
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        top: 0,
+                        bottom: 0,
+                        left: 48,
+                        width: 8,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.17),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.36),
+                              width: 1.2,
                             ),
-                          ],
+                            boxShadow: [
+                              BoxShadow(
+                                color: accent.withValues(alpha: 0.15),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    for (final minute in _boundaryMinutes(
-                      blocks,
-                      startMinute,
-                      endMinute,
-                    ))
-                      OnboardingMinuteIndicator(
-                        minute: minute,
-                        top: scale.yForMinute(minute),
-                        accent: accent,
-                      ),
-                    for (
-                      var minute = startMinute;
-                      minute <= endMinute;
-                      minute += 60
-                    )
-                      OnboardingTimelineTick(
-                        minute: minute,
-                        top: scale.yForMinute(minute),
-                        accent: accent,
-                      ),
-                    for (final block in blocks)
-                      if (entryById[block.id] != null)
-                        Positioned(
-                          top: entryById[block.id]!.top,
-                          left: 64,
-                          right: 16,
-                          height: entryById[block.id]!.height,
-                          child: blockBuilder(context, block),
+                      for (final minute in _boundaryMinutes(
+                        blocks,
+                        startMinute,
+                        endMinute,
+                      ))
+                        OnboardingMinuteIndicator(
+                          minute: minute,
+                          top: scale.yForMinute(minute),
+                          accent: accent,
                         ),
-                  ],
+                      for (
+                        var minute = startMinute;
+                        minute <= endMinute;
+                        minute += 60
+                      )
+                        OnboardingTimelineTick(
+                          minute: minute,
+                          top: scale.yForMinute(minute),
+                          accent: accent,
+                        ),
+                      for (final block in blocks)
+                        if (entryById[block.id] != null)
+                          Positioned(
+                            top: entryById[block.id]!.top,
+                            left: 64,
+                            right: 16,
+                            height: entryById[block.id]!.height,
+                            child: Semantics(
+                              button: true,
+                              label:
+                                  '${block.title}, from ${onboardingTimeLabel(block.startMinute)} to ${onboardingTimeLabel(block.endMinute)}',
+                              hint: 'Double tap to edit timeline item',
+                              child: blockBuilder(context, block),
+                            ),
+                          ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -403,34 +450,38 @@ class OnboardingTimelineTick extends StatelessWidget {
       left: 0,
       width: 56,
       height: 25,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            width: 42,
-            child: Text(
-              _compactTimeLabel(minute),
-              textAlign: TextAlign.right,
-              maxLines: 2,
-              overflow: TextOverflow.clip,
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                height: 1.1,
-                color: OptivusColors.textSecondary,
+      child: ExcludeSemantics(
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              width: 42,
+              child: Text(
+                _compactTimeLabel(minute),
+                textAlign: TextAlign.right,
+                maxLines: 2,
+                overflow: TextOverflow.clip,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                  color: OptivusColors.textSecondary,
+                ),
               ),
             ),
-          ),
-          Positioned(
-            left: 48,
-            top: 9,
-            width: 4,
-            height: 1.5,
-            child: DecoratedBox(
-              decoration: BoxDecoration(color: accent.withValues(alpha: 0.35)),
+            Positioned(
+              left: 48,
+              top: 9,
+              width: 4,
+              height: 1.5,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.35),
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -459,49 +510,53 @@ class OnboardingMinuteIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          top: top - 8,
-          left: 0,
-          width: 44,
-          height: 16,
-          child: Text(
-            _compactMinuteLabel(minute),
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              color: accent.withValues(alpha: 0.68),
+    return Positioned.fill(
+      child: ExcludeSemantics(
+        child: Stack(
+          children: [
+            Positioned(
+              top: top - 8,
+              left: 0,
+              width: 44,
+              height: 16,
+              child: Text(
+                _compactMinuteLabel(minute),
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  color: accent.withValues(alpha: 0.68),
+                ),
+              ),
             ),
-          ),
-        ),
-        Positioned(
-          top: top,
-          left: 64,
-          right: 16,
-          height: 1,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.13),
-              borderRadius: BorderRadius.circular(99),
+            Positioned(
+              top: top,
+              left: 64,
+              right: 16,
+              height: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
             ),
-          ),
-        ),
-        Positioned(
-          top: top,
-          left: 44,
-          width: 18,
-          height: 1.5,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.48),
-              borderRadius: BorderRadius.circular(99),
+            Positioned(
+              top: top,
+              left: 44,
+              width: 18,
+              height: 1.5,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.48),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

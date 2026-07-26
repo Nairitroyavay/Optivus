@@ -199,6 +199,18 @@ class FitnessCenterNotifier extends StateNotifier<FitnessCenterState> {
   FitnessCenterNotifier(this._ref) : super(FitnessCenterState.mock());
 
   final Ref _ref;
+  String? _ownerUid;
+
+  String? get ownerUid => _ownerUid;
+
+  void setOwnerUid(String? uid) {
+    _ownerUid = uid;
+  }
+
+  void resetForSignedOut() {
+    _ownerUid = null;
+    state = FitnessCenterState.mock();
+  }
 
   void selectActivityType(FitnessActivityType activityType) {
     state = state.copyWith(selectedActivityType: activityType);

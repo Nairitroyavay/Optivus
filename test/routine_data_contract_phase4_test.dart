@@ -403,28 +403,43 @@ void main() {
       expect(saved.notes, 'Keep this');
     });
 
-    test('retry and changed bundle never restore a user deletion', () async {
-      final harness = await _projectedHarness('user-a');
-      final original = (await harness.routines.fetchRoutineItems(
-        'user-a',
-      )).single;
-      await harness.routines.deleteRoutineItem('user-a', original.id);
-      final changedDraft = _completedDraft(
-        'user-a',
-        title: 'Changed onboarding title',
-      );
-      final changedBundle = OnboardingCompletionService.buildBundle(
-        changedDraft,
-      );
+    test(
+      'retry with same fingerprint preserves deletion while changed fingerprint re-projects',
+      () async {
+        final harness = await _projectedHarness('user-a');
+        final original = (await harness.routines.fetchRoutineItems(
+          'user-a',
+        )).single;
+        await harness.routines.deleteRoutineItem('user-a', original.id);
 
-      final result = await harness.onboarding.completeOnboarding(
-        finalDraft: changedDraft,
-        bundle: changedBundle,
-      );
+        // Retry with same draft/bundle (matching fingerprint) returns noOp and preserves deletion
+        final retryResult = await harness.onboarding.completeOnboarding(
+          finalDraft: harness.draft,
+          bundle: harness.bundle,
+        );
+        expect(retryResult.outcome, RoutineProjectionOutcome.noOp);
+        expect(await harness.routines.fetchRoutineItems('user-a'), isEmpty);
 
-      expect(result.outcome, RoutineProjectionOutcome.noOp);
-      expect(await harness.routines.fetchRoutineItems('user-a'), isEmpty);
-    });
+        // Rebuilt draft with changed fingerprint triggers re-projection
+        final changedDraft = _completedDraft(
+          'user-a',
+          title: 'Changed onboarding title',
+        );
+        final changedBundle = OnboardingCompletionService.buildBundle(
+          changedDraft,
+        );
+
+        final reprojectResult = await harness.onboarding.completeOnboarding(
+          finalDraft: changedDraft,
+          bundle: changedBundle,
+        );
+        expect(reprojectResult.outcome, RoutineProjectionOutcome.projected);
+        expect(
+          await harness.routines.fetchRoutineItems('user-a'),
+          hasLength(1),
+        );
+      },
+    );
 
     test('different users receive isolated paths and IDs', () async {
       final first = await _projectedHarness('user-a');
@@ -762,6 +777,16 @@ class _StaticAuthRepository implements AuthRepository {
 
   @override
   AuthUser? get currentUser => null;
+
+  @override
+  Future<AuthUser> signInAnonymously() async => user;
+
+  @override
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async => user;
 
   @override
   Future<String?> currentIdToken() async => 'token';

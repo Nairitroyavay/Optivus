@@ -54,6 +54,7 @@ void main() {
     container
         .read(mockUserProfileProvider.notifier)
         .applyOnboardingBundle(bundle);
+    container.read(mockUserProfileProvider.notifier).completeOnboarding();
 
     expect(container.read(mockRoutineProvider), isNotEmpty);
     expect(container.read(mockGoalProvider), isNotEmpty);

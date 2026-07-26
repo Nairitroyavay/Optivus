@@ -8,7 +8,7 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
   final FirebaseFirestore? _injectedFirestore;
 
   FirestoreHabitSystemsRepository({FirebaseFirestore? firestore})
-      : _injectedFirestore = firestore;
+    : _injectedFirestore = firestore;
 
   FirebaseFirestore get _firestore =>
       _injectedFirestore ?? FirebaseFirestore.instance;
@@ -48,8 +48,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
   @override
   Future<List<HabitSystemRecord>> fetchHabitSystems(String uid) async {
     _validateOwnerUid(uid);
-    final snapshot =
-        await _firestore.collection(FirestoreUserPaths.habitSystems(uid)).get();
+    final snapshot = await _firestore
+        .collection(FirestoreUserPaths.habitSystems(uid))
+        .get();
 
     return snapshot.docs
         .map((doc) => HabitSystemRecord.fromMap(doc.data(), documentId: doc.id))
@@ -144,6 +145,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
           snapshot.data()!,
           documentId: snapshot.id,
         );
+        if (existing.ownerUid != system.ownerUid) {
+          throw const HabitSystemWriteConflict('Owner UID mismatch');
+        }
         if (existing.version != expectedVersion) {
           throw const HabitSystemWriteConflict('Stale version');
         }
@@ -175,7 +179,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
     _validateOwnerUid(uid);
     _validateSystemId(systemId);
 
-    final docRef = _firestore.doc(FirestoreUserPaths.habitSystem(uid, systemId));
+    final docRef = _firestore.doc(
+      FirestoreUserPaths.habitSystem(uid, systemId),
+    );
 
     try {
       final nextSystem = await _firestore.runTransaction<HabitSystemRecord>((
@@ -190,6 +196,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
           snapshot.data()!,
           documentId: snapshot.id,
         );
+        if (existing.ownerUid != uid) {
+          throw const HabitSystemWriteConflict('Owner UID mismatch');
+        }
         if (existing.version != expectedVersion) {
           throw const HabitSystemWriteConflict('Stale version');
         }
@@ -222,7 +231,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
     _validateOwnerUid(uid);
     _validateSystemId(systemId);
 
-    final docRef = _firestore.doc(FirestoreUserPaths.habitSystem(uid, systemId));
+    final docRef = _firestore.doc(
+      FirestoreUserPaths.habitSystem(uid, systemId),
+    );
 
     try {
       final nextSystem = await _firestore.runTransaction<HabitSystemRecord>((
@@ -237,6 +248,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
           snapshot.data()!,
           documentId: snapshot.id,
         );
+        if (existing.ownerUid != uid) {
+          throw const HabitSystemWriteConflict('Owner UID mismatch');
+        }
         if (existing.version != expectedVersion) {
           throw const HabitSystemWriteConflict('Stale version');
         }
@@ -285,7 +299,15 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
         final sysSnap = await tx.get(docRef);
         final systemAlreadyExists = sysSnap.exists;
 
-        if (!systemAlreadyExists) {
+        if (systemAlreadyExists) {
+          final existing = HabitSystemRecord.fromMap(
+            sysSnap.data()!,
+            documentId: sysSnap.id,
+          );
+          if (existing.ownerUid != system.ownerUid) {
+            throw const HabitSystemWriteConflict('Owner UID mismatch');
+          }
+        } else {
           // We only write the system and create a receipt.
           final sysData = _systemToFirestoreMap(system);
           sysData['createdAt'] = FieldValue.serverTimestamp();
@@ -312,8 +334,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
           };
           tx.set(projectionRef, receipt);
         } else {
-          final existingApplied =
-              List<String>.from(projSnap.data()?['appliedSystemIds'] ?? []);
+          final existingApplied = List<String>.from(
+            projSnap.data()?['appliedSystemIds'] ?? [],
+          );
           if (!existingApplied.contains(system.systemId)) {
             existingApplied.add(system.systemId);
             tx.update(projectionRef, {
@@ -324,6 +347,118 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
         }
       });
       return HabitSystemWriteResult.success(system);
+    } catch (e) {
+      return HabitSystemWriteResult.failure(e.toString());
+    }
+  }
+
+  @override
+  Future<HabitSystemWriteResult> reconcileProjectedSystems({
+    required String ownerUid,
+    required String projectionId,
+    required List<HabitSystemRecord> systems,
+  }) async {
+    _validateOwnerUid(ownerUid);
+    if (projectionId.trim().isEmpty || projectionId.contains('/')) {
+      throw ArgumentError('Valid projection ID is required.');
+    }
+    for (final sys in systems) {
+      if (sys.ownerUid != ownerUid) {
+        throw ArgumentError('System ownerUid does not match target ownerUid.');
+      }
+      _validateSystemId(sys.systemId);
+    }
+
+    final projectionRef = _firestore
+        .collection('users')
+        .doc(ownerUid)
+        .collection('habitSystemProjections')
+        .doc(projectionId);
+
+    final expectedIds = systems.map((s) => s.systemId).toList();
+
+    try {
+      await _firestore.runTransaction((tx) async {
+        final projSnap = await tx.get(projectionRef);
+        final systemSnaps = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+        for (final sys in systems) {
+          final docRef = _firestore.doc(
+            FirestoreUserPaths.habitSystem(ownerUid, sys.systemId),
+          );
+          final sysSnap = await tx.get(docRef);
+          systemSnaps[sys.systemId] = sysSnap;
+        }
+
+        final appliedSystemIds = <String>[];
+        final failedSystemIds = <String>[];
+
+        for (final sys in systems) {
+          final docRef = _firestore.doc(
+            FirestoreUserPaths.habitSystem(ownerUid, sys.systemId),
+          );
+          final sysSnap = systemSnaps[sys.systemId];
+          final exists = sysSnap != null && sysSnap.exists;
+
+          if (exists) {
+            final existing = HabitSystemRecord.fromMap(
+              sysSnap.data()!,
+              documentId: sysSnap.id,
+            );
+            if (existing.ownerUid != ownerUid) {
+              failedSystemIds.add(sys.systemId);
+              continue;
+            }
+          } else {
+            final sysData = _systemToFirestoreMap(sys);
+            sysData['createdAt'] = FieldValue.serverTimestamp();
+            sysData['updatedAt'] = FieldValue.serverTimestamp();
+            sysData['version'] = 1;
+            tx.set(docRef, sysData);
+          }
+          appliedSystemIds.add(sys.systemId);
+        }
+
+        final existingApplied = projSnap.exists
+            ? List<String>.from(projSnap.data()?['appliedSystemIds'] ?? [])
+            : <String>[];
+        for (final id in appliedSystemIds) {
+          if (!existingApplied.contains(id)) {
+            existingApplied.add(id);
+          }
+        }
+
+        final status = failedSystemIds.isNotEmpty ? 'partial' : 'completed';
+
+        if (!projSnap.exists) {
+          final receipt = {
+            'projectionId': projectionId,
+            'ownerUid': ownerUid,
+            'sourceVersion': '1',
+            'expectedSystemIds': expectedIds,
+            'appliedSystemIds': existingApplied,
+            'failedSystemIds': failedSystemIds,
+            'status': status,
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'completedAt': FieldValue.serverTimestamp(),
+            'schemaVersion': 1,
+          };
+          tx.set(projectionRef, receipt);
+        } else {
+          tx.update(projectionRef, {
+            'expectedSystemIds': expectedIds,
+            'appliedSystemIds': existingApplied,
+            'failedSystemIds': failedSystemIds,
+            'status': status,
+            'updatedAt': FieldValue.serverTimestamp(),
+            if (status == 'completed')
+              'completedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+      return HabitSystemWriteResult.success(
+        systems.isNotEmpty ? systems.first : null,
+      );
     } catch (e) {
       return HabitSystemWriteResult.failure(e.toString());
     }

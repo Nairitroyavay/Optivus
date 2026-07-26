@@ -372,6 +372,23 @@ class OnboardingStepBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final isSmallScreen = media.size.height < 600 || media.size.width < 600;
+    if (isSmallScreen) {
+      return OnboardingScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            OnboardingSectionTitle(title: title, subtitle: subtitle),
+            const SizedBox(height: 12),
+            _InternalProgress(accent: accent),
+            const SizedBox(height: 14),
+            ...children,
+          ],
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -830,8 +847,10 @@ class OnboardingTextInputCard extends StatelessWidget {
 
 class _InternalProgress extends StatelessWidget {
   final Color accent;
+  final double progress;
 
-  const _InternalProgress({required this.accent});
+  // ignore: unused_element_parameter
+  const _InternalProgress({required this.accent, this.progress = 0.42});
 
   @override
   Widget build(BuildContext context) {
@@ -841,9 +860,11 @@ class _InternalProgress extends StatelessWidget {
         borderRadius: BorderRadius.circular(99),
         color: Colors.white.withValues(alpha: 0.28),
       ),
-      child: FractionallySizedBox(
+      child: AnimatedFractionallySizedBox(
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOutCubic,
         alignment: Alignment.centerLeft,
-        widthFactor: 0.42,
+        widthFactor: progress.clamp(0.0, 1.0),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(99),
@@ -1065,7 +1086,8 @@ double _calculateWrapHeight(
 ) {
   if (labels.isEmpty) return 0.0;
   final TextScaler textScaler = MediaQuery.textScalerOf(context);
-  final TextDirection textDirection = Directionality.of(context);
+  final TextDirection textDirection =
+      Directionality.maybeOf(context) ?? TextDirection.ltr;
   double currentX = 0.0;
   double currentY = 0.0;
   double rowHeight = 0.0;

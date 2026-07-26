@@ -298,7 +298,7 @@ class _OnboardingStep6State extends ConsumerState<OnboardingStep6> {
         child: SingleChildScrollView(
           key: const Key('onboarding-step6-timeline-scroll'),
           controller: _scrollController,
-          physics: const BouncingScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.only(bottom: _kTimelineBottomPadding),
           child: SizedBox(
             height: timelineHeight,

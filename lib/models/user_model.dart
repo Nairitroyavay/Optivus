@@ -307,9 +307,13 @@ class UserModel {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int schemaVersion;
-  final bool onboardingCompleted;
+  final bool onboardingInputCompleted;
+  final String onboardingProjectionStatus;
   final int onboardingStep;
   final String? lastDayClosed;
+
+  bool get onboardingCompleted =>
+      onboardingInputCompleted && onboardingProjectionStatus == 'completed';
 
   // ── Coach identity ──────────────────────────────────────────────────────
   final String? coachName;
@@ -319,7 +323,7 @@ class UserModel {
   // ── Notification preferences ────────────────────────────────────────────
   final NotificationSettings notificationSettings;
 
-  const UserModel({
+  UserModel({
     required this.id,
     required this.email,
     this.displayName,
@@ -327,40 +331,28 @@ class UserModel {
     required this.createdAt,
     required this.updatedAt,
     this.schemaVersion = 1,
-    this.onboardingCompleted = false,
+    bool? onboardingInputCompleted,
+    String? onboardingProjectionStatus,
+    bool onboardingCompleted = false,
     this.onboardingStep = 0,
     this.lastDayClosed,
     this.coachName,
     this.coachStyle,
     this.accountabilityMode,
     this.notificationSettings = const NotificationSettings(),
-  });
+  }) : onboardingInputCompleted =
+           onboardingInputCompleted ?? (onboardingCompleted || false),
+       onboardingProjectionStatus =
+           onboardingProjectionStatus ??
+           (onboardingCompleted ? 'completed' : 'none');
 
   factory UserModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? <String, dynamic>{};
-    return UserModel(
-      id: data['uid'] as String? ?? data['id'] as String? ?? doc.id,
-      email: data['email'] as String? ?? '',
-      displayName: data['displayName'] as String? ?? data['name'] as String?,
-      timezone: data['timezone'] as String?,
-      createdAt: _asDateTime(data['createdAt']) ?? DateTime.now(),
-      updatedAt: _asDateTime(data['updatedAt']) ?? DateTime.now(),
-      schemaVersion: data['schemaVersion'] as int? ?? 1,
-      onboardingCompleted: data['onboardingCompleted'] as bool? ?? false,
-      onboardingStep: data['onboardingStep'] as int? ?? 0,
-      lastDayClosed: data['lastDayClosed'] as String?,
-      coachName: data['coachName'] as String?,
-      coachStyle: data['coachStyle'] as String?,
-      accountabilityMode: data['accountabilityMode'] as String?,
-      notificationSettings: data['notificationSettings'] is Map
-          ? NotificationSettings.fromMap(
-              Map<String, dynamic>.from(data['notificationSettings'] as Map),
-            )
-          : const NotificationSettings(),
-    );
+    return UserModel.fromMap({...data, 'id': doc.id});
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    final legacyCompleted = map['onboardingCompleted'] as bool? ?? false;
     return UserModel(
       id: map['uid'] as String? ?? map['id'] as String? ?? '',
       email: map['email'] as String? ?? '',
@@ -369,7 +361,12 @@ class UserModel {
       createdAt: _asDateTime(map['createdAt']) ?? DateTime.now(),
       updatedAt: _asDateTime(map['updatedAt']) ?? DateTime.now(),
       schemaVersion: map['schemaVersion'] as int? ?? 1,
-      onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
+      onboardingInputCompleted:
+          map['onboardingInputCompleted'] as bool? ?? legacyCompleted,
+      onboardingProjectionStatus:
+          map['onboardingProjectionStatus'] as String? ??
+          (legacyCompleted ? 'completed' : 'none'),
+      onboardingCompleted: legacyCompleted,
       onboardingStep: map['onboardingStep'] as int? ?? 0,
       lastDayClosed: map['lastDayClosed'] as String?,
       coachName: map['coachName'] as String?,
@@ -392,6 +389,8 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': FieldValue.serverTimestamp(),
       'schemaVersion': schemaVersion,
+      'onboardingInputCompleted': onboardingInputCompleted,
+      'onboardingProjectionStatus': onboardingProjectionStatus,
       'onboardingCompleted': onboardingCompleted,
       'onboardingStep': onboardingStep,
       'lastDayClosed': lastDayClosed,
@@ -409,6 +408,8 @@ class UserModel {
     String? displayName,
     String? timezone,
     DateTime? updatedAt,
+    bool? onboardingInputCompleted,
+    String? onboardingProjectionStatus,
     bool? onboardingCompleted,
     int? onboardingStep,
     String? lastDayClosed,
@@ -417,6 +418,15 @@ class UserModel {
     String? accountabilityMode,
     NotificationSettings? notificationSettings,
   }) {
+    final nextInputCompleted =
+        onboardingInputCompleted ??
+        onboardingCompleted ??
+        this.onboardingInputCompleted;
+    final nextProjectionStatus =
+        onboardingProjectionStatus ??
+        (onboardingCompleted != null
+            ? (onboardingCompleted ? 'completed' : 'none')
+            : this.onboardingProjectionStatus);
     return UserModel(
       id: id,
       email: email ?? this.email,
@@ -425,7 +435,8 @@ class UserModel {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       schemaVersion: schemaVersion,
-      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      onboardingInputCompleted: nextInputCompleted,
+      onboardingProjectionStatus: nextProjectionStatus,
       onboardingStep: onboardingStep ?? this.onboardingStep,
       lastDayClosed: lastDayClosed ?? this.lastDayClosed,
       coachName: coachName ?? this.coachName,

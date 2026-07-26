@@ -100,11 +100,22 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
   }
 
   void completeOnboarding() {
-    state = state.copyWith(onboardingCompleted: true);
+    state = state.copyWith(
+      onboardingInputCompleted: true,
+      onboardingProjectionStatus: 'completed',
+      onboardingCompleted: true,
+    );
   }
 
   void applyOnboardingBundle(OnboardingCompletionBundle bundle) {
     final patch = bundle.userProfilePatch;
+    final inputCompleted =
+        patch['onboardingInputCompleted'] as bool? ??
+        patch['onboardingCompleted'] as bool? ??
+        true;
+    final projectionStatus =
+        patch['onboardingProjectionStatus'] as String? ??
+        (patch['onboardingCompleted'] == true ? 'completed' : 'pending');
     state = UserProfile(
       uid: patch['uid'] as String? ?? state.uid,
       email: state.email,
@@ -113,7 +124,8 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
       updatedAt:
           DateTime.tryParse(patch['updatedAt'] as String? ?? '') ??
           DateTime.now(),
-      onboardingCompleted: patch['onboardingCompleted'] as bool? ?? true,
+      onboardingInputCompleted: inputCompleted,
+      onboardingProjectionStatus: projectionStatus,
       onboardingStep:
           (patch['onboardingStep'] as num?)?.toInt() ?? state.onboardingStep,
       lifeRole: patch['lifeRole'] as String? ?? state.lifeRole,

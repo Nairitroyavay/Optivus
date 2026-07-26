@@ -139,6 +139,30 @@ function habitSystemData(uid = "user123", id = "habitsys-1", overrides = {}) {
   };
 }
 
+function userData(uid = "user123", overrides = {}) {
+  return {
+    uid,
+    displayName: "Test User",
+    email: "user@example.com",
+    onboardingCompleted: false,
+    createdAt,
+    updatedAt,
+    ...overrides,
+  };
+}
+
+function onboardingJobData(uid = "user123", overrides = {}) {
+  return {
+    jobId: "current",
+    ownerUid: uid,
+    stage: "persistDraft",
+    status: "in_progress",
+    createdAt,
+    updatedAt,
+    ...overrides,
+  };
+}
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: "optivus-lifeos",
@@ -406,4 +430,85 @@ describe("Firestore Rules for Routine durability", () => {
       })
     );
   });
+
+  describe("Issue 64: Firestore Security Rules for Users, Onboarding Jobs, and Routine Rules", () => {
+    it("allows verified owner user profile document access and rejects unverified or cross-user access", async () => {
+      const verifiedOwner = ownerDb("user123", true);
+      const unverifiedOwner = ownerDb("user123", false);
+      const otherUser = ownerDb("other_user", true);
+
+      const docRef = verifiedOwner.collection("users").doc("user123");
+      await assertSucceeds(docRef.set(userData("user123")));
+      await assertSucceeds(docRef.get());
+
+      const unverifiedDocRef = unverifiedOwner.collection("users").doc("user123");
+      await assertFails(unverifiedDocRef.set(userData("user123")));
+
+      const otherDocRef = otherUser.collection("users").doc("user123");
+      await assertFails(otherDocRef.set(userData("user123")));
+      await assertFails(otherDocRef.get());
+    });
+
+    it("allows verified owner onboarding completion job access and rejects cross-user access", async () => {
+      const owner = ownerDb("user123", true);
+      const otherUser = ownerDb("other_user", true);
+
+      const jobRef = owner.collection("users").doc("user123").collection("onboardingCompletionJobs").doc("current");
+      await assertSucceeds(jobRef.set(onboardingJobData("user123")));
+      await assertSucceeds(jobRef.get());
+
+      const otherJobRef = otherUser.collection("users").doc("user123").collection("onboardingCompletionJobs").doc("current");
+      await assertFails(otherJobRef.set(onboardingJobData("user123")));
+      await assertFails(otherJobRef.get());
+    });
+
+    it("validates routine template 'job' category and prohibits modifying immutable projection fields", async () => {
+      const owner = ownerDb("user123", true);
+      const validJobItemRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-job-1");
+      await assertSucceeds(validJobItemRef.set(routineItemData("user123", "routine-job-1", { category: "job" })));
+
+      const invalidCategoryRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-bad-cat");
+      await assertFails(invalidCategoryRef.set(routineItemData("user123", "routine-bad-cat", { category: "unauthorized_category" })));
+
+      const itemRef = owner.collection("users").doc("user123").collection("routineItems").doc("routine-item-1");
+      await assertSucceeds(itemRef.set(routineItemData("user123", "routine-item-1", { onboardingProjectionId: "onboarding-initial-v1" })));
+      await assertFails(itemRef.update({ onboardingProjectionId: "modified-projection-id" }));
+    });
+
+    it("validates routine occurrence action and enforces immutable occurrence fields", async () => {
+      const owner = ownerDb("user123", true);
+      const validOccRef = owner.collection("users").doc("user123").collection("routineHistory").doc("occ-valid");
+      await assertSucceeds(validOccRef.set(occurrenceData("user123", "occ-valid", { action: "complete" })));
+
+      const invalidActionRef = owner.collection("users").doc("user123").collection("routineHistory").doc("occ-invalid");
+      await assertFails(invalidActionRef.set(occurrenceData("user123", "occ-invalid", { action: "invalid_action_name" })));
+
+      await assertFails(validOccRef.update({ occurrenceDateKey: "2026-12-31" }));
+    });
+
+    it("enforces strict append-only constraints on routineEvents", async () => {
+      const owner = ownerDb("user123", true);
+      const eventRef = owner.collection("users").doc("user123").collection("routineEvents").doc("event-append-1");
+      await assertSucceeds(eventRef.set(eventData("user123", "event-append-1")));
+
+      await assertFails(eventRef.update({ eventType: "updated" }));
+      await assertFails(eventRef.delete());
+    });
+
+    it("enforces projectionId matching, total cursor requirements, and monotonic progress", async () => {
+      const owner = ownerDb("user123", true);
+      const invalidProjIdRef = owner.collection("users").doc("user123").collection("routineProjections").doc("wrong-proj-id");
+      await assertFails(invalidProjIdRef.set(projectionData("user123", { id: "wrong-proj-id" })));
+
+      const projRef = owner.collection("users").doc("user123").collection("routineProjections").doc("onboarding-initial-v1");
+      await assertSucceeds(projRef.set(projectionData("user123", { totalCount: 5, cursor: 2, status: "pending" })));
+
+      // Transitioning status to completed when cursor (2) < totalCount (5) must fail
+      await assertFails(projRef.update({ status: "completed" }));
+
+      // Regressing cursor (from 2 to 1) must fail
+      await assertFails(projRef.update({ cursor: 1 }));
+    });
+  });
 });
+

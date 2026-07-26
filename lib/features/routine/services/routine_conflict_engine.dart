@@ -91,7 +91,7 @@ class RoutineConflictEngine {
           bool blocking = false;
           bool canKeepBoth = true;
 
-          if (isAUnavailable || isBUnavailable) {
+          if (isAUnavailable && isBUnavailable) {
             conflictType = RoutineConflictType.unavailableTime;
             blocking = true;
             canKeepBoth = false;
@@ -99,7 +99,7 @@ class RoutineConflictEngine {
             conflictType = RoutineConflictType.sleepConflict;
             blocking = true;
             canKeepBoth = false;
-          } else if (a.isHardBlock || b.isHardBlock) {
+          } else if (a.isHardBlock && b.isHardBlock) {
             conflictType = RoutineConflictType.hardBlockConflict;
             blocking = true;
             canKeepBoth = false; // Two hard blocks cannot be kept together

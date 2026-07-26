@@ -5,16 +5,101 @@ import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/profile_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
+
+enum OnboardingRecoveryTier {
+  tier1BundleFound,
+  tier2RebuiltFromDraft,
+  tier3Synthesized,
+  tier4ResetRequired,
+}
+
+class OnboardingCompletionResult {
+  final OnboardingRecoveryTier tier;
+  final OnboardingCompletionBundle? bundle;
+  final OnboardingDraft? draft;
+
+  const OnboardingCompletionResult({
+    required this.tier,
+    this.bundle,
+    this.draft,
+  });
+
+  bool get hasBundle => bundle != null;
+}
 
 class OnboardingCompletionService {
   const OnboardingCompletionService._();
 
+  static Future<OnboardingCompletionResult> recoverCompletionState({
+    required String uid,
+    required OnboardingRepository onboardingRepository,
+    required ProfileRepository profileRepository,
+    RoutineRepository? routineRepository,
+  }) async {
+    // Tier 1: Try fetching existing completion bundle
+    var bundle = await onboardingRepository.fetchCompletionBundle(uid);
+    if (bundle != null && bundle.uid == uid) {
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.tier1BundleFound,
+        bundle: bundle,
+      );
+    }
+
+    // Tier 2: Fetch onboarding draft and rebuild bundle
+    final draft = await onboardingRepository.fetchDraft(uid);
+    if (draft != null && draft.uid == uid) {
+      final completedDraft = draft.onboardingCompleted
+          ? draft
+          : draft.copyWith(
+              onboardingCompleted: true,
+              currentStep: OnboardingDraft.lastStepIndex,
+            );
+      if (!draft.onboardingCompleted) {
+        await onboardingRepository.saveDraft(completedDraft);
+      }
+      bundle = buildBundle(completedDraft);
+      await onboardingRepository.saveCompletionBundle(bundle);
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.tier2RebuiltFromDraft,
+        bundle: bundle,
+        draft: completedDraft,
+      );
+    }
+
+    // Tier 3: Inspect user profile and synthesize fallback bundle
+    final userProfile = await profileRepository.fetchUserProfile(uid);
+    if (userProfile != null) {
+      final synthesizedDraft = OnboardingDraft(uid: uid).copyWith(
+        onboardingCompleted: true,
+        currentStep: OnboardingDraft.lastStepIndex,
+      );
+      bundle = buildBundle(synthesizedDraft);
+      await onboardingRepository.saveDraft(synthesizedDraft);
+      await onboardingRepository.saveCompletionBundle(bundle);
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.tier3Synthesized,
+        bundle: bundle,
+        draft: synthesizedDraft,
+      );
+    }
+
+    // Tier 4: No artifacts found -> Reset input state to step 0
+    return const OnboardingCompletionResult(
+      tier: OnboardingRecoveryTier.tier4ResetRequired,
+    );
+  }
+
   static OnboardingCompletionBundle buildBundle(OnboardingDraft draft) {
     final now = DateTime.now();
     final preview = draft.buildFinalPreview();
-    final baseItems = draft.baseTimeline.blocks
-        .where((block) => !block.needsTimeConfirmation)
-        .toList();
+    final baseItems = mergeOverlappingEatingBlocks(
+      draft.baseTimeline.blocks
+          .where((block) => !block.needsTimeConfirmation)
+          .toList(),
+    );
 
     // We rebuild routine items per day to ensure no hard-block overlaps
     final routineItems = _scheduleRoutineItems(draft, baseItems, preview.items);
@@ -307,7 +392,9 @@ class OnboardingCompletionService {
       'createdAt': draft.createdAt?.toIso8601String() ?? now.toIso8601String(),
       'updatedAt': now.toIso8601String(),
       'source': OnboardingDraft.sourceOnboarding,
-      'onboardingCompleted': true,
+      'onboardingInputCompleted': true,
+      'onboardingProjectionStatus': 'pending',
+      'onboardingCompleted': false,
       'onboardingStep': OnboardingDraft.lastStepIndex,
       'lifeRole': draft.lifeRole.lifeRole ?? '',
       'workingExtra': draft.lifeRole.workType,

@@ -259,7 +259,9 @@ void main() {
   test('completed onboarding bundle hydrates local frontend state', () async {
     final container = ProviderContainer(
       overrides: [
-        habitSystemsRepositoryProvider.overrideWithValue(FakeHabitSystemsRepository()),
+        habitSystemsRepositoryProvider.overrideWithValue(
+          FakeHabitSystemsRepository(),
+        ),
       ],
     );
     addTearDown(container.dispose);
@@ -463,6 +465,16 @@ class _ImmediateAuthRepository implements AuthRepository {
 
   @override
   Future<String?> currentIdToken() async => 'firebase-token';
+
+  @override
+  Future<AuthUser> signInAnonymously() async => user;
+
+  @override
+  Future<AuthUser> linkAnonymousWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async => user;
 
   @override
   Future<AuthUser?> reloadCurrentUser() async => user;

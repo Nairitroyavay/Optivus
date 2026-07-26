@@ -105,10 +105,10 @@ class _LiquidGlassOnboardingIndicatorState
 
     final double fromCX = _cx(from);
     final double toCX = _cx(to);
-    final double leadT = Curves.easeInOut.transform(
+    final double leadT = Curves.easeInOutCubic.transform(
       (frac * 1.6).clamp(0.0, 1.0),
     );
-    final double lagT = Curves.easeInOut.transform(
+    final double lagT = Curves.easeInOutCubic.transform(
       ((frac - 0.35) * 1.6).clamp(0.0, 1.0),
     );
     final bool movingRight = to >= from;
@@ -208,7 +208,9 @@ class _LiquidGlassOnboardingIndicatorState
                     top: _trackH / 2 - _dotD / 2,
                     width: _dotD,
                     height: _dotD,
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeInOutCubic,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: widget.completedSteps[i]
@@ -389,18 +391,24 @@ class OnboardingStepShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final media = MediaQuery.of(context);
+    final keyboardOpen = media.viewInsets.bottom > 0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSmall = media.size.height < 600 || media.size.width < 600;
+    final responsiveHeaderH = isSmall ? 50.0 : headerHeight;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: false,
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              OptivusColors.onboardingTop,
-              OptivusColors.onboardingBottom,
-            ],
+            colors: isDark
+                ? [
+                    OptivusColors.onboardingDarkTop,
+                    OptivusColors.onboardingDarkBottom,
+                  ]
+                : [OptivusColors.onboardingTop, OptivusColors.onboardingBottom],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -414,14 +422,14 @@ class OnboardingStepShell extends StatelessWidget {
                 child: Column(
                   children: [
                     SizedBox(
-                      height: headerHeight,
+                      height: responsiveHeaderH,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             SizedBox(
-                              width: 32,
+                              width: 40,
                               child: topLeftOverlay != null
                                   ? Align(
                                       alignment: Alignment.centerLeft,
@@ -444,7 +452,7 @@ class OnboardingStepShell extends StatelessWidget {
                               ),
                             ),
                             SizedBox(
-                              width: 32,
+                              width: 40,
                               child: showSave
                                   ? Align(
                                       alignment: Alignment.centerRight,
@@ -462,7 +470,14 @@ class OnboardingStepShell extends StatelessWidget {
                       ),
                     ),
                     AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, animation) => SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, -0.3),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: FadeTransition(opacity: animation, child: child),
+                      ),
                       child: validationMessage == null
                           ? const SizedBox.shrink()
                           : Container(

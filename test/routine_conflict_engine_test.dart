@@ -94,7 +94,11 @@ void main() {
         title: 'Class Task',
         category: RoutineCategory.classBlock,
       );
-      final overlap = baseItem.copyWith(id: 'overlap1', title: 'Overlap Task');
+      final overlap = baseItem.copyWith(
+        id: 'overlap1',
+        title: 'Overlap Task',
+        category: RoutineCategory.classBlock,
+      );
       final conflicts = RoutineConflictEngine.detect([
         classTask,
         overlap,

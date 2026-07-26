@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
@@ -47,6 +49,145 @@ class OnboardingStep14 extends ConsumerWidget {
           .every((done) => done))
         const _MissingSetup('Unsaved setup steps', 0),
     ];
+
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape ||
+        MediaQuery.sizeOf(context).height < 500;
+
+    if (isLandscape) {
+      return OnboardingScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const OnboardingSectionTitle(
+              title: 'Today Is Ready',
+              subtitle:
+                  'Review the local onboarding setup before entering Optivus.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 14),
+            if (missing.isNotEmpty)
+              OnboardingGlassCard(
+                tint: OptivusColors.warning.withValues(alpha: 0.10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: OptivusColors.warning,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Missing required setup',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      missing.map((item) => item.label).join('\n'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: OptivusColors.textSecondary,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final item in missing)
+                          ActionChip(
+                            label: Text('Fix ${item.label}'),
+                            onPressed: onJumpToStep == null
+                                ? null
+                                : () => onJumpToStep!(item.step),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            if (missing.isNotEmpty) const SizedBox(height: 16),
+            OnboardingGlassCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Final preview',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 10),
+                  Text('Timeline blocks: ${draft.baseTimeline.blocks.length}'),
+                  Text(
+                    'Eating mode: ${draft.baseTimeline.eatingMode ?? "default"}',
+                  ),
+                  Text(
+                    'Skin care products: ${draft.baseTimeline.skinCareSelectedProductNames.length}',
+                  ),
+                  Text('Identity goals: ${draft.identityGoals.length}'),
+                ],
+              ),
+            ),
+            if (bundle.warnings.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              OnboardingGlassCard(
+                tint: OptivusColors.warning.withValues(alpha: 0.08),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Warnings',
+                      style: TextStyle(
+                        color: OptivusColors.warning,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(bundle.warnings.join('\n')),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            const OnboardingSectionTitle(
+              title: 'Today timeline preview',
+              subtitle: 'Generated blocks for your first day',
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 480,
+              child: OnboardingVerticalTimeline(
+                blocks: bundle.baseTimelineBlocks,
+                blockBuilder: (context, block) => OnboardingGlassCard(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        block.title,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

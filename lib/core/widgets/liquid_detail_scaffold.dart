@@ -42,7 +42,7 @@ class LiquidDetailScaffold extends StatelessWidget {
       body: SafeArea(
         bottom: false,
         child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverPadding(
               padding: padding,

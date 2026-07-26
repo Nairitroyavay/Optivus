@@ -1,4 +1,3 @@
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 
@@ -7,10 +6,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
 
   static HomeDashboardState _initialMockState() {
     return const HomeDashboardState(
-      identityFocus: IdentityFocus(
-        primaryIdentity: '',
-        primaryProof: '',
-      ),
+      identityFocus: IdentityFocus(primaryIdentity: '', primaryProof: ''),
       nowNextAction: null,
       missionSummary: HomeMissionSummary(
         percentage: 0.0,
@@ -29,7 +25,21 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
     );
   }
 
-  void completeCheckIn(String checkInId, String option) {
+  String? _ownerUid;
+
+  void setOwnerUid(String? uid) {
+    _ownerUid = uid;
+  }
+
+  void resetForSignedOut() {
+    _ownerUid = null;
+    state = _initialMockState();
+  }
+
+  void completeCheckIn(String checkInId, String option, {String? targetUid}) {
+    if (targetUid != null && _ownerUid != null && targetUid != _ownerUid) {
+      return;
+    }
     final newCheckIns = state.checkIns.map((item) {
       if (item.id == checkInId) {
         return item.copyWith(selectedOption: option);
@@ -40,13 +50,22 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
     state = state.copyWith(checkIns: newCheckIns);
   }
 
-  void completeTracker(String trackerId) {
+  void completeTracker(String trackerId, {String? targetUid}) {
+    if (targetUid != null && _ownerUid != null && targetUid != _ownerUid) {
+      return;
+    }
     // Mock update logic
   }
 
-  void cycleNowNextState() {
+  void cycleNowNextState({String? targetUid}) {
+    if (targetUid != null && _ownerUid != null && targetUid != _ownerUid) {
+      return;
+    }
     final types = NowActionType.values;
-    final currentIndex = types.indexOf(state.nowNextAction!.currentType);
+    final action = state.nowNextAction;
+    final currentIndex = action == null
+        ? -1
+        : types.indexOf(action.currentType);
     final nextIndex = (currentIndex + 1) % types.length;
     final nextType = types[nextIndex];
 

@@ -517,10 +517,7 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
           uid,
           () => {},
         );
-        final current = receipts[fromReceipt.id];
-        if (current == null) {
-          throw StateError('Routine projection receipt is missing.');
-        }
+        final current = receipts.putIfAbsent(fromReceipt.id, () => fromReceipt);
         final targetAlreadyReached =
             current.status == toReceipt.status &&
             current.cursor == toReceipt.cursor;

@@ -8,6 +8,7 @@ import '../../views/screens/signup_screen.dart';
 import '../../views/screens/verify_email_screen.dart';
 import '../../views/screens/loading_screen.dart';
 import '../../views/screens/app_shell.dart';
+import '../../features/recovery/screens/onboarding_recovery_screen.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import '../../state/auth_state.dart';
 import '../../state/app_state.dart';
@@ -84,7 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isVerifyRoute = state.uri.path == '/verify-email';
 
       // Still resolving auth/profile/onboarding draft state.
-      if (authState.isLoading || authState.backendRestoreFailed) {
+      if (authState.isLoading) {
         return state.uri.path == '/loading' ? null : '/loading';
       }
 
@@ -93,7 +94,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isSignedOutRoute ? null : '/';
       }
 
-      if (authState.emailUnverified) {
+      final userProfile = ref.read(mockUserProfileProvider);
+      final isProjectionFailed =
+          userProfile.onboardingProjectionStatus == 'failed' ||
+          authState.backendRestoreFailed ||
+          authState.onboardingFailureReason != null;
+
+      if (isProjectionFailed && authState.onboardingIncomplete != true) {
+        return state.uri.path == '/onboarding/recovery'
+            ? null
+            : '/onboarding/recovery';
+      }
+
+      final needsVerify =
+          authState.emailUnverified ||
+          (authState.user != null &&
+              authState.user!.providerId == 'password' &&
+              !authState.user!.emailVerified);
+
+      if (needsVerify) {
         return isVerifyRoute ? null : '/verify-email';
       }
 
@@ -101,19 +120,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         return authState.onboardingComplete ? '/app?tab=0' : '/onboarding';
       }
 
-      // 2. Signed in but onboarding not complete -> restricted to onboarding
-      final onboardingCompleted = ref
-          .read(mockUserProfileProvider)
-          .onboardingCompleted;
-      if (!onboardingCompleted || authState.onboardingIncomplete) {
+      // 2. Signed in: check onboarding input vs completion status
+      final onboardingInputCompleted = userProfile.onboardingInputCompleted;
+      final onboardingCompleted = userProfile.onboardingCompleted;
+
+      if (!onboardingInputCompleted || authState.onboardingIncomplete) {
         if (state.uri.path != '/onboarding') return '/onboarding';
+        return null;
+      }
+
+      if (onboardingInputCompleted && !onboardingCompleted) {
+        if (state.uri.path != '/onboarding/recovery' &&
+            state.uri.path != '/loading') {
+          return '/onboarding/recovery';
+        }
         return null;
       }
 
       // 3. Signed in & onboarding complete -> redirect away from auth/onboarding
       if (isSignedOutRoute ||
           state.uri.path == '/loading' ||
-          state.uri.path == '/onboarding') {
+          state.uri.path == '/onboarding' ||
+          state.uri.path == '/onboarding/recovery') {
         return '/app?tab=0';
       }
 
@@ -137,6 +165,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingFlow(),
+      ),
+      GoRoute(
+        path: '/onboarding/recovery',
+        builder: (context, state) => const OnboardingRecoveryScreen(),
       ),
       GoRoute(
         path: '/app',
