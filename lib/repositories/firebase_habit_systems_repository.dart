@@ -281,7 +281,12 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
     _validateSystemId(system.systemId);
 
     if (system.onboardingProjectionId == null) {
-      return const HabitSystemWriteResult.failure('Missing projection ID');
+      return HabitSystemWriteResult.failure(
+        'Missing projection ID',
+        expectedSystemIds: [system.systemId],
+        failedSystemIds: [system.systemId],
+        projectionStatus: 'failed',
+      );
     }
 
     final projectionRef = _firestore
@@ -346,9 +351,19 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
           }
         }
       });
-      return HabitSystemWriteResult.success(system);
+      return HabitSystemWriteResult.success(
+        system,
+        expectedSystemIds: [system.systemId],
+        appliedSystemIds: [system.systemId],
+        projectionStatus: 'completed',
+      );
     } catch (e) {
-      return HabitSystemWriteResult.failure(e.toString());
+      return HabitSystemWriteResult.failure(
+        'Habit system projection write failed',
+        expectedSystemIds: [system.systemId],
+        failedSystemIds: [system.systemId],
+        projectionStatus: 'failed',
+      );
     }
   }
 
@@ -378,7 +393,7 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
     final expectedIds = systems.map((s) => s.systemId).toList();
 
     try {
-      await _firestore.runTransaction((tx) async {
+      final outcome = await _firestore.runTransaction((tx) async {
         final projSnap = await tx.get(projectionRef);
         final systemSnaps = <String, DocumentSnapshot<Map<String, dynamic>>>{};
         for (final sys in systems) {
@@ -440,7 +455,8 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
             'status': status,
             'createdAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
-            'completedAt': FieldValue.serverTimestamp(),
+            if (status == 'completed')
+              'completedAt': FieldValue.serverTimestamp(),
             'schemaVersion': 1,
           };
           tx.set(projectionRef, receipt);
@@ -455,12 +471,35 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
               'completedAt': FieldValue.serverTimestamp(),
           });
         }
+
+        return _HabitProjectionBatchOutcome(
+          appliedSystemIds: appliedSystemIds,
+          failedSystemIds: failedSystemIds,
+          status: status,
+        );
       });
+      if (outcome.failedSystemIds.isNotEmpty) {
+        return HabitSystemWriteResult.failure(
+          'Habit system projection partially failed',
+          expectedSystemIds: expectedIds,
+          appliedSystemIds: outcome.appliedSystemIds,
+          failedSystemIds: outcome.failedSystemIds,
+          projectionStatus: outcome.status,
+        );
+      }
       return HabitSystemWriteResult.success(
         systems.isNotEmpty ? systems.first : null,
+        expectedSystemIds: expectedIds,
+        appliedSystemIds: outcome.appliedSystemIds,
+        projectionStatus: outcome.status,
       );
     } catch (e) {
-      return HabitSystemWriteResult.failure(e.toString());
+      return HabitSystemWriteResult.failure(
+        'Habit system projection batch failed',
+        expectedSystemIds: expectedIds,
+        failedSystemIds: expectedIds,
+        projectionStatus: 'failed',
+      );
     }
   }
 
@@ -472,4 +511,16 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
         .doc(FirestoreUserPaths.habitSystem(uid, systemId))
         .delete();
   }
+}
+
+class _HabitProjectionBatchOutcome {
+  final List<String> appliedSystemIds;
+  final List<String> failedSystemIds;
+  final String status;
+
+  const _HabitProjectionBatchOutcome({
+    required this.appliedSystemIds,
+    required this.failedSystemIds,
+    required this.status,
+  });
 }

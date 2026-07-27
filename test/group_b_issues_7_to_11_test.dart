@@ -115,6 +115,40 @@ void main() {
       expect(result.isValid, isFalse);
       expect(result.failureReason, contains('missing'));
     });
+
+    test('Validator fails when source item ID mismatches', () {
+      final bundle = _createTestBundle(uid: 'uid-7f', itemCount: 1);
+      final plan = RoutineOnboardingProjection.build(bundle);
+      final receipt = _createTestReceipt(uid: 'uid-7f', plan: plan);
+
+      final result = const RoutineProjectionReceiptValidator().validate(
+        receipt: receipt,
+        actualItems: [
+          plan.items.first.copyWith(onboardingSourceItemId: 'wrong-source'),
+        ],
+        ownerUid: 'uid-7f',
+        plan: plan,
+      );
+
+      expect(result.isValid, isFalse);
+      expect(result.failureReason, contains('source mismatch'));
+    });
+
+    test('Validator fails when Routine source is not onboarding', () {
+      final bundle = _createTestBundle(uid: 'uid-7g', itemCount: 1);
+      final plan = RoutineOnboardingProjection.build(bundle);
+      final receipt = _createTestReceipt(uid: 'uid-7g', plan: plan);
+
+      final result = const RoutineProjectionReceiptValidator().validate(
+        receipt: receipt,
+        actualItems: [plan.items.first.copyWith(source: RoutineSource.manual)],
+        ownerUid: 'uid-7g',
+        plan: plan,
+      );
+
+      expect(result.isValid, isFalse);
+      expect(result.failureReason, contains('source mismatch'));
+    });
   });
 
   group('Issue 8: Receipt storing all item categories', () {
@@ -181,6 +215,61 @@ void main() {
         expect(result.receipt.existingItemIds, contains(plan.items.first.id));
         expect(result.receipt.createdItemIds, hasLength(2));
         expect(result.receipt.projectedItemIds, hasLength(3));
+      },
+    );
+
+    test(
+      'completeOnboarding reprojects instead of noOp when an expected item is missing',
+      () async {
+        final db = FakeRoutineDatabase();
+        final repo = FakeOnboardingRepository(routineDatabase: db);
+        final bundle = _createTestBundle(uid: 'uid-8c', itemCount: 2);
+        final draft = _createCompletedDraft('uid-8c');
+        final plan = RoutineOnboardingProjection.build(bundle);
+
+        await repo.completeOnboarding(finalDraft: draft, bundle: bundle);
+        db.itemsByUid['uid-8c']!.remove(plan.items.first.id);
+
+        final retry = await repo.completeOnboarding(
+          finalDraft: draft,
+          bundle: bundle,
+        );
+
+        expect(retry.outcome, RoutineProjectionOutcome.projected);
+        expect(retry.receipt.createdItemIds, contains(plan.items.first.id));
+        expect(
+          db.itemsByUid['uid-8c']!.keys,
+          containsAll(plan.items.map((i) => i.id)),
+        );
+      },
+    );
+
+    test(
+      'completeOnboarding repairs corrupt existing projected items before receipt noOp',
+      () async {
+        final db = FakeRoutineDatabase();
+        final repo = FakeOnboardingRepository(routineDatabase: db);
+        final bundle = _createTestBundle(uid: 'uid-8d', itemCount: 1);
+        final draft = _createCompletedDraft('uid-8d');
+        final plan = RoutineOnboardingProjection.build(bundle);
+
+        await repo.completeOnboarding(finalDraft: draft, bundle: bundle);
+        db.itemsByUid['uid-8d']![plan.items.first.id] = plan.items.first
+            .copyWith(source: RoutineSource.manual);
+
+        final retry = await repo.completeOnboarding(
+          finalDraft: draft,
+          bundle: bundle,
+        );
+
+        final repaired = db.itemsByUid['uid-8d']![plan.items.first.id]!;
+        expect(retry.outcome, RoutineProjectionOutcome.projected);
+        expect(retry.receipt.repairedItemIds, contains(plan.items.first.id));
+        expect(repaired.source, RoutineSource.onboarding);
+        expect(
+          repaired.onboardingSourceItemId,
+          plan.items.first.onboardingSourceItemId,
+        );
       },
     );
   });

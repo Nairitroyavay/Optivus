@@ -170,6 +170,12 @@ void main() {
         );
 
         expect(result.success, isTrue);
+        expect(
+          result.expectedSystemIds,
+          equals(['sys_batch_1', 'sys_batch_2']),
+        );
+        expect(result.appliedSystemIds, equals(['sys_batch_1', 'sys_batch_2']));
+        expect(result.failedSystemIds, isEmpty);
 
         final savedSystems = await repo.fetchHabitSystems('user_batch');
         expect(savedSystems.length, equals(2));
@@ -222,6 +228,125 @@ void main() {
         final systems = await repo.fetchHabitSystems('user_hydration');
         expect(systems.isNotEmpty, isTrue);
         expect(systems.first.title, equals('Morning Exercise'));
+        expect(
+          container.read(habitSystemsNotifierProvider).systems,
+          isNotEmpty,
+        );
+      },
+    );
+
+    test(
+      'OnboardingFrontendHydrationService reloads Habit Systems after reconcile',
+      () async {
+        final habitRepo = _DelayedVisibilityHabitSystemsRepository();
+        final routineRepo = FakeRoutineRepository();
+        final container = ProviderContainer(
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            habitSystemsRepositoryProvider.overrideWithValue(habitRepo),
+            routineRepositoryProvider.overrideWithValue(routineRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final bundle = OnboardingCompletionBundle.fromMap({
+          'uid': 'user_hydration_reload',
+          'goodHabitTemplates': [
+            {
+              'id': 'g_reload_1',
+              'systemKey': 'deep_work',
+              'title': 'Deep Work',
+              'durationMinutes': 45,
+            },
+          ],
+        });
+
+        final projection = RoutineOnboardingProjection.build(bundle);
+        routineRepo.database.receiptsByUid.putIfAbsent(
+          'user_hydration_reload',
+          () => {},
+        )[projection.projectionId] = projection.receipt;
+
+        await const OnboardingFrontendHydrationService().hydrate(
+          read: container.read,
+          bundle: bundle,
+        );
+
+        final expectedIds = HabitSystemOnboardingProjection.build(
+          bundle,
+          projection.items,
+        ).map((system) => system.systemId).toSet();
+        final visibleIds = container
+            .read(habitSystemsNotifierProvider)
+            .systems
+            .map((system) => system.systemId)
+            .toSet();
+
+        expect(habitRepo.reconcileCalled, isTrue);
+        expect(habitRepo.fetchBeforeReconcileCount, equals(0));
+        expect(habitRepo.fetchAfterReconcileCount, greaterThanOrEqualTo(2));
+        expect(visibleIds, containsAll(expectedIds));
+      },
+    );
+
+    test(
+      'OnboardingFrontendHydrationService rejects partial habit projection',
+      () async {
+        final habitRepo = _PartialFailureHabitSystemsRepository();
+        final routineRepo = FakeRoutineRepository();
+        final container = ProviderContainer(
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            habitSystemsRepositoryProvider.overrideWithValue(habitRepo),
+            routineRepositoryProvider.overrideWithValue(routineRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final bundle = OnboardingCompletionBundle.fromMap({
+          'uid': 'user_hydration_partial',
+          'goodHabitTemplates': [
+            {
+              'id': 'g_partial_1',
+              'systemKey': 'reading',
+              'title': 'Reading',
+              'durationMinutes': 20,
+            },
+          ],
+        });
+
+        final projection = RoutineOnboardingProjection.build(bundle);
+        routineRepo.database.receiptsByUid.putIfAbsent(
+          'user_hydration_partial',
+          () => {},
+        )[projection.projectionId] = projection.receipt;
+
+        await expectLater(
+          const OnboardingFrontendHydrationService().hydrate(
+            read: container.read,
+            bundle: bundle,
+          ),
+          throwsA(
+            isA<HabitSystemProjectionFailureException>()
+                .having(
+                  (error) => error.code,
+                  'code',
+                  'habit_system_projection_write_failed',
+                )
+                .having(
+                  (error) => error.failedSystemIds,
+                  'failedSystemIds',
+                  isNotEmpty,
+                ),
+          ),
+        );
+
+        expect(habitRepo.reconcileCalled, isTrue);
+        expect(container.read(habitSystemsNotifierProvider).systems, isEmpty);
       },
     );
   });
@@ -403,4 +528,56 @@ void main() {
       expect(updatedRoutines.first.id, equals('r_freq'));
     });
   });
+}
+
+class _DelayedVisibilityHabitSystemsRepository
+    extends FakeHabitSystemsRepository {
+  bool reconcileCalled = false;
+  int fetchBeforeReconcileCount = 0;
+  int fetchAfterReconcileCount = 0;
+
+  @override
+  Future<List<HabitSystemRecord>> fetchHabitSystems(String uid) async {
+    if (!reconcileCalled) {
+      fetchBeforeReconcileCount++;
+      return const [];
+    }
+    fetchAfterReconcileCount++;
+    return super.fetchHabitSystems(uid);
+  }
+
+  @override
+  Future<HabitSystemWriteResult> reconcileProjectedSystems({
+    required String ownerUid,
+    required String projectionId,
+    required List<HabitSystemRecord> systems,
+  }) async {
+    reconcileCalled = true;
+    return super.reconcileProjectedSystems(
+      ownerUid: ownerUid,
+      projectionId: projectionId,
+      systems: systems,
+    );
+  }
+}
+
+class _PartialFailureHabitSystemsRepository extends FakeHabitSystemsRepository {
+  bool reconcileCalled = false;
+
+  @override
+  Future<HabitSystemWriteResult> reconcileProjectedSystems({
+    required String ownerUid,
+    required String projectionId,
+    required List<HabitSystemRecord> systems,
+  }) async {
+    reconcileCalled = true;
+    final expectedIds = systems.map((system) => system.systemId).toList();
+    return HabitSystemWriteResult.failure(
+      'partial',
+      expectedSystemIds: expectedIds,
+      appliedSystemIds: const [],
+      failedSystemIds: expectedIds,
+      projectionStatus: 'partial',
+    );
+  }
 }

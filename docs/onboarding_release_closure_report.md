@@ -3,7 +3,7 @@
 ## Verdict
 PARTIALLY_STABILIZED_RELEASE_BLOCKED
 
-The onboarding and account-restoration implementation is materially stabilized for the app-side automated gate, but the production release gate is not complete. Flutter formatting, analysis, full Flutter tests, and Firestore security rules now pass. Android release build, iOS build/configuration, and physical-device validation remain blocked, so this report must not be read as a final ship approval.
+The onboarding and account-restoration implementation is materially stabilized for the app-side automated gate, and Android release artifact generation is now unblocked. Flutter formatting, analysis, full Flutter tests, Firestore security rules, debug APK, and release APK now pass. iOS build/configuration and physical-device validation remain blocked, so this report must not be read as a final ship approval.
 
 ## Current Closure Update - 2026-07-27
 
@@ -33,13 +33,13 @@ This section supersedes the earlier baseline verdict for the work completed in t
 | `npm test` | Fails when run directly | The rules tests require Firestore emulator host discovery; direct Jest execution still fails before meaningful rule assertions. |
 | `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" PATH="/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin:$PATH" firebase emulators:exec --only firestore "npm test"` | Passed | Firestore emulator suite completed with 23/23 tests passing. |
 | `flutter build apk --debug` | Passed | Built `build/app/outputs/flutter-apk/app-debug.apk`; Kotlin Gradle Plugin migration warning remains. |
-| `flutter build apk --release` | Blocked / interrupted | Release build stalled after tree-shaking and was interrupted after a later 331.3s attempt with Gradle exit code 130; no release APK produced. |
+| `flutter build apk --release` | Passed | User-supplied terminal evidence shows the second release attempt completed in 178.4s and built `build/app/outputs/flutter-apk/app-release.apk` at 72.7 MB. Local artifact verified at 72,694,701 bytes, timestamp `2026-07-27 03:06:40 IST`, SHA-256 `4d1db9c9451d6d7772fa6bb490a11fb430b27b92121f049045208103b09a684a`. Kotlin Gradle Plugin migration warning remains. |
 | `flutter build ios --debug --simulator` | Failed before build | Flutter reported `Application not configured for iOS`; local Xcode setup is incomplete and CocoaPods is missing. |
 | Physical Android/iOS device gate | Not executed | `flutter devices` showed no physical Android or iOS runtime. |
 
 ### Current Release Decision
 
-Do not ship yet. Automated Flutter and Firestore security evidence is green, but production readiness still needs a successful Android release artifact, iOS project/toolchain restoration, and at least one real-device validation pass for account creation, onboarding completion, cold restart restoration, partial-failure recovery, sign-out/sign-in isolation, and account restoration.
+Do not ship yet. Automated Flutter, Firestore security, and Android APK artifact evidence is green, but production readiness still needs iOS project/toolchain restoration and at least one real-device validation pass for account creation, onboarding completion, cold restart restoration, partial-failure recovery, sign-out/sign-in isolation, and account restoration.
 
 ## Current Re-Audit Baseline - 2026-07-27
 

@@ -40,14 +40,36 @@ class HabitSystemWriteResult {
   final bool success;
   final HabitSystemRecord? system;
   final String? error;
+  final List<String> expectedSystemIds;
+  final List<String> appliedSystemIds;
+  final List<String> failedSystemIds;
+  final String? projectionStatus;
 
-  const HabitSystemWriteResult.success(this.system)
-    : success = true,
-      error = null;
+  const HabitSystemWriteResult.success(
+    this.system, {
+    this.expectedSystemIds = const [],
+    this.appliedSystemIds = const [],
+    this.failedSystemIds = const [],
+    this.projectionStatus,
+  }) : success = true,
+       error = null;
 
-  const HabitSystemWriteResult.failure(this.error)
-    : success = false,
-      system = null;
+  const HabitSystemWriteResult.failure(
+    this.error, {
+    this.expectedSystemIds = const [],
+    this.appliedSystemIds = const [],
+    this.failedSystemIds = const [],
+    this.projectionStatus,
+  }) : success = false,
+       system = null;
+
+  bool get hasProjectionMetadata =>
+      expectedSystemIds.isNotEmpty ||
+      appliedSystemIds.isNotEmpty ||
+      failedSystemIds.isNotEmpty ||
+      projectionStatus != null;
+
+  bool get hasProjectionFailures => failedSystemIds.isNotEmpty;
 }
 
 class RetryPayload {

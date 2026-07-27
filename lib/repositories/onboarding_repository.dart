@@ -9,6 +9,7 @@ import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/routine_firestore_codec.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/services/routine_projection_receipt_validator.dart';
 
 import 'package:optivus/core/utils/debouncer.dart';
 
@@ -97,14 +98,26 @@ class FakeOnboardingRepository implements OnboardingRepository {
         routineDatabase.receiptsByUid[bundle.uid]?[plan.projectionId];
     final existingDraft = _drafts[bundle.uid];
     final existingBundle = _bundles[bundle.uid];
+    final existingItems = routineDatabase.itemsByUid[bundle.uid] ?? const {};
     if (existingReceipt != null &&
         existingDraft != null &&
         existingBundle != null &&
         existingReceipt.sourceBundleFingerprint == plan.fingerprint) {
-      return RoutineProjectionResult(
-        outcome: RoutineProjectionOutcome.noOp,
+      final validation = const RoutineProjectionReceiptValidator().validate(
         receipt: existingReceipt,
+        actualItems: [
+          for (final item in plan.items)
+            if (existingItems[item.id] != null) existingItems[item.id]!,
+        ],
+        ownerUid: bundle.uid,
+        plan: plan,
       );
+      if (validation.isValid) {
+        return RoutineProjectionResult(
+          outcome: RoutineProjectionOutcome.noOp,
+          receipt: existingReceipt,
+        );
+      }
     }
 
     final nextDrafts = Map<String, OnboardingDraft>.from(_drafts);
@@ -122,9 +135,26 @@ class FakeOnboardingRepository implements OnboardingRepository {
     final failedItemIds = <String>[];
     const codec = RoutineTemplateFirestoreCodec();
     for (final item in plan.items) {
-      if (userItems.containsKey(item.id)) {
-        existingItemIds.add(item.id);
-        continue;
+      final existingItem = userItems[item.id];
+      if (existingItem != null) {
+        if (_isExpectedProjectedRoutineItem(
+          actualItem: existingItem,
+          expectedItem: item,
+          ownerUid: bundle.uid,
+          projectionId: plan.projectionId,
+        )) {
+          existingItemIds.add(item.id);
+          continue;
+        }
+        try {
+          codec.toFirestore(ownerUid: bundle.uid, item: item);
+          userItems[item.id] = item;
+          repairedItemIds.add(item.id);
+          continue;
+        } catch (_) {
+          failedItemIds.add(item.id);
+          continue;
+        }
       }
       try {
         codec.toFirestore(ownerUid: bundle.uid, item: item);
@@ -165,6 +195,21 @@ class FakeOnboardingRepository implements OnboardingRepository {
   OnboardingCompletionBundle? savedCompletionBundle(String uid) {
     return _bundles[uid];
   }
+}
+
+bool _isExpectedProjectedRoutineItem({
+  required RoutineItem actualItem,
+  required RoutineItem expectedItem,
+  required String ownerUid,
+  required String projectionId,
+}) {
+  return actualItem.id == expectedItem.id &&
+      actualItem.userId == ownerUid &&
+      actualItem.onboardingProjectionId == projectionId &&
+      actualItem.onboardingSourceItemId ==
+          expectedItem.onboardingSourceItemId &&
+      actualItem.source == RoutineSource.onboarding &&
+      actualItem.schemaVersion == RoutineItem.currentSchemaVersion;
 }
 
 class FirestoreOnboardingRepository implements OnboardingRepository {
@@ -279,6 +324,10 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
         final draftSnapshot = await transaction.get(draftReference);
         final bundleSnapshot = await transaction.get(bundleReference);
         final profileSnapshot = await transaction.get(profileReference);
+        final itemSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+        for (final reference in itemReferences) {
+          itemSnapshots.add(await transaction.get(reference));
+        }
 
         if (receiptSnapshot.exists &&
             draftSnapshot.exists &&
@@ -297,17 +346,24 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
                 false;
             if (inputCompleted &&
                 receipt.sourceBundleFingerprint == plan.fingerprint) {
-              return RoutineProjectionResult(
-                outcome: RoutineProjectionOutcome.noOp,
-                receipt: receipt,
-              );
+              final validation = const RoutineProjectionReceiptValidator()
+                  .validate(
+                    receipt: receipt,
+                    actualItems: _routineItemsFromSnapshots(
+                      itemSnapshots,
+                      _routineCodec,
+                    ),
+                    ownerUid: bundle.uid,
+                    plan: plan,
+                  );
+              if (validation.isValid) {
+                return RoutineProjectionResult(
+                  outcome: RoutineProjectionOutcome.noOp,
+                  receipt: receipt,
+                );
+              }
             }
           }
-        }
-
-        final itemSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
-        for (final reference in itemReferences) {
-          itemSnapshots.add(await transaction.get(reference));
         }
 
         transaction.set(
@@ -342,8 +398,33 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
         for (var index = 0; index < plan.items.length; index++) {
           final item = plan.items[index];
           if (itemSnapshots[index].exists) {
-            existingItemIds.add(item.id);
-            continue;
+            final existingItem = _routineItemFromSnapshot(
+              itemSnapshots[index],
+              _routineCodec,
+            );
+            if (existingItem != null &&
+                _isExpectedProjectedRoutineItem(
+                  actualItem: existingItem,
+                  expectedItem: item,
+                  ownerUid: bundle.uid,
+                  projectionId: plan.projectionId,
+                )) {
+              existingItemIds.add(item.id);
+              continue;
+            }
+            try {
+              final data = _routineCodec.toFirestore(
+                ownerUid: bundle.uid,
+                item: item,
+              );
+              data['updatedAt'] = FieldValue.serverTimestamp();
+              transaction.set(itemReferences[index], data);
+              repairedItemIds.add(item.id);
+              continue;
+            } catch (_) {
+              failedItemIds.add(item.id);
+              continue;
+            }
           }
           try {
             final data = _routineCodec.toFirestore(
@@ -386,6 +467,34 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
     } catch (error) {
       throw RoutineProjectionRetryRequiredException(error);
     }
+  }
+}
+
+List<RoutineItem> _routineItemsFromSnapshots(
+  List<DocumentSnapshot<Map<String, dynamic>>> snapshots,
+  RoutineTemplateFirestoreCodec codec,
+) {
+  final items = <RoutineItem>[];
+  for (final snapshot in snapshots) {
+    final item = _routineItemFromSnapshot(snapshot, codec);
+    if (item != null) {
+      items.add(item);
+    }
+  }
+  return items;
+}
+
+RoutineItem? _routineItemFromSnapshot(
+  DocumentSnapshot<Map<String, dynamic>> snapshot,
+  RoutineTemplateFirestoreCodec codec,
+) {
+  if (!snapshot.exists) return null;
+  final data = snapshot.data();
+  if (data == null) return null;
+  try {
+    return codec.fromFirestore(documentId: snapshot.id, data: data);
+  } catch (_) {
+    return null;
   }
 }
 

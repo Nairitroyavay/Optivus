@@ -147,7 +147,12 @@ class FakeHabitSystemsRepository implements HabitSystemsRepository {
       userMap[system.systemId] = system;
       _notify(uid);
     }
-    return HabitSystemWriteResult.success(system);
+    return HabitSystemWriteResult.success(
+      system,
+      expectedSystemIds: [system.systemId],
+      appliedSystemIds: [system.systemId],
+      projectionStatus: 'completed',
+    );
   }
 
   @override
@@ -157,6 +162,8 @@ class FakeHabitSystemsRepository implements HabitSystemsRepository {
     required List<HabitSystemRecord> systems,
   }) async {
     final userMap = _storage.putIfAbsent(ownerUid, () => {});
+    final expectedSystemIds = systems.map((system) => system.systemId).toList();
+    final appliedSystemIds = <String>[];
     for (final system in systems) {
       if (system.ownerUid != ownerUid) {
         throw ArgumentError('System ownerUid does not match target ownerUid.');
@@ -168,10 +175,14 @@ class FakeHabitSystemsRepository implements HabitSystemsRepository {
       if (!userMap.containsKey(system.systemId)) {
         userMap[system.systemId] = system;
       }
+      appliedSystemIds.add(system.systemId);
     }
     _notify(ownerUid);
     return HabitSystemWriteResult.success(
       systems.isNotEmpty ? systems.first : null,
+      expectedSystemIds: expectedSystemIds,
+      appliedSystemIds: appliedSystemIds,
+      projectionStatus: 'completed',
     );
   }
 

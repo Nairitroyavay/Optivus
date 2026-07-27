@@ -40,10 +40,16 @@ class RoutineProjectionFailureException implements Exception {
 class RoutineOnboardingEventProjectionResult {
   final String projectionId;
   final int attemptedCount;
+  final List<String> expectedEventIds;
+  final List<String> appliedEventIds;
+  final List<String> failedEventIds;
 
   const RoutineOnboardingEventProjectionResult({
     required this.projectionId,
     required this.attemptedCount,
+    this.expectedEventIds = const [],
+    this.appliedEventIds = const [],
+    this.failedEventIds = const [],
   });
 }
 
@@ -77,12 +83,14 @@ class RoutineOnboardingEventProjector {
         id: plan.projectionId,
         ownerUid: bundle.uid,
         sourceBundleSchemaVersion: OnboardingCompletionBundle.schemaVersion,
-        sourceBundleId: bundle.uid,
+        sourceBundleId: plan.sourceBundleId,
         sourceBundleFingerprint: plan.fingerprint,
+        expectedItemIds: plan.items.map((i) => i.id).toList(),
         status: 'pending',
         cursor: 0,
         totalCount: plan.items.length,
         createdItemIds: plan.items.map((i) => i.id).toList(),
+        projectedItemIds: plan.items.map((i) => i.id).toList(),
         createdAt: now,
         updatedAt: now,
       );
@@ -129,19 +137,6 @@ class RoutineOnboardingEventProjector {
       );
     }
 
-    if (receipt.status == 'completed') {
-      if (receipt.cursor != receipt.totalCount) {
-        throw const RoutineProjectionFailureException(
-          reason: RoutineProjectionFailureReason.invalidCursor,
-          message: 'Completed receipt cursor mismatch.',
-        );
-      }
-      return RoutineOnboardingEventProjectionResult(
-        projectionId: plan.projectionId,
-        attemptedCount: 0,
-      );
-    }
-
     final itemById = {for (final item in plan.items) item.id: item};
     final targetIds = receipt.createdItemIds.isNotEmpty
         ? receipt.createdItemIds
@@ -158,6 +153,23 @@ class RoutineOnboardingEventProjector {
           occurredAt: receipt.createdAt,
         ),
     ];
+    final expectedEventIds = events.map((event) => event.eventId).toList()
+      ..sort();
+
+    if (receipt.status == 'completed') {
+      if (receipt.cursor != receipt.totalCount) {
+        throw const RoutineProjectionFailureException(
+          reason: RoutineProjectionFailureReason.invalidCursor,
+          message: 'Completed receipt cursor mismatch.',
+        );
+      }
+      return RoutineOnboardingEventProjectionResult(
+        projectionId: plan.projectionId,
+        attemptedCount: 0,
+        expectedEventIds: expectedEventIds,
+        appliedEventIds: expectedEventIds,
+      );
+    }
 
     final transactionRepository = read(routineTransactionRepositoryProvider);
     final createdEventsOffset = receipt.createdItemIds.isNotEmpty
@@ -229,9 +241,13 @@ class RoutineOnboardingEventProjector {
       currentReceipt = nextReceipt;
     }
 
+    final appliedEventIds = events.map((event) => event.eventId).toList()
+      ..sort();
     return RoutineOnboardingEventProjectionResult(
       projectionId: plan.projectionId,
       attemptedCount: attempted,
+      expectedEventIds: expectedEventIds,
+      appliedEventIds: appliedEventIds,
     );
   }
 
@@ -260,11 +276,14 @@ class RoutineOnboardingEventProjector {
       operationKey: 'onboarding_${operationKey.substring(0, 40)}',
       source: 'onboarding',
       occurredAt: occurredAt.toUtc(),
-      itemSnapshot: _boundedHistorySnapshot(item, ownerUid),
+      itemSnapshot: _boundedHistorySnapshot(item, projectionId),
     );
   }
 
-  Map<String, dynamic> _boundedHistorySnapshot(RoutineItem item, String uid) {
+  Map<String, dynamic> _boundedHistorySnapshot(
+    RoutineItem item,
+    String projectionId,
+  ) {
     return {
       'id': item.id,
       'title': item.title,
@@ -273,7 +292,7 @@ class RoutineOnboardingEventProjector {
       'blockType': item.blockType.name,
       'trackerTaskType': item.trackerType.name,
       'hardBlock': item.hardBlock,
-      'onboardingProjectionId': 'onboarding-initial-v1',
+      'onboardingProjectionId': projectionId,
     };
   }
 

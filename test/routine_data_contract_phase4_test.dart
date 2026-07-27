@@ -404,7 +404,7 @@ void main() {
     });
 
     test(
-      'retry with same fingerprint preserves deletion while changed fingerprint re-projects',
+      'retry with same fingerprint repairs deletion while changed fingerprint re-projects',
       () async {
         final harness = await _projectedHarness('user-a');
         final original = (await harness.routines.fetchRoutineItems(
@@ -412,13 +412,16 @@ void main() {
         )).single;
         await harness.routines.deleteRoutineItem('user-a', original.id);
 
-        // Retry with same draft/bundle (matching fingerprint) returns noOp and preserves deletion
+        // Retry with same draft/bundle restores the expected projected item.
         final retryResult = await harness.onboarding.completeOnboarding(
           finalDraft: harness.draft,
           bundle: harness.bundle,
         );
-        expect(retryResult.outcome, RoutineProjectionOutcome.noOp);
-        expect(await harness.routines.fetchRoutineItems('user-a'), isEmpty);
+        expect(retryResult.outcome, RoutineProjectionOutcome.projected);
+        expect(
+          await harness.routines.fetchRoutineItems('user-a'),
+          hasLength(1),
+        );
 
         // Rebuilt draft with changed fingerprint triggers re-projection
         final changedDraft = _completedDraft(
