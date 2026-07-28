@@ -138,18 +138,35 @@ class RoutineOnboardingEventProjector {
     }
 
     final itemById = {for (final item in plan.items) item.id: item};
-    final targetIds = receipt.createdItemIds.isNotEmpty
-        ? receipt.createdItemIds
-        : receipt.projectedItemIds;
+    
+    // Fallback if legacy receipt format is used
+    final useProjectedFallback = receipt.createdItemIds.isEmpty && receipt.repairedItemIds.isEmpty && receipt.projectedItemIds.isNotEmpty;
+    
+    final createdTargetIds = useProjectedFallback ? receipt.projectedItemIds : receipt.createdItemIds;
     final createdIds =
-        targetIds.where(itemById.containsKey).toSet().toList(growable: false)
+        createdTargetIds.where(itemById.containsKey).toSet().toList(growable: false)
           ..sort();
+          
+    final repairedTargetIds = useProjectedFallback ? const <String>[] : receipt.repairedItemIds;
+    final repairedIds = 
+        repairedTargetIds.where(itemById.containsKey).toSet().toList(growable: false)
+          ..sort();
+
     final events = [
       for (final itemId in createdIds)
-        _createdEvent(
+        _eventRecord(
           ownerUid: bundle.uid,
           projectionId: plan.projectionId,
           item: itemById[itemId]!,
+          eventType: RoutineEventType.created,
+          occurredAt: receipt.createdAt,
+        ),
+      for (final itemId in repairedIds)
+        _eventRecord(
+          ownerUid: bundle.uid,
+          projectionId: plan.projectionId,
+          item: itemById[itemId]!,
+          eventType: RoutineEventType.edited,
           occurredAt: receipt.createdAt,
         ),
     ];
@@ -253,28 +270,33 @@ class RoutineOnboardingEventProjector {
     );
   }
 
-  RoutineEventRecord _createdEvent({
+  RoutineEventRecord _eventRecord({
     required String ownerUid,
     required String projectionId,
     required RoutineItem item,
+    required RoutineEventType eventType,
     required DateTime occurredAt,
   }) {
-    final operationKey = _stableId('onboarding-created-operation-v1', [
+    final operationPrefix = eventType == RoutineEventType.created 
+        ? 'onboarding-created-operation-v1' 
+        : 'onboarding-edited-operation-v1';
+        
+    final operationKey = _stableId(operationPrefix, [
       ownerUid,
       projectionId,
       item.id,
-      RoutineEventType.created.name,
+      eventType.name,
     ]);
     final eventId = _stableId('routine-event-v1', [
       operationKey,
       item.id,
-      RoutineEventType.created.name,
+      eventType.name,
     ]);
     return RoutineEventRecord(
       eventId: 'evt_${eventId.substring(0, 40)}',
       ownerUid: ownerUid,
       routineItemId: item.id,
-      eventType: RoutineEventType.created,
+      eventType: eventType,
       operationKey: 'onboarding_${operationKey.substring(0, 40)}',
       source: 'onboarding',
       occurredAt: occurredAt.toUtc(),

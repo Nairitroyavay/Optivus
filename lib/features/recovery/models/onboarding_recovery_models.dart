@@ -51,18 +51,7 @@ class RebuildBundleFromDraftAction extends OnboardingRecoveryAction {
   Future<void> execute(Ref ref, String uid) async {}
 }
 
-class SynthesizeBundleAction extends OnboardingRecoveryAction {
-  const SynthesizeBundleAction()
-    : super(
-        actionId: 'synthesize_bundle',
-        label: 'Restore Default Setup',
-        description:
-            'Synthesize a baseline setup plan and complete configuration.',
-      );
 
-  @override
-  Future<void> execute(Ref ref, String uid) async {}
-}
 
 class RestartOnboardingInputAction extends OnboardingRecoveryAction {
   const RestartOnboardingInputAction()

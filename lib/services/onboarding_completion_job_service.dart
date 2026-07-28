@@ -108,9 +108,19 @@ class OnboardingCompletionJobService {
           clearLastError: true,
         );
         await _saveJobStatus(job);
+        
+        void checkSession() {
+          if (reader != null) {
+            final profile = reader(mockUserProfileProvider);
+            if (profile.uid.isNotEmpty && profile.uid != uid) {
+              throw StateError('Job cancelled due to sign-out or account switch.');
+            }
+          }
+        }
 
         try {
           // Stage 1: PERSIST_DRAFT
+          checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.persistDraft)) {
             job = await _beginStage(
               job,
@@ -118,6 +128,12 @@ class OnboardingCompletionJobService {
             );
 
             await onboardingRepository.saveDraft(finalDraft);
+            
+            final readbackDraft = await onboardingRepository.fetchDraft(uid);
+            if (readbackDraft == null || readbackDraft.schemaVersion != finalDraft.schemaVersion) {
+              throw StateError('Draft read-back verification failed.');
+            }
+            
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.persistDraft.name] = true;
             job = job.copyWith(stagesCompleted: nextCompleted);
@@ -125,6 +141,7 @@ class OnboardingCompletionJobService {
           }
 
           // Stage 2: PERSIST_BUNDLE
+          checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.persistBundle)) {
             job = await _beginStage(
               job,
@@ -132,6 +149,12 @@ class OnboardingCompletionJobService {
             );
 
             await onboardingRepository.saveCompletionBundle(bundle);
+            
+            final readbackBundle = await onboardingRepository.fetchCompletionBundle(uid);
+            if (readbackBundle == null || readbackBundle.schemaVersion != bundle.schemaVersion) {
+              throw StateError('Bundle read-back verification failed.');
+            }
+            
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.persistBundle.name] = true;
             job = job.copyWith(stagesCompleted: nextCompleted);
@@ -139,6 +162,7 @@ class OnboardingCompletionJobService {
           }
 
           // Stage 3: PROJECT_ROUTINES
+          checkSession();
           if (!job.isStageCompleted(
             OnboardingCompletionStage.projectRoutines,
           )) {
@@ -147,17 +171,27 @@ class OnboardingCompletionJobService {
               OnboardingCompletionStage.projectRoutines,
             );
 
-            await onboardingRepository.completeOnboarding(
+            final projectionResult = await onboardingRepository.completeOnboarding(
               finalDraft: finalDraft,
               bundle: bundle,
             );
+            
+            final receipt = projectionResult.receipt;
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.projectRoutines.name] = true;
-            job = job.copyWith(stagesCompleted: nextCompleted);
+            job = job.copyWith(
+              stagesCompleted: nextCompleted,
+              expectedRoutineIds: receipt.expectedItemIds,
+              appliedRoutineIds: receipt.createdItemIds,
+              existingRoutineIds: receipt.existingItemIds,
+              repairedRoutineIds: receipt.repairedItemIds,
+              failedRoutineIds: receipt.failedItemIds,
+            );
             await _saveJobStatus(job);
           }
 
           // Stage 4: PROJECT_HABITS
+          checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.projectHabits)) {
             job = await _beginStage(
               job,
@@ -165,9 +199,14 @@ class OnboardingCompletionJobService {
             );
 
             if (reader != null) {
-              await const OnboardingFrontendHydrationService().hydrate(
+              final hydrationResult = await const OnboardingFrontendHydrationService().hydrate(
                 read: reader,
                 bundle: bundle,
+              );
+              job = job.copyWith(
+                expectedHabitIds: hydrationResult.expectedHabitSystemIds,
+                appliedHabitIds: hydrationResult.appliedHabitSystemIds,
+                failedHabitIds: hydrationResult.failedHabitSystemIds,
               );
             } else if (requireFrontendHydration) {
               throw StateError(
@@ -181,6 +220,7 @@ class OnboardingCompletionJobService {
           }
 
           // Stage 5: UPDATE_PROFILE
+          checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.updateProfile)) {
             job = await _beginStage(
               job,
@@ -268,6 +308,7 @@ class OnboardingCompletionJobService {
           }
 
           // Stage 6: COMPLETE_JOB
+          checkSession();
           job = job.copyWith(
             status: OnboardingJobStatus.completed,
             stage: OnboardingCompletionStage.completed,
@@ -276,11 +317,15 @@ class OnboardingCompletionJobService {
           await _saveJobStatus(job);
           return job;
         } catch (e) {
+          final isStateError = e is StateError;
           job = job.copyWith(
             status: OnboardingJobStatus.failed,
             retryCount: job.retryCount + 1,
             lastError: e.toString(),
-            updatedAt: DateTime.now(),
+            lastFailureCode: isStateError ? 'state_error' : 'unhandled_exception',
+            lastFailureStage: job.stage.name,
+            lastFailureOccurredAt: DateTime.now(),
+            diagnosticCategory: isStateError ? 'validation_failed' : 'execution_failed',
           );
           await _saveJobStatus(job);
           rethrow;
@@ -339,6 +384,11 @@ class OnboardingCompletionJobService {
     OnboardingCompletionJob job,
     OnboardingCompletionStage stage,
   ) async {
+    if (job.stage.index > stage.index && job.stage != OnboardingCompletionStage.completed) {
+      throw StateError(
+        'Monotonicity violation: Cannot move back from ${job.stage.name} to ${stage.name}',
+      );
+    }
     final next = job.copyWith(
       status: OnboardingJobStatus.inProgress,
       stage: stage,

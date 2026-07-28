@@ -12,7 +12,6 @@ import 'package:optivus/repositories/routine_repository.dart';
 enum OnboardingRecoveryTier {
   tier1BundleFound,
   tier2RebuiltFromDraft,
-  tier3Synthesized,
   tier4ResetRequired,
 }
 
@@ -51,57 +50,17 @@ class OnboardingCompletionService {
     // Tier 2: Fetch onboarding draft and rebuild bundle
     final draft = await onboardingRepository.fetchDraft(uid);
     if (draft != null && draft.uid == uid) {
-      final completedDraft = draft.onboardingCompleted
-          ? draft
-          : draft.copyWith(
-              onboardingCompleted: true,
-              currentStep: OnboardingDraft.lastStepIndex,
-            );
-      if (!draft.onboardingCompleted) {
-        await onboardingRepository.saveDraft(completedDraft);
+      if (draft.onboardingCompleted) {
+        bundle = buildBundle(draft);
+        await onboardingRepository.saveCompletionBundle(bundle);
+        return OnboardingCompletionResult(
+          tier: OnboardingRecoveryTier.tier2RebuiltFromDraft,
+          bundle: bundle,
+          draft: draft,
+        );
       }
-      bundle = buildBundle(completedDraft);
-      await onboardingRepository.saveCompletionBundle(bundle);
-      return OnboardingCompletionResult(
-        tier: OnboardingRecoveryTier.tier2RebuiltFromDraft,
-        bundle: bundle,
-        draft: completedDraft,
-      );
-    }
-
-    // Tier 3: Inspect user profile and synthesize fallback bundle
-    final userProfile = await profileRepository.fetchUserProfile(uid);
-    if (userProfile != null) {
-      final synthesizedDraft =
-          OnboardingDraft(
-            uid: uid,
-            baseTimeline: const BaseTimelineDraft(
-              skinCareSkipped: true,
-              blocks: [
-                TimelineBlockDraft(
-                  id: 'eating_lunch',
-                  section: 'eating',
-                  title: 'Lunch',
-                  blockType: 'softBlock',
-                  startMinute: 720,
-                  endMinute: 750,
-                  repeatDays: [1, 2, 3, 4, 5],
-                  needsTimeConfirmation: false,
-                ),
-              ],
-            ).withRequiredFixedBlocks(),
-          ).copyWith(
-            onboardingCompleted: true,
-            currentStep: OnboardingDraft.lastStepIndex,
-          );
-      bundle = buildBundle(synthesizedDraft);
-      await onboardingRepository.saveDraft(synthesizedDraft);
-      await onboardingRepository.saveCompletionBundle(bundle);
-      return OnboardingCompletionResult(
-        tier: OnboardingRecoveryTier.tier3Synthesized,
-        bundle: bundle,
-        draft: synthesizedDraft,
-      );
+      // Draft is incomplete. We cannot rebuild a bundle.
+      // Do not synthesize or fake completion. Fall through to reset.
     }
 
     // Tier 4: No artifacts found -> Reset input state to step 0

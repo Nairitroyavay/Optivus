@@ -927,11 +927,9 @@ service cloud.firestore {
     function validUserProfileKeys(data) {
       return data.keys().hasOnly([
         "uid",
-        "id",
         "email",
         "displayName",
-        "name",
-        "timezone",
+        "accountStatus",
         "createdAt",
         "updatedAt",
         "schemaVersion",
@@ -939,12 +937,6 @@ service cloud.firestore {
         "onboardingProjectionStatus",
         "onboardingCompleted",
         "onboardingStep",
-        "lastDayClosed",
-        "coachName",
-        "coachStyle",
-        "accountabilityMode",
-        "notificationSettings",
-        "accountStatus",
         "lifeRole",
         "workingExtra",
         "businessMode",
@@ -959,27 +951,24 @@ service cloud.firestore {
         "bmiEstimate",
         "calorieEstimate",
         "proteinEstimate",
+        "coachName",
+        "coachStyle",
         "slipUpStyle"
       ]);
     }
 
     function validUserProfile(data, uid) {
       return validUserProfileKeys(data)
-        && (data.uid == uid || data.id == uid)
+        && data.uid == uid
         && data.email is string
         && data.email.size() > 0
         && data.email.size() <= 320
         && (!data.keys().hasAny(["displayName"]) || (data.displayName is string && data.displayName.size() <= 200))
-        && (!data.keys().hasAny(["name"]) || (data.name is string && data.name.size() <= 200))
+        && (!data.keys().hasAny(["accountStatus"]) || (data.accountStatus is string && data.accountStatus.size() <= 50))
         && (!data.keys().hasAny(["onboardingCompleted"]) || data.onboardingCompleted is bool)
         && (!data.keys().hasAny(["onboardingInputCompleted"]) || data.onboardingInputCompleted is bool)
         && (!data.keys().hasAny(["onboardingProjectionStatus"]) || (data.onboardingProjectionStatus is string && data.onboardingProjectionStatus.size() <= 50))
         && (!data.keys().hasAny(["onboardingStep"]) || data.onboardingStep is int)
-        && (!data.keys().hasAny(["timezone"]) || (data.timezone is string && data.timezone.size() <= 100))
-        && (!data.keys().hasAny(["coachName"]) || (data.coachName is string && data.coachName.size() <= 100))
-        && (!data.keys().hasAny(["coachStyle"]) || (data.coachStyle is string && data.coachStyle.size() <= 50))
-        && (!data.keys().hasAny(["accountabilityMode"]) || (data.accountabilityMode is string && data.accountabilityMode.size() <= 50))
-        && (!data.keys().hasAny(["accountStatus"]) || (data.accountStatus is string && data.accountStatus.size() <= 50))
         && (!data.keys().hasAny(["lifeRole"]) || (data.lifeRole is map || (data.lifeRole is string && data.lifeRole.size() <= 100)))
         && (!data.keys().hasAny(["workingExtra"]) || (data.workingExtra is bool || (data.workingExtra is string && data.workingExtra.size() <= 100)))
         && (!data.keys().hasAny(["businessMode"]) || (data.businessMode is bool || (data.businessMode is string && data.businessMode.size() <= 100)))
@@ -994,9 +983,9 @@ service cloud.firestore {
         && (!data.keys().hasAny(["bmiEstimate"]) || (data.bmiEstimate is number || (data.bmiEstimate is string && data.bmiEstimate.size() <= 50)))
         && (!data.keys().hasAny(["calorieEstimate"]) || data.calorieEstimate is number)
         && (!data.keys().hasAny(["proteinEstimate"]) || data.proteinEstimate is number)
+        && (!data.keys().hasAny(["coachName"]) || (data.coachName is string && data.coachName.size() <= 100))
+        && (!data.keys().hasAny(["coachStyle"]) || (data.coachStyle is string && data.coachStyle.size() <= 50))
         && (!data.keys().hasAny(["slipUpStyle"]) || (data.slipUpStyle is string && data.slipUpStyle.size() <= 100))
-        && (!data.keys().hasAny(["lastDayClosed"]) || (data.lastDayClosed is timestamp || (data.lastDayClosed is string && data.lastDayClosed.size() <= 50)))
-        && (!data.keys().hasAny(["notificationSettings"]) || data.notificationSettings is map)
         && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp || data.createdAt is string)
         && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string)
         && (!data.keys().hasAny(["schemaVersion"]) || (data.schemaVersion is int && data.schemaVersion >= 1));
@@ -1112,19 +1101,40 @@ service cloud.firestore {
 
     function validOnboardingCompletionJob(data, jobId) {
       return data.keys().hasOnly([
-        "jobId", "ownerUid", "stage", "status", "createdAt", "updatedAt", "schemaVersion"
+        "jobId", "uid", "stage", "status", "stagesCompleted", "sourceFingerprint",
+        "retryCount", "lastError", "lastFailureCode", "lastFailureStage", "retryable",
+        "publicMessageKey", "diagnosticCategory", "failedEntityIds", "lastFailureOccurredAt",
+        "expectedRoutineIds", "appliedRoutineIds", "existingRoutineIds", "repairedRoutineIds", "failedRoutineIds",
+        "expectedHistoryIds", "appliedHistoryIds", "failedHistoryIds",
+        "expectedHabitIds", "appliedHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
+        "createdAt", "updatedAt", "schemaVersion"
       ])
       && data.keys().hasAll([
-        "jobId", "ownerUid", "stage", "status"
+        "jobId", "uid", "stage", "status"
       ])
-      && data.ownerUid == request.auth.uid
+      && data.uid == request.auth.uid
       && data.jobId == jobId
       && data.stage is string
       && data.status is string
-      && (data.status == "in_progress" || data.status == "completed" || data.status == "failed")
       && (!data.keys().hasAny(["schemaVersion"]) || (data.schemaVersion is int && data.schemaVersion >= 1))
       && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp || data.createdAt is string)
-      && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string);
+      && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string)
+      && (!data.keys().hasAny(["failedEntityIds"]) || data.failedEntityIds is list)
+      && (!data.keys().hasAny(["expectedRoutineIds"]) || data.expectedRoutineIds is list)
+      && (!data.keys().hasAny(["appliedRoutineIds"]) || data.appliedRoutineIds is list)
+      && (!data.keys().hasAny(["existingRoutineIds"]) || data.existingRoutineIds is list)
+      && (!data.keys().hasAny(["repairedRoutineIds"]) || data.repairedRoutineIds is list)
+      && (!data.keys().hasAny(["failedRoutineIds"]) || data.failedRoutineIds is list)
+      && (!data.keys().hasAny(["expectedHistoryIds"]) || data.expectedHistoryIds is list)
+      && (!data.keys().hasAny(["appliedHistoryIds"]) || data.appliedHistoryIds is list)
+      && (!data.keys().hasAny(["failedHistoryIds"]) || data.failedHistoryIds is list)
+      && (!data.keys().hasAny(["expectedHabitIds"]) || data.expectedHabitIds is list)
+      && (!data.keys().hasAny(["appliedHabitIds"]) || data.appliedHabitIds is list)
+      && (!data.keys().hasAny(["existingHabitIds"]) || data.existingHabitIds is list)
+      && (!data.keys().hasAny(["repairedHabitIds"]) || data.repairedHabitIds is list)
+      && (!data.keys().hasAny(["failedHabitIds"]) || data.failedHabitIds is list)
+      && (!data.keys().hasAny(["retryCount"]) || data.retryCount is int)
+      && (!data.keys().hasAny(["stagesCompleted"]) || data.stagesCompleted is map);
     }
 
     function validGoalKeys(data) {
@@ -1227,7 +1237,27 @@ service cloud.firestore {
     }
 
     function validSettingsDoc(data) {
-      return data.keys().hasOnly(["id", "locale", "timeFormat", "themeMode", "notificationsEnabled", "updatedAt", "createdAt"]);
+      return data.keys().hasOnly([
+        "userId",
+        "countryCode",
+        "countryName",
+        "timezone",
+        "languageCode",
+        "currencyCode",
+        "currencySymbol",
+        "measurementSystem",
+        "heightUnit",
+        "weightUnit",
+        "distanceUnit",
+        "temperatureUnit",
+        "timeFormat",
+        "dateFormat",
+        "weekStartDay",
+        "foodVocabularyMode",
+        "paymentRegion",
+        "createdAt",
+        "updatedAt"
+      ]);
     }
 
     function validNotificationPreferences(data) {

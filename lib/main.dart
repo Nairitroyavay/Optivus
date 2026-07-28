@@ -48,6 +48,11 @@ void main() async {
       },
       fallback: null,
       operationName: 'Firebase.initializeApp',
+      onError: (e, st) {
+        if (OptivusAppEnvironmentConfig.requiresLiveServices) {
+          throw StateError('Fatal: Firebase initialization failed in live environment. $e');
+        }
+      },
     );
   } else {
     debugPrint('Optivus backend mode: fake frontend/dev mode');

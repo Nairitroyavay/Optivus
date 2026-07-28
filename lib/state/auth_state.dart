@@ -1043,6 +1043,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _resetSignedOutState({String? targetUserUid}) {
+    _ref.invalidate(onboardingCompletionJobServiceProvider);
+    _ref.invalidate(onboardingCompletionJobProvider);
     _ref.read(recoveryRetryControllerProvider.notifier).reset();
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
     _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
@@ -1082,11 +1084,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (currentUser == null) return;
 
     if (action is RestartOnboardingInputAction) {
-      await markOnboardingIncomplete(currentUser);
-      return;
-    }
-
-    if (action is SynthesizeBundleAction) {
       await markOnboardingIncomplete(currentUser);
       return;
     }
