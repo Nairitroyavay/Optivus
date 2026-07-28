@@ -127,3 +127,46 @@ Immediate Action Plan:
 5. Follow all 11 global rules and restrictions in `.agents/ORIGINAL_REQUEST.md`.
 6. When all 68 issues and 13 release gates pass twice, send a completion victory claim message to Sentinel (`93e65b99-8f7d-4882-b00f-beb34fa1c406` / parent) claiming victory so the Victory Auditor can be spawned.
 </USER_REQUEST>
+
+## Follow-up — 2026-07-27T14:30:52+05:30
+
+<USER_REQUEST>
+You are the Lead Software Architect & Orchestrator for Phase 4.6 Final Production Closure of the Optivus Flutter/Firebase application.
+
+Working Directory for Orchestrator Metadata: `/Users/roy/optivus2/Optivus/.agents/orchestrator`
+Project Root: `/Users/roy/optivus2/Optivus`
+User Request Specification: `/Users/roy/optivus2/Optivus/.agents/ORIGINAL_REQUEST.md`
+
+Your responsibilities:
+1. Initialize your working directory `.agents/orchestrator/` with `plan.md`, `progress.md`, and `context.md`.
+2. Read the full user request in `/Users/roy/optivus2/Optivus/.agents/ORIGINAL_REQUEST.md`.
+3. Decompose and execute the Phase 4.6 requirements:
+   - R1: Mandatory Initial Audit (creating `docs/phase_4_6_final_audit.md`).
+   - R2: Audit only the real production path (Signup -> Email Verification -> Login -> Onboarding -> Draft Persistence -> Completion Bundle -> Routine Projection -> Routine History Projection -> Habit Projection -> Controller Reload -> Profile Finalization -> Router Transition -> Home Screen -> Cold Restart -> Sign Out -> Sign In -> Recovery).
+   - R3: Fix remaining production issues (P0/P1 blockers, race conditions, restart failures, sign-out/account-switch hazards, recovery/projection issues, security gaps, etc.).
+   - R4-R8: Apply safety rules, security/data integrity, evidence recording, environment awareness, and verification (analyzer, unit tests, emulator tests, builds).
+   - R9: Generate final documentation (`docs/phase_4_6_release_ready.md`).
+4. Dispatch specialist subagents (workers, reviewers, challengers, etc.) into their own dedicated subdirectories under `.agents/` as needed to perform tasks. Maintain continuous updates to `.agents/orchestrator/progress.md`.
+5. When all acceptance criteria are met and all P0/P1 issues are resolved, report completion to Sentinel.
+</USER_REQUEST>
+
+## Follow-up — 2026-07-28T15:01:25+05:30
+
+<USER_REQUEST>
+You are the Project Orchestrator for Phase 4.6 Final Production Closure of the Optivus project.
+Your authoritative requirements are recorded verbatim in `/Users/roy/optivus2/Optivus/.agents/ORIGINAL_REQUEST.md`.
+Project Working Directory: `/Users/roy/optivus2/Optivus`.
+Your Agent Directory: `/Users/roy/optivus2/Optivus/.agents/orchestrator`.
+
+Please carry out Phase 4.6:
+1. Initialize your agent directory `/Users/roy/optivus2/Optivus/.agents/orchestrator` with `BRIEFING.md`, `plan.md`, and `progress.md`.
+2. Execute Requirements R1-R6 from `ORIGINAL_REQUEST.md`:
+   - R1: Perform Mandatory Initial Audit of real production code against previous reports. Create `docs/phase_4_6_final_audit.md` with all initial statuses as NOT VERIFIED.
+   - R2: Audit end-to-end production execution path (Signup -> Email Verification -> Login -> Onboarding -> Draft Persistence -> Completion Bundle -> Routine Projection -> Routine History Projection -> Habit Projection -> Controller Reload -> Profile Finalization -> Router Transition -> Home Screen -> Cold Restart -> Sign Out -> Sign In -> Recovery).
+   - R3 & R4: Ensure production safety, deterministic/resumable/idempotent rules, and strict security/data integrity.
+   - R5: Evidence-Based Fix Protocol for all identified P0/P1 issues.
+   - R6: Automated & build verification (`flutter analyze`, `flutter test`, emulator tests if backend changes), create `docs/phase_4_6_release_ready.md`.
+3. Update `progress.md` frequently after every milestone or subagent action.
+4. Once all requirements and acceptance criteria are completely satisfied, report VICTORY CLAIMED to the Sentinel.
+</USER_REQUEST>
+

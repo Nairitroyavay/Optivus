@@ -6,6 +6,7 @@ class Debouncer {
   final Duration delay;
   Timer? _timer;
   Future<void> Function()? _pendingAction;
+  final List<Completer<void>> _completers = [];
 
   Debouncer({this.delay = const Duration(milliseconds: 400)});
 
@@ -13,28 +14,42 @@ class Debouncer {
   bool get isPending => _timer?.isActive ?? false;
 
   /// Schedules [action] to run after [delay]. Any previously scheduled action is cancelled.
-  void run(Future<void> Function() action) {
-    cancel();
+  Future<void> run(Future<void> Function() action) {
+    _timer?.cancel();
     _pendingAction = action;
+    final completer = Completer<void>();
+    _completers.add(completer);
+
     _timer = Timer(delay, () async {
-      final task = _pendingAction;
-      _pendingAction = null;
-      _timer = null;
-      if (task != null) {
-        await task();
-      }
+      await flush();
     });
+
+    return completer.future;
   }
 
   /// Immediately executes the pending action if scheduled, cancelling the delay timer.
   Future<void> flush() async {
-    if (_timer != null || _pendingAction != null) {
-      _timer?.cancel();
-      _timer = null;
-      final task = _pendingAction;
-      _pendingAction = null;
-      if (task != null) {
+    _timer?.cancel();
+    _timer = null;
+    final task = _pendingAction;
+    final activeCompleters = List<Completer<void>>.from(_completers);
+    _pendingAction = null;
+    _completers.clear();
+
+    if (task != null) {
+      try {
         await task();
+        for (final c in activeCompleters) {
+          if (!c.isCompleted) c.complete();
+        }
+      } catch (e, st) {
+        for (final c in activeCompleters) {
+          if (!c.isCompleted) c.completeError(e, st);
+        }
+      }
+    } else {
+      for (final c in activeCompleters) {
+        if (!c.isCompleted) c.complete();
       }
     }
   }
@@ -44,6 +59,10 @@ class Debouncer {
     _timer?.cancel();
     _timer = null;
     _pendingAction = null;
+    for (final c in _completers) {
+      if (!c.isCompleted) c.complete();
+    }
+    _completers.clear();
   }
 
   /// Disposes resources held by this debouncer.

@@ -1,6 +1,6 @@
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../views/screens/welcome_screen.dart';
 import '../../views/screens/login_screen.dart';
@@ -50,15 +50,6 @@ String? optivusAuthRedirect({
     return isSignedOutRoute ? null : '/';
   }
 
-  final isProjectionFailed =
-      userProfile.onboardingProjectionStatus == 'failed' ||
-      authState.backendRestoreFailed ||
-      authState.onboardingFailureReason != null;
-
-  if (isProjectionFailed && authState.onboardingIncomplete != true) {
-    return uri.path == '/onboarding/recovery' ? null : '/onboarding/recovery';
-  }
-
   final needsVerify =
       authState.emailUnverified ||
       (authState.user != null &&
@@ -73,15 +64,28 @@ String? optivusAuthRedirect({
     return authState.onboardingComplete ? '/app?tab=0' : '/onboarding';
   }
 
+  final isProjectionFailed =
+      userProfile.onboardingProjectionStatus == 'failed' ||
+      authState.backendRestoreFailed ||
+      authState.onboardingFailureReason != null;
+
   final onboardingInputCompleted = userProfile.onboardingInputCompleted;
   final onboardingCompleted = userProfile.onboardingCompleted;
+
+  if (isProjectionFailed) {
+    if (!onboardingInputCompleted && authState.onboardingIncomplete) {
+      if (uri.path != '/onboarding') return '/onboarding';
+      return null;
+    }
+    return uri.path == '/onboarding/recovery' ? null : '/onboarding/recovery';
+  }
 
   if (!onboardingInputCompleted || authState.onboardingIncomplete) {
     if (uri.path != '/onboarding') return '/onboarding';
     return null;
   }
 
-  if (onboardingInputCompleted && !onboardingCompleted) {
+  if (!onboardingCompleted) {
     if (uri.path != '/onboarding/recovery' && uri.path != '/loading') {
       return '/onboarding/recovery';
     }
@@ -102,40 +106,52 @@ final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
 
   String openTrackerDetail(TrackerDetailView detail) {
-    ref.read(appNavigationProvider.notifier).goToTracker();
-    ref.read(trackerDetailViewRequestProvider.notifier).state =
-        TrackerDetailTarget.view(detail);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appNavigationProvider.notifier).goToTracker();
+      ref.read(trackerDetailViewRequestProvider.notifier).state =
+          TrackerDetailTarget.view(detail);
+    });
     return '/app?tab=2';
   }
 
   String openHomeDetail(HomeDetailTarget target) {
-    ref.read(appNavigationProvider.notifier).goToHome();
-    ref.read(homeDetailViewRequestProvider.notifier).state = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appNavigationProvider.notifier).goToHome();
+      ref.read(homeDetailViewRequestProvider.notifier).state = target;
+    });
     return '/app?tab=0';
   }
 
   String openProfileDetail(ProfileDetailView detail) {
-    ref.read(appNavigationProvider.notifier).goToProfile();
-    ref.read(profileDetailViewRequestProvider.notifier).state =
-        ProfileDetailTarget(view: detail);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appNavigationProvider.notifier).goToProfile();
+      ref.read(profileDetailViewRequestProvider.notifier).state =
+          ProfileDetailTarget(view: detail);
+    });
     return '/app?tab=5';
   }
 
   String openRoutineDetail(RoutineDetailTarget target) {
-    ref.read(appNavigationProvider.notifier).goToRoutine();
-    ref.read(routineDetailViewRequestProvider.notifier).state = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appNavigationProvider.notifier).goToRoutine();
+      ref.read(routineDetailViewRequestProvider.notifier).state = target;
+    });
     return '/app?tab=1';
   }
 
   String openCoachDetail(CoachDetailView detail) {
-    ref.read(appNavigationProvider.notifier).goToCoach();
-    ref.read(coachDetailViewRequestProvider.notifier).state = detail;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appNavigationProvider.notifier).goToCoach();
+      ref.read(coachDetailViewRequestProvider.notifier).state = detail;
+    });
     return '/app?tab=3';
   }
 
   String openGoalsDetail(GoalsDetailTarget target) {
-    ref.read(appNavigationProvider.notifier).goToGoals();
-    ref.read(goalsDetailViewRequestProvider.notifier).state = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appNavigationProvider.notifier).goToGoals();
+      ref.read(goalsDetailViewRequestProvider.notifier).state = target;
+    });
     return '/app?tab=4';
   }
 

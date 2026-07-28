@@ -13,8 +13,37 @@ class DiagnosticBundleService {
     r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
   );
 
+  static final RegExp _systemPathRegex = RegExp(
+    r'(?:file://)?(?:/Users|/data|/home|[a-zA-Z]:\\Users|[a-zA-Z]:\\Documents and Settings)/[A-Za-z0-9_.\-/]+',
+    caseSensitive: false,
+  );
+
+  static final RegExp _jwtTokenRegex = RegExp(
+    r'eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_%]+',
+  );
+
+  static final RegExp _bearerTokenRegex = RegExp(
+    r'Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*',
+    caseSensitive: false,
+  );
+
+  static final RegExp _jsonTokenKeyRegex = RegExp(
+    r'"(authToken|accessToken|idToken|refreshToken|token|apiKey|secret)":\s*"[^"]+"',
+    caseSensitive: false,
+  );
+
   static String redactPii(String input, {String? userName}) {
     var redacted = input.replaceAll(_emailRegex, '[REDACTED_EMAIL]');
+    redacted = redacted.replaceAll(_systemPathRegex, '[REDACTED_PATH]');
+    redacted = redacted.replaceAll(_jwtTokenRegex, '[REDACTED_TOKEN]');
+    redacted = redacted.replaceAllMapped(
+      _bearerTokenRegex,
+      (m) => 'Bearer [REDACTED_TOKEN]',
+    );
+    redacted = redacted.replaceAllMapped(
+      _jsonTokenKeyRegex,
+      (m) => '"${m[1]}": "[REDACTED_TOKEN]"',
+    );
     if (userName != null && userName.trim().isNotEmpty) {
       final namePattern = RegExp(
         RegExp.escape(userName.trim()),

@@ -218,8 +218,7 @@ class OnboardingCompletionJob {
       if (lastFailureStage != null) 'lastFailureStage': lastFailureStage,
       if (retryable != null) 'retryable': retryable,
       if (publicMessageKey != null) 'publicMessageKey': publicMessageKey,
-      if (diagnosticCategory != null)
-        'diagnosticCategory': diagnosticCategory,
+      if (diagnosticCategory != null) 'diagnosticCategory': diagnosticCategory,
       'failedEntityIds': failedEntityIds,
       if (lastFailureOccurredAt != null)
         'lastFailureOccurredAt': lastFailureOccurredAt!.toIso8601String(),

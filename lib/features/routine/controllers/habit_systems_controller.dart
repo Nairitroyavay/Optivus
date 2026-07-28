@@ -9,6 +9,7 @@ import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/habit_systems_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/habit_system_onboarding_projection.dart';
 import 'package:optivus/services/habit_system_schedule_reconciler.dart';
 import 'package:optivus/features/routine/routine_state.dart';
@@ -102,6 +103,9 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     return 'habitsys_${digest.toString().substring(0, 24)}';
   }
 
+  Future<void>? _inFlightLoad;
+  String? _inFlightUid;
+
   Future<void> loadForOwner(String uid) async {
     return loadForOwnerWithFallback(uid);
   }
@@ -114,73 +118,106 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
     if (uid.trim().isEmpty || uid.contains('/')) {
       throw ArgumentError('Valid authenticated owner UID is required.');
     }
-
-    final isNewOwner = _ownerUid != uid;
-    final generation = ++_loadGeneration;
-    _ownerUid = uid;
-
-    if (isNewOwner) {
-      state = state.copyWith(
-        loading: true,
-        systems: const [],
-        pendingOperationKeys: const {},
-        failedOperations: const {},
-        clearError: true,
-      );
-    } else {
-      state = state.copyWith(loading: true, clearError: true);
+    if (_ownerUid == uid && _inFlightUid == uid && _inFlightLoad != null) {
+      await _inFlightLoad;
+      return;
     }
+    final inFlightCompleter = Completer<void>();
+    _inFlightUid = uid;
+    _inFlightLoad = inFlightCompleter.future;
 
     try {
-      final remoteSystems = await _repository.fetchHabitSystems(uid);
-      if (!mounted || generation != _loadGeneration || _ownerUid != uid) return;
+      final isNewOwner = _ownerUid != uid;
+      final generation = ++_loadGeneration;
+      _ownerUid = uid;
 
-      OnboardingCompletionBundle? activeBundle = bundle;
-      if (activeBundle == null) {
-        try {
-          final repo = _ref.read(onboardingRepositoryProvider);
-          activeBundle = await repo.fetchCompletionBundle(uid);
-        } catch (_) {}
-      }
-
-      final routines = projectedRoutines ?? tryReadRoutineItems();
-
-      if (remoteSystems.isEmpty && activeBundle != null) {
-        final projectedSystems = HabitSystemOnboardingProjection.build(
-          activeBundle,
-          routines,
+      if (isNewOwner) {
+        state = state.copyWith(
+          loading: true,
+          systems: const [],
+          pendingOperationKeys: const {},
+          failedOperations: const {},
+          clearError: true,
         );
-        state = state.copyWith(systems: projectedSystems, loading: false);
-      } else if (activeBundle != null) {
-        final projectedSystems = HabitSystemOnboardingProjection.build(
-          activeBundle,
-          routines,
-        );
-        final merged = _mergeSystems(remoteSystems, projectedSystems);
-        state = state.copyWith(systems: merged, loading: false);
       } else {
-        state = state.copyWith(systems: remoteSystems, loading: false);
-      }
-    } catch (e) {
-      if (!mounted || generation != _loadGeneration || _ownerUid != uid) return;
-
-      OnboardingCompletionBundle? activeBundle = bundle;
-      if (activeBundle == null) {
-        try {
-          final repo = _ref.read(onboardingRepositoryProvider);
-          activeBundle = await repo.fetchCompletionBundle(uid);
-        } catch (_) {}
+        state = state.copyWith(loading: true, clearError: true);
       }
 
-      if (activeBundle != null) {
-        final routines = projectedRoutines ?? tryReadRoutineItems();
-        final projectedSystems = HabitSystemOnboardingProjection.build(
-          activeBundle,
-          routines,
-        );
-        state = state.copyWith(systems: projectedSystems, loading: false);
-      } else {
-        state = state.copyWith(loading: false, error: e.toString());
+      try {
+        final remoteSystems = await _repository.fetchHabitSystems(uid);
+        if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
+          return;
+        }
+
+        OnboardingCompletionBundle? activeBundle = bundle;
+        if (activeBundle == null) {
+          try {
+            final repo = _ref.read(onboardingRepositoryProvider);
+            activeBundle = await repo.fetchCompletionBundle(uid);
+          } catch (_) {}
+        }
+
+        var routines = projectedRoutines ?? tryReadRoutineItems();
+        if (routines.isEmpty) {
+          try {
+            final routineRepo = _ref.read(routineRepositoryProvider);
+            routines = await routineRepo.fetchRoutineItems(uid);
+          } catch (_) {}
+        }
+
+        if (remoteSystems.isEmpty && activeBundle != null) {
+          final projectedSystems = HabitSystemOnboardingProjection.build(
+            activeBundle,
+            routines,
+          );
+          state = state.copyWith(systems: projectedSystems, loading: false);
+        } else if (activeBundle != null) {
+          final projectedSystems = HabitSystemOnboardingProjection.build(
+            activeBundle,
+            routines,
+          );
+          final merged = _mergeSystems(remoteSystems, projectedSystems);
+          state = state.copyWith(systems: merged, loading: false);
+        } else {
+          state = state.copyWith(systems: remoteSystems, loading: false);
+        }
+      } catch (e) {
+        if (!mounted || generation != _loadGeneration || _ownerUid != uid) {
+          return;
+        }
+
+        OnboardingCompletionBundle? activeBundle = bundle;
+        if (activeBundle == null) {
+          try {
+            final repo = _ref.read(onboardingRepositoryProvider);
+            activeBundle = await repo.fetchCompletionBundle(uid);
+          } catch (_) {}
+        }
+
+        if (activeBundle != null) {
+          var routines = projectedRoutines ?? tryReadRoutineItems();
+          if (routines.isEmpty) {
+            try {
+              final routineRepo = _ref.read(routineRepositoryProvider);
+              routines = await routineRepo.fetchRoutineItems(uid);
+            } catch (_) {}
+          }
+          final projectedSystems = HabitSystemOnboardingProjection.build(
+            activeBundle,
+            routines,
+          );
+          state = state.copyWith(systems: projectedSystems, loading: false);
+        } else {
+          state = state.copyWith(loading: false, error: e.toString());
+        }
+      }
+    } finally {
+      if (_inFlightUid == uid) {
+        _inFlightLoad = null;
+        _inFlightUid = null;
+      }
+      if (!inFlightCompleter.isCompleted) {
+        inFlightCompleter.complete();
       }
     }
   }

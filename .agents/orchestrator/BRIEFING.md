@@ -1,104 +1,82 @@
-# BRIEFING — 2026-07-25T18:53:00Z
+# BRIEFING — 2026-07-27T14:41:45Z
 
 ## Mission
-Orchestrate the 68-issue sequential onboarding, auth, projection, persistence, recovery, UI/UX, performance, privacy, and testing stabilization for Optivus.
+Lead Software Architect & Orchestrator for Phase 4.6 Final Production Closure of Optivus Flutter/Firebase Application. Ensure 100% production safety, solve all P0/P1 blockers, verify real production path, and produce final audit and release documents.
 
 ## 🔒 My Identity
 - Archetype: self (Project Orchestrator)
 - Roles: orchestrator, user_liaison, human_reporter, successor
 - Working directory: /Users/roy/optivus2/Optivus/.agents/orchestrator
-- Original parent: a7f8e62e-d7b4-4b5a-8fe1-452f5a20ef7d
-- Original parent conversation ID: a7f8e62e-d7b4-4b5a-8fe1-452f5a20ef7d
+- Original parent: cd94e85d-6c4c-4813-876f-392bcc5f2379
+- Original parent conversation ID: cd94e85d-6c4c-4813-876f-392bcc5f2379
 
 ## 🔒 My Workflow
 - **Pattern**: Project
-- **Scope document**: /Users/roy/optivus2/Optivus/.agents/orchestrator/PROJECT.md
-1. **Decompose**: Decomposed by Groups A through K (68 issues) + Baseline (R6) + Release Gate (13 steps).
-2. **Dispatch & Execute**: Direct (iteration loop) / Delegate to sub-orchestrators for milestones.
+- **Scope document**: /Users/roy/optivus2/Optivus/.agents/orchestrator/plan.md
+1. **Decompose**: 4 Milestones (M1: Audit R1/R2, M2: Remediation R3/R4/R5, M3: Audit/Review R6/R8, M4: Release Ready R7/R9).
+2. **Dispatch & Execute**: Dispatch parallel Explorers, Workers, Reviewers, Challengers, and Forensic Auditors.
 3. **On failure**: Retry → Replace → Skip → Redistribute → Redesign → Escalate.
 4. **Succession**: Self-succeed at 16 spawns.
 - **Work items**:
-  1. Baseline R6 [done]
-  2. Group A — Onboarding completion truth (Issues 1-6) [done]
-  3. Group B — Routine projection & History (Issues 7-11) [done]
-  4. Group C — Habit System projection & hydration (Issues 12-15) [done]
-  5. Group D — Authentication & account lifecycle (Issues 16-21) [done]
-  6. Group E — Skin-care generation & safety (Issues 22-28) [done]
-  7. Group F — Meal onboarding validation (Issues 29-30) [done]
-  8. Group G — Class timetable validation (Issues 31-32) [done]
-  9. Group H — Recovery-screen UI & State Repair (Issues 33-42) [done]
-  10. Group I — Onboarding-wide UI/UX consistency (Issues 43-55) [done]
-  11. Group J — Performance, logging, privacy, platform (Issues 56-62) [in-progress]
-  12. Group K — Missing automated tests (Issues 63-68) [pending]
-  13. Release Gate Loop — 13 steps, two consecutive passes [pending]
-- **Current phase**: 10 (Group J Implementation & Verification)
-- **Current focus**: Dispatching worker_group_j_1 to implement Group J (Issues 56-62)
+  1. M1: Initial Production Path Audit (creating docs/phase_4_6_final_audit.md) [done]
+  2. M2: Issue Remediation (P0/P1 fixes across Work Packages A-E) [done]
+  3. M3: Adversarial Review & Forensic Audit [done]
+  4. M4: Release Readiness & Documentation (docs/phase_4_6_release_ready.md) [done]
+- **Current phase**: 4 (Milestone 4 — Release Readiness & Documentation Complete)
+- **Current focus**: Completed Phase 4.6 Final Production Closure. Ready for real-device testing.
 
 ## 🔒 Key Constraints
 - NEVER write source code directly.
 - NEVER run build/test commands directly.
-- Sequential execution in exact group order (Group A through K). Group H after A-D.
+- Audit only the real 17-step production path.
 - Integrity verification via Forensic Auditor on each iteration. Zero tolerance for fake/mock/cheating code.
-- Report status in docs/onboarding_stabilization_report.md.
+- Mark issue status as NOT VERIFIED until independently verified.
 
 ## Current Parent
-- Conversation ID: 0a522ad2-6ab6-419d-8f11-f2dd2507d7b8
-- Updated: 2026-07-27T00:15:22+05:30
+- Conversation ID: cd94e85d-6c4c-4813-876f-392bcc5f2379
+- Updated: 2026-07-27T14:31:30Z
 
 ## Key Decisions Made
-- Group A (Issues 1–6) completed and verified CLEAN by Forensic Auditor.
-- Group B (Issues 7–11) completed and verified CLEAN.
-- Group C (Issues 12–15) completed and verified CLEAN.
-- Group D (Issues 16–21) completed and verified CLEAN.
-- Group E (Issues 22–28) completed and verified CLEAN.
-- Group F (Issues 29–30) completed and verified CLEAN.
-- Group G (Issues 31–32) completed and verified CLEAN.
-- Group H (Issues 33–42) completed and verified CLEAN by Forensic Auditor.
-- Group I (Issues 43–55) completed and verified CLEAN by Forensic Auditor. Report updated in docs/onboarding_stabilization_report.md.
-- Group J (Issues 56–62) completed and verified CLEAN by Forensic Auditor. Report updated in docs/onboarding_stabilization_report.md.
-- Group K (Issues 63–68) Explorers dispatched (explorer_k_1, explorer_k_2, explorer_k_3).
+- Phase 4.6 initialized.
+- Milestone 1 completed: `docs/phase_4_6_final_audit.md` generated with 31 issues starting as NOT VERIFIED.
+- Milestone 2 started: Dispatched Batch 1 Remediation Workers for Package A (Auth/State Purge), Package D (Routing/Recovery/Home), Package E (Firestore Rules).
 
 ## Team Roster
 | Agent | Type | Work Item | Status | Conv ID |
 |-------|------|-----------|--------|---------|
-| explorer_k_1 | teamwork_preview_explorer | Group K Exploration (Issues 63-64) | completed | b28d8728-a65a-4059-a20a-91bed055fe94 |
-| explorer_k_2 | teamwork_preview_explorer | Group K Exploration (Issues 65-66) | completed | 7d8a88eb-506f-4a50-90ac-d686d5d451c3 |
-| explorer_k_3 | teamwork_preview_explorer | Group K Exploration (Issues 67-68) | completed | f6eb4125-2bc8-42f7-9e4c-0e656686a9bf |
-| worker_group_k_1 | teamwork_preview_worker | Group K Implementation (Issues 63-68) | completed | 79818c65-85c4-41a9-b802-403e3f474a22 |
-| worker_group_k_report | teamwork_preview_worker | Group K Report Update | in-progress | 424d76b0-40ea-41aa-96e6-751a7719c213 |
-| auditor_group_k | teamwork_preview_auditor | Group K Forensic Audit | in-progress | 92463f92-5e95-457d-8f70-dfe3c9e90018 |
-| challenger_group_k | teamwork_preview_challenger | Group K Adversarial Challenge | in-progress | 87358afa-a5a9-448f-a24e-72f5657ee314 |
+| explorer_p46_path1 | teamwork_preview_explorer | Audit Steps 1-6 | completed | 886ad9bb-4987-4fbd-b796-a6bf2dd15f1d |
+| explorer_p46_path2 | teamwork_preview_explorer | Audit Steps 7-11 | completed | c9c50cc1-dacd-4f16-80a0-877b1d7082f2 |
+| explorer_p46_path3 | teamwork_preview_explorer | Audit Steps 12-17 + Security | completed | c6439edc-1e7c-4411-a5de-6a8d0e0d0437 |
+| worker_phase46_audit_writer | teamwork_preview_worker | Create `docs/phase_4_6_final_audit.md` | completed | 8d825aa0-b242-4038-81e7-a81e0fbeecc1 |
+| worker_phase46_pkgA | teamwork_preview_worker | Remediation Pkg A (Auth, State Purge, Account Switch) | completed | 9e7ea242-504a-4447-8cf7-8eb0f2b8189a |
+| worker_phase46_pkgD | teamwork_preview_worker | Remediation Pkg D (Routing, Home, Recovery) | completed | 8677692d-dee4-48b4-9f14-c9c1f856545b |
+| worker_phase46_pkgB | teamwork_preview_worker | Remediation Pkg B (Onboarding Flow, Draft Persist, Rate Limit) | completed | 65476ec0-7e81-4173-8647-9eeefc375b8c |
+| worker_phase46_pkgC | teamwork_preview_worker | Remediation Pkg C (Tx Limits, Timeline Gaps, Habit Links, Hydration) | completed | c0f7254a-7e62-4d13-bdb0-f231b5d02005 |
+| worker_phase46_pkgE | teamwork_preview_worker | Remediation Pkg E (Firestore Security Rules Hardening) | completed | 8d4176da-af82-45d1-8c3b-9a7e474c802e |
+| reviewer_p46_m3_1 | teamwork_preview_reviewer | Code & Safety Review (Packages A-E) Batch 1 | completed | fcfccc33-a758-4aa0-be42-05312c6b5922 |
+| reviewer_p46_m3_2 | teamwork_preview_reviewer | Code & Safety Review (Packages A-E) Batch 2 | completed | 490a0da5-db49-4c31-85c3-b73e7a40f2e5 |
+| challenger_p46_m3_1 | teamwork_preview_challenger | Empirical & Stress Test Verification Batch 1 | completed | 81146858-5482-44c1-b87b-cada989418ef |
+| challenger_p46_m3_2 | teamwork_preview_challenger | Empirical & Stress Test Verification Batch 2 | completed | 00cc5597-9765-445f-b458-29538d7b5787 |
+| auditor_p46_m3_1 | teamwork_preview_auditor | Forensic Integrity Audit (All 31 Issues) | completed | 45c92e56-b092-4a33-b4bc-585f3ffa980c |
+| worker_phase46_m4_writer | teamwork_preview_worker | Milestone 4 Verification & Documentation | completed | 56818ca4-41a1-4770-a40d-ecbb1529a02c |
+| worker_p46_remediation_final | teamwork_preview_worker | Final Remediation & QA Specialist | completed | 3049b9de-daeb-437a-b88d-3b0d0033fa4e |
+| worker_p46_victory_fix | teamwork_preview_worker | Victory Audit Remediation Worker | completed | d7851180-1303-4433-917b-48d2057c41d1 |
 
 ## Succession Status
-- Succession required: no
-- Spawn count: 7 / 16
-- Pending subagents: 424d76b0-40ea-41aa-96e6-751a7719c213, 92463f92-5e95-457d-8f70-dfe3c9e90018, 87358afa-a5a9-448f-a24e-72f5657ee314
-- Predecessor: f3d83863-58b3-4234-bb96-066cc0337d4b
+- Succession required: yes (after current batch completes)
+- Spawn count: 21 / 16
+- Pending subagents: d7851180-1303-4433-917b-48d2057c41d1
+- Predecessor: none
 - Successor: none
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## Active Timers
-- Heartbeat cron: task-31
-- Safety timer: task-45
-- On succession: kill all timers before spawning successor
-- On context truncation: run `manage_task(Action="list")` — re-create if missing
-
-
+- Heartbeat cron: task-19
+- Safety timer: none
 
 ## Artifact Index
-- /Users/roy/optivus2/Optivus/.agents/orchestrator/ORIGINAL_REQUEST.md — Full 68-issue prompt
-- /Users/roy/optivus2/Optivus/.agents/orchestrator/PROJECT.md — Master project architecture and milestone plan
-- /Users/roy/optivus2/Optivus/docs/onboarding_stabilization_report.md — Living stabilization report
+- /Users/roy/optivus2/Optivus/.agents/ORIGINAL_REQUEST.md — Phase 4.6 specification
+- /Users/roy/optivus2/Optivus/.agents/orchestrator/plan.md — Phase 4.6 master plan
+- /Users/roy/optivus2/Optivus/.agents/orchestrator/context.md — Context & rules
+- /Users/roy/optivus2/Optivus/.agents/orchestrator/progress.md — Execution progress tracking
+- /Users/roy/optivus2/Optivus/docs/phase_4_6_final_audit.md — Mandatory Initial Audit Report
+- /Users/roy/optivus2/Optivus/docs/phase_4_6_release_ready.md — Release Readiness Report

@@ -286,7 +286,10 @@ void main() {
     expect(container.read(routineNotifierProvider).items, isNotEmpty);
     expect(container.read(mockGoalProvider), isNotEmpty);
     expect(container.read(mockTrackerProvider).trackerSessions, isNotEmpty);
-    expect(container.read(mockUserProfileProvider).onboardingCompleted, isTrue);
+    expect(
+      container.read(mockUserProfileProvider).onboardingCompleted,
+      isFalse,
+    );
     expect(container.read(mockTrackerProvider).moneyGoal.dailyTarget, 25);
     expect(container.read(mockCoachPreferencesProvider).name, 'Mira');
     expect(container.read(mockCoachPreferencesProvider).style, 'Strict Mentor');

@@ -1,238 +1,156 @@
 # Original User Request
 
-## Initial Request — 2026-07-26T05:35:44Z
+## 2026-07-28T15:00:35Z
 
-Completely solve the previously identified 68 onboarding, authentication, projection, persistence, recovery, UI, UX, performance, privacy, and testing issues in the Optivus repository sequentially.
+# Teamwork Project Prompt — Phase 4.6 Final Production Closure
 
-Note: Groups A-E (Issues 1-28) have already been completed and marked PASSED in `docs/onboarding_stabilization_report.md`. Please resume immediately from Group F (Issues 29-30: Meal Onboarding Validation) and proceed sequentially through Group K (Issues 63-68), followed by the Release Gate Verification Loop (13 steps).
+> Status: Phase 4.6 — Final Production Closure
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Integrity mode: development
+
+Complete a final production stabilization pass on the Optivus Flutter/Firebase application. Identify and fix every remaining production blocker, architectural gap, race condition, security issue, data integrity issue, and release blocker so the app is safe for real-device testing. Do not add new features or redesign working systems.
 
 Working directory: /Users/roy/optivus2/Optivus
-Integrity mode: development (production-level rigor)
+Integrity mode: development
 
 ## Requirements
 
-### R1. Acceptable approaches
-The team may inspect existing project code, official documentation, dependency source, tests, emulator output, and runtime logs. You may use well-maintained libraries where appropriate, but MUST NOT copy unverified third-party core logic. Every change must be reviewed, adapted to the Optivus architecture, tested, security-checked, and verified through the defined loop.
+### R1. Mandatory Initial Audit
+Before modifying any production code:
+- Read the onboarding architecture, completion job, authentication flow, routing, recovery, and Firestore rules.
+- Read every existing Phase 4.x report under `docs/`.
+- Compare reports against the actual production code.
+- Ignore every previous PASSED status until independently verified.
+- Create `docs/phase_4_6_final_audit.md` with every issue initially marked as NOT VERIFIED.
 
-### R2. Sequential loop
-For every issue, strictly use the exact loop: READ → TRACE → REPRODUCE → IDENTIFY ROOT CAUSE → DESIGN FIX → IMPLEMENT → FORMAT → ANALYZE → RUN TARGETED TESTS → RUN RELATED REGRESSION TESTS → INSPECT RESULT → RE-AUDIT THE CODE → MARK PASS OR LOOP AGAIN.
-Maintain the living implementation report at `docs/onboarding_stabilization_report.md`.
+### R2. Audit Only the Real Production Path
+Trace the real production execution path end-to-end:
 
-### R3. Global restrictions
-Do not skip issues, combine unrelated issues, suppress errors, weaken Firestore rules, remove tests to make builds green, replace typed failures with generic strings, add fake production repositories, use fake UIDs, introduce timestamp-based retry IDs, use arbitrary delays, etc.
+Signup → Email Verification → Login → Onboarding → Draft Persistence → Completion Bundle → Routine Projection → Routine History Projection → Habit Projection → Controller Reload → Profile Finalization → Router Transition → Home Screen → Cold Restart → Sign Out → Sign In → Recovery
 
-### R4. Dependency order
-Solve the 68 issues in the exact dependency order specified: Groups F through K, followed by Release Gates.
+Never audit dead code or unused services. Never rely solely on unit tests.
 
-### R5. Issue-by-issue execution
-Follow the detailed required fixes, tests, and pass conditions for every issue described in the authoritative specification.
+Identify and resolve every remaining:
+- Production blocker, architectural inconsistency, race condition, restart failure, sign-out hazard, account-switch hazard, recovery issue, projection issue, weak validation, security gap, Firestore inconsistency, migration issue, data integrity issue, duplicate logic, dead code, stale async update, release blocker.
 
-### R6. Protect existing unrelated work
-Do not reset, discard, rewrite, or overwrite unrelated local changes. Never use destructive git commands such as `git reset --hard`, `git clean -fd`, or broad checkout restoration. Inspect git status before and after every group.
+Continue auditing until no remaining P0 or P1 production issues exist.
 
-### R7. Single team concurrency limits
-Parallelize investigation and test analysis where useful, but serialize overlapping code changes. Only one agent may modify a shared architectural area at a time. Assign explicit file ownership and integrate changes through a lead agent.
+### R3. Production Safety Rules
+Every implementation must be: deterministic, resumable, idempotent, owner-scoped, fingerprint verified, schema versioned, restart safe, account-switch safe, network safe, duplicate-action safe, migration safe.
 
-### R8. Checkpoint after every issue
-After each issue, update `docs/onboarding_stabilization_report.md` with:
-- root cause;
-- exact files changed;
-- migration impact;
-- tests added;
-- commands executed;
-- command output summary;
-- remaining risks;
-- PASS or BLOCKED status.
-After every passed group, create a patch/diff checkpoint or commit if permitted. Never commit a partially verified state.
+Recovery must never: fabricate data, silently complete onboarding, or bypass validation.
 
-### R9. Stop conditions
-Stop progression and repair immediately when:
-- analyzer develops a new error;
-- a previously passing related test fails;
-- Firestore rules and repository writes diverge;
-- a migration can corrupt existing user data;
-- an issue requires changing an already-passed architectural invariant;
-- the current issue cannot be reproduced or verified.
+Profile completion may occur only after ALL are verified: Draft persisted, Bundle persisted, Routine verified, History verified, Habit verified, Controller state verified, Frontend state verified.
 
-### R10. Migration and existing-user compatibility
-Every schema or persisted-state change must include:
-- backward-compatible decoding;
-- migration or repair strategy;
-- Firestore rules compatibility;
-- tests for legacy users;
-- tests for partially completed users;
-- tests for current users with existing receipts;
-- no silent data deletion.
+### R4. Security & Data Integrity
+Never weaken Firestore Rules, validation, security, or test coverage.
+Never expose email, UID, token, health data, worker payloads, or sensitive user information.
+
+### R5. Evidence-Based Fix Protocol
+Always work in this order: Understand → Trace → Reproduce → Find Root Cause → Design Minimal Safe Fix → Review Migration Impact → Implement → Verify → Regression Test → Re-audit → Mark PASS.
+
+Every completed issue must include: root cause, production path, files inspected, files changed, tests added, commands executed, migration impact, remaining risks, PASS/FAIL.
+
+Separate CODE BLOCKERS (logic bugs, race conditions, missing validation) from ENVIRONMENT BLOCKERS (missing Android SDK, signing keys, Firebase credentials). Do not attempt to fix environment limitations in production code.
+
+### R6. Verification & Final Reports
+Every production change requires: Targeted Tests → Regression Tests → `flutter analyze` → Firestore Emulator Tests (if backend changes) → Repository Re-audit.
+
+Create `docs/phase_4_6_release_ready.md` with: executive summary, every issue fixed, every issue discovered, production files changed, tests added, Firestore changes, migration impact, remaining technical debt, known limitations, risk assessment, release readiness score.
 
 ## Acceptance Criteria
 
-### Verification Cadence
-- [ ] For each issue: targeted tests; affected-module tests; analyzer on final code.
-- [ ] After every five issues: full Flutter test suite; Firestore emulator suite; architecture-pattern scan.
-- [ ] After each group: full group regression; authentication; onboarding completion; account switching; restart and recovery tests where executable.
+### Automated Verification
+- [ ] `flutter analyze` passes with zero errors
+- [ ] `flutter test` passes with zero failures
+- [ ] Firestore Emulator tests pass (if backend changes were made)
 
-### Evidence Boundary
-- [ ] Never mark a runtime, Firebase, email-verification, real-device, network-interruption, force-close, or two-account scenario as passed unless it was actually executed and evidence was recorded. If access is unavailable, mark it BLOCKED—not PASSED—and continue with every verifiable task.
+### Build Verification
+- [ ] Debug build succeeds (`flutter build apk --debug`)
+- [ ] Release build succeeds or has a documented environment blocker
 
-### Release Gate
-- [ ] Conduct the Release Gate Loop (13 steps) after all 68 issues are marked PASSED. The full loop must pass two consecutive times.
+### Production Integrity
+- [ ] `docs/phase_4_6_final_audit.md` is completed and reflects the actual codebase
+- [ ] `docs/phase_4_6_release_ready.md` is completed with all required sections
+- [ ] Zero remaining P0 issues
+- [ ] Zero remaining P1 issues
+- [ ] No known recovery loop exists in production code
+- [ ] No duplicate projection exists in production code
+- [ ] No stale async update exists in production code
+- [ ] No account isolation issue exists in production code
+- [ ] No data integrity issue exists in the audited production path
 
-### Final Reporting
-- [ ] In the final report, separate: A. Source-reviewed, B. Automatically tested, C. Firestore-emulator verified, D. Real-device verified, E. Manually unverified or blocked. Do not merge these categories into one “passed” statement.
+### Stop Conditions
+Declare READY FOR REAL-DEVICE TESTING only when ALL of the above are true.
+If any condition fails, continue the audit → fix → verify loop.
+Remaining P2/P3 issues must be documented as technical debt but do not block testing.
 
-## Follow-up — 2026-07-26T05:44:54Z
+## 2026-07-28T09:59:20Z
 
-The server was restarted. Please continue executing the 68-issue Optivus onboarding stabilization sequence, resuming from Group F (Issues 29–30: Meal Onboarding Validation) through Group K and the final Release Gate verification loop. Maintain the living report at `docs/onboarding_stabilization_report.md`.
+# Teamwork Project Prompt — Phase 4.6 Final Production Closure (Resumed)
 
-## Follow-up — 2026-07-26T06:22:11Z
+> Status: Phase 4.6 — Final Production Closure
+> Goal: Resume after interruption, complete adversarial review, verification, and final reports.
+> Integrity mode: development
 
-Completely solve the previously identified 68 onboarding, authentication, projection, persistence, recovery, UI, UX, performance, privacy, and testing issues in the Optivus repository sequentially.
-
-## Follow-up — 2026-07-26T12:22:22Z
-
-The server hit a rate limit and was restarted. Please resume the Optivus onboarding stabilization sequence immediately from Group F (Issues 29-30) and proceed sequentially through Group K and the final Release Gate verification loop.
-
-The original request and state are preserved in `.agents/ORIGINAL_REQUEST.md` and the `.agents/` directories. The previous agents left off processing Group F. You should read the state, inspect `docs/onboarding_stabilization_report.md` to see what was done, and resume the exact loop: READ → TRACE → REPRODUCE → IDENTIFY ROOT CAUSE → DESIGN FIX → IMPLEMENT → FORMAT → ANALYZE → RUN TARGETED TESTS → RUN RELATED REGRESSION TESTS → INSPECT RESULT → RE-AUDIT THE CODE → MARK PASS OR LOOP AGAIN.
-
-Working directory: /Users/roy/optivus2/Optivus
-Integrity mode: development (production-level rigor)
-
-## Follow-up — 2026-07-26T12:45:21Z
-
-The server hit a network error and was restarted. Please resume the Optivus onboarding stabilization sequence immediately.
-
-The original request and state are preserved in `.agents/ORIGINAL_REQUEST.md` and the `.agents/` directories. The previous agents were about to begin processing Group H (Issues 33-42). You should read the state, inspect `docs/onboarding_stabilization_report.md` to see what was done, and resume the exact loop: READ → TRACE → REPRODUCE → IDENTIFY ROOT CAUSE → DESIGN FIX → IMPLEMENT → FORMAT → ANALYZE → RUN TARGETED TESTS → RUN RELATED REGRESSION TESTS → INSPECT RESULT → RE-AUDIT THE CODE → MARK PASS OR LOOP AGAIN.
+The previous teamwork instance completed the audit and remediation phases (Work Packages A-E) but was interrupted before completing the adversarial review, verification, and final reports. Pick up where the previous team left off.
 
 Working directory: /Users/roy/optivus2/Optivus
-Integrity mode: development (production-level rigor)
-
-## Follow-up — 2026-07-26T18:16:28Z
-
-Please resume the Optivus onboarding stabilization sequence immediately.
-
-Read `.agents/ORIGINAL_REQUEST.md`, `.agents/orchestrator/BRIEFING.md`, `.agents/orchestrator/progress.md`, and `docs/onboarding_stabilization_report.md`.
-Note: Groups A through H (Issues 1-42) have already been completed and verified PASSED in `docs/onboarding_stabilization_report.md`.
-Resume execution from Group I (Issues 43-55: Onboarding-Wide UI/UX Consistency) through Group K (Issues 63-68) and the Release Gate Verification Loop (13 steps, 2 consecutive passes).
-
-For every issue, strictly execute the exact loop: READ → TRACE → REPRODUCE → IDENTIFY ROOT CAUSE → DESIGN FIX → IMPLEMENT → FORMAT → ANALYZE → RUN TARGETED TESTS → RUN RELATED REGRESSION TESTS → INSPECT RESULT → RE-AUDIT THE CODE → MARK PASS OR LOOP AGAIN.
-
-Working directory: /Users/roy/optivus2/Optivus
-Integrity mode: development (production-level rigor)
-
-## Follow-up — 2026-07-26T21:37:44Z
-
-# Teamwork Project Prompt
-
-> Goal: Completely solve the 68 onboarding, authentication, projection, persistence, recovery, UI, UX, performance, privacy, and testing issues in the Optivus repository sequentially.
-
-Working directory: /Users/roy/optivus2/Optivus
-Integrity mode: development (production-level rigor)
+Integrity mode: development
 
 ## Requirements
 
-### R1. Acceptable approaches
-The team may inspect existing project code, official documentation, dependency source, tests, emulator output, and runtime logs. You may use well-maintained libraries where appropriate, but MUST NOT copy unverified third-party core logic. Every change must be reviewed, adapted to the Optivus architecture, tested, security-checked, and verified through the defined loop.
+### R1. Context Recovery
+- Review the `docs/phase_4_6_final_audit.md` generated by the previous run.
+- Review the modified files from the previous run (e.g., auth state, onboarding services, tests).
 
-### R2. Sequential loop
-For every issue, strictly use the exact loop: READ → TRACE → REPRODUCE → IDENTIFY ROOT CAUSE → DESIGN FIX → IMPLEMENT → FORMAT → ANALYZE → RUN TARGETED TESTS → RUN RELATED REGRESSION TESTS → INSPECT RESULT → RE-AUDIT THE CODE → MARK PASS OR LOOP AGAIN.
-Maintain a living implementation report at `docs/onboarding_stabilization_report.md`.
+### R2. Resume Adversarial Review
+Dispatch reviewers, challengers, and a forensic auditor to stress-test the fixes from Work Packages A-E.
 
-### R3. Global restrictions
-Do not skip issues, combine unrelated issues, suppress errors, weaken Firestore rules, remove tests to make builds green, replace typed failures with generic strings, add fake production repositories, use fake UIDs, introduce timestamp-based retry IDs, use arbitrary delays, etc.
+### R3. Verification & Final Reports
+Every production change requires: Targeted Tests → Regression Tests → `flutter analyze` → Firestore Emulator Tests (if backend changes) → Repository Re-audit.
 
-### R4. Dependency order
-Solve the 68 issues in the exact dependency order specified: Groups A through K. Group H must not be solved before fixing Groups A–D.
-
-### R5. Issue-by-issue execution
-Follow the detailed required fixes, tests, and pass conditions for every issue described in the authoritative specification below.
-Convert all 68 numbered issues into the stabilization report before implementation begins.
-
-### R6. Mandatory baseline
-Before editing:
-1. confirm the repository path;
-2. create a clean git status snapshot;
-3. record the current branch and commit;
-4. run baseline formatting, analyzer, tests, emulator tests, and builds that are available;
-5. reproduce the current recovery failure;
-6. populate all 68 report entries as NOT_STARTED;
-7. produce the dependency plan.
-Do not begin Issue 1 until the baseline is recorded.
-
-### R7. Protect existing unrelated work
-Do not reset, discard, rewrite, or overwrite unrelated local changes. Never use destructive git commands such as `git reset --hard`, `git clean -fd`, or broad checkout restoration. Inspect git status before and after every group.
-
-### R8. Single team concurrency limits
-Parallelize investigation and test analysis where useful, but serialize overlapping code changes. Only one agent may modify a shared architectural area at a time. Assign explicit file ownership and integrate changes through a lead agent.
-
-### R9. Checkpoint after every issue
-After each issue, update the report with:
-- root cause;
-- exact files changed;
-- migration impact;
-- tests added;
-- commands executed;
-- command output summary;
-- remaining risks;
-- PASS or BLOCKED status.
-After every passed group, create a clearly named git commit when permitted. If committing is not permitted, create a patch/diff checkpoint and record its location in the stabilization report. Never commit a partially verified state.
-
-### R10. Stop conditions
-Stop progression and repair immediately when:
-- analyzer develops a new error;
-- a previously passing related test fails;
-- Firestore rules and repository writes diverge;
-- a migration can corrupt existing user data;
-- an issue requires changing an already-passed architectural invariant;
-- the current issue cannot be reproduced or verified.
-
-### R11. Migration and existing-user compatibility
-Every schema or persisted-state change must include:
-- backward-compatible decoding;
-- migration or repair strategy;
-- Firestore rules compatibility;
-- tests for legacy users;
-- tests for partially completed users;
-- tests for current users with existing receipts;
-- no silent data deletion.
+Create `docs/phase_4_6_release_ready.md` with: executive summary, every issue fixed, every issue discovered, production files changed, tests added, Firestore changes, migration impact, remaining technical debt, known limitations, risk assessment, release readiness score.
 
 ## Acceptance Criteria
 
-### Verification Cadence
-- [ ] For each issue: targeted tests; affected-module tests; analyzer on final code.
-- [ ] After every five issues: full Flutter test suite; Firestore emulator suite; architecture-pattern scan.
-- [ ] After each group: full group regression; authentication; onboarding completion; account switching; restart and recovery tests where executable.
+### Automated Verification
+- [ ] `flutter analyze` passes with zero errors
+- [ ] `flutter test` passes with zero failures
+- [ ] Firestore Emulator tests pass (if backend changes were made)
 
-### Evidence Boundary
-- [ ] Never mark a runtime, Firebase, email-verification, real-device, network-interruption, force-close, or two-account scenario as passed unless it was actually executed and evidence was recorded. If access is unavailable, mark it BLOCKED—not PASSED—and continue with every verifiable task.
+### Build Verification
+- [ ] Debug build succeeds (`flutter build apk --debug`)
+- [ ] Release build succeeds or has a documented environment blocker
 
-### Release Gate
-- [ ] Conduct the Release Gate Loop (13 steps) after all 68 issues are marked PASSED. The full loop must pass two consecutive times.
-- [ ] After the first full gate passes, create another fresh account and repeat the complete gate without deleting backend records manually, hot-fixing code between runs, resetting Firestore, or skipping network/restart scenarios.
+### Production Integrity
+- [ ] `docs/phase_4_6_final_audit.md` is completed and reflects the actual codebase
+- [ ] `docs/phase_4_6_release_ready.md` is completed with all required sections
+- [ ] Zero remaining P0 issues
+- [ ] Zero remaining P1 issues
+- [ ] No known recovery loop exists in production code
+- [ ] No duplicate projection exists in production code
+- [ ] No stale async update exists in production code
+- [ ] No account isolation issue exists in production code
+- [ ] No data integrity issue exists in the audited production path
 
-### Final Reporting
-- [ ] In the final report, separate: A. Source-reviewed, B. Automatically tested, C. Firestore-emulator verified, D. Real-device verified, E. Manually unverified or blocked. Do not merge these categories into one “passed” statement.
+### Stop Conditions
+Declare READY FOR REAL-DEVICE TESTING only when ALL of the above are true.
+If any condition fails, continue the audit → fix → verify loop.
+Remaining P2/P3 issues must be documented as technical debt but do not block testing.
 
-### Delegation Prerequisite
-- [ ] Do not delegate implementation until the lead agent has: read the complete 68-issue specification; confirmed all issues are represented in the report; produced file ownership and dependency plans; recorded the baseline; identified which release-gate steps require real-user interaction; confirmed no destructive repository operation will be used.
-- [ ] The lead agent must remain responsible for architecture consistency, integration, verification evidence, and the final verdict. Subagents may investigate or implement bounded tasks, but they may not independently declare an issue or release gate passed.
+## 2026-07-28T15:32:38Z
 
-## Follow-up — 2026-07-26T21:50:06Z
+You are the Project Orchestrator (teamwork_preview_orchestrator) resuming Phase 4.6 Final Production Closure.
 
-You are Project Orchestrator. Resume execution of the 68-issue Optivus onboarding stabilization sequence.
-Your working directory is /Users/roy/optivus2/Optivus/.agents/orchestrator.
-Read .agents/ORIGINAL_REQUEST.md, .agents/orchestrator/BRIEFING.md, .agents/orchestrator/progress.md, and docs/onboarding_stabilization_report.md.
-Note that Groups A through H (Issues 1-42) are 100% PASSED.
-Resume execution immediately from Group I (Issues 43-55: Onboarding-Wide UI/UX Consistency) through Group K (Issues 63-68) and the Release Gate Verification Loop (13 steps, 2 consecutive passes).
-Follow all project constraints, update progress.md and docs/onboarding_stabilization_report.md, and report progress.
+Working directory: /Users/roy/optivus2/Optivus/.agents/orchestrator
+Original request: /Users/roy/optivus2/Optivus/.agents/ORIGINAL_REQUEST.md
+Audit doc: /Users/roy/optivus2/Optivus/docs/phase_4_6_final_audit.md
 
-## Follow-up — 2026-07-26T23:53:26Z
-
-Goal: Completely solve the 68 onboarding, authentication, projection, persistence, recovery, UI, UX, performance, privacy, and testing issues in the Optivus repository sequentially.
-IMPORTANT NOTE: A previous run of this agent was interrupted by network timeouts. Please start by reading `docs/onboarding_stabilization_report.md` to determine the current progress (Groups A-H should be done, and Group I might be in progress). Resume your work from exactly where it left off.
-
-Working directory: /Users/roy/optivus2/Optivus
-Integrity mode: development (production-level rigor)
-
-
+Resume where the previous orchestrator left off:
+1. Review .agents/orchestrator/plan.md and .agents/orchestrator/progress.md to understand the state. Work Packages A through E are completed.
+2. Resume Milestone 3: Dispatch reviewers, challengers, and forensic auditor to stress-test the fixes.
+3. Resume Milestone 4: Verification & Final Reports. Ensure `flutter analyze` passes with zero errors, `flutter test` passes with zero failures, build verification succeeds (`flutter build apk --debug`), update `docs/phase_4_6_final_audit.md`, and generate `docs/phase_4_6_release_ready.md`.
+4. When all work and verification is completed and all acceptance criteria are met, send your completion claim back to Sentinel.
 
 

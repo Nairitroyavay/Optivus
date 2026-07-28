@@ -924,12 +924,339 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Phase 2B onboarding draft/completion bundle. Validation stays light for
-    // early development; production backend modules must add specific schemas.
-    match /users/{uid}/onboarding/{docId} {
-      allow read, write: if verifiedOwner(uid);
+    function validUserProfileKeys(data) {
+      return data.keys().hasOnly([
+        "uid",
+        "id",
+        "email",
+        "displayName",
+        "name",
+        "timezone",
+        "createdAt",
+        "updatedAt",
+        "schemaVersion",
+        "onboardingInputCompleted",
+        "onboardingProjectionStatus",
+        "onboardingCompleted",
+        "onboardingStep",
+        "lastDayClosed",
+        "coachName",
+        "coachStyle",
+        "accountabilityMode",
+        "notificationSettings",
+        "accountStatus",
+        "lifeRole",
+        "workingExtra",
+        "businessMode",
+        "exerciseLevel",
+        "waterIntake",
+        "stressLevel",
+        "sleepQuality",
+        "ageRange",
+        "height",
+        "weight",
+        "gender",
+        "bmiEstimate",
+        "calorieEstimate",
+        "proteinEstimate",
+        "slipUpStyle"
+      ]);
     }
 
+    function validUserProfile(data, uid) {
+      return validUserProfileKeys(data)
+        && (data.uid == uid || data.id == uid)
+        && data.email is string
+        && data.email.size() > 0
+        && data.email.size() <= 320
+        && (!data.keys().hasAny(["displayName"]) || (data.displayName is string && data.displayName.size() <= 200))
+        && (!data.keys().hasAny(["name"]) || (data.name is string && data.name.size() <= 200))
+        && (!data.keys().hasAny(["onboardingCompleted"]) || data.onboardingCompleted is bool)
+        && (!data.keys().hasAny(["onboardingInputCompleted"]) || data.onboardingInputCompleted is bool)
+        && (!data.keys().hasAny(["onboardingProjectionStatus"]) || (data.onboardingProjectionStatus is string && data.onboardingProjectionStatus.size() <= 50))
+        && (!data.keys().hasAny(["onboardingStep"]) || data.onboardingStep is int)
+        && (!data.keys().hasAny(["timezone"]) || (data.timezone is string && data.timezone.size() <= 100))
+        && (!data.keys().hasAny(["coachName"]) || (data.coachName is string && data.coachName.size() <= 100))
+        && (!data.keys().hasAny(["coachStyle"]) || (data.coachStyle is string && data.coachStyle.size() <= 50))
+        && (!data.keys().hasAny(["accountabilityMode"]) || (data.accountabilityMode is string && data.accountabilityMode.size() <= 50))
+        && (!data.keys().hasAny(["accountStatus"]) || (data.accountStatus is string && data.accountStatus.size() <= 50))
+        && (!data.keys().hasAny(["lifeRole"]) || (data.lifeRole is map || (data.lifeRole is string && data.lifeRole.size() <= 100)))
+        && (!data.keys().hasAny(["workingExtra"]) || (data.workingExtra is bool || (data.workingExtra is string && data.workingExtra.size() <= 100)))
+        && (!data.keys().hasAny(["businessMode"]) || (data.businessMode is bool || (data.businessMode is string && data.businessMode.size() <= 100)))
+        && (!data.keys().hasAny(["exerciseLevel"]) || (data.exerciseLevel is string && data.exerciseLevel.size() <= 50))
+        && (!data.keys().hasAny(["waterIntake"]) || (data.waterIntake is number || (data.waterIntake is string && data.waterIntake.size() <= 50)))
+        && (!data.keys().hasAny(["stressLevel"]) || (data.stressLevel is number || (data.stressLevel is string && data.stressLevel.size() <= 50)))
+        && (!data.keys().hasAny(["sleepQuality"]) || (data.sleepQuality is number || (data.sleepQuality is string && data.sleepQuality.size() <= 50)))
+        && (!data.keys().hasAny(["ageRange"]) || (data.ageRange is string && data.ageRange.size() <= 50))
+        && (!data.keys().hasAny(["height"]) || (data.height is number || (data.height is string && data.height.size() <= 50)))
+        && (!data.keys().hasAny(["weight"]) || (data.weight is number || (data.weight is string && data.weight.size() <= 50)))
+        && (!data.keys().hasAny(["gender"]) || (data.gender is string && data.gender.size() <= 50))
+        && (!data.keys().hasAny(["bmiEstimate"]) || (data.bmiEstimate is number || (data.bmiEstimate is string && data.bmiEstimate.size() <= 50)))
+        && (!data.keys().hasAny(["calorieEstimate"]) || data.calorieEstimate is number)
+        && (!data.keys().hasAny(["proteinEstimate"]) || data.proteinEstimate is number)
+        && (!data.keys().hasAny(["slipUpStyle"]) || (data.slipUpStyle is string && data.slipUpStyle.size() <= 100))
+        && (!data.keys().hasAny(["lastDayClosed"]) || (data.lastDayClosed is timestamp || (data.lastDayClosed is string && data.lastDayClosed.size() <= 50)))
+        && (!data.keys().hasAny(["notificationSettings"]) || data.notificationSettings is map)
+        && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp || data.createdAt is string)
+        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string)
+        && (!data.keys().hasAny(["schemaVersion"]) || (data.schemaVersion is int && data.schemaVersion >= 1));
+    }
+
+    function validOnboardingDraftKeys(data) {
+      return data.keys().hasOnly([
+        "uid",
+        "schemaVersion",
+        "source",
+        "currentStep",
+        "stepCompleted",
+        "stepDirty",
+        "stepLoading",
+        "createdAt",
+        "updatedAt",
+        "onboardingCompleted",
+        "welcomeSaved",
+        "patiencePledgeAccepted",
+        "patiencePledgeText",
+        "lifeRole",
+        "bodyBasics",
+        "baseTimeline",
+        "badHabitsNotNow",
+        "badHabits",
+        "goodHabitsNotNow",
+        "goodHabits",
+        "identityGoals",
+        "coachSetup",
+        "slipUpHandling",
+        "notifications",
+        "finalPreview"
+      ]);
+    }
+
+    function validOnboardingDraft(data, uid) {
+      return validOnboardingDraftKeys(data)
+        && data.uid == uid
+        && data.schemaVersion is int
+        && data.schemaVersion >= 1
+        && data.currentStep is int
+        && data.currentStep >= 0
+        && data.stepCompleted is list
+        && data.stepDirty is list
+        && data.stepLoading is list
+        && data.onboardingCompleted is bool
+        && data.welcomeSaved is bool
+        && data.patiencePledgeAccepted is bool
+        && data.badHabitsNotNow is bool
+        && data.badHabits is list
+        && data.goodHabitsNotNow is bool
+        && data.goodHabits is list
+        && data.identityGoals is list
+        && data.lifeRole is map
+        && data.bodyBasics is map
+        && data.baseTimeline is map
+        && data.coachSetup is map
+        && data.notifications is map
+        && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp || data.createdAt is string)
+        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string)
+        && (!data.keys().hasAny(["patiencePledgeText"]) || data.patiencePledgeText is string)
+        && (!data.keys().hasAny(["slipUpHandling"]) || data.slipUpHandling is string)
+        && (!data.keys().hasAny(["finalPreview"]) || data.finalPreview is map);
+    }
+
+    function validOnboardingCompletionBundleKeys(data) {
+      return data.keys().hasOnly([
+        "uid",
+        "schemaVersion",
+        "version",
+        "source",
+        "createdAt",
+        "updatedAt",
+        "onboardingCompleted",
+        "userProfilePatch",
+        "baseTimelineBlocks",
+        "finalTimelineItems",
+        "routineItemsForApp",
+        "goodHabitTemplates",
+        "badHabitCheckIns",
+        "identityGoalSystems",
+        "notificationPreferences",
+        "coachPreferences",
+        "moneyGoal",
+        "uploadedAssetReferences",
+        "warnings",
+        "duplicateSystemKeysMerged"
+      ]);
+    }
+
+    function validOnboardingCompletionBundle(data, uid) {
+      return validOnboardingCompletionBundleKeys(data)
+        && data.uid == uid
+        && (data.keys().hasAny(["schemaVersion"]) ? (data.schemaVersion is int && data.schemaVersion >= 1) : true)
+        && (data.keys().hasAny(["version"]) ? (data.version is int && data.version >= 1) : true)
+        && data.onboardingCompleted == true
+        && data.userProfilePatch is map
+        && data.baseTimelineBlocks is list
+        && data.finalTimelineItems is list
+        && data.routineItemsForApp is list
+        && data.goodHabitTemplates is list
+        && data.badHabitCheckIns is list
+        && data.identityGoalSystems is list
+        && data.notificationPreferences is map
+        && data.coachPreferences is map
+        && data.uploadedAssetReferences is list
+        && data.warnings is list
+        && data.duplicateSystemKeysMerged is list
+        && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp || data.createdAt is string)
+        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string)
+        && (!data.keys().hasAny(["moneyGoal"]) || data.moneyGoal is map);
+    }
+
+    function validOnboardingCompletionJob(data, jobId) {
+      return data.keys().hasOnly([
+        "jobId", "ownerUid", "stage", "status", "createdAt", "updatedAt", "schemaVersion"
+      ])
+      && data.keys().hasAll([
+        "jobId", "ownerUid", "stage", "status"
+      ])
+      && data.ownerUid == request.auth.uid
+      && data.jobId == jobId
+      && data.stage is string
+      && data.status is string
+      && (data.status == "in_progress" || data.status == "completed" || data.status == "failed")
+      && (!data.keys().hasAny(["schemaVersion"]) || (data.schemaVersion is int && data.schemaVersion >= 1))
+      && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp || data.createdAt is string)
+      && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string);
+    }
+
+    function validGoalKeys(data) {
+      return data.keys().hasOnly([
+        "id",
+        "identityTitle",
+        "purposeStatement",
+        "progressPercent",
+        "systems",
+        "dailyProof",
+        "streakDays",
+        "isArchived",
+        "isPaused",
+        "createdAt",
+        "updatedAt",
+        "schemaVersion"
+      ]);
+    }
+
+    function validGoal(data, goalId) {
+      return validGoalKeys(data)
+        && (!data.keys().hasAny(["id"]) || data.id == goalId)
+        && data.identityTitle is string
+        && data.identityTitle.size() > 0
+        && data.identityTitle.size() <= 200
+        && data.purposeStatement is string
+        && data.progressPercent is number
+        && data.systems is list
+        && data.dailyProof is map
+        && data.streakDays is int
+        && data.isArchived is bool
+        && data.isPaused is bool;
+    }
+
+    function validTrackerHistoryEntry(data, eventId) {
+      return data.keys().hasOnly([
+        "id", "userId", "trackerType", "category", "title", "subtitle",
+        "occurredAt", "sourceId", "valueLabel", "completed", "createdAt"
+      ])
+      && data.trackerType is string
+      && data.category is string
+      && data.title is string;
+    }
+
+    function validFocusSession(data, sessionId) {
+      return data.keys().hasOnly([
+        "id", "userId", "mode", "startedAt", "completedAt", "targetMinutes",
+        "completedMinutes", "linkedRoutineItemId", "linkedRoutineTitle",
+        "status", "distractionRiskScore", "createdAt", "updatedAt"
+      ])
+      && data.mode is string
+      && data.targetMinutes is int;
+    }
+
+    function validCoachSession(data, sessionId) {
+      return data.keys().hasOnly([
+        "id", "title", "type", "coachName", "coachStyle", "messages", "createdAt", "updatedAt"
+      ])
+      && data.title is string
+      && data.coachName is string
+      && data.messages is list;
+    }
+
+    function validMindNote(data, noteId) {
+      return data.keys().hasOnly([
+        "id", "content", "type", "intensity", "timestamp", "isSharedWithCoach", "createdAt", "updatedAt"
+      ])
+      && data.content is string
+      && data.type is string
+      && data.intensity is string;
+    }
+
+    function validSimpleTracker(data) {
+      return data.keys().hasOnly(["id", "enabledTrackers", "createdAt", "updatedAt"])
+        && (!data.keys().hasAny(["enabledTrackers"]) || data.enabledTrackers is list);
+    }
+
+    function validHabitTemplate(data, habitId) {
+      return data.keys().hasOnly(["id", "title", "category", "targetDaysPerWeek", "createdAt", "updatedAt"])
+        && (!data.keys().hasAny(["id"]) || data.id == habitId)
+        && data.title is string
+        && data.title.size() <= 200;
+    }
+
+    function validBadHabitCheckin(data, habitId) {
+      return data.keys().hasOnly(["id", "habitId", "timestamp", "note", "createdAt"])
+        && (!data.keys().hasAny(["habitId"]) || data.habitId is string);
+    }
+
+    function validMoneyEntry(data) {
+      return data.keys().hasOnly(["id", "title", "targetAmount", "currentAmount", "amount", "category", "dateKey", "createdAt", "updatedAt"]);
+    }
+
+    function validHealthLog(data) {
+      return data.keys().hasOnly(["id", "title", "value", "unit", "notes", "timestamp", "dateKey", "createdAt", "updatedAt"]);
+    }
+
+    function validHomeDashboard(data) {
+      return data.keys().hasOnly(["id", "lastUpdated", "widgets", "summary", "createdAt", "updatedAt"]);
+    }
+
+    function validSettingsDoc(data) {
+      return data.keys().hasOnly(["id", "locale", "timeFormat", "themeMode", "notificationsEnabled", "updatedAt", "createdAt"]);
+    }
+
+    function validNotificationPreferences(data) {
+      return data.keys().hasOnly(["id", "pushEnabled", "emailEnabled", "dailyReminderTime", "quietHoursStart", "quietHoursEnd", "updatedAt", "createdAt"]);
+    }
+
+    function validCoachPreferences(data) {
+      return data.keys().hasOnly(["id", "coachName", "coachStyle", "accountabilityMode", "createdAt", "updatedAt"]);
+    }
+
+    function validProfileSubdoc(data) {
+      return data.keys().hasOnly(["id", "bio", "avatarUrl", "theme", "createdAt", "updatedAt"]);
+    }
+
+    // PATH3-SEC-02: Hardened Onboarding Draft & Completion Bundle schemas
+    match /users/{uid}/onboarding/{docId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && ((docId == "draft" && validOnboardingDraft(request.resource.data, uid))
+            || (docId == "completionBundle" && validOnboardingCompletionBundle(request.resource.data, uid)));
+      allow delete: if false;
+    }
+
+    match /users/{uid}/onboardingCompletionJobs/{jobId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validOnboardingCompletionJob(request.resource.data, jobId);
+      allow delete: if verifiedOwner(uid);
+    }
 
     match /users/{uid}/habitSystems/{systemId} {
       allow read: if verifiedOwner(uid);
@@ -974,25 +1301,164 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /users/{uid} {
-      allow read, write: if verifiedOwner(uid);
+    // PATH3-SEC-01: Explicit feature subcollection rules with schema validation
+    match /users/{uid}/goals/{goalId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validGoal(request.resource.data, goalId);
+      allow delete: if verifiedOwner(uid);
     }
 
-    // Temporary verified-owner development catchall.
-    // Home/Routine/Tracker/Goals/Coach backend collections must get specific
-    // collection rules before production release. Uploads and import reviews
-    // are excluded here because their stricter rules above already apply.
-    match /users/{uid}/{collectionId}/{document=**} {
-      allow read, write: if verifiedOwner(uid)
-        && collectionId != "uploads"
-        && collectionId != "routineImportReviews"
-        && collectionId != "routineItems"
-        && collectionId != "routineHistory"
-        && collectionId != "routineEvents"
-        && collectionId != "routineProjections"
-        && collectionId != "habitSystems"
-        && collectionId != "syncAllowances"
-        && collectionId != "syncEvents";
+    match /users/{uid}/trackers/{trackerId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validSimpleTracker(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/tracker/{docId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validSimpleTracker(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/trackerHistory/{eventId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validTrackerHistoryEntry(request.resource.data, eventId);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/habitTemplates/{habitId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validHabitTemplate(request.resource.data, habitId);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/badHabitCheckins/{habitId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validBadHabitCheckin(request.resource.data, habitId);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/money/{docId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validMoneyEntry(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/money/{docId}/{subcollection}/{subDocId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validMoneyEntry(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/focusSessions/{sessionId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validFocusSession(request.resource.data, sessionId);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/sleepLogs/{logId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validHealthLog(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/nutritionLogs/{logId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validHealthLog(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/fitnessSessions/{sessionId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validHealthLog(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/home/{docId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validHomeDashboard(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/coachSessions/{sessionId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validCoachSession(request.resource.data, sessionId);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/coach/{docId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validCoachPreferences(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/coach/{docId}/{subcollection}/{subDocId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && (docId == "preferences" ? validCoachPreferences(request.resource.data) : validCoachSession(request.resource.data, subDocId));
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/mindNotes/{noteId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validMindNote(request.resource.data, noteId);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/settings/{settingId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validSettingsDoc(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/notifications/{docId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validNotificationPreferences(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/notifications/{docId}/{subcollection}/{subDocId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validNotificationPreferences(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/profile/{docId} {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validProfileSubdoc(request.resource.data);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    // PATH3-SEC-03: User Profile strict schema validation
+    match /users/{uid} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validUserProfile(request.resource.data, uid);
+      allow update: if verifiedOwner(uid)
+        && validUserProfile(request.resource.data, uid)
+        && (!resource.data.keys().hasAny(["uid"]) || request.resource.data.uid == resource.data.uid)
+        && (!resource.data.keys().hasAny(["createdAt"]) || request.resource.data.createdAt == resource.data.createdAt);
+      allow delete: if verifiedOwner(uid);
     }
   }
 }

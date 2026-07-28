@@ -82,6 +82,7 @@ class RecoveryRetryController extends StateNotifier<RecoveryRetryState> {
 
   void reset() {
     _timer?.cancel();
+    _timer = null;
     state = const RecoveryRetryState();
   }
 

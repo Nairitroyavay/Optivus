@@ -49,18 +49,27 @@ class _AppShellState extends ConsumerState<AppShell> {
   void initState() {
     super.initState();
     _tabCache = List<Widget?>.filled(_tabGradients.length, null);
-    final initialIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
-    _ensureTabLoaded(initialIndex);
-    ref.read(appNavigationProvider.notifier).setTab(initialIndex);
+    final targetIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
+    _ensureTabLoaded(targetIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(appNavigationProvider.notifier).setTab(targetIndex);
+      }
+    });
   }
 
   @override
   void didUpdateWidget(covariant AppShell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.initialIndex != widget.initialIndex) {
-      final nextIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
-      _ensureTabLoaded(nextIndex);
-      ref.read(appNavigationProvider.notifier).setTab(nextIndex);
+    final targetIndex = widget.initialIndex.clamp(0, _tabGradients.length - 1);
+    if (oldWidget.initialIndex != widget.initialIndex ||
+        ref.read(appNavigationProvider) != targetIndex) {
+      _ensureTabLoaded(targetIndex);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(appNavigationProvider.notifier).setTab(targetIndex);
+        }
+      });
     }
   }
 

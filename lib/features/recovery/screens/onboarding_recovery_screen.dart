@@ -263,14 +263,20 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
                                   ),
                                   const SizedBox(height: 8),
                                   ElevatedButton(
-                                    onPressed: retryState.canRetry
+                                    onPressed:
+                                        retryState.canRetry ||
+                                            action
+                                                is RestartOnboardingInputAction
                                         ? () {
-                                            ref
-                                                .read(
-                                                  recoveryRetryControllerProvider
-                                                      .notifier,
-                                                )
-                                                .recordAttemptAndStartCooldown();
+                                            if (action
+                                                is! RestartOnboardingInputAction) {
+                                              ref
+                                                  .read(
+                                                    recoveryRetryControllerProvider
+                                                        .notifier,
+                                                  )
+                                                  .recordAttemptAndStartCooldown();
+                                            }
                                             ref
                                                 .read(authProvider.notifier)
                                                 .executeRecoveryAction(action);

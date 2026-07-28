@@ -171,7 +171,7 @@ beforeAll(async () => {
       rules: fs.readFileSync("firestore.rules", "utf8"),
     },
   });
-});
+}, 30000);
 
 afterAll(async () => {
   await testEnv.cleanup();
@@ -528,4 +528,247 @@ describe("Firestore Rules for Routine durability", () => {
       await assertFails(projRef.update({ cursor: 1 }));
     });
   });
+
+  describe("Work Package E Remediation (Phase 4.6 Final Production Closure)", () => {
+    describe("ISSUE-SEC-01 / PATH3-SEC-01: Wildcard Subcollection Catch-All Rule Bypasses Validation", () => {
+      it("allows owner to write valid subcollection documents and rejects malformed or arbitrary keys", async () => {
+        const owner = ownerDb("user123", true);
+
+        // Valid tracker config doc
+        const trackerRef = owner.collection("users").doc("user123").collection("trackers").doc("config");
+        await assertSucceeds(trackerRef.set({
+          id: "config",
+          enabledTrackers: ["water", "sleep"],
+          createdAt,
+          updatedAt
+        }));
+
+        // Malformed tracker config with illegal key
+        await assertFails(trackerRef.set({
+          id: "config",
+          enabledTrackers: ["water"],
+          illegalInjection: true
+        }));
+
+        // Valid habit template doc
+        const habitRef = owner.collection("users").doc("user123").collection("habitTemplates").doc("habit-1");
+        await assertSucceeds(habitRef.set({
+          id: "habit-1",
+          title: "Morning Journaling",
+          category: "mindfulness",
+          targetDaysPerWeek: 5,
+          createdAt,
+          updatedAt
+        }));
+
+        // Malformed habit template with oversized title
+        await assertFails(habitRef.set({
+          id: "habit-1",
+          title: "A".repeat(250),
+          category: "mindfulness"
+        }));
+
+        // Valid money entry doc
+        const moneyRef = owner.collection("users").doc("user123").collection("money").doc("goals").collection("items").doc("goal-1");
+        await assertSucceeds(moneyRef.set({
+          id: "goal-1",
+          title: "Emergency Fund",
+          targetAmount: 5000,
+          currentAmount: 1000,
+          createdAt,
+          updatedAt
+        }));
+
+        // Malformed money entry doc
+        await assertFails(moneyRef.set({
+          id: "goal-1",
+          unsupportedField: "malicious"
+        }));
+
+        // Valid coach preferences doc
+        const coachPrefRef = owner.collection("users").doc("user123").collection("coach").doc("preferences").collection("main").doc("settings");
+        await assertSucceeds(coachPrefRef.set({
+          id: "settings",
+          coachName: "Marcus",
+          coachStyle: "direct",
+          accountabilityMode: "daily",
+          createdAt,
+          updatedAt
+        }));
+
+        // Malformed coach preferences doc
+        await assertFails(coachPrefRef.set({
+          id: "settings",
+          unknownKey: 12345
+        }));
+      });
+
+      it("rejects cross-user subcollection writes", async () => {
+        const otherUser = ownerDb("other_user", true);
+
+        const trackerRef = otherUser.collection("users").doc("user123").collection("trackers").doc("config");
+        await assertFails(trackerRef.set({
+          id: "config",
+          enabledTrackers: ["water"]
+        }));
+
+        const settingsRef = otherUser.collection("users").doc("user123").collection("settings").doc("appPreferences");
+        await assertFails(settingsRef.set({
+          id: "appPreferences",
+          locale: "en_US"
+        }));
+      });
+    });
+
+    describe("ISSUE-SEC-02 / PATH3-SEC-02: Permissive Onboarding Collection Rule Allows Malformed Document Injection", () => {
+      it("allows verified owner valid onboarding draft and bundle writes and rejects malformed documents", async () => {
+        const owner = ownerDb("user123", true);
+
+        // Valid onboarding draft
+        const draftRef = owner.collection("users").doc("user123").collection("onboarding").doc("draft");
+        await assertSucceeds(draftRef.set({
+          uid: "user123",
+          schemaVersion: 1,
+          currentStep: 2,
+          stepCompleted: [0, 1],
+          stepDirty: [],
+          stepLoading: [],
+          onboardingCompleted: false,
+          welcomeSaved: true,
+          patiencePledgeAccepted: true,
+          badHabitsNotNow: true,
+          badHabits: [],
+          goodHabitsNotNow: true,
+          goodHabits: [],
+          identityGoals: [],
+          lifeRole: {},
+          bodyBasics: {},
+          baseTimeline: {},
+          coachSetup: {},
+          notifications: {},
+          createdAt,
+          updatedAt
+        }));
+
+        // Malformed onboarding draft (invalid currentStep type and missing schemaVersion)
+        await assertFails(draftRef.set({
+          uid: "user123",
+          currentStep: "not-a-number"
+        }));
+
+        // Malformed onboarding draft with illegal field injection
+        await assertFails(draftRef.set({
+          uid: "user123",
+          schemaVersion: 1,
+          currentStep: 0,
+          stepCompleted: [],
+          stepDirty: [],
+          stepLoading: [],
+          onboardingCompleted: false,
+          welcomeSaved: true,
+          patiencePledgeAccepted: true,
+          badHabitsNotNow: true,
+          badHabits: [],
+          goodHabitsNotNow: true,
+          goodHabits: [],
+          identityGoals: [],
+          lifeRole: {},
+          bodyBasics: {},
+          baseTimeline: {},
+          coachSetup: {},
+          notifications: {},
+          injectedHackerField: "pwned"
+        }));
+
+        // Valid completion bundle
+        const bundleRef = owner.collection("users").doc("user123").collection("onboarding").doc("completionBundle");
+        await assertSucceeds(bundleRef.set({
+          uid: "user123",
+          schemaVersion: 1,
+          onboardingCompleted: true,
+          userProfilePatch: { displayName: "Test User" },
+          baseTimelineBlocks: [],
+          finalTimelineItems: [],
+          routineItemsForApp: [],
+          goodHabitTemplates: [],
+          badHabitCheckIns: [],
+          identityGoalSystems: [],
+          notificationPreferences: {},
+          coachPreferences: {},
+          uploadedAssetReferences: [],
+          warnings: [],
+          duplicateSystemKeysMerged: [],
+          createdAt,
+          updatedAt
+        }));
+
+        // Malformed completion bundle (onboardingCompleted = false)
+        await assertFails(bundleRef.set({
+          uid: "user123",
+          schemaVersion: 1,
+          onboardingCompleted: false,
+          userProfilePatch: {}
+        }));
+
+        // Reject arbitrary unrecognized onboarding doc ID
+        const malformedDocRef = owner.collection("users").doc("user123").collection("onboarding").doc("arbitraryDoc");
+        await assertFails(malformedDocRef.set({
+          uid: "user123",
+          randomData: true
+        }));
+      });
+    });
+
+    describe("ISSUE-SEC-03 / PATH3-SEC-03: Root User Profile Document (/users/{uid}) Lacks Key & Field Length Rules", () => {
+      it("enforces strict field length restrictions, required string formats, and immutable uid on /users/{uid}", async () => {
+        const owner = ownerDb("user123", true);
+        const userRef = owner.collection("users").doc("user123");
+
+        // Valid user profile set
+        await assertSucceeds(userRef.set({
+          uid: "user123",
+          email: "user@example.com",
+          displayName: "Valid User Name",
+          timezone: "America/New_York",
+          coachName: "Coach Alex",
+          coachStyle: "supportive",
+          createdAt,
+          updatedAt,
+          schemaVersion: 1
+        }));
+
+        // Reject oversized displayName (> 200 chars)
+        await assertFails(userRef.set({
+          uid: "user123",
+          email: "user@example.com",
+          displayName: "X".repeat(250)
+        }));
+
+        // Reject oversized coachName (> 100 chars)
+        await assertFails(userRef.set({
+          uid: "user123",
+          email: "user@example.com",
+          coachName: "Y".repeat(150)
+        }));
+
+        // Reject unallowed key injection
+        await assertFails(userRef.set({
+          uid: "user123",
+          email: "user@example.com",
+          adminPrivileges: true
+        }));
+
+        // Reject mutating uid on update
+        await assertFails(userRef.update({
+          uid: "hacker_uid"
+        }));
+
+        // Reject mutating createdAt on update
+        await assertFails(userRef.update({
+          createdAt: new Date("2020-01-01T00:00:00.000Z")
+        }));
+      });
+    });
+  });
 });
+

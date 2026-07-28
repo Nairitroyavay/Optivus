@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'package:optivus/features/tracker/money/money_system_mock_flows.dart';
 import 'package:optivus/models/money_models.dart';
+import 'package:optivus/models/tracker_models.dart';
+import 'package:optivus/repositories/tracker_repository.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'home_glass_widgets.dart';
 
@@ -80,6 +84,11 @@ class TodayCheckInCard extends ConsumerWidget {
                 compact: true,
                 accent: activeColor,
                 onTap: () {
+                  final isFirebase =
+                      ref.read(optivusBackendModeProvider) ==
+                      OptivusBackendMode.firebase;
+                  final uid = ref.read(authProvider).user?.uid;
+
                   if (item.id == 'money_saved') {
                     if (option == 'Custom') {
                       showIAlreadySavedFlow(
@@ -108,8 +117,46 @@ class TodayCheckInCard extends ConsumerWidget {
                             source: MoneyEntrySource.manual,
                             description: 'Home money saved check-in',
                           );
+
+                      if (isFirebase && uid != null && uid.isNotEmpty) {
+                        final now = DateTime.now();
+                        final savingEntry = SavingEntry(
+                          id: 'home_checkin_${now.millisecondsSinceEpoch}',
+                          amount: amount,
+                          currencyCode: region.currencyCode,
+                          createdAt: now,
+                          dateKey:
+                              '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+                          description: 'Home money saved check-in',
+                          status: MoneyEntryStatus.confirmed,
+                          source: MoneyEntrySource.manual,
+                          method: goal.defaultMethod,
+                          note: 'Home money saved check-in',
+                        );
+                        ref
+                            .read(moneyRepositoryProvider)
+                            .saveSavingEntry(uid, savingEntry);
+                      }
+                    }
+                  } else {
+                    if (isFirebase && uid != null && uid.isNotEmpty) {
+                      final now = DateTime.now();
+                      final historyEntry = TrackerHistoryEntry(
+                        id: 'checkin_${item.id}_${now.millisecondsSinceEpoch}',
+                        userId: uid,
+                        trackerType: 'check_in',
+                        category: 'check_in',
+                        title: item.title,
+                        subtitle: option,
+                        occurredAt: now,
+                        valueLabel: option,
+                      );
+                      ref
+                          .read(trackerHistoryRepositoryProvider)
+                          .appendHistory(uid, historyEntry);
                     }
                   }
+
                   ref
                       .read(homeDashboardProvider.notifier)
                       .completeCheckIn(item.id, option);

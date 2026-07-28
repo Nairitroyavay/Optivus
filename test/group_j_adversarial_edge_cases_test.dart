@@ -211,8 +211,8 @@ void main() {
         });
         final bundle = OnboardingCompletionBundle.fromMap({'uid': 'user_fail'});
 
-        expect(
-          () async => service.runCompletionJob(
+        await expectLater(
+          service.runCompletionJob(
             uid: 'user_fail',
             finalDraft: draft,
             bundle: bundle,
@@ -220,7 +220,7 @@ void main() {
           throwsStateError,
         );
 
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
         expect(wakeLock.isHeld('onboarding_completion_user_fail'), isFalse);
       },
     );

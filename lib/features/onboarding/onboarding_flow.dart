@@ -239,13 +239,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         return;
       }
 
+      final targetStep = _currentPage;
       final onboardingState = ref.read(mockOnboardingProvider);
-      final isDirty = onboardingState.stepDirty[_currentPage];
-      final isCompleted = onboardingState.stepCompleted[_currentPage];
+      final isDirty = onboardingState.stepDirty[targetStep];
+      final isCompleted = onboardingState.stepCompleted[targetStep];
 
       // If dirty or not completed, force save logic
       if (isDirty || !isCompleted) {
-        final saveSuccess = await _saveStep(_currentPage);
+        final saveSuccess = await _saveStep(targetStep);
         if (!mounted) return;
         if (!saveSuccess) {
           return; // Stop if invalid
@@ -425,6 +426,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   Future<void> _navigateToIndicatorStep(int index) async {
+    if (_isSaving || _isNavigating) return;
     final onboardingState = ref.read(mockOnboardingProvider);
     final boundedIndex = index.clamp(
       0,
@@ -936,7 +938,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     if (path == onboardingEatingPathHasRoutine ||
-        path == onboardingEatingPathCreate) {
+        path == onboardingEatingPathCreate ||
+        path == 'no_routine') {
       if (!base.hasConfirmedSection('eating')) {
         _setInternalValidation('Generate your meal routine first.');
         return true;

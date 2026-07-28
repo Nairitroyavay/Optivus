@@ -320,6 +320,16 @@ class OnboardingDraft {
         if (!completedSteps.take(lastStepIndex).every((done) => done)) {
           return 'Complete and save all previous onboarding steps first.';
         }
+        if (baseTimeline.skinCareSetupPath != null) {
+          final skinCareErr = baseTimeline.validateSkinCareSetup();
+          if (skinCareErr != null) return skinCareErr;
+        }
+        if (baseTimeline.eatingSetupPath != null ||
+            baseTimeline.eatingMode != null ||
+            baseTimeline.shouldPlanMeals != null) {
+          final eatingErr = baseTimeline.validateEatingSetup();
+          if (eatingErr != null) return eatingErr;
+        }
         final preview = buildFinalPreview();
         if (preview.blockingWarnings.isNotEmpty) {
           return preview.blockingWarnings.first;
@@ -1813,17 +1823,18 @@ class BaseTimelineDraft {
       if (skinCareProductPhotoR2Key?.trim().isNotEmpty != true) {
         return 'Add a face photo to personalize your product recommendations.';
       }
-      if (skinCareSuggestedProducts.isEmpty) {
-        return 'Select at least one recommended product before building your routine.';
-      }
     }
     if (skinCareSetupPath == 'has_products' ||
-        skinCareSetupPath == 'no_products') {
+        (skinCareSetupPath == 'no_products' &&
+            skinCareSuggestedProducts.isNotEmpty)) {
       final desired = _normalizeSkinCareDesiredApplicationsPerDay(
         skinCareDesiredApplicationsPerDay,
       );
       final msg = _missingSkinCareRoutineMessage(desired);
       return msg;
+    }
+    if (skinCareSetupPath == 'no_products') {
+      return null;
     }
     return 'Build skin care routine or skip.';
   }

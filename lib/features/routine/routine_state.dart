@@ -449,129 +449,150 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     }
   }
 
+  Future<void>? _inFlightLoad;
+  String? _inFlightUid;
+
   Future<void> loadForOwner(String uid) async {
     if (uid.trim().isEmpty || uid.contains('/')) {
       throw ArgumentError('A valid authenticated Routine owner is required.');
     }
-    final isNewOwner = _ownerUid != uid;
-    final generation = ++_loadGeneration;
-    _ownerUid = uid;
-    // Cancel old subscription BEFORE fetch to prevent stale events.
-    _eventsSubscription?.cancel();
-    _eventsSubscription = null;
-    if (isNewOwner) {
-      state = state.copyWith(
-        loading: true,
-        eventsLoading: true,
-        occurrences: const [],
-        events: const [],
-        corruptEvents: const [],
-        pendingItemIds: const {},
-        pendingOccurrenceIds: const {},
-        failedIntentsByItemId: const {},
-        failedOccurrenceIntentsById: const {},
-        queuedOccurrenceIntentsById: const {},
-        failedBatchIntentsByOperationId: const {},
-        items: const [],
-        clearError: true,
-        clearEventsError: true,
-        clearTrackerIntent: true,
-        conflicts: const [],
-      );
-    } else {
-      state = state.copyWith(loading: true, clearError: true);
+    if (_ownerUid == uid && _inFlightUid == uid && _inFlightLoad != null) {
+      await _inFlightLoad;
+      return;
     }
+    final inFlightCompleter = Completer<void>();
+    _inFlightUid = uid;
+    _inFlightLoad = inFlightCompleter.future;
+
     try {
-      final results = await Future.wait<Object>([
-        _repository.fetchRoutineItems(uid),
-        _historyRepository.fetchHistory(uid),
-      ]);
-      if (generation != _loadGeneration || _ownerUid != uid) return;
-      final remoteItems = results[0] as List<RoutineItem>;
-      final localActiveIds = state.pendingItemIds.union(
-        state.failedIntentsByItemId.keys.toSet(),
-      );
-
-      final mergedItems = <RoutineItem>[];
-      for (final remote in remoteItems) {
-        if (!localActiveIds.contains(remote.id)) {
-          mergedItems.add(remote);
-        }
+      final isNewOwner = _ownerUid != uid;
+      final generation = ++_loadGeneration;
+      _ownerUid = uid;
+      // Cancel old subscription BEFORE fetch to prevent stale events.
+      _eventsSubscription?.cancel();
+      _eventsSubscription = null;
+      if (isNewOwner) {
+        state = state.copyWith(
+          loading: true,
+          eventsLoading: true,
+          occurrences: const [],
+          events: const [],
+          corruptEvents: const [],
+          pendingItemIds: const {},
+          pendingOccurrenceIds: const {},
+          failedIntentsByItemId: const {},
+          failedOccurrenceIntentsById: const {},
+          queuedOccurrenceIntentsById: const {},
+          failedBatchIntentsByOperationId: const {},
+          items: const [],
+          clearError: true,
+          clearEventsError: true,
+          clearTrackerIntent: true,
+          conflicts: const [],
+        );
+      } else {
+        state = state.copyWith(loading: true, clearError: true);
       }
-      for (final id in localActiveIds) {
-        final localItem = state.items.where((e) => e.id == id).firstOrNull;
-        if (localItem != null) {
-          mergedItems.add(localItem);
-        }
-      }
+      try {
+        final results = await Future.wait<Object>([
+          _repository.fetchRoutineItems(uid),
+          _historyRepository.fetchHistory(uid),
+        ]);
+        if (generation != _loadGeneration || _ownerUid != uid) return;
+        final remoteItems = results[0] as List<RoutineItem>;
+        final localActiveIds = state.pendingItemIds.union(
+          state.failedIntentsByItemId.keys.toSet(),
+        );
 
-      final mergedOccurrences = <RoutineOccurrenceRecord>[];
-      final remoteOccurrences = results[1] as List<RoutineOccurrenceRecord>;
-      final localOccurrenceIds = state.pendingOccurrenceIds.union(
-        state.failedOccurrenceIntentsById.keys.toSet(),
-      );
-
-      for (final remote in remoteOccurrences) {
-        if (!localOccurrenceIds.contains(remote.id)) {
-          mergedOccurrences.add(remote);
-        }
-      }
-      for (final id in localOccurrenceIds) {
-        if (state.failedOccurrenceIntentsById.containsKey(id)) {
-          final intent = state.failedOccurrenceIntentsById[id]!;
-          mergedOccurrences.add(
-            intent.previousRecord ?? intent.attemptedRecord,
-          );
-        } else {
-          final localOcc = state.occurrences
-              .where((e) => e.id == id)
-              .firstOrNull;
-          if (localOcc != null) {
-            mergedOccurrences.add(localOcc);
+        final mergedItems = <RoutineItem>[];
+        for (final remote in remoteItems) {
+          if (!localActiveIds.contains(remote.id)) {
+            mergedItems.add(remote);
           }
         }
-      }
+        for (final id in localActiveIds) {
+          final localItem = state.items.where((e) => e.id == id).firstOrNull;
+          if (localItem != null) {
+            mergedItems.add(localItem);
+          }
+        }
 
-      state = state.copyWith(
-        items: mergedItems,
-        occurrences: mergedOccurrences,
-        loading: false,
-        eventsLoading: true,
-      );
-      _recalculateConflicts();
-      final eventsGeneration = ++_eventsGeneration;
-      _eventsSubscription = _transactionRepository
-          .watchEvents(uid)
-          .listen(
-            (feed) {
-              if (mounted &&
-                  _ownerUid == uid &&
-                  _eventsGeneration == eventsGeneration &&
-                  _loadGeneration == generation) {
-                state = state.copyWith(
-                  events: feed.validEvents,
-                  corruptEvents: feed.corruptEvents,
-                  eventsLoading: false,
-                  clearEventsError: true,
-                );
-              }
-            },
-            onError: (Object error) {
-              if (mounted &&
-                  _ownerUid == uid &&
-                  _eventsGeneration == eventsGeneration &&
-                  _loadGeneration == generation) {
-                state = state.copyWith(
-                  eventsLoading: false,
-                  eventsError: error.toString(),
-                );
-              }
-            },
-          );
-    } catch (e) {
-      if (generation != _loadGeneration || _ownerUid != uid) return;
-      state = state.copyWith(loading: false, error: e.toString());
-      rethrow;
+        final mergedOccurrences = <RoutineOccurrenceRecord>[];
+        final remoteOccurrences = results[1] as List<RoutineOccurrenceRecord>;
+        final localOccurrenceIds = state.pendingOccurrenceIds.union(
+          state.failedOccurrenceIntentsById.keys.toSet(),
+        );
+
+        for (final remote in remoteOccurrences) {
+          if (!localOccurrenceIds.contains(remote.id)) {
+            mergedOccurrences.add(remote);
+          }
+        }
+        for (final id in localOccurrenceIds) {
+          if (state.failedOccurrenceIntentsById.containsKey(id)) {
+            final intent = state.failedOccurrenceIntentsById[id]!;
+            mergedOccurrences.add(
+              intent.previousRecord ?? intent.attemptedRecord,
+            );
+          } else {
+            final localOcc = state.occurrences
+                .where((e) => e.id == id)
+                .firstOrNull;
+            if (localOcc != null) {
+              mergedOccurrences.add(localOcc);
+            }
+          }
+        }
+
+        state = state.copyWith(
+          items: mergedItems,
+          occurrences: mergedOccurrences,
+          loading: false,
+          eventsLoading: true,
+        );
+        _recalculateConflicts();
+        final eventsGeneration = ++_eventsGeneration;
+        _eventsSubscription = _transactionRepository
+            .watchEvents(uid)
+            .listen(
+              (feed) {
+                if (mounted &&
+                    _ownerUid == uid &&
+                    _eventsGeneration == eventsGeneration &&
+                    _loadGeneration == generation) {
+                  state = state.copyWith(
+                    events: feed.validEvents,
+                    corruptEvents: feed.corruptEvents,
+                    eventsLoading: false,
+                    clearEventsError: true,
+                  );
+                }
+              },
+              onError: (Object error) {
+                if (mounted &&
+                    _ownerUid == uid &&
+                    _eventsGeneration == eventsGeneration &&
+                    _loadGeneration == generation) {
+                  state = state.copyWith(
+                    eventsLoading: false,
+                    eventsError: error.toString(),
+                  );
+                }
+              },
+            );
+      } catch (e) {
+        if (generation != _loadGeneration || _ownerUid != uid) return;
+        state = state.copyWith(loading: false, error: e.toString());
+        rethrow;
+      }
+    } finally {
+      if (_inFlightUid == uid) {
+        _inFlightLoad = null;
+        _inFlightUid = null;
+      }
+      if (!inFlightCompleter.isCompleted) {
+        inFlightCompleter.complete();
+      }
     }
   }
 

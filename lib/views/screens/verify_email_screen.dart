@@ -36,6 +36,23 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   Future<void>? _verifyOperation;
 
   @override
+  void initState() {
+    super.initState();
+    _cooldown = _calculateRemainingCooldown();
+    if (_cooldown > 0) {
+      _startCooldown();
+    }
+  }
+
+  int _calculateRemainingCooldown() {
+    final lastSent = ref.read(authProvider).lastVerificationEmailSent;
+    if (lastSent == null) return 0;
+    final elapsed = DateTime.now().difference(lastSent).inSeconds;
+    final remaining = _resendCooldownSeconds - elapsed;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     super.dispose();
@@ -45,6 +62,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     if (_checking) return;
 
     final operation = ref.read(authProvider.notifier).checkEmailVerification();
+    if (!mounted) return;
     setState(() {
       _checking = true;
       _verifyOperation = operation;
@@ -73,8 +91,11 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   }
 
   Future<void> _resend() async {
-    if (_resending || _cooldown > 0) return;
+    if (_resending) return;
+    _cooldown = _calculateRemainingCooldown();
+    if (_cooldown > 0) return;
 
+    if (!mounted) return;
     setState(() {
       _resending = true;
       _error = null;
@@ -84,9 +105,12 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     try {
       await ref.read(authProvider.notifier).resendEmailVerification();
       if (!mounted) return;
+      _cooldown = _calculateRemainingCooldown();
+      if (_cooldown == 0) {
+        _cooldown = _resendCooldownSeconds;
+      }
       setState(() {
         _success = 'Verification email sent. Check your inbox.';
-        _cooldown = _resendCooldownSeconds;
       });
       _startCooldown();
     } catch (error) {
@@ -104,12 +128,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
         timer.cancel();
         return;
       }
-      if (_cooldown <= 1) {
+      final remaining = _calculateRemainingCooldown();
+      if (remaining <= 0) {
         timer.cancel();
-        setState(() => _cooldown = 0);
+        if (mounted) setState(() => _cooldown = 0);
         return;
       }
-      setState(() => _cooldown--);
+      if (mounted) setState(() => _cooldown = remaining);
     });
   }
 

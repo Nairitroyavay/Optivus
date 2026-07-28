@@ -219,7 +219,9 @@ class RoutineOnboardingEventProjector {
       currentReceipt = nextReceipt;
     }
 
-    if (events.isEmpty && currentReceipt.status != 'completed') {
+    if ((events.isEmpty ||
+            currentReceipt.cursor == currentReceipt.totalCount) &&
+        currentReceipt.status != 'completed') {
       final now = DateTime.now().toUtc();
       final nextReceipt = currentReceipt.copyWith(
         cursor: currentReceipt.totalCount,

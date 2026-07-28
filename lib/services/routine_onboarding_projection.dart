@@ -40,6 +40,7 @@ class RoutineOnboardingProjection {
     validateOwnerUid(bundle.uid);
     final normalized = <RoutineItem>[];
     final usedIds = <String>{};
+    final occurrenceCounts = <String, int>{};
     for (var index = 0; index < bundle.routineItemsForApp.length; index++) {
       final source = bundle.routineItemsForApp[index];
       final sourceKey = source.id.trim().isEmpty
@@ -50,10 +51,12 @@ class RoutineOnboardingProjection {
         sourceItemId: sourceKey,
       );
       if (!usedIds.add(id)) {
+        final count = (occurrenceCounts[sourceKey] ?? 0) + 1;
+        occurrenceCounts[sourceKey] = count;
         id = stableRoutineDocumentId(
           ownerUid: bundle.uid,
           sourceItemId:
-              '$sourceKey|${_semanticSourceKey(source)}|duplicate:$index',
+              '$sourceKey|${_semanticSourceKey(source)}|duplicate:$count',
         );
         usedIds.add(id);
       }

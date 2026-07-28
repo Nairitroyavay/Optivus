@@ -72,10 +72,28 @@ class OnboardingCompletionService {
     // Tier 3: Inspect user profile and synthesize fallback bundle
     final userProfile = await profileRepository.fetchUserProfile(uid);
     if (userProfile != null) {
-      final synthesizedDraft = OnboardingDraft(uid: uid).copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
+      final synthesizedDraft =
+          OnboardingDraft(
+            uid: uid,
+            baseTimeline: const BaseTimelineDraft(
+              skinCareSkipped: true,
+              blocks: [
+                TimelineBlockDraft(
+                  id: 'eating_lunch',
+                  section: 'eating',
+                  title: 'Lunch',
+                  blockType: 'softBlock',
+                  startMinute: 720,
+                  endMinute: 750,
+                  repeatDays: [1, 2, 3, 4, 5],
+                  needsTimeConfirmation: false,
+                ),
+              ],
+            ).withRequiredFixedBlocks(),
+          ).copyWith(
+            onboardingCompleted: true,
+            currentStep: OnboardingDraft.lastStepIndex,
+          );
       bundle = buildBundle(synthesizedDraft);
       await onboardingRepository.saveDraft(synthesizedDraft);
       await onboardingRepository.saveCompletionBundle(bundle);
@@ -93,13 +111,29 @@ class OnboardingCompletionService {
   }
 
   static OnboardingCompletionBundle buildBundle(OnboardingDraft draft) {
-    final now = DateTime.now();
-    final preview = draft.buildFinalPreview();
     final baseItems = mergeOverlappingEatingBlocks(
       draft.baseTimeline.blocks
           .where((block) => !block.needsTimeConfirmation)
           .toList(),
     );
+    final mergedTimeline = draft.baseTimeline.copyWith(blocks: baseItems);
+
+    if (draft.baseTimeline.skinCareSetupPath != null) {
+      final skinCareErr = mergedTimeline.validateSkinCareSetup();
+      if (skinCareErr != null) {
+        throw StateError(skinCareErr);
+      }
+    }
+    if (draft.baseTimeline.eatingSetupPath != null ||
+        draft.baseTimeline.eatingMode != null ||
+        draft.baseTimeline.shouldPlanMeals != null) {
+      final eatingErr = mergedTimeline.validateEatingSetup();
+      if (eatingErr != null) {
+        throw StateError(eatingErr);
+      }
+    }
+    final now = DateTime.now();
+    final preview = draft.buildFinalPreview();
 
     // We rebuild routine items per day to ensure no hard-block overlaps
     final routineItems = _scheduleRoutineItems(draft, baseItems, preview.items);

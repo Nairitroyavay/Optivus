@@ -368,6 +368,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           .where((entry) => entry.section != onboardingSectionEating)
           .toList(growable: false);
       return base.copyWith(
+        eatingSetupPath: base.eatingSetupPath ?? onboardingEatingPathCreate,
         blocks: nextBlocks,
         pendingFutureImports: nextPending,
         eatingSetupStep: 1,

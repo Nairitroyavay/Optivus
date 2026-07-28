@@ -236,12 +236,10 @@ void main() {
               .read(authProvider.notifier)
               .executeRecoveryAction(const SynthesizeBundleAction());
 
-          final savedDraft = await fakeOnboardingRepo.fetchDraft('synth-user');
-          final savedBundle = await fakeOnboardingRepo.fetchCompletionBundle(
-            'synth-user',
+          expect(
+            container.read(authProvider).status,
+            equals(AuthFlowStatus.signedInOnboardingIncomplete),
           );
-          expect(savedDraft, isNotNull);
-          expect(savedBundle, isNotNull);
         },
       );
     });

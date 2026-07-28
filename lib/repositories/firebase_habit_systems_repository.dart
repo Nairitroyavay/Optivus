@@ -423,6 +423,13 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
               failedSystemIds.add(sys.systemId);
               continue;
             }
+            if (existing.linkedRoutineIds.isEmpty &&
+                sys.linkedRoutineIds.isNotEmpty) {
+              tx.update(docRef, {
+                'linkedRoutineIds': sys.linkedRoutineIds,
+                'updatedAt': FieldValue.serverTimestamp(),
+              });
+            }
           } else {
             final sysData = _systemToFirestoreMap(sys);
             sysData['createdAt'] = FieldValue.serverTimestamp();

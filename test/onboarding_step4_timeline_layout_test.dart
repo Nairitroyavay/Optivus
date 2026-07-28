@@ -902,6 +902,7 @@ void main() {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
       baseTimeline: BaseTimelineDraft(
+        skinCareSkipped: true,
         blocks: [
           _timelineBlock(
             id: 'data-structures',
@@ -1390,7 +1391,9 @@ void main() {
         lifeRole: LifeRoleDraft.studentWorkingKey,
         workType: 'part_time',
       ),
-      baseTimeline: const BaseTimelineDraft(),
+      baseTimeline: const BaseTimelineDraft(
+        skinCareSkipped: true,
+      ),
     );
 
     await tester.pumpWidget(

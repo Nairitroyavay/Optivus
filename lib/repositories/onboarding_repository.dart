@@ -36,7 +36,7 @@ class FakeOnboardingRepository implements OnboardingRepository {
   final Debouncer _draftDebouncer = Debouncer(
     delay: const Duration(milliseconds: 400),
   );
-  OnboardingDraft? _pendingDraft;
+  final Map<String, OnboardingDraft> _pendingDraftsByUid = {};
 
   FakeOnboardingRepository({FakeRoutineDatabase? routineDatabase})
     : routineDatabase = routineDatabase ?? FakeRoutineDatabase();
@@ -49,8 +49,8 @@ class FakeOnboardingRepository implements OnboardingRepository {
 
   @override
   Future<OnboardingDraft?> fetchDraft(String uid) async {
-    if (_pendingDraft != null && _pendingDraft!.uid == uid) {
-      return _pendingDraft;
+    if (_pendingDraftsByUid.containsKey(uid)) {
+      return _pendingDraftsByUid[uid];
     }
     return _drafts[uid];
   }
@@ -62,12 +62,12 @@ class FakeOnboardingRepository implements OnboardingRepository {
 
   @override
   Future<void> saveDraft(OnboardingDraft draft) async {
-    _pendingDraft = draft;
+    _pendingDraftsByUid[draft.uid] = draft;
     _draftDebouncer.run(() async {
-      final target = _pendingDraft;
-      if (target != null) {
+      final targets = Map<String, OnboardingDraft>.from(_pendingDraftsByUid);
+      _pendingDraftsByUid.removeWhere((key, _) => targets.containsKey(key));
+      for (final target in targets.values) {
         _drafts[target.uid] = target;
-        _pendingDraft = null;
       }
     });
   }
@@ -94,6 +94,9 @@ class FakeOnboardingRepository implements OnboardingRepository {
   }) async {
     _validateCompletion(finalDraft, bundle);
     final plan = RoutineOnboardingProjection.build(bundle);
+    if (plan.items.length > 240) {
+      throw StateError('Onboarding produced too many Routine templates.');
+    }
     final existingReceipt =
         routineDatabase.receiptsByUid[bundle.uid]?[plan.projectionId];
     final existingDraft = _drafts[bundle.uid];
@@ -232,8 +235,8 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
 
   @override
   Future<OnboardingDraft?> fetchDraft(String uid) async {
-    if (_pendingDraft != null && _pendingDraft!.uid == uid) {
-      return _pendingDraft;
+    if (_pendingDraftsByUid.containsKey(uid)) {
+      return _pendingDraftsByUid[uid];
     }
     final doc = await _firestore
         .doc(FirestoreUserPaths.onboardingDraft(uid))
@@ -254,18 +257,18 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
   final Debouncer _draftDebouncer = Debouncer(
     delay: const Duration(milliseconds: 400),
   );
-  OnboardingDraft? _pendingDraft;
+  final Map<String, OnboardingDraft> _pendingDraftsByUid = {};
 
   @override
   Future<void> saveDraft(OnboardingDraft draft) async {
-    _pendingDraft = draft;
-    _draftDebouncer.run(() async {
-      final target = _pendingDraft;
-      if (target != null) {
+    _pendingDraftsByUid[draft.uid] = draft;
+    return _draftDebouncer.run(() async {
+      final targets = Map<String, OnboardingDraft>.from(_pendingDraftsByUid);
+      _pendingDraftsByUid.removeWhere((key, _) => targets.containsKey(key));
+      for (final target in targets.values) {
         await _firestore
             .doc(FirestoreUserPaths.onboardingDraft(target.uid))
             .set(target.toMap(), SetOptions(merge: true));
-        _pendingDraft = null;
       }
     });
   }
@@ -294,7 +297,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
   }) async {
     _validateCompletion(finalDraft, bundle);
     final plan = RoutineOnboardingProjection.build(bundle);
-    if (plan.items.length > 450) {
+    if (plan.items.length > 240) {
       throw StateError('Onboarding produced too many Routine templates.');
     }
     final receiptReference = _firestore.doc(
@@ -513,8 +516,7 @@ RoutineProjectionReceipt _receiptForCategories(
   }.toList()..sort();
 
   final initialCursor = existingItemIds.length;
-  final isCompleted =
-      initialCursor >= expectedItemIds.length && expectedItemIds.isNotEmpty;
+  final isCompleted = initialCursor >= expectedItemIds.length;
   return RoutineProjectionReceipt(
     id: receipt.id,
     ownerUid: receipt.ownerUid,

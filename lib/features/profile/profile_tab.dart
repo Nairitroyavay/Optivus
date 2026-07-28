@@ -42,10 +42,23 @@ class _ProfileTabState extends ConsumerState<ProfileTab> {
   @override
   Widget build(BuildContext context) {
     ref.listen(profileDetailViewRequestProvider, (previous, next) {
-      if (next.view == ProfileDetailView.none) return;
+      if (next.view == ProfileDetailView.none) {
+        if (_activeDetail.view != ProfileDetailView.none) {
+          setState(() => _activeDetail = ProfileDetailTarget.none);
+        }
+        return;
+      }
       _openDetail(next);
       ref.read(profileDetailViewRequestProvider.notifier).state =
           ProfileDetailTarget.none;
+    });
+
+    ref.listen(authProvider.select((s) => s.user?.uid), (previous, next) {
+      if (next == null || (previous != null && previous != next)) {
+        if (mounted && _activeDetail.view != ProfileDetailView.none) {
+          setState(() => _activeDetail = ProfileDetailTarget.none);
+        }
+      }
     });
 
     final pending = ref.watch(profileDetailViewRequestProvider);

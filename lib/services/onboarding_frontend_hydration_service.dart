@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/repositories/habit_systems_repository.dart';
-import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/habit_system_operation.dart';
@@ -90,12 +89,6 @@ class OnboardingFrontendHydrationService {
       read: read,
       bundle: bundle,
     );
-    final receipt = await read(
-      routineRepositoryProvider,
-    ).fetchProjectionReceipt(bundle.uid, projection.projectionId);
-    if (receipt != null && receipt.status == 'completed') {
-      read(mockUserProfileProvider.notifier).completeOnboarding();
-    }
     final routineIds = read(routineNotifierProvider).items
         .map((item) => item.id)
         .where((id) => !routineBefore.contains(id))

@@ -109,7 +109,19 @@ class HomeTab extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TodayIdentityCard(
-                      identity: dashboardState.identityFocus,
+                      identity:
+                          (dashboardState.identityFocus != null &&
+                              dashboardState
+                                  .identityFocus!
+                                  .primaryIdentity
+                                  .isNotEmpty)
+                          ? dashboardState.identityFocus!
+                          : IdentityFocus(
+                              primaryIdentity: profile.lifeRole.isNotEmpty
+                                  ? profile.lifeRole
+                                  : 'Optivus Explorer',
+                              primaryProof: 'Daily System Execution',
+                            ),
                       onTap: () =>
                           ref.read(appNavigationProvider.notifier).goToGoals(),
                     ),
@@ -191,7 +203,10 @@ String _safeHomeDisplayName({
         : candidate;
   }
 
-  if (emailValue == 'test@optivus.dev') return 'Nairit';
+  if (emailLocalPart.isNotEmpty && emailLocalPart.length <= 18) {
+    return emailLocalPart;
+  }
+
   return 'there';
 }
 

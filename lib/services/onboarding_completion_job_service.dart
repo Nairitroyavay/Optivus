@@ -12,6 +12,7 @@ import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
+import 'package:optivus/state/app_state.dart';
 
 import 'package:optivus/services/background_sync_wake_lock_manager.dart';
 
@@ -234,12 +235,36 @@ class OnboardingCompletionJobService {
               onboardingCompleted: true,
               updatedAt: DateTime.now(),
             );
-            await profileRepository.saveUserProfile(profile);
 
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.updateProfile.name] = true;
-            job = job.copyWith(stagesCompleted: nextCompleted);
-            await _saveJobStatus(job);
+            final updatedJob = job.copyWith(stagesCompleted: nextCompleted);
+
+            if (firestore != null) {
+              final batch = firestore!.batch();
+              batch.set(
+                firestore!.doc(FirestoreUserPaths.profile(profile.uid)),
+                profile.toFirestoreMap(),
+                SetOptions(merge: true),
+              );
+              batch.set(
+                firestore!.doc(
+                  FirestoreUserPaths.onboardingCompletionJob(updatedJob.uid),
+                ),
+                updatedJob.toMap(),
+              );
+              await batch.commit();
+            } else {
+              await profileRepository.saveUserProfile(profile);
+              await _saveJobStatus(updatedJob);
+            }
+            job = updatedJob;
+
+            if (reader != null) {
+              try {
+                reader(mockUserProfileProvider.notifier).completeOnboarding();
+              } catch (_) {}
+            }
           }
 
           // Stage 6: COMPLETE_JOB
@@ -293,8 +318,15 @@ class OnboardingCompletionJobService {
     }
     if (existing.sourceFingerprint != null &&
         existing.sourceFingerprint != sourceFingerprint) {
-      throw StateError(
-        'Persisted onboarding completion job fingerprint mismatch.',
+      return existing.copyWith(
+        status: OnboardingJobStatus.pending,
+        stage: OnboardingCompletionStage.init,
+        stagesCompleted: const {},
+        sourceFingerprint: sourceFingerprint,
+        retryCount: 0,
+        updatedAt: now,
+        clearLastError: true,
+        clearLastFailure: true,
       );
     }
     return existing.copyWith(

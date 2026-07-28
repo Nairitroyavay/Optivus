@@ -679,9 +679,15 @@ void main() {
         rules,
         contains('request.resource.data.ownerUid == request.auth.uid'),
       );
-      expect(rules, contains('collectionId != "routineItems"'));
-      expect(rules, contains('collectionId != "routineHistory"'));
-      expect(rules, contains('collectionId != "routineProjections"'));
+      expect(rules, contains('match /users/{uid}/routineItems/{itemId}'));
+      expect(
+        rules,
+        contains('match /users/{uid}/routineHistory/{occurrenceId}'),
+      );
+      expect(
+        rules,
+        contains('match /users/{uid}/routineProjections/{projectionId}'),
+      );
       expect(rules, contains('"localPreviewPath"'));
     });
   });

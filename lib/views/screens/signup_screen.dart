@@ -166,7 +166,24 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
 
   Future<void> _sendResetForExistingAccount() async {
     if (_resetLoading) return;
-    final email = (_accountExistsEmail ?? _emailCtrl.text).trim();
+
+    final currentEmail = _emailCtrl.text.trim();
+    final isValidEmail = RegExp(
+      r'^[\w\.\+\-]+@[\w\-]+\.[a-z]{2,}$',
+      caseSensitive: false,
+    ).hasMatch(currentEmail);
+
+    if ((currentEmail.isEmpty || !isValidEmail) &&
+        _accountExistsEmail != null &&
+        _accountExistsEmail!.isNotEmpty) {
+      _emailCtrl.text = _accountExistsEmail!;
+    }
+
+    final email =
+        (_emailCtrl.text.isNotEmpty
+                ? _emailCtrl.text
+                : _accountExistsEmail ?? '')
+            .trim();
     if (email.isEmpty) {
       setState(() => _errorMsg = 'Enter your email to reset your password.');
       return;
