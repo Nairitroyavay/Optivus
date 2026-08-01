@@ -1,10 +1,16 @@
-## 2026-07-28T10:03:27Z
-You are challenger_p46_m3_2, a code-executing adversarial verifier for Optivus Phase 4.6 Final Production Closure.
-Your working directory is /Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_2.
+## 2026-07-29T17:03:40+05:30
+<USER_REQUEST>
+You are challenger_p46_m3_2, an adversarial code-executing verifier assigned to challenge job history accounting, failure payload sanitization, and release build integrity for Phase 4.6.2.
 
-Your task is to execute adversarial stress tests targeting data integrity, race conditions, and recovery logic:
-1. Verify that recovery never fabricates completion data (AuthNotifier recovery path).
-2. Verify batch limits when N > 240 items in onboarding completion job.
-3. Verify that linkedRoutineIds projections and routine history projector receipt cursors work idempotently.
-4. Run `flutter test` and document exact pass/fail results.
-Write your detailed report to /Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_2/handoff.md and send your completion message to parent.
+# Working Directory
+`/Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_2`
+
+# Objectives & Instructions
+1. Maintain your workspace in `/Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_2`. Create `ORIGINAL_REQUEST.md`, `BRIEFING.md`, `progress.md`.
+2. Verify structured failure payload sanitization: simulate exceptions during completion stages and verify that sensitive data (emails, auth tokens) are redacted from `job.lastError` while structural fields (`failureCode`, `diagnosticCategory`, `failedEntityIds`) are accurately populated.
+3. Verify fine-grained completion stage ordering: verify that Stage 5 (`UPDATE_PROFILE`) cannot execute unless all prior stages are verified.
+4. Verify Android APK artifacts on disk: check `/Users/roy/optivus2/Optivus/build/app/outputs/flutter-apk/app-debug.apk` and `app-release.apk` for existence and non-zero file sizes.
+5. Run `flutter analyze` and `flutter test`.
+6. Create `/Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_2/handoff.md` with your report and verdict (PASS or FAIL).
+7. Send your completion report to Lead Orchestrator via `send_message`.
+</USER_REQUEST>

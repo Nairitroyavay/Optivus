@@ -20,6 +20,9 @@ class OnboardingFrontendHydrationResult {
   final List<String> expectedHabitSystemIds;
   final List<String> appliedHabitSystemIds;
   final List<String> failedHabitSystemIds;
+  final List<String> expectedHistoryIds;
+  final List<String> appliedHistoryIds;
+  final List<String> failedHistoryIds;
 
   const OnboardingFrontendHydrationResult({
     required this.routineItemIds,
@@ -28,6 +31,9 @@ class OnboardingFrontendHydrationResult {
     this.expectedHabitSystemIds = const [],
     this.appliedHabitSystemIds = const [],
     this.failedHabitSystemIds = const [],
+    this.expectedHistoryIds = const [],
+    this.appliedHistoryIds = const [],
+    this.failedHistoryIds = const [],
   });
 
   bool get changed =>
@@ -36,7 +42,10 @@ class OnboardingFrontendHydrationResult {
       goalIds.isNotEmpty ||
       expectedHabitSystemIds.isNotEmpty ||
       appliedHabitSystemIds.isNotEmpty ||
-      failedHabitSystemIds.isNotEmpty;
+      failedHabitSystemIds.isNotEmpty ||
+      expectedHistoryIds.isNotEmpty ||
+      appliedHistoryIds.isNotEmpty ||
+      failedHistoryIds.isNotEmpty;
 }
 
 class HabitSystemProjectionFailureException implements Exception {
@@ -65,6 +74,9 @@ class OnboardingFrontendHydrationService {
     required OptivusProviderReader read,
     required OnboardingCompletionBundle bundle,
   }) async {
+    if (bundle.uid.trim().isEmpty) {
+      throw ArgumentError('Cannot hydrate onboarding with empty bundle.uid.');
+    }
     final projection = RoutineOnboardingProjection.build(bundle);
     final routineItems = projection.items;
     final habitSystemProjections = HabitSystemOnboardingProjection.build(
@@ -85,10 +97,8 @@ class OnboardingFrontendHydrationService {
         ? const <String>[]
         : read(mockRoutineProvider.notifier).mergeMissing(routineItems);
     await read(routineNotifierProvider.notifier).loadForOwner(bundle.uid);
-    await const RoutineOnboardingEventProjector().projectCreatedEvents(
-      read: read,
-      bundle: bundle,
-    );
+    final eventProjectionResult = await const RoutineOnboardingEventProjector()
+        .projectCreatedEvents(read: read, bundle: bundle);
     final routineIds = read(routineNotifierProvider).items
         .map((item) => item.id)
         .where((id) => !routineBefore.contains(id))
@@ -136,6 +146,9 @@ class OnboardingFrontendHydrationService {
       expectedHabitSystemIds: expectedHabitSystemIds.toList()..sort(),
       appliedHabitSystemIds: appliedHabitSystemIds,
       failedHabitSystemIds: failedHabitSystemIds,
+      expectedHistoryIds: eventProjectionResult.expectedEventIds,
+      appliedHistoryIds: eventProjectionResult.appliedEventIds,
+      failedHistoryIds: eventProjectionResult.failedEventIds,
     );
   }
 

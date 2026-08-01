@@ -30,6 +30,8 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
     state = UserProfile.empty(uid: uid, email: email, displayName: displayName);
   }
 
+  void resetForSignedOut() => resetEmpty();
+
   void loadSeedData(UserProfile profile) {
     state = profile;
   }
@@ -168,6 +170,8 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
   void resetEmpty() {
     state = const [];
   }
+
+  void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
     state = MockSeedData.defaultRoutineItems;
@@ -457,6 +461,8 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
   void resetEmpty() {
     state = _emptyState();
   }
+
+  void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
     state = _seedState();
@@ -975,6 +981,8 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
     state = const [];
   }
 
+  void resetForSignedOut() => resetEmpty();
+
   void loadSeedData() {
     state = MockSeedData.defaultGoals;
   }
@@ -1081,6 +1089,8 @@ class MockMindNoteNotifier extends StateNotifier<List<MindNote>> {
     state = const [];
   }
 
+  void resetForSignedOut() => resetEmpty();
+
   void loadSeedData() {
     state = MockSeedData.defaultMindNotes;
   }
@@ -1132,6 +1142,8 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
   void resetEmpty() {
     state = const [];
   }
+
+  void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
     state = MockSeedData.defaultCoachSessions;
@@ -1301,6 +1313,8 @@ class MockCoachPreferencesNotifier extends StateNotifier<CoachPreferences> {
     state = CoachPreferences();
   }
 
+  void resetForSignedOut() => resetEmpty();
+
   void updatePreferences(CoachPreferences prefs) {
     state = prefs;
   }
@@ -1330,6 +1344,8 @@ class MockNotificationPreferencesNotifier
       nightReflection: false,
     );
   }
+
+  void resetForSignedOut() => resetEmpty();
 
   void updatePreferences(NotificationPreferences prefs) {
     state = prefs;
@@ -1381,6 +1397,8 @@ class MockPermissionNotifier extends StateNotifier<PermissionStatus> {
   void resetEmpty() {
     state = PermissionStatus();
   }
+
+  void resetForSignedOut() => resetEmpty();
 
   void toggleNotificationPermission() {
     final next = state.notifications == PermissionConnectionState.notConnected
@@ -1444,6 +1462,8 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
       ),
     );
   }
+
+  void resetForSignedOut() => reset('');
 
   void setStep(int step) {
     final bounded = step.clamp(0, OnboardingDraft.lastStepIndex).toInt();

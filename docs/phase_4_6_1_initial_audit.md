@@ -1,3 +1,6 @@
+> **HISTORICAL — NOT AUTHORITATIVE**  
+> *This report is superseded by Phase 4.6.2 Final Corrective Closure audit (`docs/phase_4_6_2_initial_audit.md`). Claims of PASS or completion in this report are historical and not authoritative.*
+
 # Phase 4.6.1 Initial Audit
 Date: 2026-07-28
 Commit: 575b992ec42f94d5694ba28ea78a5dcbf6ea38fc

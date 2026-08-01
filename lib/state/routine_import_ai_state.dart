@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
@@ -49,13 +50,18 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
     final user = _ref.read(authProvider).user;
     final preflightError = routineImportAiPreflightError(
       review: review,
-      signedIn: user != null,
+      signedIn: user != null && user.uid.trim().isNotEmpty,
       emailVerified: user?.emailVerified ?? false,
     );
     if (preflightError != null) {
       return _fail(preflightError);
     }
     final verifiedUser = user!;
+    if (verifiedUser.uid.trim().isEmpty) {
+      return _fail('Sign in before running AI extraction.');
+    }
+
+    final startAssetKey = review.uploadedAssetR2Key;
 
     final idToken = await _ref.read(authRepositoryProvider).currentIdToken();
     if (idToken == null || idToken.trim().isEmpty) {
@@ -72,14 +78,35 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
         idToken: idToken,
         review: review.copyWith(uid: verifiedUser.uid),
       );
+      final currentUser = _ref.read(authProvider).user;
+      final currentAssetKey = review.uploadedAssetR2Key;
+      if (currentUser == null ||
+          currentUser.uid.trim().isEmpty ||
+          currentUser.uid != verifiedUser.uid ||
+          currentAssetKey != startAssetKey ||
+          state.status != RoutineImportAiStatus.extracting) {
+        // Session, account, or source asset changed mid-flight; ignore stale AI extraction result.
+        return null;
+      }
       state = RoutineImportAiState(
         status: RoutineImportAiStatus.extracted,
         result: result,
       );
       return result;
     } on MissingConfigException catch (e) {
+      final currentUser = _ref.read(authProvider).user;
+      if (currentUser == null || currentUser.uid != verifiedUser.uid) {
+        return null;
+      }
       return _fail(e.message);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint(
+        '[RoutineImportAiController] AI extraction caught error: $e\n$st',
+      );
+      final currentUser = _ref.read(authProvider).user;
+      if (currentUser == null || currentUser.uid != verifiedUser.uid) {
+        return null;
+      }
       return _fail('AI extraction failed. Try again later.');
     }
   }

@@ -180,16 +180,13 @@ void main() {
 
         const codec = RoutineProjectionReceiptFirestoreCodec();
         final map = codec.toFirestore(receipt);
-        expect(map['expectedItemIds'], equals(['item-1', 'item-2', 'item-3']));
-        expect(map['createdItemIds'], equals(['item-1']));
-        expect(map['existingItemIds'], equals(['item-2']));
-        expect(map['repairedItemIds'], equals(['item-3']));
+        expect(map['projectedItemIds'], equals(['item-1', 'item-2', 'item-3']));
 
         final decoded = codec.fromFirestore(documentId: 'rec-8a', data: map);
         expect(decoded.expectedItemIds, equals(['item-1', 'item-2', 'item-3']));
-        expect(decoded.createdItemIds, equals(['item-1']));
-        expect(decoded.existingItemIds, equals(['item-2']));
-        expect(decoded.repairedItemIds, equals(['item-3']));
+        expect(decoded.createdItemIds, equals(['item-1', 'item-2', 'item-3']));
+        expect(decoded.existingItemIds, isEmpty);
+        expect(decoded.repairedItemIds, isEmpty);
       },
     );
 

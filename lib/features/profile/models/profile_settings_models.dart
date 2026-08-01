@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum ProfileConnectionStatus { connected, notConnected, notConfigured, error }
 
 extension ProfileConnectionStatusLabel on ProfileConnectionStatus {
@@ -279,6 +281,12 @@ class NotificationSettingsModel {
 }
 
 class UserPreferences {
+  final String id;
+  final String bio;
+  final String avatarUrl;
+  final String theme;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
   final bool haptics;
   final bool autoCorrect;
   final String themeMode;
@@ -288,6 +296,12 @@ class UserPreferences {
   final String coachVoice;
 
   const UserPreferences({
+    this.id = 'main',
+    this.bio = '',
+    this.avatarUrl = '',
+    this.theme = 'system',
+    this.createdAt,
+    this.updatedAt,
     this.haptics = true,
     this.autoCorrect = true,
     this.themeMode = 'System',
@@ -298,6 +312,12 @@ class UserPreferences {
   });
 
   UserPreferences copyWith({
+    String? id,
+    String? bio,
+    String? avatarUrl,
+    String? theme,
+    DateTime? createdAt,
+    DateTime? updatedAt,
     bool? haptics,
     bool? autoCorrect,
     String? themeMode,
@@ -307,6 +327,12 @@ class UserPreferences {
     String? coachVoice,
   }) {
     return UserPreferences(
+      id: id ?? this.id,
+      bio: bio ?? this.bio,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      theme: theme ?? this.theme,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       haptics: haptics ?? this.haptics,
       autoCorrect: autoCorrect ?? this.autoCorrect,
       themeMode: themeMode ?? this.themeMode,
@@ -319,6 +345,12 @@ class UserPreferences {
 
   Map<String, Object?> toMap() {
     return {
+      'id': id,
+      'bio': bio,
+      'avatarUrl': avatarUrl,
+      'theme': theme,
+      if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
+      if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
       'haptics': haptics,
       'autoCorrect': autoCorrect,
       'themeMode': themeMode,
@@ -329,10 +361,33 @@ class UserPreferences {
     };
   }
 
-  Map<String, Object?> toFirestoreMap() => toMap();
+  Map<String, Object?> toFirestoreMap() {
+    return {
+      'id': id,
+      'bio': bio,
+      'avatarUrl': avatarUrl,
+      'theme': theme,
+      if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
+      if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+    };
+  }
 
   factory UserPreferences.fromMap(Map<String, dynamic> map) {
     return UserPreferences(
+      id: map['id'] as String? ?? 'main',
+      bio: map['bio'] as String? ?? '',
+      avatarUrl: map['avatarUrl'] as String? ?? '',
+      theme: map['theme'] as String? ?? map['themeMode'] as String? ?? 'system',
+      createdAt: map['createdAt'] is Timestamp
+          ? (map['createdAt'] as Timestamp).toDate()
+          : (map['createdAt'] is String
+                ? DateTime.tryParse(map['createdAt'] as String)
+                : null),
+      updatedAt: map['updatedAt'] is Timestamp
+          ? (map['updatedAt'] as Timestamp).toDate()
+          : (map['updatedAt'] is String
+                ? DateTime.tryParse(map['updatedAt'] as String)
+                : null),
       haptics: map['haptics'] as bool? ?? true,
       autoCorrect: map['autoCorrect'] as bool? ?? true,
       themeMode: map['themeMode'] as String? ?? 'System',

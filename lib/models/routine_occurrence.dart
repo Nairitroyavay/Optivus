@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:optivus/models/routine_item.dart';
 
 class RoutineOccurrenceRecord {
@@ -78,6 +79,85 @@ class RoutineOccurrenceRecord {
       displayTitleOverride: displayTitleOverride ?? this.displayTitleOverride,
       undoToPlannedAllowed: undoToPlannedAllowed ?? this.undoToPlannedAllowed,
     );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'ownerUid': ownerUid,
+    'routineItemId': routineItemId,
+    'occurrenceDateKey': occurrenceDateKey,
+    'status': status.name,
+    'source': source,
+    'action': action,
+    'operationKey': operationKey,
+    if (movedToDateKey != null) 'movedToDateKey': movedToDateKey,
+    if (movedStartMinute != null) 'movedStartMinute': movedStartMinute,
+    if (movedEndMinute != null) 'movedEndMinute': movedEndMinute,
+    'completedSubtaskIndexes': completedSubtaskIndexes,
+    if (note != null) 'note': note,
+    if (displayTitleOverride != null)
+      'displayTitleOverride': displayTitleOverride,
+    'undoToPlannedAllowed': undoToPlannedAllowed,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+    'schemaVersion': schemaVersion,
+  };
+
+  Map<String, dynamic> toFirestoreMap() {
+    final map = toMap();
+    map['createdAt'] = Timestamp.fromDate(createdAt.toUtc());
+    map['updatedAt'] = Timestamp.fromDate(updatedAt.toUtc());
+    return map;
+  }
+
+  factory RoutineOccurrenceRecord.fromMap(
+    Map<String, dynamic> map, {
+    String? documentId,
+  }) {
+    DateTime parseDate(dynamic val) {
+      if (val is Timestamp) return val.toDate().toUtc();
+      if (val is DateTime) return val.toUtc();
+      if (val is String) return DateTime.parse(val).toUtc();
+      return DateTime.now().toUtc();
+    }
+
+    final rawStatus = map['status'] as String? ?? 'active';
+    final parsedStatus = RoutineStatus.values.firstWhere(
+      (s) => s.name == rawStatus,
+      orElse: () => RoutineStatus.active,
+    );
+    final subtasksRaw = map['completedSubtaskIndexes'] as List?;
+    final subtasks =
+        subtasksRaw?.map((e) => (e as num).toInt()).toList() ?? const <int>[];
+
+    return RoutineOccurrenceRecord(
+      id: (map['id'] as String?) ?? documentId ?? '',
+      ownerUid: map['ownerUid'] as String? ?? '',
+      routineItemId: map['routineItemId'] as String? ?? '',
+      occurrenceDateKey: map['occurrenceDateKey'] as String? ?? '',
+      status: parsedStatus,
+      source: map['source'] as String? ?? 'routine',
+      action: map['action'] as String? ?? 'start',
+      operationKey: map['operationKey'] as String? ?? 'op',
+      createdAt: parseDate(map['createdAt']),
+      updatedAt: parseDate(map['updatedAt']),
+      schemaVersion:
+          (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
+      movedToDateKey: map['movedToDateKey'] as String?,
+      movedStartMinute: (map['movedStartMinute'] as num?)?.toInt(),
+      movedEndMinute: (map['movedEndMinute'] as num?)?.toInt(),
+      completedSubtaskIndexes: List.unmodifiable(subtasks),
+      note: map['note'] as String?,
+      displayTitleOverride: map['displayTitleOverride'] as String?,
+      undoToPlannedAllowed: map['undoToPlannedAllowed'] as bool? ?? false,
+    );
+  }
+
+  factory RoutineOccurrenceRecord.fromFirestoreMap(
+    Map<String, dynamic> map, {
+    String? documentId,
+  }) {
+    return RoutineOccurrenceRecord.fromMap(map, documentId: documentId);
   }
 }
 

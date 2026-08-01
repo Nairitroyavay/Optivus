@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 // ── Item Type (block category) ──────────────────────────────
 enum RoutineBlockType {
   hardBlock, // Non-negotiable: Class, Shift work, Travel, sleep
@@ -427,6 +429,64 @@ class RoutineItem {
       'conflictMessage': conflictMessage,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  Map<String, dynamic> toFirestoreMap({String ownerUid = ''}) {
+    final effectiveOwner = ownerUid.isNotEmpty ? ownerUid : (userId ?? '');
+    return {
+      'id': id,
+      if (effectiveOwner.isNotEmpty) 'ownerUid': effectiveOwner,
+      'title': title.trim(),
+      'category': category.name,
+      'source': source.name,
+      'blockType': blockType.name,
+      'priority': priority.name,
+      'startMinute': startMinute,
+      'endMinute': endMinute,
+      'repeatRule':
+          repeatRule ??
+          (date != null && repeatDays.isEmpty ? 'once' : 'weekly'),
+      'repeatDays': [...repeatDays]..sort(),
+      if (date != null)
+        'dateKey':
+            '${date!.year.toString().padLeft(4, '0')}-${date!.month.toString().padLeft(2, '0')}-${date!.day.toString().padLeft(2, '0')}',
+      if (endDate != null)
+        'endDateKey':
+            '${endDate!.year.toString().padLeft(4, '0')}-${endDate!.month.toString().padLeft(2, '0')}-${endDate!.day.toString().padLeft(2, '0')}',
+      'crossesMidnight': crossesMidnight,
+      'endsNextDay': endsNextDay,
+      if (location != null && location!.trim().isNotEmpty)
+        'location': location!.trim(),
+      'isTrackerLinked': isTrackerLinked,
+      'trackerType': trackerType.name,
+      if (notes != null && notes!.trim().isNotEmpty) 'notes': notes!.trim(),
+      if (bestTime != null && bestTime!.trim().isNotEmpty)
+        'bestTime': bestTime!.trim(),
+      if (subtasks != null) 'subtasks': List<String>.from(subtasks!),
+      if (steps != null) 'steps': List<String>.from(steps!),
+      if (mealCategory != null && mealCategory!.trim().isNotEmpty)
+        'mealCategory': mealCategory!.trim(),
+      if (dishes != null) 'dishes': List<String>.from(dishes!),
+      if (caloriesEstimate != null) 'caloriesEstimate': caloriesEstimate,
+      if (proteinEstimate != null) 'proteinEstimate': proteinEstimate,
+      'hardBlock': hardBlock,
+      'allowedConflicts': allowedConflicts.map((c) => c.toMap()).toList(),
+      if (onboardingProjectionId != null &&
+          onboardingProjectionId!.trim().isNotEmpty)
+        'onboardingProjectionId': onboardingProjectionId,
+      if (onboardingSourceItemId != null &&
+          onboardingSourceItemId!.trim().isNotEmpty)
+        'onboardingSourceItemId': onboardingSourceItemId,
+      if (createdByOperationId != null &&
+          createdByOperationId!.trim().isNotEmpty)
+        'createdByOperationId': createdByOperationId,
+      if (lastMutationOperationId != null &&
+          lastMutationOperationId!.trim().isNotEmpty)
+        'lastMutationOperationId': lastMutationOperationId,
+      'createdAt': Timestamp.fromDate(createdAt.toUtc()),
+      'updatedAt': Timestamp.fromDate(updatedAt.toUtc()),
+      'schemaVersion': currentSchemaVersion,
     };
   }
 

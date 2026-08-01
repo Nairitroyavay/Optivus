@@ -18,6 +18,10 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
     state = settings;
   }
 
+  void resetForSignedOut() {
+    state = RegionSettings.defaultForUser('signed-out');
+  }
+
   Future<void> save(RegionSettings settings) async {
     final updated = _guardPaymentRegion(
       settings,

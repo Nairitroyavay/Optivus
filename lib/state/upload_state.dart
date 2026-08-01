@@ -99,7 +99,9 @@ class UploadController extends StateNotifier<UploadState> {
     if (state.isBusy) return null;
     final currentAuthUser = _authRepository.currentUser;
     if (uid.trim().isEmpty ||
-        (currentAuthUser != null && currentAuthUser.uid != uid)) {
+        currentAuthUser == null ||
+        currentAuthUser.uid.trim().isEmpty ||
+        currentAuthUser.uid != uid) {
       state = state.copyWith(
         status: UploadFlowStatus.failed,
         errorMessage: 'Please sign in before uploading a photo.',
@@ -207,10 +209,25 @@ class UploadController extends StateNotifier<UploadState> {
         updatedAt: now,
       );
 
+      final activeUser = _authRepository.currentUser;
+      if (activeUser == null ||
+          activeUser.uid.trim().isEmpty ||
+          activeUser.uid != uid) {
+        return null;
+      }
+
       state = state.copyWith(status: UploadFlowStatus.savingMetadata);
       savingMetadata = true;
       await _assetRepository.saveAsset(asset);
       savingMetadata = false;
+
+      final postSaveActiveUser = _authRepository.currentUser;
+      if (postSaveActiveUser == null ||
+          postSaveActiveUser.uid.trim().isEmpty ||
+          postSaveActiveUser.uid != uid) {
+        return null;
+      }
+
       state = state.copyWith(
         status: UploadFlowStatus.uploaded,
         asset: asset,

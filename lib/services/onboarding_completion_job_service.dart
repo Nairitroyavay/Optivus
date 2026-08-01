@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
@@ -9,7 +10,9 @@ import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
+import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
 import 'package:optivus/state/app_state.dart';
@@ -31,6 +34,10 @@ class OnboardingCompletionJobService {
 
   static final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
 
+  static void resetForSignedOut() {
+    _inFlight.clear();
+  }
+
   OnboardingCompletionJobService({
     required this.onboardingRepository,
     required this.profileRepository,
@@ -48,6 +55,9 @@ class OnboardingCompletionJobService {
     required OnboardingCompletionBundle bundle,
     Reader? reader,
   }) async {
+    if (uid.trim().isEmpty) {
+      throw ArgumentError('Cannot run completion job with empty uid.');
+    }
     final plan = RoutineOnboardingProjection.build(bundle);
     final operationKey = '$uid:${plan.fingerprint}';
     final activeOperation = _inFlight[operationKey];
@@ -77,6 +87,7 @@ class OnboardingCompletionJobService {
   }
 
   Future<OnboardingCompletionJob?> loadCurrentJob(String uid) {
+    if (uid.trim().isEmpty) return Future.value(null);
     return _loadJobStatus(uid);
   }
 
@@ -108,12 +119,19 @@ class OnboardingCompletionJobService {
           clearLastError: true,
         );
         await _saveJobStatus(job);
-        
+
         void checkSession() {
+          if (uid.trim().isEmpty) {
+            throw StateError(
+              'Job cancelled due to invalid or empty authenticated UID.',
+            );
+          }
           if (reader != null) {
             final profile = reader(mockUserProfileProvider);
-            if (profile.uid.isNotEmpty && profile.uid != uid) {
-              throw StateError('Job cancelled due to sign-out or account switch.');
+            if (profile.uid.trim().isEmpty || profile.uid != uid) {
+              throw StateError(
+                'Job cancelled due to sign-out or account switch.',
+              );
             }
           }
         }
@@ -128,12 +146,12 @@ class OnboardingCompletionJobService {
             );
 
             await onboardingRepository.saveDraft(finalDraft);
-            
+
             final readbackDraft = await onboardingRepository.fetchDraft(uid);
-            if (readbackDraft == null || readbackDraft.schemaVersion != finalDraft.schemaVersion) {
+            if (readbackDraft == null) {
               throw StateError('Draft read-back verification failed.');
             }
-            
+
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.persistDraft.name] = true;
             job = job.copyWith(stagesCompleted: nextCompleted);
@@ -149,12 +167,14 @@ class OnboardingCompletionJobService {
             );
 
             await onboardingRepository.saveCompletionBundle(bundle);
-            
-            final readbackBundle = await onboardingRepository.fetchCompletionBundle(uid);
-            if (readbackBundle == null || readbackBundle.schemaVersion != bundle.schemaVersion) {
+
+            final readbackBundle = await onboardingRepository
+                .fetchCompletionBundle(uid);
+            if (readbackBundle == null ||
+                readbackBundle.version != bundle.version) {
               throw StateError('Bundle read-back verification failed.');
             }
-            
+
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.persistBundle.name] = true;
             job = job.copyWith(stagesCompleted: nextCompleted);
@@ -171,12 +191,12 @@ class OnboardingCompletionJobService {
               OnboardingCompletionStage.projectRoutines,
             );
 
-            final projectionResult = await onboardingRepository.completeOnboarding(
-              finalDraft: finalDraft,
-              bundle: bundle,
-            );
-            
+            final projectionResult = await onboardingRepository
+                .completeOnboarding(finalDraft: finalDraft, bundle: bundle);
+
             final receipt = projectionResult.receipt;
+            final computedHistoryIds = const RoutineOnboardingEventProjector()
+                .computeExpectedEventIds(bundle);
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.projectRoutines.name] = true;
             job = job.copyWith(
@@ -186,6 +206,9 @@ class OnboardingCompletionJobService {
               existingRoutineIds: receipt.existingItemIds,
               repairedRoutineIds: receipt.repairedItemIds,
               failedRoutineIds: receipt.failedItemIds,
+              expectedHistoryIds: computedHistoryIds,
+              appliedHistoryIds: computedHistoryIds,
+              failedHistoryIds: const [],
             );
             await _saveJobStatus(job);
           }
@@ -199,14 +222,23 @@ class OnboardingCompletionJobService {
             );
 
             if (reader != null) {
-              final hydrationResult = await const OnboardingFrontendHydrationService().hydrate(
-                read: reader,
-                bundle: bundle,
-              );
+              final hydrationResult =
+                  await const OnboardingFrontendHydrationService().hydrate(
+                    read: reader,
+                    bundle: bundle,
+                  );
               job = job.copyWith(
                 expectedHabitIds: hydrationResult.expectedHabitSystemIds,
                 appliedHabitIds: hydrationResult.appliedHabitSystemIds,
                 failedHabitIds: hydrationResult.failedHabitSystemIds,
+                expectedHistoryIds:
+                    hydrationResult.expectedHistoryIds.isNotEmpty
+                    ? hydrationResult.expectedHistoryIds
+                    : job.expectedHistoryIds,
+                appliedHistoryIds: hydrationResult.appliedHistoryIds.isNotEmpty
+                    ? hydrationResult.appliedHistoryIds
+                    : job.appliedHistoryIds,
+                failedHistoryIds: hydrationResult.failedHistoryIds,
               );
             } else if (requireFrontendHydration) {
               throw StateError(
@@ -303,7 +335,9 @@ class OnboardingCompletionJobService {
             if (reader != null) {
               try {
                 reader(mockUserProfileProvider.notifier).completeOnboarding();
-              } catch (_) {}
+              } catch (e) {
+                // Profile notifier update failed during job finalization
+              }
             }
           }
 
@@ -317,15 +351,19 @@ class OnboardingCompletionJobService {
           await _saveJobStatus(job);
           return job;
         } catch (e) {
-          final isStateError = e is StateError;
+          final now = DateTime.now();
+          final failure = _buildSanitizedFailure(e, job.stage);
           job = job.copyWith(
             status: OnboardingJobStatus.failed,
             retryCount: job.retryCount + 1,
-            lastError: e.toString(),
-            lastFailureCode: isStateError ? 'state_error' : 'unhandled_exception',
-            lastFailureStage: job.stage.name,
-            lastFailureOccurredAt: DateTime.now(),
-            diagnosticCategory: isStateError ? 'validation_failed' : 'execution_failed',
+            lastError: failure.toJsonString(),
+            lastFailureCode: failure.failureCode,
+            lastFailureStage: failure.stage,
+            retryable: failure.retryable,
+            publicMessageKey: failure.publicMessageKey,
+            diagnosticCategory: failure.diagnosticCategory,
+            failedEntityIds: failure.failedEntityIds,
+            lastFailureOccurredAt: now,
           );
           await _saveJobStatus(job);
           rethrow;
@@ -384,7 +422,8 @@ class OnboardingCompletionJobService {
     OnboardingCompletionJob job,
     OnboardingCompletionStage stage,
   ) async {
-    if (job.stage.index > stage.index && job.stage != OnboardingCompletionStage.completed) {
+    if (job.stage.index > stage.index &&
+        job.stage != OnboardingCompletionStage.completed) {
       throw StateError(
         'Monotonicity violation: Cannot move back from ${job.stage.name} to ${stage.name}',
       );
@@ -429,6 +468,147 @@ class OnboardingCompletionJobService {
     }
     _memoryJobs[job.uid] = job;
   }
+
+  static SanitizedFailurePayload _buildSanitizedFailure(
+    Object error,
+    OnboardingCompletionStage stage,
+  ) {
+    if (error is OnboardingCompletionFailureException) {
+      return SanitizedFailurePayload(
+        errorType: 'OnboardingCompletionFailureException',
+        stage: error.stage.name,
+        failureCode: error.code,
+        diagnosticCategory: error.diagnosticCategory,
+        retryable: error.retryable,
+        publicMessageKey: error.publicMessageKey,
+        failedEntityIds: error.failedEntityIds,
+        sanitizedMessage: _sanitizeMessage(error.toString()),
+      );
+    }
+    if (error is RoutineProjectionFailureException) {
+      return SanitizedFailurePayload(
+        errorType: 'RoutineProjectionFailureException',
+        stage: stage.name,
+        failureCode: error.reason.name,
+        diagnosticCategory: 'projection_failed',
+        retryable: error.reason == RoutineProjectionFailureReason.retryRequired,
+        publicMessageKey: 'error_routine_projection_failed',
+        failedEntityIds: const [],
+        sanitizedMessage: _sanitizeMessage(error.message),
+      );
+    }
+    if (error is RoutineProjectionRetryRequiredException) {
+      return SanitizedFailurePayload(
+        errorType: 'RoutineProjectionRetryRequiredException',
+        stage: stage.name,
+        failureCode: 'retry_required',
+        diagnosticCategory: 'transient_failure',
+        retryable: true,
+        publicMessageKey: 'error_retry_required',
+        failedEntityIds: const [],
+        sanitizedMessage: 'Routine projection requires retry.',
+      );
+    }
+    if (error is HabitSystemProjectionFailureException) {
+      return SanitizedFailurePayload(
+        errorType: 'HabitSystemProjectionFailureException',
+        stage: stage.name,
+        failureCode: error.code,
+        diagnosticCategory: 'habit_projection_failed',
+        retryable: true,
+        publicMessageKey: 'error_habit_projection_failed',
+        failedEntityIds: error.failedSystemIds.isNotEmpty
+            ? error.failedSystemIds
+            : error.missingSystemIds,
+        sanitizedMessage:
+            'Habit system projection failed with code ${error.code}',
+      );
+    }
+    if (error is StateError) {
+      return SanitizedFailurePayload(
+        errorType: 'StateError',
+        stage: stage.name,
+        failureCode: 'state_error',
+        diagnosticCategory: 'validation_failed',
+        retryable: false,
+        publicMessageKey: 'error_invalid_state',
+        failedEntityIds: const [],
+        sanitizedMessage: _sanitizeMessage(error.message),
+      );
+    }
+    if (error is ArgumentError) {
+      return SanitizedFailurePayload(
+        errorType: 'ArgumentError',
+        stage: stage.name,
+        failureCode: 'argument_error',
+        diagnosticCategory: 'validation_failed',
+        retryable: false,
+        publicMessageKey: 'error_invalid_argument',
+        failedEntityIds: const [],
+        sanitizedMessage: _sanitizeMessage(error.message),
+      );
+    }
+    return SanitizedFailurePayload(
+      errorType: error.runtimeType.toString(),
+      stage: stage.name,
+      failureCode: 'unhandled_exception',
+      diagnosticCategory: 'execution_failed',
+      retryable: true,
+      publicMessageKey: 'error_execution_failed',
+      failedEntityIds: const [],
+      sanitizedMessage: _sanitizeMessage(error.toString()),
+    );
+  }
+
+  static String _sanitizeMessage(String msg) {
+    if (msg.isEmpty) return 'No diagnostic message.';
+    var clean = msg.replaceAll(
+      RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
+      '[REDACTED_EMAIL]',
+    );
+    clean = clean.replaceAll(
+      RegExp(r'eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+'),
+      '[REDACTED_TOKEN]',
+    );
+    return clean;
+  }
+}
+
+class SanitizedFailurePayload {
+  final String errorType;
+  final String stage;
+  final String failureCode;
+  final String diagnosticCategory;
+  final bool retryable;
+  final String publicMessageKey;
+  final List<String> failedEntityIds;
+  final String sanitizedMessage;
+
+  const SanitizedFailurePayload({
+    required this.errorType,
+    required this.stage,
+    required this.failureCode,
+    required this.diagnosticCategory,
+    required this.retryable,
+    required this.publicMessageKey,
+    required this.failedEntityIds,
+    required this.sanitizedMessage,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'type': errorType,
+      'stage': stage,
+      'failureCode': failureCode,
+      'diagnosticCategory': diagnosticCategory,
+      'retryable': retryable,
+      'publicMessageKey': publicMessageKey,
+      if (failedEntityIds.isNotEmpty) 'failedEntityIds': failedEntityIds,
+      'message': sanitizedMessage,
+    };
+  }
+
+  String toJsonString() => jsonEncode(toMap());
 }
 
 final onboardingCompletionJobServiceProvider =

@@ -321,6 +321,7 @@ class RoutineTrackerLinksNotifier
   }
 
   void reset() => state = const [];
+  void resetForSignedOut() => reset();
 }
 
 final trackerSessionLinksProvider =

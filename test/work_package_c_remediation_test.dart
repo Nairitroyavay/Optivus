@@ -18,6 +18,9 @@ import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/models/region_settings.dart';
+import 'package:optivus/models/routine_occurrence.dart';
+import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
@@ -328,6 +331,9 @@ void main() {
           plan.projectionId: completedReceipt,
         };
 
+        container.read(mockUserProfileProvider.notifier).state =
+            UserProfile.empty(uid: 'user_1102');
+
         final jobService = OnboardingCompletionJobService(
           onboardingRepository: fakeOnboardingRepo,
           profileRepository: fakeProfileRepo,
@@ -395,5 +401,411 @@ void main() {
         expect(result.draft?.uid, equals('user_1402'));
       },
     );
+
+    test(
+      'WORKSTREAM-C-01: OnboardingCompletionJobService populates expectedHistoryIds and appliedHistoryIds',
+      () async {
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeProfileRepo = FakeProfileRepository();
+        final fakeRoutineRepo = FakeRoutineRepository();
+
+        final container = ProviderContainer(
+          overrides: [
+            onboardingRepositoryProvider.overrideWithValue(fakeOnboardingRepo),
+            profileRepositoryProvider.overrideWithValue(fakeProfileRepo),
+            routineRepositoryProvider.overrideWithValue(fakeRoutineRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        const uid = 'user_c_01';
+        final draft = _createCompletedDraft(uid);
+        final item = RoutineItem(
+          id: 'item_c_01',
+          title: 'Morning Routine',
+          category: RoutineCategory.health,
+          blockType: RoutineBlockType.trackerTask,
+          startMinute: 420,
+          endMinute: 480,
+        );
+        final bundle = _createTestBundle(uid, [item]);
+        await fakeOnboardingRepo.saveCompletionBundle(bundle);
+
+        final plan = RoutineOnboardingProjection.build(bundle);
+        final completedReceipt = plan.receipt.copyWith(
+          status: 'completed',
+          cursor: plan.receipt.totalCount,
+        );
+        fakeRoutineRepo.database.receiptsByUid[uid] = {
+          plan.projectionId: completedReceipt,
+        };
+        final itemsMap = <String, RoutineItem>{};
+        for (final projectedItem in plan.items) {
+          itemsMap[projectedItem.id] = projectedItem;
+        }
+        fakeRoutineRepo.database.itemsByUid[uid] = itemsMap;
+
+        container.read(mockUserProfileProvider.notifier).state =
+            UserProfile.empty(uid: uid);
+
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: fakeOnboardingRepo,
+          profileRepository: fakeProfileRepo,
+          routineRepository: fakeRoutineRepo,
+        );
+
+        final job = await jobService.runCompletionJob(
+          uid: uid,
+          finalDraft: draft,
+          bundle: bundle,
+          reader: container.read,
+        );
+
+        expect(job.status, equals(OnboardingJobStatus.completed));
+        expect(job.expectedHistoryIds, isNotEmpty);
+        expect(job.appliedHistoryIds, isNotEmpty);
+        expect(job.failedHistoryIds, isEmpty);
+      },
+    );
+
+    test(
+      'WORKSTREAM-C-02: OnboardingCompletionJobService populates structured failure payload on error',
+      () async {
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeProfileRepo = FakeProfileRepository();
+
+        // Cause draft save to fail with a StateError by providing a draft with owner mismatch
+        final draft = _createCompletedDraft('mismatched_uid');
+        final bundle = _createTestBundle('target_uid', []);
+
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: fakeOnboardingRepo,
+          profileRepository: fakeProfileRepo,
+        );
+
+        try {
+          await jobService.runCompletionJob(
+            uid: 'target_uid',
+            finalDraft: draft,
+            bundle: bundle,
+          );
+          fail('Should have thrown an exception');
+        } catch (_) {}
+
+        final failedJob = await jobService.loadCurrentJob('target_uid');
+        expect(failedJob, isNotNull);
+        expect(failedJob!.status, equals(OnboardingJobStatus.failed));
+        expect(failedJob.lastError, isNotNull);
+        expect(failedJob.lastError, contains('"type":"StateError"'));
+        expect(
+          failedJob.lastError,
+          contains('"diagnosticCategory":"validation_failed"'),
+        );
+        expect(failedJob.lastFailureCode, equals('state_error'));
+        expect(failedJob.lastFailureStage, equals('persistDraft'));
+        expect(failedJob.retryable, isFalse);
+        expect(failedJob.diagnosticCategory, equals('validation_failed'));
+      },
+    );
+
+    group('Workstream B: Firestore Serialization Contract Verification', () {
+      test(
+        'Contract 1: UserProfile.toFirestoreMap() keys match validUserProfileKeys',
+        () {
+          final profile = UserProfile(
+            uid: 'user_b1',
+            email: 'test@example.com',
+            displayName: 'Test User',
+            workingExtra: null,
+            businessMode: null,
+            createdAt: DateTime.utc(2026, 7, 29),
+            updatedAt: DateTime.utc(2026, 7, 29),
+          );
+          final map = profile.toFirestoreMap();
+          expect(
+            map.containsKey('workingExtra'),
+            isFalse,
+            reason: 'Null workingExtra must be omitted',
+          );
+          expect(
+            map.containsKey('businessMode'),
+            isFalse,
+            reason: 'Null businessMode must be omitted',
+          );
+
+          const allowedKeys = {
+            'uid',
+            'email',
+            'displayName',
+            'accountStatus',
+            'createdAt',
+            'updatedAt',
+            'schemaVersion',
+            'onboardingInputCompleted',
+            'onboardingProjectionStatus',
+            'onboardingCompleted',
+            'onboardingStep',
+            'lifeRole',
+            'workingExtra',
+            'businessMode',
+            'exerciseLevel',
+            'waterIntake',
+            'stressLevel',
+            'sleepQuality',
+            'ageRange',
+            'height',
+            'weight',
+            'gender',
+            'bmiEstimate',
+            'calorieEstimate',
+            'proteinEstimate',
+            'coachName',
+            'coachStyle',
+            'slipUpStyle',
+          };
+          expect(map.keys.toSet().difference(allowedKeys), isEmpty);
+        },
+      );
+
+      test(
+        'Contract 2: RegionSettings.toFirestoreMap() keys match validSettingsDoc',
+        () {
+          final settings = RegionSettings.defaultForUser('user_b2');
+          final map = settings.toFirestoreMap();
+          const allowedKeys = {
+            'userId',
+            'countryCode',
+            'countryName',
+            'timezone',
+            'languageCode',
+            'currencyCode',
+            'currencySymbol',
+            'measurementSystem',
+            'heightUnit',
+            'weightUnit',
+            'distanceUnit',
+            'temperatureUnit',
+            'timeFormat',
+            'dateFormat',
+            'weekStartDay',
+            'foodVocabularyMode',
+            'paymentRegion',
+            'createdAt',
+            'updatedAt',
+          };
+          expect(map.keys.toSet(), equals(allowedKeys));
+        },
+      );
+
+      test(
+        'Contract 3: UserPreferences.toFirestoreMap() keys match validProfileSubdoc',
+        () {
+          final prefs = const UserPreferences(
+            id: 'main',
+            bio: 'Tester',
+            avatarUrl: 'https://example.com/avatar.jpg',
+            theme: 'dark',
+          );
+          final map = prefs.toFirestoreMap();
+          const allowedKeys = {
+            'id',
+            'bio',
+            'avatarUrl',
+            'theme',
+            'createdAt',
+            'updatedAt',
+          };
+          expect(map.keys.toSet().difference(allowedKeys), isEmpty);
+          expect(map['id'], equals('main'));
+          expect(map['bio'], equals('Tester'));
+        },
+      );
+
+      test(
+        'Contract 4: OnboardingDraft.toFirestoreMap() omits null optional fields',
+        () {
+          final draft = _createCompletedDraft('user_b4');
+          final map = draft.toFirestoreMap();
+          expect(map.containsKey('patiencePledgeText'), isFalse);
+          expect(map.containsKey('slipUpHandling'), isFalse);
+
+          const allowedKeys = {
+            'uid',
+            'schemaVersion',
+            'source',
+            'currentStep',
+            'stepCompleted',
+            'stepDirty',
+            'stepLoading',
+            'createdAt',
+            'updatedAt',
+            'onboardingCompleted',
+            'welcomeSaved',
+            'patiencePledgeAccepted',
+            'patiencePledgeText',
+            'lifeRole',
+            'bodyBasics',
+            'baseTimeline',
+            'badHabitsNotNow',
+            'badHabits',
+            'goodHabitsNotNow',
+            'goodHabits',
+            'identityGoals',
+            'coachSetup',
+            'slipUpHandling',
+            'notifications',
+            'finalPreview',
+          };
+          expect(map.keys.toSet().difference(allowedKeys), isEmpty);
+        },
+      );
+
+      test(
+        'Contract 5: OnboardingCompletionBundle.toFirestoreMap() omits null moneyGoal',
+        () {
+          final bundle = _createTestBundle('user_b5', []);
+          final map = bundle.toFirestoreMap();
+          expect(map.containsKey('moneyGoal'), isFalse);
+
+          const allowedKeys = {
+            'uid',
+            'schemaVersion',
+            'version',
+            'source',
+            'createdAt',
+            'updatedAt',
+            'onboardingCompleted',
+            'userProfilePatch',
+            'baseTimelineBlocks',
+            'finalTimelineItems',
+            'routineItemsForApp',
+            'goodHabitTemplates',
+            'badHabitCheckIns',
+            'identityGoalSystems',
+            'notificationPreferences',
+            'coachPreferences',
+            'moneyGoal',
+            'uploadedAssetReferences',
+            'warnings',
+            'duplicateSystemKeysMerged',
+          };
+          expect(map.keys.toSet().difference(allowedKeys), isEmpty);
+        },
+      );
+
+      test(
+        'Contract 6: OnboardingCompletionJob serialization and lastFailureOccurredAt',
+        () {
+          final now = DateTime.now().toUtc();
+          final job = OnboardingCompletionJob(
+            jobId: 'job_b6',
+            uid: 'user_b6',
+            lastFailureOccurredAt: now,
+            createdAt: now,
+            updatedAt: now,
+          );
+          final map = job.toMap();
+          expect(map['lastFailureOccurredAt'], isA<String>());
+
+          final firestoreMap = job.toFirestoreMap();
+          expect(firestoreMap['lastFailureOccurredAt'], isNotNull);
+
+          final deserialized = OnboardingCompletionJob.fromMap(map);
+          expect(deserialized.jobId, equals('job_b6'));
+        },
+      );
+
+      test('Contract 7: Routine serializers enforce rules schemas', () {
+        final item = RoutineItem(
+          id: 'item_b7',
+          title: 'Test Routine',
+          startMinute: 480,
+          endMinute: 540,
+          blockType: RoutineBlockType.hardBlock,
+        );
+        final itemMap = item.toFirestoreMap(ownerUid: 'user_b7');
+        expect(itemMap.containsKey('status'), isFalse);
+        expect(itemMap.containsKey('isCompleted'), isFalse);
+        expect(itemMap.containsKey('hasConflict'), isFalse);
+        expect(itemMap['ownerUid'], equals('user_b7'));
+
+        final occurrence = RoutineOccurrenceRecord(
+          id: 'occ_b7',
+          ownerUid: 'user_b7',
+          routineItemId: 'item_b7',
+          occurrenceDateKey: '2026-07-29',
+          status: RoutineStatus.completed,
+          source: 'routine',
+          action: 'complete',
+          operationKey: 'op_b7',
+          createdAt: DateTime.now().toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+        );
+        final occMap = occurrence.toFirestoreMap();
+        expect(occMap['status'], equals('completed'));
+        expect(occMap.containsKey('movedToDateKey'), isFalse);
+
+        final receipt = RoutineProjectionReceipt(
+          id: 'onboarding-initial-v1',
+          ownerUid: 'user_b7',
+          sourceBundleSchemaVersion: 1,
+          sourceBundleId: 'bundle_1',
+          sourceBundleFingerprint: 'a' * 64,
+          projectedItemIds: ['item_b7'],
+          status: 'completed',
+          cursor: 1,
+          totalCount: 1,
+          createdAt: DateTime.now().toUtc(),
+          completedAt: DateTime.now().toUtc(),
+        );
+        final receiptMap = receipt.toFirestoreMap();
+        const allowedReceiptKeys = {
+          'id',
+          'ownerUid',
+          'source',
+          'sourceBundleSchemaVersion',
+          'sourceBundleId',
+          'sourceBundleFingerprint',
+          'projectedItemIds',
+          'eventSchemaVersion',
+          'totalCount',
+          'cursor',
+          'status',
+          'createdAt',
+          'updatedAt',
+          'completedAt',
+          'lastSafeError',
+          'schemaVersion',
+        };
+        expect(receiptMap.keys.toSet().difference(allowedReceiptKeys), isEmpty);
+      });
+
+      test(
+        'Contract 8: HabitSystemRecord.toFirestoreMap() respects status and source rules',
+        () {
+          final recordUser = HabitSystemRecord(
+            systemId: 'hs_user',
+            ownerUid: 'user_b8',
+            title: 'User Habit',
+            category: RoutineCategory.habit,
+            systemType: HabitSystemType.goodHabit,
+            source: 'user',
+            createdAt: DateTime.now().toUtc(),
+            updatedAt: DateTime.now().toUtc(),
+          );
+          final mapUser = recordUser.toFirestoreMap();
+          expect(mapUser.containsKey('archivedAt'), isFalse);
+          expect(mapUser.containsKey('onboardingSourceId'), isFalse);
+          expect(mapUser.containsKey('onboardingProjectionId'), isFalse);
+
+          final recordArchived = recordUser.copyWith(
+            status: HabitSystemStatus.archived,
+            archivedAt: DateTime.now().toUtc(),
+          );
+          final mapArchived = recordArchived.toFirestoreMap();
+          expect(mapArchived.containsKey('archivedAt'), isTrue);
+        },
+      );
+    });
   });
 }

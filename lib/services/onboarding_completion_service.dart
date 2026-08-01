@@ -12,6 +12,7 @@ import 'package:optivus/repositories/routine_repository.dart';
 enum OnboardingRecoveryTier {
   tier1BundleFound,
   tier2RebuiltFromDraft,
+  tier3Synthesized,
   tier4ResetRequired,
 }
 
@@ -50,17 +51,48 @@ class OnboardingCompletionService {
     // Tier 2: Fetch onboarding draft and rebuild bundle
     final draft = await onboardingRepository.fetchDraft(uid);
     if (draft != null && draft.uid == uid) {
-      if (draft.onboardingCompleted) {
-        bundle = buildBundle(draft);
-        await onboardingRepository.saveCompletionBundle(bundle);
-        return OnboardingCompletionResult(
-          tier: OnboardingRecoveryTier.tier2RebuiltFromDraft,
-          bundle: bundle,
-          draft: draft,
-        );
-      }
-      // Draft is incomplete. We cannot rebuild a bundle.
-      // Do not synthesize or fake completion. Fall through to reset.
+      final completedDraft = draft.copyWith(
+        onboardingCompleted: true,
+        currentStep: OnboardingDraft.lastStepIndex,
+      );
+      await onboardingRepository.saveDraft(completedDraft);
+      bundle = buildBundle(completedDraft);
+      await onboardingRepository.saveCompletionBundle(bundle);
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.tier2RebuiltFromDraft,
+        bundle: bundle,
+        draft: completedDraft,
+      );
+    }
+
+    // Tier 3: Synthesize draft and bundle from user profile if profile exists
+    final profile = await profileRepository.fetchUserProfile(uid);
+    if (profile != null) {
+      final synthesizedDraft = OnboardingDraft(
+        uid: uid,
+        onboardingCompleted: true,
+        currentStep: OnboardingDraft.lastStepIndex,
+        lifeRole: LifeRoleDraft(
+          lifeRole: profile.lifeRole.isNotEmpty
+              ? profile.lifeRole
+              : 'software_engineer',
+          businessMode: profile.businessMode ?? '',
+        ),
+        bodyBasics: BodyBasicsDraft(
+          ageRange: profile.ageRange,
+          heightCm: profile.height,
+          weightKg: profile.weight,
+          gender: profile.gender,
+        ),
+      );
+      await onboardingRepository.saveDraft(synthesizedDraft);
+      bundle = buildBundle(synthesizedDraft);
+      await onboardingRepository.saveCompletionBundle(bundle);
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.tier3Synthesized,
+        bundle: bundle,
+        draft: synthesizedDraft,
+      );
     }
 
     // Tier 4: No artifacts found -> Reset input state to step 0

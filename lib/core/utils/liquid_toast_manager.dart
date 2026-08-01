@@ -80,6 +80,8 @@ class ToastQueueNotifier extends StateNotifier<ToastQueueState> {
     state = const ToastQueueState(current: null, queue: []);
   }
 
+  void resetForSignedOut() => clearAll();
+
   @override
   void dispose() {
     _timer?.cancel();

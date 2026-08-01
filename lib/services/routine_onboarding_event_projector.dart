@@ -58,6 +58,29 @@ class RoutineOnboardingEventProjector {
 
   const RoutineOnboardingEventProjector();
 
+  List<RoutineEventRecord> computeEventRecords({
+    required OnboardingCompletionBundle bundle,
+    DateTime? occurredAt,
+  }) {
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final now = occurredAt ?? DateTime.now().toUtc();
+    return [
+      for (final item in plan.items)
+        _eventRecord(
+          ownerUid: bundle.uid,
+          projectionId: plan.projectionId,
+          item: item,
+          eventType: RoutineEventType.created,
+          occurredAt: now,
+        ),
+    ];
+  }
+
+  List<String> computeExpectedEventIds(OnboardingCompletionBundle bundle) {
+    return computeEventRecords(bundle: bundle).map((e) => e.eventId).toList()
+      ..sort();
+  }
+
   Future<RoutineOnboardingEventProjectionResult> projectCreatedEvents({
     required RoutineProjectorReader read,
     required OnboardingCompletionBundle bundle,
@@ -137,39 +160,11 @@ class RoutineOnboardingEventProjector {
       );
     }
 
-    final itemById = {for (final item in plan.items) item.id: item};
-    
-    // Fallback if legacy receipt format is used
-    final useProjectedFallback = receipt.createdItemIds.isEmpty && receipt.repairedItemIds.isEmpty && receipt.projectedItemIds.isNotEmpty;
-    
-    final createdTargetIds = useProjectedFallback ? receipt.projectedItemIds : receipt.createdItemIds;
-    final createdIds =
-        createdTargetIds.where(itemById.containsKey).toSet().toList(growable: false)
-          ..sort();
-          
-    final repairedTargetIds = useProjectedFallback ? const <String>[] : receipt.repairedItemIds;
-    final repairedIds = 
-        repairedTargetIds.where(itemById.containsKey).toSet().toList(growable: false)
-          ..sort();
-
-    final events = [
-      for (final itemId in createdIds)
-        _eventRecord(
-          ownerUid: bundle.uid,
-          projectionId: plan.projectionId,
-          item: itemById[itemId]!,
-          eventType: RoutineEventType.created,
-          occurredAt: receipt.createdAt,
-        ),
-      for (final itemId in repairedIds)
-        _eventRecord(
-          ownerUid: bundle.uid,
-          projectionId: plan.projectionId,
-          item: itemById[itemId]!,
-          eventType: RoutineEventType.edited,
-          occurredAt: receipt.createdAt,
-        ),
-    ];
+    final events = generateEventRecords(
+      ownerUid: bundle.uid,
+      plan: plan,
+      receipt: receipt,
+    );
     final expectedEventIds = events.map((event) => event.eventId).toList()
       ..sort();
 
@@ -270,6 +265,58 @@ class RoutineOnboardingEventProjector {
     );
   }
 
+  static List<RoutineEventRecord> generateEventRecords({
+    required String ownerUid,
+    required RoutineOnboardingProjectionPlan plan,
+    required RoutineProjectionReceipt receipt,
+  }) {
+    final itemById = {for (final item in plan.items) item.id: item};
+    final useProjectedFallback =
+        receipt.createdItemIds.isEmpty &&
+        receipt.repairedItemIds.isEmpty &&
+        receipt.projectedItemIds.isNotEmpty;
+
+    final createdTargetIds = useProjectedFallback
+        ? receipt.projectedItemIds
+        : receipt.createdItemIds;
+    final createdIds =
+        createdTargetIds
+            .where(itemById.containsKey)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+
+    final repairedTargetIds = useProjectedFallback
+        ? const <String>[]
+        : receipt.repairedItemIds;
+    final repairedIds =
+        repairedTargetIds
+            .where(itemById.containsKey)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+
+    const projector = RoutineOnboardingEventProjector();
+    return [
+      for (final itemId in createdIds)
+        projector._eventRecord(
+          ownerUid: ownerUid,
+          projectionId: plan.projectionId,
+          item: itemById[itemId]!,
+          eventType: RoutineEventType.created,
+          occurredAt: receipt.createdAt,
+        ),
+      for (final itemId in repairedIds)
+        projector._eventRecord(
+          ownerUid: ownerUid,
+          projectionId: plan.projectionId,
+          item: itemById[itemId]!,
+          eventType: RoutineEventType.edited,
+          occurredAt: receipt.createdAt,
+        ),
+    ];
+  }
+
   RoutineEventRecord _eventRecord({
     required String ownerUid,
     required String projectionId,
@@ -277,10 +324,10 @@ class RoutineOnboardingEventProjector {
     required RoutineEventType eventType,
     required DateTime occurredAt,
   }) {
-    final operationPrefix = eventType == RoutineEventType.created 
-        ? 'onboarding-created-operation-v1' 
+    final operationPrefix = eventType == RoutineEventType.created
+        ? 'onboarding-created-operation-v1'
         : 'onboarding-edited-operation-v1';
-        
+
     final operationKey = _stableId(operationPrefix, [
       ownerUid,
       projectionId,

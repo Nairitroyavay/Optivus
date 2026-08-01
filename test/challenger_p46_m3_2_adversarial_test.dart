@@ -23,177 +23,204 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Challenger P46 M3.2: Recovery Data Integrity & Safety', () {
-    test('SynthesizeBundleAction in AuthNotifier never fabricates completion data', () async {
-      final fakeAuthRepo = FakeAuthRepository();
-      final fakeOnboardingRepo = FakeOnboardingRepository();
-      final fakeProfileRepo = FakeProfileRepository();
-      final container = ProviderContainer(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(fakeAuthRepo),
-          onboardingRepositoryProvider.overrideWithValue(fakeOnboardingRepo),
-          profileRepositoryProvider.overrideWithValue(fakeProfileRepo),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      'SynthesizeBundleAction in AuthNotifier never fabricates completion data',
+      () async {
+        final fakeAuthRepo = FakeAuthRepository();
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeProfileRepo = FakeProfileRepository();
+        final container = ProviderContainer(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(fakeAuthRepo),
+            onboardingRepositoryProvider.overrideWithValue(fakeOnboardingRepo),
+            profileRepositoryProvider.overrideWithValue(fakeProfileRepo),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      const testUser = AuthUser(
-        uid: 'test-synth-uid',
-        email: 'test@example.com',
-        isAnonymous: false,
-        emailVerified: true,
-        providerId: 'password',
-      );
-      container.read(authProvider.notifier).state = const AuthState(
-        user: testUser,
-        status: AuthFlowStatus.signedInOnboardingComplete,
-      );
+        const testUser = AuthUser(
+          uid: 'test-synth-uid',
+          email: 'test@example.com',
+          isAnonymous: false,
+          emailVerified: true,
+          providerId: 'password',
+        );
+        container.read(authProvider.notifier).state = const AuthState(
+          user: testUser,
+          status: AuthFlowStatus.signedInOnboardingComplete,
+        );
 
-      final notifier = container.read(authProvider.notifier);
-      await notifier.executeRecoveryAction(const SynthesizeBundleAction());
+        final notifier = container.read(authProvider.notifier);
+        await notifier.executeRecoveryAction(const SynthesizeBundleAction());
 
-      final authState = container.read(authProvider);
-      final profile = container.read(mockUserProfileProvider);
+        final authState = container.read(authProvider);
+        final profile = container.read(mockUserProfileProvider);
 
-      // Must be marked incomplete, NOT completed with fabricated data
-      expect(authState.status, equals(AuthFlowStatus.signedInOnboardingIncomplete));
-      expect(profile.onboardingCompleted, isFalse);
-      expect(profile.onboardingInputCompleted, isFalse);
-      expect(profile.onboardingStep, equals(0));
+        // Must be marked incomplete, NOT completed with fabricated data
+        expect(
+          authState.status,
+          equals(AuthFlowStatus.signedInOnboardingIncomplete),
+        );
+        expect(profile.onboardingCompleted, isFalse);
+        expect(profile.onboardingInputCompleted, isFalse);
+        expect(profile.onboardingStep, equals(0));
 
-      // Verify no completion bundle was created in the repository
-      final bundle = await fakeOnboardingRepo.fetchCompletionBundle(testUser.uid);
-      expect(bundle, isNull);
-    });
+        // Verify no completion bundle was created in the repository
+        final bundle = await fakeOnboardingRepo.fetchCompletionBundle(
+          testUser.uid,
+        );
+        expect(bundle, isNull);
+      },
+    );
 
-    test('RestartOnboardingInputAction marks onboarding incomplete without data fabrication', () async {
-      final fakeAuthRepo = FakeAuthRepository();
-      final fakeOnboardingRepo = FakeOnboardingRepository();
-      final container = ProviderContainer(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(fakeAuthRepo),
-          onboardingRepositoryProvider.overrideWithValue(fakeOnboardingRepo),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      'RestartOnboardingInputAction marks onboarding incomplete without data fabrication',
+      () async {
+        final fakeAuthRepo = FakeAuthRepository();
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final container = ProviderContainer(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(fakeAuthRepo),
+            onboardingRepositoryProvider.overrideWithValue(fakeOnboardingRepo),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      const testUser = AuthUser(
-        uid: 'test-restart-uid',
-        email: 'test@example.com',
-        isAnonymous: false,
-        emailVerified: true,
-        providerId: 'password',
-      );
-      container.read(authProvider.notifier).state = const AuthState(
-        user: testUser,
-        status: AuthFlowStatus.backendRestoreFailed,
-      );
+        const testUser = AuthUser(
+          uid: 'test-restart-uid',
+          email: 'test@example.com',
+          isAnonymous: false,
+          emailVerified: true,
+          providerId: 'password',
+        );
+        container.read(authProvider.notifier).state = const AuthState(
+          user: testUser,
+          status: AuthFlowStatus.backendRestoreFailed,
+        );
 
-      final notifier = container.read(authProvider.notifier);
-      await notifier.executeRecoveryAction(const RestartOnboardingInputAction());
+        final notifier = container.read(authProvider.notifier);
+        await notifier.executeRecoveryAction(
+          const RestartOnboardingInputAction(),
+        );
 
-      final authState = container.read(authProvider);
-      final profile = container.read(mockUserProfileProvider);
+        final authState = container.read(authProvider);
+        final profile = container.read(mockUserProfileProvider);
 
-      expect(authState.status, equals(AuthFlowStatus.signedInOnboardingIncomplete));
-      expect(profile.onboardingCompleted, isFalse);
-      expect(profile.onboardingStep, equals(0));
-    });
+        expect(
+          authState.status,
+          equals(AuthFlowStatus.signedInOnboardingIncomplete),
+        );
+        expect(profile.onboardingCompleted, isFalse);
+        expect(profile.onboardingStep, equals(0));
+      },
+    );
 
-    test('RebuildBundleFromDraftAction when draft and profile are missing resets state to incomplete', () async {
-      final fakeAuthRepo = FakeAuthRepository();
-      final fakeOnboardingRepo = FakeOnboardingRepository();
-      final fakeProfileRepo = FakeProfileRepository();
-      final container = ProviderContainer(
-        overrides: [
-          authRepositoryProvider.overrideWithValue(fakeAuthRepo),
-          onboardingRepositoryProvider.overrideWithValue(fakeOnboardingRepo),
-          profileRepositoryProvider.overrideWithValue(fakeProfileRepo),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      'RebuildBundleFromDraftAction when draft and profile are missing resets state to incomplete',
+      () async {
+        final fakeAuthRepo = FakeAuthRepository();
+        final fakeOnboardingRepo = FakeOnboardingRepository();
+        final fakeProfileRepo = FakeProfileRepository();
+        final container = ProviderContainer(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(fakeAuthRepo),
+            onboardingRepositoryProvider.overrideWithValue(fakeOnboardingRepo),
+            profileRepositoryProvider.overrideWithValue(fakeProfileRepo),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      const testUser = AuthUser(
-        uid: 'test-missing-draft-uid',
-        email: 'test@example.com',
-        isAnonymous: false,
-        emailVerified: true,
-        providerId: 'password',
-      );
-      container.read(authProvider.notifier).state = const AuthState(
-        user: testUser,
-        status: AuthFlowStatus.backendRestoreFailed,
-      );
+        const testUser = AuthUser(
+          uid: 'test-missing-draft-uid',
+          email: 'test@example.com',
+          isAnonymous: false,
+          emailVerified: true,
+          providerId: 'password',
+        );
+        container.read(authProvider.notifier).state = const AuthState(
+          user: testUser,
+          status: AuthFlowStatus.backendRestoreFailed,
+        );
 
-      final notifier = container.read(authProvider.notifier);
-      await notifier.executeRecoveryAction(const RebuildBundleFromDraftAction());
+        final notifier = container.read(authProvider.notifier);
+        await notifier.executeRecoveryAction(
+          const RebuildBundleFromDraftAction(),
+        );
 
-      final authState = container.read(authProvider);
-      expect(authState.status, equals(AuthFlowStatus.signedInOnboardingIncomplete));
-    });
+        final authState = container.read(authProvider);
+        expect(
+          authState.status,
+          equals(AuthFlowStatus.signedInOnboardingIncomplete),
+        );
+      },
+    );
   });
 
   group('Challenger P46 M3.2: Batch Limits (N > 240 Items)', () {
-    test('completeOnboarding throws StateError when plan.items.length > 240', () async {
-      final onboardingRepo = FakeOnboardingRepository();
-      const uid = 'user-batch-limit-over';
+    test(
+      'completeOnboarding throws StateError when plan.items.length > 240',
+      () async {
+        final onboardingRepo = FakeOnboardingRepository();
+        const uid = 'user-batch-limit-over';
 
-      final draft = OnboardingDraft(uid: uid).copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
-      final baseBundle = OnboardingCompletionService.buildBundle(draft);
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
-      final largeRoutines = List.generate(
-        241,
-        (i) => RoutineItem(
-          id: 'routine-item-$i',
-          userId: uid,
-          title: 'Routine Item $i',
-          category: RoutineCategory.fixed,
-          blockType: RoutineBlockType.softBlock,
-          startMinute: (i * 5) % (24 * 60),
-          endMinute: ((i * 5) + 4) % (24 * 60),
-        ),
-      );
-
-      final largeBundle = OnboardingCompletionBundle(
-        uid: baseBundle.uid,
-        version: baseBundle.version,
-        source: baseBundle.source,
-        createdAt: baseBundle.createdAt,
-        updatedAt: baseBundle.updatedAt,
-        userProfilePatch: baseBundle.userProfilePatch,
-        baseTimelineBlocks: baseBundle.baseTimelineBlocks,
-        finalTimelineItems: baseBundle.finalTimelineItems,
-        routineItemsForApp: largeRoutines,
-        goodHabitTemplates: baseBundle.goodHabitTemplates,
-        badHabitCheckIns: baseBundle.badHabitCheckIns,
-        identityGoalSystems: baseBundle.identityGoalSystems,
-        notificationPreferences: baseBundle.notificationPreferences,
-        coachPreferences: baseBundle.coachPreferences,
-        moneyGoal: baseBundle.moneyGoal,
-        uploadedAssetReferences: baseBundle.uploadedAssetReferences,
-        warnings: baseBundle.warnings,
-        duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
-      );
-
-      final plan = RoutineOnboardingProjection.build(largeBundle);
-      expect(plan.items.length, equals(241));
-
-      expect(
-        () => onboardingRepo.completeOnboarding(
-          finalDraft: draft,
-          bundle: largeBundle,
-        ),
-        throwsA(
-          isA<StateError>().having(
-            (e) => e.message,
-            'message',
-            contains('Onboarding produced too many Routine templates.'),
+        final largeRoutines = List.generate(
+          241,
+          (i) => RoutineItem(
+            id: 'routine-item-$i',
+            userId: uid,
+            title: 'Routine Item $i',
+            category: RoutineCategory.fixed,
+            blockType: RoutineBlockType.softBlock,
+            startMinute: (i * 5) % (24 * 60),
+            endMinute: ((i * 5) + 4) % (24 * 60),
           ),
-        ),
-      );
-    });
+        );
+
+        final largeBundle = OnboardingCompletionBundle(
+          uid: baseBundle.uid,
+          version: baseBundle.version,
+          source: baseBundle.source,
+          createdAt: baseBundle.createdAt,
+          updatedAt: baseBundle.updatedAt,
+          userProfilePatch: baseBundle.userProfilePatch,
+          baseTimelineBlocks: baseBundle.baseTimelineBlocks,
+          finalTimelineItems: baseBundle.finalTimelineItems,
+          routineItemsForApp: largeRoutines,
+          goodHabitTemplates: baseBundle.goodHabitTemplates,
+          badHabitCheckIns: baseBundle.badHabitCheckIns,
+          identityGoalSystems: baseBundle.identityGoalSystems,
+          notificationPreferences: baseBundle.notificationPreferences,
+          coachPreferences: baseBundle.coachPreferences,
+          moneyGoal: baseBundle.moneyGoal,
+          uploadedAssetReferences: baseBundle.uploadedAssetReferences,
+          warnings: baseBundle.warnings,
+          duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
+        );
+
+        final plan = RoutineOnboardingProjection.build(largeBundle);
+        expect(plan.items.length, equals(241));
+
+        expect(
+          () => onboardingRepo.completeOnboarding(
+            finalDraft: draft,
+            bundle: largeBundle,
+          ),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('Onboarding produced too many Routine templates.'),
+            ),
+          ),
+        );
+      },
+    );
 
     test('completeOnboarding succeeds when plan.items.length == 240', () async {
       final onboardingRepo = FakeOnboardingRepository();
@@ -250,285 +277,554 @@ void main() {
       expect(result.receipt.totalCount, equals(240));
     });
 
-    test('OnboardingCompletionJobService fails gracefully when N > 240', () async {
-      final onboardingRepo = FakeOnboardingRepository();
-      final profileRepo = FakeProfileRepository();
-      final jobService = OnboardingCompletionJobService(
-        onboardingRepository: onboardingRepo,
-        profileRepository: profileRepo,
-      );
+    test(
+      'OnboardingCompletionJobService fails gracefully when N > 240',
+      () async {
+        final onboardingRepo = FakeOnboardingRepository();
+        final profileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: onboardingRepo,
+          profileRepository: profileRepo,
+        );
 
-      const uid = 'user-job-batch-limit';
-      final draft = OnboardingDraft(uid: uid).copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
-      final baseBundle = OnboardingCompletionService.buildBundle(draft);
+        const uid = 'user-job-batch-limit';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
-      final largeRoutines = List.generate(
-        245,
-        (i) => RoutineItem(
-          id: 'routine-item-$i',
-          userId: uid,
-          title: 'Routine Item $i',
-          category: RoutineCategory.fixed,
-          blockType: RoutineBlockType.softBlock,
-          startMinute: (i * 5) % (24 * 60),
-          endMinute: ((i * 5) + 4) % (24 * 60),
-        ),
-      );
-      final largeBundle = OnboardingCompletionBundle(
-        uid: baseBundle.uid,
-        version: baseBundle.version,
-        source: baseBundle.source,
-        createdAt: baseBundle.createdAt,
-        updatedAt: baseBundle.updatedAt,
-        userProfilePatch: baseBundle.userProfilePatch,
-        baseTimelineBlocks: baseBundle.baseTimelineBlocks,
-        finalTimelineItems: baseBundle.finalTimelineItems,
-        routineItemsForApp: largeRoutines,
-        goodHabitTemplates: baseBundle.goodHabitTemplates,
-        badHabitCheckIns: baseBundle.badHabitCheckIns,
-        identityGoalSystems: baseBundle.identityGoalSystems,
-        notificationPreferences: baseBundle.notificationPreferences,
-        coachPreferences: baseBundle.coachPreferences,
-        moneyGoal: baseBundle.moneyGoal,
-        uploadedAssetReferences: baseBundle.uploadedAssetReferences,
-        warnings: baseBundle.warnings,
-        duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
-      );
+        final largeRoutines = List.generate(
+          245,
+          (i) => RoutineItem(
+            id: 'routine-item-$i',
+            userId: uid,
+            title: 'Routine Item $i',
+            category: RoutineCategory.fixed,
+            blockType: RoutineBlockType.softBlock,
+            startMinute: (i * 5) % (24 * 60),
+            endMinute: ((i * 5) + 4) % (24 * 60),
+          ),
+        );
+        final largeBundle = OnboardingCompletionBundle(
+          uid: baseBundle.uid,
+          version: baseBundle.version,
+          source: baseBundle.source,
+          createdAt: baseBundle.createdAt,
+          updatedAt: baseBundle.updatedAt,
+          userProfilePatch: baseBundle.userProfilePatch,
+          baseTimelineBlocks: baseBundle.baseTimelineBlocks,
+          finalTimelineItems: baseBundle.finalTimelineItems,
+          routineItemsForApp: largeRoutines,
+          goodHabitTemplates: baseBundle.goodHabitTemplates,
+          badHabitCheckIns: baseBundle.badHabitCheckIns,
+          identityGoalSystems: baseBundle.identityGoalSystems,
+          notificationPreferences: baseBundle.notificationPreferences,
+          coachPreferences: baseBundle.coachPreferences,
+          moneyGoal: baseBundle.moneyGoal,
+          uploadedAssetReferences: baseBundle.uploadedAssetReferences,
+          warnings: baseBundle.warnings,
+          duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
+        );
 
-      await expectLater(
-        () => jobService.runCompletionJob(
-          uid: uid,
-          finalDraft: draft,
-          bundle: largeBundle,
-        ),
-        throwsA(isA<StateError>()),
-      );
+        await expectLater(
+          () => jobService.runCompletionJob(
+            uid: uid,
+            finalDraft: draft,
+            bundle: largeBundle,
+          ),
+          throwsA(isA<StateError>()),
+        );
 
-      final job = await jobService.loadCurrentJob(uid);
-      expect(job, isNotNull);
-      expect(job!.status, equals(OnboardingJobStatus.failed));
-      expect(job.lastError, contains('too many Routine templates'));
-    });
+        final job = await jobService.loadCurrentJob(uid);
+        expect(job, isNotNull);
+        expect(job!.status, equals(OnboardingJobStatus.failed));
+        expect(job.lastError, contains('too many Routine templates'));
+      },
+    );
   });
 
   group('Challenger P46 M3.2: linkedRoutineIds & Receipt Cursor Idempotency', () {
-    test('HabitSystemOnboardingProjection build is deterministic and idempotent', () {
-      const uid = 'user-hs-idempotent';
-      final draft = OnboardingDraft(uid: uid).copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
-      final bundle = OnboardingCompletionService.buildBundle(draft);
+    test(
+      'HabitSystemOnboardingProjection build is deterministic and idempotent',
+      () {
+        const uid = 'user-hs-idempotent';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
 
-      final routines = <RoutineItem>[
-        RoutineItem(
-          id: 'r1',
-          userId: uid,
-          title: 'Hydration Routine',
-          category: RoutineCategory.habit,
-          blockType: RoutineBlockType.softBlock,
-          startMinute: 480,
-          endMinute: 500,
-        ),
-        RoutineItem(
-          id: 'r2',
-          userId: uid,
-          title: 'Skin Care Morning',
-          category: RoutineCategory.skinCare,
-          blockType: RoutineBlockType.softBlock,
-          startMinute: 420,
-          endMinute: 435,
-        ),
-      ];
+        final routines = <RoutineItem>[
+          RoutineItem(
+            id: 'r1',
+            userId: uid,
+            title: 'Hydration Routine',
+            category: RoutineCategory.habit,
+            blockType: RoutineBlockType.softBlock,
+            startMinute: 480,
+            endMinute: 500,
+          ),
+          RoutineItem(
+            id: 'r2',
+            userId: uid,
+            title: 'Skin Care Morning',
+            category: RoutineCategory.skinCare,
+            blockType: RoutineBlockType.softBlock,
+            startMinute: 420,
+            endMinute: 435,
+          ),
+        ];
 
-      final systemsRun1 = HabitSystemOnboardingProjection.build(bundle, routines);
-      final systemsRun2 = HabitSystemOnboardingProjection.build(bundle, routines);
+        final systemsRun1 = HabitSystemOnboardingProjection.build(
+          bundle,
+          routines,
+        );
+        final systemsRun2 = HabitSystemOnboardingProjection.build(
+          bundle,
+          routines,
+        );
 
-      expect(systemsRun1.length, equals(systemsRun2.length));
-      for (var i = 0; i < systemsRun1.length; i++) {
-        expect(systemsRun1[i].systemId, equals(systemsRun2[i].systemId));
-        expect(systemsRun1[i].linkedRoutineIds, equals(systemsRun2[i].linkedRoutineIds));
-      }
-    });
+        expect(systemsRun1.length, equals(systemsRun2.length));
+        for (var i = 0; i < systemsRun1.length; i++) {
+          expect(systemsRun1[i].systemId, equals(systemsRun2[i].systemId));
+          expect(
+            systemsRun1[i].linkedRoutineIds,
+            equals(systemsRun2[i].linkedRoutineIds),
+          );
+        }
+      },
+    );
 
-    test('RoutineOnboardingEventProjector handles completed receipts idempotently', () async {
-      final routineRepo = FakeRoutineRepository();
-      final txRepo = FakeRoutineTransactionRepository(routineRepository: routineRepo);
-      final container = ProviderContainer(
-        overrides: [
-          routineRepositoryProvider.overrideWithValue(routineRepo),
-          routineTransactionRepositoryProvider.overrideWithValue(txRepo),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      'RoutineOnboardingEventProjector handles completed receipts idempotently',
+      () async {
+        final routineRepo = FakeRoutineRepository();
+        final txRepo = FakeRoutineTransactionRepository(
+          routineRepository: routineRepo,
+        );
+        final container = ProviderContainer(
+          overrides: [
+            routineRepositoryProvider.overrideWithValue(routineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(txRepo),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      const uid = 'user-cursor-idempotent';
-      final draft = OnboardingDraft(uid: uid).copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
-      final baseBundle = OnboardingCompletionService.buildBundle(draft);
+        const uid = 'user-cursor-idempotent';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
-      final sampleRoutines = List.generate(
-        5,
-        (i) => RoutineItem(
-          id: 'routine-sample-$i',
-          userId: uid,
-          title: 'Sample Routine $i',
-          category: RoutineCategory.fixed,
-          blockType: RoutineBlockType.softBlock,
-          startMinute: (i * 10) % (24 * 60),
-          endMinute: ((i * 10) + 9) % (24 * 60),
-        ),
-      );
+        final sampleRoutines = List.generate(
+          5,
+          (i) => RoutineItem(
+            id: 'routine-sample-$i',
+            userId: uid,
+            title: 'Sample Routine $i',
+            category: RoutineCategory.fixed,
+            blockType: RoutineBlockType.softBlock,
+            startMinute: (i * 10) % (24 * 60),
+            endMinute: ((i * 10) + 9) % (24 * 60),
+          ),
+        );
 
-      final bundle = OnboardingCompletionBundle(
-        uid: baseBundle.uid,
-        version: baseBundle.version,
-        source: baseBundle.source,
-        createdAt: baseBundle.createdAt,
-        updatedAt: baseBundle.updatedAt,
-        userProfilePatch: baseBundle.userProfilePatch,
-        baseTimelineBlocks: baseBundle.baseTimelineBlocks,
-        finalTimelineItems: baseBundle.finalTimelineItems,
-        routineItemsForApp: sampleRoutines,
-        goodHabitTemplates: baseBundle.goodHabitTemplates,
-        badHabitCheckIns: baseBundle.badHabitCheckIns,
-        identityGoalSystems: baseBundle.identityGoalSystems,
-        notificationPreferences: baseBundle.notificationPreferences,
-        coachPreferences: baseBundle.coachPreferences,
-        moneyGoal: baseBundle.moneyGoal,
-        uploadedAssetReferences: baseBundle.uploadedAssetReferences,
-        warnings: baseBundle.warnings,
-        duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
-      );
+        final bundle = OnboardingCompletionBundle(
+          uid: baseBundle.uid,
+          version: baseBundle.version,
+          source: baseBundle.source,
+          createdAt: baseBundle.createdAt,
+          updatedAt: baseBundle.updatedAt,
+          userProfilePatch: baseBundle.userProfilePatch,
+          baseTimelineBlocks: baseBundle.baseTimelineBlocks,
+          finalTimelineItems: baseBundle.finalTimelineItems,
+          routineItemsForApp: sampleRoutines,
+          goodHabitTemplates: baseBundle.goodHabitTemplates,
+          badHabitCheckIns: baseBundle.badHabitCheckIns,
+          identityGoalSystems: baseBundle.identityGoalSystems,
+          notificationPreferences: baseBundle.notificationPreferences,
+          coachPreferences: baseBundle.coachPreferences,
+          moneyGoal: baseBundle.moneyGoal,
+          uploadedAssetReferences: baseBundle.uploadedAssetReferences,
+          warnings: baseBundle.warnings,
+          duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
+        );
 
-      final plan = RoutineOnboardingProjection.build(bundle);
+        final plan = RoutineOnboardingProjection.build(bundle);
 
-      // Pre-save routine items to database
-      for (final item in plan.items) {
-        await routineRepo.createRoutineItem(uid, item);
-      }
+        // Pre-save routine items to database
+        for (final item in plan.items) {
+          await routineRepo.createRoutineItem(uid, item);
+        }
 
-      const projector = RoutineOnboardingEventProjector();
+        const projector = RoutineOnboardingEventProjector();
 
-      // First run: project created events
-      final result1 = await projector.projectCreatedEvents(
-        read: container.read,
-        bundle: bundle,
-      );
+        // First run: project created events
+        final result1 = await projector.projectCreatedEvents(
+          read: container.read,
+          bundle: bundle,
+        );
 
-      expect(result1.attemptedCount, equals(plan.items.length));
+        expect(result1.attemptedCount, equals(plan.items.length));
 
-      final receiptAfter1 = await routineRepo.fetchProjectionReceipt(uid, plan.projectionId);
-      expect(receiptAfter1, isNotNull);
-      expect(receiptAfter1!.status, equals('completed'));
-      expect(receiptAfter1.cursor, equals(plan.items.length));
+        final receiptAfter1 = await routineRepo.fetchProjectionReceipt(
+          uid,
+          plan.projectionId,
+        );
+        expect(receiptAfter1, isNotNull);
+        expect(receiptAfter1!.status, equals('completed'));
+        expect(receiptAfter1.cursor, equals(plan.items.length));
 
-      // Second run: execute again on already completed receipt
-      final result2 = await projector.projectCreatedEvents(
-        read: container.read,
-        bundle: bundle,
-      );
+        // Second run: execute again on already completed receipt
+        final result2 = await projector.projectCreatedEvents(
+          read: container.read,
+          bundle: bundle,
+        );
 
-      // Must be idempotent with 0 attempted count and matching applied events
-      expect(result2.attemptedCount, equals(0));
-      expect(result2.appliedEventIds, equals(result1.appliedEventIds));
-    });
+        // Must be idempotent with 0 attempted count and matching applied events
+        expect(result2.attemptedCount, equals(0));
+        expect(result2.appliedEventIds, equals(result1.appliedEventIds));
+      },
+    );
 
-    test('RoutineOnboardingEventProjector resumes from partial cursor correctly', () async {
-      final routineRepo = FakeRoutineRepository();
-      final txRepo = FakeRoutineTransactionRepository(routineRepository: routineRepo);
-      final container = ProviderContainer(
-        overrides: [
-          routineRepositoryProvider.overrideWithValue(routineRepo),
-          routineTransactionRepositoryProvider.overrideWithValue(txRepo),
-        ],
-      );
-      addTearDown(container.dispose);
+    test(
+      'RoutineOnboardingEventProjector resumes from partial cursor correctly',
+      () async {
+        final routineRepo = FakeRoutineRepository();
+        final txRepo = FakeRoutineTransactionRepository(
+          routineRepository: routineRepo,
+        );
+        final container = ProviderContainer(
+          overrides: [
+            routineRepositoryProvider.overrideWithValue(routineRepo),
+            routineTransactionRepositoryProvider.overrideWithValue(txRepo),
+          ],
+        );
+        addTearDown(container.dispose);
 
-      const uid = 'user-cursor-partial';
-      final draft = OnboardingDraft(uid: uid).copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
-      final baseBundle = OnboardingCompletionService.buildBundle(draft);
+        const uid = 'user-cursor-partial';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
-      final sampleRoutines = List.generate(
-        5,
-        (i) => RoutineItem(
-          id: 'routine-sample-$i',
-          userId: uid,
-          title: 'Sample Routine $i',
-          category: RoutineCategory.fixed,
-          blockType: RoutineBlockType.softBlock,
-          startMinute: (i * 10) % (24 * 60),
-          endMinute: ((i * 10) + 9) % (24 * 60),
-        ),
-      );
+        final sampleRoutines = List.generate(
+          5,
+          (i) => RoutineItem(
+            id: 'routine-sample-$i',
+            userId: uid,
+            title: 'Sample Routine $i',
+            category: RoutineCategory.fixed,
+            blockType: RoutineBlockType.softBlock,
+            startMinute: (i * 10) % (24 * 60),
+            endMinute: ((i * 10) + 9) % (24 * 60),
+          ),
+        );
 
-      final bundle = OnboardingCompletionBundle(
-        uid: baseBundle.uid,
-        version: baseBundle.version,
-        source: baseBundle.source,
-        createdAt: baseBundle.createdAt,
-        updatedAt: baseBundle.updatedAt,
-        userProfilePatch: baseBundle.userProfilePatch,
-        baseTimelineBlocks: baseBundle.baseTimelineBlocks,
-        finalTimelineItems: baseBundle.finalTimelineItems,
-        routineItemsForApp: sampleRoutines,
-        goodHabitTemplates: baseBundle.goodHabitTemplates,
-        badHabitCheckIns: baseBundle.badHabitCheckIns,
-        identityGoalSystems: baseBundle.identityGoalSystems,
-        notificationPreferences: baseBundle.notificationPreferences,
-        coachPreferences: baseBundle.coachPreferences,
-        moneyGoal: baseBundle.moneyGoal,
-        uploadedAssetReferences: baseBundle.uploadedAssetReferences,
-        warnings: baseBundle.warnings,
-        duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
-      );
+        final bundle = OnboardingCompletionBundle(
+          uid: baseBundle.uid,
+          version: baseBundle.version,
+          source: baseBundle.source,
+          createdAt: baseBundle.createdAt,
+          updatedAt: baseBundle.updatedAt,
+          userProfilePatch: baseBundle.userProfilePatch,
+          baseTimelineBlocks: baseBundle.baseTimelineBlocks,
+          finalTimelineItems: baseBundle.finalTimelineItems,
+          routineItemsForApp: sampleRoutines,
+          goodHabitTemplates: baseBundle.goodHabitTemplates,
+          badHabitCheckIns: baseBundle.badHabitCheckIns,
+          identityGoalSystems: baseBundle.identityGoalSystems,
+          notificationPreferences: baseBundle.notificationPreferences,
+          coachPreferences: baseBundle.coachPreferences,
+          moneyGoal: baseBundle.moneyGoal,
+          uploadedAssetReferences: baseBundle.uploadedAssetReferences,
+          warnings: baseBundle.warnings,
+          duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
+        );
 
-      final plan = RoutineOnboardingProjection.build(bundle);
-      expect(plan.items.length, equals(5));
+        final plan = RoutineOnboardingProjection.build(bundle);
+        expect(plan.items.length, equals(5));
 
-      for (final item in plan.items) {
-        await routineRepo.createRoutineItem(uid, item);
-      }
+        for (final item in plan.items) {
+          await routineRepo.createRoutineItem(uid, item);
+        }
 
-      // Save partial receipt with cursor = 2 out of 5 total items
-      final now = DateTime.now().toUtc();
-      final partialReceipt = RoutineProjectionReceipt(
-        id: plan.projectionId,
-        ownerUid: uid,
-        sourceBundleSchemaVersion: OnboardingCompletionBundle.schemaVersion,
-        sourceBundleId: plan.sourceBundleId,
-        sourceBundleFingerprint: plan.fingerprint,
-        expectedItemIds: plan.items.map((i) => i.id).toList(),
-        status: 'pending',
-        cursor: 2,
-        totalCount: plan.items.length,
-        createdItemIds: plan.items.map((i) => i.id).toList(),
-        projectedItemIds: plan.items.map((i) => i.id).toList(),
-        createdAt: now,
-        updatedAt: now,
-      );
-      routineRepo.database.receiptsByUid.putIfAbsent(uid, () => {})[plan.projectionId] = partialReceipt;
+        // Save partial receipt with cursor = 2 out of 5 total items
+        final now = DateTime.now().toUtc();
+        final partialReceipt = RoutineProjectionReceipt(
+          id: plan.projectionId,
+          ownerUid: uid,
+          sourceBundleSchemaVersion: OnboardingCompletionBundle.schemaVersion,
+          sourceBundleId: plan.sourceBundleId,
+          sourceBundleFingerprint: plan.fingerprint,
+          expectedItemIds: plan.items.map((i) => i.id).toList(),
+          status: 'pending',
+          cursor: 2,
+          totalCount: plan.items.length,
+          createdItemIds: plan.items.map((i) => i.id).toList(),
+          projectedItemIds: plan.items.map((i) => i.id).toList(),
+          createdAt: now,
+          updatedAt: now,
+        );
+        routineRepo.database.receiptsByUid.putIfAbsent(
+          uid,
+          () => {},
+        )[plan.projectionId] = partialReceipt;
 
-      const projector = RoutineOnboardingEventProjector();
-      final result = await projector.projectCreatedEvents(
-        read: container.read,
-        bundle: bundle,
-      );
+        const projector = RoutineOnboardingEventProjector();
+        final result = await projector.projectCreatedEvents(
+          read: container.read,
+          bundle: bundle,
+        );
 
-      // Should attempt remaining 3 items (5 - 2 = 3)
-      expect(result.attemptedCount, equals(3));
+        // Should attempt remaining 3 items (5 - 2 = 3)
+        expect(result.attemptedCount, equals(3));
 
-      final finalReceipt = await routineRepo.fetchProjectionReceipt(uid, plan.projectionId);
-      expect(finalReceipt!.status, equals('completed'));
-      expect(finalReceipt.cursor, equals(5));
-    });
+        final finalReceipt = await routineRepo.fetchProjectionReceipt(
+          uid,
+          plan.projectionId,
+        );
+        expect(finalReceipt!.status, equals('completed'));
+        expect(finalReceipt.cursor, equals(5));
+      },
+    );
+  });
+
+  group('Challenger P46 M3.2: Structured Failure Payload Sanitization', () {
+    test(
+      'Simulated exception containing sensitive data (emails, auth tokens) redacts lastError while preserving structural fields',
+      () async {
+        final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
+          saveDraftException: StateError(
+            'Authentication failed for secret.user@domain.com using token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.signature',
+          ),
+        );
+        final fakeProfileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: mockOnboardingRepo,
+          profileRepository: fakeProfileRepo,
+        );
+
+        const uid = 'user-sensitive-payload';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+
+        await expectLater(
+          () => jobService.runCompletionJob(
+            uid: uid,
+            finalDraft: draft,
+            bundle: bundle,
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        final job = await jobService.loadCurrentJob(uid);
+        expect(job, isNotNull);
+        expect(job!.status, equals(OnboardingJobStatus.failed));
+        expect(job.lastFailureStage, equals('persistDraft'));
+        expect(job.lastFailureCode, equals('state_error'));
+        expect(job.diagnosticCategory, equals('validation_failed'));
+
+        // Redaction verification: sensitive email and token must NOT be present
+        expect(job.lastError, isNotNull);
+        expect(job.lastError, contains('[REDACTED_EMAIL]'));
+        expect(job.lastError, contains('[REDACTED_TOKEN]'));
+        expect(job.lastError, isNot(contains('secret.user@domain.com')));
+        expect(
+          job.lastError,
+          isNot(contains('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9')),
+        );
+      },
+    );
+
+    test(
+      'OnboardingCompletionFailureException preserves structural fields and sanitizes custom error message',
+      () async {
+        final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
+          completeOnboardingException: OnboardingCompletionFailureException(
+            OnboardingCompletionFailure(
+              code: 'ROUTINE_PROJECTION_TIMEOUT',
+              stage: OnboardingCompletionStage.projectRoutines,
+              retryable: true,
+              publicMessageKey: 'error_projection_timeout',
+              diagnosticCategory: 'network_timeout',
+              failedEntityIds: const ['routine_101', 'routine_102'],
+              occurredAt: DateTime.now(),
+            ),
+          ),
+        );
+        final fakeProfileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: mockOnboardingRepo,
+          profileRepository: fakeProfileRepo,
+        );
+
+        const uid = 'user-structural-payload';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+
+        await expectLater(
+          () => jobService.runCompletionJob(
+            uid: uid,
+            finalDraft: draft,
+            bundle: bundle,
+          ),
+          throwsA(isA<OnboardingCompletionFailureException>()),
+        );
+
+        final job = await jobService.loadCurrentJob(uid);
+        expect(job, isNotNull);
+        expect(job!.status, equals(OnboardingJobStatus.failed));
+        expect(job.lastFailureStage, equals('projectRoutines'));
+        expect(job.lastFailureCode, equals('ROUTINE_PROJECTION_TIMEOUT'));
+        expect(job.diagnosticCategory, equals('network_timeout'));
+        expect(job.retryable, isTrue);
+        expect(job.failedEntityIds, equals(['routine_101', 'routine_102']));
+      },
+    );
+  });
+
+  group('Challenger P46 M3.2: Fine-Grained Completion Stage Ordering (Stage 5 UPDATE_PROFILE)', () {
+    test(
+      'Stage 5 (UPDATE_PROFILE) cannot execute if Stage 1 (PERSIST_DRAFT) fails',
+      () async {
+        final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
+          saveDraftException: StateError('Stage 1 persistence failed'),
+        );
+        final fakeProfileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: mockOnboardingRepo,
+          profileRepository: fakeProfileRepo,
+        );
+
+        const uid = 'user-stage5-blocked-s1';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+
+        await expectLater(
+          () => jobService.runCompletionJob(
+            uid: uid,
+            finalDraft: draft,
+            bundle: bundle,
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        final job = await jobService.loadCurrentJob(uid);
+        expect(job, isNotNull);
+        expect(job!.status, equals(OnboardingJobStatus.failed));
+        expect(
+          job.isStageCompleted(OnboardingCompletionStage.updateProfile),
+          isFalse,
+        );
+        expect(job.stagesCompleted['persistDraft'], isNot(true));
+
+        final profile = await fakeProfileRepo.fetchUserProfile(uid);
+        expect(profile?.onboardingCompleted, isNot(true));
+      },
+    );
+
+    test(
+      'Stage 5 (UPDATE_PROFILE) cannot execute if Stage 3 (PROJECT_ROUTINES) fails',
+      () async {
+        final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
+          completeOnboardingException: StateError('Stage 3 projection failed'),
+        );
+        final fakeProfileRepo = FakeProfileRepository();
+        final jobService = OnboardingCompletionJobService(
+          onboardingRepository: mockOnboardingRepo,
+          profileRepository: fakeProfileRepo,
+        );
+
+        const uid = 'user-stage5-blocked-s3';
+        final draft = OnboardingDraft(uid: uid).copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+
+        await expectLater(
+          () => jobService.runCompletionJob(
+            uid: uid,
+            finalDraft: draft,
+            bundle: bundle,
+          ),
+          throwsA(isA<StateError>()),
+        );
+
+        final job = await jobService.loadCurrentJob(uid);
+        expect(job, isNotNull);
+        expect(job!.status, equals(OnboardingJobStatus.failed));
+        expect(
+          job.isStageCompleted(OnboardingCompletionStage.persistDraft),
+          isTrue,
+        );
+        expect(
+          job.isStageCompleted(OnboardingCompletionStage.persistBundle),
+          isTrue,
+        );
+        expect(
+          job.isStageCompleted(OnboardingCompletionStage.projectRoutines),
+          isFalse,
+        );
+        expect(
+          job.isStageCompleted(OnboardingCompletionStage.updateProfile),
+          isFalse,
+        );
+
+        final profile = await fakeProfileRepo.fetchUserProfile(uid);
+        expect(profile?.onboardingCompleted, isNot(true));
+      },
+    );
   });
 }
+
+class _ConfigurableFakeOnboardingRepository extends FakeOnboardingRepository {
+  final Object? saveDraftException;
+  final Object? completeOnboardingException;
+
+  _ConfigurableFakeOnboardingRepository({
+    this.saveDraftException,
+    this.completeOnboardingException,
+  });
+
+  @override
+  Future<void> saveDraft(OnboardingDraft draft) async {
+    if (saveDraftException != null) {
+      throw saveDraftException!;
+    }
+    await super.saveDraft(draft);
+  }
+
+  @override
+  Future<OnboardingDraft?> fetchDraft(String uid) async {
+    if (saveDraftException != null) {
+      return null;
+    }
+    return super.fetchDraft(uid);
+  }
+
+  @override
+  Future<RoutineProjectionResult> completeOnboarding({
+    required OnboardingDraft finalDraft,
+    required OnboardingCompletionBundle bundle,
+  }) async {
+    if (completeOnboardingException != null) {
+      throw completeOnboardingException!;
+    }
+    return super.completeOnboarding(finalDraft: finalDraft, bundle: bundle);
+  }
+}
+

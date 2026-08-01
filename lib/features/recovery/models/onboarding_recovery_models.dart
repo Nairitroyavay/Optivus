@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+export 'package:optivus/services/onboarding_completion_service.dart'
+    show OnboardingRecoveryTier;
 
 enum OnboardingFailureReason {
   networkTimeout,
@@ -51,7 +53,18 @@ class RebuildBundleFromDraftAction extends OnboardingRecoveryAction {
   Future<void> execute(Ref ref, String uid) async {}
 }
 
+class SynthesizeBundleAction extends OnboardingRecoveryAction {
+  const SynthesizeBundleAction()
+    : super(
+        actionId: 'synthesize_bundle',
+        label: 'Synthesize Setup Plan',
+        description:
+            'Synthesize a fallback setup plan and retry onboarding recovery.',
+      );
 
+  @override
+  Future<void> execute(Ref ref, String uid) async {}
+}
 
 class RestartOnboardingInputAction extends OnboardingRecoveryAction {
   const RestartOnboardingInputAction()

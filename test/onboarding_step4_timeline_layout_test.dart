@@ -1391,9 +1391,7 @@ void main() {
         lifeRole: LifeRoleDraft.studentWorkingKey,
         workType: 'part_time',
       ),
-      baseTimeline: const BaseTimelineDraft(
-        skinCareSkipped: true,
-      ),
+      baseTimeline: const BaseTimelineDraft(skinCareSkipped: true),
     );
 
     await tester.pumpWidget(

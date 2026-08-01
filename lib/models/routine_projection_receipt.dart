@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum RoutineProjectionOutcome { projected, noOp, retryRequired }
 
 class RoutineProjectionReceipt {
@@ -147,6 +149,37 @@ class RoutineProjectionReceipt {
           : (lastSafeError ?? this.lastSafeError),
       schemaVersion: schemaVersion ?? this.schemaVersion,
     );
+  }
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'ownerUid': ownerUid,
+    'source': source,
+    'sourceBundleSchemaVersion': sourceBundleSchemaVersion,
+    'sourceBundleId': sourceBundleId,
+    'sourceBundleFingerprint': sourceBundleFingerprint,
+    'projectedItemIds': projectedItemIds,
+    'eventSchemaVersion': eventSchemaVersion,
+    'totalCount': totalCount,
+    'cursor': cursor,
+    'status': status,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'updatedAt': updatedAt.toUtc().toIso8601String(),
+    if (completedAt != null)
+      'completedAt': completedAt!.toUtc().toIso8601String(),
+    if (lastSafeError != null && lastSafeError!.trim().isNotEmpty)
+      'lastSafeError': lastSafeError!.trim(),
+    'schemaVersion': schemaVersion,
+  };
+
+  Map<String, dynamic> toFirestoreMap() {
+    final map = toMap();
+    map['createdAt'] = Timestamp.fromDate(createdAt.toUtc());
+    map['updatedAt'] = Timestamp.fromDate(updatedAt.toUtc());
+    if (completedAt != null) {
+      map['completedAt'] = Timestamp.fromDate(completedAt!.toUtc());
+    }
+    return map;
   }
 }
 

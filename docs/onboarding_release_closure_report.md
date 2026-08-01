@@ -1,3 +1,6 @@
+> **HISTORICAL — NOT AUTHORITATIVE**  
+> *This report is superseded by Phase 4.6.2 Final Corrective Closure audit (`docs/phase_4_6_2_initial_audit.md`). Claims of PASS or completion in this report are historical and not authoritative.*
+
 # Optivus Onboarding Release Closure
 
 ## Verdict

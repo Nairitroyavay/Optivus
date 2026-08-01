@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/optivus_app.dart';
+import 'package:optivus/config/app_environment_config.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/config/firebase_options.dart';
 import 'package:optivus/config/runtime_config.dart';
@@ -49,8 +50,11 @@ void main() async {
       fallback: null,
       operationName: 'Firebase.initializeApp',
       onError: (e, st) {
+        debugPrint('Optivus error: Firebase initialization failed: $e');
         if (OptivusAppEnvironmentConfig.requiresLiveServices) {
-          throw StateError('Fatal: Firebase initialization failed in live environment. $e');
+          throw StateError(
+            'Fatal: Firebase initialization failed in live environment. $e',
+          );
         }
       },
     );

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:optivus/models/routine_item.dart';
 
 enum HabitSystemType { goodHabit, badHabit, identity }
@@ -90,6 +91,12 @@ class HabitSystemRecord {
   }
 
   Map<String, dynamic> toMap() {
+    final isArchivedStatus = status == HabitSystemStatus.archived;
+    final effectiveArchivedAt = isArchivedStatus
+        ? (archivedAt ?? updatedAt)
+        : null;
+    final isUserSource = source == 'user';
+    final isOnboardingSource = source == 'onboarding';
     return {
       'systemId': systemId,
       'ownerUid': ownerUid,
@@ -100,13 +107,46 @@ class HabitSystemRecord {
       'status': status.name,
       'linkedRoutineIds': linkedRoutineIds,
       'source': source,
-      if (onboardingSourceId != null) 'onboardingSourceId': onboardingSourceId,
-      if (onboardingProjectionId != null)
-        'onboardingProjectionId': onboardingProjectionId,
+      if (!isUserSource && (isOnboardingSource || onboardingSourceId != null))
+        'onboardingSourceId': onboardingSourceId ?? '',
+      if (!isUserSource &&
+          (isOnboardingSource || onboardingProjectionId != null))
+        'onboardingProjectionId': onboardingProjectionId ?? '',
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
-      if (archivedAt != null)
-        'archivedAt': archivedAt!.toUtc().toIso8601String(),
+      if (isArchivedStatus && effectiveArchivedAt != null)
+        'archivedAt': effectiveArchivedAt.toUtc().toIso8601String(),
+      'schemaVersion': schemaVersion,
+      'version': version,
+    };
+  }
+
+  Map<String, dynamic> toFirestoreMap() {
+    final isArchivedStatus = status == HabitSystemStatus.archived;
+    final effectiveArchivedAt = isArchivedStatus
+        ? (archivedAt ?? updatedAt)
+        : null;
+    final isUserSource = source == 'user';
+    final isOnboardingSource = source == 'onboarding';
+    return {
+      'systemId': systemId,
+      'ownerUid': ownerUid,
+      'title': title,
+      'description': description,
+      'category': category.name,
+      'systemType': systemType.name,
+      'status': status.name,
+      'linkedRoutineIds': linkedRoutineIds,
+      'source': source,
+      if (!isUserSource && (isOnboardingSource || onboardingSourceId != null))
+        'onboardingSourceId': onboardingSourceId ?? '',
+      if (!isUserSource &&
+          (isOnboardingSource || onboardingProjectionId != null))
+        'onboardingProjectionId': onboardingProjectionId ?? '',
+      'createdAt': Timestamp.fromDate(createdAt.toUtc()),
+      'updatedAt': Timestamp.fromDate(updatedAt.toUtc()),
+      if (isArchivedStatus && effectiveArchivedAt != null)
+        'archivedAt': Timestamp.fromDate(effectiveArchivedAt.toUtc()),
       'schemaVersion': schemaVersion,
       'version': version,
     };

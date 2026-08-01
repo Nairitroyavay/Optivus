@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
@@ -14,6 +15,7 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
@@ -26,6 +28,7 @@ import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/state/region_settings_provider.dart';
+import 'package:optivus/core/utils/liquid_toast_manager.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/recovery/services/recovery_retry_controller.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
@@ -415,6 +418,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> markOnboardingComplete(AuthUser user) async {
+    if (user.uid.trim().isEmpty) return;
     if (_needsEmailVerification(user)) {
       state = state.copyWith(
         user: user,
@@ -449,6 +453,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> acceptCanonicalOnboardingCompletion(AuthUser user) async {
+    if (user.uid.trim().isEmpty) return;
     if (_needsEmailVerification(user)) {
       state = state.copyWith(
         user: user,
@@ -480,6 +485,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> markOnboardingIncomplete(AuthUser user) async {
+    if (user.uid.trim().isEmpty) return;
     final profile = _ref
         .read(mockUserProfileProvider)
         .copyWith(
@@ -575,6 +581,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     AuthUser user, {
     bool isAnonymousLink = false,
   }) async {
+    if (user.uid.trim().isEmpty) {
+      _resetSignedOutState();
+      state = const AuthState(status: AuthFlowStatus.signedOut);
+      return;
+    }
     _resetSignedOutState(targetUserUid: user.uid);
     state = state.copyWith(
       user: user,
@@ -582,12 +593,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       clearError: true,
     );
     if (!_useFirebaseBackend) {
+      final restoreGen = _backendRestoreGeneration;
       if (user.uid == 'dev-user-12345') {
         await _loadDevSeedState(user);
       } else {
-        await _loadFakeUserState(user);
+        await _loadFakeUserState(user, restoreGen);
       }
-      if (!mounted) return;
+      if (!mounted || !_isCurrentRestore(restoreGen)) return;
       _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
       _ref.read(fitnessCenterProvider.notifier).setOwnerUid(user.uid);
       state = state.copyWith(
@@ -730,6 +742,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           await _ref
               .read(onboardingRepositoryProvider)
               .saveDraft(synthesizedDraft);
+          if (!_isCurrentRestore(restoreGeneration)) return;
         }
       }
       _resetUserScopedMockState();
@@ -745,11 +758,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
           bundle = await _ref
               .read(onboardingRepositoryProvider)
               .fetchCompletionBundle(user.uid);
-        } catch (_) {
-          throw const _RoutineProjectionRestoreException(
-            'Routine setup recovery is required because the completion snapshot is corrupted.',
+        } catch (e) {
+          throw _RoutineProjectionRestoreException(
+            'Routine setup recovery is required because the completion snapshot is corrupted: $e',
             reason: OnboardingFailureReason.corruptedBundle,
-            actions: [
+            actions: const [
               RebuildBundleFromDraftAction(),
               SynthesizeBundleAction(),
               RestartOnboardingInputAction(),
@@ -873,7 +886,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         onboardingFailureReason: error.reason,
         recoveryActions: error.actions,
       );
-    } catch (_) {
+    } catch (e) {
       if (!_isCurrentRestore(restoreGeneration)) return;
       state = state.copyWith(
         user: user,
@@ -955,10 +968,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _resetUserScopedMockState();
   }
 
-  Future<void> _loadFakeUserState(AuthUser user) async {
+  Future<void> _loadFakeUserState(AuthUser user, [int? restoreGen]) async {
+    if (user.uid.trim().isEmpty) return;
     final savedDraft = await _ref
         .read(onboardingRepositoryProvider)
         .fetchDraft(user.uid);
+    if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
     if (savedDraft == null) {
       final currentProfile = _ref.read(mockUserProfileProvider);
       final step = currentProfile.onboardingStep.clamp(
@@ -984,7 +999,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       _resetNormalUserState(user);
       _ref.read(mockOnboardingProvider.notifier).loadSeedData(synthesizedDraft);
       await _ref.read(onboardingRepositoryProvider).saveDraft(synthesizedDraft);
+      if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
       await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
+      if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
       await _ref
           .read(habitSystemsNotifierProvider.notifier)
           .loadForOwner(user.uid);
@@ -1029,6 +1046,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final bundle = await _ref
         .read(onboardingRepositoryProvider)
         .fetchCompletionBundle(user.uid);
+    if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
     if (savedDraft.onboardingCompleted && bundle != null) {
       await const OnboardingFrontendHydrationService().hydrate(
         read: _ref.read,
@@ -1036,6 +1054,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     } else {
       await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
+      if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
       await _ref
           .read(habitSystemsNotifierProvider.notifier)
           .loadForOwner(user.uid);
@@ -1043,15 +1062,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _resetSignedOutState({String? targetUserUid}) {
+    OnboardingCompletionJobService.resetForSignedOut();
     _ref.invalidate(onboardingCompletionJobServiceProvider);
     _ref.invalidate(onboardingCompletionJobProvider);
-    _ref.read(recoveryRetryControllerProvider.notifier).reset();
+    _ref.read(recoveryRetryControllerProvider.notifier).resetForSignedOut();
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
+    _ref.read(trackerSessionLinksProvider.notifier).resetForSignedOut();
     _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
-    _ref.read(mockUserProfileProvider.notifier).resetEmpty();
+    _ref.read(mockUserProfileProvider.notifier).resetForSignedOut();
     if (targetUserUid == null ||
         _ref.read(mockOnboardingProvider).draft.uid != targetUserUid) {
-      _ref.read(mockOnboardingProvider.notifier).reset(targetUserUid ?? '');
+      _ref.read(mockOnboardingProvider.notifier).resetForSignedOut();
     }
     _ref.read(profileSettingsProvider.notifier).resetForSignedOut();
     _ref.read(homeDashboardProvider.notifier).resetForSignedOut();
@@ -1061,6 +1082,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(routineImportAiControllerProvider.notifier).resetForSignedOut();
     _ref.read(uploadControllerProvider.notifier).resetForSignedOut();
     _ref.read(appNavigationProvider.notifier).resetForSignedOut();
+    _ref.read(toastQueueProvider.notifier).resetForSignedOut();
     _ref.read(homeDetailViewRequestProvider.notifier).state =
         const HomeDetailTarget.none();
     _ref.read(trackerDetailViewRequestProvider.notifier).state =
@@ -1073,17 +1095,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
         CoachDetailView.none;
     _ref.read(goalsDetailViewRequestProvider.notifier).state =
         GoalsDetailTarget.none;
-    _ref
-        .read(regionSettingsProvider.notifier)
-        .loadSettings(RegionSettings.defaultForUser('signed-out'));
+    _ref.read(regionSettingsProvider.notifier).resetForSignedOut();
     _resetUserScopedMockState();
   }
 
   Future<void> executeRecoveryAction(OnboardingRecoveryAction action) async {
     final currentUser = state.user ?? _repository.currentUser;
-    if (currentUser == null) return;
+    if (currentUser == null || currentUser.uid.trim().isEmpty) return;
+    final actionUid = currentUser.uid;
 
-    if (action is RestartOnboardingInputAction) {
+    if (action is RestartOnboardingInputAction ||
+        action is SynthesizeBundleAction) {
       await markOnboardingIncomplete(currentUser);
       return;
     }
@@ -1098,30 +1120,56 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (action is RebuildBundleFromDraftAction) {
         final draft = await _ref
             .read(onboardingRepositoryProvider)
-            .fetchDraft(currentUser.uid);
+            .fetchDraft(actionUid);
+        if (!mounted || state.user?.uid != actionUid) return;
         if (draft != null) {
-          final completedDraft = draft.copyWith(
-            onboardingCompleted: true,
-            currentStep: OnboardingDraft.lastStepIndex,
-          );
-          await _ref
-              .read(onboardingRepositoryProvider)
-              .saveDraft(completedDraft);
-          final bundle = OnboardingCompletionService.buildBundle(
-            completedDraft,
-          );
+          final firstMissingStep = draft.stepCompleted.indexOf(false);
+          final isDraftValid =
+              draft.onboardingCompleted &&
+              firstMissingStep == -1 &&
+              draft.validateStep(14, draft.stepCompleted) == null;
+          if (!isDraftValid) {
+            final stepToResume = firstMissingStep != -1
+                ? firstMissingStep
+                : (draft.currentStep < OnboardingDraft.lastStepIndex
+                      ? draft.currentStep
+                      : 0);
+            final updatedDraft = draft.copyWith(
+              currentStep: stepToResume,
+              onboardingCompleted: false,
+            );
+            await _ref
+                .read(onboardingRepositoryProvider)
+                .saveDraft(updatedDraft);
+            if (!mounted || state.user?.uid != actionUid) return;
+            await markOnboardingIncomplete(currentUser);
+            return;
+          }
+          final bundle = OnboardingCompletionService.buildBundle(draft);
           await _ref
               .read(onboardingRepositoryProvider)
               .saveCompletionBundle(bundle);
+          if (!mounted || state.user?.uid != actionUid) return;
+          final readbackBundle = await _ref
+              .read(onboardingRepositoryProvider)
+              .fetchCompletionBundle(actionUid);
+          if (!mounted || state.user?.uid != actionUid) return;
+          if (readbackBundle == null ||
+              readbackBundle.version != bundle.version) {
+            throw StateError(
+              'Completion bundle read-back verification failed during recovery.',
+            );
+          }
           await retryBackendRestore();
           return;
         } else {
           final recoveryResult =
               await OnboardingCompletionService.recoverCompletionState(
-                uid: currentUser.uid,
+                uid: actionUid,
                 onboardingRepository: _ref.read(onboardingRepositoryProvider),
                 profileRepository: _ref.read(profileRepositoryProvider),
               );
+          if (!mounted || state.user?.uid != actionUid) return;
           if (recoveryResult.tier ==
               OnboardingRecoveryTier.tier4ResetRequired) {
             await markOnboardingIncomplete(currentUser);
@@ -1135,10 +1183,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (action is RetryCompletionJobAction) {
         final recoveryResult =
             await OnboardingCompletionService.recoverCompletionState(
-              uid: currentUser.uid,
+              uid: actionUid,
               onboardingRepository: _ref.read(onboardingRepositoryProvider),
               profileRepository: _ref.read(profileRepositoryProvider),
             );
+        if (!mounted || state.user?.uid != actionUid) return;
         if (recoveryResult.tier == OnboardingRecoveryTier.tier4ResetRequired) {
           await markOnboardingIncomplete(currentUser);
           return;
@@ -1150,14 +1199,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (action is ForceResyncProjectionsAction) {
         var bundle = await _ref
             .read(onboardingRepositoryProvider)
-            .fetchCompletionBundle(currentUser.uid);
+            .fetchCompletionBundle(actionUid);
+        if (!mounted || state.user?.uid != actionUid) return;
         if (bundle == null) {
           final recoveryResult =
               await OnboardingCompletionService.recoverCompletionState(
-                uid: currentUser.uid,
+                uid: actionUid,
                 onboardingRepository: _ref.read(onboardingRepositoryProvider),
                 profileRepository: _ref.read(profileRepositoryProvider),
               );
+          if (!mounted || state.user?.uid != actionUid) return;
           bundle = recoveryResult.bundle;
         }
         if (bundle != null) {
@@ -1166,17 +1217,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
               read: _ref.read,
               bundle: bundle,
             );
-          } on RoutineProjectionFailureException catch (_) {
-            // If receipt is missing or invalid, retryBackendRestore recovers it
-          } catch (_) {}
+          } on RoutineProjectionFailureException catch (pe) {
+            debugPrint(
+              '[AuthState] Routine projection failed during ForceResyncProjectionsAction: $pe',
+            );
+          } catch (e) {
+            debugPrint(
+              '[AuthState] Unexpected hydration failure during ForceResyncProjectionsAction: $e',
+            );
+          }
         }
+        if (!mounted || state.user?.uid != actionUid) return;
         await retryBackendRestore();
         return;
       }
 
       await retryBackendRestore();
     } catch (e) {
-      if (mounted) {
+      if (mounted && state.user?.uid == actionUid) {
         final mapped = mapAuthError(e);
         state = state.copyWith(
           user: currentUser,
@@ -1192,16 +1250,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void _resetUserScopedMockState() {
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
     if (!_useFirebaseBackend) {
-      _ref.read(mockRoutineProvider.notifier).resetEmpty();
+      _ref.read(mockRoutineProvider.notifier).resetForSignedOut();
     }
-    _ref.read(mockTrackerProvider.notifier).resetEmpty();
-    _ref.read(mockGoalProvider.notifier).resetEmpty();
-    _ref.read(mockMindNoteProvider.notifier).resetEmpty();
+    _ref.read(mockTrackerProvider.notifier).resetForSignedOut();
+    _ref.read(mockGoalProvider.notifier).resetForSignedOut();
+    _ref.read(mockMindNoteProvider.notifier).resetForSignedOut();
     _ref.read(homeMindNoteProvider.notifier).resetForSignedOut();
-    _ref.read(mockCoachProvider.notifier).resetEmpty();
-    _ref.read(mockCoachPreferencesProvider.notifier).resetEmpty();
-    _ref.read(mockNotificationPreferencesProvider.notifier).resetEmpty();
-    _ref.read(mockPermissionProvider.notifier).resetEmpty();
+    _ref.read(mockCoachProvider.notifier).resetForSignedOut();
+    _ref.read(mockCoachPreferencesProvider.notifier).resetForSignedOut();
+    _ref.read(mockNotificationPreferencesProvider.notifier).resetForSignedOut();
+    _ref.read(mockPermissionProvider.notifier).resetForSignedOut();
   }
 }
 

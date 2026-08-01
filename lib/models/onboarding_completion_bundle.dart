@@ -88,22 +88,28 @@ class OnboardingCompletionBundle {
         'allowProfileContext': coachPreferences.allowProfileContext,
         'shareSelectedNotesOnly': coachPreferences.shareSelectedNotesOnly,
       },
-      'moneyGoal': moneyGoal == null
-          ? null
-          : {
-              'id': moneyGoal!.id,
-              'dailyTarget': moneyGoal!.dailyTarget,
-              'totalConfirmedSaved': moneyGoal!.totalConfirmedSaved,
-              'totalPotentialSaved': moneyGoal!.totalPotentialSaved,
-              'streakDays': moneyGoal!.streakDays,
-              'streakLevel': moneyGoal!.streakLevel,
-            },
+      if (moneyGoal != null)
+        'moneyGoal': {
+          'id': moneyGoal!.id,
+          'dailyTarget': moneyGoal!.dailyTarget,
+          'totalConfirmedSaved': moneyGoal!.totalConfirmedSaved,
+          'totalPotentialSaved': moneyGoal!.totalPotentialSaved,
+          'streakDays': moneyGoal!.streakDays,
+          'streakLevel': moneyGoal!.streakLevel,
+        },
       'uploadedAssetReferences': uploadedAssetReferences
           .map((asset) => asset.toMap())
           .toList(),
       'warnings': warnings,
       'duplicateSystemKeysMerged': duplicateSystemKeysMerged,
     };
+  }
+
+  Map<String, dynamic> toFirestoreMap() {
+    final map = toMap();
+    map['createdAt'] = Timestamp.fromDate(createdAt);
+    map['updatedAt'] = Timestamp.fromDate(updatedAt);
+    return map;
   }
 
   factory OnboardingCompletionBundle.fromMap(Map<String, dynamic> map) {

@@ -241,6 +241,16 @@ class OnboardingCompletionJob {
     };
   }
 
+  Map<String, dynamic> toFirestoreMap() {
+    final map = toMap();
+    map['createdAt'] = Timestamp.fromDate(createdAt);
+    map['updatedAt'] = Timestamp.fromDate(updatedAt);
+    if (lastFailureOccurredAt != null) {
+      map['lastFailureOccurredAt'] = Timestamp.fromDate(lastFailureOccurredAt!);
+    }
+    return map;
+  }
+
   factory OnboardingCompletionJob.fromMap(Map<String, dynamic> map) {
     final stagesRaw = map['stagesCompleted'];
     Map<String, bool> stagesCompleted = {};

@@ -1,14 +1,17 @@
-## 2026-07-28T10:03:27Z
+## 2026-07-29T11:33:40Z
 
-You are challenger_p46_m3_1, a code-executing adversarial verifier for Optivus Phase 4.6 Final Production Closure.
-Your working directory is /Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_1.
+You are challenger_p46_m3_1, an adversarial code-executing verifier assigned to stress test Phase 4.6.2 fixes in Optivus.
 
-Your task is to execute empirical stress testing and static/dynamic checks across the project:
-1. Run `flutter analyze` to check for any static analysis warnings/errors.
-2. Run `flutter test` across unit and integration test suites.
-3. Test edge cases:
-   - Restart safety & account switch state purge in AuthNotifier
-   - Onboarding draft persistence debouncing & completion job transaction batch limits
-   - Router redirect logic & preventing infinite redirect loops
-   - Firestore security rules
-Write your findings to /Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_1/handoff.md and send your completion report message to parent.
+# Working Directory
+`/Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_1`
+
+# Objectives & Instructions
+1. Maintain your workspace in `/Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_1`. Create `ORIGINAL_REQUEST.md`, `BRIEFING.md`, `progress.md`.
+2. Execute adversarial stress tests against:
+   - Onboarding recovery state transitions: attempt to feed incomplete drafts and verify recovery NEVER force-marks `onboardingCompleted: true` or fabricates completed onboarding.
+   - Auth sign-out and account switching: trigger rapid sign-outs/switches while async completion/hydration/AI operations are in-flight; verify no Account A state leaks into Account B and no post-sign-out navigation or state mutation occurs.
+   - Firestore contract boundary limits: test serializers against edge-case null values, optional fields, and unexpected field maps.
+3. Execute existing adversarial test suites (`test/group_h_adversarial_stress_test.dart`, `test/challenger_p46_m3_2_adversarial_test.dart`, `test/workstream_d_auth_async_isolation_test.dart`, etc.) via `run_command`.
+4. Run full static analysis `flutter analyze` and `flutter test`.
+5. Write your execution report and findings to `/Users/roy/optivus2/Optivus/.agents/challenger_p46_m3_1/handoff.md`.
+6. Send your verdict (PASS or FAIL) and summary report to Lead Orchestrator via `send_message`.

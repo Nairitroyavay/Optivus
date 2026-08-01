@@ -86,6 +86,8 @@ class RecoveryRetryController extends StateNotifier<RecoveryRetryState> {
     state = const RecoveryRetryState();
   }
 
+  void resetForSignedOut() => reset();
+
   @override
   void dispose() {
     _timer?.cancel();

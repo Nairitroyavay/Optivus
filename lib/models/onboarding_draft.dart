@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class OnboardingDraft {
   static const int schemaVersion = 2;
   static const String sourceOnboarding = 'onboarding';
@@ -186,12 +188,12 @@ class OnboardingDraft {
     'stepCompleted': stepCompleted,
     'stepDirty': stepDirty,
     'stepLoading': stepLoading,
-    'createdAt': createdAt?.toIso8601String(),
-    'updatedAt': updatedAt?.toIso8601String(),
+    if (createdAt != null) 'createdAt': createdAt?.toIso8601String(),
+    if (updatedAt != null) 'updatedAt': updatedAt?.toIso8601String(),
     'onboardingCompleted': onboardingCompleted,
     'welcomeSaved': welcomeSaved,
     'patiencePledgeAccepted': patiencePledgeAccepted,
-    'patiencePledgeText': patiencePledgeText,
+    if (patiencePledgeText != null) 'patiencePledgeText': patiencePledgeText,
     'lifeRole': lifeRole.toMap(),
     'bodyBasics': bodyBasics.toMap(),
     'baseTimeline': baseTimeline.toMap(),
@@ -201,10 +203,17 @@ class OnboardingDraft {
     'goodHabits': goodHabits.map((habit) => habit.toMap()).toList(),
     'identityGoals': identityGoals.map((goal) => goal.toMap()).toList(),
     'coachSetup': coachSetup.toMap(),
-    'slipUpHandling': slipUpHandling,
+    if (slipUpHandling != null) 'slipUpHandling': slipUpHandling,
     'notifications': notifications.toMap(),
-    'finalPreview': finalPreview?.toMap(),
+    if (finalPreview != null) 'finalPreview': finalPreview?.toMap(),
   };
+
+  Map<String, dynamic> toFirestoreMap() {
+    final map = toMap();
+    if (createdAt != null) map['createdAt'] = Timestamp.fromDate(createdAt!);
+    if (updatedAt != null) map['updatedAt'] = Timestamp.fromDate(updatedAt!);
+    return map;
+  }
 
   OnboardingDraft copyWith({
     String? uid,
@@ -652,14 +661,14 @@ class OnboardingDraft {
                 item.repeatDays.contains(day) &&
                 item.blockType == TimelineBlockDraft.hardBlockKey,
           )
-          .fold<int>(0, (sum, item) => sum + item.durationMinutes);
+          .fold<int>(0, (total, item) => total + item.durationMinutes);
       final flexibleMinutes = items
           .where(
             (item) =>
                 item.repeatDays.contains(day) &&
                 item.blockType != TimelineBlockDraft.hardBlockKey,
           )
-          .fold<int>(0, (sum, item) => sum + item.durationMinutes);
+          .fold<int>(0, (total, item) => total + item.durationMinutes);
       final freeMinutes = (24 * 60 - hardMinutes).clamp(0, 24 * 60);
       if (flexibleMinutes > freeMinutes) {
         warnings.add(
