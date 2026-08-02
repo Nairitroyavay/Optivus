@@ -7,6 +7,7 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/config/firebase_options.dart';
 import 'package:optivus/config/runtime_config.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:optivus/app/configuration_failure_app.dart';
 
 import 'package:optivus/core/utils/platform_channel_boundary.dart';
 
@@ -41,6 +42,8 @@ void main() async {
     generatedFirebaseProjectId: firebaseOptions?.projectId ?? '',
   );
 
+  bool firebaseInitFailed = false;
+
   if (firebaseOptions != null) {
     await safePlatformCall(
       call: () async {
@@ -51,10 +54,9 @@ void main() async {
       operationName: 'Firebase.initializeApp',
       onError: (e, st) {
         debugPrint('Optivus error: Firebase initialization failed: $e');
+        firebaseInitFailed = true;
         if (OptivusAppEnvironmentConfig.requiresLiveServices) {
-          throw StateError(
-            'Fatal: Firebase initialization failed in live environment. $e',
-          );
+          // We will render ConfigurationFailureApp below
         }
       },
     );
@@ -62,5 +64,9 @@ void main() async {
     debugPrint('Optivus backend mode: fake frontend/dev mode');
   }
 
-  runApp(const ProviderScope(child: OptivusApp()));
+  if (firebaseInitFailed && OptivusAppEnvironmentConfig.requiresLiveServices) {
+    runApp(const ConfigurationFailureApp());
+  } else {
+    runApp(const ProviderScope(child: OptivusApp()));
+  }
 }
