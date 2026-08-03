@@ -369,6 +369,14 @@ class UserPreferences {
       'theme': theme,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+      'haptics': haptics,
+      'autoCorrect': autoCorrect,
+      'themeMode': themeMode,
+      'accentColor': accentColor,
+      'bottomTabLayout': bottomTabLayout,
+      'timelineDisplay': timelineDisplay,
+      'coachVoice': coachVoice,
+      'schemaVersion': 1,
     };
   }
 

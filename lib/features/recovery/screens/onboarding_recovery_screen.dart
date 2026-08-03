@@ -132,7 +132,7 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
     final failureReason = authState.onboardingFailureReason;
     final actions = authState.recoveryActions.isNotEmpty
         ? authState.recoveryActions
-        : const <OnboardingRecoveryAction>[RetryCompletionJobAction()];
+        : const <OnboardingRecoveryAction>[RetryNetworkAction()];
 
     return Scaffold(
       appBar: AppBar(
@@ -266,10 +266,10 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
                                     onPressed:
                                         retryState.canRetry ||
                                             action
-                                                is RestartOnboardingInputAction
+                                                is ResumeOnboardingAction
                                         ? () {
                                             if (action
-                                                is! RestartOnboardingInputAction) {
+                                                is! ResumeOnboardingAction) {
                                               ref
                                                   .read(
                                                     recoveryRetryControllerProvider

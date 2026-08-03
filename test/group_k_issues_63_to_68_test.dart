@@ -1056,19 +1056,19 @@ void main() {
           );
           addTearDown(container.dispose);
 
-          const retryAction = RetryCompletionJobAction();
-          expect(retryAction.actionId, equals('retry_completion_job'));
+          const retryAction = RetryNetworkAction();
+          expect(retryAction.actionId, equals('retry_network'));
 
-          const rebuildAction = RebuildBundleFromDraftAction();
-          expect(rebuildAction.actionId, equals('rebuild_bundle_from_draft'));
+          const rebuildAction = RebuildBundleFromVerifiedDraftAction();
+          expect(rebuildAction.actionId, equals('rebuild_bundle'));
 
-          const restartAction = RestartOnboardingInputAction();
-          expect(restartAction.actionId, equals('restart_onboarding_input'));
+          const restartAction = ResumeOnboardingAction();
+          expect(restartAction.actionId, equals('resume_onboarding'));
 
-          const forceResyncAction = ForceResyncProjectionsAction();
+          const forceResyncAction = RepairProjectionAction();
           expect(
             forceResyncAction.actionId,
-            equals('force_resync_projections'),
+            equals('repair_projection'),
           );
         },
       );

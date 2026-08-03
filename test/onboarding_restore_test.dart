@@ -405,6 +405,11 @@ class _ControllableAuthRepository implements AuthRepository {
 }
 
 class _ControlledOnboardingRepository implements OnboardingRepository {
+  @override
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {
+    await saveDraft(draft);
+  }
+
   final Completer<OnboardingDraft?>? draftCompleter;
   OnboardingDraft? draft;
   int draftFailures;

@@ -55,10 +55,10 @@ void main() {
 
         expect(find.text('Setup Verification Incomplete'), findsOneWidget);
         expect(find.textContaining('Reason:'), findsOneWidget);
-        expect(find.text('Retry Setup'), findsWidgets);
+        expect(find.text('Retry Connection'), findsWidgets);
         expect(
           find.text(
-            'Resume the onboarding completion process from where it left off.',
+            'Retry the last operation after a network failure.',
           ),
           findsOneWidget,
         );
@@ -89,17 +89,17 @@ void main() {
         final notifier = container.read(authProvider.notifier);
 
         await notifier.executeRecoveryAction(
-          const RestartOnboardingInputAction(),
+          const ResumeOnboardingAction(),
         );
         expect(container.read(authProvider).onboardingIncomplete, isTrue);
 
-        await notifier.executeRecoveryAction(const SynthesizeBundleAction());
+        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
         await notifier.executeRecoveryAction(
-          const RebuildBundleFromDraftAction(),
+          const RebuildBundleFromVerifiedDraftAction(),
         );
-        await notifier.executeRecoveryAction(const RetryCompletionJobAction());
+        await notifier.executeRecoveryAction(const RetryNetworkAction());
         await notifier.executeRecoveryAction(
-          const ForceResyncProjectionsAction(),
+          const RepairProjectionAction(),
         );
       },
     );
@@ -107,11 +107,11 @@ void main() {
 
   group('Group H - Issue 36: Routine Projection State Force-Resync', () {
     test(
-      'ForceResyncProjectionsAction triggers hydration and event projection',
+      'RepairProjectionAction triggers hydration and event projection',
       () async {
-        const action = ForceResyncProjectionsAction();
-        expect(action.actionId, equals('force_resync_projections'));
-        expect(action.label, equals('Force Resync Projections'));
+        const action = RepairProjectionAction();
+        expect(action.actionId, equals('repair_projection'));
+        expect(action.label, equals('Repair Plan'));
       },
     );
   });

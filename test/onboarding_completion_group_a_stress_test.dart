@@ -168,7 +168,7 @@ void main() {
           ),
           isTrue,
         );
-        expect(onboardingRepo.saveDraftCount, equals(1));
+        expect(onboardingRepo.saveFinalDraftImmediatelyCount, equals(1));
         expect(onboardingRepo.saveCompletionBundleCount, equals(1));
         expect(onboardingRepo.completeOnboardingCount, equals(2));
       },
@@ -358,10 +358,12 @@ class _CountingOnboardingRepository extends FakeOnboardingRepository {
   int saveCompletionBundleCount = 0;
   int completeOnboardingCount = 0;
 
+  int saveFinalDraftImmediatelyCount = 0;
+
   @override
-  Future<void> saveDraft(OnboardingDraft draft) {
-    saveDraftCount++;
-    return super.saveDraft(draft);
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) {
+    saveFinalDraftImmediatelyCount++;
+    return super.saveFinalDraftImmediately(draft);
   }
 
   @override

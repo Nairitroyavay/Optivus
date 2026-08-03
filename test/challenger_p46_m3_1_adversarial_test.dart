@@ -26,7 +26,7 @@ void main() {
 
   group('Challenger P46 M3.1: Onboarding Recovery State Transitions & Draft Handling', () {
     test(
-      'SynthesizeBundleAction on incomplete draft NEVER sets onboardingCompleted: true',
+      'RebuildBundleFromVerifiedDraftAction on incomplete draft NEVER sets onboardingCompleted: true',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -79,7 +79,7 @@ void main() {
         );
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(const SynthesizeBundleAction());
+        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
@@ -100,7 +100,7 @@ void main() {
     );
 
     test(
-      'RestartOnboardingInputAction resets state to signedInOnboardingIncomplete',
+      'ResumeOnboardingAction resets state to signedInOnboardingIncomplete',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -126,7 +126,7 @@ void main() {
         );
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(const RestartOnboardingInputAction());
+        await notifier.executeRecoveryAction(const ResumeOnboardingAction());
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
@@ -141,7 +141,7 @@ void main() {
     );
 
     test(
-      'RebuildBundleFromDraftAction when draft is missing triggers tier4 reset to incomplete',
+      'RebuildBundleFromVerifiedDraftAction when draft is missing triggers tier4 reset to incomplete',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -169,7 +169,7 @@ void main() {
         );
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(const RebuildBundleFromDraftAction());
+        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
@@ -183,7 +183,7 @@ void main() {
     );
 
     test(
-      'RebuildBundleFromDraftAction on incomplete draft marks onboarding incomplete',
+      'RebuildBundleFromVerifiedDraftAction on incomplete draft marks onboarding incomplete',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -233,7 +233,7 @@ void main() {
         );
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(const RebuildBundleFromDraftAction());
+        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
@@ -283,7 +283,7 @@ void main() {
         expect(container.read(recoveryRetryControllerProvider).maxAttemptsReached, isTrue);
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(const RebuildBundleFromDraftAction());
+        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
@@ -440,7 +440,7 @@ void main() {
 
         // Start async recovery action for User A (which will hit fetchDraft delay)
         final recoveryFuture = notifier.executeRecoveryAction(
-          const RebuildBundleFromDraftAction(),
+          const RebuildBundleFromVerifiedDraftAction(),
         );
 
         // Immediately switch active user to User B

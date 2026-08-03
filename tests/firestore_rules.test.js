@@ -1,5 +1,6 @@
 
 const { assertFails, assertSucceeds, initializeTestEnvironment } = require("@firebase/rules-unit-testing");
+const { serverTimestamp } = require("firebase/firestore");
 const fs = require("fs");
 
 let testEnv;
@@ -143,6 +144,7 @@ function habitSystemData(uid = "user123", id = "habitsys-1", overrides = {}) {
 function userData(uid = "user123", overrides = {}) {
   return {
     uid,
+    schemaVersion: 1,
     displayName: "Test User",
     email: "user@example.com",
     onboardingCompleted: false,
@@ -726,8 +728,8 @@ describe("Firestore Rules for Routine durability", () => {
           warnings: [],
           duplicateSystemKeysMerged: [],
           moneyGoal: {},
-          createdAt,
-          updatedAt
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
         }));
 
         // Malformed completion bundle (onboardingCompleted = false)

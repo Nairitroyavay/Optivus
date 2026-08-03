@@ -65,7 +65,7 @@ class FirestoreProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile?> fetchUserProfile(String uid) async {
-    final doc = await _firestore.doc(FirestoreUserPaths.profile(uid)).get();
+    final doc = await _firestore.doc(FirestoreUserPaths.user(uid)).get();
     final data = doc.data();
     return data == null ? null : UserProfile.fromFirestoreMap(data);
   }
@@ -81,7 +81,7 @@ class FirestoreProfileRepository implements ProfileRepository {
   @override
   Future<void> saveUserProfile(UserProfile profile) {
     return _firestore
-        .doc(FirestoreUserPaths.profile(profile.uid))
+        .doc(FirestoreUserPaths.user(profile.uid))
         .set(profile.toFirestoreMap(), SetOptions(merge: true));
   }
 

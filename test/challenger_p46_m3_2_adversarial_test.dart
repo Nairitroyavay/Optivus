@@ -24,7 +24,7 @@ void main() {
 
   group('Challenger P46 M3.2: Recovery Data Integrity & Safety', () {
     test(
-      'SynthesizeBundleAction in AuthNotifier never fabricates completion data',
+      'RebuildBundleFromVerifiedDraftAction in AuthNotifier never fabricates completion data',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -51,7 +51,7 @@ void main() {
         );
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(const SynthesizeBundleAction());
+        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
@@ -74,7 +74,7 @@ void main() {
     );
 
     test(
-      'RestartOnboardingInputAction marks onboarding incomplete without data fabrication',
+      'ResumeOnboardingAction marks onboarding incomplete without data fabrication',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -100,7 +100,7 @@ void main() {
 
         final notifier = container.read(authProvider.notifier);
         await notifier.executeRecoveryAction(
-          const RestartOnboardingInputAction(),
+          const ResumeOnboardingAction(),
         );
 
         final authState = container.read(authProvider);
@@ -116,7 +116,7 @@ void main() {
     );
 
     test(
-      'RebuildBundleFromDraftAction when draft and profile are missing resets state to incomplete',
+      'RebuildBundleFromVerifiedDraftAction when draft and profile are missing resets state to incomplete',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -144,7 +144,7 @@ void main() {
 
         final notifier = container.read(authProvider.notifier);
         await notifier.executeRecoveryAction(
-          const RebuildBundleFromDraftAction(),
+          const RebuildBundleFromVerifiedDraftAction(),
         );
 
         final authState = container.read(authProvider);
@@ -801,11 +801,11 @@ class _ConfigurableFakeOnboardingRepository extends FakeOnboardingRepository {
   });
 
   @override
-  Future<void> saveDraft(OnboardingDraft draft) async {
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {
     if (saveDraftException != null) {
       throw saveDraftException!;
     }
-    await super.saveDraft(draft);
+    await super.saveFinalDraftImmediately(draft);
   }
 
   @override

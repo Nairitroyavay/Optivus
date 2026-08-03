@@ -140,7 +140,7 @@ void main() {
       );
 
       test(
-        'executeRecoveryAction executes RetryCompletionJobAction and handles Tier 4 transition',
+        'executeRecoveryAction executes RetryNetworkAction and handles Tier 4 transition',
         () async {
           final fakeAuthRepo = FakeAuthRepository();
           final container = ProviderContainer(
@@ -164,17 +164,17 @@ void main() {
             status: AuthFlowStatus.backendRestoreFailed,
           );
 
-          // Under empty repos, RetryCompletionJobAction encounters Tier 4
+          // Under empty repos, RetryNetworkAction encounters Tier 4
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const RetryCompletionJobAction());
+              .executeRecoveryAction(const RetryNetworkAction());
 
           expect(container.read(authProvider).onboardingIncomplete, isTrue);
         },
       );
 
       test(
-        'executeRecoveryAction executes RebuildBundleFromDraftAction when draft is absent',
+        'executeRecoveryAction executes RebuildBundleFromVerifiedDraftAction when draft is absent',
         () async {
           final fakeAuthRepo = FakeAuthRepository();
           final container = ProviderContainer(
@@ -198,17 +198,17 @@ void main() {
             status: AuthFlowStatus.backendRestoreFailed,
           );
 
-          // When draft is absent, RebuildBundleFromDraftAction falls back to recoverCompletionState
+          // When draft is absent, RebuildBundleFromVerifiedDraftAction falls back to recoverCompletionState
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const RebuildBundleFromDraftAction());
+              .executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
           expect(container.read(authProvider).onboardingIncomplete, isTrue);
         },
       );
 
       test(
-        'executeRecoveryAction executes SynthesizeBundleAction under broken state',
+        'executeRecoveryAction executes RebuildBundleFromVerifiedDraftAction under broken state',
         () async {
           final fakeAuthRepo = FakeAuthRepository();
           final container = ProviderContainer(
@@ -234,7 +234,7 @@ void main() {
 
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const SynthesizeBundleAction());
+              .executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
           expect(
             container.read(authProvider).status,
@@ -247,27 +247,58 @@ void main() {
     // =========================================================================
     // 2. FORCE-RESYNC ACTION EXECUTION STRESS TEST
     // =========================================================================
-    group('2. ForceResyncProjectionsAction Resilience', () {
+    group('2. RepairProjectionAction Resilience', () {
       test(
-        'ForceResyncProjectionsAction carries correct id, label, and description',
+        'RepairProjectionAction carries correct id, label, and description',
         () {
-          const action = ForceResyncProjectionsAction();
-          expect(action.actionId, equals('force_resync_projections'));
-          expect(action.label, equals('Force Resync Projections'));
-          expect(action.description, contains('projections'));
+          const action = RepairProjectionAction();
+          expect(action.actionId, equals('repair_projection'));
+          expect(action.label, equals('Repair Plan'));
+          expect(action.description, contains('routines'));
         },
       );
 
       test(
-        'ForceResyncProjectionsAction recovers bundle when missing before resyncing',
+        'RebuildBundleFromVerifiedDraftAction recovers bundle when missing',
         () async {
           final fakeAuthRepo = FakeAuthRepository();
           final fakeOnboardingRepo = FakeOnboardingRepository();
           final fakeProfileRepo = FakeProfileRepository();
 
           const uid = 'resync-user-1';
-          final profile = UserProfile.empty(uid: uid, email: 'resync@test.com');
+          final profile = UserProfile.empty(uid: uid, email: 'resync@test.com').copyWith(onboardingCompleted: true);
           await fakeProfileRepo.saveUserProfile(profile);
+
+          final draft = OnboardingDraft(uid: uid).copyWith(
+            onboardingCompleted: true,
+            currentStep: OnboardingDraft.lastStepIndex,
+            stepCompleted: List.generate(OnboardingDraft.stepCount, (_) => true),
+            baseTimeline: const BaseTimelineDraft(
+              skinCareSkipped: true,
+              eatingMode: 'mess_hostel',
+              blocks: [
+                TimelineBlockDraft(
+                  id: 'eating_1',
+                  title: 'Lunch',
+                  section: 'eating',
+                  startMinute: 720,
+                  endMinute: 780,
+                  repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                  blockType: 'soft',
+                ),
+                TimelineBlockDraft(
+                  id: 'fixed_1',
+                  title: 'Sleep',
+                  section: 'fixed',
+                  startMinute: 1380,
+                  endMinute: 360,
+                  repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                  blockType: 'hard',
+                ),
+              ],
+            ),
+          );
+          await fakeOnboardingRepo.saveDraft(draft);
 
           final container = ProviderContainer(
             overrides: [
@@ -291,16 +322,16 @@ void main() {
 
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const ForceResyncProjectionsAction());
+              .executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
 
-          // Bundle should have been recovered/synthesized during force-resync execution
+          // Bundle should have been recovered/synthesized during execution
           final bundle = await fakeOnboardingRepo.fetchCompletionBundle(uid);
           expect(bundle, isNotNull);
         },
       );
 
       test(
-        'ForceResyncProjectionsAction gracefully handles null user state',
+        'RepairProjectionAction gracefully handles null user state',
         () async {
           final fakeAuthRepo = FakeAuthRepository();
           final container = ProviderContainer(
@@ -317,7 +348,7 @@ void main() {
           // Should complete cleanly without exception
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const ForceResyncProjectionsAction());
+              .executeRecoveryAction(const RepairProjectionAction());
 
           expect(container.read(authProvider).user, isNull);
         },

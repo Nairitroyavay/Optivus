@@ -17,6 +17,7 @@ abstract class OnboardingRepository {
   Future<OnboardingDraft?> fetchDraft(String uid);
   Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid);
   Future<void> saveDraft(OnboardingDraft draft);
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {}
   Future<void> flushPendingDraftSave() async {}
   void dispose() {}
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle);
@@ -70,6 +71,12 @@ class FakeOnboardingRepository implements OnboardingRepository {
         _drafts[target.uid] = target;
       }
     });
+  }
+
+  @override
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {
+    _pendingDraftsByUid.remove(draft.uid);
+    _drafts[draft.uid] = draft;
   }
 
   @override
@@ -271,6 +278,14 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
             .set(target.toMap(), SetOptions(merge: true));
       }
     });
+  }
+
+  @override
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {
+    _pendingDraftsByUid.remove(draft.uid);
+    await _firestore
+        .doc(FirestoreUserPaths.onboardingDraft(draft.uid))
+        .set(draft.toMap(), SetOptions(merge: true));
   }
 
   @override

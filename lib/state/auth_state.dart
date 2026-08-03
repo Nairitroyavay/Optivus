@@ -763,9 +763,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             'Routine setup recovery is required because the completion snapshot is corrupted: $e',
             reason: OnboardingFailureReason.corruptedBundle,
             actions: const [
-              RebuildBundleFromDraftAction(),
-              SynthesizeBundleAction(),
-              RestartOnboardingInputAction(),
+              RebuildBundleFromVerifiedDraftAction(),
+              MigrateLegacySetupAction(),
+              ResetSetupSafelyAction(),
             ],
           );
         }
@@ -782,8 +782,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
               'Routine setup recovery is required because both draft and completion snapshot are missing.',
               reason: OnboardingFailureReason.missingDraftAndBundle,
               actions: [
-                SynthesizeBundleAction(),
-                RestartOnboardingInputAction(),
+                MigrateLegacySetupAction(),
+                ResetSetupSafelyAction(),
               ],
             );
           } else {
@@ -791,8 +791,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
               'Routine setup recovery is required because the completion snapshot is missing.',
               reason: OnboardingFailureReason.missingBundle,
               actions: [
-                RebuildBundleFromDraftAction(),
-                RestartOnboardingInputAction(),
+                RebuildBundleFromVerifiedDraftAction(),
+                ResetSetupSafelyAction(),
               ],
             );
           }
@@ -821,9 +821,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             'receipt is invalid: ${validation.failureReason}',
             reason: OnboardingFailureReason.projectionFailed,
             actions: const [
-              ForceResyncProjectionsAction(),
-              RetryCompletionJobAction(),
-              RebuildBundleFromDraftAction(),
+              RepairProjectionAction(),
+              RetryNetworkAction(),
+              RebuildBundleFromVerifiedDraftAction(),
             ],
           );
         }
@@ -838,9 +838,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             'Routine setup recovery is required because projection failed: ${pe.message}',
             reason: OnboardingFailureReason.projectionFailed,
             actions: const [
-              ForceResyncProjectionsAction(),
-              RetryCompletionJobAction(),
-              RebuildBundleFromDraftAction(),
+              RepairProjectionAction(),
+              RetryNetworkAction(),
+              RebuildBundleFromVerifiedDraftAction(),
             ],
           );
         }
@@ -859,9 +859,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             'did not complete.',
             reason: OnboardingFailureReason.projectionFailed,
             actions: [
-              ForceResyncProjectionsAction(),
-              RetryCompletionJobAction(),
-              RebuildBundleFromDraftAction(),
+              RepairProjectionAction(),
+              RetryNetworkAction(),
+              RebuildBundleFromVerifiedDraftAction(),
             ],
           );
         }
@@ -894,7 +894,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         errorMessage:
             'Could not restore setup. Check your connection and try again.',
         onboardingFailureReason: OnboardingFailureReason.networkTimeout,
-        recoveryActions: const [RetryCompletionJobAction()],
+        recoveryActions: const [RetryNetworkAction()],
       );
     }
   }
@@ -1104,8 +1104,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (currentUser == null || currentUser.uid.trim().isEmpty) return;
     final actionUid = currentUser.uid;
 
-    if (action is RestartOnboardingInputAction ||
-        action is SynthesizeBundleAction) {
+    if (action is ResetSetupSafelyAction ||
+        action is MigrateLegacySetupAction) {
       await markOnboardingIncomplete(currentUser);
       return;
     }
@@ -1117,7 +1117,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     try {
-      if (action is RebuildBundleFromDraftAction) {
+      if (action is RebuildBundleFromVerifiedDraftAction) {
         final draft = await _ref
             .read(onboardingRepositoryProvider)
             .fetchDraft(actionUid);
@@ -1180,7 +1180,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         }
       }
 
-      if (action is RetryCompletionJobAction) {
+      if (action is RetryNetworkAction) {
         final recoveryResult =
             await OnboardingCompletionService.recoverCompletionState(
               uid: actionUid,
@@ -1196,7 +1196,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
-      if (action is ForceResyncProjectionsAction) {
+      if (action is RepairProjectionAction) {
         var bundle = await _ref
             .read(onboardingRepositoryProvider)
             .fetchCompletionBundle(actionUid);
@@ -1219,11 +1219,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
             );
           } on RoutineProjectionFailureException catch (pe) {
             debugPrint(
-              '[AuthState] Routine projection failed during ForceResyncProjectionsAction: $pe',
+              '[AuthState] Routine projection failed during RepairProjectionAction: $pe',
             );
           } catch (e) {
             debugPrint(
-              '[AuthState] Unexpected hydration failure during ForceResyncProjectionsAction: $e',
+              '[AuthState] Unexpected hydration failure during RepairProjectionAction: $e',
             );
           }
         }
@@ -1241,7 +1241,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           status: AuthFlowStatus.backendRestoreFailed,
           errorMessage: mapped.message,
           onboardingFailureReason: OnboardingFailureReason.projectionFailed,
-          recoveryActions: const [RestartOnboardingInputAction()],
+          recoveryActions: const [ResetSetupSafelyAction()],
         );
       }
     }

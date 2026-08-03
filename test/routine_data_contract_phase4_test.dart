@@ -754,6 +754,13 @@ Future<_ProjectionHarness> _projectedHarness(String uid) async {
   final draft = _completedDraft(uid);
   final bundle = OnboardingCompletionService.buildBundle(draft);
   await onboarding.completeOnboarding(finalDraft: draft, bundle: bundle);
+  final plan = RoutineOnboardingProjection.build(bundle);
+  final receipt = database.receiptsByUid[uid]![plan.projectionId]!;
+  database.receiptsByUid[uid]![plan.projectionId] = receipt.copyWith(
+    status: 'completed',
+    cursor: receipt.totalCount,
+    completedAt: DateTime.now().toUtc(),
+  );
   return _ProjectionHarness(
     onboarding: onboarding,
     routines: routines,

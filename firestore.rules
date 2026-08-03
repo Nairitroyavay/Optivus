@@ -960,6 +960,7 @@ service cloud.firestore {
     function validUserProfile(data, uid) {
       return validUserProfileKeys(data)
         && data.uid == uid
+        && data.schemaVersion == 1
         && data.email is string
         && data.email.size() > 0
         && data.email.size() <= 320
@@ -1094,8 +1095,8 @@ service cloud.firestore {
         && data.uploadedAssetReferences is list
         && data.warnings is list
         && data.duplicateSystemKeysMerged is list
-        && (!data.keys().hasAny(["createdAt"]) || data.createdAt is timestamp || data.createdAt is string)
-        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt is timestamp || data.updatedAt is string)
+        && (!data.keys().hasAny(["createdAt"]) || data.createdAt == request.time)
+        && (!data.keys().hasAny(["updatedAt"]) || data.updatedAt == request.time)
         && (!data.keys().hasAny(["moneyGoal"]) || data.moneyGoal is map);
     }
 
@@ -1236,7 +1237,7 @@ service cloud.firestore {
       return data.keys().hasOnly(["id", "lastUpdated", "widgets", "summary", "createdAt", "updatedAt"]);
     }
 
-    function validSettingsDoc(data) {
+    function validRegionLocalization(data, uid) {
       return data.keys().hasOnly([
         "userId",
         "countryCode",
@@ -1257,7 +1258,37 @@ service cloud.firestore {
         "paymentRegion",
         "createdAt",
         "updatedAt"
-      ]);
+      ])
+      && data.userId == uid;
+    }
+
+    function validAppPreferences(data, uid) {
+      return data.keys().hasOnly([
+        "id",
+        "uid",
+        "bio",
+        "avatarUrl",
+        "theme",
+        "createdAt",
+        "updatedAt",
+        "haptics",
+        "autoCorrect",
+        "themeMode",
+        "accentColor",
+        "bottomTabLayout",
+        "timelineDisplay",
+        "coachVoice",
+        "schemaVersion"
+      ])
+      && data.uid == uid
+      && data.schemaVersion == 1
+      && (!data.keys().hasAny(["haptics"]) || data.haptics is bool)
+      && (!data.keys().hasAny(["autoCorrect"]) || data.autoCorrect is bool)
+      && (!data.keys().hasAny(["themeMode"]) || data.themeMode is string)
+      && (!data.keys().hasAny(["accentColor"]) || data.accentColor is string)
+      && (!data.keys().hasAny(["bottomTabLayout"]) || data.bottomTabLayout is string)
+      && (!data.keys().hasAny(["timelineDisplay"]) || data.timelineDisplay is string)
+      && (!data.keys().hasAny(["coachVoice"]) || data.coachVoice is string);
     }
 
     function validNotificationPreferences(data) {
@@ -1269,7 +1300,13 @@ service cloud.firestore {
     }
 
     function validProfileSubdoc(data) {
-      return data.keys().hasOnly(["id", "bio", "avatarUrl", "theme", "createdAt", "updatedAt"]);
+      return data.keys().hasOnly(["id", "name", "username", "bio", "customIdentityDisplay", "photoState", "displayName", "createdAt", "updatedAt"])
+        && (!data.keys().hasAny(["name"]) || data.name is string)
+        && (!data.keys().hasAny(["username"]) || data.username is string)
+        && (!data.keys().hasAny(["bio"]) || data.bio is string)
+        && (!data.keys().hasAny(["customIdentityDisplay"]) || data.customIdentityDisplay is bool)
+        && (!data.keys().hasAny(["photoState"]) || data.photoState is string)
+        && (!data.keys().hasAny(["displayName"]) || data.displayName is string);
     }
 
     // PATH3-SEC-02: Hardened Onboarding Draft & Completion Bundle schemas
@@ -1451,10 +1488,17 @@ service cloud.firestore {
       allow delete: if verifiedOwner(uid);
     }
 
-    match /users/{uid}/settings/{settingId} {
+    match /users/{uid}/settings/regionLocalization {
       allow read: if verifiedOwner(uid);
       allow create, update: if verifiedOwner(uid)
-        && validSettingsDoc(request.resource.data);
+        && validRegionLocalization(request.resource.data, uid);
+      allow delete: if verifiedOwner(uid);
+    }
+
+    match /users/{uid}/settings/appPreferences {
+      allow read: if verifiedOwner(uid);
+      allow create, update: if verifiedOwner(uid)
+        && validAppPreferences(request.resource.data, uid);
       allow delete: if verifiedOwner(uid);
     }
 

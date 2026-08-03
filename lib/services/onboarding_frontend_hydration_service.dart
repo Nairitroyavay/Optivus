@@ -7,7 +7,6 @@ import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/habit_system_operation.dart';
 import 'package:optivus/models/habit_system_record.dart';
 import 'package:optivus/services/habit_system_onboarding_projection.dart';
-import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -97,8 +96,6 @@ class OnboardingFrontendHydrationService {
         ? const <String>[]
         : read(mockRoutineProvider.notifier).mergeMissing(routineItems);
     await read(routineNotifierProvider.notifier).loadForOwner(bundle.uid);
-    final eventProjectionResult = await const RoutineOnboardingEventProjector()
-        .projectCreatedEvents(read: read, bundle: bundle);
     final routineIds = read(routineNotifierProvider).items
         .map((item) => item.id)
         .where((id) => !routineBefore.contains(id))
@@ -146,9 +143,9 @@ class OnboardingFrontendHydrationService {
       expectedHabitSystemIds: expectedHabitSystemIds.toList()..sort(),
       appliedHabitSystemIds: appliedHabitSystemIds,
       failedHabitSystemIds: failedHabitSystemIds,
-      expectedHistoryIds: eventProjectionResult.expectedEventIds,
-      appliedHistoryIds: eventProjectionResult.appliedEventIds,
-      failedHistoryIds: eventProjectionResult.failedEventIds,
+      expectedHistoryIds: const [],
+      appliedHistoryIds: const [],
+      failedHistoryIds: const [],
     );
   }
 

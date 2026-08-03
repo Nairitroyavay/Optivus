@@ -450,17 +450,17 @@ void main() {
     test(
       'OnboardingRecoveryAction concrete types specify label and actionId',
       () {
-        const retry = RetryCompletionJobAction();
-        expect(retry.actionId, equals('retry_completion_job'));
-        expect(retry.label, equals('Retry Setup'));
+        const retry = RetryNetworkAction();
+        expect(retry.actionId, equals('retry_network'));
+        expect(retry.label, equals('Retry Connection'));
 
-        const rebuild = RebuildBundleFromDraftAction();
-        expect(rebuild.actionId, equals('rebuild_bundle_from_draft'));
+        const rebuild = RebuildBundleFromVerifiedDraftAction();
+        expect(rebuild.actionId, equals('rebuild_bundle'));
         expect(rebuild.label, equals('Rebuild Setup Plan'));
 
-        const restart = RestartOnboardingInputAction();
-        expect(restart.actionId, equals('restart_onboarding_input'));
-        expect(restart.label, equals('Restart Setup Forms'));
+        const restart = ResumeOnboardingAction();
+        expect(restart.actionId, equals('resume_onboarding'));
+        expect(restart.label, equals('Resume Setup'));
       },
     );
 
@@ -472,8 +472,8 @@ void main() {
           errorMessage: 'Bundle missing',
           onboardingFailureReason: OnboardingFailureReason.missingBundle,
           recoveryActions: [
-            RebuildBundleFromDraftAction(),
-            RestartOnboardingInputAction(),
+            RebuildBundleFromVerifiedDraftAction(),
+            ResumeOnboardingAction(),
           ],
         );
 
@@ -484,7 +484,7 @@ void main() {
         expect(state.recoveryActions.length, equals(2));
         expect(
           state.recoveryActions.first,
-          isA<RebuildBundleFromDraftAction>(),
+          isA<RebuildBundleFromVerifiedDraftAction>(),
         );
       },
     );

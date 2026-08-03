@@ -763,6 +763,10 @@ class FakeAuthNotifier extends StateNotifier<AuthState>
 
 class FakeOnboardingRepository implements OnboardingRepository {
   @override
+  Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {
+    await saveDraft(draft);
+  }
+  @override
   Future<void> saveDraft(OnboardingDraft draft) async {}
   @override
   Future<void> flushPendingDraftSave() async {}

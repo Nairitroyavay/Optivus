@@ -145,10 +145,13 @@ class OnboardingCompletionJobService {
               OnboardingCompletionStage.persistDraft,
             );
 
-            await onboardingRepository.saveDraft(finalDraft);
+            await onboardingRepository.flushPendingDraftSave();
+            await onboardingRepository.saveFinalDraftImmediately(finalDraft);
 
             final readbackDraft = await onboardingRepository.fetchDraft(uid);
-            if (readbackDraft == null) {
+            if (readbackDraft == null || 
+                readbackDraft.uid != uid || 
+                !readbackDraft.onboardingCompleted) {
               throw StateError('Draft read-back verification failed.');
             }
 
@@ -195,8 +198,30 @@ class OnboardingCompletionJobService {
                 .completeOnboarding(finalDraft: finalDraft, bundle: bundle);
 
             final receipt = projectionResult.receipt;
-            final computedHistoryIds = const RoutineOnboardingEventProjector()
-                .computeExpectedEventIds(bundle);
+            
+            RoutineOnboardingEventProjectionResult historyResult;
+            if (reader != null) {
+              historyResult = await const RoutineOnboardingEventProjector()
+                  .projectCreatedEvents(
+                    read: reader,
+                    bundle: bundle,
+                  );
+            } else {
+              if (requireRoutineVerification) {
+                throw StateError('Onboarding frontend reader is required for history verification.');
+              }
+              final computedHistoryIds = const RoutineOnboardingEventProjector()
+                  .computeExpectedEventIds(bundle);
+              final plan = RoutineOnboardingProjection.build(bundle);
+              historyResult = RoutineOnboardingEventProjectionResult(
+                projectionId: plan.projectionId,
+                attemptedCount: 0,
+                expectedEventIds: computedHistoryIds,
+                appliedEventIds: computedHistoryIds,
+                failedEventIds: const [],
+              );
+            }
+            
             final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
               ..[OnboardingCompletionStage.projectRoutines.name] = true;
             job = job.copyWith(
@@ -206,9 +231,9 @@ class OnboardingCompletionJobService {
               existingRoutineIds: receipt.existingItemIds,
               repairedRoutineIds: receipt.repairedItemIds,
               failedRoutineIds: receipt.failedItemIds,
-              expectedHistoryIds: computedHistoryIds,
-              appliedHistoryIds: computedHistoryIds,
-              failedHistoryIds: const [],
+              expectedHistoryIds: historyResult.expectedEventIds,
+              appliedHistoryIds: historyResult.appliedEventIds,
+              failedHistoryIds: historyResult.failedEventIds,
             );
             await _saveJobStatus(job);
           }
@@ -231,14 +256,18 @@ class OnboardingCompletionJobService {
                 expectedHabitIds: hydrationResult.expectedHabitSystemIds,
                 appliedHabitIds: hydrationResult.appliedHabitSystemIds,
                 failedHabitIds: hydrationResult.failedHabitSystemIds,
-                expectedHistoryIds:
-                    hydrationResult.expectedHistoryIds.isNotEmpty
-                    ? hydrationResult.expectedHistoryIds
-                    : job.expectedHistoryIds,
-                appliedHistoryIds: hydrationResult.appliedHistoryIds.isNotEmpty
-                    ? hydrationResult.appliedHistoryIds
-                    : job.appliedHistoryIds,
-                failedHistoryIds: hydrationResult.failedHistoryIds,
+                expectedHistoryIds: [
+                  ...job.expectedHistoryIds,
+                  ...hydrationResult.expectedHistoryIds,
+                ],
+                appliedHistoryIds: [
+                  ...job.appliedHistoryIds,
+                  ...hydrationResult.appliedHistoryIds,
+                ],
+                failedHistoryIds: [
+                  ...job.failedHistoryIds,
+                  ...hydrationResult.failedHistoryIds,
+                ],
               );
             } else if (requireFrontendHydration) {
               throw StateError(
@@ -427,6 +456,14 @@ class OnboardingCompletionJobService {
       throw StateError(
         'Monotonicity violation: Cannot move back from ${job.stage.name} to ${stage.name}',
       );
+    }
+    if (stage.index > 1) {
+      final prevStage = OnboardingCompletionStage.values[stage.index - 1];
+      if (!job.isStageCompleted(prevStage)) {
+        throw StateError(
+          'Monotonicity violation: Cannot skip to ${stage.name} because ${prevStage.name} is incomplete.',
+        );
+      }
     }
     final next = job.copyWith(
       status: OnboardingJobStatus.inProgress,
