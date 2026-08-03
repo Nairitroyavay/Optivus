@@ -709,6 +709,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
             incrementRevision: false,
           );
           _ref.read(mockOnboardingProvider.notifier).loadSeedData(safeDraft);
+        } else if (createdProfile) {
+          // A newly verified account has no onboarding draft yet. This is the
+          // expected first-run state, not missing/corrupt recovery data.
+          final freshDraft = OnboardingDraft(
+            uid: user.uid,
+            baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
+            createdAt: now,
+            updatedAt: now,
+          );
+          await _ref.read(onboardingRepositoryProvider).saveDraft(freshDraft);
+          if (!_isCurrentRestore(restoreGeneration)) return;
+          _ref.read(mockOnboardingProvider.notifier).loadSeedData(freshDraft);
         } else {
           throw const _RoutineProjectionRestoreException(
             'Setup recovery is required because the onboarding draft is missing.',

@@ -376,18 +376,10 @@ class OnboardingDraft {
   }
 
   FinalTimelinePreview buildFinalPreview() {
-    final conflicts = baseTimeline.detectConflicts();
-    final sectionByBlockId = {
-      for (final block in baseTimeline.blocks) block.id: block.section,
-    };
+    final conflicts = timelineConflictsRequiringAcceptance();
     final warnings = <String>[
       for (final conflict in conflicts)
-        if (conflict.isBlocking &&
-            !_isOnboardingResponsibilityOverlap(
-              sectionByBlockId[conflict.firstBlockId],
-              sectionByBlockId[conflict.secondBlockId],
-            ))
-          'Resolve or accept the conflict between ${conflict.firstTitle} and ${conflict.secondTitle}.',
+        'Resolve or accept the conflict between ${conflict.firstTitle} and ${conflict.secondTitle}.',
     ];
 
     final baseItems = baseTimeline.blocks
@@ -418,6 +410,29 @@ class OnboardingDraft {
       warnings: warnings,
       duplicateSystemKeysSkipped: skippedDuplicateSystemKeys(),
     );
+  }
+
+  /// Hard overlaps that need an explicit decision before onboarding can finish.
+  ///
+  /// Class, work, and fixed responsibilities intentionally keep the existing
+  /// onboarding behavior: their overlapping cards can coexist without another
+  /// confirmation. Other hard overlaps (for example, class and breakfast) must
+  /// be accepted by the user and are then retained in the final Routine plan.
+  List<TimelineConflictDraft> timelineConflictsRequiringAcceptance() {
+    final sectionByBlockId = {
+      for (final block in baseTimeline.blocks) block.id: block.section,
+    };
+    return baseTimeline
+        .detectConflicts()
+        .where(
+          (conflict) =>
+              conflict.isBlocking &&
+              !_isOnboardingResponsibilityOverlap(
+                sectionByBlockId[conflict.firstBlockId],
+                sectionByBlockId[conflict.secondBlockId],
+              ),
+        )
+        .toList(growable: false);
   }
 
   List<FinalTimelineItem> _standaloneGoodHabitItems(
@@ -620,10 +635,17 @@ class OnboardingDraft {
   List<String> _finalTimelineConflictWarnings(List<FinalTimelineItem> items) {
     final warnings = <String>[];
     final seen = <String>{};
+    final baseBlockIds = baseTimeline.blocks.map((block) => block.id).toSet();
     for (var i = 0; i < items.length; i++) {
       final first = items[i];
       for (var j = i + 1; j < items.length; j++) {
         final second = items[j];
+        // Base-timeline conflicts were already classified above. Rechecking
+        // them here produced two differently worded warnings for one overlap.
+        if (baseBlockIds.contains(first.id) &&
+            baseBlockIds.contains(second.id)) {
+          continue;
+        }
         for (final firstWindow in _windowsForFinalItem(first)) {
           for (final secondWindow in _windowsForFinalItem(second)) {
             if (firstWindow.day != secondWindow.day) continue;

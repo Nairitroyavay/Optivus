@@ -7,10 +7,12 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
@@ -934,6 +936,103 @@ void main() {
       isNull,
     );
   });
+
+  testWidgets(
+    'final preview lets the user keep class and breakfast and projects both Routine cards',
+    (tester) async {
+      late MockOnboardingNotifier notifier;
+      final classBlock = _timelineBlock(
+        id: 'monday-class',
+        section: 'classes',
+        title: 'Morning Class',
+        startMinute: 8 * 60,
+        endMinute: 9 * 60,
+      );
+      final breakfastBlock = _timelineBlock(
+        id: 'monday-breakfast',
+        section: 'eating',
+        title: 'Breakfast',
+        startMinute: 8 * 60 + 15,
+        endMinute: 8 * 60 + 45,
+      );
+      final conflictKey = TimelineConflictDraft.keyFor(
+        classBlock.id,
+        breakfastBlock.id,
+        1,
+      );
+      final draft = OnboardingDraft(
+        uid: 'overlap-user',
+        currentStep: OnboardingDraft.lastStepIndex,
+        stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+        baseTimeline: BaseTimelineDraft(
+          skinCareSkipped: true,
+          blocks: [classBlock, breakfastBlock],
+        ),
+      );
+
+      final unresolvedPreview = draft.buildFinalPreview();
+      expect(unresolvedPreview.blockingWarnings, hasLength(1));
+      expect(
+        unresolvedPreview.warnings.where(
+          (warning) => warning.startsWith('Resolve or accept'),
+        ),
+        hasLength(1),
+      );
+
+      tester.view.physicalSize = const Size(400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith((_) {
+              notifier = MockOnboardingNotifier()..loadSeedData(draft);
+              return notifier;
+            }),
+          ],
+          child: const MaterialApp(home: Scaffold(body: OnboardingStep14())),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose how to handle overlaps'), findsOneWidget);
+      expect(find.text('Morning Class + Breakfast'), findsOneWidget);
+      expect(find.text('Overlap on Monday'), findsOneWidget);
+
+      final keepBoth = find.byKey(
+        ValueKey('onboarding-final-keep-both-$conflictKey'),
+      );
+      await tester.ensureVisible(keepBoth);
+      await tester.tap(keepBoth);
+      await tester.pumpAndSettle();
+
+      final acceptedDraft = notifier.state.draft;
+      expect(
+        acceptedDraft.baseTimeline.acceptedConflictKeys,
+        contains(conflictKey),
+      );
+      expect(acceptedDraft.timelineConflictsRequiringAcceptance(), isEmpty);
+      expect(acceptedDraft.buildFinalPreview().blockingWarnings, isEmpty);
+      expect(find.text('Choose how to handle overlaps'), findsNothing);
+
+      final bundle = OnboardingCompletionService.buildBundle(acceptedDraft);
+      expect(
+        bundle.routineItemsForApp.map((item) => item.id),
+        containsAll(<String>[classBlock.id, breakfastBlock.id]),
+      );
+      expect(
+        bundle.routineItemsForApp
+            .where(
+              (item) =>
+                  item.id == classBlock.id || item.id == breakfastBlock.id,
+            )
+            .map((item) => item.startMinute),
+        containsAll(<int>[8 * 60, 8 * 60 + 15]),
+      );
+    },
+  );
 
   test(
     'AI repeat-day normalization derives clear labels without Monday default',

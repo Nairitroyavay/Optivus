@@ -25,6 +25,51 @@ import 'package:optivus/services/routine_onboarding_projection.dart';
 
 void main() {
   test(
+    'new verified Firebase account creates its first draft instead of entering recovery',
+    () async {
+      const user = AuthUser(
+        uid: 'brand-new-user',
+        email: 'brand-new@example.com',
+        displayName: 'Brand New',
+        emailVerified: true,
+      );
+      final authRepository = _ControllableAuthRepository();
+      final profileRepository = FakeProfileRepository();
+      final onboardingRepository = _ControlledOnboardingRepository();
+      final container = ProviderContainer(
+        overrides: _firebaseOverrides(
+          authRepository: authRepository,
+          profileRepository: profileRepository,
+          onboardingRepository: onboardingRepository,
+        ),
+      );
+      addTearDown(container.dispose);
+      addTearDown(authRepository.dispose);
+
+      container.read(authProvider);
+      authRepository.emit(user);
+      await pumpEventQueue(times: 20);
+
+      expect(
+        container.read(authProvider).status,
+        AuthFlowStatus.signedInOnboardingIncomplete,
+      );
+      expect(container.read(authProvider).backendRestoreFailed, isFalse);
+      expect(onboardingRepository.draft?.uid, user.uid);
+      expect(
+        onboardingRepository.draft?.baseTimeline.blocks.map(
+          (block) => block.id,
+        ),
+        containsAll(<String>[
+          BaseTimelineDraft.fixedSleepId,
+          BaseTimelineDraft.fixedBathId,
+        ]),
+      );
+      expect(container.read(mockOnboardingProvider).draft.uid, user.uid);
+    },
+  );
+
+  test(
     'firebase incomplete user does not become onboarding incomplete until draft fetch completes',
     () async {
       const user = AuthUser(

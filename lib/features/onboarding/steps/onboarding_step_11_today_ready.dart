@@ -18,6 +18,7 @@ class OnboardingStep14 extends ConsumerWidget {
     final onboarding = ref.watch(mockOnboardingProvider);
     final draft = onboarding.draft;
     final bundle = OnboardingCompletionService.buildBundle(draft);
+    final blockingConflicts = draft.timelineConflictsRequiringAcceptance();
     final missing = <_MissingSetup>[
       if (draft.lifeRole.validate() != null)
         const _MissingSetup('Role and lifestyle', 2),
@@ -80,9 +81,11 @@ class OnboardingStep14 extends ConsumerWidget {
                           color: OptivusColors.warning,
                         ),
                         SizedBox(width: 8),
-                        Text(
-                          'Missing required setup',
-                          style: TextStyle(fontWeight: FontWeight.w900),
+                        Expanded(
+                          child: Text(
+                            'Missing required setup',
+                            style: TextStyle(fontWeight: FontWeight.w900),
+                          ),
                         ),
                       ],
                     ),
@@ -113,6 +116,13 @@ class OnboardingStep14 extends ConsumerWidget {
                 ),
               ),
             if (missing.isNotEmpty) const SizedBox(height: 16),
+            if (blockingConflicts.isNotEmpty) ...[
+              _BlockingConflictList(
+                conflicts: blockingConflicts,
+                onKeepBoth: (conflict) => _keepBoth(ref, conflict),
+              ),
+              const SizedBox(height: 16),
+            ],
             OnboardingGlassCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,9 +230,11 @@ class OnboardingStep14 extends ConsumerWidget {
                               color: OptivusColors.warning,
                             ),
                             SizedBox(width: 8),
-                            Text(
-                              'Missing required setup',
-                              style: TextStyle(fontWeight: FontWeight.w900),
+                            Expanded(
+                              child: Text(
+                                'Missing required setup',
+                                style: TextStyle(fontWeight: FontWeight.w900),
+                              ),
                             ),
                           ],
                         ),
@@ -276,6 +288,13 @@ class OnboardingStep14 extends ConsumerWidget {
                     ),
                   ),
                 const SizedBox(height: 14),
+                if (blockingConflicts.isNotEmpty) ...[
+                  _BlockingConflictList(
+                    conflicts: blockingConflicts,
+                    onKeepBoth: (conflict) => _keepBoth(ref, conflict),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 OnboardingGlassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,6 +467,14 @@ class OnboardingStep14 extends ConsumerWidget {
     );
   }
 
+  static void _keepBoth(WidgetRef ref, TimelineConflictDraft conflict) {
+    updateBaseTimelineDraft(
+      ref,
+      OnboardingDraft.lastStepIndex,
+      (base) => base.acceptConflict(conflict.key),
+    );
+  }
+
   static String _time(int minute) {
     final hour = minute ~/ 60;
     final h = hour % 12 == 0 ? 12 : hour % 12;
@@ -475,6 +502,112 @@ class OnboardingStep14 extends ConsumerWidget {
         )
         .join(' ');
   }
+}
+
+class _BlockingConflictList extends StatelessWidget {
+  final List<TimelineConflictDraft> conflicts;
+  final ValueChanged<TimelineConflictDraft> onKeepBoth;
+
+  const _BlockingConflictList({
+    required this.conflicts,
+    required this.onKeepBoth,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OnboardingGlassCard(
+      tint: OptivusColors.warning.withValues(alpha: 0.10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.compare_arrows_rounded, color: OptivusColors.warning),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Choose how to handle overlaps',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Keeping both preserves both cards in Routine at the times you selected.',
+            style: TextStyle(
+              fontSize: 12,
+              color: OptivusColors.textSecondary,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (var index = 0; index < conflicts.length; index++) ...[
+            _BlockingConflictRow(
+              conflict: conflicts[index],
+              onKeepBoth: () => onKeepBoth(conflicts[index]),
+            ),
+            if (index != conflicts.length - 1) const Divider(height: 20),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _BlockingConflictRow extends StatelessWidget {
+  final TimelineConflictDraft conflict;
+  final VoidCallback onKeepBoth;
+
+  const _BlockingConflictRow({
+    required this.conflict,
+    required this.onKeepBoth,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${conflict.firstTitle} + ${conflict.secondTitle}',
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Overlap on ${_weekday(conflict.day)}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        FilledButton.tonal(
+          key: ValueKey('onboarding-final-keep-both-${conflict.key}'),
+          onPressed: onKeepBoth,
+          child: const Text('Keep both'),
+        ),
+      ],
+    );
+  }
+
+  static String _weekday(int day) => switch (day) {
+    1 => 'Monday',
+    2 => 'Tuesday',
+    3 => 'Wednesday',
+    4 => 'Thursday',
+    5 => 'Friday',
+    6 => 'Saturday',
+    7 => 'Sunday',
+    _ => 'the selected day',
+  };
 }
 
 class _MissingSetup {
