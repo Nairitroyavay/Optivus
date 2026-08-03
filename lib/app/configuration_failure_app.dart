@@ -23,18 +23,13 @@ class ConfigurationFailureApp extends StatelessWidget {
                 SizedBox(height: 24),
                 Text(
                   'Configuration Error',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
                 SizedBox(height: 16),
                 Text(
                   'The application failed to initialize a required subsystem.\n\nPlease check your internet connection and restart the application.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(fontSize: 16),
                 ),
               ],
             ),

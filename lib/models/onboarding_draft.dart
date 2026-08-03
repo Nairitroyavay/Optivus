@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 
 class OnboardingDraft {
   static const int schemaVersion = 2;
@@ -15,6 +18,8 @@ class OnboardingDraft {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final bool onboardingCompleted;
+  final int revision;
+  final String sourceFingerprint;
 
   final bool welcomeSaved;
   final bool patiencePledgeAccepted;
@@ -89,6 +94,8 @@ class OnboardingDraft {
     this.createdAt,
     this.updatedAt,
     this.onboardingCompleted = false,
+    this.revision = 1,
+    this.sourceFingerprint = '',
     this.welcomeSaved = false,
     this.patiencePledgeAccepted = false,
     this.patiencePledgeText,
@@ -129,6 +136,8 @@ class OnboardingDraft {
       createdAt: _readDateTime(map['createdAt']),
       updatedAt: _readDateTime(map['updatedAt']),
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
+      revision: (map['revision'] as num?)?.toInt() ?? 1,
+      sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
       patiencePledgeText: map['patiencePledgeText'] as String?,
@@ -180,33 +189,43 @@ class OnboardingDraft {
     );
   }
 
-  Map<String, dynamic> toMap() => {
-    'uid': uid,
-    'schemaVersion': schemaVersion,
-    'source': sourceOnboarding,
-    'currentStep': currentStep,
-    'stepCompleted': stepCompleted,
-    'stepDirty': stepDirty,
-    'stepLoading': stepLoading,
-    if (createdAt != null) 'createdAt': createdAt?.toIso8601String(),
-    if (updatedAt != null) 'updatedAt': updatedAt?.toIso8601String(),
-    'onboardingCompleted': onboardingCompleted,
-    'welcomeSaved': welcomeSaved,
-    'patiencePledgeAccepted': patiencePledgeAccepted,
-    if (patiencePledgeText != null) 'patiencePledgeText': patiencePledgeText,
-    'lifeRole': lifeRole.toMap(),
-    'bodyBasics': bodyBasics.toMap(),
-    'baseTimeline': baseTimeline.toMap(),
-    'badHabitsNotNow': badHabitsNotNow,
-    'badHabits': badHabits.map((habit) => habit.toMap()).toList(),
-    'goodHabitsNotNow': goodHabitsNotNow,
-    'goodHabits': goodHabits.map((habit) => habit.toMap()).toList(),
-    'identityGoals': identityGoals.map((goal) => goal.toMap()).toList(),
-    'coachSetup': coachSetup.toMap(),
-    if (slipUpHandling != null) 'slipUpHandling': slipUpHandling,
-    'notifications': notifications.toMap(),
-    if (finalPreview != null) 'finalPreview': finalPreview?.toMap(),
-  };
+  Map<String, dynamic> toMap() {
+    final map = <String, dynamic>{
+      'uid': uid,
+      'schemaVersion': schemaVersion,
+      'source': sourceOnboarding,
+      'revision': revision,
+      'currentStep': currentStep,
+      'stepCompleted': stepCompleted,
+      'stepDirty': stepDirty,
+      'stepLoading': stepLoading,
+      if (createdAt != null) 'createdAt': createdAt?.toIso8601String(),
+      if (updatedAt != null) 'updatedAt': updatedAt?.toIso8601String(),
+      'onboardingCompleted': onboardingCompleted,
+      'welcomeSaved': welcomeSaved,
+      'patiencePledgeAccepted': patiencePledgeAccepted,
+      if (patiencePledgeText != null) 'patiencePledgeText': patiencePledgeText,
+      'lifeRole': lifeRole.toMap(),
+      'bodyBasics': bodyBasics.toMap(),
+      'baseTimeline': baseTimeline.toMap(),
+      'badHabitsNotNow': badHabitsNotNow,
+      'badHabits': badHabits.map((habit) => habit.toMap()).toList(),
+      'goodHabitsNotNow': goodHabitsNotNow,
+      'goodHabits': goodHabits.map((habit) => habit.toMap()).toList(),
+      'identityGoals': identityGoals.map((goal) => goal.toMap()).toList(),
+      'coachSetup': coachSetup.toMap(),
+      if (slipUpHandling != null) 'slipUpHandling': slipUpHandling,
+      'notifications': notifications.toMap(),
+      if (finalPreview != null) 'finalPreview': finalPreview?.toMap(),
+    };
+    map['sourceFingerprint'] = sourceFingerprint.trim().isNotEmpty
+        ? sourceFingerprint
+        : _fingerprintDraftMap(map);
+    return map;
+  }
+
+  String get effectiveSourceFingerprint =>
+      toMap()['sourceFingerprint'] as String;
 
   Map<String, dynamic> toFirestoreMap() {
     final map = toMap();
@@ -224,6 +243,8 @@ class OnboardingDraft {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? onboardingCompleted,
+    int? revision,
+    String? sourceFingerprint,
     bool? welcomeSaved,
     bool? patiencePledgeAccepted,
     String? patiencePledgeText,
@@ -242,6 +263,7 @@ class OnboardingDraft {
     bool clearPatiencePledgeText = false,
     bool clearSlipUpHandling = false,
     bool clearFinalPreview = false,
+    bool incrementRevision = true,
   }) {
     return OnboardingDraft(
       uid: uid ?? this.uid,
@@ -260,6 +282,11 @@ class OnboardingDraft {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      revision:
+          revision ?? (incrementRevision ? this.revision + 1 : this.revision),
+      sourceFingerprint:
+          sourceFingerprint ??
+          (incrementRevision ? '' : this.sourceFingerprint),
       welcomeSaved: welcomeSaved ?? this.welcomeSaved,
       patiencePledgeAccepted:
           patiencePledgeAccepted ?? this.patiencePledgeAccepted,
@@ -3050,4 +3077,12 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
   final result = [...otherBlocks, ...mergedEating];
   result.sort((a, b) => a.startMinute.compareTo(b.startMinute));
   return result;
+}
+
+String _fingerprintDraftMap(Map<String, dynamic> map) {
+  final identity = Map<String, dynamic>.from(map)
+    ..remove('sourceFingerprint')
+    ..remove('createdAt')
+    ..remove('updatedAt');
+  return sha256.convert(utf8.encode(jsonEncode(identity))).toString();
 }

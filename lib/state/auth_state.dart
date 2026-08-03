@@ -26,12 +26,12 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/core/utils/liquid_toast_manager.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/features/recovery/services/recovery_retry_controller.dart';
-import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
 import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
@@ -46,6 +46,7 @@ import 'package:optivus/features/tracker/providers/tracker_settings_provider.dar
 import 'package:optivus/services/onboarding_account_migration_service.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
@@ -141,6 +142,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final Ref _ref;
   late final StreamSubscription<AuthUser?> _authSubscription;
   int _backendRestoreGeneration = 0;
+  int _authOperationGeneration = 0;
 
   AuthNotifier(this._repository, Ref ref)
     : _ref = ref,
@@ -161,15 +163,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   @override
   void dispose() {
     _backendRestoreGeneration++;
+    _authOperationGeneration++;
     _authSubscription.cancel();
     super.dispose();
   }
 
   Future<void> login(String email, String password) async {
+    final operation = ++_authOperationGeneration;
     final previousUser = state.user;
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       final user = await _repository.signIn(email, password);
+      if (!_isCurrentAuthOperation(operation)) return;
 
       if (_needsEmailVerification(user)) {
         state = state.copyWith(
@@ -182,6 +187,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       await _loadOrCreateBackendUserState(user);
     } catch (error) {
+      if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
       state = state.copyWith(
         user: previousUser,
@@ -191,7 +197,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       rethrow;
     } finally {
-      if (mounted && state.isAuthenticating) {
+      if (_isCurrentAuthOperation(operation) && state.isAuthenticating) {
         state = state.copyWith(
           status: statusFor(
             state.user,
@@ -203,11 +209,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> signup(String name, String email, String password) async {
+    final operation = ++_authOperationGeneration;
     final previousUser = state.user;
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     AuthUser? createdUser;
     try {
       final user = await _repository.signUp(email, password, name: name);
+      if (!_isCurrentAuthOperation(operation)) return;
       createdUser = user;
       if (_needsEmailVerification(user)) {
         state = state.copyWith(
@@ -216,10 +224,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
           clearError: true,
         );
         await _repository.sendEmailVerification();
+        if (!_isCurrentAuthOperation(operation)) return;
         return;
       }
       await _loadOrCreateBackendUserState(user);
     } catch (error) {
+      if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
       final activeUser = createdUser ?? previousUser;
       state = state.copyWith(
@@ -232,7 +242,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       rethrow;
     } finally {
-      if (mounted && state.isAuthenticating) {
+      if (_isCurrentAuthOperation(operation) && state.isAuthenticating) {
         state = state.copyWith(
           status: statusFor(
             state.user,
@@ -244,11 +254,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> signInAnonymously() async {
+    final operation = ++_authOperationGeneration;
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       final user = await _repository.signInAnonymously();
+      if (!_isCurrentAuthOperation(operation)) return;
       await _loadOrCreateBackendUserState(user);
     } catch (error) {
+      if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
       state = state.copyWith(
         status: AuthFlowStatus.error,
@@ -264,6 +277,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     String password, {
     String? name,
   }) async {
+    final operation = ++_authOperationGeneration;
     final oldUser = state.user;
     final oldAnonUid = oldUser?.isAnonymous == true ? oldUser!.uid : null;
 
@@ -274,6 +288,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         password,
         name: name,
       );
+      if (!_isCurrentAuthOperation(operation)) return;
 
       if (oldAnonUid != null && oldAnonUid != user.uid) {
         await OnboardingAccountMigrationService.migrateAccountData(
@@ -281,6 +296,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           newUid: user.uid,
           read: _ref.read,
         );
+        if (!_isCurrentAuthOperation(operation)) return;
       }
 
       if (_needsEmailVerification(user)) {
@@ -290,11 +306,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
           clearError: true,
         );
         await _repository.sendEmailVerification();
+        if (!_isCurrentAuthOperation(operation)) return;
         return;
       }
 
       await _loadOrCreateBackendUserState(user, isAnonymousLink: true);
     } catch (error) {
+      if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
       state = state.copyWith(
         user: oldUser,
@@ -311,6 +329,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    ++_authOperationGeneration;
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       await _repository.signOut();
@@ -418,38 +437,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> markOnboardingComplete(AuthUser user) async {
-    if (user.uid.trim().isEmpty) return;
-    if (_needsEmailVerification(user)) {
-      state = state.copyWith(
-        user: user,
-        status: AuthFlowStatus.signedInEmailUnverified,
-        clearError: true,
-      );
-      return;
-    }
-    final profile = _ref
-        .read(mockUserProfileProvider)
-        .copyWith(
-          uid: user.uid,
-          email: user.email ?? _ref.read(mockUserProfileProvider).email,
-          displayName:
-              user.displayName ??
-              _ref.read(mockUserProfileProvider).displayName,
-          onboardingInputCompleted: true,
-          onboardingProjectionStatus: 'completed',
-          onboardingCompleted: true,
-          onboardingStep: OnboardingDraft.lastStepIndex,
-          updatedAt: DateTime.now(),
-        );
-    _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
-    if (_useFirebaseBackend) {
-      await _ref.read(profileRepositoryProvider).saveUserProfile(profile);
-    }
-    state = state.copyWith(
-      user: user,
-      status: AuthFlowStatus.signedInOnboardingComplete,
-      clearError: true,
-    );
+    await acceptCanonicalOnboardingCompletion(user);
   }
 
   Future<void> acceptCanonicalOnboardingCompletion(AuthUser user) async {
@@ -462,20 +450,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return;
     }
-    final profile = _ref
-        .read(mockUserProfileProvider)
-        .copyWith(
-          uid: user.uid,
-          email: user.email ?? _ref.read(mockUserProfileProvider).email,
-          displayName:
-              user.displayName ??
-              _ref.read(mockUserProfileProvider).displayName,
-          onboardingInputCompleted: true,
-          onboardingProjectionStatus: 'completed',
-          onboardingCompleted: true,
-          onboardingStep: OnboardingDraft.lastStepIndex,
-          updatedAt: DateTime.now(),
-        );
+    final capturedAuthGeneration = _ref.read(authGenerationProvider);
+    final job = await _ref
+        .read(onboardingCompletionJobServiceProvider)
+        .loadCurrentJob(user.uid);
+    final profile = await _ref
+        .read(profileRepositoryProvider)
+        .fetchUserProfile(user.uid);
+    if (!mounted ||
+        _ref.read(authGenerationProvider) != capturedAuthGeneration ||
+        state.user?.uid != user.uid) {
+      return;
+    }
+    if (job == null ||
+        job.status != OnboardingJobStatus.completed ||
+        job.stage != OnboardingCompletionStage.completed ||
+        profile == null ||
+        profile.uid != user.uid ||
+        !profile.onboardingCompleted ||
+        profile.onboardingProjectionStatus != 'completed') {
+      throw StateError('Canonical onboarding completion is not verified.');
+    }
     _ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
     state = state.copyWith(
       user: user,
@@ -528,6 +523,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final previousUser = state.user;
 
     if (user == null) {
+      _authOperationGeneration++;
       _backendRestoreGeneration++;
       _resetSignedOutState();
       state = const AuthState(status: AuthFlowStatus.signedOut);
@@ -555,6 +551,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     if (isAccountSwitch) {
+      _authOperationGeneration++;
       state = state.copyWith(
         user: user,
         status: AuthFlowStatus.loadingBackendUser,
@@ -695,11 +692,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
-      if (profile.onboardingCompleted) {
-        _ref
-            .read(mockOnboardingProvider.notifier)
-            .completeOnboarding(uid: user.uid);
-      } else {
+      if (!profile.onboardingCompleted) {
         state = state.copyWith(
           user: user,
           status: AuthFlowStatus.restoringOnboarding,
@@ -713,36 +706,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
           final safeDraft = savedDraft.copyWith(
             uid: user.uid,
             stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+            incrementRevision: false,
           );
           _ref.read(mockOnboardingProvider.notifier).loadSeedData(safeDraft);
         } else {
-          final step = profile.onboardingStep.clamp(
-            0,
-            OnboardingDraft.lastStepIndex,
+          throw const _RoutineProjectionRestoreException(
+            'Setup recovery is required because the onboarding draft is missing.',
+            reason: OnboardingFailureReason.missingDraftAndBundle,
+            actions: [MigrateLegacySetupAction(), ResetSetupSafelyAction()],
           );
-          final synthesizedDraft = OnboardingDraft(
-            uid: user.uid,
-            currentStep: step,
-            lifeRole: LifeRoleDraft(
-              lifeRole: profile.lifeRole.isNotEmpty
-                  ? profile.lifeRole
-                  : 'software_engineer',
-              businessMode: profile.businessMode ?? '',
-            ),
-            bodyBasics: BodyBasicsDraft(
-              ageRange: profile.ageRange,
-              heightCm: profile.height,
-              weightKg: profile.weight,
-              gender: profile.gender,
-            ),
-          );
-          _ref
-              .read(mockOnboardingProvider.notifier)
-              .loadSeedData(synthesizedDraft);
-          await _ref
-              .read(onboardingRepositoryProvider)
-              .saveDraft(synthesizedDraft);
-          if (!_isCurrentRestore(restoreGeneration)) return;
         }
       }
       _resetUserScopedMockState();
@@ -781,10 +753,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             throw const _RoutineProjectionRestoreException(
               'Routine setup recovery is required because both draft and completion snapshot are missing.',
               reason: OnboardingFailureReason.missingDraftAndBundle,
-              actions: [
-                MigrateLegacySetupAction(),
-                ResetSetupSafelyAction(),
-              ],
+              actions: [MigrateLegacySetupAction(), ResetSetupSafelyAction()],
             );
           } else {
             throw const _RoutineProjectionRestoreException(
@@ -797,6 +766,39 @@ class AuthNotifier extends StateNotifier<AuthState> {
             );
           }
         }
+
+        final completedDraft = await _ref
+            .read(onboardingRepositoryProvider)
+            .fetchDraft(user.uid);
+        if (!_isCurrentRestore(restoreGeneration)) return;
+        final draftVerified =
+            completedDraft != null &&
+            completedDraft.uid == user.uid &&
+            completedDraft.onboardingCompleted &&
+            completedDraft.currentStep == OnboardingDraft.lastStepIndex &&
+            completedDraft.stepCompleted.length == OnboardingDraft.stepCount &&
+            completedDraft.stepCompleted.every((value) => value) &&
+            completedDraft.revision == bundle.draftRevision &&
+            completedDraft.effectiveSourceFingerprint ==
+                bundle.sourceFingerprint;
+        if (!draftVerified) {
+          throw const _RoutineProjectionRestoreException(
+            'Setup recovery is required because the final draft and completion snapshot do not match.',
+            reason: OnboardingFailureReason.corruptedBundle,
+            actions: [MigrateLegacySetupAction(), ResetSetupSafelyAction()],
+          );
+        }
+        _ref
+            .read(mockOnboardingProvider.notifier)
+            .loadSeedData(
+              completedDraft.copyWith(
+                stepLoading: List<bool>.filled(
+                  OnboardingDraft.stepCount,
+                  false,
+                ),
+                incrementRevision: false,
+              ),
+            );
 
         final plan = RoutineOnboardingProjection.build(bundle);
         final routineRepo = _ref.read(routineRepositoryProvider);
@@ -903,6 +905,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return mounted && restoreGeneration == _backendRestoreGeneration;
   }
 
+  bool _isCurrentAuthOperation(int operation) {
+    return mounted && operation == _authOperationGeneration;
+  }
+
   bool get _useFirebaseBackend {
     return _ref.read(optivusBackendModeProvider) == OptivusBackendMode.firebase;
   }
@@ -975,31 +981,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         .fetchDraft(user.uid);
     if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
     if (savedDraft == null) {
-      final currentProfile = _ref.read(mockUserProfileProvider);
-      final step = currentProfile.onboardingStep.clamp(
-        0,
-        OnboardingDraft.lastStepIndex,
-      );
-      final synthesizedDraft = OnboardingDraft(
-        uid: user.uid,
-        currentStep: step,
-        lifeRole: LifeRoleDraft(
-          lifeRole: currentProfile.lifeRole.isNotEmpty
-              ? currentProfile.lifeRole
-              : 'software_engineer',
-          businessMode: currentProfile.businessMode ?? '',
-        ),
-        bodyBasics: BodyBasicsDraft(
-          ageRange: currentProfile.ageRange,
-          heightCm: currentProfile.height,
-          weightKg: currentProfile.weight,
-          gender: currentProfile.gender,
-        ),
-      );
       _resetNormalUserState(user);
-      _ref.read(mockOnboardingProvider.notifier).loadSeedData(synthesizedDraft);
-      await _ref.read(onboardingRepositoryProvider).saveDraft(synthesizedDraft);
-      if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
       await _ref.read(routineNotifierProvider.notifier).loadForOwner(user.uid);
       if (restoreGen != null && !_isCurrentRestore(restoreGen)) return;
       await _ref
@@ -1040,6 +1022,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           savedDraft.copyWith(
             uid: user.uid,
             stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+            incrementRevision: false,
           ),
         );
     _resetUserScopedMockState();
@@ -1062,6 +1045,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void _resetSignedOutState({String? targetUserUid}) {
+    _ref.read(authGenerationProvider.notifier).state++;
     OnboardingCompletionJobService.resetForSignedOut();
     _ref.invalidate(onboardingCompletionJobServiceProvider);
     _ref.invalidate(onboardingCompletionJobProvider);
@@ -1103,138 +1087,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final currentUser = state.user ?? _repository.currentUser;
     if (currentUser == null || currentUser.uid.trim().isEmpty) return;
     final actionUid = currentUser.uid;
-
-    if (action is ResetSetupSafelyAction ||
-        action is MigrateLegacySetupAction) {
-      await markOnboardingIncomplete(currentUser);
-      return;
-    }
-
-    final retryState = _ref.read(recoveryRetryControllerProvider);
-    if (retryState.maxAttemptsReached) {
-      await markOnboardingIncomplete(currentUser);
-      return;
-    }
-
+    final capturedAuthGeneration = _ref.read(authGenerationProvider);
+    final operations = OnboardingRecoveryOperations(
+      retryBackendRestore: retryBackendRestore,
+      markOnboardingIncomplete: () async {
+        final activeUser = state.user ?? _repository.currentUser;
+        if (activeUser == null || activeUser.uid != actionUid) return;
+        await markOnboardingIncomplete(activeUser);
+      },
+      signOut: logout,
+    );
     try {
-      if (action is RebuildBundleFromVerifiedDraftAction) {
-        final draft = await _ref
-            .read(onboardingRepositoryProvider)
-            .fetchDraft(actionUid);
-        if (!mounted || state.user?.uid != actionUid) return;
-        if (draft != null) {
-          final firstMissingStep = draft.stepCompleted.indexOf(false);
-          final isDraftValid =
-              draft.onboardingCompleted &&
-              firstMissingStep == -1 &&
-              draft.validateStep(14, draft.stepCompleted) == null;
-          if (!isDraftValid) {
-            final stepToResume = firstMissingStep != -1
-                ? firstMissingStep
-                : (draft.currentStep < OnboardingDraft.lastStepIndex
-                      ? draft.currentStep
-                      : 0);
-            final updatedDraft = draft.copyWith(
-              currentStep: stepToResume,
-              onboardingCompleted: false,
-            );
-            await _ref
-                .read(onboardingRepositoryProvider)
-                .saveDraft(updatedDraft);
-            if (!mounted || state.user?.uid != actionUid) return;
-            await markOnboardingIncomplete(currentUser);
-            return;
-          }
-          final bundle = OnboardingCompletionService.buildBundle(draft);
-          await _ref
-              .read(onboardingRepositoryProvider)
-              .saveCompletionBundle(bundle);
-          if (!mounted || state.user?.uid != actionUid) return;
-          final readbackBundle = await _ref
-              .read(onboardingRepositoryProvider)
-              .fetchCompletionBundle(actionUid);
-          if (!mounted || state.user?.uid != actionUid) return;
-          if (readbackBundle == null ||
-              readbackBundle.version != bundle.version) {
-            throw StateError(
-              'Completion bundle read-back verification failed during recovery.',
-            );
-          }
-          await retryBackendRestore();
-          return;
-        } else {
-          final recoveryResult =
-              await OnboardingCompletionService.recoverCompletionState(
-                uid: actionUid,
-                onboardingRepository: _ref.read(onboardingRepositoryProvider),
-                profileRepository: _ref.read(profileRepositoryProvider),
-              );
-          if (!mounted || state.user?.uid != actionUid) return;
-          if (recoveryResult.tier ==
-              OnboardingRecoveryTier.tier4ResetRequired) {
-            await markOnboardingIncomplete(currentUser);
-            return;
-          }
-          await retryBackendRestore();
-          return;
-        }
-      }
-
-      if (action is RetryNetworkAction) {
-        final recoveryResult =
-            await OnboardingCompletionService.recoverCompletionState(
-              uid: actionUid,
-              onboardingRepository: _ref.read(onboardingRepositoryProvider),
-              profileRepository: _ref.read(profileRepositoryProvider),
-            );
-        if (!mounted || state.user?.uid != actionUid) return;
-        if (recoveryResult.tier == OnboardingRecoveryTier.tier4ResetRequired) {
-          await markOnboardingIncomplete(currentUser);
-          return;
-        }
-        await retryBackendRestore();
+      await action.execute(_ref, actionUid, operations);
+      if (!mounted ||
+          state.user?.uid != actionUid ||
+          _ref.read(authGenerationProvider) != capturedAuthGeneration) {
         return;
       }
-
-      if (action is RepairProjectionAction) {
-        var bundle = await _ref
-            .read(onboardingRepositoryProvider)
-            .fetchCompletionBundle(actionUid);
-        if (!mounted || state.user?.uid != actionUid) return;
-        if (bundle == null) {
-          final recoveryResult =
-              await OnboardingCompletionService.recoverCompletionState(
-                uid: actionUid,
-                onboardingRepository: _ref.read(onboardingRepositoryProvider),
-                profileRepository: _ref.read(profileRepositoryProvider),
-              );
-          if (!mounted || state.user?.uid != actionUid) return;
-          bundle = recoveryResult.bundle;
-        }
-        if (bundle != null) {
-          try {
-            await const OnboardingFrontendHydrationService().hydrate(
-              read: _ref.read,
-              bundle: bundle,
-            );
-          } on RoutineProjectionFailureException catch (pe) {
-            debugPrint(
-              '[AuthState] Routine projection failed during RepairProjectionAction: $pe',
-            );
-          } catch (e) {
-            debugPrint(
-              '[AuthState] Unexpected hydration failure during RepairProjectionAction: $e',
-            );
-          }
-        }
-        if (!mounted || state.user?.uid != actionUid) return;
-        await retryBackendRestore();
-        return;
-      }
-
-      await retryBackendRestore();
     } catch (e) {
-      if (mounted && state.user?.uid == actionUid) {
+      debugPrint(
+        '[AuthRecovery] Recovery action failed safely (${e.runtimeType}).',
+      );
+      if (mounted &&
+          state.user?.uid == actionUid &&
+          _ref.read(authGenerationProvider) == capturedAuthGeneration) {
         final mapped = mapAuthError(e);
         state = state.copyWith(
           user: currentUser,

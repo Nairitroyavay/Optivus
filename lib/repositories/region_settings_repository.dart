@@ -42,7 +42,7 @@ class FirestoreRegionSettingsRepository implements RegionSettingsRepository {
   Future<void> saveRegionSettings(RegionSettings settings) {
     return _firestore
         .doc(FirestoreUserPaths.regionSettings(settings.userId))
-        .set(settings.toFirestoreMap(), SetOptions(merge: true));
+        .set(settings.toFirestoreMap());
   }
 }
 

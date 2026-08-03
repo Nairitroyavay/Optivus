@@ -5,7 +5,6 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
-import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
@@ -16,6 +15,7 @@ import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 
 import 'package:optivus/services/background_sync_wake_lock_manager.dart';
 
@@ -33,8 +33,10 @@ class OnboardingCompletionJobService {
   final Map<String, OnboardingCompletionJob> _memoryJobs = {};
 
   static final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
+  static int _operationGeneration = 0;
 
   static void resetForSignedOut() {
+    _operationGeneration++;
     _inFlight.clear();
   }
 
@@ -58,16 +60,21 @@ class OnboardingCompletionJobService {
     if (uid.trim().isEmpty) {
       throw ArgumentError('Cannot run completion job with empty uid.');
     }
-    final plan = RoutineOnboardingProjection.build(bundle);
-    final operationKey = '$uid:${plan.fingerprint}';
+    final operationKey = '$uid:${bundle.effectiveSourceFingerprint}';
     final activeOperation = _inFlight[operationKey];
     if (activeOperation != null) return activeOperation;
+    final operationGeneration = ++_operationGeneration;
+    final authGeneration = reader == null
+        ? null
+        : reader(authGenerationProvider);
 
     final operation = _runCompletionJob(
       uid: uid,
       finalDraft: finalDraft,
       bundle: bundle,
-      sourceFingerprint: plan.fingerprint,
+      sourceFingerprint: bundle.effectiveSourceFingerprint,
+      operationGeneration: operationGeneration,
+      authGeneration: authGeneration,
       reader: reader,
     );
     _inFlight[operationKey] = operation;
@@ -96,6 +103,8 @@ class OnboardingCompletionJobService {
     required OnboardingDraft finalDraft,
     required OnboardingCompletionBundle bundle,
     required String sourceFingerprint,
+    required int operationGeneration,
+    required int? authGeneration,
     Reader? reader,
   }) async {
     return runWithWakeLock<OnboardingCompletionJob>(
@@ -106,6 +115,7 @@ class OnboardingCompletionJobService {
         var job = await _loadOrCreateJob(
           uid: uid,
           sourceFingerprint: sourceFingerprint,
+          draftRevision: finalDraft.revision,
           now: now,
         );
         if (job.status == OnboardingJobStatus.completed &&
@@ -114,19 +124,27 @@ class OnboardingCompletionJobService {
         }
 
         job = job.copyWith(
-          status: OnboardingJobStatus.inProgress,
+          status: OnboardingJobStatus.running,
           updatedAt: now,
           clearLastError: true,
         );
         await _saveJobStatus(job);
 
         void checkSession() {
+          if (operationGeneration != _operationGeneration) {
+            throw StateError('Job cancelled by a newer operation.');
+          }
           if (uid.trim().isEmpty) {
             throw StateError(
               'Job cancelled due to invalid or empty authenticated UID.',
             );
           }
           if (reader != null) {
+            if (reader(authGenerationProvider) != authGeneration) {
+              throw StateError(
+                'Job cancelled because the authenticated session changed.',
+              );
+            }
             final profile = reader(mockUserProfileProvider);
             if (profile.uid.trim().isEmpty || profile.uid != uid) {
               throw StateError(
@@ -137,222 +155,303 @@ class OnboardingCompletionJobService {
         }
 
         try {
-          // Stage 1: PERSIST_DRAFT
+          checkSession();
+          if (!job.isStageCompleted(OnboardingCompletionStage.validateInput)) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.validateInput,
+            );
+            _validateCompletionInput(uid, finalDraft, bundle);
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.validateInput,
+            );
+          }
+
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.persistDraft)) {
             job = await _beginStage(
               job,
               OnboardingCompletionStage.persistDraft,
             );
-
             await onboardingRepository.flushPendingDraftSave();
             await onboardingRepository.saveFinalDraftImmediately(finalDraft);
-
-            final readbackDraft = await onboardingRepository.fetchDraft(uid);
-            if (readbackDraft == null || 
-                readbackDraft.uid != uid || 
-                !readbackDraft.onboardingCompleted) {
-              throw StateError('Draft read-back verification failed.');
-            }
-
-            final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
-              ..[OnboardingCompletionStage.persistDraft.name] = true;
-            job = job.copyWith(stagesCompleted: nextCompleted);
-            await _saveJobStatus(job);
+            await onboardingRepository.flushPendingDraftSave();
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.persistDraft,
+            );
           }
 
-          // Stage 2: PERSIST_BUNDLE
+          checkSession();
+          if (!job.isStageCompleted(OnboardingCompletionStage.verifyDraft)) {
+            job = await _beginStage(job, OnboardingCompletionStage.verifyDraft);
+            final readbackDraft = await onboardingRepository.fetchDraft(uid);
+            _verifyFinalDraft(readbackDraft, finalDraft);
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.verifyDraft,
+            );
+          }
+
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.persistBundle)) {
             job = await _beginStage(
               job,
               OnboardingCompletionStage.persistBundle,
             );
-
             await onboardingRepository.saveCompletionBundle(bundle);
-
-            final readbackBundle = await onboardingRepository
-                .fetchCompletionBundle(uid);
-            if (readbackBundle == null ||
-                readbackBundle.version != bundle.version) {
-              throw StateError('Bundle read-back verification failed.');
-            }
-
-            final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
-              ..[OnboardingCompletionStage.persistBundle.name] = true;
-            job = job.copyWith(stagesCompleted: nextCompleted);
-            await _saveJobStatus(job);
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.persistBundle,
+            );
           }
 
-          // Stage 3: PROJECT_ROUTINES
+          checkSession();
+          if (!job.isStageCompleted(OnboardingCompletionStage.verifyBundle)) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.verifyBundle,
+            );
+            final readbackBundle = await onboardingRepository
+                .fetchCompletionBundle(uid);
+            _verifyCompletionBundle(readbackBundle, bundle);
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.verifyBundle,
+            );
+          }
+
           checkSession();
           if (!job.isStageCompleted(
-            OnboardingCompletionStage.projectRoutines,
+            OnboardingCompletionStage.reconcileRoutines,
           )) {
             job = await _beginStage(
               job,
-              OnboardingCompletionStage.projectRoutines,
+              OnboardingCompletionStage.reconcileRoutines,
             );
-
-            final projectionResult = await onboardingRepository
-                .completeOnboarding(finalDraft: finalDraft, bundle: bundle);
-
-            final receipt = projectionResult.receipt;
-            
-            RoutineOnboardingEventProjectionResult historyResult;
-            if (reader != null) {
-              historyResult = await const RoutineOnboardingEventProjector()
-                  .projectCreatedEvents(
-                    read: reader,
-                    bundle: bundle,
-                  );
-            } else {
-              if (requireRoutineVerification) {
-                throw StateError('Onboarding frontend reader is required for history verification.');
-              }
-              final computedHistoryIds = const RoutineOnboardingEventProjector()
-                  .computeExpectedEventIds(bundle);
-              final plan = RoutineOnboardingProjection.build(bundle);
-              historyResult = RoutineOnboardingEventProjectionResult(
-                projectionId: plan.projectionId,
-                attemptedCount: 0,
-                expectedEventIds: computedHistoryIds,
-                appliedEventIds: computedHistoryIds,
-                failedEventIds: const [],
-              );
-            }
-            
-            final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
-              ..[OnboardingCompletionStage.projectRoutines.name] = true;
+            final result = await onboardingRepository.completeOnboarding(
+              finalDraft: finalDraft,
+              bundle: bundle,
+            );
+            final receipt = result.receipt;
             job = job.copyWith(
-              stagesCompleted: nextCompleted,
               expectedRoutineIds: receipt.expectedItemIds,
               appliedRoutineIds: receipt.createdItemIds,
               existingRoutineIds: receipt.existingItemIds,
               repairedRoutineIds: receipt.repairedItemIds,
               failedRoutineIds: receipt.failedItemIds,
+            );
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.reconcileRoutines,
+            );
+          }
+
+          checkSession();
+          if (!job.isStageCompleted(OnboardingCompletionStage.verifyRoutines)) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.verifyRoutines,
+            );
+            await _verifyRoutineProjection(
+              uid: uid,
+              bundle: bundle,
+              reader: reader,
+            );
+            if (job.failedRoutineIds.isNotEmpty ||
+                !_sameIds(job.expectedRoutineIds, <String>{
+                  ...job.appliedRoutineIds,
+                  ...job.existingRoutineIds,
+                  ...job.repairedRoutineIds,
+                })) {
+              throw StateError('Routine accounting verification failed.');
+            }
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.verifyRoutines,
+            );
+          }
+
+          checkSession();
+          if (!job.isStageCompleted(
+            OnboardingCompletionStage.projectRoutineHistory,
+          )) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.projectRoutineHistory,
+            );
+            final historyResult = await _projectRoutineHistory(
+              bundle: bundle,
+              reader: reader,
+            );
+            job = job.copyWith(
               expectedHistoryIds: historyResult.expectedEventIds,
               appliedHistoryIds: historyResult.appliedEventIds,
+              existingHistoryIds: historyResult.existingEventIds,
+              repairedHistoryIds: historyResult.repairedEventIds,
               failedHistoryIds: historyResult.failedEventIds,
             );
-            await _saveJobStatus(job);
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.projectRoutineHistory,
+            );
           }
 
-          // Stage 4: PROJECT_HABITS
           checkSession();
-          if (!job.isStageCompleted(OnboardingCompletionStage.projectHabits)) {
+          if (!job.isStageCompleted(
+            OnboardingCompletionStage.verifyRoutineHistory,
+          )) {
             job = await _beginStage(
               job,
-              OnboardingCompletionStage.projectHabits,
+              OnboardingCompletionStage.verifyRoutineHistory,
             );
-
-            if (reader != null) {
-              final hydrationResult =
-                  await const OnboardingFrontendHydrationService().hydrate(
-                    read: reader,
-                    bundle: bundle,
-                  );
-              job = job.copyWith(
-                expectedHabitIds: hydrationResult.expectedHabitSystemIds,
-                appliedHabitIds: hydrationResult.appliedHabitSystemIds,
-                failedHabitIds: hydrationResult.failedHabitSystemIds,
-                expectedHistoryIds: [
-                  ...job.expectedHistoryIds,
-                  ...hydrationResult.expectedHistoryIds,
-                ],
-                appliedHistoryIds: [
+            if (job.failedHistoryIds.isNotEmpty ||
+                !_sameIds(job.expectedHistoryIds, <String>{
                   ...job.appliedHistoryIds,
-                  ...hydrationResult.appliedHistoryIds,
-                ],
-                failedHistoryIds: [
-                  ...job.failedHistoryIds,
-                  ...hydrationResult.failedHistoryIds,
-                ],
-              );
-            } else if (requireFrontendHydration) {
+                  ...job.existingHistoryIds,
+                  ...job.repairedHistoryIds,
+                })) {
               throw StateError(
-                'Onboarding frontend hydration dependency is required.',
+                'Routine History read-back verification failed.',
               );
             }
-            final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
-              ..[OnboardingCompletionStage.projectHabits.name] = true;
-            job = job.copyWith(stagesCompleted: nextCompleted);
-            await _saveJobStatus(job);
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.verifyRoutineHistory,
+            );
           }
 
-          // Stage 5: UPDATE_PROFILE
           checkSession();
-          if (!job.isStageCompleted(OnboardingCompletionStage.updateProfile)) {
+          if (!job.isStageCompleted(
+            OnboardingCompletionStage.reconcileHabitSystems,
+          )) {
             job = await _beginStage(
               job,
-              OnboardingCompletionStage.updateProfile,
+              OnboardingCompletionStage.reconcileHabitSystems,
             );
-
-            final plan = RoutineOnboardingProjection.build(bundle);
-            final activeRoutineRepo = reader != null
-                ? reader(routineRepositoryProvider)
-                : routineRepository;
-            if (activeRoutineRepo == null) {
-              if (requireRoutineVerification) {
+            if (reader == null) {
+              if (requireFrontendHydration) {
                 throw StateError(
-                  'Routine repository dependency is required before profile finalization.',
+                  'Onboarding frontend hydration dependency is required.',
                 );
               }
             } else {
-              final receipt = await activeRoutineRepo.fetchProjectionReceipt(
-                uid,
-                plan.projectionId,
+              final hydration = await const OnboardingFrontendHydrationService()
+                  .hydrate(read: reader, bundle: bundle);
+              job = job.copyWith(
+                expectedHabitIds: hydration.expectedHabitSystemIds,
+                appliedHabitIds: hydration.createdHabitSystemIds,
+                existingHabitIds: hydration.existingHabitSystemIds,
+                repairedHabitIds: hydration.repairedHabitSystemIds,
+                failedHabitIds: hydration.failedHabitSystemIds,
               );
-              if (receipt == null ||
-                  receipt.status != 'completed' ||
-                  receipt.cursor != receipt.totalCount ||
-                  receipt.sourceBundleFingerprint != plan.fingerprint) {
-                throw StateError(
-                  'Cannot transition profile to onboardingCompleted: true before projection receipt is complete and fingerprint-matched.',
-                );
-              }
-              final actualItems = await activeRoutineRepo.fetchRoutineItems(
-                uid,
-              );
-              final validation = const RoutineProjectionReceiptValidator()
-                  .validate(
-                    receipt: receipt,
-                    actualItems: actualItems,
-                    ownerUid: uid,
-                    plan: plan,
-                  );
-              if (!validation.isValid) {
-                throw StateError(
-                  'Cannot complete job with invalid receipt: ${validation.failureReason}',
-                );
-              }
             }
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.reconcileHabitSystems,
+            );
+          }
 
+          checkSession();
+          if (!job.isStageCompleted(
+            OnboardingCompletionStage.verifyHabitSystems,
+          )) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.verifyHabitSystems,
+            );
+            if (job.failedHabitIds.isNotEmpty ||
+                !_sameIds(job.expectedHabitIds, <String>{
+                  ...job.appliedHabitIds,
+                  ...job.existingHabitIds,
+                  ...job.repairedHabitIds,
+                })) {
+              throw StateError('Habit-system read-back verification failed.');
+            }
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.verifyHabitSystems,
+            );
+          }
+
+          checkSession();
+          if (!job.isStageCompleted(
+            OnboardingCompletionStage.reloadControllers,
+          )) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.reloadControllers,
+            );
+            if (reader != null) {
+              await const OnboardingFrontendHydrationService()
+                  .reloadControllers(read: reader, bundle: bundle);
+            }
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.reloadControllers,
+            );
+          }
+
+          checkSession();
+          if (!job.isStageCompleted(
+            OnboardingCompletionStage.verifyFrontendState,
+          )) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.verifyFrontendState,
+            );
+            if (reader != null) {
+              const OnboardingFrontendHydrationService().verifyFrontendState(
+                read: reader,
+                bundle: bundle,
+              );
+            }
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.verifyFrontendState,
+            );
+          }
+
+          checkSession();
+          if (!job.isStageCompleted(
+            OnboardingCompletionStage.finalizeProfile,
+          )) {
+            job = await _beginStage(
+              job,
+              OnboardingCompletionStage.finalizeProfile,
+            );
+            _verifyFinalizationAccounting(job);
             var profile = await profileRepository.fetchUserProfile(uid);
-            profile ??= UserProfile.empty(uid: uid);
+            if (profile == null) {
+              throw StateError(
+                'Root UserProfile is required for finalization.',
+              );
+            }
             profile = profile.copyWith(
               onboardingInputCompleted: true,
               onboardingProjectionStatus: 'completed',
               onboardingCompleted: true,
               updatedAt: DateTime.now(),
             );
-
-            final nextCompleted = Map<String, bool>.from(job.stagesCompleted)
-              ..[OnboardingCompletionStage.updateProfile.name] = true;
-            final updatedJob = job.copyWith(stagesCompleted: nextCompleted);
-
+            final updatedJob = _stageCompletedCopy(
+              job,
+              OnboardingCompletionStage.finalizeProfile,
+            );
             if (firestore != null) {
               final batch = firestore!.batch();
               batch.set(
-                firestore!.doc(FirestoreUserPaths.profile(profile.uid)),
+                firestore!.doc(FirestoreUserPaths.user(profile.uid)),
                 profile.toFirestoreMap(),
                 SetOptions(merge: true),
               );
               batch.set(
                 firestore!.doc(
-                  FirestoreUserPaths.onboardingCompletionJob(updatedJob.uid),
+                  FirestoreUserPaths.onboardingCompletionJob(
+                    updatedJob.ownerUid,
+                  ),
                 ),
-                updatedJob.toMap(),
+                updatedJob.toFirestoreMap(),
               );
               await batch.commit();
             } else {
@@ -360,22 +459,14 @@ class OnboardingCompletionJobService {
               await _saveJobStatus(updatedJob);
             }
             job = updatedJob;
-
-            if (reader != null) {
-              try {
-                reader(mockUserProfileProvider.notifier).completeOnboarding();
-              } catch (e) {
-                // Profile notifier update failed during job finalization
-              }
-            }
           }
 
-          // Stage 6: COMPLETE_JOB
           checkSession();
           job = job.copyWith(
             status: OnboardingJobStatus.completed,
             stage: OnboardingCompletionStage.completed,
             updatedAt: DateTime.now(),
+            completedAt: DateTime.now(),
           );
           await _saveJobStatus(job);
           return job;
@@ -383,7 +474,9 @@ class OnboardingCompletionJobService {
           final now = DateTime.now();
           final failure = _buildSanitizedFailure(e, job.stage);
           job = job.copyWith(
-            status: OnboardingJobStatus.failed,
+            status: failure.retryable
+                ? OnboardingJobStatus.retryableFailure
+                : OnboardingJobStatus.fatalFailure,
             retryCount: job.retryCount + 1,
             lastError: failure.toJsonString(),
             lastFailureCode: failure.failureCode,
@@ -391,6 +484,7 @@ class OnboardingCompletionJobService {
             retryable: failure.retryable,
             publicMessageKey: failure.publicMessageKey,
             diagnosticCategory: failure.diagnosticCategory,
+            safeCauseType: failure.errorType,
             failedEntityIds: failure.failedEntityIds,
             lastFailureOccurredAt: now,
           );
@@ -401,9 +495,165 @@ class OnboardingCompletionJobService {
     );
   }
 
+  void _validateCompletionInput(
+    String uid,
+    OnboardingDraft draft,
+    OnboardingCompletionBundle bundle,
+  ) {
+    if (draft.uid != uid || bundle.uid != uid) {
+      throw ArgumentError('Completion input owner mismatch.');
+    }
+    if (!draft.onboardingCompleted ||
+        draft.currentStep != OnboardingDraft.lastStepIndex ||
+        draft.stepCompleted.length != OnboardingDraft.stepCount ||
+        draft.stepCompleted.any((value) => !value)) {
+      throw ArgumentError('Final onboarding draft is incomplete.');
+    }
+    if (bundle.sourceFingerprint != draft.effectiveSourceFingerprint ||
+        bundle.draftRevision != draft.revision ||
+        bundle.version != OnboardingCompletionBundle.schemaVersion) {
+      throw ArgumentError('Completion bundle does not match the final draft.');
+    }
+  }
+
+  void _verifyFinalDraft(OnboardingDraft? actual, OnboardingDraft expected) {
+    if (actual == null ||
+        actual.uid != expected.uid ||
+        actual.revision != expected.revision ||
+        actual.effectiveSourceFingerprint !=
+            expected.effectiveSourceFingerprint ||
+        actual.onboardingCompleted != expected.onboardingCompleted ||
+        actual.currentStep != expected.currentStep ||
+        actual.stepCompleted.length != OnboardingDraft.stepCount ||
+        actual.stepCompleted.any((value) => !value) ||
+        actual.toMap()['schemaVersion'] != OnboardingDraft.schemaVersion) {
+      throw StateError('Final draft read-back verification failed.');
+    }
+  }
+
+  void _verifyCompletionBundle(
+    OnboardingCompletionBundle? actual,
+    OnboardingCompletionBundle expected,
+  ) {
+    if (actual == null ||
+        actual.uid != expected.uid ||
+        actual.version != expected.version ||
+        actual.sourceFingerprint != expected.sourceFingerprint ||
+        actual.draftRevision != expected.draftRevision ||
+        !_sameIds(actual.expectedRoutineIds, expected.expectedRoutineIds) ||
+        !_sameIds(actual.expectedHistoryIds, expected.expectedHistoryIds) ||
+        !_sameIds(actual.expectedHabitIds, expected.expectedHabitIds) ||
+        !_sameIds(actual.acceptedSourceIds, expected.acceptedSourceIds) ||
+        !_sameIds(actual.generatedSourceIds, expected.generatedSourceIds)) {
+      throw StateError('Completion bundle read-back verification failed.');
+    }
+  }
+
+  Future<void> _verifyRoutineProjection({
+    required String uid,
+    required OnboardingCompletionBundle bundle,
+    Reader? reader,
+  }) async {
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final activeRepository = reader != null
+        ? reader(routineRepositoryProvider)
+        : routineRepository;
+    if (activeRepository == null) {
+      if (requireRoutineVerification) {
+        throw StateError('Routine repository is required for verification.');
+      }
+      return;
+    }
+    final receipt = await activeRepository.fetchProjectionReceipt(
+      uid,
+      plan.projectionId,
+    );
+    if (receipt == null ||
+        receipt.status != 'completed' ||
+        receipt.cursor != receipt.totalCount ||
+        receipt.sourceBundleFingerprint != plan.fingerprint) {
+      throw StateError('Routine projection receipt verification failed.');
+    }
+    final items = await activeRepository.fetchRoutineItems(uid);
+    final validation = const RoutineProjectionReceiptValidator().validate(
+      receipt: receipt,
+      actualItems: items,
+      ownerUid: uid,
+      plan: plan,
+    );
+    if (!validation.isValid) {
+      throw StateError('Routine projection document verification failed.');
+    }
+  }
+
+  Future<RoutineOnboardingEventProjectionResult> _projectRoutineHistory({
+    required OnboardingCompletionBundle bundle,
+    Reader? reader,
+  }) async {
+    if (reader != null) {
+      return const RoutineOnboardingEventProjector().projectCreatedEvents(
+        read: reader,
+        bundle: bundle,
+      );
+    }
+    if (requireRoutineVerification) {
+      throw StateError(
+        'History repository reader is required for verification.',
+      );
+    }
+    final ids = const RoutineOnboardingEventProjector().computeExpectedEventIds(
+      bundle,
+    );
+    return RoutineOnboardingEventProjectionResult(
+      projectionId: RoutineOnboardingProjection.build(bundle).projectionId,
+      attemptedCount: 0,
+      expectedEventIds: ids,
+      appliedEventIds: ids,
+    );
+  }
+
+  void _verifyFinalizationAccounting(OnboardingCompletionJob job) {
+    if (!job.isStageCompleted(OnboardingCompletionStage.verifyDraft) ||
+        !job.isStageCompleted(OnboardingCompletionStage.verifyBundle) ||
+        !job.isStageCompleted(OnboardingCompletionStage.verifyRoutines) ||
+        !job.isStageCompleted(OnboardingCompletionStage.verifyRoutineHistory) ||
+        !job.isStageCompleted(OnboardingCompletionStage.verifyHabitSystems) ||
+        !job.isStageCompleted(OnboardingCompletionStage.verifyFrontendState) ||
+        job.failedRoutineIds.isNotEmpty ||
+        job.failedHistoryIds.isNotEmpty ||
+        job.failedHabitIds.isNotEmpty) {
+      throw StateError('Profile finalization prerequisites are incomplete.');
+    }
+  }
+
+  bool _sameIds(Iterable<String> left, Iterable<String> right) {
+    final a = left.toSet();
+    final b = right.toSet();
+    return a.length == b.length && a.containsAll(b);
+  }
+
+  OnboardingCompletionJob _stageCompletedCopy(
+    OnboardingCompletionJob job,
+    OnboardingCompletionStage stage,
+  ) {
+    final completed = Map<String, bool>.from(job.stagesCompleted)
+      ..[stage.name] = true;
+    return job.copyWith(stagesCompleted: completed, updatedAt: DateTime.now());
+  }
+
+  Future<OnboardingCompletionJob> _markStageCompleted(
+    OnboardingCompletionJob job,
+    OnboardingCompletionStage stage,
+  ) async {
+    final next = _stageCompletedCopy(job, stage);
+    await _saveJobStatus(next);
+    return next;
+  }
+
   Future<OnboardingCompletionJob> _loadOrCreateJob({
     required String uid,
     required String sourceFingerprint,
+    required int draftRevision,
     required DateTime now,
   }) async {
     final existing = await _loadJobStatus(uid);
@@ -415,6 +665,7 @@ class OnboardingCompletionJobService {
         stage: OnboardingCompletionStage.init,
         stagesCompleted: const {},
         sourceFingerprint: sourceFingerprint,
+        draftRevision: draftRevision,
         retryCount: 0,
         createdAt: now,
         updatedAt: now,
@@ -424,17 +675,43 @@ class OnboardingCompletionJobService {
     if (existing.uid != uid) {
       throw StateError('Persisted onboarding completion job owner mismatch.');
     }
-    if (existing.schemaVersion !=
-        OnboardingCompletionJob.currentSchemaVersion) {
+    if (existing.schemaVersion < 1 ||
+        existing.schemaVersion > OnboardingCompletionJob.currentSchemaVersion) {
       throw StateError('Unsupported onboarding completion job schema version.');
     }
-    if (existing.sourceFingerprint != null &&
+    // Legacy broad stages cannot prove completion of any of the finer v2
+    // verification barriers. Restart safely from validation while retaining
+    // only owner-scoped identity and retry evidence in the legacy document.
+    if (existing.schemaVersion < OnboardingCompletionJob.currentSchemaVersion) {
+      return OnboardingCompletionJob(
+        jobId: existing.jobId,
+        ownerUid: uid,
+        status: OnboardingJobStatus.pending,
+        stage: OnboardingCompletionStage.validateInput,
+        stagesCompleted: const {},
+        sourceFingerprint: sourceFingerprint,
+        draftRevision: draftRevision,
+        retryCount: existing.retryCount,
+        lastFailureCode: existing.lastFailureCode,
+        lastFailureStage: existing.lastFailureStage,
+        retryable: existing.retryable,
+        publicMessageKey: existing.publicMessageKey,
+        diagnosticCategory: existing.diagnosticCategory,
+        safeCauseType: existing.safeCauseType,
+        failedEntityIds: existing.failedEntityIds,
+        lastFailureOccurredAt: existing.lastFailureOccurredAt,
+        createdAt: existing.createdAt,
+        updatedAt: now,
+      );
+    }
+    if (existing.sourceFingerprint.isNotEmpty &&
         existing.sourceFingerprint != sourceFingerprint) {
       return existing.copyWith(
         status: OnboardingJobStatus.pending,
         stage: OnboardingCompletionStage.init,
         stagesCompleted: const {},
         sourceFingerprint: sourceFingerprint,
+        draftRevision: draftRevision,
         retryCount: 0,
         updatedAt: now,
         clearLastError: true,
@@ -443,6 +720,8 @@ class OnboardingCompletionJobService {
     }
     return existing.copyWith(
       sourceFingerprint: sourceFingerprint,
+      draftRevision: draftRevision,
+      schemaVersion: OnboardingCompletionJob.currentSchemaVersion,
       updatedAt: now,
     );
   }
@@ -466,7 +745,7 @@ class OnboardingCompletionJobService {
       }
     }
     final next = job.copyWith(
-      status: OnboardingJobStatus.inProgress,
+      status: OnboardingJobStatus.running,
       stage: stage,
       updatedAt: DateTime.now(),
       clearLastError: true,
@@ -495,7 +774,7 @@ class OnboardingCompletionJobService {
     if (firestore != null) {
       await firestore!
           .doc(FirestoreUserPaths.onboardingCompletionJob(job.uid))
-          .set(job.toMap());
+          .set(job.toFirestoreMap());
       return;
     }
     if (requirePersistentJobs) {
@@ -519,7 +798,7 @@ class OnboardingCompletionJobService {
         retryable: error.retryable,
         publicMessageKey: error.publicMessageKey,
         failedEntityIds: error.failedEntityIds,
-        sanitizedMessage: _sanitizeMessage(error.toString()),
+        sanitizedMessage: 'Completion failed with code ${error.code}.',
       );
     }
     if (error is RoutineProjectionFailureException) {
@@ -531,7 +810,8 @@ class OnboardingCompletionJobService {
         retryable: error.reason == RoutineProjectionFailureReason.retryRequired,
         publicMessageKey: 'error_routine_projection_failed',
         failedEntityIds: const [],
-        sanitizedMessage: _sanitizeMessage(error.message),
+        sanitizedMessage:
+            'Routine projection failed with reason ${error.reason.name}.',
       );
     }
     if (error is RoutineProjectionRetryRequiredException) {
@@ -570,7 +850,7 @@ class OnboardingCompletionJobService {
         retryable: false,
         publicMessageKey: 'error_invalid_state',
         failedEntityIds: const [],
-        sanitizedMessage: _sanitizeMessage(error.message),
+        sanitizedMessage: 'Completion state validation failed.',
       );
     }
     if (error is ArgumentError) {
@@ -582,7 +862,7 @@ class OnboardingCompletionJobService {
         retryable: false,
         publicMessageKey: 'error_invalid_argument',
         failedEntityIds: const [],
-        sanitizedMessage: _sanitizeMessage(error.message),
+        sanitizedMessage: 'Completion argument validation failed.',
       );
     }
     return SanitizedFailurePayload(
@@ -593,21 +873,8 @@ class OnboardingCompletionJobService {
       retryable: true,
       publicMessageKey: 'error_execution_failed',
       failedEntityIds: const [],
-      sanitizedMessage: _sanitizeMessage(error.toString()),
+      sanitizedMessage: 'Completion execution failed safely.',
     );
-  }
-
-  static String _sanitizeMessage(String msg) {
-    if (msg.isEmpty) return 'No diagnostic message.';
-    var clean = msg.replaceAll(
-      RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'),
-      '[REDACTED_EMAIL]',
-    );
-    clean = clean.replaceAll(
-      RegExp(r'eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+'),
-      '[REDACTED_TOKEN]',
-    );
-    return clean;
   }
 }
 

@@ -242,7 +242,7 @@ void main() {
     );
 
     test(
-      'completeOnboarding repairs corrupt existing projected items before receipt noOp',
+      'completeOnboarding fails closed when an existing projection changed source',
       () async {
         final db = FakeRoutineDatabase();
         final repo = FakeOnboardingRepository(routineDatabase: db);
@@ -259,14 +259,11 @@ void main() {
           bundle: bundle,
         );
 
-        final repaired = db.itemsByUid['uid-8d']![plan.items.first.id]!;
+        final preserved = db.itemsByUid['uid-8d']![plan.items.first.id]!;
         expect(retry.outcome, RoutineProjectionOutcome.projected);
-        expect(retry.receipt.repairedItemIds, contains(plan.items.first.id));
-        expect(repaired.source, RoutineSource.onboarding);
-        expect(
-          repaired.onboardingSourceItemId,
-          plan.items.first.onboardingSourceItemId,
-        );
+        expect(retry.receipt.failedItemIds, contains(plan.items.first.id));
+        expect(retry.receipt.repairedItemIds, isEmpty);
+        expect(preserved.source, RoutineSource.manual);
       },
     );
   });
@@ -300,6 +297,9 @@ void main() {
 
         final bundle = _createTestBundle(uid: 'uid-9b', itemCount: 2);
         final draft = _createCompletedDraft('uid-9b');
+        await profileRepo.saveUserProfile(
+          UserProfile.empty(uid: 'uid-9b', email: 'test@example.com'),
+        );
 
         // Before completing event projection, completeOnboarding sets receipt status to 'pending'
         await onboardingRepo.completeOnboarding(
@@ -503,6 +503,7 @@ class _Harness {
   late final FakeRoutineRepository routines;
   late final FakeOnboardingRepository onboarding;
   late final FakeRoutineTransactionRepository transactions;
+  final FakeRoutineHistoryRepository history = FakeRoutineHistoryRepository();
   late final ProviderContainer container;
 
   _Harness() {
@@ -510,7 +511,7 @@ class _Harness {
     onboarding = FakeOnboardingRepository(routineDatabase: database);
     transactions = FakeRoutineTransactionRepository(
       routineRepository: routines,
-      historyRepository: FakeRoutineHistoryRepository(),
+      historyRepository: history,
     );
     container = ProviderContainer(
       overrides: [
@@ -520,6 +521,7 @@ class _Harness {
         routineRepositoryProvider.overrideWithValue(routines),
         onboardingRepositoryProvider.overrideWithValue(onboarding),
         routineTransactionRepositoryProvider.overrideWithValue(transactions),
+        routineHistoryRepositoryProvider.overrideWithValue(history),
       ],
     );
   }
@@ -562,12 +564,13 @@ OnboardingCompletionBundle _createTestBundle({
   required int itemCount,
 }) {
   final now = DateTime.utc(2026, 7, 25);
+  final draft = _createCompletedDraft(uid);
   return OnboardingCompletionBundle(
     uid: uid,
     createdAt: now,
     updatedAt: now,
     userProfilePatch: OnboardingCompletionService.buildBundle(
-      _createCompletedDraft(uid),
+      draft,
     ).userProfilePatch,
     baseTimelineBlocks: const [],
     finalTimelineItems: const [],
@@ -596,6 +599,8 @@ OnboardingCompletionBundle _createTestBundle({
     uploadedAssetReferences: const [],
     warnings: const [],
     duplicateSystemKeysMerged: const [],
+    sourceFingerprint: draft.effectiveSourceFingerprint,
+    draftRevision: draft.revision,
   );
 }
 

@@ -224,11 +224,16 @@ void main() {
         );
 
         const uid = 'user-job-3';
-        final draft = OnboardingDraft(uid: uid).copyWith(
+        final draft = OnboardingDraft(
+          uid: uid,
           onboardingCompleted: true,
           currentStep: OnboardingDraft.lastStepIndex,
+          stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
         );
         final bundle = OnboardingCompletionService.buildBundle(draft);
+        await profileRepo.saveUserProfile(
+          UserProfile.empty(uid: uid, email: 'test@example.com'),
+        );
 
         final completedJob = await jobService.runCompletionJob(
           uid: uid,
@@ -389,7 +394,10 @@ void main() {
 
         final draft = OnboardingDraft(
           uid: uid,
-        ).copyWith(onboardingCompleted: true);
+          currentStep: OnboardingDraft.lastStepIndex,
+          stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+          onboardingCompleted: true,
+        );
         await onboardingRepo.saveDraft(draft);
 
         final result = await OnboardingCompletionService.recoverCompletionState(
@@ -408,7 +416,7 @@ void main() {
     );
 
     test(
-      'recoverCompletionState executes Tier 3 when profile exists but draft/bundle missing',
+      'recoverCompletionState reports missing setup when only a profile exists',
       () async {
         final onboardingRepo = FakeOnboardingRepository();
         final profileRepo = FakeProfileRepository();
@@ -422,13 +430,15 @@ void main() {
           profileRepository: profileRepo,
         );
 
-        expect(result.tier, equals(OnboardingRecoveryTier.tier3Synthesized));
-        expect(result.bundle?.uid, equals(uid));
+        expect(result.tier, equals(OnboardingRecoveryTier.missingSetup));
+        expect(result.bundle, isNull);
+        expect(result.draft, isNull);
+        expect(await onboardingRepo.fetchDraft(uid), isNull);
       },
     );
 
     test(
-      'recoverCompletionState executes Tier 4 when no artifacts exist',
+      'recoverCompletionState reports missing setup when no artifacts exist',
       () async {
         final onboardingRepo = FakeOnboardingRepository();
         final profileRepo = FakeProfileRepository();
@@ -440,7 +450,7 @@ void main() {
           profileRepository: profileRepo,
         );
 
-        expect(result.tier, equals(OnboardingRecoveryTier.tier4ResetRequired));
+        expect(result.tier, equals(OnboardingRecoveryTier.missingSetup));
         expect(result.hasBundle, isFalse);
       },
     );

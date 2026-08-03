@@ -32,11 +32,11 @@ void main() {
         );
 
         const uid = 'stress-resume-user';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final bundle = OnboardingCompletionService.buildBundle(draft);
+        await profileRepo.saveUserProfile(
+          UserProfile.empty(uid: uid, email: 'test@example.com'),
+        );
 
         // Save draft and bundle beforehand to simulate stages 1 & 2 done
         await onboardingRepo.saveDraft(draft);
@@ -89,11 +89,11 @@ void main() {
         );
 
         const uid = 'stress-fail-user';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final bundle = OnboardingCompletionService.buildBundle(draft);
+        await profileRepo.saveUserProfile(
+          UserProfile.empty(uid: uid, email: 'test@example.com'),
+        );
 
         // Inject failure on first attempt
         onboardingRepo.failNextCompletionBeforeCommit();
@@ -135,11 +135,11 @@ void main() {
         );
 
         const uid = 'stress-resume-persisted-stage-user';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final bundle = OnboardingCompletionService.buildBundle(draft);
+        await profileRepo.saveUserProfile(
+          UserProfile.empty(uid: uid, email: 'test@example.com'),
+        );
 
         onboardingRepo.failNextCompletionBeforeCommit();
         await expectLater(
@@ -186,10 +186,7 @@ void main() {
         );
 
         const uid = 'stress-missing-reader-user';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final bundle = OnboardingCompletionService.buildBundle(draft);
 
         await expectLater(
@@ -235,8 +232,7 @@ void main() {
         final profileRepo = FakeProfileRepository();
         const uid = 'complex-draft-user';
 
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
+        final draft = _completedDraft(uid).copyWith(
           goodHabits: [
             const GoodHabitDraft(
               id: 'gh-1',
@@ -351,6 +347,19 @@ void main() {
       },
     );
   });
+}
+
+OnboardingDraft _completedDraft(String uid) {
+  return OnboardingDraft(
+    uid: uid,
+    currentStep: OnboardingDraft.lastStepIndex,
+    stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+    stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
+    stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+    onboardingCompleted: true,
+    createdAt: DateTime.utc(2026, 8, 3),
+    updatedAt: DateTime.utc(2026, 8, 3),
+  );
 }
 
 class _CountingOnboardingRepository extends FakeOnboardingRepository {

@@ -1338,8 +1338,7 @@ class _OnboardingStep4UnifiedState
     if (!kDebugMode) return;
     debugPrint(
       '[Onboarding4] aiMode=${OptivusRoutineImportAiConfig.mode.name} '
-      'workerUrlConfigured=${OptivusRoutineImportAiConfig.hasWorkerUrl} '
-      'workerBaseUrl=${OptivusRoutineImportAiConfig.workerBaseUrl.trim().isEmpty ? 'missing' : OptivusRoutineImportAiConfig.workerBaseUrl}',
+      'workerUrlConfigured=${OptivusRoutineImportAiConfig.hasWorkerUrl}',
     );
   }
 
@@ -1369,9 +1368,9 @@ class _OnboardingStep4UnifiedState
     debugPrint(
       '[Onboarding4] START source=${photo.source.name} '
       'purpose=${photo.purpose.name} '
-      'assetId=${photo.asset.assetId.trim().isEmpty ? 'missing' : photo.asset.assetId} '
-      'r2Key=${photo.asset.r2Key.trim().isEmpty ? 'missing' : 'exists'} '
-      'contentType=${photo.asset.contentType.trim().isEmpty ? 'missing' : photo.asset.contentType}',
+      'assetIdPresent=${photo.asset.assetId.trim().isNotEmpty} '
+      'r2KeyPresent=${photo.asset.r2Key.trim().isNotEmpty} '
+      'contentTypePresent=${photo.asset.contentType.trim().isNotEmpty}',
     );
   }
 
@@ -1382,11 +1381,10 @@ class _OnboardingStep4UnifiedState
     required List<String> warnings,
   }) {
     if (!kDebugMode) return;
-    final warningText = warnings.isEmpty ? 'none' : warnings.join(' | ');
     debugPrint(
       '[Onboarding4] RESULT source=${photo.source.name} '
       'controllerStatus=${controllerState.status.name} '
-      'resultNull=${result == null} warnings=$warningText',
+      'resultNull=${result == null} warningCount=${warnings.length}',
     );
     if (result != null) {
       debugPrint(
@@ -1420,7 +1418,7 @@ class _OnboardingStep4UnifiedState
     if (mapping.droppedExamples.isNotEmpty) {
       debugPrint(
         '[Onboarding4] DROPPED source=${photo.source.name} '
-        'examples=${mapping.droppedExampleText}',
+        'exampleCount=${mapping.droppedExamples.length}',
       );
     }
     if (mapping.blocks.isEmpty) {
@@ -1430,8 +1428,7 @@ class _OnboardingStep4UnifiedState
         'workerMode=${OptivusRoutineImportAiConfig.mode.name} '
         'uploadedAssetIdExists=${photo.asset.assetId.trim().isNotEmpty} '
         'uploadedAssetR2KeyExists=${photo.asset.r2Key.trim().isNotEmpty} '
-        'filtered=${mapping.filterSummary} '
-        'examples=${mapping.droppedExampleText}',
+        'droppedExampleCount=${mapping.droppedExamples.length}',
       );
     }
   }
@@ -1445,7 +1442,7 @@ class _OnboardingStep4UnifiedState
       ref.read(onboardingWorkTimelineProvider),
     ).length;
     debugPrint(
-      '[Onboarding4] role=${_role ?? 'unknown'} classBlocks=$classCount '
+      '[Onboarding4] classBlocks=$classCount '
       'workBlocks=$workCount allVisible=${classCount + workCount}',
     );
   }

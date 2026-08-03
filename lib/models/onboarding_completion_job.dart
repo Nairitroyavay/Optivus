@@ -1,16 +1,47 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum OnboardingCompletionStage {
-  init,
+  validateInput,
   persistDraft,
+  verifyDraft,
   persistBundle,
-  projectRoutines,
-  projectHabits,
-  updateProfile,
-  completed,
+  verifyBundle,
+  reconcileRoutines,
+  verifyRoutines,
+  projectRoutineHistory,
+  verifyRoutineHistory,
+  reconcileHabitSystems,
+  verifyHabitSystems,
+  reloadControllers,
+  verifyFrontendState,
+  finalizeProfile,
+  completed;
+
+  // Source-compatible aliases for callers compiled against the pre-v2 model.
+  // They serialize to the canonical v2 values above and are never accepted by
+  // Firestore Rules as separate enum strings.
+  @Deprecated('Use validateInput')
+  static const init = validateInput;
+  @Deprecated('Use reconcileRoutines')
+  static const projectRoutines = reconcileRoutines;
+  @Deprecated('Use reconcileHabitSystems')
+  static const projectHabits = reconcileHabitSystems;
+  @Deprecated('Use finalizeProfile')
+  static const updateProfile = finalizeProfile;
 }
 
-enum OnboardingJobStatus { pending, inProgress, completed, failed }
+enum OnboardingJobStatus {
+  pending,
+  running,
+  retryableFailure,
+  fatalFailure,
+  completed;
+
+  @Deprecated('Use running')
+  static const inProgress = running;
+  @Deprecated('Use retryableFailure or fatalFailure')
+  static const failed = retryableFailure;
+}
 
 class OnboardingCompletionFailure {
   final String code;
@@ -18,6 +49,7 @@ class OnboardingCompletionFailure {
   final bool retryable;
   final String publicMessageKey;
   final String diagnosticCategory;
+  final String safeCauseType;
   final List<String> failedEntityIds;
   final DateTime occurredAt;
 
@@ -27,6 +59,7 @@ class OnboardingCompletionFailure {
     required this.retryable,
     required this.publicMessageKey,
     required this.diagnosticCategory,
+    this.safeCauseType = 'unknown',
     required this.failedEntityIds,
     required this.occurredAt,
   });
@@ -42,6 +75,7 @@ class OnboardingCompletionFailureException implements Exception {
   bool get retryable => failure.retryable;
   String get publicMessageKey => failure.publicMessageKey;
   String get diagnosticCategory => failure.diagnosticCategory;
+  String get safeCauseType => failure.safeCauseType;
   List<String> get failedEntityIds => failure.failedEntityIds;
 
   @override
@@ -50,23 +84,29 @@ class OnboardingCompletionFailureException implements Exception {
 }
 
 class OnboardingCompletionJob {
-  static const int currentSchemaVersion = 1;
+  static const int currentSchemaVersion = 2;
 
   final String jobId;
-  final String uid;
+  final String ownerUid;
   final OnboardingJobStatus status;
   final OnboardingCompletionStage stage;
   final Map<String, bool> stagesCompleted;
-  final String? sourceFingerprint;
+  final String sourceFingerprint;
+  final int draftRevision;
   final int retryCount;
+
+  // Kept in memory/read compatibility for legacy tests and documents. It is
+  // sanitized and deliberately omitted from canonical Firestore writes.
   final String? lastError;
   final String? lastFailureCode;
   final String? lastFailureStage;
   final bool? retryable;
   final String? publicMessageKey;
   final String? diagnosticCategory;
+  final String? safeCauseType;
   final List<String> failedEntityIds;
   final DateTime? lastFailureOccurredAt;
+
   final List<String> expectedRoutineIds;
   final List<String> appliedRoutineIds;
   final List<String> existingRoutineIds;
@@ -74,6 +114,8 @@ class OnboardingCompletionJob {
   final List<String> failedRoutineIds;
   final List<String> expectedHistoryIds;
   final List<String> appliedHistoryIds;
+  final List<String> existingHistoryIds;
+  final List<String> repairedHistoryIds;
   final List<String> failedHistoryIds;
   final List<String> expectedHabitIds;
   final List<String> appliedHabitIds;
@@ -82,15 +124,18 @@ class OnboardingCompletionJob {
   final List<String> failedHabitIds;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? completedAt;
   final int schemaVersion;
 
-  const OnboardingCompletionJob({
+  OnboardingCompletionJob({
     required this.jobId,
-    required this.uid,
+    String? ownerUid,
+    String? uid,
     this.status = OnboardingJobStatus.pending,
-    this.stage = OnboardingCompletionStage.init,
+    this.stage = OnboardingCompletionStage.validateInput,
     this.stagesCompleted = const {},
-    this.sourceFingerprint,
+    this.sourceFingerprint = '',
+    this.draftRevision = 1,
     this.retryCount = 0,
     this.lastError,
     this.lastFailureCode,
@@ -98,6 +143,7 @@ class OnboardingCompletionJob {
     this.retryable,
     this.publicMessageKey,
     this.diagnosticCategory,
+    this.safeCauseType,
     this.failedEntityIds = const [],
     this.lastFailureOccurredAt,
     this.expectedRoutineIds = const [],
@@ -107,6 +153,8 @@ class OnboardingCompletionJob {
     this.failedRoutineIds = const [],
     this.expectedHistoryIds = const [],
     this.appliedHistoryIds = const [],
+    this.existingHistoryIds = const [],
+    this.repairedHistoryIds = const [],
     this.failedHistoryIds = const [],
     this.expectedHabitIds = const [],
     this.appliedHabitIds = const [],
@@ -115,20 +163,30 @@ class OnboardingCompletionJob {
     this.failedHabitIds = const [],
     required this.createdAt,
     required this.updatedAt,
+    this.completedAt,
     this.schemaVersion = currentSchemaVersion,
-  });
+  }) : assert(ownerUid != null || uid != null),
+       ownerUid = ownerUid ?? uid!;
 
-  bool isStageCompleted(OnboardingCompletionStage s) {
-    return stagesCompleted[s.name] == true;
+  @Deprecated('Use ownerUid')
+  String get uid => ownerUid;
+
+  List<String> get createdRoutineIds => appliedRoutineIds;
+  List<String> get createdHabitIds => appliedHabitIds;
+
+  bool isStageCompleted(OnboardingCompletionStage value) {
+    return stagesCompleted[value.name] == true;
   }
 
   OnboardingCompletionJob copyWith({
     String? jobId,
+    String? ownerUid,
     String? uid,
     OnboardingJobStatus? status,
     OnboardingCompletionStage? stage,
     Map<String, bool>? stagesCompleted,
     String? sourceFingerprint,
+    int? draftRevision,
     int? retryCount,
     String? lastError,
     bool clearLastError = false,
@@ -137,6 +195,7 @@ class OnboardingCompletionJob {
     bool? retryable,
     String? publicMessageKey,
     String? diagnosticCategory,
+    String? safeCauseType,
     List<String>? failedEntityIds,
     DateTime? lastFailureOccurredAt,
     bool clearLastFailure = false,
@@ -147,6 +206,8 @@ class OnboardingCompletionJob {
     List<String>? failedRoutineIds,
     List<String>? expectedHistoryIds,
     List<String>? appliedHistoryIds,
+    List<String>? existingHistoryIds,
+    List<String>? repairedHistoryIds,
     List<String>? failedHistoryIds,
     List<String>? expectedHabitIds,
     List<String>? appliedHabitIds,
@@ -155,15 +216,18 @@ class OnboardingCompletionJob {
     List<String>? failedHabitIds,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? completedAt,
+    bool clearCompletedAt = false,
     int? schemaVersion,
   }) {
     return OnboardingCompletionJob(
       jobId: jobId ?? this.jobId,
-      uid: uid ?? this.uid,
+      ownerUid: ownerUid ?? uid ?? this.ownerUid,
       status: status ?? this.status,
       stage: stage ?? this.stage,
       stagesCompleted: stagesCompleted ?? this.stagesCompleted,
       sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
+      draftRevision: draftRevision ?? this.draftRevision,
       retryCount: retryCount ?? this.retryCount,
       lastError: clearLastError ? null : (lastError ?? this.lastError),
       lastFailureCode: clearLastFailure
@@ -179,6 +243,9 @@ class OnboardingCompletionJob {
       diagnosticCategory: clearLastFailure
           ? null
           : (diagnosticCategory ?? this.diagnosticCategory),
+      safeCauseType: clearLastFailure
+          ? null
+          : (safeCauseType ?? this.safeCauseType),
       failedEntityIds: clearLastFailure
           ? const []
           : (failedEntityIds ?? this.failedEntityIds),
@@ -192,6 +259,8 @@ class OnboardingCompletionJob {
       failedRoutineIds: failedRoutineIds ?? this.failedRoutineIds,
       expectedHistoryIds: expectedHistoryIds ?? this.expectedHistoryIds,
       appliedHistoryIds: appliedHistoryIds ?? this.appliedHistoryIds,
+      existingHistoryIds: existingHistoryIds ?? this.existingHistoryIds,
+      repairedHistoryIds: repairedHistoryIds ?? this.repairedHistoryIds,
       failedHistoryIds: failedHistoryIds ?? this.failedHistoryIds,
       expectedHabitIds: expectedHabitIds ?? this.expectedHabitIds,
       appliedHabitIds: appliedHabitIds ?? this.appliedHabitIds,
@@ -200,6 +269,7 @@ class OnboardingCompletionJob {
       failedHabitIds: failedHabitIds ?? this.failedHabitIds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
       schemaVersion: schemaVersion ?? this.schemaVersion,
     );
   }
@@ -207,36 +277,40 @@ class OnboardingCompletionJob {
   Map<String, dynamic> toMap() {
     return {
       'jobId': jobId,
-      'uid': uid,
+      'ownerUid': ownerUid,
       'status': status.name,
       'stage': stage.name,
       'stagesCompleted': stagesCompleted,
-      if (sourceFingerprint != null) 'sourceFingerprint': sourceFingerprint,
+      'sourceFingerprint': sourceFingerprint,
+      'draftRevision': draftRevision,
       'retryCount': retryCount,
-      if (lastError != null) 'lastError': lastError,
-      if (lastFailureCode != null) 'lastFailureCode': lastFailureCode,
-      if (lastFailureStage != null) 'lastFailureStage': lastFailureStage,
+      if (lastFailureCode != null) 'failureCode': lastFailureCode,
+      if (lastFailureStage != null) 'failureStage': lastFailureStage,
       if (retryable != null) 'retryable': retryable,
       if (publicMessageKey != null) 'publicMessageKey': publicMessageKey,
       if (diagnosticCategory != null) 'diagnosticCategory': diagnosticCategory,
-      'failedEntityIds': failedEntityIds,
+      if (safeCauseType != null) 'safeCauseType': safeCauseType,
+      'failedEntityIds': _sortedUnique(failedEntityIds),
       if (lastFailureOccurredAt != null)
-        'lastFailureOccurredAt': lastFailureOccurredAt!.toIso8601String(),
-      'expectedRoutineIds': expectedRoutineIds,
-      'appliedRoutineIds': appliedRoutineIds,
-      'existingRoutineIds': existingRoutineIds,
-      'repairedRoutineIds': repairedRoutineIds,
-      'failedRoutineIds': failedRoutineIds,
-      'expectedHistoryIds': expectedHistoryIds,
-      'appliedHistoryIds': appliedHistoryIds,
-      'failedHistoryIds': failedHistoryIds,
-      'expectedHabitIds': expectedHabitIds,
-      'appliedHabitIds': appliedHabitIds,
-      'existingHabitIds': existingHabitIds,
-      'repairedHabitIds': repairedHabitIds,
-      'failedHabitIds': failedHabitIds,
+        'failureOccurredAt': lastFailureOccurredAt!.toIso8601String(),
+      'expectedRoutineIds': _sortedUnique(expectedRoutineIds),
+      'createdRoutineIds': _sortedUnique(appliedRoutineIds),
+      'existingRoutineIds': _sortedUnique(existingRoutineIds),
+      'repairedRoutineIds': _sortedUnique(repairedRoutineIds),
+      'failedRoutineIds': _sortedUnique(failedRoutineIds),
+      'expectedHistoryIds': _sortedUnique(expectedHistoryIds),
+      'appliedHistoryIds': _sortedUnique(appliedHistoryIds),
+      'existingHistoryIds': _sortedUnique(existingHistoryIds),
+      'repairedHistoryIds': _sortedUnique(repairedHistoryIds),
+      'failedHistoryIds': _sortedUnique(failedHistoryIds),
+      'expectedHabitIds': _sortedUnique(expectedHabitIds),
+      'createdHabitIds': _sortedUnique(appliedHabitIds),
+      'existingHabitIds': _sortedUnique(existingHabitIds),
+      'repairedHabitIds': _sortedUnique(repairedHabitIds),
+      'failedHabitIds': _sortedUnique(failedHabitIds),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
+      if (completedAt != null) 'completedAt': completedAt!.toIso8601String(),
       'schemaVersion': schemaVersion,
     };
   }
@@ -246,67 +320,88 @@ class OnboardingCompletionJob {
     map['createdAt'] = Timestamp.fromDate(createdAt);
     map['updatedAt'] = Timestamp.fromDate(updatedAt);
     if (lastFailureOccurredAt != null) {
-      map['lastFailureOccurredAt'] = Timestamp.fromDate(lastFailureOccurredAt!);
+      map['failureOccurredAt'] = Timestamp.fromDate(lastFailureOccurredAt!);
+    }
+    if (completedAt != null) {
+      map['completedAt'] = Timestamp.fromDate(completedAt!);
     }
     return map;
   }
 
   factory OnboardingCompletionJob.fromMap(Map<String, dynamic> map) {
     final stagesRaw = map['stagesCompleted'];
-    Map<String, bool> stagesCompleted = {};
+    final stagesCompleted = <String, bool>{};
     if (stagesRaw is Map) {
-      stagesCompleted = Map<String, bool>.from(stagesRaw);
+      for (final entry in stagesRaw.entries) {
+        final key = _migrateStageName(entry.key.toString());
+        if (entry.value == true) stagesCompleted[key] = true;
+      }
     }
     return OnboardingCompletionJob(
       jobId: map['jobId'] as String? ?? 'current',
-      uid: map['uid'] as String? ?? '',
-      status: _parseEnum(
-        OnboardingJobStatus.values,
-        map['status'],
-        OnboardingJobStatus.pending,
-      ),
-      stage: _parseEnum(
-        OnboardingCompletionStage.values,
-        map['stage'],
-        OnboardingCompletionStage.init,
-      ),
+      ownerUid: map['ownerUid'] as String? ?? map['uid'] as String? ?? '',
+      status: _parseStatus(map['status']),
+      stage: _parseStage(map['stage']),
       stagesCompleted: stagesCompleted,
-      sourceFingerprint: map['sourceFingerprint'] as String?,
-      retryCount: map['retryCount'] as int? ?? 0,
+      sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
+      draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
+      retryCount: (map['retryCount'] as num?)?.toInt() ?? 0,
       lastError: map['lastError'] as String?,
-      lastFailureCode: map['lastFailureCode'] as String?,
-      lastFailureStage: map['lastFailureStage'] as String?,
+      lastFailureCode:
+          map['failureCode'] as String? ?? map['lastFailureCode'] as String?,
+      lastFailureStage:
+          map['failureStage'] as String? ?? map['lastFailureStage'] as String?,
       retryable: map['retryable'] as bool?,
       publicMessageKey: map['publicMessageKey'] as String?,
       diagnosticCategory: map['diagnosticCategory'] as String?,
+      safeCauseType: map['safeCauseType'] as String?,
       failedEntityIds: _parseStringList(map['failedEntityIds']),
-      lastFailureOccurredAt: _parseDateTime(map['lastFailureOccurredAt']),
+      lastFailureOccurredAt: _parseDateTime(
+        map['failureOccurredAt'] ?? map['lastFailureOccurredAt'],
+      ),
       expectedRoutineIds: _parseStringList(map['expectedRoutineIds']),
-      appliedRoutineIds: _parseStringList(map['appliedRoutineIds']),
+      appliedRoutineIds: _parseStringList(
+        map['createdRoutineIds'] ?? map['appliedRoutineIds'],
+      ),
       existingRoutineIds: _parseStringList(map['existingRoutineIds']),
       repairedRoutineIds: _parseStringList(map['repairedRoutineIds']),
       failedRoutineIds: _parseStringList(map['failedRoutineIds']),
       expectedHistoryIds: _parseStringList(map['expectedHistoryIds']),
       appliedHistoryIds: _parseStringList(map['appliedHistoryIds']),
+      existingHistoryIds: _parseStringList(map['existingHistoryIds']),
+      repairedHistoryIds: _parseStringList(map['repairedHistoryIds']),
       failedHistoryIds: _parseStringList(map['failedHistoryIds']),
       expectedHabitIds: _parseStringList(map['expectedHabitIds']),
-      appliedHabitIds: _parseStringList(map['appliedHabitIds']),
+      appliedHabitIds: _parseStringList(
+        map['createdHabitIds'] ?? map['appliedHabitIds'],
+      ),
       existingHabitIds: _parseStringList(map['existingHabitIds']),
       repairedHabitIds: _parseStringList(map['repairedHabitIds']),
       failedHabitIds: _parseStringList(map['failedHabitIds']),
       createdAt: _parseDateTime(map['createdAt']) ?? DateTime.now(),
       updatedAt: _parseDateTime(map['updatedAt']) ?? DateTime.now(),
-      schemaVersion: map['schemaVersion'] as int? ?? currentSchemaVersion,
+      completedAt: _parseDateTime(map['completedAt']),
+      schemaVersion:
+          (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
     );
   }
 
-  static T _parseEnum<T extends Enum>(List<T> values, Object? raw, T fallback) {
-    if (raw is String) {
-      for (final v in values) {
-        if (v.name == raw) return v;
-      }
-    }
-    return fallback;
+  static OnboardingCompletionStage _parseStage(Object? raw) {
+    final migrated = _migrateStageName(raw?.toString() ?? 'validateInput');
+    return OnboardingCompletionStage.values.firstWhere(
+      (value) => value.name == migrated,
+      orElse: () => OnboardingCompletionStage.validateInput,
+    );
+  }
+
+  static OnboardingJobStatus _parseStatus(Object? raw) {
+    return switch (raw?.toString()) {
+      'inProgress' || 'in_progress' || 'running' => OnboardingJobStatus.running,
+      'failed' || 'retryableFailure' => OnboardingJobStatus.retryableFailure,
+      'fatalFailure' => OnboardingJobStatus.fatalFailure,
+      'completed' => OnboardingJobStatus.completed,
+      _ => OnboardingJobStatus.pending,
+    };
   }
 
   static DateTime? _parseDateTime(Object? value) {
@@ -323,4 +418,19 @@ class OnboardingCompletionJob {
       value.whereType<String>().where((id) => id.trim().isNotEmpty),
     );
   }
+}
+
+String _migrateStageName(String raw) {
+  return switch (raw) {
+    'init' => 'validateInput',
+    'projectRoutines' => 'reconcileRoutines',
+    'projectHabits' => 'reconcileHabitSystems',
+    'updateProfile' => 'finalizeProfile',
+    _ => raw,
+  };
+}
+
+List<String> _sortedUnique(Iterable<String> values) {
+  return values.where((value) => value.trim().isNotEmpty).toSet().toList()
+    ..sort();
 }

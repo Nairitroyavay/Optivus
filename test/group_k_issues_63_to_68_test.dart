@@ -229,6 +229,9 @@ void main() {
         final onboardingRepo = FakeOnboardingRepository(routineDatabase: db);
         final profileRepo = FakeProfileRepository();
         final routineRepo = FakeRoutineRepository(database: db);
+        await profileRepo.saveUserProfile(
+          UserProfile.empty(uid: uid, email: 'test@example.com'),
+        );
 
         final jobService = OnboardingCompletionJobService(
           onboardingRepository: onboardingRepo,
@@ -348,6 +351,9 @@ void main() {
           final onboardingRepo = FakeOnboardingRepository(routineDatabase: db);
           final profileRepo = FakeProfileRepository();
           final routineRepo = FakeRoutineRepository(database: db);
+          await profileRepo.saveUserProfile(
+            UserProfile.empty(uid: uid, email: 'test@example.com'),
+          );
 
           // Inject network / atomic failure before commit
           onboardingRepo.failNextCompletionBeforeCommit();
@@ -395,6 +401,9 @@ void main() {
           final profileRepo = FakeProfileRepository();
           final routineRepo = FakeRoutineRepository(database: db);
 
+          await profileRepo.saveUserProfile(
+            UserProfile.empty(uid: uid, email: 'test@example.com'),
+          );
           await onboardingRepo.saveDraft(draft);
           await onboardingRepo.flushPendingDraftSave();
           expect(onboardingRepo.isDraftSavedInMap(uid), isTrue);
@@ -1011,7 +1020,7 @@ void main() {
           );
           expect(tier2Result.bundle, isNotNull);
 
-          // Tier 3: Completion bundle and draft missing, but user profile exists -> synthesizes fallback bundle
+          // Missing setup is never synthesized from a profile alone.
           final repoTier3 = FakeOnboardingRepository(routineDatabase: db);
           final userProfile = UserProfile.empty(uid: uid);
           await profileRepo.saveUserProfile(userProfile);
@@ -1022,11 +1031,9 @@ void main() {
                 onboardingRepository: repoTier3,
                 profileRepository: profileRepo,
               );
-          expect(
-            tier3Result.tier,
-            equals(OnboardingRecoveryTier.tier3Synthesized),
-          );
-          expect(tier3Result.bundle, isNotNull);
+          expect(tier3Result.tier, equals(OnboardingRecoveryTier.missingSetup));
+          expect(tier3Result.bundle, isNull);
+          expect(tier3Result.draft, isNull);
 
           // Tier 4: Bundle, draft, and profile all missing -> reset required
           const uidEmpty = 'user-empty-tier4';
@@ -1066,10 +1073,7 @@ void main() {
           expect(restartAction.actionId, equals('resume_onboarding'));
 
           const forceResyncAction = RepairProjectionAction();
-          expect(
-            forceResyncAction.actionId,
-            equals('repair_projection'),
-          );
+          expect(forceResyncAction.actionId, equals('repair_projection'));
         },
       );
     },

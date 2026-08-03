@@ -865,11 +865,12 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       if (kDebugMode) {
         debugPrint(
           '[SkinCareWorkerClient] routine raw '
-          'routinePlans=$plans '
-          'weeklyRoutine=$wR '
-          'suggestedProducts=$sP '
-          'warnings=$warnings '
-          'rejectedPlanReasons=$rejectedPlanReasons',
+          'routinePlanCount=${plans is List ? plans.length : 0} '
+          'weeklyRoutineCount=${wR is List ? wR.length : 0} '
+          'suggestedProductCount=${sP is List ? sP.length : 0} '
+          'warningCount=${warnings is List ? warnings.length : 0} '
+          'rejectedPlanCount='
+          '${rejectedPlanReasons is List ? rejectedPlanReasons.length : 0}',
         );
       }
 

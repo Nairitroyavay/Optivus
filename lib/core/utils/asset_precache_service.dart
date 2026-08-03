@@ -11,8 +11,11 @@ class SplashAssetCacheService {
     for (final assetPath in splashAssetPaths) {
       try {
         await precacheImage(AssetImage(assetPath), context);
-      } catch (e) {
-        debugPrint('[SplashAssetCacheService] Error precaching $assetPath: $e');
+      } catch (error) {
+        debugPrint(
+          '[SplashAssetCacheService] Asset precache failed safely '
+          '(${error.runtimeType}).',
+        );
       }
     }
   }

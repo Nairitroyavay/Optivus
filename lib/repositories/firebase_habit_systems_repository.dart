@@ -40,6 +40,8 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
         'onboardingSourceId': system.onboardingSourceId,
       if (system.onboardingProjectionId != null)
         'onboardingProjectionId': system.onboardingProjectionId,
+      if (system.sourceFingerprint != null)
+        'sourceFingerprint': system.sourceFingerprint,
       'schemaVersion': system.schemaVersion,
       'version': system.version,
     };
@@ -114,8 +116,8 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
       return const HabitSystemWriteResult.failure('Failed to create');
     } on HabitSystemWriteConflict catch (e) {
       return HabitSystemWriteResult.failure(e.message);
-    } catch (e) {
-      return HabitSystemWriteResult.failure(e.toString());
+    } catch (_) {
+      return const HabitSystemWriteResult.failure('Failed to create safely');
     }
   }
 
@@ -164,8 +166,8 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
       return HabitSystemWriteResult.success(updatedSystem);
     } on HabitSystemWriteConflict catch (e) {
       return HabitSystemWriteResult.failure(e.message);
-    } catch (e) {
-      return HabitSystemWriteResult.failure(e.toString());
+    } catch (_) {
+      return const HabitSystemWriteResult.failure('Failed to update safely');
     }
   }
 
@@ -216,8 +218,8 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
       return HabitSystemWriteResult.success(nextSystem);
     } on HabitSystemWriteConflict catch (e) {
       return HabitSystemWriteResult.failure(e.message);
-    } catch (e) {
-      return HabitSystemWriteResult.failure(e.toString());
+    } catch (_) {
+      return const HabitSystemWriteResult.failure('Failed to archive safely');
     }
   }
 
@@ -268,8 +270,8 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
       return HabitSystemWriteResult.success(nextSystem);
     } on HabitSystemWriteConflict catch (e) {
       return HabitSystemWriteResult.failure(e.message);
-    } catch (e) {
-      return HabitSystemWriteResult.failure(e.toString());
+    } catch (_) {
+      return const HabitSystemWriteResult.failure('Failed to restore safely');
     }
   }
 
@@ -404,7 +406,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
           systemSnaps[sys.systemId] = sysSnap;
         }
 
-        final appliedSystemIds = <String>[];
+        final createdSystemIds = <String>[];
+        final existingSystemIds = <String>[];
+        final repairedSystemIds = <String>[];
         final failedSystemIds = <String>[];
 
         for (final sys in systems) {
@@ -419,16 +423,22 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
               sysSnap.data()!,
               documentId: sysSnap.id,
             );
-            if (existing.ownerUid != ownerUid) {
+            if (!_sameProjectionIdentity(existing, sys)) {
               failedSystemIds.add(sys.systemId);
               continue;
             }
-            if (existing.linkedRoutineIds.isEmpty &&
-                sys.linkedRoutineIds.isNotEmpty) {
-              tx.update(docRef, {
-                'linkedRoutineIds': sys.linkedRoutineIds,
-                'updatedAt': FieldValue.serverTimestamp(),
-              });
+            if (_sameProjectedSystem(existing, sys)) {
+              existingSystemIds.add(sys.systemId);
+            } else {
+              final repaired = sys.copyWith(
+                createdAt: existing.createdAt,
+                version: existing.version + 1,
+              );
+              final repairedData = _systemToFirestoreMap(repaired);
+              repairedData['createdAt'] = sysSnap.data()!['createdAt'];
+              repairedData['updatedAt'] = FieldValue.serverTimestamp();
+              tx.set(docRef, repairedData);
+              repairedSystemIds.add(sys.systemId);
             }
           } else {
             final sysData = _systemToFirestoreMap(sys);
@@ -436,9 +446,15 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
             sysData['updatedAt'] = FieldValue.serverTimestamp();
             sysData['version'] = 1;
             tx.set(docRef, sysData);
+            createdSystemIds.add(sys.systemId);
           }
-          appliedSystemIds.add(sys.systemId);
         }
+
+        final appliedSystemIds = <String>{
+          ...createdSystemIds,
+          ...existingSystemIds,
+          ...repairedSystemIds,
+        }.toList()..sort();
 
         final existingApplied = projSnap.exists
             ? List<String>.from(projSnap.data()?['appliedSystemIds'] ?? [])
@@ -481,6 +497,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
 
         return _HabitProjectionBatchOutcome(
           appliedSystemIds: appliedSystemIds,
+          createdSystemIds: createdSystemIds,
+          existingSystemIds: existingSystemIds,
+          repairedSystemIds: repairedSystemIds,
           failedSystemIds: failedSystemIds,
           status: status,
         );
@@ -490,6 +509,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
           'Habit system projection partially failed',
           expectedSystemIds: expectedIds,
           appliedSystemIds: outcome.appliedSystemIds,
+          createdSystemIds: outcome.createdSystemIds,
+          existingSystemIds: outcome.existingSystemIds,
+          repairedSystemIds: outcome.repairedSystemIds,
           failedSystemIds: outcome.failedSystemIds,
           projectionStatus: outcome.status,
         );
@@ -498,6 +520,9 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
         systems.isNotEmpty ? systems.first : null,
         expectedSystemIds: expectedIds,
         appliedSystemIds: outcome.appliedSystemIds,
+        createdSystemIds: outcome.createdSystemIds,
+        existingSystemIds: outcome.existingSystemIds,
+        repairedSystemIds: outcome.repairedSystemIds,
         projectionStatus: outcome.status,
       );
     } catch (e) {
@@ -522,12 +547,44 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
 
 class _HabitProjectionBatchOutcome {
   final List<String> appliedSystemIds;
+  final List<String> createdSystemIds;
+  final List<String> existingSystemIds;
+  final List<String> repairedSystemIds;
   final List<String> failedSystemIds;
   final String status;
 
   const _HabitProjectionBatchOutcome({
     required this.appliedSystemIds,
+    required this.createdSystemIds,
+    required this.existingSystemIds,
+    required this.repairedSystemIds,
     required this.failedSystemIds,
     required this.status,
   });
+}
+
+bool _sameProjectionIdentity(
+  HabitSystemRecord actual,
+  HabitSystemRecord expected,
+) {
+  return actual.ownerUid == expected.ownerUid &&
+      actual.source == 'onboarding' &&
+      actual.onboardingSourceId == expected.onboardingSourceId &&
+      actual.onboardingProjectionId == expected.onboardingProjectionId &&
+      actual.sourceFingerprint == expected.sourceFingerprint &&
+      actual.schemaVersion == expected.schemaVersion;
+}
+
+bool _sameProjectedSystem(
+  HabitSystemRecord actual,
+  HabitSystemRecord expected,
+) {
+  return _sameProjectionIdentity(actual, expected) &&
+      actual.title == expected.title &&
+      actual.description == expected.description &&
+      actual.category == expected.category &&
+      actual.systemType == expected.systemType &&
+      actual.status == expected.status &&
+      actual.linkedRoutineIds.toSet().containsAll(expected.linkedRoutineIds) &&
+      expected.linkedRoutineIds.toSet().containsAll(actual.linkedRoutineIds);
 }

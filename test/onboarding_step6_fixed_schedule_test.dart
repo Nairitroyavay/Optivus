@@ -766,6 +766,7 @@ class FakeOnboardingRepository implements OnboardingRepository {
   Future<void> saveFinalDraftImmediately(OnboardingDraft draft) async {
     await saveDraft(draft);
   }
+
   @override
   Future<void> saveDraft(OnboardingDraft draft) async {}
   @override

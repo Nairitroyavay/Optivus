@@ -265,8 +265,11 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
         );
       }
       return result;
-    } catch (e, stack) {
-      debugPrint('Worker extraction caught error: $e\n$stack');
+    } catch (error) {
+      debugPrint(
+        '[RoutineImportAiClient] Worker extraction failed safely '
+        '(${error.runtimeType}).',
+      );
       return _fallbackResult(
         uid: uid,
         review: review,
@@ -297,7 +300,7 @@ class WorkerRoutineImportAiClient implements RoutineImportAiClient {
     debugPrint(
       '[RoutineImportAiClient] invalid worker response: reason=$reason '
       'uidMatches=${result.uid == uid} source=${result.source.name} '
-      'expectedSource=${review.source.name} rawSource=${raw['source']} '
+      'expectedSource=${review.source.name} '
       'hasCandidatesList=${raw['candidates'] is List} '
       'candidateCount=${raw['candidates'] is List ? (raw['candidates'] as List).length : 'n/a'}',
     );

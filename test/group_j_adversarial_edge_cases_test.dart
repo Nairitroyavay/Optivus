@@ -6,8 +6,8 @@ import 'package:optivus/core/utils/platform_channel_boundary.dart';
 import 'package:optivus/services/background_sync_wake_lock_manager.dart';
 import 'package:optivus/services/native/notification_intent_service.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/models/onboarding_draft.dart';
-import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
@@ -205,11 +205,13 @@ void main() {
           wakeLock: wakeLock,
         );
 
-        final draft = OnboardingDraft.fromMap({
-          'uid': 'user_fail',
-          'onboardingCompleted': true,
-        });
-        final bundle = OnboardingCompletionBundle.fromMap({'uid': 'user_fail'});
+        final draft = OnboardingDraft(
+          uid: 'user_fail',
+          currentStep: OnboardingDraft.lastStepIndex,
+          stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+          onboardingCompleted: true,
+        );
+        final bundle = OnboardingCompletionService.buildBundle(draft);
 
         await expectLater(
           service.runCompletionJob(
@@ -274,6 +276,11 @@ void main() {
 }
 
 class FailingProfileRepository extends FakeProfileRepository {
+  @override
+  Future<UserProfile?> fetchUserProfile(String uid) async {
+    return UserProfile.empty(uid: uid, email: 'test@example.com');
+  }
+
   @override
   Future<void> saveUserProfile(UserProfile profile) async {
     throw StateError('Database connection broken during profile update');

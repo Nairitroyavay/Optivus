@@ -42,12 +42,24 @@ class FirestoreAppPreferencesRepository implements AppPreferencesRepository {
   }
 
   @override
-  Future<void> saveAppPreferences(String uid, UserPreferences preferences) {
-    return _firestore.doc(FirestoreUserPaths.appPreferences(uid)).set({
-      ...preferences.toFirestoreMap(),
-      'uid': uid,
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
-    }, SetOptions(merge: true));
+  Future<void> saveAppPreferences(
+    String uid,
+    UserPreferences preferences,
+  ) async {
+    final reference = _firestore.doc(FirestoreUserPaths.appPreferences(uid));
+    final existing = await reference.get();
+    final existingCreatedAt = existing.data()?['createdAt'];
+    final createdAt = existingCreatedAt is Timestamp
+        ? existingCreatedAt.toDate()
+        : preferences.createdAt;
+    final now = DateTime.now();
+    await reference.set(
+      preferences.toFirestoreMap(
+        ownerUid: uid,
+        createdAtOverride: createdAt ?? now,
+        updatedAtOverride: now,
+      ),
+    );
   }
 }
 

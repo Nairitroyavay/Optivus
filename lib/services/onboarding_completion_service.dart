@@ -8,23 +8,40 @@ import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/services/habit_system_onboarding_projection.dart';
+import 'package:optivus/services/routine_onboarding_event_projector.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 
 enum OnboardingRecoveryTier {
-  tier1BundleFound,
-  tier2RebuiltFromDraft,
-  tier3Synthesized,
-  tier4ResetRequired,
+  verifiedBundleFound,
+  rebuiltFromVerifiedDraft,
+  partialDraftResume,
+  missingSetup,
+  corruptDraft,
+  migrationRequired,
+  ownerMismatch;
+
+  @Deprecated('Use verifiedBundleFound')
+  static const tier1BundleFound = verifiedBundleFound;
+  @Deprecated('Use rebuiltFromVerifiedDraft')
+  static const tier2RebuiltFromDraft = rebuiltFromVerifiedDraft;
+  @Deprecated('Completion synthesis was removed; use missingSetup')
+  static const tier3Synthesized = missingSetup;
+  @Deprecated('Use missingSetup')
+  static const tier4ResetRequired = missingSetup;
 }
 
 class OnboardingCompletionResult {
   final OnboardingRecoveryTier tier;
   final OnboardingCompletionBundle? bundle;
   final OnboardingDraft? draft;
+  final String? failureCode;
 
   const OnboardingCompletionResult({
     required this.tier,
     this.bundle,
     this.draft,
+    this.failureCode,
   });
 
   bool get hasBundle => bundle != null;
@@ -39,65 +56,81 @@ class OnboardingCompletionService {
     required ProfileRepository profileRepository,
     RoutineRepository? routineRepository,
   }) async {
-    // Tier 1: Try fetching existing completion bundle
-    var bundle = await onboardingRepository.fetchCompletionBundle(uid);
-    if (bundle != null && bundle.uid == uid) {
+    final bundle = await onboardingRepository.fetchCompletionBundle(uid);
+    if (bundle != null && bundle.uid != uid) {
       return OnboardingCompletionResult(
-        tier: OnboardingRecoveryTier.tier1BundleFound,
+        tier: OnboardingRecoveryTier.ownerMismatch,
+        failureCode: 'completion_bundle_owner_mismatch',
+      );
+    }
+    if (bundle != null) {
+      if (bundle.version != OnboardingCompletionBundle.schemaVersion ||
+          bundle.sourceFingerprint.length != 64 ||
+          bundle.draftRevision < 1) {
+        return OnboardingCompletionResult(
+          tier: OnboardingRecoveryTier.migrationRequired,
+          bundle: bundle,
+          failureCode: 'completion_bundle_schema_migration_required',
+        );
+      }
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.verifiedBundleFound,
         bundle: bundle,
       );
     }
 
-    // Tier 2: Fetch onboarding draft and rebuild bundle
     final draft = await onboardingRepository.fetchDraft(uid);
-    if (draft != null && draft.uid == uid) {
-      final completedDraft = draft.copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
-      await onboardingRepository.saveDraft(completedDraft);
-      bundle = buildBundle(completedDraft);
-      await onboardingRepository.saveCompletionBundle(bundle);
+    if (draft != null && draft.uid != uid) {
       return OnboardingCompletionResult(
-        tier: OnboardingRecoveryTier.tier2RebuiltFromDraft,
-        bundle: bundle,
-        draft: completedDraft,
+        tier: OnboardingRecoveryTier.ownerMismatch,
+        draft: draft,
+        failureCode: 'onboarding_draft_owner_mismatch',
+      );
+    }
+    if (draft != null && draft.onboardingCompleted) {
+      final isVerifiedComplete =
+          draft.currentStep == OnboardingDraft.lastStepIndex &&
+          draft.stepCompleted.length == OnboardingDraft.stepCount &&
+          draft.stepCompleted.every((value) => value) &&
+          draft.revision >= 1 &&
+          draft.effectiveSourceFingerprint.length == 64;
+      if (!isVerifiedComplete) {
+        return OnboardingCompletionResult(
+          tier: OnboardingRecoveryTier.corruptDraft,
+          draft: draft,
+          failureCode: 'completed_draft_failed_verification',
+        );
+      }
+      final rebuilt = buildBundle(draft);
+      await onboardingRepository.saveCompletionBundle(rebuilt);
+      final readback = await onboardingRepository.fetchCompletionBundle(uid);
+      if (readback == null ||
+          readback.uid != uid ||
+          readback.sourceFingerprint != rebuilt.sourceFingerprint ||
+          readback.draftRevision != draft.revision ||
+          readback.version != OnboardingCompletionBundle.schemaVersion) {
+        return OnboardingCompletionResult(
+          tier: OnboardingRecoveryTier.corruptDraft,
+          draft: draft,
+          failureCode: 'rebuilt_bundle_readback_failed',
+        );
+      }
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.rebuiltFromVerifiedDraft,
+        bundle: readback,
+        draft: draft,
+      );
+    }
+    if (draft != null) {
+      return OnboardingCompletionResult(
+        tier: OnboardingRecoveryTier.partialDraftResume,
+        draft: draft,
       );
     }
 
-    // Tier 3: Synthesize draft and bundle from user profile if profile exists
-    final profile = await profileRepository.fetchUserProfile(uid);
-    if (profile != null) {
-      final synthesizedDraft = OnboardingDraft(
-        uid: uid,
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-        lifeRole: LifeRoleDraft(
-          lifeRole: profile.lifeRole.isNotEmpty
-              ? profile.lifeRole
-              : 'software_engineer',
-          businessMode: profile.businessMode ?? '',
-        ),
-        bodyBasics: BodyBasicsDraft(
-          ageRange: profile.ageRange,
-          heightCm: profile.height,
-          weightKg: profile.weight,
-          gender: profile.gender,
-        ),
-      );
-      await onboardingRepository.saveDraft(synthesizedDraft);
-      bundle = buildBundle(synthesizedDraft);
-      await onboardingRepository.saveCompletionBundle(bundle);
-      return OnboardingCompletionResult(
-        tier: OnboardingRecoveryTier.tier3Synthesized,
-        bundle: bundle,
-        draft: synthesizedDraft,
-      );
-    }
-
-    // Tier 4: No artifacts found -> Reset input state to step 0
     return const OnboardingCompletionResult(
-      tier: OnboardingRecoveryTier.tier4ResetRequired,
+      tier: OnboardingRecoveryTier.missingSetup,
+      failureCode: 'onboarding_draft_missing',
     );
   }
 
@@ -144,7 +177,7 @@ class OnboardingCompletionService {
           )
         : null;
 
-    return OnboardingCompletionBundle(
+    final initialBundle = OnboardingCompletionBundle(
       uid: draft.uid,
       createdAt: now,
       updatedAt: now,
@@ -161,6 +194,32 @@ class OnboardingCompletionService {
       uploadedAssetReferences: _uploadedAssetReferences(draft),
       warnings: preview.warnings,
       duplicateSystemKeysMerged: preview.duplicateSystemKeysSkipped,
+      sourceFingerprint: draft.effectiveSourceFingerprint,
+      draftRevision: draft.revision,
+    );
+    final routinePlan = RoutineOnboardingProjection.build(initialBundle);
+    final habitSystems = HabitSystemOnboardingProjection.build(
+      initialBundle,
+      routinePlan.items,
+      now: now,
+    );
+    final acceptedSourceIds = <String>{
+      ...routineItems.map((item) => item.id),
+      ...initialBundle.goodHabitTemplates.map((item) => item.id),
+      ...badHabitCheckIns.map((item) => item.id),
+      ...goals.map((item) => item.id),
+    }.toList()..sort();
+    final generatedSourceIds = <String>{
+      ...routinePlan.items.map((item) => item.id),
+      ...habitSystems.map((item) => item.systemId),
+    }.toList()..sort();
+    return initialBundle.copyWithContractMetadata(
+      expectedRoutineIds: routinePlan.items.map((item) => item.id).toList(),
+      expectedHistoryIds: const RoutineOnboardingEventProjector()
+          .computeExpectedEventIds(initialBundle),
+      expectedHabitIds: habitSystems.map((item) => item.systemId).toList(),
+      acceptedSourceIds: acceptedSourceIds,
+      generatedSourceIds: generatedSourceIds,
     );
   }
 
@@ -244,14 +303,16 @@ class OnboardingCompletionService {
     // Generate base routines
     final scheduled = baseBlocks.map((b) {
       final blockType = _routineBlockTypeForDraft(b.blockType);
+      final isOvernight =
+          b.crossesMidnight || b.endsNextDay || b.endMinute <= b.startMinute;
       return RoutineItem(
         id: b.id,
         userId: draft.uid,
         title: b.title,
         startMinute: b.startMinute,
         endMinute: b.endMinute,
-        crossesMidnight: b.crossesMidnight,
-        endsNextDay: b.endsNextDay,
+        crossesMidnight: isOvernight,
+        endsNextDay: isOvernight,
         repeatDays: b.repeatDays,
         blockType: blockType,
         category: _categoryForTimelineSource(b.section, blockType),
@@ -416,7 +477,6 @@ class OnboardingCompletionService {
       'schemaVersion': OnboardingCompletionBundle.schemaVersion,
       'createdAt': draft.createdAt?.toIso8601String() ?? now.toIso8601String(),
       'updatedAt': now.toIso8601String(),
-      'source': OnboardingDraft.sourceOnboarding,
       'onboardingInputCompleted': true,
       'onboardingProjectionStatus': 'pending',
       'onboardingCompleted': false,

@@ -57,9 +57,7 @@ void main() {
         expect(find.textContaining('Reason:'), findsOneWidget);
         expect(find.text('Retry Connection'), findsWidgets);
         expect(
-          find.text(
-            'Retry the last operation after a network failure.',
-          ),
+          find.text('Retry the last operation after a network failure.'),
           findsOneWidget,
         );
       },
@@ -68,7 +66,7 @@ void main() {
 
   group('Group H - Issue 35: Draft Profile Repair Action Execution', () {
     test(
-      'executeRecoveryAction handles all action types with 4-tier fallback logic',
+      'executeRecoveryAction fails closed when action preconditions are absent',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final container = ProviderContainer(
@@ -88,19 +86,20 @@ void main() {
 
         final notifier = container.read(authProvider.notifier);
 
-        await notifier.executeRecoveryAction(
-          const ResumeOnboardingAction(),
+        await notifier.executeRecoveryAction(const ResumeOnboardingAction());
+        expect(
+          container.read(authProvider).status,
+          equals(AuthFlowStatus.backendRestoreFailed),
         );
-        expect(container.read(authProvider).onboardingIncomplete, isTrue);
 
-        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
+        await notifier.executeRecoveryAction(
+          const RebuildBundleFromVerifiedDraftAction(),
+        );
         await notifier.executeRecoveryAction(
           const RebuildBundleFromVerifiedDraftAction(),
         );
         await notifier.executeRecoveryAction(const RetryNetworkAction());
-        await notifier.executeRecoveryAction(
-          const RepairProjectionAction(),
-        );
+        await notifier.executeRecoveryAction(const RepairProjectionAction());
       },
     );
   });

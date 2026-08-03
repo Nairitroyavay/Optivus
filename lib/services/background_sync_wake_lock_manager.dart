@@ -15,13 +15,13 @@ class DefaultSystemWakeLock implements SystemWakeLock {
   @override
   Future<void> acquire({required String tag}) async {
     _heldTags.add(tag);
-    debugPrint('[SystemWakeLock] Acquired wake lock claim for tag: $tag');
+    debugPrint('[SystemWakeLock] Acquired wake lock claim.');
   }
 
   @override
   Future<void> release({required String tag}) async {
     _heldTags.remove(tag);
-    debugPrint('[SystemWakeLock] Released wake lock claim for tag: $tag');
+    debugPrint('[SystemWakeLock] Released wake lock claim.');
   }
 
   @override

@@ -28,6 +28,9 @@ class RoutineOccurrenceFirestoreCodec {
     'note',
     'displayTitleOverride',
     'undoToPlannedAllowed',
+    'onboardingProjectionId',
+    'onboardingSourceItemId',
+    'sourceFingerprint',
     'createdAt',
     'updatedAt',
     'schemaVersion',
@@ -50,6 +53,12 @@ class RoutineOccurrenceFirestoreCodec {
     if (!_occurrenceSources.contains(record.source) ||
         !_occurrenceActions.contains(record.action)) {
       throw ArgumentError('Invalid Routine occurrence source/action.');
+    }
+    if (record.source == 'onboarding' &&
+        (record.onboardingProjectionId?.trim().isEmpty != false ||
+            record.onboardingSourceItemId?.trim().isEmpty != false ||
+            record.sourceFingerprint?.length != 64)) {
+      throw ArgumentError('Onboarding History metadata is incomplete.');
     }
     if (record.operationKey.trim().isEmpty ||
         record.operationKey.length > 256) {
@@ -82,6 +91,12 @@ class RoutineOccurrenceFirestoreCodec {
       if (record.displayTitleOverride?.trim().isNotEmpty == true)
         'displayTitleOverride': record.displayTitleOverride!.trim(),
       'undoToPlannedAllowed': record.undoToPlannedAllowed,
+      if (record.onboardingProjectionId != null)
+        'onboardingProjectionId': record.onboardingProjectionId,
+      if (record.onboardingSourceItemId != null)
+        'onboardingSourceItemId': record.onboardingSourceItemId,
+      if (record.sourceFingerprint != null)
+        'sourceFingerprint': record.sourceFingerprint,
       'createdAt': Timestamp.fromDate(record.createdAt.toUtc()),
       'updatedAt': Timestamp.fromDate(record.updatedAt.toUtc()),
       'schemaVersion': record.schemaVersion,
@@ -131,6 +146,9 @@ class RoutineOccurrenceFirestoreCodec {
       note: data['note'] as String?,
       displayTitleOverride: data['displayTitleOverride'] as String?,
       undoToPlannedAllowed: data['undoToPlannedAllowed'] as bool? ?? false,
+      onboardingProjectionId: data['onboardingProjectionId'] as String?,
+      onboardingSourceItemId: data['onboardingSourceItemId'] as String?,
+      sourceFingerprint: data['sourceFingerprint'] as String?,
       createdAt:
           readRoutineDateTime(data['createdAt']) ??
           (throw const FormatException(
@@ -178,7 +196,14 @@ const _durableOccurrenceStatuses = {
   RoutineStatus.moved,
 };
 
-const _occurrenceSources = {'routine', 'tracker', 'checkIn', 'money', 'system'};
+const _occurrenceSources = {
+  'routine',
+  'tracker',
+  'checkIn',
+  'money',
+  'system',
+  'onboarding',
+};
 
 const _occurrenceActions = {
   'start',
@@ -191,6 +216,8 @@ const _occurrenceActions = {
   'checkIn',
   'toggleSubtask',
   'makeTiny',
+  'project',
+  'repair',
 };
 
 String stableRoutineOccurrenceId({

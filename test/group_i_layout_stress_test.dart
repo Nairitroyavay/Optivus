@@ -7,6 +7,7 @@ import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/state/app_state.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -159,8 +160,19 @@ void main() {
             addTearDown(tester.view.resetDevicePixelRatio);
 
             await tester.pumpWidget(
-              const ProviderScope(
-                child: MaterialApp(home: Scaffold(body: OnboardingStep14())),
+              ProviderScope(
+                overrides: [
+                  mockOnboardingProvider.overrideWith((_) {
+                    final notifier = MockOnboardingNotifier();
+                    notifier.loadSeedData(
+                      const OnboardingDraft(uid: 'layout_test_owner'),
+                    );
+                    return notifier;
+                  }),
+                ],
+                child: const MaterialApp(
+                  home: Scaffold(body: OnboardingStep14()),
+                ),
               ),
             );
 

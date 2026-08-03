@@ -4,6 +4,7 @@ import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 
 enum RoutineImportAiStatus { idle, extracting, extracted, failed }
 
@@ -38,6 +39,7 @@ class RoutineImportAiState {
 class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
   final Ref _ref;
   final RoutineImportAiClient _client;
+  int _operationGeneration = 0;
 
   RoutineImportAiController(this._ref, this._client)
     : super(const RoutineImportAiState());
@@ -57,6 +59,8 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
       return _fail(preflightError);
     }
     final verifiedUser = user!;
+    final operationGeneration = ++_operationGeneration;
+    final authGeneration = _ref.read(authGenerationProvider);
     if (verifiedUser.uid.trim().isEmpty) {
       return _fail('Sign in before running AI extraction.');
     }
@@ -64,6 +68,13 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
     final startAssetKey = review.uploadedAssetR2Key;
 
     final idToken = await _ref.read(authRepositoryProvider).currentIdToken();
+    if (!_isCurrentOperation(
+      verifiedUser.uid,
+      operationGeneration,
+      authGeneration,
+    )) {
+      return null;
+    }
     if (idToken == null || idToken.trim().isEmpty) {
       return _fail('Please sign in again before running AI extraction.');
     }
@@ -84,6 +95,11 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
           currentUser.uid.trim().isEmpty ||
           currentUser.uid != verifiedUser.uid ||
           currentAssetKey != startAssetKey ||
+          !_isCurrentOperation(
+            verifiedUser.uid,
+            operationGeneration,
+            authGeneration,
+          ) ||
           state.status != RoutineImportAiStatus.extracting) {
         // Session, account, or source asset changed mid-flight; ignore stale AI extraction result.
         return null;
@@ -99,9 +115,9 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
         return null;
       }
       return _fail(e.message);
-    } catch (e, st) {
+    } catch (e) {
       debugPrint(
-        '[RoutineImportAiController] AI extraction caught error: $e\n$st',
+        '[RoutineImportAiController] AI extraction failed (${e.runtimeType}).',
       );
       final currentUser = _ref.read(authProvider).user;
       if (currentUser == null || currentUser.uid != verifiedUser.uid) {
@@ -112,10 +128,12 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
   }
 
   void reset() {
+    _operationGeneration++;
     state = const RoutineImportAiState();
   }
 
   void resetForSignedOut() {
+    _operationGeneration++;
     state = const RoutineImportAiState();
   }
 
@@ -125,6 +143,16 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
       errorMessage: message,
     );
     return null;
+  }
+
+  bool _isCurrentOperation(
+    String uid,
+    int operationGeneration,
+    int authGeneration,
+  ) {
+    return _operationGeneration == operationGeneration &&
+        _ref.read(authGenerationProvider) == authGeneration &&
+        _ref.read(authProvider).user?.uid == uid;
   }
 }
 

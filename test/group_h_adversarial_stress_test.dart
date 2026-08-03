@@ -59,7 +59,10 @@ void main() {
           const uid = 'user-tier-2';
           final draft = OnboardingDraft(
             uid: uid,
-          ).copyWith(onboardingCompleted: false, currentStep: 3);
+            currentStep: OnboardingDraft.lastStepIndex,
+            stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+            onboardingCompleted: true,
+          );
           await fakeOnboardingRepo.saveDraft(draft);
 
           final result =
@@ -90,7 +93,7 @@ void main() {
       );
 
       test(
-        'Tier 3: Returns tier3Synthesized when draft & bundle missing, but user profile exists',
+        'Missing setup remains missing when only a user profile exists',
         () async {
           const uid = 'user-tier-3';
           final profile = UserProfile.empty(uid: uid, email: 'tier3@test.com');
@@ -103,17 +106,17 @@ void main() {
                 profileRepository: fakeProfileRepo,
               );
 
-          expect(result.tier, equals(OnboardingRecoveryTier.tier3Synthesized));
-          expect(result.hasBundle, isTrue);
-          expect(result.draft, isNotNull);
+          expect(result.tier, equals(OnboardingRecoveryTier.missingSetup));
+          expect(result.hasBundle, isFalse);
+          expect(result.draft, isNull);
 
           // Verify synthesized draft and bundle saved
           final savedDraft = await fakeOnboardingRepo.fetchDraft(uid);
           final savedBundle = await fakeOnboardingRepo.fetchCompletionBundle(
             uid,
           );
-          expect(savedDraft, isNotNull);
-          expect(savedBundle, isNotNull);
+          expect(savedDraft, isNull);
+          expect(savedBundle, isNull);
         },
       );
 
@@ -174,7 +177,7 @@ void main() {
       );
 
       test(
-        'executeRecoveryAction executes RebuildBundleFromVerifiedDraftAction when draft is absent',
+        'RebuildBundleFromVerifiedDraftAction fails closed when draft is absent',
         () async {
           final fakeAuthRepo = FakeAuthRepository();
           final container = ProviderContainer(
@@ -198,17 +201,22 @@ void main() {
             status: AuthFlowStatus.backendRestoreFailed,
           );
 
-          // When draft is absent, RebuildBundleFromVerifiedDraftAction falls back to recoverCompletionState
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
+              .executeRecoveryAction(
+                const RebuildBundleFromVerifiedDraftAction(),
+              );
 
-          expect(container.read(authProvider).onboardingIncomplete, isTrue);
+          expect(
+            container.read(authProvider).status,
+            equals(AuthFlowStatus.backendRestoreFailed),
+          );
+          expect(await fakeOnboardingRepo.fetchDraft(testUser.uid), isNull);
         },
       );
 
       test(
-        'executeRecoveryAction executes RebuildBundleFromVerifiedDraftAction under broken state',
+        'RebuildBundleFromVerifiedDraftAction preserves a broken state',
         () async {
           final fakeAuthRepo = FakeAuthRepository();
           final container = ProviderContainer(
@@ -234,11 +242,13 @@ void main() {
 
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
+              .executeRecoveryAction(
+                const RebuildBundleFromVerifiedDraftAction(),
+              );
 
           expect(
             container.read(authProvider).status,
-            equals(AuthFlowStatus.signedInOnboardingIncomplete),
+            equals(AuthFlowStatus.backendRestoreFailed),
           );
         },
       );
@@ -266,13 +276,19 @@ void main() {
           final fakeProfileRepo = FakeProfileRepository();
 
           const uid = 'resync-user-1';
-          final profile = UserProfile.empty(uid: uid, email: 'resync@test.com').copyWith(onboardingCompleted: true);
+          final profile = UserProfile.empty(
+            uid: uid,
+            email: 'resync@test.com',
+          ).copyWith(onboardingCompleted: true);
           await fakeProfileRepo.saveUserProfile(profile);
 
           final draft = OnboardingDraft(uid: uid).copyWith(
             onboardingCompleted: true,
             currentStep: OnboardingDraft.lastStepIndex,
-            stepCompleted: List.generate(OnboardingDraft.stepCount, (_) => true),
+            stepCompleted: List.generate(
+              OnboardingDraft.stepCount,
+              (_) => true,
+            ),
             baseTimeline: const BaseTimelineDraft(
               skinCareSkipped: true,
               eatingMode: 'mess_hostel',
@@ -322,7 +338,9 @@ void main() {
 
           await container
               .read(authProvider.notifier)
-              .executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
+              .executeRecoveryAction(
+                const RebuildBundleFromVerifiedDraftAction(),
+              );
 
           // Bundle should have been recovered/synthesized during execution
           final bundle = await fakeOnboardingRepo.fetchCompletionBundle(uid);

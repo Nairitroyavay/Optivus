@@ -9,9 +9,10 @@ import 'package:optivus/core/utils/platform_channel_boundary.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/background_sync_wake_lock_manager.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/native/notification_intent_service.dart';
 import 'package:optivus/models/onboarding_draft.dart';
-import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 
@@ -202,11 +203,16 @@ void main() {
         wakeLock: wakeLock,
       );
 
-      final draft = OnboardingDraft.fromMap({
-        'uid': 'user_wake',
-        'onboardingCompleted': true,
-      });
-      final bundle = OnboardingCompletionBundle.fromMap({'uid': 'user_wake'});
+      final draft = OnboardingDraft(
+        uid: 'user_wake',
+        currentStep: OnboardingDraft.lastStepIndex,
+        stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+        onboardingCompleted: true,
+      );
+      final bundle = OnboardingCompletionService.buildBundle(draft);
+      await profileRepo.saveUserProfile(
+        UserProfile.empty(uid: 'user_wake', email: 'test@example.com'),
+      );
 
       final job = await service.runCompletionJob(
         uid: 'user_wake',

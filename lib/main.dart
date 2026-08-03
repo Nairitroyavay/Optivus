@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/optivus_app.dart';
-import 'package:optivus/config/app_environment_config.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/config/firebase_options.dart';
 import 'package:optivus/config/runtime_config.dart';
@@ -12,10 +11,7 @@ import 'package:optivus/app/configuration_failure_app.dart';
 import 'package:optivus/core/utils/platform_channel_boundary.dart';
 
 void main() async {
-  // Ensure Flutter engine bindings are fully initialized before bootstrapping services
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Configure modern Android/iOS edge-to-edge UI
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -27,7 +23,6 @@ void main() async {
     ),
   );
 
-  // Enable true full screen (immersive mode, hides status and nav bars)
   await safePlatformCall(
     call: () =>
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
@@ -35,38 +30,41 @@ void main() async {
     operationName: 'setEnabledSystemUIMode',
   );
 
-  final firebaseOptions = OptivusBackendConfig.useFirebase
-      ? DefaultFirebaseOptions.currentPlatform
-      : null;
-  OptivusRuntimeConfig.validateForStartup(
-    generatedFirebaseProjectId: firebaseOptions?.projectId ?? '',
-  );
+  runApp(await buildOptivusRoot());
+}
 
-  bool firebaseInitFailed = false;
+typedef RuntimeValidator =
+    void Function({required String generatedFirebaseProjectId});
+typedef FirebaseInitializer = Future<void> Function(FirebaseOptions options);
 
-  if (firebaseOptions != null) {
-    await safePlatformCall(
-      call: () async {
-        await Firebase.initializeApp(options: firebaseOptions);
-        debugPrint('Optivus backend mode: Firebase initialized');
-      },
-      fallback: null,
-      operationName: 'Firebase.initializeApp',
-      onError: (e, st) {
-        debugPrint('Optivus error: Firebase initialization failed: $e');
-        firebaseInitFailed = true;
-        if (OptivusAppEnvironmentConfig.requiresLiveServices) {
-          // We will render ConfigurationFailureApp below
-        }
-      },
+/// Builds the only two legal startup roots: the app after a fully successful
+/// bootstrap, or a deterministic safe failure UI. This boundary is injectable
+/// so configuration and Firebase failures are widget-testable.
+Future<Widget> buildOptivusRoot({
+  bool? useFirebase,
+  FirebaseOptions? firebaseOptions,
+  RuntimeValidator? validateRuntime,
+  FirebaseInitializer? initializeFirebase,
+}) async {
+  try {
+    final shouldUseFirebase = useFirebase ?? OptivusBackendConfig.useFirebase;
+    final resolvedOptions = shouldUseFirebase
+        ? (firebaseOptions ?? DefaultFirebaseOptions.currentPlatform)
+        : null;
+    (validateRuntime ?? OptivusRuntimeConfig.validateForStartup)(
+      generatedFirebaseProjectId: resolvedOptions?.projectId ?? '',
     );
-  } else {
-    debugPrint('Optivus backend mode: fake frontend/dev mode');
-  }
-
-  if (firebaseInitFailed && OptivusAppEnvironmentConfig.requiresLiveServices) {
-    runApp(const ConfigurationFailureApp());
-  } else {
-    runApp(const ProviderScope(child: OptivusApp()));
+    if (resolvedOptions != null) {
+      await (initializeFirebase ??
+          (options) =>
+              Firebase.initializeApp(options: options))(resolvedOptions);
+      debugPrint('Optivus backend mode: Firebase initialized');
+    } else {
+      debugPrint('Optivus backend mode: fake frontend/dev mode');
+    }
+    return const ProviderScope(child: OptivusApp());
+  } catch (error) {
+    debugPrint('Optivus startup failed safely (${error.runtimeType}).');
+    return const ConfigurationFailureApp();
   }
 }

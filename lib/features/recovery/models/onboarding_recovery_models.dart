@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
-import 'package:optivus/state/auth_state.dart';
 export 'package:optivus/services/onboarding_completion_service.dart'
     show OnboardingRecoveryTier;
 
@@ -28,7 +27,23 @@ abstract class OnboardingRecoveryAction {
     required this.description,
   });
 
-  Future<void> execute(Ref ref, String uid);
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  );
+}
+
+class OnboardingRecoveryOperations {
+  final Future<void> Function() retryBackendRestore;
+  final Future<void> Function() markOnboardingIncomplete;
+  final Future<void> Function() signOut;
+
+  const OnboardingRecoveryOperations({
+    required this.retryBackendRestore,
+    required this.markOnboardingIncomplete,
+    required this.signOut,
+  });
 }
 
 class RetryNetworkAction extends OnboardingRecoveryAction {
@@ -40,8 +55,12 @@ class RetryNetworkAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
-    await ref.read(authProvider.notifier).retryBackendRestore();
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
+    await operations.retryBackendRestore();
   }
 }
 
@@ -54,25 +73,33 @@ class ResumeOnboardingAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
     final draft = await ref.read(onboardingRepositoryProvider).fetchDraft(uid);
-    if (draft != null) {
-      final firstMissingStep = draft.stepCompleted.indexOf(false);
-      final stepToResume = firstMissingStep != -1
-          ? firstMissingStep
-          : (draft.currentStep < OnboardingDraft.lastStepIndex
-                ? draft.currentStep
-                : 0);
-      final updatedDraft = draft.copyWith(
-        currentStep: stepToResume,
-        onboardingCompleted: false,
-      );
-      await ref.read(onboardingRepositoryProvider).saveDraft(updatedDraft);
+    if (draft == null) {
+      throw StateError('No onboarding draft is available to resume.');
     }
-    final user = ref.read(authProvider).user;
-    if (user != null && user.uid == uid) {
-      await ref.read(authProvider.notifier).markOnboardingIncomplete(user);
+    if (draft.uid != uid) {
+      throw StateError('Onboarding draft owner mismatch.');
     }
+    if (draft.onboardingCompleted) {
+      throw StateError('A completed onboarding draft cannot be resumed.');
+    }
+    final firstMissingStep = draft.stepCompleted.indexOf(false);
+    final stepToResume = firstMissingStep != -1
+        ? firstMissingStep
+        : (draft.currentStep < OnboardingDraft.lastStepIndex
+              ? draft.currentStep
+              : 0);
+    final updatedDraft = draft.copyWith(
+      currentStep: stepToResume,
+      onboardingCompleted: false,
+    );
+    await ref.read(onboardingRepositoryProvider).saveDraft(updatedDraft);
+    await operations.markOnboardingIncomplete();
   }
 }
 
@@ -85,8 +112,12 @@ class ResumeProjectionAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
-    await ref.read(authProvider.notifier).retryBackendRestore();
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
+    await operations.retryBackendRestore();
   }
 }
 
@@ -99,8 +130,12 @@ class RepairProjectionAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
-    await ref.read(authProvider.notifier).retryBackendRestore();
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
+    await operations.retryBackendRestore();
   }
 }
 
@@ -113,29 +148,44 @@ class RebuildBundleFromVerifiedDraftAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
     final repo = ref.read(onboardingRepositoryProvider);
     final draft = await repo.fetchDraft(uid);
-    if (draft != null) {
-      final firstMissingStep = draft.stepCompleted.indexOf(false);
-      final isDraftValid =
-          draft.onboardingCompleted &&
-          firstMissingStep == -1 &&
-          draft.validateStep(14, draft.stepCompleted) == null;
-      if (isDraftValid) {
-        final bundle = OnboardingCompletionService.buildBundle(draft);
-        await repo.saveCompletionBundle(bundle);
-        
-        final readbackBundle = await repo.fetchCompletionBundle(uid);
-        if (readbackBundle == null || readbackBundle.version != bundle.version) {
-          throw StateError('Completion bundle read-back verification failed during recovery.');
-        }
-        await ref.read(authProvider.notifier).retryBackendRestore();
-        return;
-      }
+    if (draft == null) {
+      throw StateError('No onboarding draft is available to rebuild.');
     }
-    // Fallback if not valid
-    await const ResumeOnboardingAction().execute(ref, uid);
+    if (draft.uid != uid) {
+      throw StateError('Onboarding draft owner mismatch.');
+    }
+    final firstMissingStep = draft.stepCompleted.indexOf(false);
+    final isDraftValid =
+        draft.onboardingCompleted &&
+        firstMissingStep == -1 &&
+        draft.validateStep(14, draft.stepCompleted) == null;
+    if (isDraftValid) {
+      final bundle = OnboardingCompletionService.buildBundle(draft);
+      await repo.saveCompletionBundle(bundle);
+      final readbackBundle = await repo.fetchCompletionBundle(uid);
+      if (readbackBundle == null ||
+          readbackBundle.uid != uid ||
+          readbackBundle.version != bundle.version ||
+          readbackBundle.sourceFingerprint != bundle.sourceFingerprint ||
+          readbackBundle.draftRevision != draft.revision) {
+        throw StateError(
+          'Completion bundle read-back verification failed during recovery.',
+        );
+      }
+      await operations.retryBackendRestore();
+      return;
+    }
+    if (draft.onboardingCompleted) {
+      throw StateError('Completed draft failed recovery verification.');
+    }
+    await const ResumeOnboardingAction().execute(ref, uid, operations);
   }
 }
 
@@ -148,8 +198,21 @@ class MigrateLegacySetupAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
-    await const ResetSetupSafelyAction().execute(ref, uid);
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
+    final draft = await ref.read(onboardingRepositoryProvider).fetchDraft(uid);
+    if (draft == null) {
+      throw StateError('No legacy onboarding draft is available to migrate.');
+    }
+    if (draft.uid != uid) {
+      throw StateError('Legacy onboarding draft owner mismatch.');
+    }
+    throw StateError(
+      'This setup schema requires an explicit supported migration.',
+    );
   }
 }
 
@@ -162,11 +225,12 @@ class ResetSetupSafelyAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
-    final user = ref.read(authProvider).user;
-    if (user != null && user.uid == uid) {
-      await ref.read(authProvider.notifier).markOnboardingIncomplete(user);
-    }
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
+    await operations.markOnboardingIncomplete();
   }
 }
 
@@ -179,7 +243,11 @@ class SignOutAction extends OnboardingRecoveryAction {
       );
 
   @override
-  Future<void> execute(Ref ref, String uid) async {
-    await ref.read(authProvider.notifier).logout();
+  Future<void> execute(
+    Ref ref,
+    String uid,
+    OnboardingRecoveryOperations operations,
+  ) async {
+    await operations.signOut();
   }
 }

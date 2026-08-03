@@ -18,6 +18,7 @@ import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/upload_state.dart';
@@ -1581,6 +1582,7 @@ class _HasProductsModeScreenState
     }
 
     final currentRequestId = ++_generationRequestId;
+    final currentAuthGeneration = ref.read(authGenerationProvider);
     final currentSourceEpoch = _sourceEpoch;
     final currentSource = activeSource;
 
@@ -1639,6 +1641,10 @@ class _HasProductsModeScreenState
           productPhotos: [asset!.r2Key.trim()],
         );
         if (!mounted ||
+            ref.read(authGenerationProvider) != currentAuthGeneration ||
+            (ref.read(authProvider).user?.uid ??
+                    ref.read(mockOnboardingProvider).draft.uid) !=
+                uid ||
             _generationRequestId != currentRequestId ||
             _sourceEpoch != currentSourceEpoch ||
             _inputSource != currentSource) {
@@ -1652,9 +1658,9 @@ class _HasProductsModeScreenState
         if (kDebugMode) {
           debugPrint(
             '[Onboarding7] product-analysis status='
-            '${analysis.hasError ? 'error:${analysis.errorMessage}' : 'ok'} '
-            'warnings=${analysis.warnings.join('|')} '
-            'products=${analysis.products.length}',
+            '${analysis.hasError ? 'error' : 'ok'} '
+            'warningCount=${analysis.warnings.length} '
+            'productCount=${analysis.products.length}',
           );
         }
         if (analysis.hasError) {
@@ -1757,8 +1763,8 @@ class _HasProductsModeScreenState
       if (kDebugMode) {
         debugPrint(
           '[Onboarding7] activeSource=${activeSource.name} '
-          'typedProductDetails=${typedProductDetails.map((e) => e.toMap()).toList()} '
-          'photoProductsDetected=${photoProductDetails.map((e) => e.toMap()).toList()}',
+          'typedProductCount=${typedProductDetails.length} '
+          'photoProductCount=${photoProductDetails.length}',
         );
       }
 
@@ -1790,6 +1796,10 @@ class _HasProductsModeScreenState
       }
 
       if (!mounted ||
+          ref.read(authGenerationProvider) != currentAuthGeneration ||
+          (ref.read(authProvider).user?.uid ??
+                  ref.read(mockOnboardingProvider).draft.uid) !=
+              uid ||
           _generationRequestId != currentRequestId ||
           _sourceEpoch != currentSourceEpoch ||
           _inputSource != currentSource) {
@@ -1804,22 +1814,13 @@ class _HasProductsModeScreenState
       if (kDebugMode) {
         debugPrint(
           '[Onboarding7] routine-generate status='
-          '${result.hasError ? 'error:${result.errorMessage}' : 'ok'} '
-          'warnings=${result.warnings.join('|')} '
+          '${result.hasError ? 'error' : 'ok'} '
+          'warningCount=${result.warnings.length} '
           'routinePlans=${result.routinePlans.length} '
-          'timelineBlocks=${result.timelineBlocks.length}',
-        );
-        debugPrint(
-          '[Onboarding7] routinePlansReturned='
-          '${result.routinePlans.map((plan) => plan.toMap()).toList()}',
-        );
-        debugPrint('[Onboarding7] weeklyRoutine=${result.weeklyRoutine}');
-        debugPrint(
-          '[Onboarding7] suggestedProducts=${result.suggestedProducts}',
-        );
-        debugPrint('[Onboarding7] warnings=${result.warnings}');
-        debugPrint(
-          '[Onboarding7] rejectedPlanReasons=${result.rejectedPlanReasons}',
+          'timelineBlocks=${result.timelineBlocks.length} '
+          'weeklyRoutineCount=${result.weeklyRoutine.length} '
+          'suggestedProductCount=${result.suggestedProducts.length} '
+          'rejectedPlanCount=${result.rejectedPlanReasons.length}',
         );
       }
       var routinePlans = result.routinePlans;
@@ -1835,7 +1836,8 @@ class _HasProductsModeScreenState
       if (result.hasError && !isExplicitError) {
         if (kDebugMode) {
           debugPrint(
-            '[Onboarding7] AI routine generation unreachable (${result.errorMessage}). Generating offline fallback routine...',
+            '[Onboarding7] AI routine generation unavailable; '
+            'using the offline fallback.',
           );
         }
         result = OfflineSkinCareRoutineGenerator.generateFallbackRoutine(
@@ -1966,12 +1968,15 @@ class _HasProductsModeScreenState
         _editingExisting = false;
         _generationError = null;
       });
-    } catch (e, st) {
-      debugPrint('Error generating routine (Products): $e\n$st');
+    } catch (error) {
+      debugPrint(
+        '[Onboarding7] Product routine generation failed safely '
+        '(${error.runtimeType}).',
+      );
       if (!mounted) return;
       setState(() {
         _generating = false;
-        _generationError = onboarding7UnexpectedAiMessage(e);
+        _generationError = onboarding7UnexpectedAiMessage(error);
       });
     }
   }
@@ -3216,13 +3221,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         region = detectedRegion;
         try {
           await ref.read(regionSettingsProvider.notifier).save(detectedRegion);
-        } catch (error, stackTrace) {
+        } catch (error) {
           ref
               .read(regionSettingsProvider.notifier)
               .loadSettings(detectedRegion);
           debugPrint(
-            'Detected region could not be persisted; using it for this '
-            'skin-care request: $error\n$stackTrace',
+            '[Onboarding7] Detected region could not be persisted; '
+            'using it for this request (${error.runtimeType}).',
           );
         }
       }
@@ -3318,12 +3323,15 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         _showProductSelection = true;
         _generationError = null;
       });
-    } catch (e, st) {
-      debugPrint('Error finding products (No products): $e\n$st');
+    } catch (error) {
+      debugPrint(
+        '[Onboarding7] Product discovery failed safely '
+        '(${error.runtimeType}).',
+      );
       if (!mounted) return;
       setState(() {
         _findingProducts = false;
-        _generationError = onboarding7UnexpectedAiMessage(e);
+        _generationError = onboarding7UnexpectedAiMessage(error);
       });
     }
   }
@@ -3492,12 +3500,15 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         _pendingDesiredApplicationsPerDay = null;
         _generationError = null;
       });
-    } catch (e, st) {
-      debugPrint('Error generating routine (No products): $e\n$st');
+    } catch (error) {
+      debugPrint(
+        '[Onboarding7] Selected-product routine generation failed safely '
+        '(${error.runtimeType}).',
+      );
       if (!mounted) return;
       setState(() {
         _generating = false;
-        _generationError = onboarding7UnexpectedAiMessage(e);
+        _generationError = onboarding7UnexpectedAiMessage(error);
       });
     }
   }

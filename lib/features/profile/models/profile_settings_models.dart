@@ -210,7 +210,21 @@ class UserProfileSettings {
     };
   }
 
-  Map<String, Object?> toFirestoreMap() => toMap();
+  Map<String, Object?> toFirestoreMap({
+    String? ownerUid,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    final now = updatedAt ?? DateTime.now();
+    return {
+      'uid': ?ownerUid,
+      'schemaVersion': 1,
+      ...toMap(),
+      'displayName': name.trim(),
+      'createdAt': Timestamp.fromDate(createdAt ?? now),
+      'updatedAt': Timestamp.fromDate(now),
+    };
+  }
 
   factory UserProfileSettings.fromMap(Map<String, dynamic> map) {
     return UserProfileSettings(
@@ -361,14 +375,14 @@ class UserPreferences {
     };
   }
 
-  Map<String, Object?> toFirestoreMap() {
+  Map<String, Object?> toFirestoreMap({
+    String? ownerUid,
+    DateTime? createdAtOverride,
+    DateTime? updatedAtOverride,
+  }) {
+    final writtenAt = updatedAtOverride ?? updatedAt ?? DateTime.now();
     return {
-      'id': id,
-      'bio': bio,
-      'avatarUrl': avatarUrl,
-      'theme': theme,
-      if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
-      if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
+      'uid': ?ownerUid,
       'haptics': haptics,
       'autoCorrect': autoCorrect,
       'themeMode': themeMode,
@@ -377,6 +391,10 @@ class UserPreferences {
       'timelineDisplay': timelineDisplay,
       'coachVoice': coachVoice,
       'schemaVersion': 1,
+      'createdAt': Timestamp.fromDate(
+        createdAtOverride ?? createdAt ?? writtenAt,
+      ),
+      'updatedAt': Timestamp.fromDate(writtenAt),
     };
   }
 

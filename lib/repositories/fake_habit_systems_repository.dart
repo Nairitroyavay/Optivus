@@ -163,7 +163,10 @@ class FakeHabitSystemsRepository implements HabitSystemsRepository {
   }) async {
     final userMap = _storage.putIfAbsent(ownerUid, () => {});
     final expectedSystemIds = systems.map((system) => system.systemId).toList();
-    final appliedSystemIds = <String>[];
+    final createdSystemIds = <String>[];
+    final existingSystemIds = <String>[];
+    final repairedSystemIds = <String>[];
+    final failedSystemIds = <String>[];
     for (final system in systems) {
       if (system.ownerUid != ownerUid) {
         throw ArgumentError('System ownerUid does not match target ownerUid.');
@@ -172,16 +175,46 @@ class FakeHabitSystemsRepository implements HabitSystemsRepository {
       if (existing != null && existing.ownerUid != ownerUid) {
         throw const HabitSystemWriteConflict('Owner UID mismatch');
       }
-      if (!userMap.containsKey(system.systemId)) {
+      if (existing == null) {
         userMap[system.systemId] = system;
+        createdSystemIds.add(system.systemId);
+      } else if (!_sameProjectionIdentity(existing, system)) {
+        failedSystemIds.add(system.systemId);
+      } else if (_sameProjectedSystem(existing, system)) {
+        existingSystemIds.add(system.systemId);
+      } else {
+        userMap[system.systemId] = system.copyWith(
+          createdAt: existing.createdAt,
+          version: existing.version + 1,
+        );
+        repairedSystemIds.add(system.systemId);
       }
-      appliedSystemIds.add(system.systemId);
     }
     _notify(ownerUid);
+    final appliedSystemIds = <String>{
+      ...createdSystemIds,
+      ...existingSystemIds,
+      ...repairedSystemIds,
+    }.toList()..sort();
+    if (failedSystemIds.isNotEmpty) {
+      return HabitSystemWriteResult.failure(
+        'Habit system projection failed closed',
+        expectedSystemIds: expectedSystemIds,
+        appliedSystemIds: appliedSystemIds,
+        createdSystemIds: createdSystemIds,
+        existingSystemIds: existingSystemIds,
+        repairedSystemIds: repairedSystemIds,
+        failedSystemIds: failedSystemIds,
+        projectionStatus: 'partial',
+      );
+    }
     return HabitSystemWriteResult.success(
       systems.isNotEmpty ? systems.first : null,
       expectedSystemIds: expectedSystemIds,
       appliedSystemIds: appliedSystemIds,
+      createdSystemIds: createdSystemIds,
+      existingSystemIds: existingSystemIds,
+      repairedSystemIds: repairedSystemIds,
       projectionStatus: 'completed',
     );
   }
@@ -198,4 +231,30 @@ class FakeHabitSystemsRepository implements HabitSystemsRepository {
     _notify(uid);
     return controller.stream;
   }
+}
+
+bool _sameProjectionIdentity(
+  HabitSystemRecord actual,
+  HabitSystemRecord expected,
+) {
+  return actual.ownerUid == expected.ownerUid &&
+      actual.source == 'onboarding' &&
+      actual.onboardingSourceId == expected.onboardingSourceId &&
+      actual.onboardingProjectionId == expected.onboardingProjectionId &&
+      actual.sourceFingerprint == expected.sourceFingerprint &&
+      actual.schemaVersion == expected.schemaVersion;
+}
+
+bool _sameProjectedSystem(
+  HabitSystemRecord actual,
+  HabitSystemRecord expected,
+) {
+  return _sameProjectionIdentity(actual, expected) &&
+      actual.title == expected.title &&
+      actual.description == expected.description &&
+      actual.category == expected.category &&
+      actual.systemType == expected.systemType &&
+      actual.status == expected.status &&
+      actual.linkedRoutineIds.toSet().containsAll(expected.linkedRoutineIds) &&
+      expected.linkedRoutineIds.toSet().containsAll(actual.linkedRoutineIds);
 }

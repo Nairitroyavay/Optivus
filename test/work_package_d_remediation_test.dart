@@ -69,11 +69,16 @@ void main() {
           profileRepository: profileRepo,
         );
 
-        final draft = OnboardingDraft(uid: 'user_fp').copyWith(
+        final draft = OnboardingDraft(
+          uid: 'user_fp',
           onboardingCompleted: true,
           currentStep: OnboardingDraft.lastStepIndex,
+          stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
         );
         final bundle = OnboardingCompletionService.buildBundle(draft);
+        await profileRepo.saveUserProfile(
+          UserProfile.empty(uid: 'user_fp', email: 'test@example.com'),
+        );
 
         final updatedJob = await service.runCompletionJob(
           uid: 'user_fp',

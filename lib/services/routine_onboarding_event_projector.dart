@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/routine_event_record.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
+import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
@@ -42,6 +44,8 @@ class RoutineOnboardingEventProjectionResult {
   final int attemptedCount;
   final List<String> expectedEventIds;
   final List<String> appliedEventIds;
+  final List<String> existingEventIds;
+  final List<String> repairedEventIds;
   final List<String> failedEventIds;
 
   const RoutineOnboardingEventProjectionResult({
@@ -49,6 +53,8 @@ class RoutineOnboardingEventProjectionResult {
     required this.attemptedCount,
     this.expectedEventIds = const [],
     this.appliedEventIds = const [],
+    this.existingEventIds = const [],
+    this.repairedEventIds = const [],
     this.failedEventIds = const [],
   });
 }
@@ -77,8 +83,7 @@ class RoutineOnboardingEventProjector {
   }
 
   List<String> computeExpectedEventIds(OnboardingCompletionBundle bundle) {
-    return computeEventRecords(bundle: bundle).map((e) => e.eventId).toList()
-      ..sort();
+    return _historyRecords(bundle).map((record) => record.id).toList()..sort();
   }
 
   Future<RoutineOnboardingEventProjectionResult> projectCreatedEvents({
@@ -160,14 +165,17 @@ class RoutineOnboardingEventProjector {
       );
     }
 
+    final historyResult = await _reconcileAndVerifyHistory(
+      read: read,
+      bundle: bundle,
+      plan: plan,
+    );
+
     final events = generateEventRecords(
       ownerUid: bundle.uid,
       plan: plan,
       receipt: receipt,
     );
-    final expectedEventIds = events.map((event) => event.eventId).toList()
-      ..sort();
-
     if (receipt.status == 'completed') {
       if (receipt.cursor != receipt.totalCount) {
         throw const RoutineProjectionFailureException(
@@ -175,18 +183,11 @@ class RoutineOnboardingEventProjector {
           message: 'Completed receipt cursor mismatch.',
         );
       }
-      return RoutineOnboardingEventProjectionResult(
-        projectionId: plan.projectionId,
-        attemptedCount: 0,
-        expectedEventIds: expectedEventIds,
-        appliedEventIds: expectedEventIds,
-      );
+      return historyResult;
     }
 
     final transactionRepository = read(routineTransactionRepositoryProvider);
-    final createdEventsOffset = receipt.createdItemIds.isNotEmpty
-        ? receipt.existingItemIds.length
-        : 0;
+    final createdEventsOffset = receipt.existingItemIds.length;
     var currentReceipt = receipt;
     var attempted = 0;
     for (
@@ -255,14 +256,129 @@ class RoutineOnboardingEventProjector {
       currentReceipt = nextReceipt;
     }
 
-    final appliedEventIds = events.map((event) => event.eventId).toList()
-      ..sort();
     return RoutineOnboardingEventProjectionResult(
       projectionId: plan.projectionId,
       attemptedCount: attempted,
-      expectedEventIds: expectedEventIds,
-      appliedEventIds: appliedEventIds,
+      expectedEventIds: historyResult.expectedEventIds,
+      appliedEventIds: historyResult.appliedEventIds,
+      existingEventIds: historyResult.existingEventIds,
+      repairedEventIds: historyResult.repairedEventIds,
+      failedEventIds: historyResult.failedEventIds,
     );
+  }
+
+  Future<RoutineOnboardingEventProjectionResult> _reconcileAndVerifyHistory({
+    required RoutineProjectorReader read,
+    required OnboardingCompletionBundle bundle,
+    required RoutineOnboardingProjectionPlan plan,
+  }) async {
+    final repository = read(routineHistoryRepositoryProvider);
+    final expected = _historyRecords(bundle);
+    final before = {
+      for (final record in await repository.fetchHistory(bundle.uid))
+        record.id: record,
+    };
+    final created = <String>[];
+    final existing = <String>[];
+    final repaired = <String>[];
+    final failed = <String>[];
+    for (final record in expected) {
+      final current = before[record.id];
+      if (current != null && _matchesHistoryRecord(current, record)) {
+        existing.add(record.id);
+        continue;
+      }
+      try {
+        final write = current == null
+            ? record
+            : record.copyWith(
+                action: 'repair',
+                operationKey: '${record.operationKey}_repair',
+              );
+        await repository.appendHistory(bundle.uid, write);
+        (current == null ? created : repaired).add(record.id);
+      } catch (_) {
+        failed.add(record.id);
+      }
+    }
+
+    final after = {
+      for (final record in await repository.fetchHistory(bundle.uid))
+        record.id: record,
+    };
+    for (final expectedRecord in expected) {
+      final actual = after[expectedRecord.id];
+      if (actual == null || !_matchesHistoryRecord(actual, expectedRecord)) {
+        failed.add(expectedRecord.id);
+      }
+    }
+    final failedSet = failed.toSet();
+    created.removeWhere(failedSet.contains);
+    existing.removeWhere(failedSet.contains);
+    repaired.removeWhere(failedSet.contains);
+    final expectedIds = expected.map((record) => record.id).toList()..sort();
+    created.sort();
+    existing.sort();
+    repaired.sort();
+    final failedIds = failedSet.toList()..sort();
+    return RoutineOnboardingEventProjectionResult(
+      projectionId: plan.projectionId,
+      attemptedCount: created.length + repaired.length,
+      expectedEventIds: expectedIds,
+      appliedEventIds: created,
+      existingEventIds: existing,
+      repairedEventIds: repaired,
+      failedEventIds: failedIds,
+    );
+  }
+
+  List<RoutineOccurrenceRecord> _historyRecords(
+    OnboardingCompletionBundle bundle,
+  ) {
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final dateKey = routineLocalDateKey(bundle.createdAt);
+    return [
+      for (final item in plan.items)
+        RoutineOccurrenceRecord(
+          id: stableRoutineOccurrenceId(
+            ownerUid: bundle.uid,
+            routineItemId: item.id,
+            occurrenceDateKey: dateKey,
+          ),
+          ownerUid: bundle.uid,
+          routineItemId: item.id,
+          occurrenceDateKey: dateKey,
+          status: RoutineStatus.active,
+          source: 'onboarding',
+          action: 'project',
+          operationKey:
+              'onboarding_history_${_stableId('history-v1', [bundle.uid, plan.projectionId, item.id]).substring(0, 40)}',
+          createdAt: bundle.createdAt.toUtc(),
+          updatedAt: bundle.updatedAt.toUtc(),
+          displayTitleOverride: item.title,
+          onboardingProjectionId: plan.projectionId,
+          onboardingSourceItemId: item.onboardingSourceItemId ?? item.id,
+          sourceFingerprint: bundle.sourceFingerprint,
+        ),
+    ];
+  }
+
+  bool _matchesHistoryRecord(
+    RoutineOccurrenceRecord actual,
+    RoutineOccurrenceRecord expected,
+  ) {
+    return actual.id == expected.id &&
+        actual.ownerUid == expected.ownerUid &&
+        actual.routineItemId == expected.routineItemId &&
+        actual.occurrenceDateKey == expected.occurrenceDateKey &&
+        actual.status == expected.status &&
+        actual.source == expected.source &&
+        (actual.action == 'project' || actual.action == 'repair') &&
+        actual.displayTitleOverride == expected.displayTitleOverride &&
+        actual.onboardingProjectionId == expected.onboardingProjectionId &&
+        actual.onboardingSourceItemId == expected.onboardingSourceItemId &&
+        actual.sourceFingerprint == expected.sourceFingerprint &&
+        actual.schemaVersion == RoutineOccurrenceRecord.currentSchemaVersion;
   }
 
   static List<RoutineEventRecord> generateEventRecords({

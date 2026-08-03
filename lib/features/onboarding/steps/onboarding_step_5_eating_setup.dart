@@ -17,6 +17,7 @@ import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
@@ -41,6 +42,15 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   String? _createError;
   bool _creatingRoutine = false;
   bool _editingGeneratedRoutine = false;
+
+  bool _isCurrentSession(String uid, int authGeneration) {
+    final currentUid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    return mounted &&
+        currentUid == uid &&
+        ref.read(authGenerationProvider) == authGeneration;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +116,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final uid =
         ref.read(authProvider).user?.uid ??
         ref.read(mockOnboardingProvider).draft.uid;
+    final authGeneration = ref.read(authGenerationProvider);
     final asset = await ref
         .read(uploadControllerProvider.notifier)
         .startUpload(
@@ -113,7 +124,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           purpose: UploadedAssetPurpose.eatingMenu,
           sourceFeature: OnboardingDraft.sourceOnboarding,
         );
-    if (!mounted) return;
+    if (!_isCurrentSession(uid, authGeneration)) return;
 
     final uploadState = ref.read(uploadControllerProvider);
     setState(() {
@@ -166,8 +177,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
     debugPrint(
       '[Onboarding5] START source=eating purpose=eatingMenu '
-      'assetId=${asset.assetId} r2Key=${asset.r2Key.trim().isEmpty ? 'missing' : 'exists'} '
-      'contentType=${asset.contentType}',
+      'assetIdPresent=${asset.assetId.trim().isNotEmpty} '
+      'r2KeyPresent=${asset.r2Key.trim().isNotEmpty} '
+      'contentTypePresent=${asset.contentType.trim().isNotEmpty}',
     );
 
     final now = DateTime.now();
@@ -199,7 +211,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final aiState = ref.read(routineImportAiControllerProvider);
     debugPrint(
       '[Onboarding5] RESULT source=eating resultNull=${result == null} '
-      'warnings=${result?.warnings.join('|') ?? aiState.errorMessage ?? 'none'}',
+      'controllerStatus=${aiState.status.name} '
+      'warningCount=${result?.warnings.length ?? 0}',
     );
     if (result == null) {
       setState(
@@ -257,15 +270,14 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final base = draft.baseTimeline;
     final bodyContext = onboarding5MealBodyContextFromDraft(draft);
     debugPrint(
-      '[Onboarding5] GENERATE source=create bodyGoal=${bodyContext.bodyGoal} '
-      'hasBodyBasics=${bodyContext.hasBodyBasics} heightCm=${bodyContext.heightCm ?? "missing"} '
-      'weightKg=${bodyContext.currentWeightKg ?? "missing"} age=${bodyContext.age ?? "missing"} '
-      'bmr=${bodyContext.estimatedBmr} maintenance=${bodyContext.estimatedMaintenanceCalories} '
-      'targetCalories=${bodyContext.targetCalories}',
+      '[Onboarding5] GENERATE source=create '
+      'hasBodyBasics=${bodyContext.hasBodyBasics}',
     );
     final uid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final authGeneration = ref.read(authGenerationProvider);
     final idToken =
         await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+    if (!_isCurrentSession(uid, authGeneration)) return;
     final nutritionClient = ref.read(nutritionAiClientProvider);
 
     try {
@@ -300,7 +312,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         },
       );
 
-      if (!mounted) return;
+      if (!_isCurrentSession(uid, authGeneration)) return;
 
       if (result.id.trim().isEmpty ||
           result.uid != uid ||

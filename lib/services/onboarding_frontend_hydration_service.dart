@@ -18,6 +18,9 @@ class OnboardingFrontendHydrationResult {
   final List<String> goalIds;
   final List<String> expectedHabitSystemIds;
   final List<String> appliedHabitSystemIds;
+  final List<String> createdHabitSystemIds;
+  final List<String> existingHabitSystemIds;
+  final List<String> repairedHabitSystemIds;
   final List<String> failedHabitSystemIds;
   final List<String> expectedHistoryIds;
   final List<String> appliedHistoryIds;
@@ -29,6 +32,9 @@ class OnboardingFrontendHydrationResult {
     required this.goalIds,
     this.expectedHabitSystemIds = const [],
     this.appliedHabitSystemIds = const [],
+    this.createdHabitSystemIds = const [],
+    this.existingHabitSystemIds = const [],
+    this.repairedHabitSystemIds = const [],
     this.failedHabitSystemIds = const [],
     this.expectedHistoryIds = const [],
     this.appliedHistoryIds = const [],
@@ -41,6 +47,9 @@ class OnboardingFrontendHydrationResult {
       goalIds.isNotEmpty ||
       expectedHabitSystemIds.isNotEmpty ||
       appliedHabitSystemIds.isNotEmpty ||
+      createdHabitSystemIds.isNotEmpty ||
+      existingHabitSystemIds.isNotEmpty ||
+      repairedHabitSystemIds.isNotEmpty ||
       failedHabitSystemIds.isNotEmpty ||
       expectedHistoryIds.isNotEmpty ||
       appliedHistoryIds.isNotEmpty ||
@@ -112,6 +121,9 @@ class OnboardingFrontendHydrationService {
     ).updatePreferences(bundle.notificationPreferences);
 
     var appliedHabitSystemIds = const <String>[];
+    var createdHabitSystemIds = const <String>[];
+    var existingHabitSystemIds = const <String>[];
+    var repairedHabitSystemIds = const <String>[];
     var failedHabitSystemIds = const <String>[];
     if (habitSystemProjections.isNotEmpty) {
       final projectionId =
@@ -124,17 +136,20 @@ class OnboardingFrontendHydrationService {
         systems: habitSystemProjections,
       );
       appliedHabitSystemIds = result.appliedSystemIds;
+      createdHabitSystemIds = result.createdSystemIds;
+      existingHabitSystemIds = result.existingSystemIds;
+      repairedHabitSystemIds = result.repairedSystemIds;
       failedHabitSystemIds = result.failedSystemIds;
       _verifyHabitProjectionWriteResult(result, expectedHabitSystemIds);
       final persistedSystems = await repo.fetchHabitSystems(bundle.uid);
       _verifyProjectedHabitSystemsPersisted(
         persistedSystems,
-        expectedHabitSystemIds,
+        habitSystemProjections,
       );
     }
 
-    await read(habitSystemsNotifierProvider.notifier).loadForOwner(bundle.uid);
-    _verifyProjectedHabitSystemsVisible(read, expectedHabitSystemIds);
+    await reloadControllers(read: read, bundle: bundle);
+    verifyFrontendState(read: read, bundle: bundle);
 
     return OnboardingFrontendHydrationResult(
       routineItemIds: routineIds,
@@ -142,6 +157,9 @@ class OnboardingFrontendHydrationService {
       goalIds: goalIds,
       expectedHabitSystemIds: expectedHabitSystemIds.toList()..sort(),
       appliedHabitSystemIds: appliedHabitSystemIds,
+      createdHabitSystemIds: createdHabitSystemIds,
+      existingHabitSystemIds: existingHabitSystemIds,
+      repairedHabitSystemIds: repairedHabitSystemIds,
       failedHabitSystemIds: failedHabitSystemIds,
       expectedHistoryIds: const [],
       appliedHistoryIds: const [],
@@ -171,36 +189,106 @@ class OnboardingFrontendHydrationService {
 
   void _verifyProjectedHabitSystemsPersisted(
     List<HabitSystemRecord> systems,
-    Set<String> expectedSystemIds,
+    List<HabitSystemRecord> expectedSystems,
   ) {
-    final persistedIds = systems.map((system) => system.systemId).toSet();
+    final expectedSystemIds = expectedSystems
+        .map((system) => system.systemId)
+        .toSet();
+    final persistedById = {
+      for (final system in systems) system.systemId: system,
+    };
+    final persistedIds = persistedById.keys.toSet();
     final missingIds = expectedSystemIds.difference(persistedIds).toList()
       ..sort();
-    if (missingIds.isNotEmpty) {
+    final invalidIds = <String>[
+      for (final expected in expectedSystems)
+        if (persistedById[expected.systemId] != null &&
+            !_matchesExpectedHabit(persistedById[expected.systemId]!, expected))
+          expected.systemId,
+    ]..sort();
+    if (missingIds.isNotEmpty || invalidIds.isNotEmpty) {
       throw HabitSystemProjectionFailureException(
-        code: 'habit_system_projection_persistence_missing',
+        code: 'habit_system_projection_persistence_invalid',
         expectedSystemIds: expectedSystemIds.toList()..sort(),
-        missingSystemIds: missingIds,
+        missingSystemIds: [...missingIds, ...invalidIds]..sort(),
       );
     }
   }
 
-  void _verifyProjectedHabitSystemsVisible(
-    OptivusProviderReader read,
-    Set<String> expectedSystemIds,
-  ) {
-    if (expectedSystemIds.isEmpty) return;
-    final visibleIds = read(
-      habitSystemsNotifierProvider,
-    ).systems.map((system) => system.systemId).toSet();
-    final missingIds = expectedSystemIds.difference(visibleIds).toList()
-      ..sort();
-    if (missingIds.isNotEmpty) {
-      throw HabitSystemProjectionFailureException(
-        code: 'habit_system_projection_controller_missing',
-        expectedSystemIds: expectedSystemIds.toList()..sort(),
-        missingSystemIds: missingIds,
+  Future<void> reloadControllers({
+    required OptivusProviderReader read,
+    required OnboardingCompletionBundle bundle,
+  }) async {
+    await read(routineNotifierProvider.notifier).loadForOwner(bundle.uid);
+    await read(habitSystemsNotifierProvider.notifier).loadForOwner(bundle.uid);
+  }
+
+  void verifyFrontendState({
+    required OptivusProviderReader read,
+    required OnboardingCompletionBundle bundle,
+  }) {
+    final projection = RoutineOnboardingProjection.build(bundle);
+    final expectedRoutineIds = projection.items.map((item) => item.id).toSet();
+    final visibleRoutineIds = read(
+      routineNotifierProvider,
+    ).items.map((item) => item.id).toSet();
+    final missingRoutineIds = expectedRoutineIds.difference(visibleRoutineIds);
+    if (missingRoutineIds.isNotEmpty) {
+      throw StateError(
+        'Routine controller is missing verified onboarding data.',
       );
     }
+    final expectedSystems = HabitSystemOnboardingProjection.build(
+      bundle,
+      projection.items,
+    );
+    final expectedSystemIds = expectedSystems
+        .map((system) => system.systemId)
+        .toSet();
+    if (expectedSystemIds.isEmpty) return;
+    final visibleSystems = read(habitSystemsNotifierProvider).systems;
+    final visibleById = {
+      for (final system in visibleSystems) system.systemId: system,
+    };
+    final visibleIds = visibleById.keys.toSet();
+    final missingIds = expectedSystemIds.difference(visibleIds).toList()
+      ..sort();
+    final invalidIds = <String>[
+      for (final expected in expectedSystems)
+        if (visibleById[expected.systemId] != null &&
+            !_matchesExpectedHabit(visibleById[expected.systemId]!, expected))
+          expected.systemId,
+    ]..sort();
+    if (missingIds.isNotEmpty || invalidIds.isNotEmpty) {
+      throw HabitSystemProjectionFailureException(
+        code: 'habit_system_projection_controller_invalid',
+        expectedSystemIds: expectedSystemIds.toList()..sort(),
+        missingSystemIds: [...missingIds, ...invalidIds]..sort(),
+      );
+    }
+  }
+
+  bool _matchesExpectedHabit(
+    HabitSystemRecord actual,
+    HabitSystemRecord expected,
+  ) {
+    return actual.systemId == expected.systemId &&
+        actual.ownerUid == expected.ownerUid &&
+        actual.title == expected.title &&
+        actual.description == expected.description &&
+        actual.category == expected.category &&
+        actual.systemType == expected.systemType &&
+        actual.status == expected.status &&
+        actual.linkedRoutineIds.toSet().containsAll(
+          expected.linkedRoutineIds,
+        ) &&
+        expected.linkedRoutineIds.toSet().containsAll(
+          actual.linkedRoutineIds,
+        ) &&
+        actual.source == 'onboarding' &&
+        actual.onboardingSourceId == expected.onboardingSourceId &&
+        actual.onboardingProjectionId == expected.onboardingProjectionId &&
+        actual.sourceFingerprint == expected.sourceFingerprint &&
+        actual.schemaVersion == expected.schemaVersion;
   }
 }

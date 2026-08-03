@@ -215,7 +215,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           .setValidationMessage(
             OptivusBackendConfig.useFirebase
                 ? 'Could not save this step. Please check your connection and try again.'
-                : e.toString(),
+                : 'Could not save this step. Please try again.',
           );
       return false;
     } finally {
@@ -267,7 +267,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       if (!mounted) return;
       ref
           .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(e.toString());
+          .setValidationMessage(
+            'Could not continue onboarding safely. Please try again.',
+          );
     } finally {
       if (mounted) setState(() => _isNavigating = false);
     }
@@ -315,7 +317,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     final draftForBundle = savedDraft.copyWith(uid: uid);
-    final bundle = OnboardingCompletionService.buildBundle(draftForBundle);
+    final now = DateTime.now();
+    final finalDraft = draftForBundle.copyWith(
+      onboardingCompleted: true,
+      currentStep: OnboardingDraft.lastStepIndex,
+      stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+      stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
+      stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+      finalPreview:
+          draftForBundle.finalPreview ?? draftForBundle.buildFinalPreview(),
+      createdAt: draftForBundle.createdAt ?? now,
+      updatedAt: now,
+    );
+    final bundle = OnboardingCompletionService.buildBundle(finalDraft);
     String? blockingWarning;
     for (final warning in bundle.warnings) {
       if (warning.startsWith('Resolve or accept')) {
@@ -329,19 +343,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           .setValidationMessage(blockingWarning);
       return;
     }
-
-    final now = DateTime.now();
-    final finalDraft = draftForBundle.copyWith(
-      onboardingCompleted: true,
-      currentStep: OnboardingDraft.lastStepIndex,
-      stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
-      stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
-      stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
-      finalPreview:
-          draftForBundle.finalPreview ?? draftForBundle.buildFinalPreview(),
-      createdAt: draftForBundle.createdAt ?? now,
-      updatedAt: now,
-    );
 
     try {
       final job = await ref

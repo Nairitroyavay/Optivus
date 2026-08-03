@@ -42,6 +42,9 @@ class HabitSystemWriteResult {
   final String? error;
   final List<String> expectedSystemIds;
   final List<String> appliedSystemIds;
+  final List<String> createdSystemIds;
+  final List<String> existingSystemIds;
+  final List<String> repairedSystemIds;
   final List<String> failedSystemIds;
   final String? projectionStatus;
 
@@ -49,6 +52,9 @@ class HabitSystemWriteResult {
     this.system, {
     this.expectedSystemIds = const [],
     this.appliedSystemIds = const [],
+    this.createdSystemIds = const [],
+    this.existingSystemIds = const [],
+    this.repairedSystemIds = const [],
     this.failedSystemIds = const [],
     this.projectionStatus,
   }) : success = true,
@@ -58,6 +64,9 @@ class HabitSystemWriteResult {
     this.error, {
     this.expectedSystemIds = const [],
     this.appliedSystemIds = const [],
+    this.createdSystemIds = const [],
+    this.existingSystemIds = const [],
+    this.repairedSystemIds = const [],
     this.failedSystemIds = const [],
     this.projectionStatus,
   }) : success = false,

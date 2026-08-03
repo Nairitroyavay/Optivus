@@ -86,18 +86,23 @@ class FirestoreProfileRepository implements ProfileRepository {
   }
 
   @override
-  Future<void> saveProfileSettings(String uid, UserProfileSettings settings) {
-    final data = <String, Object?>{
-      ...settings.toFirestoreMap(),
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
-    };
-    final trimmedName = settings.name.trim();
-    if (trimmedName.isNotEmpty) {
-      data['displayName'] = trimmedName;
-    }
-    return _firestore
-        .doc(FirestoreUserPaths.profile(uid))
-        .set(data, SetOptions(merge: true));
+  Future<void> saveProfileSettings(
+    String uid,
+    UserProfileSettings settings,
+  ) async {
+    final reference = _firestore.doc(FirestoreUserPaths.profile(uid));
+    final existing = await reference.get();
+    final existingCreatedAt = existing.data()?['createdAt'];
+    final now = DateTime.now();
+    await reference.set(
+      settings.toFirestoreMap(
+        ownerUid: uid,
+        createdAt: existingCreatedAt is Timestamp
+            ? existingCreatedAt.toDate()
+            : now,
+        updatedAt: now,
+      ),
+    );
   }
 }
 

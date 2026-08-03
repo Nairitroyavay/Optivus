@@ -154,39 +154,158 @@ function userData(uid = "user123", overrides = {}) {
   };
 }
 
+const fingerprint =
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+function profileSettingsData(uid = "user123", overrides = {}) {
+  return {
+    uid,
+    schemaVersion: 1,
+    name: "Test User",
+    username: "test_user",
+    bio: "",
+    customIdentityDisplay: false,
+    photoState: "none",
+    displayName: "Test User",
+    createdAt,
+    updatedAt,
+    ...overrides,
+  };
+}
+
+function regionData(uid = "user123", overrides = {}) {
+  return {
+    userId: uid,
+    schemaVersion: 1,
+    countryCode: "IN",
+    countryName: "India",
+    timezone: "Asia/Kolkata",
+    languageCode: "en",
+    currencyCode: "INR",
+    currencySymbol: "₹",
+    measurementSystem: "metric",
+    heightUnit: "cm",
+    weightUnit: "kg",
+    distanceUnit: "km",
+    temperatureUnit: "celsius",
+    timeFormat: "12h",
+    dateFormat: "dd/MM/yyyy",
+    weekStartDay: "monday",
+    foodVocabularyMode: "international",
+    paymentRegion: "IN",
+    createdAt,
+    updatedAt,
+    ...overrides,
+  };
+}
+
+function appPreferencesData(uid = "user123", overrides = {}) {
+  return {
+    uid,
+    schemaVersion: 1,
+    haptics: true,
+    autoCorrect: false,
+    themeMode: "dark",
+    accentColor: "teal",
+    bottomTabLayout: "standard",
+    timelineDisplay: "compact",
+    coachVoice: "direct",
+    createdAt,
+    updatedAt,
+    ...overrides,
+  };
+}
+
+function onboardingDraftData(uid = "user123", overrides = {}) {
+  return {
+    uid,
+    schemaVersion: 2,
+    source: "onboarding",
+    revision: 7,
+    sourceFingerprint: fingerprint,
+    currentStep: 2,
+    stepCompleted: [true, true, false, false, false, false, false, false, false, false, false, false, false, false, false],
+    stepDirty: Array(15).fill(false),
+    stepLoading: Array(15).fill(false),
+    onboardingCompleted: false,
+    welcomeSaved: true,
+    patiencePledgeAccepted: true,
+    badHabitsNotNow: true,
+    badHabits: [],
+    goodHabitsNotNow: true,
+    goodHabits: [],
+    identityGoals: [],
+    lifeRole: {},
+    bodyBasics: {},
+    baseTimeline: {},
+    coachSetup: {},
+    notifications: {},
+    createdAt,
+    updatedAt,
+    ...overrides,
+  };
+}
+
+function completionBundleData(uid = "user123", overrides = {}) {
+  return {
+    uid,
+    schemaVersion: 1,
+    source: "onboarding",
+    sourceFingerprint: fingerprint,
+    draftRevision: 7,
+    onboardingCompleted: true,
+    userProfilePatch: { uid, onboardingCompleted: false },
+    baseTimelineBlocks: [],
+    finalTimelineItems: [],
+    routineItemsForApp: [],
+    goodHabitTemplates: [],
+    badHabitCheckIns: [],
+    identityGoalSystems: [],
+    notificationPreferences: {},
+    coachPreferences: {},
+    uploadedAssetReferences: [],
+    warnings: [],
+    duplicateSystemKeysMerged: [],
+    expectedRoutineIds: [],
+    expectedHistoryIds: [],
+    expectedHabitIds: [],
+    acceptedSourceIds: [],
+    generatedSourceIds: [],
+    createdAt,
+    updatedAt,
+    ...overrides,
+  };
+}
+
 function onboardingJobData(uid = "user123", overrides = {}) {
   return {
     jobId: "current",
-    uid: uid,
-    stage: "persistDraft",
-    status: "in_progress",
+    ownerUid: uid,
+    stage: "validateInput",
+    status: "pending",
     stagesCompleted: {},
-    sourceFingerprint: "fingerprint",
+    sourceFingerprint: fingerprint,
+    draftRevision: 7,
     retryCount: 0,
-    lastError: "none",
-    lastFailureCode: "none",
-    lastFailureStage: "none",
-    retryable: true,
-    publicMessageKey: "none",
-    diagnosticCategory: "none",
     failedEntityIds: [],
-    lastFailureOccurredAt: "never",
     expectedRoutineIds: [],
-    appliedRoutineIds: [],
+    createdRoutineIds: [],
     existingRoutineIds: [],
     repairedRoutineIds: [],
     failedRoutineIds: [],
     expectedHistoryIds: [],
     appliedHistoryIds: [],
+    existingHistoryIds: [],
+    repairedHistoryIds: [],
     failedHistoryIds: [],
     expectedHabitIds: [],
-    appliedHabitIds: [],
+    createdHabitIds: [],
     existingHabitIds: [],
     repairedHabitIds: [],
     failedHabitIds: [],
     createdAt,
     updatedAt,
-    schemaVersion: 1,
+    schemaVersion: 2,
     ...overrides,
   };
 }
@@ -653,29 +772,7 @@ describe("Firestore Rules for Routine durability", () => {
 
         // Valid onboarding draft
         const draftRef = owner.collection("users").doc("user123").collection("onboarding").doc("draft");
-        await assertSucceeds(draftRef.set({
-          uid: "user123",
-          schemaVersion: 1,
-          currentStep: 2,
-          stepCompleted: [0, 1],
-          stepDirty: [],
-          stepLoading: [],
-          onboardingCompleted: false,
-          welcomeSaved: true,
-          patiencePledgeAccepted: true,
-          badHabitsNotNow: true,
-          badHabits: [],
-          goodHabitsNotNow: true,
-          goodHabits: [],
-          identityGoals: [],
-          lifeRole: {},
-          bodyBasics: {},
-          baseTimeline: {},
-          coachSetup: {},
-          notifications: {},
-          createdAt,
-          updatedAt
-        }));
+        await assertSucceeds(draftRef.set(onboardingDraftData()));
 
         // Malformed onboarding draft (invalid currentStep type and missing schemaVersion)
         await assertFails(draftRef.set({
@@ -709,28 +806,7 @@ describe("Firestore Rules for Routine durability", () => {
 
         // Valid completion bundle
         const bundleRef = owner.collection("users").doc("user123").collection("onboarding").doc("completionBundle");
-        await assertSucceeds(bundleRef.set({
-          uid: "user123",
-          schemaVersion: 1,
-          version: 1,
-          source: "onboarding",
-          onboardingCompleted: true,
-          userProfilePatch: { displayName: "Test User" },
-          baseTimelineBlocks: [],
-          finalTimelineItems: [],
-          routineItemsForApp: [],
-          goodHabitTemplates: [],
-          badHabitCheckIns: [],
-          identityGoalSystems: [],
-          notificationPreferences: {},
-          coachPreferences: {},
-          uploadedAssetReferences: [],
-          warnings: [],
-          duplicateSystemKeysMerged: [],
-          moneyGoal: {},
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        }));
+        await assertSucceeds(bundleRef.set(completionBundleData()));
 
         // Malformed completion bundle (onboardingCompleted = false)
         await assertFails(bundleRef.set({
@@ -802,3 +878,166 @@ describe("Firestore Rules for Routine durability", () => {
   });
 });
 
+describe("Phase 4.6.4 canonical production contracts", () => {
+  it("accepts root UserProfile create and valid owner update", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123");
+    await assertSucceeds(ref.set(userData()));
+    await assertSucceeds(ref.update({ displayName: "Updated", updatedAt: completedAt }));
+  });
+
+  it("rejects cross-user profile access, immutable UID mutation, and unknown fields", async () => {
+    const owner = ownerDb();
+    const ref = owner.collection("users").doc("user123");
+    await assertSucceeds(ref.set(userData()));
+    await assertFails(ownerDb("other_user").collection("users").doc("user123").get());
+    await assertFails(ref.update({ uid: "other_user", updatedAt: completedAt }));
+    await assertFails(ref.update({ admin: true, updatedAt: completedAt }));
+  });
+
+  it("rejects full UserProfile at profile/main and accepts only profile settings there", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("profile").doc("main");
+    await assertFails(ref.set(userData()));
+    await assertSucceeds(ref.set(profileSettingsData()));
+    await assertFails(ref.set(profileSettingsData("user123", { email: "not-allowed@example.com" })));
+  });
+
+  it("accepts exact RegionLocalization and rejects schema drift", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("settings").doc("regionLocalization");
+    await assertSucceeds(ref.set(regionData()));
+    await assertFails(ref.set(regionData("user123", { schemaVersion: 2 })));
+    await assertFails(ref.set(regionData("user123", { unknown: true })));
+  });
+
+  it("accepts exact AppPreferences and rejects unrelated profile fields", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("settings").doc("appPreferences");
+    await assertSucceeds(ref.set(appPreferencesData()));
+    await assertFails(ref.set(appPreferencesData("user123", { bio: "not a preference" })));
+    await assertFails(ref.set(appPreferencesData("other_user")));
+  });
+
+  it("accepts canonical CompletionBundle and rejects wrong timestamps/fingerprint/unknown fields", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("onboarding").doc("completionBundle");
+    await assertSucceeds(ref.set(completionBundleData()));
+    await assertFails(ref.set(completionBundleData("user123", { createdAt: createdAt.toISOString() })));
+    await assertFails(ref.set(completionBundleData("user123", { sourceFingerprint: "not-a-fingerprint" })));
+    await assertFails(ref.set(completionBundleData("user123", { arbitrary: true })));
+  });
+
+  it("accepts canonical CompletionJob and rejects alternate uid/in_progress schema", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("onboardingCompletionJobs").doc("current");
+    await assertSucceeds(ref.set(onboardingJobData()));
+    const alternate = onboardingJobData();
+    delete alternate.ownerUid;
+    alternate.uid = "user123";
+    alternate.status = "in_progress";
+    await assertFails(ref.set(alternate));
+  });
+
+  it("rejects invalid CompletionJob create stage, enum, unknown field, and skipped transition", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("onboardingCompletionJobs").doc("current");
+    await assertFails(ref.set(onboardingJobData("user123", { stage: "persistDraft" })));
+    await assertFails(ref.set(onboardingJobData("user123", { status: "inProgress" })));
+    await assertFails(ref.set(onboardingJobData("user123", { lastError: "raw exception" })));
+    await assertSucceeds(ref.set(onboardingJobData()));
+    await assertFails(ref.update({ stage: "verifyDraft", status: "running", updatedAt: completedAt }));
+    await assertSucceeds(ref.update({
+      stage: "persistDraft",
+      status: "running",
+      stagesCompleted: { validateInput: true },
+      updatedAt: completedAt,
+    }));
+  });
+
+  it("rejects a completed draft whose verified steps are incomplete", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("onboarding").doc("draft");
+    await assertFails(ref.set(onboardingDraftData("user123", {
+      currentStep: 14,
+      onboardingCompleted: true,
+    })));
+    await assertSucceeds(ref.set(onboardingDraftData("user123", {
+      currentStep: 14,
+      stepCompleted: Array(15).fill(true),
+      onboardingCompleted: true,
+    })));
+  });
+
+  it("rejects source conversion while allowing content repair for onboarding Routine", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("routineItems").doc("routine-item-1");
+    await assertSucceeds(ref.set(routineItemData()));
+    await assertFails(ref.update({
+      source: "onboarding",
+      onboardingProjectionId: "onboarding-initial-v1",
+      onboardingSourceItemId: "source-1",
+      updatedAt: completedAt,
+    }));
+
+    const projected = db.collection("users").doc("user123").collection("routineItems").doc("projected-1");
+    await assertSucceeds(projected.set(routineItemData("user123", "projected-1", {
+      source: "onboarding",
+      onboardingProjectionId: "onboarding-initial-v1",
+      onboardingSourceItemId: "source-1",
+    })));
+    await assertSucceeds(projected.update({ title: "Repaired title", updatedAt: completedAt }));
+  });
+
+  it("rejects wrong-source History conversion and accepts exact onboarding History", async () => {
+    const db = ownerDb();
+    const collection = db.collection("users").doc("user123").collection("routineHistory");
+    const manualRef = collection.doc("manual-history");
+    await assertSucceeds(manualRef.set(occurrenceData("user123", "manual-history")));
+    await assertFails(manualRef.update({
+      source: "onboarding",
+      action: "repair",
+      onboardingProjectionId: "onboarding-initial-v1",
+      onboardingSourceItemId: "source-1",
+      sourceFingerprint: fingerprint,
+      updatedAt: completedAt,
+    }));
+
+    const projectedRef = collection.doc("projected-history");
+    const projectedHistory = occurrenceData("user123", "projected-history", {
+      status: "active",
+      source: "onboarding",
+      action: "project",
+      operationKey: "onboarding_history_1",
+      onboardingProjectionId: "onboarding-initial-v1",
+      onboardingSourceItemId: "source-1",
+      sourceFingerprint: fingerprint,
+    });
+    delete projectedHistory.movedToDateKey;
+    delete projectedHistory.movedStartMinute;
+    delete projectedHistory.movedEndMinute;
+    await assertSucceeds(projectedRef.set(projectedHistory));
+  });
+
+  it("rejects wrong-source Habit conversion and accepts exact onboarding Habit", async () => {
+    const db = ownerDb();
+    const collection = db.collection("users").doc("user123").collection("habitSystems");
+    const userRef = collection.doc("user-habit");
+    await assertSucceeds(userRef.set(habitSystemData("user123", "user-habit")));
+    await assertFails(userRef.update({
+      source: "onboarding",
+      onboardingSourceId: "source-1",
+      onboardingProjectionId: "projection-1",
+      sourceFingerprint: fingerprint,
+      version: 2,
+      updatedAt: completedAt,
+    }));
+
+    await assertSucceeds(collection.doc("onboarding-habit").set(habitSystemData("user123", "onboarding-habit", {
+      source: "onboarding",
+      onboardingSourceId: "source-1",
+      onboardingProjectionId: "projection-1",
+      sourceFingerprint: fingerprint,
+    })));
+  });
+});

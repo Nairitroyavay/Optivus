@@ -127,6 +127,7 @@ class _ProjectionHarness {
   late final FakeRoutineRepository routines;
   late final FakeOnboardingRepository onboarding;
   late final FakeRoutineTransactionRepository transactions;
+  final FakeRoutineHistoryRepository history = FakeRoutineHistoryRepository();
   late final ProviderContainer container;
 
   _ProjectionHarness() {
@@ -134,7 +135,7 @@ class _ProjectionHarness {
     onboarding = FakeOnboardingRepository(routineDatabase: database);
     transactions = FakeRoutineTransactionRepository(
       routineRepository: routines,
-      historyRepository: FakeRoutineHistoryRepository(),
+      historyRepository: history,
     );
     container = ProviderContainer(
       overrides: [
@@ -144,6 +145,7 @@ class _ProjectionHarness {
         routineRepositoryProvider.overrideWithValue(routines),
         onboardingRepositoryProvider.overrideWithValue(onboarding),
         routineTransactionRepositoryProvider.overrideWithValue(transactions),
+        routineHistoryRepositoryProvider.overrideWithValue(history),
       ],
     );
   }

@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -80,6 +81,13 @@ OnboardingCompletionBundle _createTestBundle(
     uploadedAssetReferences: bundle.uploadedAssetReferences,
     warnings: bundle.warnings,
     duplicateSystemKeysMerged: bundle.duplicateSystemKeysMerged,
+    sourceFingerprint: draft.effectiveSourceFingerprint,
+    draftRevision: draft.revision,
+    expectedRoutineIds: bundle.expectedRoutineIds,
+    expectedHistoryIds: bundle.expectedHistoryIds,
+    expectedHabitIds: bundle.expectedHabitIds,
+    acceptedSourceIds: bundle.acceptedSourceIds,
+    generatedSourceIds: bundle.generatedSourceIds,
   );
 }
 
@@ -239,6 +247,10 @@ void main() {
           systemType: HabitSystemType.goodHabit,
           status: HabitSystemStatus.active,
           linkedRoutineIds: const [],
+          source: 'onboarding',
+          onboardingSourceId: 'source_0901',
+          onboardingProjectionId: 'proj_0901',
+          sourceFingerprint: 'a' * 64,
           createdAt: DateTime.now().toUtc(),
           updatedAt: DateTime.now().toUtc(),
         );
@@ -333,6 +345,9 @@ void main() {
 
         container.read(mockUserProfileProvider.notifier).state =
             UserProfile.empty(uid: 'user_1102');
+        await fakeProfileRepo.saveUserProfile(
+          UserProfile.empty(uid: 'user_1102', email: 'test@example.com'),
+        );
 
         final jobService = OnboardingCompletionJobService(
           onboardingRepository: fakeOnboardingRepo,
@@ -352,7 +367,9 @@ void main() {
         expect(profile?.onboardingCompleted, isTrue);
         expect(
           container.read(mockUserProfileProvider).onboardingCompleted,
-          isTrue,
+          isFalse,
+          reason:
+              'Local auth state is finalized only after canonical acceptance.',
         );
       },
     );
@@ -369,7 +386,7 @@ void main() {
     );
 
     test(
-      'ISSUE-14-02: Missing draft on cold restart synthesizes draft from profile',
+      'ISSUE-14-02: Missing draft on cold restart remains missing setup',
       () async {
         final fakeOnboardingRepo = FakeOnboardingRepository();
         final fakeProfileRepo = FakeProfileRepository();
@@ -396,9 +413,9 @@ void main() {
           profileRepository: fakeProfileRepo,
         );
 
-        expect(result.tier, equals(OnboardingRecoveryTier.tier3Synthesized));
-        expect(result.draft, isNotNull);
-        expect(result.draft?.uid, equals('user_1402'));
+        expect(result.tier, equals(OnboardingRecoveryTier.missingSetup));
+        expect(result.draft, isNull);
+        expect(await fakeOnboardingRepo.fetchDraft('user_1402'), isNull);
       },
     );
 
@@ -447,6 +464,9 @@ void main() {
 
         container.read(mockUserProfileProvider.notifier).state =
             UserProfile.empty(uid: uid);
+        await fakeProfileRepo.saveUserProfile(
+          UserProfile.empty(uid: uid, email: 'test@example.com'),
+        );
 
         final jobService = OnboardingCompletionJobService(
           onboardingRepository: fakeOnboardingRepo,
@@ -494,15 +514,15 @@ void main() {
 
         final failedJob = await jobService.loadCurrentJob('target_uid');
         expect(failedJob, isNotNull);
-        expect(failedJob!.status, equals(OnboardingJobStatus.failed));
+        expect(failedJob!.status, equals(OnboardingJobStatus.fatalFailure));
         expect(failedJob.lastError, isNotNull);
-        expect(failedJob.lastError, contains('"type":"StateError"'));
+        expect(failedJob.lastError, contains('"type":"ArgumentError"'));
         expect(
           failedJob.lastError,
           contains('"diagnosticCategory":"validation_failed"'),
         );
-        expect(failedJob.lastFailureCode, equals('state_error'));
-        expect(failedJob.lastFailureStage, equals('persistDraft'));
+        expect(failedJob.lastFailureCode, equals('argument_error'));
+        expect(failedJob.lastFailureStage, equals('validateInput'));
         expect(failedJob.retryable, isFalse);
         expect(failedJob.diagnosticCategory, equals('validation_failed'));
       },
@@ -574,6 +594,7 @@ void main() {
           final map = settings.toFirestoreMap();
           const allowedKeys = {
             'userId',
+            'schemaVersion',
             'countryCode',
             'countryName',
             'timezone',
@@ -594,30 +615,59 @@ void main() {
             'updatedAt',
           };
           expect(map.keys.toSet(), equals(allowedKeys));
+
+          final restored = RegionSettings.fromFirestoreMap(
+            Map<String, dynamic>.from(map),
+          );
+          expect(restored.userId, settings.userId);
+          expect(restored.countryCode, settings.countryCode);
+          expect(restored.countryName, settings.countryName);
+          expect(restored.timezone, settings.timezone);
+          expect(restored.languageCode, settings.languageCode);
+          expect(restored.currencyCode, settings.currencyCode);
+          expect(restored.currencySymbol, settings.currencySymbol);
+          expect(restored.measurementSystem, settings.measurementSystem);
+          expect(restored.heightUnit, settings.heightUnit);
+          expect(restored.weightUnit, settings.weightUnit);
+          expect(restored.distanceUnit, settings.distanceUnit);
+          expect(restored.temperatureUnit, settings.temperatureUnit);
+          expect(restored.timeFormat, settings.timeFormat);
+          expect(restored.dateFormat, settings.dateFormat);
+          expect(restored.weekStartDay, settings.weekStartDay);
+          expect(restored.foodVocabularyMode, settings.foodVocabularyMode);
+          expect(restored.paymentRegion, settings.paymentRegion);
+          expect(restored.createdAt, settings.createdAt);
+          expect(restored.updatedAt, settings.updatedAt);
         },
       );
 
       test(
         'Contract 3: UserPreferences.toFirestoreMap() keys match validProfileSubdoc',
         () {
-          final prefs = const UserPreferences(
+          final createdAt = DateTime.utc(2026, 7, 26, 10);
+          final updatedAt = DateTime.utc(2026, 7, 26, 11);
+          final prefs = UserPreferences(
             id: 'main',
             bio: 'Tester',
             avatarUrl: 'https://example.com/avatar.jpg',
             theme: 'dark',
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            haptics: false,
+            autoCorrect: false,
+            themeMode: 'Dark',
+            accentColor: 'Blue',
+            bottomTabLayout: 'Labels',
+            timelineDisplay: 'Compact',
+            coachVoice: 'Voice first',
           );
-          final map = prefs.toFirestoreMap();
+          final map = prefs.toFirestoreMap(ownerUid: 'user_b3');
           const allowedKeys = {
-            'id',
-            'bio',
-            'avatarUrl',
-            'theme',
+            'uid',
             'haptics',
             'autoCorrect',
             'themeMode',
             'accentColor',
-            'language',
-            'timezone',
             'bottomTabLayout',
             'timelineDisplay',
             'coachVoice',
@@ -625,9 +675,27 @@ void main() {
             'createdAt',
             'updatedAt',
           };
-          expect(map.keys.toSet().difference(allowedKeys), isEmpty);
-          expect(map['id'], equals('main'));
-          expect(map['bio'], equals('Tester'));
+          expect(map.keys.toSet(), equals(allowedKeys));
+          expect(map['uid'], equals('user_b3'));
+
+          final restored = UserPreferences.fromFirestoreMap(
+            Map<String, dynamic>.from(map),
+          );
+          expect(restored.haptics, prefs.haptics);
+          expect(restored.autoCorrect, prefs.autoCorrect);
+          expect(restored.themeMode, prefs.themeMode);
+          expect(restored.accentColor, prefs.accentColor);
+          expect(restored.bottomTabLayout, prefs.bottomTabLayout);
+          expect(restored.timelineDisplay, prefs.timelineDisplay);
+          expect(restored.coachVoice, prefs.coachVoice);
+          expect(
+            restored.createdAt?.millisecondsSinceEpoch,
+            createdAt.millisecondsSinceEpoch,
+          );
+          expect(
+            restored.updatedAt?.millisecondsSinceEpoch,
+            updatedAt.millisecondsSinceEpoch,
+          );
         },
       );
 
@@ -643,6 +711,8 @@ void main() {
             'uid',
             'schemaVersion',
             'source',
+            'revision',
+            'sourceFingerprint',
             'currentStep',
             'stepCompleted',
             'stepDirty',
@@ -682,6 +752,8 @@ void main() {
             'schemaVersion',
             'version',
             'source',
+            'draftRevision',
+            'sourceFingerprint',
             'createdAt',
             'updatedAt',
             'onboardingCompleted',
@@ -698,6 +770,11 @@ void main() {
             'uploadedAssetReferences',
             'warnings',
             'duplicateSystemKeysMerged',
+            'expectedRoutineIds',
+            'expectedHistoryIds',
+            'expectedHabitIds',
+            'acceptedSourceIds',
+            'generatedSourceIds',
           };
           expect(map.keys.toSet().difference(allowedKeys), isEmpty);
         },
@@ -715,10 +792,10 @@ void main() {
             updatedAt: now,
           );
           final map = job.toMap();
-          expect(map['lastFailureOccurredAt'], isA<String>());
+          expect(map['failureOccurredAt'], isA<String>());
 
           final firestoreMap = job.toFirestoreMap();
-          expect(firestoreMap['lastFailureOccurredAt'], isNotNull);
+          expect(firestoreMap['failureOccurredAt'], isA<Timestamp>());
 
           final deserialized = OnboardingCompletionJob.fromMap(map);
           expect(deserialized.jobId, equals('job_b6'));

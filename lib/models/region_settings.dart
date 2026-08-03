@@ -157,6 +157,8 @@ _CurrencyProfile _currencyProfileForCountry(String countryCode) {
 }
 
 class RegionSettings {
+  static const int schemaVersion = 1;
+
   final String userId;
   final String countryCode;
   final String countryName;
@@ -449,6 +451,7 @@ class RegionSettings {
   Map<String, Object?> toMap() {
     return {
       'userId': userId,
+      'schemaVersion': schemaVersion,
       'countryCode': countryCode,
       'countryName': countryName,
       'timezone': timezone,
@@ -473,6 +476,7 @@ class RegionSettings {
   Map<String, Object?> toFirestoreMap() {
     return {
       'userId': userId,
+      'schemaVersion': schemaVersion,
       'countryCode': countryCode,
       'countryName': countryName,
       'timezone': timezone,

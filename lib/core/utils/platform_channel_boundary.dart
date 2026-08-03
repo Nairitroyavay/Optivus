@@ -14,19 +14,22 @@ Future<T> safePlatformCall<T>({
     return await call();
   } on MissingPluginException catch (e, st) {
     debugPrint(
-      '[PlatformChannelBoundary] MissingPluginException in ${operationName ?? "call"}: $e',
+      '[PlatformChannelBoundary] Missing plugin in '
+      '${operationName ?? "call"}.',
     );
     onError?.call(e, st);
     return fallback;
   } on PlatformException catch (e, st) {
     debugPrint(
-      '[PlatformChannelBoundary] PlatformException in ${operationName ?? "call"}: [${e.code}] ${e.message}',
+      '[PlatformChannelBoundary] Platform call failed in '
+      '${operationName ?? "call"} (${e.runtimeType}).',
     );
     onError?.call(e, st);
     return fallback;
   } catch (e, st) {
     debugPrint(
-      '[PlatformChannelBoundary] Unexpected error in ${operationName ?? "call"}: $e',
+      '[PlatformChannelBoundary] Unexpected platform failure in '
+      '${operationName ?? "call"} (${e.runtimeType}).',
     );
     onError?.call(e, st);
     return fallback;

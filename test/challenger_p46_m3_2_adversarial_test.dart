@@ -51,16 +51,15 @@ void main() {
         );
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(const RebuildBundleFromVerifiedDraftAction());
+        await notifier.executeRecoveryAction(
+          const RebuildBundleFromVerifiedDraftAction(),
+        );
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
 
-        // Must be marked incomplete, NOT completed with fabricated data
-        expect(
-          authState.status,
-          equals(AuthFlowStatus.signedInOnboardingIncomplete),
-        );
+        // The action must fail closed, not fabricate a resumable draft.
+        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
         expect(profile.onboardingCompleted, isFalse);
         expect(profile.onboardingInputCompleted, isFalse);
         expect(profile.onboardingStep, equals(0));
@@ -74,7 +73,7 @@ void main() {
     );
 
     test(
-      'ResumeOnboardingAction marks onboarding incomplete without data fabrication',
+      'ResumeOnboardingAction without a draft fails without fabrication',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -99,24 +98,19 @@ void main() {
         );
 
         final notifier = container.read(authProvider.notifier);
-        await notifier.executeRecoveryAction(
-          const ResumeOnboardingAction(),
-        );
+        await notifier.executeRecoveryAction(const ResumeOnboardingAction());
 
         final authState = container.read(authProvider);
         final profile = container.read(mockUserProfileProvider);
 
-        expect(
-          authState.status,
-          equals(AuthFlowStatus.signedInOnboardingIncomplete),
-        );
+        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
         expect(profile.onboardingCompleted, isFalse);
         expect(profile.onboardingStep, equals(0));
       },
     );
 
     test(
-      'RebuildBundleFromVerifiedDraftAction when draft and profile are missing resets state to incomplete',
+      'RebuildBundleFromVerifiedDraftAction with no artifacts fails closed',
       () async {
         final fakeAuthRepo = FakeAuthRepository();
         final fakeOnboardingRepo = FakeOnboardingRepository();
@@ -148,10 +142,7 @@ void main() {
         );
 
         final authState = container.read(authProvider);
-        expect(
-          authState.status,
-          equals(AuthFlowStatus.signedInOnboardingIncomplete),
-        );
+        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
       },
     );
   });
@@ -163,10 +154,7 @@ void main() {
         final onboardingRepo = FakeOnboardingRepository();
         const uid = 'user-batch-limit-over';
 
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
         final largeRoutines = List.generate(
@@ -201,6 +189,8 @@ void main() {
           uploadedAssetReferences: baseBundle.uploadedAssetReferences,
           warnings: baseBundle.warnings,
           duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
+          sourceFingerprint: draft.effectiveSourceFingerprint,
+          draftRevision: draft.revision,
         );
 
         final plan = RoutineOnboardingProjection.build(largeBundle);
@@ -226,10 +216,7 @@ void main() {
       final onboardingRepo = FakeOnboardingRepository();
       const uid = 'user-batch-limit-exact';
 
-      final draft = OnboardingDraft(uid: uid).copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-      );
+      final draft = _completedDraft(uid);
       final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
       final exactRoutines = List.generate(
@@ -264,6 +251,8 @@ void main() {
         uploadedAssetReferences: baseBundle.uploadedAssetReferences,
         warnings: baseBundle.warnings,
         duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
+        sourceFingerprint: draft.effectiveSourceFingerprint,
+        draftRevision: draft.revision,
       );
 
       final plan = RoutineOnboardingProjection.build(exactBundle);
@@ -288,10 +277,7 @@ void main() {
         );
 
         const uid = 'user-job-batch-limit';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
         final largeRoutines = List.generate(
@@ -325,6 +311,8 @@ void main() {
           uploadedAssetReferences: baseBundle.uploadedAssetReferences,
           warnings: baseBundle.warnings,
           duplicateSystemKeysMerged: baseBundle.duplicateSystemKeysMerged,
+          sourceFingerprint: draft.effectiveSourceFingerprint,
+          draftRevision: draft.revision,
         );
 
         await expectLater(
@@ -338,8 +326,9 @@ void main() {
 
         final job = await jobService.loadCurrentJob(uid);
         expect(job, isNotNull);
-        expect(job!.status, equals(OnboardingJobStatus.failed));
-        expect(job.lastError, contains('too many Routine templates'));
+        expect(job!.status, equals(OnboardingJobStatus.fatalFailure));
+        expect(job.lastError, contains('Completion state validation failed.'));
+        expect(job.lastError, isNot(contains('Routine templates')));
       },
     );
   });
@@ -349,10 +338,7 @@ void main() {
       'HabitSystemOnboardingProjection build is deterministic and idempotent',
       () {
         const uid = 'user-hs-idempotent';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final bundle = OnboardingCompletionService.buildBundle(draft);
 
         final routines = <RoutineItem>[
@@ -412,10 +398,7 @@ void main() {
         addTearDown(container.dispose);
 
         const uid = 'user-cursor-idempotent';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
         final sampleRoutines = List.generate(
@@ -505,10 +488,7 @@ void main() {
         addTearDown(container.dispose);
 
         const uid = 'user-cursor-partial';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final baseBundle = OnboardingCompletionService.buildBundle(draft);
 
         final sampleRoutines = List.generate(
@@ -609,10 +589,7 @@ void main() {
         );
 
         const uid = 'user-sensitive-payload';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final bundle = OnboardingCompletionService.buildBundle(draft);
 
         await expectLater(
@@ -626,15 +603,14 @@ void main() {
 
         final job = await jobService.loadCurrentJob(uid);
         expect(job, isNotNull);
-        expect(job!.status, equals(OnboardingJobStatus.failed));
+        expect(job!.status, equals(OnboardingJobStatus.fatalFailure));
         expect(job.lastFailureStage, equals('persistDraft'));
         expect(job.lastFailureCode, equals('state_error'));
         expect(job.diagnosticCategory, equals('validation_failed'));
 
-        // Redaction verification: sensitive email and token must NOT be present
+        // Structured diagnostics never retain source exception content.
         expect(job.lastError, isNotNull);
-        expect(job.lastError, contains('[REDACTED_EMAIL]'));
-        expect(job.lastError, contains('[REDACTED_TOKEN]'));
+        expect(job.lastError, contains('Completion state validation failed.'));
         expect(job.lastError, isNot(contains('secret.user@domain.com')));
         expect(
           job.lastError,
@@ -666,10 +642,7 @@ void main() {
         );
 
         const uid = 'user-structural-payload';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
+        final draft = _completedDraft(uid);
         final bundle = OnboardingCompletionService.buildBundle(draft);
 
         await expectLater(
@@ -683,8 +656,8 @@ void main() {
 
         final job = await jobService.loadCurrentJob(uid);
         expect(job, isNotNull);
-        expect(job!.status, equals(OnboardingJobStatus.failed));
-        expect(job.lastFailureStage, equals('projectRoutines'));
+        expect(job!.status, equals(OnboardingJobStatus.retryableFailure));
+        expect(job.lastFailureStage, equals('reconcileRoutines'));
         expect(job.lastFailureCode, equals('ROUTINE_PROJECTION_TIMEOUT'));
         expect(job.diagnosticCategory, equals('network_timeout'));
         expect(job.retryable, isTrue);
@@ -693,102 +666,114 @@ void main() {
     );
   });
 
-  group('Challenger P46 M3.2: Fine-Grained Completion Stage Ordering (Stage 5 UPDATE_PROFILE)', () {
-    test(
-      'Stage 5 (UPDATE_PROFILE) cannot execute if Stage 1 (PERSIST_DRAFT) fails',
-      () async {
-        final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
-          saveDraftException: StateError('Stage 1 persistence failed'),
-        );
-        final fakeProfileRepo = FakeProfileRepository();
-        final jobService = OnboardingCompletionJobService(
-          onboardingRepository: mockOnboardingRepo,
-          profileRepository: fakeProfileRepo,
-        );
+  group(
+    'Challenger P46 M3.2: Fine-Grained Completion Stage Ordering (Stage 5 UPDATE_PROFILE)',
+    () {
+      test(
+        'Stage 5 (UPDATE_PROFILE) cannot execute if Stage 1 (PERSIST_DRAFT) fails',
+        () async {
+          final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
+            saveDraftException: StateError('Stage 1 persistence failed'),
+          );
+          final fakeProfileRepo = FakeProfileRepository();
+          final jobService = OnboardingCompletionJobService(
+            onboardingRepository: mockOnboardingRepo,
+            profileRepository: fakeProfileRepo,
+          );
 
-        const uid = 'user-stage5-blocked-s1';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
-        final bundle = OnboardingCompletionService.buildBundle(draft);
+          const uid = 'user-stage5-blocked-s1';
+          final draft = _completedDraft(uid);
+          final bundle = OnboardingCompletionService.buildBundle(draft);
 
-        await expectLater(
-          () => jobService.runCompletionJob(
-            uid: uid,
-            finalDraft: draft,
-            bundle: bundle,
-          ),
-          throwsA(isA<StateError>()),
-        );
+          await expectLater(
+            () => jobService.runCompletionJob(
+              uid: uid,
+              finalDraft: draft,
+              bundle: bundle,
+            ),
+            throwsA(isA<StateError>()),
+          );
 
-        final job = await jobService.loadCurrentJob(uid);
-        expect(job, isNotNull);
-        expect(job!.status, equals(OnboardingJobStatus.failed));
-        expect(
-          job.isStageCompleted(OnboardingCompletionStage.updateProfile),
-          isFalse,
-        );
-        expect(job.stagesCompleted['persistDraft'], isNot(true));
+          final job = await jobService.loadCurrentJob(uid);
+          expect(job, isNotNull);
+          expect(job!.status, equals(OnboardingJobStatus.fatalFailure));
+          expect(
+            job.isStageCompleted(OnboardingCompletionStage.updateProfile),
+            isFalse,
+          );
+          expect(job.stagesCompleted['persistDraft'], isNot(true));
 
-        final profile = await fakeProfileRepo.fetchUserProfile(uid);
-        expect(profile?.onboardingCompleted, isNot(true));
-      },
-    );
+          final profile = await fakeProfileRepo.fetchUserProfile(uid);
+          expect(profile?.onboardingCompleted, isNot(true));
+        },
+      );
 
-    test(
-      'Stage 5 (UPDATE_PROFILE) cannot execute if Stage 3 (PROJECT_ROUTINES) fails',
-      () async {
-        final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
-          completeOnboardingException: StateError('Stage 3 projection failed'),
-        );
-        final fakeProfileRepo = FakeProfileRepository();
-        final jobService = OnboardingCompletionJobService(
-          onboardingRepository: mockOnboardingRepo,
-          profileRepository: fakeProfileRepo,
-        );
+      test(
+        'Stage 5 (UPDATE_PROFILE) cannot execute if Stage 3 (PROJECT_ROUTINES) fails',
+        () async {
+          final mockOnboardingRepo = _ConfigurableFakeOnboardingRepository(
+            completeOnboardingException: StateError(
+              'Stage 3 projection failed',
+            ),
+          );
+          final fakeProfileRepo = FakeProfileRepository();
+          final jobService = OnboardingCompletionJobService(
+            onboardingRepository: mockOnboardingRepo,
+            profileRepository: fakeProfileRepo,
+          );
 
-        const uid = 'user-stage5-blocked-s3';
-        final draft = OnboardingDraft(uid: uid).copyWith(
-          onboardingCompleted: true,
-          currentStep: OnboardingDraft.lastStepIndex,
-        );
-        final bundle = OnboardingCompletionService.buildBundle(draft);
+          const uid = 'user-stage5-blocked-s3';
+          final draft = _completedDraft(uid);
+          final bundle = OnboardingCompletionService.buildBundle(draft);
 
-        await expectLater(
-          () => jobService.runCompletionJob(
-            uid: uid,
-            finalDraft: draft,
-            bundle: bundle,
-          ),
-          throwsA(isA<StateError>()),
-        );
+          await expectLater(
+            () => jobService.runCompletionJob(
+              uid: uid,
+              finalDraft: draft,
+              bundle: bundle,
+            ),
+            throwsA(isA<StateError>()),
+          );
 
-        final job = await jobService.loadCurrentJob(uid);
-        expect(job, isNotNull);
-        expect(job!.status, equals(OnboardingJobStatus.failed));
-        expect(
-          job.isStageCompleted(OnboardingCompletionStage.persistDraft),
-          isTrue,
-        );
-        expect(
-          job.isStageCompleted(OnboardingCompletionStage.persistBundle),
-          isTrue,
-        );
-        expect(
-          job.isStageCompleted(OnboardingCompletionStage.projectRoutines),
-          isFalse,
-        );
-        expect(
-          job.isStageCompleted(OnboardingCompletionStage.updateProfile),
-          isFalse,
-        );
+          final job = await jobService.loadCurrentJob(uid);
+          expect(job, isNotNull);
+          expect(job!.status, equals(OnboardingJobStatus.fatalFailure));
+          expect(
+            job.isStageCompleted(OnboardingCompletionStage.persistDraft),
+            isTrue,
+          );
+          expect(
+            job.isStageCompleted(OnboardingCompletionStage.persistBundle),
+            isTrue,
+          );
+          expect(
+            job.isStageCompleted(OnboardingCompletionStage.projectRoutines),
+            isFalse,
+          );
+          expect(
+            job.isStageCompleted(OnboardingCompletionStage.updateProfile),
+            isFalse,
+          );
 
-        final profile = await fakeProfileRepo.fetchUserProfile(uid);
-        expect(profile?.onboardingCompleted, isNot(true));
-      },
-    );
-  });
+          final profile = await fakeProfileRepo.fetchUserProfile(uid);
+          expect(profile?.onboardingCompleted, isNot(true));
+        },
+      );
+    },
+  );
+}
+
+OnboardingDraft _completedDraft(String uid) {
+  return OnboardingDraft(
+    uid: uid,
+    currentStep: OnboardingDraft.lastStepIndex,
+    stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+    stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
+    stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+    onboardingCompleted: true,
+    createdAt: DateTime.utc(2026, 8, 3),
+    updatedAt: DateTime.utc(2026, 8, 3),
+  );
 }
 
 class _ConfigurableFakeOnboardingRepository extends FakeOnboardingRepository {
@@ -827,4 +812,3 @@ class _ConfigurableFakeOnboardingRepository extends FakeOnboardingRepository {
     return super.completeOnboarding(finalDraft: finalDraft, bundle: bundle);
   }
 }
-

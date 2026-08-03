@@ -17,6 +17,7 @@ class HabitSystemRecord {
   final String source;
   final String? onboardingSourceId;
   final String? onboardingProjectionId;
+  final String? sourceFingerprint;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? archivedAt;
@@ -35,6 +36,7 @@ class HabitSystemRecord {
     this.source = 'user',
     this.onboardingSourceId,
     this.onboardingProjectionId,
+    this.sourceFingerprint,
     required this.createdAt,
     required this.updatedAt,
     this.archivedAt,
@@ -62,6 +64,7 @@ class HabitSystemRecord {
     String? source,
     String? onboardingSourceId,
     String? onboardingProjectionId,
+    String? sourceFingerprint,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? archivedAt,
@@ -82,6 +85,7 @@ class HabitSystemRecord {
       onboardingSourceId: onboardingSourceId ?? this.onboardingSourceId,
       onboardingProjectionId:
           onboardingProjectionId ?? this.onboardingProjectionId,
+      sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       archivedAt: clearArchivedAt ? null : (archivedAt ?? this.archivedAt),
@@ -112,6 +116,8 @@ class HabitSystemRecord {
       if (!isUserSource &&
           (isOnboardingSource || onboardingProjectionId != null))
         'onboardingProjectionId': onboardingProjectionId ?? '',
+      if (!isUserSource && (isOnboardingSource || sourceFingerprint != null))
+        'sourceFingerprint': sourceFingerprint ?? '',
       'createdAt': createdAt.toUtc().toIso8601String(),
       'updatedAt': updatedAt.toUtc().toIso8601String(),
       if (isArchivedStatus && effectiveArchivedAt != null)
@@ -143,6 +149,8 @@ class HabitSystemRecord {
       if (!isUserSource &&
           (isOnboardingSource || onboardingProjectionId != null))
         'onboardingProjectionId': onboardingProjectionId ?? '',
+      if (!isUserSource && (isOnboardingSource || sourceFingerprint != null))
+        'sourceFingerprint': sourceFingerprint ?? '',
       'createdAt': Timestamp.fromDate(createdAt.toUtc()),
       'updatedAt': Timestamp.fromDate(updatedAt.toUtc()),
       if (isArchivedStatus && effectiveArchivedAt != null)
@@ -224,6 +232,7 @@ class HabitSystemRecord {
       source: (map['source'] as String?) ?? 'user',
       onboardingSourceId: map['onboardingSourceId'] as String?,
       onboardingProjectionId: map['onboardingProjectionId'] as String?,
+      sourceFingerprint: map['sourceFingerprint'] as String?,
       createdAt: parseDate(map['createdAt']),
       updatedAt: parseDate(map['updatedAt']),
       archivedAt: parseNullableDate(map['archivedAt']),

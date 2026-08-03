@@ -22,6 +22,9 @@ class RoutineOccurrenceRecord {
   final String? note;
   final String? displayTitleOverride;
   final bool undoToPlannedAllowed;
+  final String? onboardingProjectionId;
+  final String? onboardingSourceItemId;
+  final String? sourceFingerprint;
 
   const RoutineOccurrenceRecord({
     required this.id,
@@ -42,6 +45,9 @@ class RoutineOccurrenceRecord {
     this.note,
     this.displayTitleOverride,
     this.undoToPlannedAllowed = false,
+    this.onboardingProjectionId,
+    this.onboardingSourceItemId,
+    this.sourceFingerprint,
   });
 
   RoutineOccurrenceRecord copyWith({
@@ -57,6 +63,9 @@ class RoutineOccurrenceRecord {
     String? note,
     String? displayTitleOverride,
     bool? undoToPlannedAllowed,
+    String? onboardingProjectionId,
+    String? onboardingSourceItemId,
+    String? sourceFingerprint,
   }) {
     return RoutineOccurrenceRecord(
       id: id,
@@ -78,6 +87,11 @@ class RoutineOccurrenceRecord {
       note: note ?? this.note,
       displayTitleOverride: displayTitleOverride ?? this.displayTitleOverride,
       undoToPlannedAllowed: undoToPlannedAllowed ?? this.undoToPlannedAllowed,
+      onboardingProjectionId:
+          onboardingProjectionId ?? this.onboardingProjectionId,
+      onboardingSourceItemId:
+          onboardingSourceItemId ?? this.onboardingSourceItemId,
+      sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
     );
   }
 
@@ -98,6 +112,11 @@ class RoutineOccurrenceRecord {
     if (displayTitleOverride != null)
       'displayTitleOverride': displayTitleOverride,
     'undoToPlannedAllowed': undoToPlannedAllowed,
+    if (onboardingProjectionId != null)
+      'onboardingProjectionId': onboardingProjectionId,
+    if (onboardingSourceItemId != null)
+      'onboardingSourceItemId': onboardingSourceItemId,
+    if (sourceFingerprint != null) 'sourceFingerprint': sourceFingerprint,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
     'schemaVersion': schemaVersion,
@@ -150,6 +169,9 @@ class RoutineOccurrenceRecord {
       note: map['note'] as String?,
       displayTitleOverride: map['displayTitleOverride'] as String?,
       undoToPlannedAllowed: map['undoToPlannedAllowed'] as bool? ?? false,
+      onboardingProjectionId: map['onboardingProjectionId'] as String?,
+      onboardingSourceItemId: map['onboardingSourceItemId'] as String?,
+      sourceFingerprint: map['sourceFingerprint'] as String?,
     );
   }
 

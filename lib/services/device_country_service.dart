@@ -53,10 +53,10 @@ class GeolocatorDeviceCountryService implements DeviceCountryService {
           }
         }
       }
-    } catch (error, stackTrace) {
+    } catch (error) {
       debugPrint(
-        'Device country detection failed; using locale fallback: '
-        '$error\n$stackTrace',
+        '[DeviceCountryService] Detection failed safely; using locale '
+        'fallback (${error.runtimeType}).',
       );
     }
 

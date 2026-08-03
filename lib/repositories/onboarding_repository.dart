@@ -156,6 +156,15 @@ class FakeOnboardingRepository implements OnboardingRepository {
           existingItemIds.add(item.id);
           continue;
         }
+        if (!_hasExpectedRoutineProjectionIdentity(
+          actualItem: existingItem,
+          expectedItem: item,
+          ownerUid: bundle.uid,
+          projectionId: plan.projectionId,
+        )) {
+          failedItemIds.add(item.id);
+          continue;
+        }
         try {
           codec.toFirestore(ownerUid: bundle.uid, item: item);
           userItems[item.id] = item;
@@ -208,6 +217,21 @@ class FakeOnboardingRepository implements OnboardingRepository {
 }
 
 bool _isExpectedProjectedRoutineItem({
+  required RoutineItem actualItem,
+  required RoutineItem expectedItem,
+  required String ownerUid,
+  required String projectionId,
+}) {
+  return actualItem.id == expectedItem.id &&
+      actualItem.userId == ownerUid &&
+      actualItem.onboardingProjectionId == projectionId &&
+      actualItem.onboardingSourceItemId ==
+          expectedItem.onboardingSourceItemId &&
+      actualItem.source == RoutineSource.onboarding &&
+      actualItem.schemaVersion == RoutineItem.currentSchemaVersion;
+}
+
+bool _hasExpectedRoutineProjectionIdentity({
   required RoutineItem actualItem,
   required RoutineItem expectedItem,
   required String ownerUid,
@@ -275,7 +299,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
       for (final target in targets.values) {
         await _firestore
             .doc(FirestoreUserPaths.onboardingDraft(target.uid))
-            .set(target.toMap(), SetOptions(merge: true));
+            .set(target.toFirestoreMap());
       }
     });
   }
@@ -285,7 +309,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
     _pendingDraftsByUid.remove(draft.uid);
     await _firestore
         .doc(FirestoreUserPaths.onboardingDraft(draft.uid))
-        .set(draft.toMap(), SetOptions(merge: true));
+        .set(draft.toFirestoreMap());
   }
 
   @override
@@ -302,7 +326,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) {
     return _firestore
         .doc(FirestoreUserPaths.onboardingCompletionBundle(bundle.uid))
-        .set(bundle.toMap(), SetOptions(merge: true));
+        .set(bundle.toFirestoreMap());
   }
 
   @override
@@ -336,7 +360,7 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           FirestoreUserPaths.onboardingCompletionBundle(bundle.uid),
         );
         final profileReference = _firestore.doc(
-          FirestoreUserPaths.profile(bundle.uid),
+          FirestoreUserPaths.user(bundle.uid),
         );
 
         final draftSnapshot = await transaction.get(draftReference);
@@ -386,22 +410,24 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
 
         transaction.set(
           _firestore.doc(FirestoreUserPaths.onboardingDraft(bundle.uid)),
-          finalDraft.toMap(),
+          finalDraft.toFirestoreMap(),
         );
         transaction.set(
           _firestore.doc(
             FirestoreUserPaths.onboardingCompletionBundle(bundle.uid),
           ),
-          bundle.toMap(),
+          bundle.toFirestoreMap(),
         );
-        final intermediateProfilePatch = Map<String, dynamic>.from(
-          bundle.userProfilePatch,
-        );
+        final intermediateProfilePatch =
+            Map<String, dynamic>.from(bundle.userProfilePatch)
+              ..remove('source')
+              ..remove('createdAt');
+        intermediateProfilePatch['updatedAt'] = FieldValue.serverTimestamp();
         intermediateProfilePatch['onboardingInputCompleted'] = true;
         intermediateProfilePatch['onboardingProjectionStatus'] = 'pending';
         intermediateProfilePatch['onboardingCompleted'] = false;
         transaction.set(
-          _firestore.doc(FirestoreUserPaths.profile(bundle.uid)),
+          _firestore.doc(FirestoreUserPaths.user(bundle.uid)),
           intermediateProfilePatch,
           SetOptions(merge: true),
         );
@@ -428,6 +454,16 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
                   projectionId: plan.projectionId,
                 )) {
               existingItemIds.add(item.id);
+              continue;
+            }
+            if (existingItem == null ||
+                !_hasExpectedRoutineProjectionIdentity(
+                  actualItem: existingItem,
+                  expectedItem: item,
+                  ownerUid: bundle.uid,
+                  projectionId: plan.projectionId,
+                )) {
+              failedItemIds.add(item.id);
               continue;
             }
             try {

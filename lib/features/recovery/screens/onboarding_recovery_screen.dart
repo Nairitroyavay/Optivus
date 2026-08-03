@@ -11,6 +11,36 @@ import 'package:optivus/state/auth_state.dart';
 class OnboardingRecoveryScreen extends ConsumerWidget {
   const OnboardingRecoveryScreen({super.key});
 
+  Future<void> _executeRecoveryAction(
+    BuildContext context,
+    WidgetRef ref,
+    OnboardingRecoveryAction action,
+  ) async {
+    if (action is ResetSetupSafelyAction) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Restart setup?'),
+          content: const Text(
+            'This marks setup as incomplete but preserves your account and existing Routine, History, and Habit data.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Restart setup'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !context.mounted) return;
+    }
+    await ref.read(authProvider.notifier).executeRecoveryAction(action);
+  }
+
   String _userFriendlyFailureReason(OnboardingFailureReason? reason) {
     if (reason == null) return 'Setup Recovery Required';
     return switch (reason) {
@@ -265,9 +295,8 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
                                   ElevatedButton(
                                     onPressed:
                                         retryState.canRetry ||
-                                            action
-                                                is ResumeOnboardingAction
-                                        ? () {
+                                            action is ResumeOnboardingAction
+                                        ? () async {
                                             if (action
                                                 is! ResumeOnboardingAction) {
                                               ref
@@ -277,9 +306,11 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
                                                   )
                                                   .recordAttemptAndStartCooldown();
                                             }
-                                            ref
-                                                .read(authProvider.notifier)
-                                                .executeRecoveryAction(action);
+                                            await _executeRecoveryAction(
+                                              context,
+                                              ref,
+                                              action,
+                                            );
                                           }
                                         : null,
                                     child: Text(action.label),

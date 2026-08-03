@@ -1085,8 +1085,7 @@ Onboarding7RoutinePlanAdaptationResult onboarding7AdaptRoutinePlansForSchedule({
     if (kDebugMode) {
       debugPrint(
         '[Onboarding7Scheduler] rejected plan reason=$reason '
-        'slot=${plan.slotLabel} title=${plan.title} '
-        'products=${plan.productNames}',
+        'slot=${plan.slotLabel} productCount=${plan.productNames.length}',
       );
     }
   }

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/models/money_models.dart';
@@ -27,6 +30,13 @@ class OnboardingCompletionBundle {
   final List<OnboardingUploadedAssetReference> uploadedAssetReferences;
   final List<String> warnings;
   final List<String> duplicateSystemKeysMerged;
+  final String sourceFingerprint;
+  final int draftRevision;
+  final List<String> expectedRoutineIds;
+  final List<String> expectedHistoryIds;
+  final List<String> expectedHabitIds;
+  final List<String> acceptedSourceIds;
+  final List<String> generatedSourceIds;
 
   const OnboardingCompletionBundle({
     required this.uid,
@@ -47,13 +57,21 @@ class OnboardingCompletionBundle {
     required this.uploadedAssetReferences,
     required this.warnings,
     required this.duplicateSystemKeysMerged,
+    this.sourceFingerprint = '',
+    this.draftRevision = 1,
+    this.expectedRoutineIds = const [],
+    this.expectedHistoryIds = const [],
+    this.expectedHabitIds = const [],
+    this.acceptedSourceIds = const [],
+    this.generatedSourceIds = const [],
   });
 
   Map<String, dynamic> toMap() {
-    return {
+    final map = <String, dynamic>{
       'uid': uid,
       'schemaVersion': version,
       'source': source,
+      'draftRevision': draftRevision,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'onboardingCompleted': true,
@@ -102,8 +120,20 @@ class OnboardingCompletionBundle {
           .toList(),
       'warnings': warnings,
       'duplicateSystemKeysMerged': duplicateSystemKeysMerged,
+      'expectedRoutineIds': _sortedUnique(expectedRoutineIds),
+      'expectedHistoryIds': _sortedUnique(expectedHistoryIds),
+      'expectedHabitIds': _sortedUnique(expectedHabitIds),
+      'acceptedSourceIds': _sortedUnique(acceptedSourceIds),
+      'generatedSourceIds': _sortedUnique(generatedSourceIds),
     };
+    map['sourceFingerprint'] = sourceFingerprint.trim().isNotEmpty
+        ? sourceFingerprint
+        : _fingerprintBundleMap(map);
+    return map;
   }
+
+  String get effectiveSourceFingerprint =>
+      toMap()['sourceFingerprint'] as String;
 
   Map<String, dynamic> toFirestoreMap() {
     final map = toMap();
@@ -122,6 +152,8 @@ class OnboardingCompletionBundle {
           (map['version'] as num?)?.toInt() ??
           schemaVersion,
       source: map['source'] as String? ?? OnboardingDraft.sourceOnboarding,
+      sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
+      draftRevision: (map['draftRevision'] as num?)?.toInt() ?? 1,
       createdAt: createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt:
           updatedAt ?? createdAt ?? DateTime.fromMillisecondsSinceEpoch(0),
@@ -167,6 +199,49 @@ class OnboardingCompletionBundle {
       duplicateSystemKeysMerged: _bundleStringList(
         map['duplicateSystemKeysMerged'],
       ),
+      expectedRoutineIds: _bundleStringList(map['expectedRoutineIds']),
+      expectedHistoryIds: _bundleStringList(map['expectedHistoryIds']),
+      expectedHabitIds: _bundleStringList(map['expectedHabitIds']),
+      acceptedSourceIds: _bundleStringList(map['acceptedSourceIds']),
+      generatedSourceIds: _bundleStringList(map['generatedSourceIds']),
+    );
+  }
+
+  OnboardingCompletionBundle copyWithContractMetadata({
+    String? sourceFingerprint,
+    int? draftRevision,
+    List<String>? expectedRoutineIds,
+    List<String>? expectedHistoryIds,
+    List<String>? expectedHabitIds,
+    List<String>? acceptedSourceIds,
+    List<String>? generatedSourceIds,
+  }) {
+    return OnboardingCompletionBundle(
+      uid: uid,
+      version: version,
+      source: source,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      userProfilePatch: userProfilePatch,
+      baseTimelineBlocks: baseTimelineBlocks,
+      finalTimelineItems: finalTimelineItems,
+      routineItemsForApp: routineItemsForApp,
+      goodHabitTemplates: goodHabitTemplates,
+      badHabitCheckIns: badHabitCheckIns,
+      identityGoalSystems: identityGoalSystems,
+      notificationPreferences: notificationPreferences,
+      coachPreferences: coachPreferences,
+      moneyGoal: moneyGoal,
+      uploadedAssetReferences: uploadedAssetReferences,
+      warnings: warnings,
+      duplicateSystemKeysMerged: duplicateSystemKeysMerged,
+      sourceFingerprint: sourceFingerprint ?? this.sourceFingerprint,
+      draftRevision: draftRevision ?? this.draftRevision,
+      expectedRoutineIds: expectedRoutineIds ?? this.expectedRoutineIds,
+      expectedHistoryIds: expectedHistoryIds ?? this.expectedHistoryIds,
+      expectedHabitIds: expectedHabitIds ?? this.expectedHabitIds,
+      acceptedSourceIds: acceptedSourceIds ?? this.acceptedSourceIds,
+      generatedSourceIds: generatedSourceIds ?? this.generatedSourceIds,
     );
   }
 }
@@ -372,6 +447,19 @@ DateTime? _bundleDateTimeFromValue(Object? value) {
   if (value is DateTime) return value;
   if (value is String) return DateTime.tryParse(value);
   return null;
+}
+
+List<String> _sortedUnique(Iterable<String> values) {
+  return values.where((value) => value.trim().isNotEmpty).toSet().toList()
+    ..sort();
+}
+
+String _fingerprintBundleMap(Map<String, dynamic> map) {
+  final identity = Map<String, dynamic>.from(map)
+    ..remove('sourceFingerprint')
+    ..remove('createdAt')
+    ..remove('updatedAt');
+  return sha256.convert(utf8.encode(jsonEncode(identity))).toString();
 }
 
 Map<String, dynamic> _bundleMap(Object? value) {
