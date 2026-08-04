@@ -116,7 +116,9 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
       compactMode: compactMode,
     );
 
-    final conflictCount = conflicts.length;
+    final conflictCount = conflicts
+        .where((conflict) => conflict.blocking)
+        .length;
 
     // ── Layout matches old: LiquidBg → Scaffold(transparent) → Stack ──
     return Scaffold(

@@ -5,12 +5,15 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
+import 'package:optivus/repositories/conflict_acceptance_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
+import 'package:optivus/services/onboarding_run_identity.dart';
 import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
@@ -25,25 +28,37 @@ class OnboardingCompletionJobService {
   final OnboardingRepository onboardingRepository;
   final ProfileRepository profileRepository;
   final RoutineRepository? routineRepository;
+  final ConflictAcceptanceRepository? conflictAcceptanceRepository;
   final FirebaseFirestore? firestore;
   final SystemWakeLock wakeLock;
   final bool requirePersistentJobs;
   final bool requireFrontendHydration;
   final bool requireRoutineVerification;
   final Map<String, OnboardingCompletionJob> _memoryJobs = {};
+  final Map<String, String> _memoryCurrentRunIds = {};
 
-  static final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
-  static int _operationGeneration = 0;
+  final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
+  final Map<String, int> _operationGenerationByOwner = {};
 
-  static void resetForSignedOut() {
-    _operationGeneration++;
+  void cancelAll() {
+    for (final owner in _operationGenerationByOwner.keys.toList()) {
+      _operationGenerationByOwner[owner] =
+          (_operationGenerationByOwner[owner] ?? 0) + 1;
+    }
     _inFlight.clear();
+  }
+
+  void cancelOwner(String uid) {
+    _operationGenerationByOwner[uid] =
+        (_operationGenerationByOwner[uid] ?? 0) + 1;
+    _inFlight.removeWhere((key, _) => key.startsWith('$uid:'));
   }
 
   OnboardingCompletionJobService({
     required this.onboardingRepository,
     required this.profileRepository,
     this.routineRepository,
+    this.conflictAcceptanceRepository,
     this.firestore,
     this.requirePersistentJobs = false,
     this.requireFrontendHydration = false,
@@ -60,10 +75,19 @@ class OnboardingCompletionJobService {
     if (uid.trim().isEmpty) {
       throw ArgumentError('Cannot run completion job with empty uid.');
     }
-    final operationKey = '$uid:${bundle.effectiveSourceFingerprint}';
+    final runId = bundle.runId.isNotEmpty
+        ? bundle.runId
+        : stableOnboardingRunId(
+            ownerUid: uid,
+            sourceFingerprint: bundle.effectiveSourceFingerprint,
+            draftRevision: finalDraft.revision,
+          );
+    final operationKey = '$uid:$runId';
     final activeOperation = _inFlight[operationKey];
     if (activeOperation != null) return activeOperation;
-    final operationGeneration = ++_operationGeneration;
+    final operationGeneration =
+        (_operationGenerationByOwner[uid] ?? 0) + 1;
+    _operationGenerationByOwner[uid] = operationGeneration;
     final authGeneration = reader == null
         ? null
         : reader(authGenerationProvider);
@@ -73,6 +97,7 @@ class OnboardingCompletionJobService {
       finalDraft: finalDraft,
       bundle: bundle,
       sourceFingerprint: bundle.effectiveSourceFingerprint,
+      runId: runId,
       operationGeneration: operationGeneration,
       authGeneration: authGeneration,
       reader: reader,
@@ -95,7 +120,7 @@ class OnboardingCompletionJobService {
 
   Future<OnboardingCompletionJob?> loadCurrentJob(String uid) {
     if (uid.trim().isEmpty) return Future.value(null);
-    return _loadJobStatus(uid);
+    return _loadCurrentJob(uid);
   }
 
   Future<OnboardingCompletionJob> _runCompletionJob({
@@ -103,6 +128,7 @@ class OnboardingCompletionJobService {
     required OnboardingDraft finalDraft,
     required OnboardingCompletionBundle bundle,
     required String sourceFingerprint,
+    required String runId,
     required int operationGeneration,
     required int? authGeneration,
     Reader? reader,
@@ -115,6 +141,7 @@ class OnboardingCompletionJobService {
         var job = await _loadOrCreateJob(
           uid: uid,
           sourceFingerprint: sourceFingerprint,
+          runId: runId,
           draftRevision: finalDraft.revision,
           now: now,
         );
@@ -128,10 +155,10 @@ class OnboardingCompletionJobService {
           updatedAt: now,
           clearLastError: true,
         );
-        await _saveJobStatus(job);
+        await _saveJobStatus(job, activate: true);
 
         void checkSession() {
-          if (operationGeneration != _operationGeneration) {
+          if (operationGeneration != _operationGenerationByOwner[uid]) {
             throw StateError('Job cancelled by a newer operation.');
           }
           if (uid.trim().isEmpty) {
@@ -235,12 +262,47 @@ class OnboardingCompletionJobService {
               bundle: bundle,
             );
             final receipt = result.receipt;
+            final acceptancePlan = RoutineOnboardingProjection.build(bundle);
+            final storedAcceptances =
+                await (reader == null
+                        ? conflictAcceptanceRepository
+                        : reader(conflictAcceptanceRepositoryProvider))
+                    ?.fetchForOwner(uid);
+            final expectedAcceptances = acceptancePlan.conflictAcceptances;
+            final validAcceptanceIds = <String>[];
+            final failedAcceptanceIds = <String>[];
+            for (final expected in expectedAcceptances) {
+              final actual = storedAcceptances
+                  ?.where(
+                    (candidate) =>
+                        candidate.acceptanceId == expected.acceptanceId,
+                  )
+                  .firstOrNull;
+              if (actual != null &&
+                  _matchesExpectedAcceptance(actual, expected)) {
+                validAcceptanceIds.add(expected.acceptanceId);
+              } else {
+                failedAcceptanceIds.add(expected.acceptanceId);
+              }
+            }
             job = job.copyWith(
               expectedRoutineIds: receipt.expectedItemIds,
               appliedRoutineIds: receipt.createdItemIds,
               existingRoutineIds: receipt.existingItemIds,
               repairedRoutineIds: receipt.repairedItemIds,
               failedRoutineIds: receipt.failedItemIds,
+              expectedAcceptanceIds: expectedAcceptances
+                  .map((acceptance) => acceptance.acceptanceId)
+                  .toList(),
+              appliedAcceptanceIds:
+                  result.outcome == RoutineProjectionOutcome.projected
+                  ? validAcceptanceIds
+                  : const [],
+              existingAcceptanceIds:
+                  result.outcome == RoutineProjectionOutcome.noOp
+                  ? validAcceptanceIds
+                  : const [],
+              failedAcceptanceIds: failedAcceptanceIds,
             );
             job = await _markStageCompleted(
               job,
@@ -264,6 +326,12 @@ class OnboardingCompletionJobService {
                   ...job.appliedRoutineIds,
                   ...job.existingRoutineIds,
                   ...job.repairedRoutineIds,
+                }) ||
+                job.failedAcceptanceIds.isNotEmpty ||
+                !_sameIds(job.expectedAcceptanceIds, <String>{
+                  ...job.appliedAcceptanceIds,
+                  ...job.existingAcceptanceIds,
+                  ...job.repairedAcceptanceIds,
                 })) {
               throw StateError('Routine accounting verification failed.');
             }
@@ -544,7 +612,15 @@ class OnboardingCompletionJobService {
         !_sameIds(actual.expectedHistoryIds, expected.expectedHistoryIds) ||
         !_sameIds(actual.expectedHabitIds, expected.expectedHabitIds) ||
         !_sameIds(actual.acceptedSourceIds, expected.acceptedSourceIds) ||
-        !_sameIds(actual.generatedSourceIds, expected.generatedSourceIds)) {
+        !_sameIds(actual.generatedSourceIds, expected.generatedSourceIds) ||
+        !_sameIds(
+          actual.expectedAcceptanceIds,
+          expected.expectedAcceptanceIds,
+        ) ||
+        !_sameIds(
+          actual.conflictAcceptances.map((item) => item.acceptanceId),
+          expected.conflictAcceptances.map((item) => item.acceptanceId),
+        )) {
       throw StateError('Completion bundle read-back verification failed.');
     }
   }
@@ -584,6 +660,28 @@ class OnboardingCompletionJobService {
     if (!validation.isValid) {
       throw StateError('Routine projection document verification failed.');
     }
+    final acceptanceRepository = reader != null
+        ? reader(conflictAcceptanceRepositoryProvider)
+        : conflictAcceptanceRepository;
+    if (acceptanceRepository == null) {
+      if (bundle.expectedAcceptanceIds.isNotEmpty) {
+        throw StateError(
+          'Conflict acceptance repository is required for verification.',
+        );
+      }
+      return;
+    }
+    final storedAcceptances = await acceptanceRepository.fetchForOwner(uid);
+    final storedById = {
+      for (final acceptance in storedAcceptances)
+        acceptance.acceptanceId: acceptance,
+    };
+    for (final expected in plan.conflictAcceptances) {
+      final actual = storedById[expected.acceptanceId];
+      if (actual == null || !_matchesExpectedAcceptance(actual, expected)) {
+        throw StateError('Conflict acceptance read-back verification failed.');
+      }
+    }
   }
 
   Future<RoutineOnboardingEventProjectionResult> _projectRoutineHistory({
@@ -621,7 +719,13 @@ class OnboardingCompletionJobService {
         !job.isStageCompleted(OnboardingCompletionStage.verifyFrontendState) ||
         job.failedRoutineIds.isNotEmpty ||
         job.failedHistoryIds.isNotEmpty ||
-        job.failedHabitIds.isNotEmpty) {
+        job.failedHabitIds.isNotEmpty ||
+        job.failedAcceptanceIds.isNotEmpty ||
+        !_sameIds(job.expectedAcceptanceIds, <String>{
+          ...job.appliedAcceptanceIds,
+          ...job.existingAcceptanceIds,
+          ...job.repairedAcceptanceIds,
+        })) {
       throw StateError('Profile finalization prerequisites are incomplete.');
     }
   }
@@ -630,6 +734,23 @@ class OnboardingCompletionJobService {
     final a = left.toSet();
     final b = right.toSet();
     return a.length == b.length && a.containsAll(b);
+  }
+
+  bool _matchesExpectedAcceptance(
+    ConflictAcceptance actual,
+    ConflictAcceptance expected,
+  ) {
+    return actual.ownerUid == expected.ownerUid &&
+        actual.acceptanceId == expected.acceptanceId &&
+        actual.canonicalPairHash == expected.canonicalPairHash &&
+        actual.firstProjectedRoutineId == expected.firstProjectedRoutineId &&
+        actual.secondProjectedRoutineId == expected.secondProjectedRoutineId &&
+        actual.combinedScheduleFingerprint ==
+            expected.combinedScheduleFingerprint &&
+        actual.sourceBundleFingerprint == expected.sourceBundleFingerprint &&
+        actual.projectionId == expected.projectionId &&
+        actual.status == expected.status &&
+        actual.schemaVersion == expected.schemaVersion;
   }
 
   OnboardingCompletionJob _stageCompletedCopy(
@@ -653,13 +774,14 @@ class OnboardingCompletionJobService {
   Future<OnboardingCompletionJob> _loadOrCreateJob({
     required String uid,
     required String sourceFingerprint,
+    required String runId,
     required int draftRevision,
     required DateTime now,
   }) async {
-    final existing = await _loadJobStatus(uid);
+    final existing = await _loadJobStatus(uid, runId);
     if (existing == null) {
       return OnboardingCompletionJob(
-        jobId: 'current',
+        jobId: runId,
         uid: uid,
         status: OnboardingJobStatus.pending,
         stage: OnboardingCompletionStage.init,
@@ -675,53 +797,16 @@ class OnboardingCompletionJobService {
     if (existing.uid != uid) {
       throw StateError('Persisted onboarding completion job owner mismatch.');
     }
-    if (existing.schemaVersion < 1 ||
-        existing.schemaVersion > OnboardingCompletionJob.currentSchemaVersion) {
+    if (existing.jobId != runId ||
+        existing.schemaVersion !=
+            OnboardingCompletionJob.currentSchemaVersion) {
       throw StateError('Unsupported onboarding completion job schema version.');
     }
-    // Legacy broad stages cannot prove completion of any of the finer v2
-    // verification barriers. Restart safely from validation while retaining
-    // only owner-scoped identity and retry evidence in the legacy document.
-    if (existing.schemaVersion < OnboardingCompletionJob.currentSchemaVersion) {
-      return OnboardingCompletionJob(
-        jobId: existing.jobId,
-        ownerUid: uid,
-        status: OnboardingJobStatus.pending,
-        stage: OnboardingCompletionStage.validateInput,
-        stagesCompleted: const {},
-        sourceFingerprint: sourceFingerprint,
-        draftRevision: draftRevision,
-        retryCount: existing.retryCount,
-        lastFailureCode: existing.lastFailureCode,
-        lastFailureStage: existing.lastFailureStage,
-        retryable: existing.retryable,
-        publicMessageKey: existing.publicMessageKey,
-        diagnosticCategory: existing.diagnosticCategory,
-        safeCauseType: existing.safeCauseType,
-        failedEntityIds: existing.failedEntityIds,
-        lastFailureOccurredAt: existing.lastFailureOccurredAt,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      );
-    }
-    if (existing.sourceFingerprint.isNotEmpty &&
-        existing.sourceFingerprint != sourceFingerprint) {
-      return existing.copyWith(
-        status: OnboardingJobStatus.pending,
-        stage: OnboardingCompletionStage.init,
-        stagesCompleted: const {},
-        sourceFingerprint: sourceFingerprint,
-        draftRevision: draftRevision,
-        retryCount: 0,
-        updatedAt: now,
-        clearLastError: true,
-        clearLastFailure: true,
-      );
+    if (existing.sourceFingerprint != sourceFingerprint ||
+        existing.draftRevision != draftRevision) {
+      throw StateError('Onboarding run identity collision.');
     }
     return existing.copyWith(
-      sourceFingerprint: sourceFingerprint,
-      draftRevision: draftRevision,
-      schemaVersion: OnboardingCompletionJob.currentSchemaVersion,
       updatedAt: now,
     );
   }
@@ -754,10 +839,36 @@ class OnboardingCompletionJobService {
     return next;
   }
 
-  Future<OnboardingCompletionJob?> _loadJobStatus(String uid) async {
+  Future<OnboardingCompletionJob?> _loadCurrentJob(String uid) async {
+    if (firestore != null) {
+      final pointer = await firestore!
+          .doc(FirestoreUserPaths.onboardingCurrentRun(uid))
+          .get();
+      final runId = pointer.data()?['currentRunId'] as String?;
+      if (runId != null && runId.isNotEmpty) {
+        return _loadJobStatus(uid, runId);
+      }
+      // Read-only compatibility for a legacy fixed job. A new attempt always
+      // creates a canonical run rather than mutating this document.
+      final legacy = await firestore!
+          .doc(FirestoreUserPaths.onboardingCompletionJob(uid))
+          .get();
+      final legacyData = legacy.data();
+      return legacyData == null
+          ? null
+          : OnboardingCompletionJob.fromMap(legacyData);
+    }
+    final runId = _memoryCurrentRunIds[uid];
+    return runId == null ? null : _memoryJobs['$uid:$runId'];
+  }
+
+  Future<OnboardingCompletionJob?> _loadJobStatus(
+    String uid,
+    String runId,
+  ) async {
     if (firestore != null) {
       final snapshot = await firestore!
-          .doc(FirestoreUserPaths.onboardingCompletionJob(uid))
+          .doc(FirestoreUserPaths.onboardingRun(uid, runId))
           .get();
       final data = snapshot.data();
       return data == null ? null : OnboardingCompletionJob.fromMap(data);
@@ -767,14 +878,32 @@ class OnboardingCompletionJobService {
         'Firebase onboarding completion requires persistent job storage.',
       );
     }
-    return _memoryJobs[uid];
+    return _memoryJobs['$uid:$runId'];
   }
 
-  Future<void> _saveJobStatus(OnboardingCompletionJob job) async {
+  Future<void> _saveJobStatus(
+    OnboardingCompletionJob job, {
+    bool activate = false,
+  }) async {
     if (firestore != null) {
-      await firestore!
-          .doc(FirestoreUserPaths.onboardingCompletionJob(job.uid))
-          .set(job.toFirestoreMap());
+      if (activate) {
+        final batch = firestore!.batch();
+        batch.set(
+          firestore!.doc(
+            FirestoreUserPaths.onboardingRun(job.uid, job.jobId),
+          ),
+          job.toFirestoreMap(),
+        );
+        batch.set(
+          firestore!.doc(FirestoreUserPaths.onboardingCurrentRun(job.uid)),
+          _runPointerMap(job, status: 'active'),
+        );
+        await batch.commit();
+      } else {
+        await firestore!
+            .doc(FirestoreUserPaths.onboardingRun(job.uid, job.jobId))
+            .set(job.toFirestoreMap());
+      }
       return;
     }
     if (requirePersistentJobs) {
@@ -782,7 +911,23 @@ class OnboardingCompletionJobService {
         'Firebase onboarding completion requires persistent job storage.',
       );
     }
-    _memoryJobs[job.uid] = job;
+    _memoryJobs['${job.uid}:${job.jobId}'] = job;
+    if (activate) _memoryCurrentRunIds[job.uid] = job.jobId;
+  }
+
+  Map<String, dynamic> _runPointerMap(
+    OnboardingCompletionJob job, {
+    required String status,
+  }) {
+    return {
+      'ownerUid': job.ownerUid,
+      'currentRunId': job.jobId,
+      'sourceFingerprint': job.sourceFingerprint,
+      'draftRevision': job.draftRevision,
+      'status': status,
+      'updatedAt': Timestamp.fromDate(job.updatedAt),
+      'schemaVersion': 1,
+    };
   }
 
   static SanitizedFailurePayload _buildSanitizedFailure(
@@ -923,6 +1068,9 @@ final onboardingCompletionJobServiceProvider =
         onboardingRepository: ref.watch(onboardingRepositoryProvider),
         profileRepository: ref.watch(profileRepositoryProvider),
         routineRepository: ref.watch(routineRepositoryProvider),
+        conflictAcceptanceRepository: ref.watch(
+          conflictAcceptanceRepositoryProvider,
+        ),
         firestore: firebaseMode ? FirebaseFirestore.instance : null,
         requirePersistentJobs: firebaseMode,
         requireFrontendHydration: firebaseMode,

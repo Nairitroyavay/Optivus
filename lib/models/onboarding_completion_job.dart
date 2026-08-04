@@ -84,7 +84,7 @@ class OnboardingCompletionFailureException implements Exception {
 }
 
 class OnboardingCompletionJob {
-  static const int currentSchemaVersion = 2;
+  static const int currentSchemaVersion = 3;
 
   final String jobId;
   final String ownerUid;
@@ -122,6 +122,11 @@ class OnboardingCompletionJob {
   final List<String> existingHabitIds;
   final List<String> repairedHabitIds;
   final List<String> failedHabitIds;
+  final List<String> expectedAcceptanceIds;
+  final List<String> appliedAcceptanceIds;
+  final List<String> existingAcceptanceIds;
+  final List<String> repairedAcceptanceIds;
+  final List<String> failedAcceptanceIds;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? completedAt;
@@ -161,6 +166,11 @@ class OnboardingCompletionJob {
     this.existingHabitIds = const [],
     this.repairedHabitIds = const [],
     this.failedHabitIds = const [],
+    this.expectedAcceptanceIds = const [],
+    this.appliedAcceptanceIds = const [],
+    this.existingAcceptanceIds = const [],
+    this.repairedAcceptanceIds = const [],
+    this.failedAcceptanceIds = const [],
     required this.createdAt,
     required this.updatedAt,
     this.completedAt,
@@ -214,6 +224,11 @@ class OnboardingCompletionJob {
     List<String>? existingHabitIds,
     List<String>? repairedHabitIds,
     List<String>? failedHabitIds,
+    List<String>? expectedAcceptanceIds,
+    List<String>? appliedAcceptanceIds,
+    List<String>? existingAcceptanceIds,
+    List<String>? repairedAcceptanceIds,
+    List<String>? failedAcceptanceIds,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? completedAt,
@@ -267,6 +282,14 @@ class OnboardingCompletionJob {
       existingHabitIds: existingHabitIds ?? this.existingHabitIds,
       repairedHabitIds: repairedHabitIds ?? this.repairedHabitIds,
       failedHabitIds: failedHabitIds ?? this.failedHabitIds,
+      expectedAcceptanceIds:
+          expectedAcceptanceIds ?? this.expectedAcceptanceIds,
+      appliedAcceptanceIds: appliedAcceptanceIds ?? this.appliedAcceptanceIds,
+      existingAcceptanceIds:
+          existingAcceptanceIds ?? this.existingAcceptanceIds,
+      repairedAcceptanceIds:
+          repairedAcceptanceIds ?? this.repairedAcceptanceIds,
+      failedAcceptanceIds: failedAcceptanceIds ?? this.failedAcceptanceIds,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completedAt: clearCompletedAt ? null : (completedAt ?? this.completedAt),
@@ -308,6 +331,11 @@ class OnboardingCompletionJob {
       'existingHabitIds': _sortedUnique(existingHabitIds),
       'repairedHabitIds': _sortedUnique(repairedHabitIds),
       'failedHabitIds': _sortedUnique(failedHabitIds),
+      'expectedAcceptanceIds': _sortedUnique(expectedAcceptanceIds),
+      'appliedAcceptanceIds': _sortedUnique(appliedAcceptanceIds),
+      'existingAcceptanceIds': _sortedUnique(existingAcceptanceIds),
+      'repairedAcceptanceIds': _sortedUnique(repairedAcceptanceIds),
+      'failedAcceptanceIds': _sortedUnique(failedAcceptanceIds),
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       if (completedAt != null) 'completedAt': completedAt!.toIso8601String(),
@@ -378,6 +406,11 @@ class OnboardingCompletionJob {
       existingHabitIds: _parseStringList(map['existingHabitIds']),
       repairedHabitIds: _parseStringList(map['repairedHabitIds']),
       failedHabitIds: _parseStringList(map['failedHabitIds']),
+      expectedAcceptanceIds: _parseStringList(map['expectedAcceptanceIds']),
+      appliedAcceptanceIds: _parseStringList(map['appliedAcceptanceIds']),
+      existingAcceptanceIds: _parseStringList(map['existingAcceptanceIds']),
+      repairedAcceptanceIds: _parseStringList(map['repairedAcceptanceIds']),
+      failedAcceptanceIds: _parseStringList(map['failedAcceptanceIds']),
       createdAt: _parseDateTime(map['createdAt']) ?? DateTime.now(),
       updatedAt: _parseDateTime(map['updatedAt']) ?? DateTime.now(),
       completedAt: _parseDateTime(map['completedAt']),

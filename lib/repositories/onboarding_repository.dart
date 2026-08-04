@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
@@ -123,10 +124,18 @@ class FakeOnboardingRepository implements OnboardingRepository {
         plan: plan,
       );
       if (validation.isValid) {
-        return RoutineProjectionResult(
-          outcome: RoutineProjectionOutcome.noOp,
-          receipt: existingReceipt,
-        );
+        final storedAcceptances =
+            routineDatabase.acceptancesByUid[bundle.uid] ?? const {};
+        final acceptancesValid = plan.conflictAcceptances.every((expected) {
+          final actual = storedAcceptances[expected.acceptanceId];
+          return actual != null && _isExpectedAcceptance(actual, expected);
+        });
+        if (acceptancesValid) {
+          return RoutineProjectionResult(
+            outcome: RoutineProjectionOutcome.noOp,
+            receipt: existingReceipt,
+          );
+        }
       }
     }
 
@@ -134,6 +143,9 @@ class FakeOnboardingRepository implements OnboardingRepository {
     final nextBundles = Map<String, OnboardingCompletionBundle>.from(_bundles);
     final nextItemsByUid = _copyRoutineItems(routineDatabase.itemsByUid);
     final nextReceiptsByUid = _copyReceipts(routineDatabase.receiptsByUid);
+    final nextAcceptancesByUid = _copyAcceptances(
+      routineDatabase.acceptancesByUid,
+    );
     nextDrafts[bundle.uid] = finalDraft;
     nextBundles[bundle.uid] = bundle;
     final userItems = nextItemsByUid.putIfAbsent(bundle.uid, () => {});
@@ -193,6 +205,13 @@ class FakeOnboardingRepository implements OnboardingRepository {
     );
     nextReceiptsByUid.putIfAbsent(bundle.uid, () => {})[plan.projectionId] =
         receipt;
+    final ownerAcceptances = nextAcceptancesByUid.putIfAbsent(
+      bundle.uid,
+      () => {},
+    );
+    for (final acceptance in plan.conflictAcceptances) {
+      ownerAcceptances[acceptance.acceptanceId] = acceptance;
+    }
 
     if (_failNextCompletionBeforeCommit) {
       _failNextCompletionBeforeCommit = false;
@@ -205,6 +224,7 @@ class FakeOnboardingRepository implements OnboardingRepository {
     _bundles = nextBundles;
     routineDatabase.itemsByUid = nextItemsByUid;
     routineDatabase.receiptsByUid = nextReceiptsByUid;
+    routineDatabase.acceptancesByUid = nextAcceptancesByUid;
     return RoutineProjectionResult(
       outcome: RoutineProjectionOutcome.projected,
       receipt: receipt,
@@ -349,6 +369,16 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           ),
         )
         .toList(growable: false);
+    final acceptanceReferences = plan.conflictAcceptances
+        .map(
+          (acceptance) => _firestore.doc(
+            FirestoreUserPaths.conflictAcceptance(
+              bundle.uid,
+              acceptance.acceptanceId,
+            ),
+          ),
+        )
+        .toList(growable: false);
 
     try {
       return await _firestore.runTransaction((transaction) async {
@@ -369,6 +399,10 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
         final itemSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
         for (final reference in itemReferences) {
           itemSnapshots.add(await transaction.get(reference));
+        }
+        final acceptanceSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+        for (final reference in acceptanceReferences) {
+          acceptanceSnapshots.add(await transaction.get(reference));
         }
 
         if (receiptSnapshot.exists &&
@@ -399,10 +433,25 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
                     plan: plan,
                   );
               if (validation.isValid) {
-                return RoutineProjectionResult(
-                  outcome: RoutineProjectionOutcome.noOp,
-                  receipt: receipt,
-                );
+                final acceptancesValid =
+                    plan.conflictAcceptances.length ==
+                        acceptanceSnapshots.length &&
+                    List<bool>.generate(plan.conflictAcceptances.length, (
+                      index,
+                    ) {
+                      final data = acceptanceSnapshots[index].data();
+                      if (data == null) return false;
+                      return _isExpectedAcceptance(
+                        ConflictAcceptance.fromMap(data),
+                        plan.conflictAcceptances[index],
+                      );
+                    }).every((valid) => valid);
+                if (acceptancesValid) {
+                  return RoutineProjectionResult(
+                    outcome: RoutineProjectionOutcome.noOp,
+                    receipt: receipt,
+                  );
+                }
               }
             }
           }
@@ -492,6 +541,14 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           } catch (_) {
             failedItemIds.add(item.id);
           }
+        }
+
+        for (var index = 0; index < plan.conflictAcceptances.length; index++) {
+          final acceptance = plan.conflictAcceptances[index];
+          transaction.set(
+            acceptanceReferences[index],
+            acceptance.toFirestoreMap(),
+          );
         }
 
         final receipt = _receiptForCategories(
@@ -621,6 +678,32 @@ Map<String, Map<String, RoutineProjectionReceipt>> _copyReceipts(
     for (final entry in source.entries)
       entry.key: Map<String, RoutineProjectionReceipt>.from(entry.value),
   };
+}
+
+Map<String, Map<String, ConflictAcceptance>> _copyAcceptances(
+  Map<String, Map<String, ConflictAcceptance>> source,
+) {
+  return {
+    for (final entry in source.entries)
+      entry.key: Map<String, ConflictAcceptance>.from(entry.value),
+  };
+}
+
+bool _isExpectedAcceptance(
+  ConflictAcceptance actual,
+  ConflictAcceptance expected,
+) {
+  return actual.acceptanceId == expected.acceptanceId &&
+      actual.ownerUid == expected.ownerUid &&
+      actual.canonicalPairHash == expected.canonicalPairHash &&
+      actual.firstProjectedRoutineId == expected.firstProjectedRoutineId &&
+      actual.secondProjectedRoutineId == expected.secondProjectedRoutineId &&
+      actual.combinedScheduleFingerprint ==
+          expected.combinedScheduleFingerprint &&
+      actual.sourceBundleFingerprint == expected.sourceBundleFingerprint &&
+      actual.projectionId == expected.projectionId &&
+      actual.status == expected.status &&
+      actual.schemaVersion == expected.schemaVersion;
 }
 
 final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {

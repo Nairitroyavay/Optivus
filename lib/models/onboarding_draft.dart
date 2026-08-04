@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
+import 'package:optivus/features/routine/domain/conflict_policy.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 
 class OnboardingDraft {
-  static const int schemaVersion = 2;
+  static const int schemaVersion = 3;
   static const String sourceOnboarding = 'onboarding';
   static const int _legacyStepCount = 12;
   static const int stepCount = 15;
@@ -20,6 +22,7 @@ class OnboardingDraft {
   final bool onboardingCompleted;
   final int revision;
   final String sourceFingerprint;
+  final String timezoneId;
 
   final bool welcomeSaved;
   final bool patiencePledgeAccepted;
@@ -96,6 +99,7 @@ class OnboardingDraft {
     this.onboardingCompleted = false,
     this.revision = 1,
     this.sourceFingerprint = '',
+    this.timezoneId = 'UTC',
     this.welcomeSaved = false,
     this.patiencePledgeAccepted = false,
     this.patiencePledgeText,
@@ -138,6 +142,7 @@ class OnboardingDraft {
       onboardingCompleted: map['onboardingCompleted'] as bool? ?? false,
       revision: (map['revision'] as num?)?.toInt() ?? 1,
       sourceFingerprint: map['sourceFingerprint'] as String? ?? '',
+      timezoneId: map['timezoneId'] as String? ?? 'UTC',
       welcomeSaved: map['welcomeSaved'] as bool? ?? false,
       patiencePledgeAccepted: map['patiencePledgeAccepted'] as bool? ?? false,
       patiencePledgeText: map['patiencePledgeText'] as String?,
@@ -195,6 +200,7 @@ class OnboardingDraft {
       'schemaVersion': schemaVersion,
       'source': sourceOnboarding,
       'revision': revision,
+      'timezoneId': timezoneId,
       'currentStep': currentStep,
       'stepCompleted': stepCompleted,
       'stepDirty': stepDirty,
@@ -245,6 +251,7 @@ class OnboardingDraft {
     bool? onboardingCompleted,
     int? revision,
     String? sourceFingerprint,
+    String? timezoneId,
     bool? welcomeSaved,
     bool? patiencePledgeAccepted,
     String? patiencePledgeText,
@@ -287,6 +294,7 @@ class OnboardingDraft {
       sourceFingerprint:
           sourceFingerprint ??
           (incrementRevision ? '' : this.sourceFingerprint),
+      timezoneId: timezoneId ?? this.timezoneId,
       welcomeSaved: welcomeSaved ?? this.welcomeSaved,
       patiencePledgeAccepted:
           patiencePledgeAccepted ?? this.patiencePledgeAccepted,
@@ -412,27 +420,54 @@ class OnboardingDraft {
     );
   }
 
-  /// Hard overlaps that need an explicit decision before onboarding can finish.
-  ///
-  /// Class, work, and fixed responsibilities intentionally keep the existing
-  /// onboarding behavior: their overlapping cards can coexist without another
-  /// confirmation. Other hard overlaps (for example, class and breakfast) must
-  /// be accepted by the user and are then retained in the final Routine plan.
+  /// Overlaps that the canonical policy says must be edited or accepted before
+  /// onboarding can finish.
   List<TimelineConflictDraft> timelineConflictsRequiringAcceptance() {
-    final sectionByBlockId = {
-      for (final block in baseTimeline.blocks) block.id: block.section,
-    };
     return baseTimeline
-        .detectConflicts()
-        .where(
-          (conflict) =>
-              conflict.isBlocking &&
-              !_isOnboardingResponsibilityOverlap(
-                sectionByBlockId[conflict.firstBlockId],
-                sectionByBlockId[conflict.secondBlockId],
-              ),
+        .detectConflicts(
+          ownerUid: uid.isEmpty ? 'local-onboarding-owner' : uid,
+          timezoneId: timezoneId,
+          revision: revision,
         )
+        .where((conflict) => conflict.isBlocking)
         .toList(growable: false);
+  }
+
+  OnboardingDraft acceptTimelineConflictGroup({
+    required TimelineConflictDraft conflict,
+    required List<int> weekdays,
+    required String timezoneId,
+    DateTime? acceptedAt,
+  }) {
+    final first = baseTimeline.blockById(conflict.firstBlockId);
+    final second = baseTimeline.blockById(conflict.secondBlockId);
+    if (first == null || second == null || !conflict.canKeepBoth) return this;
+    final owner = uid.isEmpty ? 'local-onboarding-owner' : uid;
+    final acceptance = ConflictAcceptance.create(
+      ownerUid: owner,
+      first: timelineScheduleDescriptor(
+        first,
+        ownerUid: owner,
+        timezoneId: timezoneId,
+        revision: revision,
+      ),
+      second: timelineScheduleDescriptor(
+        second,
+        ownerUid: owner,
+        timezoneId: timezoneId,
+        revision: revision,
+      ),
+      conflictType: conflict.conflictType,
+      scope: ConflictAcceptanceScope.recurringWeekdays,
+      applicableWeekdays: weekdays,
+      timezoneId: timezoneId,
+      acceptedFrom: ConflictAcceptanceOrigin.onboarding,
+      acceptedAt: acceptedAt,
+    );
+    return copyWith(
+      timezoneId: timezoneId,
+      baseTimeline: baseTimeline.acceptCanonicalConflict(acceptance),
+    );
   }
 
   List<FinalTimelineItem> _standaloneGoodHabitItems(
@@ -653,28 +688,12 @@ class OnboardingDraft {
                 firstWindow.startMinute < secondWindow.endMinute &&
                 firstWindow.endMinute > secondWindow.startMinute;
             if (!overlaps) continue;
-            if (_isOnboardingResponsibilityOverlap(
-              first.source,
-              second.source,
-            )) {
-              continue;
-            }
             final key =
                 '${first.id}:${second.id}:${firstWindow.day}:${firstWindow.startMinute}';
             if (!seen.add(key)) continue;
             final hardConflict =
                 first.blockType == TimelineBlockDraft.hardBlockKey &&
                 second.blockType == TimelineBlockDraft.hardBlockKey;
-            final acceptedHardConflict =
-                hardConflict &&
-                baseTimeline.acceptedConflictKeys.contains(
-                  TimelineConflictDraft.keyFor(
-                    first.id,
-                    second.id,
-                    firstWindow.day,
-                  ),
-                );
-            if (acceptedHardConflict) continue;
             warnings.add(
               hardConflict
                   ? 'Resolve or accept the final hard conflict between ${first.title} and ${second.title}.'
@@ -685,20 +704,6 @@ class OnboardingDraft {
       }
     }
     return warnings;
-  }
-
-  static bool _isOnboardingResponsibilityOverlap(
-    String? firstSection,
-    String? secondSection,
-  ) {
-    return _isOnboardingResponsibilitySection(firstSection) &&
-        _isOnboardingResponsibilitySection(secondSection);
-  }
-
-  static bool _isOnboardingResponsibilitySection(String? section) {
-    return section == 'classes' ||
-        section == 'job_work_business' ||
-        section == 'fixed';
   }
 
   static List<String> _capacityWarnings(List<FinalTimelineItem> items) {
@@ -1147,6 +1152,10 @@ class BaseTimelineDraft {
   final int skinCareDesiredApplicationsPerDay;
   final bool skinCareSkipped;
   final List<PendingFutureImportDraft> pendingFutureImports;
+  final List<ConflictAcceptance> conflictAcceptances;
+
+  /// Reader-only compatibility for schema-v2 drafts. New serializers do not
+  /// write these schedule-unbound keys.
   final List<String> acceptedConflictKeys;
   final List<String> roleChangeWarnings;
   final List<String> skinCareSpecialCareNotes;
@@ -1193,6 +1202,7 @@ class BaseTimelineDraft {
     this.skinCareDesiredApplicationsPerDay = 2,
     this.skinCareSkipped = false,
     this.pendingFutureImports = const [],
+    this.conflictAcceptances = const [],
     this.acceptedConflictKeys = const [],
     this.roleChangeWarnings = const [],
     this.skinCareSpecialCareNotes = const [],
@@ -1255,6 +1265,10 @@ class BaseTimelineDraft {
       pendingFutureImports: _readPendingFutureImports(
         map['pendingFutureImports'],
       ),
+      conflictAcceptances: _readList(
+        map['conflictAcceptances'],
+        ConflictAcceptance.fromMap,
+      ),
       acceptedConflictKeys: _readStringList(map['acceptedConflictKeys']),
       roleChangeWarnings: _readStringList(map['roleChangeWarnings']),
       skinCareSpecialCareNotes: _readStringList(
@@ -1316,7 +1330,9 @@ class BaseTimelineDraft {
     'pendingFutureImports': pendingFutureImports
         .map((entry) => entry.toMap())
         .toList(),
-    'acceptedConflictKeys': acceptedConflictKeys,
+    'conflictAcceptances': conflictAcceptances
+        .map((acceptance) => acceptance.toMap())
+        .toList(),
     'roleChangeWarnings': roleChangeWarnings,
     'skinCareSpecialCareNotes': skinCareSpecialCareNotes,
     'skinCareProductRecommendations': skinCareProductRecommendations
@@ -1365,6 +1381,7 @@ class BaseTimelineDraft {
     int? skinCareDesiredApplicationsPerDay,
     bool? skinCareSkipped,
     List<PendingFutureImportDraft>? pendingFutureImports,
+    List<ConflictAcceptance>? conflictAcceptances,
     List<String>? acceptedConflictKeys,
     List<String>? roleChangeWarnings,
     List<String>? skinCareSpecialCareNotes,
@@ -1507,6 +1524,7 @@ class BaseTimelineDraft {
                 })
                 .toList(growable: false)
           : (pendingFutureImports ?? this.pendingFutureImports),
+      conflictAcceptances: conflictAcceptances ?? this.conflictAcceptances,
       acceptedConflictKeys: acceptedConflictKeys ?? this.acceptedConflictKeys,
       roleChangeWarnings: clearRoleChangeWarnings
           ? const []
@@ -1532,6 +1550,9 @@ class BaseTimelineDraft {
 
   BaseTimelineDraft upsertBlock(TimelineBlockDraft block) {
     final exists = blocks.any((item) => item.id == block.id);
+    final changed = blocks
+        .where((item) => item.id == block.id)
+        .any((item) => item.toMap().toString() != block.toMap().toString());
     return copyWith(
       blocks: exists
           ? [
@@ -1539,6 +1560,9 @@ class BaseTimelineDraft {
                 if (item.id == block.id) block else item,
             ]
           : [...blocks, block],
+      conflictAcceptances: changed
+          ? _invalidateAcceptancesForBlock(block.id, reason: 'scheduleEdited')
+          : conflictAcceptances,
     );
   }
 
@@ -1549,6 +1573,10 @@ class BaseTimelineDraft {
         final ids = TimelineConflictDraft.blockIdsForKey(key);
         return ids == null || !ids.contains(id);
       }).toList(),
+      conflictAcceptances: _invalidateAcceptancesForBlock(
+        id,
+        reason: 'sourceBlockDeleted',
+      ),
     );
   }
 
@@ -1606,6 +1634,49 @@ class BaseTimelineDraft {
     return copyWith(acceptedConflictKeys: [...acceptedConflictKeys, key]);
   }
 
+  BaseTimelineDraft acceptCanonicalConflict(ConflictAcceptance acceptance) {
+    if (conflictAcceptances.any(
+      (current) =>
+          current.acceptanceId == acceptance.acceptanceId && current.isActive,
+    )) {
+      return this;
+    }
+    final pair = acceptance.sourceBlockIds;
+    final now = acceptance.acceptedAt;
+    return copyWith(
+      conflictAcceptances: [
+        for (final current in conflictAcceptances)
+          if (current.isActive &&
+              current.sourceBlockIds.length == pair.length &&
+              current.sourceBlockIds.containsAll(pair))
+            current.invalidated('supersededByCurrentSchedule', at: now)
+          else
+            current,
+        acceptance,
+      ],
+    );
+  }
+
+  TimelineBlockDraft? blockById(String id) {
+    for (final block in blocks) {
+      if (block.id == id) return block;
+    }
+    return null;
+  }
+
+  List<ConflictAcceptance> _invalidateAcceptancesForBlock(
+    String blockId, {
+    required String reason,
+  }) {
+    return [
+      for (final acceptance in conflictAcceptances)
+        if (acceptance.isActive && acceptance.sourceBlockIds.contains(blockId))
+          acceptance.invalidated(reason)
+        else
+          acceptance,
+    ];
+  }
+
   BaseTimelineDraft withRequiredFixedBlocks() {
     final nextBlocks = [...blocks];
     if (!_hasSleepBlock(nextBlocks)) {
@@ -1644,7 +1715,11 @@ class BaseTimelineDraft {
     );
   }
 
-  List<TimelineConflictDraft> detectConflicts() {
+  List<TimelineConflictDraft> detectConflicts({
+    String ownerUid = 'local-onboarding-owner',
+    String timezoneId = 'UTC',
+    int revision = 1,
+  }) {
     final conflicts = <TimelineConflictDraft>[];
     for (var i = 0; i < blocks.length; i++) {
       final first = blocks[i];
@@ -1664,10 +1739,36 @@ class BaseTimelineDraft {
               second.id,
               firstWindow.day,
             );
-            final accepted = acceptedConflictKeys.contains(key);
-            final hardConflict =
-                first.blockType == TimelineBlockDraft.hardBlockKey &&
-                second.blockType == TimelineBlockDraft.hardBlockKey;
+            final firstDescriptor = timelineScheduleDescriptor(
+              first,
+              ownerUid: ownerUid,
+              timezoneId: timezoneId,
+              revision: revision,
+            );
+            final secondDescriptor = timelineScheduleDescriptor(
+              second,
+              ownerUid: ownerUid,
+              timezoneId: timezoneId,
+              revision: revision,
+            );
+            final decision = ConflictPolicy.classify(
+              firstDescriptor,
+              secondDescriptor,
+            );
+            final day = DateTime(2024, 1, firstWindow.day);
+            final accepted =
+                decision.canKeepBoth &&
+                conflictAcceptances.any(
+                  (acceptance) => acceptance.authorizesSourceDraft(
+                    ownerUid: ownerUid,
+                    first: firstDescriptor,
+                    second: secondDescriptor,
+                    conflictType: decision.type.name,
+                    day: day,
+                    timezoneId: timezoneId,
+                  ),
+                );
+            final hardConflict = decision.blocking;
             conflicts.add(
               TimelineConflictDraft(
                 key: key,
@@ -1678,6 +1779,10 @@ class BaseTimelineDraft {
                 day: firstWindow.day,
                 isHardConflict: hardConflict,
                 accepted: accepted,
+                conflictType: decision.type.name,
+                blocking: decision.blocking && !accepted,
+                canKeepBoth: decision.canKeepBoth && !accepted,
+                publicReason: decision.publicReason,
               ),
             );
           }
@@ -1733,11 +1838,20 @@ class BaseTimelineDraft {
       final ids = TimelineConflictDraft.blockIdsForKey(key);
       return ids == null || ids.every((id) => !removedIds.contains(id));
     }).toList();
+    final nextAcceptances = [
+      for (final acceptance in conflictAcceptances)
+        if (acceptance.isActive &&
+            acceptance.sourceBlockIds.any(removedIds.contains))
+          acceptance.invalidated('roleChanged')
+        else
+          acceptance,
+    ];
 
     return BaseTimelineInvalidationResult(
       timeline: copyWith(
         blocks: keptBlocks,
         acceptedConflictKeys: nextAcceptedKeys,
+        conflictAcceptances: nextAcceptances,
         roleChangeWarnings: warnings,
         clearBusinessPlanning: !businessEnabled,
         clearClassData: !classesEnabled,
@@ -2281,6 +2395,7 @@ class TimelineBlockDraft {
   final List<String> skincareSteps;
   final List<String> skincareMissingItems;
   final String? skincareSlotLabel;
+  final List<String> provenanceSourceIds;
 
   const TimelineBlockDraft({
     required this.id,
@@ -2303,6 +2418,7 @@ class TimelineBlockDraft {
     this.skincareSteps = const [],
     this.skincareMissingItems = const [],
     this.skincareSlotLabel,
+    this.provenanceSourceIds = const [],
   });
 
   factory TimelineBlockDraft.fromMap(Map<String, dynamic> map) {
@@ -2327,6 +2443,7 @@ class TimelineBlockDraft {
       skincareSteps: _readStringList(map['skincareSteps']),
       skincareMissingItems: _readStringList(map['skincareMissingItems']),
       skincareSlotLabel: map['skincareSlotLabel'] as String?,
+      provenanceSourceIds: _readStringList(map['provenanceSourceIds']),
     );
   }
 
@@ -2351,6 +2468,7 @@ class TimelineBlockDraft {
     'skincareSteps': skincareSteps,
     'skincareMissingItems': skincareMissingItems,
     'skincareSlotLabel': skincareSlotLabel,
+    'provenanceSourceIds': provenanceSourceIds,
   };
 
   TimelineBlockDraft copyWith({
@@ -2374,6 +2492,7 @@ class TimelineBlockDraft {
     List<String>? skincareSteps,
     List<String>? skincareMissingItems,
     String? skincareSlotLabel,
+    List<String>? provenanceSourceIds,
   }) {
     return TimelineBlockDraft(
       id: id ?? this.id,
@@ -2397,6 +2516,7 @@ class TimelineBlockDraft {
       skincareSteps: skincareSteps ?? this.skincareSteps,
       skincareMissingItems: skincareMissingItems ?? this.skincareMissingItems,
       skincareSlotLabel: skincareSlotLabel ?? this.skincareSlotLabel,
+      provenanceSourceIds: provenanceSourceIds ?? this.provenanceSourceIds,
     );
   }
 
@@ -2408,6 +2528,50 @@ class TimelineBlockDraft {
   }
 }
 
+ConflictScheduleDescriptor timelineScheduleDescriptor(
+  TimelineBlockDraft block, {
+  required String ownerUid,
+  required String timezoneId,
+  required int revision,
+  String projectionId = '',
+  String? projectedItemId,
+}) {
+  final normalizedTitle = block.title.trim().toLowerCase();
+  final category =
+      block.id == BaseTimelineDraft.fixedSleepId || normalizedTitle == 'sleep'
+      ? ConflictSemanticCategory.sleep
+      : switch (block.section) {
+          'classes' => ConflictSemanticCategory.classBlock,
+          'job_work_business' => ConflictSemanticCategory.job,
+          'eating' => ConflictSemanticCategory.meal,
+          'fixed' => ConflictSemanticCategory.fixed,
+          _ => ConflictSemanticCategory.other,
+        };
+  final repeatDays = block.repeatDays.toSet().toList()..sort();
+  return ConflictScheduleDescriptor(
+    ownerUid: ownerUid,
+    itemId: projectedItemId ?? block.id,
+    sourceItemId: block.id,
+    startMinute: block.startMinute,
+    endMinute: block.endMinute,
+    crossesMidnight: block.crossesMidnight,
+    endsNextDay: block.endsNextDay,
+    dateKey: '',
+    endDateKey: '',
+    repeatRule: repeatDays.length == 7 ? 'daily' : 'weekly',
+    repeatDays: repeatDays,
+    blockType: block.blockType,
+    hardBlock: block.blockType == TimelineBlockDraft.hardBlockKey,
+    category: category,
+    timezoneId: timezoneId,
+    source: block.source,
+    activeStatus: 'active',
+    projectionId: projectionId,
+    revision: revision,
+    schemaVersion: OnboardingDraft.schemaVersion,
+  );
+}
+
 class TimelineConflictDraft {
   final String key;
   final String firstBlockId;
@@ -2417,6 +2581,10 @@ class TimelineConflictDraft {
   final int day;
   final bool isHardConflict;
   final bool accepted;
+  final String conflictType;
+  final bool blocking;
+  final bool canKeepBoth;
+  final String publicReason;
 
   const TimelineConflictDraft({
     required this.key,
@@ -2427,9 +2595,13 @@ class TimelineConflictDraft {
     required this.day,
     required this.isHardConflict,
     required this.accepted,
-  });
+    this.conflictType = 'compatibleOverlap',
+    bool? blocking,
+    this.canKeepBoth = false,
+    this.publicReason = '',
+  }) : blocking = blocking ?? (isHardConflict && !accepted);
 
-  bool get isBlocking => isHardConflict && !accepted;
+  bool get isBlocking => blocking && !accepted;
 
   factory TimelineConflictDraft.fromMap(Map<String, dynamic> map) {
     return TimelineConflictDraft(
@@ -2441,6 +2613,10 @@ class TimelineConflictDraft {
       day: (map['day'] as num?)?.toInt() ?? 1,
       isHardConflict: map['isHardConflict'] as bool? ?? false,
       accepted: map['accepted'] as bool? ?? false,
+      conflictType: map['conflictType'] as String? ?? 'compatibleOverlap',
+      blocking: map['blocking'] as bool?,
+      canKeepBoth: map['canKeepBoth'] as bool? ?? false,
+      publicReason: map['publicReason'] as String? ?? '',
     );
   }
 
@@ -2453,6 +2629,10 @@ class TimelineConflictDraft {
     'day': day,
     'isHardConflict': isHardConflict,
     'accepted': accepted,
+    'conflictType': conflictType,
+    'blocking': blocking,
+    'canKeepBoth': canKeepBoth,
+    'publicReason': publicReason,
   };
 
   static String keyFor(String firstId, String secondId, int day) {
@@ -3035,7 +3215,10 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
 
   if (eatingBlocks.isEmpty) return blocks;
 
-  eatingBlocks.sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  eatingBlocks.sort((a, b) {
+    final start = a.startMinute.compareTo(b.startMinute);
+    return start == 0 ? a.id.compareTo(b.id) : start;
+  });
 
   final mergedEating = <TimelineBlockDraft>[];
 
@@ -3047,36 +3230,54 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
 
     final last = mergedEating.last;
 
-    final lastDays = last.repeatDays.isEmpty
-        ? const [1, 2, 3, 4, 5, 6, 7]
-        : last.repeatDays;
-    final blockDays = block.repeatDays.isEmpty
-        ? const [1, 2, 3, 4, 5, 6, 7]
-        : block.repeatDays;
-    final hasCommonDay = lastDays.any((d) => blockDays.contains(d));
+    final lastDays = [...last.repeatDays]..sort();
+    final blockDays = [...block.repeatDays]..sort();
+    final sameDays = lastDays.join(',') == blockDays.join(',');
+    final sameMealKind = _mealSemanticKey(last) == _mealSemanticKey(block);
+    final bothSameDaySchedules =
+        !last.crossesMidnight &&
+        !last.endsNextDay &&
+        !block.crossesMidnight &&
+        !block.endsNextDay;
 
-    if (hasCommonDay && block.startMinute < last.endMinute) {
+    if (sameDays &&
+        sameMealKind &&
+        bothSameDaySchedules &&
+        block.startMinute < last.endMinute) {
       final newEndMinute = block.endMinute > last.endMinute
           ? block.endMinute
           : last.endMinute;
 
-      List<int> newDays;
-      if (last.repeatDays.isEmpty || block.repeatDays.isEmpty) {
-        newDays = const [];
-      } else {
-        newDays = <int>{...last.repeatDays, ...block.repeatDays}.toList()
-          ..sort();
-      }
-
-      final combinedDishes = <String>{...last.dishes, ...block.dishes}.toList();
+      final combinedDishes = <String>{...last.dishes, ...block.dishes}.toList()
+        ..sort();
+      final sourceIds = <String>{
+        ...(last.provenanceSourceIds.isEmpty
+            ? [last.id]
+            : last.provenanceSourceIds),
+        ...(block.provenanceSourceIds.isEmpty
+            ? [block.id]
+            : block.provenanceSourceIds),
+      }.toList()..sort();
+      final digest = sha256.convert(
+        utf8.encode(
+          [
+            'eating-merge-v2',
+            sourceIds.join(','),
+            last.startMinute,
+            newEndMinute,
+            lastDays.join(','),
+            _mealSemanticKey(last),
+          ].join('\u001f'),
+        ),
+      );
 
       final newMerged = TimelineBlockDraft(
-        id: last.id,
+        id: 'meal_${digest.toString().substring(0, 32)}',
         section: last.section,
         title: last.title,
         startMinute: last.startMinute,
         endMinute: newEndMinute,
-        repeatDays: newDays,
+        repeatDays: lastDays,
         location: last.location ?? block.location,
         blockType: last.blockType,
         source: last.source,
@@ -3086,8 +3287,9 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
         endsNextDay: last.endsNextDay || block.endsNextDay,
         mealCategory: last.mealCategory ?? block.mealCategory,
         dishes: combinedDishes,
-        calories: last.calories ?? block.calories,
-        protein: last.protein ?? block.protein,
+        calories: _mergeNutrition(last.calories, block.calories),
+        protein: _mergeNutrition(last.protein, block.protein),
+        provenanceSourceIds: sourceIds,
       );
 
       mergedEating[mergedEating.length - 1] = newMerged;
@@ -3099,6 +3301,18 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
   final result = [...otherBlocks, ...mergedEating];
   result.sort((a, b) => a.startMinute.compareTo(b.startMinute));
   return result;
+}
+
+String _mealSemanticKey(TimelineBlockDraft block) {
+  final category = block.mealCategory?.trim().toLowerCase() ?? '';
+  if (category.isNotEmpty) return category;
+  return block.title.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+}
+
+double? _mergeNutrition(double? first, double? second) {
+  if (first == null) return second;
+  if (second == null) return first;
+  return first + second;
 }
 
 String _fingerprintDraftMap(Map<String, dynamic> map) {

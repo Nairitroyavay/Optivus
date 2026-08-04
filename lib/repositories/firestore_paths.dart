@@ -35,6 +35,18 @@ class FirestoreUserPaths {
     return 'users/$uid/onboardingCompletionJobs/current';
   }
 
+  static String onboardingRun(String uid, String runId) {
+    return 'users/$uid/onboardingRuns/$runId';
+  }
+
+  static String onboardingRuns(String uid) {
+    return 'users/$uid/onboardingRuns';
+  }
+
+  static String onboardingCurrentRun(String uid) {
+    return 'users/$uid/onboarding/currentRun';
+  }
+
   static String onboardingCompletionJobs(String uid) {
     return 'users/$uid/onboardingCompletionJobs';
   }
@@ -89,6 +101,14 @@ class FirestoreUserPaths {
 
   static String routineProjections(String uid) {
     return 'users/$uid/routineProjections';
+  }
+
+  static String conflictAcceptance(String uid, String acceptanceId) {
+    return 'users/$uid/conflictAcceptances/$acceptanceId';
+  }
+
+  static String conflictAcceptances(String uid) {
+    return 'users/$uid/conflictAcceptances';
   }
 
   static String habitSystem(String uid, String systemId) {

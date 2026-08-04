@@ -6,14 +6,17 @@ import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/money_models.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/tracker_session_link.dart';
 import 'package:optivus/models/routine_event_record.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
+import 'package:optivus/repositories/conflict_acceptance_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
 import 'package:optivus/features/routine/services/routine_materializer.dart';
 import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
@@ -111,6 +114,7 @@ class RoutineBatchWriteIntent {
 
 class RoutineState {
   final List<RoutineItem> items;
+  final List<ConflictAcceptance> conflictAcceptances;
   final List<RoutineOccurrenceRecord> occurrences;
   final List<RoutineEventRecord> events;
   final List<RoutineCorruptEvent> corruptEvents;
@@ -142,6 +146,7 @@ class RoutineState {
 
   const RoutineState({
     required this.items,
+    this.conflictAcceptances = const [],
     this.occurrences = const [],
     this.events = const [],
     this.corruptEvents = const [],
@@ -173,6 +178,7 @@ class RoutineState {
 
   RoutineState copyWith({
     List<RoutineItem>? items,
+    List<ConflictAcceptance>? conflictAcceptances,
     List<RoutineOccurrenceRecord>? occurrences,
     List<RoutineEventRecord>? events,
     List<RoutineCorruptEvent>? corruptEvents,
@@ -207,6 +213,7 @@ class RoutineState {
   }) {
     return RoutineState(
       items: items ?? this.items,
+      conflictAcceptances: conflictAcceptances ?? this.conflictAcceptances,
       occurrences: occurrences ?? this.occurrences,
       events: events ?? this.events,
       corruptEvents: corruptEvents ?? this.corruptEvents,
@@ -486,6 +493,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           queuedOccurrenceIntentsById: const {},
           failedBatchIntentsByOperationId: const {},
           items: const [],
+          conflictAcceptances: const [],
           clearError: true,
           clearEventsError: true,
           clearTrackerIntent: true,
@@ -498,6 +506,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         final results = await Future.wait<Object>([
           _repository.fetchRoutineItems(uid),
           _historyRepository.fetchHistory(uid),
+          _ref.read(conflictAcceptanceRepositoryProvider).fetchForOwner(uid),
         ]);
         if (generation != _loadGeneration || _ownerUid != uid) return;
         final remoteItems = results[0] as List<RoutineItem>;
@@ -547,6 +556,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
 
         state = state.copyWith(
           items: mergedItems,
+          conflictAcceptances: results[2] as List<ConflictAcceptance>,
           occurrences: mergedOccurrences,
           loading: false,
           eventsLoading: true,
@@ -642,6 +652,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
     _ref.read(trackerSessionLinksProvider.notifier).reset();
     state = RoutineState(
       items: const [],
+      conflictAcceptances: const [],
       selectedDay: TimelineUtils.dateOnly(DateTime.now()),
       pendingItemIds: const {},
       pendingOccurrenceIds: const {},
@@ -669,6 +680,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       ),
       state.selectedDay,
       now: DateTime.now(),
+      conflictAcceptances: state.conflictAcceptances,
+      timezoneId: _ref.read(regionSettingsProvider).timezone,
     );
     state = state.copyWith(conflicts: conflicts);
   }
@@ -2456,6 +2469,8 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
         state.selectedDay,
       ),
       state.selectedDay,
+      conflictAcceptances: state.conflictAcceptances,
+      timezoneId: _ref.read(regionSettingsProvider).timezone,
     );
 
     final matchingConflict = currentConflicts
@@ -2479,140 +2494,121 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
       );
     }
 
+    final uid = _requireOwnerUid();
+    final timezoneId = _ref.read(regionSettingsProvider).timezone;
     final fingerprint = RoutineConflictEngine.scheduleFingerprint(
       item1,
       item2,
       matchingConflict.type,
+      timezoneId: timezoneId,
     );
     final dateKey = routineLocalDateKey(state.selectedDay);
-    final canonicalPairId = ([item1.id, item2.id]..sort()).join('_');
-
-    final allowance = RoutineConflictAllowance(
-      canonicalPairId: canonicalPairId,
-      evaluatedDateKey: dateKey,
-      conflictType: matchingConflict.type.name,
-      scheduleFingerprint: fingerprint,
+    final firstDescriptor = RoutineConflictEngine.scheduleDescriptor(
+      item1,
+      timezoneId: timezoneId,
+      fallbackOwnerUid: uid,
     );
-
-    final uid = _requireOwnerUid();
+    final secondDescriptor = RoutineConflictEngine.scheduleDescriptor(
+      item2,
+      timezoneId: timezoneId,
+      fallbackOwnerUid: uid,
+    );
+    final projectionId =
+        firstDescriptor.projectionId == secondDescriptor.projectionId
+        ? firstDescriptor.projectionId
+        : '';
+    final acceptance = ConflictAcceptance.create(
+      ownerUid: uid,
+      first: firstDescriptor,
+      second: secondDescriptor,
+      conflictType: matchingConflict.type.name,
+      scope: ConflictAcceptanceScope.singleOccurrence,
+      applicableWeekdays: [state.selectedDay.weekday],
+      timezoneId: timezoneId,
+      acceptedFrom: ConflictAcceptanceOrigin.routineResolver,
+      dateKey: dateKey,
+      sourceBundleFingerprint: sha256
+          .convert(
+            utf8.encode('routine-resolver-v2\u001f$uid\u001f$fingerprint'),
+          )
+          .toString(),
+      projectionId: projectionId,
+      firstProjectedRoutineId: item1.id,
+      secondProjectedRoutineId: item2.id,
+    );
     final operationId = _stableOperationId('keepboth', [
       uid,
-      canonicalPairId,
-      dateKey,
-      matchingConflict.type.name,
-      fingerprint,
+      acceptance.acceptanceId,
     ]);
-
-    List<RoutineConflictAllowance> replaceAllowance(
-      List<RoutineConflictAllowance> allowances,
-    ) {
-      return [
-        for (final current in allowances)
-          if (current.canonicalPairId != allowance.canonicalPairId ||
-              current.evaluatedDateKey != allowance.evaluatedDateKey ||
-              current.conflictType != allowance.conflictType)
-            current,
-        allowance,
-      ];
-    }
-
-    final ownedItem1 = item1.copyWith(
-      userId: uid,
-      allowedConflicts: replaceAllowance(item1.allowedConflicts),
-      clearConflict: true,
-      lastMutationOperationId: operationId,
-    );
-
-    final ownedItem2 = item2.copyWith(
-      userId: uid,
-      allowedConflicts: replaceAllowance(item2.allowedConflicts),
-      clearConflict: true,
-      lastMutationOperationId: operationId,
-    );
-
-    final itemsToUpdate = <RoutineItem>[ownedItem1, ownedItem2];
+    final pairIds = {item1.id, item2.id};
+    final previousAcceptances = state.conflictAcceptances;
+    final acceptancesToWrite = <ConflictAcceptance>[
+      for (final current in previousAcceptances)
+        if (current.isActive &&
+            current.projectedRoutineIds.length == pairIds.length &&
+            current.projectedRoutineIds.containsAll(pairIds))
+          current.invalidated('supersededByCurrentSchedule')
+        else
+          current,
+      acceptance,
+    ];
     final eventsToUpdate = <RoutineEventRecord>[
       RoutineEventRecord(
         eventId: _stableEventId(
           operationId: operationId,
-          itemId: ownedItem1.id,
+          itemId: item1.id,
           eventType: RoutineEventType.edited,
         ),
         ownerUid: uid,
-        routineItemId: ownedItem1.id,
+        routineItemId: item1.id,
         eventType: RoutineEventType.edited,
         operationKey: operationId,
         source: 'app',
         occurredAt: DateTime.now().toUtc(),
-        itemSnapshot: _boundedHistorySnapshot(ownedItem1, uid),
+        itemSnapshot: _boundedHistorySnapshot(item1, uid),
       ),
       RoutineEventRecord(
         eventId: _stableEventId(
           operationId: operationId,
-          itemId: ownedItem2.id,
+          itemId: item2.id,
           eventType: RoutineEventType.edited,
         ),
         ownerUid: uid,
-        routineItemId: ownedItem2.id,
+        routineItemId: item2.id,
         eventType: RoutineEventType.edited,
         operationKey: operationId,
         source: 'app',
         occurredAt: DateTime.now().toUtc(),
-        itemSnapshot: _boundedHistorySnapshot(ownedItem2, uid),
+        itemSnapshot: _boundedHistorySnapshot(item2, uid),
       ),
     ];
 
-    final updatedIds = itemsToUpdate.map((e) => e.id).toSet();
-
-    state = state.copyWith(
-      pendingItemIds: {...state.pendingItemIds, ...updatedIds},
-      items: state.items.map((e) {
-        final update = itemsToUpdate.where((u) => u.id == e.id).firstOrNull;
-        return update ?? e;
-      }).toList(),
-    );
+    state = state.copyWith(conflictAcceptances: acceptancesToWrite);
     _recalculateConflicts();
 
     try {
       await _transactionRepository.commitWrite(
         uid: uid,
-        setItems: itemsToUpdate,
         addEvents: eventsToUpdate,
+        setConflictAcceptances: [
+          for (final current in acceptancesToWrite)
+            if (current.acceptanceId == acceptance.acceptanceId ||
+                (current.status == ConflictAcceptanceStatus.invalidated &&
+                    previousAcceptances.any(
+                      (previous) =>
+                          previous.acceptanceId == current.acceptanceId &&
+                          previous.isActive,
+                    )))
+              current,
+        ],
       );
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
-
-      state = state.copyWith(
-        pendingItemIds: state.pendingItemIds
-            .where((id) => !updatedIds.contains(id))
-            .toSet(),
-      );
       _recalculateConflicts();
       return RoutineWriteResult.saved(operationId: operationId);
     } catch (error) {
       if (_ownerUid != uid) return _supersededWriteResult(operationId);
-      final intent = RoutineBatchWriteIntent(
-        ownerUid: uid,
-        operationId: operationId,
-        action: RoutineWriteAction.keepBoth,
-        attemptedItems: itemsToUpdate,
-        previousItems: [item1, item2],
-        events: eventsToUpdate,
-        createdAt: DateTime.now().toUtc(),
-      );
-
       state = state.copyWith(
-        pendingItemIds: state.pendingItemIds
-            .where((id) => !updatedIds.contains(id))
-            .toSet(),
-        items: state.items.map((e) {
-          if (e.id == item1.id) return item1;
-          if (e.id == item2.id) return item2;
-          return e;
-        }).toList(),
-        failedBatchIntentsByOperationId: {
-          ...state.failedBatchIntentsByOperationId,
-          operationId: intent,
-        },
+        conflictAcceptances: previousAcceptances,
         error: 'Failed to resolve conflict atomically.',
       );
       _recalculateConflicts();
@@ -2749,10 +2745,8 @@ final routineCompletionSummaryProvider = Provider<RoutineCompletionSummary>((
 });
 
 final routineConflictSummaryProvider = Provider<RoutineConflictSummary>((ref) {
-  final conflicts = RoutineConflictEngine.detect(
-    ref.watch(todayRoutineItemsProvider),
-    TimelineUtils.dateOnly(DateTime.now()),
-    now: DateTime.now(),
+  final conflicts = ref.watch(
+    routineNotifierProvider.select((state) => state.conflicts),
   );
   return RoutineConflictSummary(
     total: conflicts.length,

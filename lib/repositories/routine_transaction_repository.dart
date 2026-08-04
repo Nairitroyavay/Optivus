@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/routine_event_record.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/routine_occurrence.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
@@ -36,6 +37,7 @@ abstract class RoutineTransactionRepository {
     String? deleteOccurrenceId,
     RoutineEventRecord? addEvent,
     List<RoutineEventRecord>? addEvents,
+    List<ConflictAcceptance>? setConflictAcceptances,
   });
 
   Future<void> commitProjectionEventBatch({
@@ -102,6 +104,7 @@ class FirestoreRoutineTransactionRepository
     String? deleteOccurrenceId,
     RoutineEventRecord? addEvent,
     List<RoutineEventRecord>? addEvents,
+    List<ConflictAcceptance>? setConflictAcceptances,
   }) async {
     await _firestore.runTransaction((transaction) async {
       final eventsToWrite = [?addEvent, ...?addEvents];
@@ -129,6 +132,16 @@ class FirestoreRoutineTransactionRepository
       }
 
       final itemsToWrite = [?setItem, ...?setItems];
+
+      for (final acceptance in setConflictAcceptances ?? const []) {
+        if (acceptance.ownerUid != uid || acceptance.acceptanceId.isEmpty) {
+          throw ArgumentError('Conflict acceptance owner or ID is invalid.');
+        }
+        final docRef = _firestore.doc(
+          FirestoreUserPaths.conflictAcceptance(uid, acceptance.acceptanceId),
+        );
+        transaction.set(docRef, acceptance.toFirestoreMap());
+      }
 
       for (final item in itemsToWrite) {
         final docRef = _firestore.doc(
@@ -356,6 +369,7 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
     String? deleteOccurrenceId,
     RoutineEventRecord? addEvent,
     List<RoutineEventRecord>? addEvents,
+    List<ConflictAcceptance>? setConflictAcceptances,
   }) async {
     final completer = Completer<void>();
     final previousMutex = _mutex;
@@ -374,6 +388,12 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
           ? await _historyRepository.fetchHistory(uid)
           : <RoutineOccurrenceRecord>[];
       final initialEvents = List<RoutineEventRecord>.from(_events[uid] ?? []);
+      final fakeDatabase = _routineRepository is FakeRoutineRepository
+          ? (_routineRepository).database
+          : null;
+      final initialAcceptances = Map<String, ConflictAcceptance>.from(
+        fakeDatabase?.acceptancesByUid[uid] ?? const {},
+      );
 
       try {
         await onBeforeMutation?.call();
@@ -413,6 +433,20 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
 
         // Execute all underlying writes FIRST.
         await Future.wait(futures);
+        if (fakeDatabase != null) {
+          final ownerAcceptances = fakeDatabase.acceptancesByUid.putIfAbsent(
+            uid,
+            () => {},
+          );
+          for (final acceptance in setConflictAcceptances ?? const []) {
+            if (acceptance.ownerUid != uid || acceptance.acceptanceId.isEmpty) {
+              throw ArgumentError(
+                'Conflict acceptance owner or ID is invalid.',
+              );
+            }
+            ownerAcceptances[acceptance.acceptanceId] = acceptance;
+          }
+        }
         await onAfterMutation?.call();
 
         // Publish events only AFTER writes succeed.
@@ -447,6 +481,9 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
             repo.database.itemsByUid[uid] = {
               for (final item in initialItems) item.id: item,
             };
+          }
+          if (fakeDatabase != null) {
+            fakeDatabase.acceptancesByUid[uid] = initialAcceptances;
           }
 
           // Rollback occurrences

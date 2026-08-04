@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/routine_firestore_codec.dart';
@@ -29,6 +30,7 @@ abstract class RoutineRepository {
 class FakeRoutineDatabase {
   Map<String, Map<String, RoutineItem>> itemsByUid = {};
   Map<String, Map<String, RoutineProjectionReceipt>> receiptsByUid = {};
+  Map<String, Map<String, ConflictAcceptance>> acceptancesByUid = {};
 }
 
 class FakeRoutineRepository implements RoutineRepository {

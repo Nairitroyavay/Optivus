@@ -7,6 +7,7 @@ import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/region_settings_provider.dart';
 
 class OnboardingStep14 extends ConsumerWidget {
   final ValueChanged<int>? onJumpToStep;
@@ -19,6 +20,7 @@ class OnboardingStep14 extends ConsumerWidget {
     final draft = onboarding.draft;
     final bundle = OnboardingCompletionService.buildBundle(draft);
     final blockingConflicts = draft.timelineConflictsRequiringAcceptance();
+    final conflictGroups = _ConflictGroup.from(blockingConflicts);
     final missing = <_MissingSetup>[
       if (draft.lifeRole.validate() != null)
         const _MissingSetup('Role and lifestyle', 2),
@@ -116,10 +118,11 @@ class OnboardingStep14 extends ConsumerWidget {
                 ),
               ),
             if (missing.isNotEmpty) const SizedBox(height: 16),
-            if (blockingConflicts.isNotEmpty) ...[
+            if (conflictGroups.isNotEmpty) ...[
               _BlockingConflictList(
-                conflicts: blockingConflicts,
-                onKeepBoth: (conflict) => _keepBoth(ref, conflict),
+                groups: conflictGroups,
+                onKeepBoth: (group, days) => _keepBoth(ref, group, days),
+                onEdit: (blockId) => _editBlock(draft, blockId),
               ),
               const SizedBox(height: 16),
             ],
@@ -288,10 +291,11 @@ class OnboardingStep14 extends ConsumerWidget {
                     ),
                   ),
                 const SizedBox(height: 14),
-                if (blockingConflicts.isNotEmpty) ...[
+                if (conflictGroups.isNotEmpty) ...[
                   _BlockingConflictList(
-                    conflicts: blockingConflicts,
-                    onKeepBoth: (conflict) => _keepBoth(ref, conflict),
+                    groups: conflictGroups,
+                    onKeepBoth: (group, days) => _keepBoth(ref, group, days),
+                    onEdit: (blockId) => _editBlock(draft, blockId),
                   ),
                   const SizedBox(height: 14),
                 ],
@@ -467,12 +471,30 @@ class OnboardingStep14 extends ConsumerWidget {
     );
   }
 
-  static void _keepBoth(WidgetRef ref, TimelineConflictDraft conflict) {
-    updateBaseTimelineDraft(
-      ref,
-      OnboardingDraft.lastStepIndex,
-      (base) => base.acceptConflict(conflict.key),
-    );
+  static void _keepBoth(WidgetRef ref, _ConflictGroup group, List<int> days) {
+    final timezoneId = ref.read(regionSettingsProvider).timezone;
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .updateDraft(
+          (draft) => draft.acceptTimelineConflictGroup(
+            conflict: group.conflicts.first,
+            weekdays: days,
+            timezoneId: timezoneId,
+          ),
+        );
+  }
+
+  void _editBlock(OnboardingDraft draft, String blockId) {
+    final block = draft.baseTimeline.blockById(blockId);
+    if (block == null) return;
+    final step = switch (block.section) {
+      'classes' || 'job_work_business' => 4,
+      'eating' => 5,
+      'fixed' => 6,
+      'skin_care' => 7,
+      _ => 4,
+    };
+    onJumpToStep?.call(step);
   }
 
   static String _time(int minute) {
@@ -505,12 +527,14 @@ class OnboardingStep14 extends ConsumerWidget {
 }
 
 class _BlockingConflictList extends StatelessWidget {
-  final List<TimelineConflictDraft> conflicts;
-  final ValueChanged<TimelineConflictDraft> onKeepBoth;
+  final List<_ConflictGroup> groups;
+  final void Function(_ConflictGroup group, List<int> days) onKeepBoth;
+  final ValueChanged<String> onEdit;
 
   const _BlockingConflictList({
-    required this.conflicts,
+    required this.groups,
     required this.onKeepBoth,
+    required this.onEdit,
   });
 
   @override
@@ -542,12 +566,13 @@ class _BlockingConflictList extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          for (var index = 0; index < conflicts.length; index++) ...[
+          for (var index = 0; index < groups.length; index++) ...[
             _BlockingConflictRow(
-              conflict: conflicts[index],
-              onKeepBoth: () => onKeepBoth(conflicts[index]),
+              group: groups[index],
+              onKeepBoth: (days) => onKeepBoth(groups[index], days),
+              onEdit: onEdit,
             ),
-            if (index != conflicts.length - 1) const Divider(height: 20),
+            if (index != groups.length - 1) const Divider(height: 20),
           ],
         ],
       ),
@@ -556,46 +581,122 @@ class _BlockingConflictList extends StatelessWidget {
 }
 
 class _BlockingConflictRow extends StatelessWidget {
-  final TimelineConflictDraft conflict;
-  final VoidCallback onKeepBoth;
+  final _ConflictGroup group;
+  final ValueChanged<List<int>> onKeepBoth;
+  final ValueChanged<String> onEdit;
 
   const _BlockingConflictRow({
-    required this.conflict,
+    required this.group,
     required this.onKeepBoth,
+    required this.onEdit,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final conflict = group.conflicts.first;
+    return Semantics(
+      container: true,
+      label:
+          '${conflict.firstTitle} and ${conflict.secondTitle} overlap ${group.dayLabel}. ${conflict.publicReason}',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${conflict.firstTitle} + ${conflict.secondTitle}',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Overlap ${group.dayLabel}',
+            style: const TextStyle(
+              fontSize: 11,
+              color: OptivusColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            conflict.publicReason,
+            style: TextStyle(
+              fontSize: 11,
+              color: conflict.canKeepBoth
+                  ? OptivusColors.textSecondary
+                  : OptivusColors.warning,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Text(
-                '${conflict.firstTitle} + ${conflict.secondTitle}',
-                style: const TextStyle(fontWeight: FontWeight.w800),
+              OutlinedButton(
+                onPressed: () => onEdit(conflict.firstBlockId),
+                child: Text('Edit ${conflict.firstTitle}'),
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Overlap on ${_weekday(conflict.day)}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: OptivusColors.textSecondary,
+              OutlinedButton(
+                onPressed: () => onEdit(conflict.secondBlockId),
+                child: Text('Edit ${conflict.secondTitle}'),
+              ),
+              if (conflict.canKeepBoth)
+                FilledButton.tonal(
+                  key: ValueKey('onboarding-final-keep-both-${group.key}'),
+                  onPressed: () => onKeepBoth(group.weekdays),
+                  child: const Text('Keep Both on These Days'),
                 ),
+              OutlinedButton(
+                onPressed: conflict.canKeepBoth
+                    ? () => _reviewDays(context)
+                    : null,
+                child: const Text('Review Days'),
               ),
             ],
           ),
-        ),
-        const SizedBox(width: 10),
-        FilledButton.tonal(
-          key: ValueKey('onboarding-final-keep-both-${conflict.key}'),
-          onPressed: onKeepBoth,
-          child: const Text('Keep both'),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  Future<void> _reviewDays(BuildContext context) async {
+    final selected = group.weekdays.toSet();
+    final result = await showDialog<List<int>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Choose overlap days'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final day in group.weekdays)
+                CheckboxListTile(
+                  value: selected.contains(day),
+                  title: Text(_weekday(day)),
+                  onChanged: (checked) {
+                    setState(() {
+                      if (checked ?? false) {
+                        selected.add(day);
+                      } else {
+                        selected.remove(day);
+                      }
+                    });
+                  },
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(context, selected.toList()..sort()),
+              child: const Text('Keep Both'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != null && result.isNotEmpty) onKeepBoth(result);
   }
 
   static String _weekday(int day) => switch (day) {
@@ -608,6 +709,43 @@ class _BlockingConflictRow extends StatelessWidget {
     7 => 'Sunday',
     _ => 'the selected day',
   };
+}
+
+class _ConflictGroup {
+  const _ConflictGroup({required this.key, required this.conflicts});
+
+  final String key;
+  final List<TimelineConflictDraft> conflicts;
+
+  List<int> get weekdays =>
+      (conflicts.map((conflict) => conflict.day).toSet().toList()..sort());
+
+  String get dayLabel {
+    final days = weekdays;
+    if (days.length == 5 && days.join(',') == '1,2,3,4,5') {
+      return 'Monday–Friday';
+    }
+    return days.map(_BlockingConflictRow._weekday).join(', ');
+  }
+
+  static List<_ConflictGroup> from(List<TimelineConflictDraft> conflicts) {
+    final grouped = <String, List<TimelineConflictDraft>>{};
+    for (final conflict in conflicts) {
+      final ids = [conflict.firstBlockId, conflict.secondBlockId]..sort();
+      final key = '${ids[0]}|${ids[1]}|${conflict.conflictType}';
+      grouped.putIfAbsent(key, () => []).add(conflict);
+    }
+    final result = grouped.entries
+        .map(
+          (entry) => _ConflictGroup(
+            key: entry.key,
+            conflicts: entry.value..sort((a, b) => a.day.compareTo(b.day)),
+          ),
+        )
+        .toList();
+    result.sort((a, b) => a.key.compareTo(b.key));
+    return result;
+  }
 }
 
 class _MissingSetup {

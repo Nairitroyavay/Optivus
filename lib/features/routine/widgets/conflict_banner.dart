@@ -336,7 +336,9 @@ class _ConflictResolverCardState extends State<_ConflictResolverCard> {
     final conflict = widget.conflict;
     final item = widget.item;
     final other = widget.other;
-    final color = conflict.blocking
+    final color = conflict.resolution == RoutineConflictResolution.allowedByUser
+        ? OptivusColors.success
+        : conflict.blocking
         ? OptivusColors.danger
         : OptivusColors.warning;
     return Container(
@@ -359,7 +361,9 @@ class _ConflictResolverCardState extends State<_ConflictResolverCard> {
           Row(
             children: [
               Icon(
-                conflict.blocking
+                conflict.resolution == RoutineConflictResolution.allowedByUser
+                    ? Icons.check_circle_rounded
+                    : conflict.blocking
                     ? Icons.block_rounded
                     : Icons.warning_amber_rounded,
                 size: 18,
@@ -380,6 +384,26 @@ class _ConflictResolverCardState extends State<_ConflictResolverCard> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 7),
+          if (conflict.resolution ==
+              RoutineConflictResolution.allowedByUser) ...[
+            const Text(
+              'Overlap allowed by you',
+              style: TextStyle(
+                color: OptivusColors.success,
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 5),
+          ],
+          Text(
+            conflict.message,
+            style: const TextStyle(
+              fontSize: 12,
+              color: OptivusColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 7),
           Text(

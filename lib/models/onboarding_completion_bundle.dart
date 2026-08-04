@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:optivus/models/coach_models.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
@@ -10,9 +11,10 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 
 class OnboardingCompletionBundle {
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 2;
 
   final String uid;
+  final String runId;
   final int version;
   final String source;
   final DateTime createdAt;
@@ -37,9 +39,13 @@ class OnboardingCompletionBundle {
   final List<String> expectedHabitIds;
   final List<String> acceptedSourceIds;
   final List<String> generatedSourceIds;
+  final List<ConflictAcceptance> conflictAcceptances;
+  final List<String> expectedAcceptanceIds;
+  final List<UnscheduledRoutineSuggestion> unscheduledRoutineSuggestions;
 
   const OnboardingCompletionBundle({
     required this.uid,
+    this.runId = '',
     this.version = schemaVersion,
     this.source = OnboardingDraft.sourceOnboarding,
     required this.createdAt,
@@ -64,11 +70,15 @@ class OnboardingCompletionBundle {
     this.expectedHabitIds = const [],
     this.acceptedSourceIds = const [],
     this.generatedSourceIds = const [],
+    this.conflictAcceptances = const [],
+    this.expectedAcceptanceIds = const [],
+    this.unscheduledRoutineSuggestions = const [],
   });
 
   Map<String, dynamic> toMap() {
     final map = <String, dynamic>{
       'uid': uid,
+      'runId': runId,
       'schemaVersion': version,
       'source': source,
       'draftRevision': draftRevision,
@@ -125,6 +135,13 @@ class OnboardingCompletionBundle {
       'expectedHabitIds': _sortedUnique(expectedHabitIds),
       'acceptedSourceIds': _sortedUnique(acceptedSourceIds),
       'generatedSourceIds': _sortedUnique(generatedSourceIds),
+      'conflictAcceptances': conflictAcceptances
+          .map((acceptance) => acceptance.toMap())
+          .toList(),
+      'expectedAcceptanceIds': _sortedUnique(expectedAcceptanceIds),
+      'unscheduledRoutineSuggestions': unscheduledRoutineSuggestions
+          .map((suggestion) => suggestion.toMap())
+          .toList(),
     };
     map['sourceFingerprint'] = sourceFingerprint.trim().isNotEmpty
         ? sourceFingerprint
@@ -147,6 +164,7 @@ class OnboardingCompletionBundle {
     final updatedAt = _bundleDateTimeFromValue(map['updatedAt']);
     return OnboardingCompletionBundle(
       uid: map['uid'] as String? ?? '',
+      runId: map['runId'] as String? ?? '',
       version:
           (map['schemaVersion'] as num?)?.toInt() ??
           (map['version'] as num?)?.toInt() ??
@@ -204,6 +222,15 @@ class OnboardingCompletionBundle {
       expectedHabitIds: _bundleStringList(map['expectedHabitIds']),
       acceptedSourceIds: _bundleStringList(map['acceptedSourceIds']),
       generatedSourceIds: _bundleStringList(map['generatedSourceIds']),
+      conflictAcceptances: _bundleReadList(
+        map['conflictAcceptances'],
+        ConflictAcceptance.fromMap,
+      ),
+      expectedAcceptanceIds: _bundleStringList(map['expectedAcceptanceIds']),
+      unscheduledRoutineSuggestions: _bundleReadList(
+        map['unscheduledRoutineSuggestions'],
+        UnscheduledRoutineSuggestion.fromMap,
+      ),
     );
   }
 
@@ -215,9 +242,13 @@ class OnboardingCompletionBundle {
     List<String>? expectedHabitIds,
     List<String>? acceptedSourceIds,
     List<String>? generatedSourceIds,
+    List<ConflictAcceptance>? conflictAcceptances,
+    List<String>? expectedAcceptanceIds,
+    List<UnscheduledRoutineSuggestion>? unscheduledRoutineSuggestions,
   }) {
     return OnboardingCompletionBundle(
       uid: uid,
+      runId: runId,
       version: version,
       source: source,
       createdAt: createdAt,
@@ -242,6 +273,56 @@ class OnboardingCompletionBundle {
       expectedHabitIds: expectedHabitIds ?? this.expectedHabitIds,
       acceptedSourceIds: acceptedSourceIds ?? this.acceptedSourceIds,
       generatedSourceIds: generatedSourceIds ?? this.generatedSourceIds,
+      conflictAcceptances: conflictAcceptances ?? this.conflictAcceptances,
+      expectedAcceptanceIds:
+          expectedAcceptanceIds ?? this.expectedAcceptanceIds,
+      unscheduledRoutineSuggestions:
+          unscheduledRoutineSuggestions ?? this.unscheduledRoutineSuggestions,
+    );
+  }
+}
+
+class UnscheduledRoutineSuggestion {
+  static const int currentSchemaVersion = 1;
+
+  const UnscheduledRoutineSuggestion({
+    required this.id,
+    required this.sourceItemId,
+    required this.title,
+    required this.reason,
+    required this.repeatDays,
+    required this.durationMinutes,
+    this.schemaVersion = currentSchemaVersion,
+  });
+
+  final String id;
+  final String sourceItemId;
+  final String title;
+  final String reason;
+  final List<int> repeatDays;
+  final int durationMinutes;
+  final int schemaVersion;
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'sourceItemId': sourceItemId,
+    'title': title,
+    'reason': reason,
+    'repeatDays': repeatDays,
+    'durationMinutes': durationMinutes,
+    'schemaVersion': schemaVersion,
+  };
+
+  factory UnscheduledRoutineSuggestion.fromMap(Map<String, dynamic> map) {
+    return UnscheduledRoutineSuggestion(
+      id: map['id'] as String? ?? '',
+      sourceItemId: map['sourceItemId'] as String? ?? '',
+      title: map['title'] as String? ?? '',
+      reason: map['reason'] as String? ?? '',
+      repeatDays: _bundleIntList(map['repeatDays']),
+      durationMinutes: (map['durationMinutes'] as num?)?.toInt() ?? 0,
+      schemaVersion:
+          (map['schemaVersion'] as num?)?.toInt() ?? currentSchemaVersion,
     );
   }
 }

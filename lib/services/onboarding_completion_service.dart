@@ -1,14 +1,20 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+import 'package:optivus/features/routine/domain/conflict_policy.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/goal_models.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/habit_system_onboarding_projection.dart';
+import 'package:optivus/services/onboarding_run_identity.dart';
 import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 
@@ -160,7 +166,8 @@ class OnboardingCompletionService {
     final preview = draft.buildFinalPreview();
 
     // We rebuild routine items per day to ensure no hard-block overlaps
-    final routineItems = _scheduleRoutineItems(draft, baseItems, preview.items);
+    final schedule = _scheduleRoutineItems(draft, baseItems, preview.items);
+    final routineItems = schedule.items;
 
     final badHabitCheckIns = _badHabitCheckIns(draft, routineItems);
     final goals = _goalModels(draft, routineItems);
@@ -179,6 +186,11 @@ class OnboardingCompletionService {
 
     final initialBundle = OnboardingCompletionBundle(
       uid: draft.uid,
+      runId: stableOnboardingRunId(
+        ownerUid: draft.uid,
+        sourceFingerprint: draft.effectiveSourceFingerprint,
+        draftRevision: draft.revision,
+      ),
       createdAt: now,
       updatedAt: now,
       userProfilePatch: _userProfilePatch(draft),
@@ -192,10 +204,12 @@ class OnboardingCompletionService {
       coachPreferences: _coachPreferences(draft),
       moneyGoal: moneyGoal,
       uploadedAssetReferences: _uploadedAssetReferences(draft),
-      warnings: preview.warnings,
+      warnings: [...preview.warnings, ...schedule.warnings],
       duplicateSystemKeysMerged: preview.duplicateSystemKeysSkipped,
       sourceFingerprint: draft.effectiveSourceFingerprint,
       draftRevision: draft.revision,
+      conflictAcceptances: _canonicalSourceAcceptances(draft),
+      unscheduledRoutineSuggestions: schedule.unscheduledSuggestions,
     );
     final routinePlan = RoutineOnboardingProjection.build(initialBundle);
     final habitSystems = HabitSystemOnboardingProjection.build(
@@ -220,7 +234,59 @@ class OnboardingCompletionService {
       expectedHabitIds: habitSystems.map((item) => item.systemId).toList(),
       acceptedSourceIds: acceptedSourceIds,
       generatedSourceIds: generatedSourceIds,
+      expectedAcceptanceIds: routinePlan.conflictAcceptances
+          .map((acceptance) => acceptance.acceptanceId)
+          .toList(),
     );
+  }
+
+  static List<ConflictAcceptance> _canonicalSourceAcceptances(
+    OnboardingDraft draft,
+  ) {
+    final owner = draft.uid;
+    if (owner.isEmpty) return const [];
+    final accepted = <ConflictAcceptance>[];
+    for (final source in draft.baseTimeline.conflictAcceptances) {
+      if (!source.isActive) continue;
+      final first = draft.baseTimeline.blockById(source.firstSourceBlockId);
+      final second = draft.baseTimeline.blockById(source.secondSourceBlockId);
+      if (first == null || second == null) continue;
+      final firstDescriptor = timelineScheduleDescriptor(
+        first,
+        ownerUid: owner,
+        timezoneId: draft.timezoneId,
+        revision: draft.revision,
+      );
+      final secondDescriptor = timelineScheduleDescriptor(
+        second,
+        ownerUid: owner,
+        timezoneId: draft.timezoneId,
+        revision: draft.revision,
+      );
+      final decision = ConflictPolicy.classify(
+        firstDescriptor,
+        secondDescriptor,
+      );
+      if (!decision.canKeepBoth || decision.type.name != source.conflictType) {
+        continue;
+      }
+      accepted.add(
+        ConflictAcceptance.create(
+          ownerUid: owner,
+          first: firstDescriptor,
+          second: secondDescriptor,
+          conflictType: decision.type.name,
+          scope: source.scope,
+          applicableWeekdays: source.applicableWeekdays,
+          timezoneId: draft.timezoneId,
+          acceptedFrom: source.acceptedFrom,
+          dateKey: source.dateKey,
+          acceptedAt: source.acceptedAt,
+        ),
+      );
+    }
+    accepted.sort((a, b) => a.acceptanceId.compareTo(b.acceptanceId));
+    return accepted;
   }
 
   static List<OnboardingUploadedAssetReference> _uploadedAssetReferences(
@@ -295,7 +361,7 @@ class OnboardingCompletionService {
     return references;
   }
 
-  static List<RoutineItem> _scheduleRoutineItems(
+  static _RoutineScheduleBuildResult _scheduleRoutineItems(
     OnboardingDraft draft,
     List<TimelineBlockDraft> baseBlocks,
     List<FinalTimelineItem> previewItems,
@@ -315,7 +381,11 @@ class OnboardingCompletionService {
         endsNextDay: isOvernight,
         repeatDays: b.repeatDays,
         blockType: blockType,
-        category: _categoryForTimelineSource(b.section, blockType),
+        category:
+            b.id == BaseTimelineDraft.fixedSleepId ||
+                b.title.trim().toLowerCase() == 'sleep'
+            ? RoutineCategory.sleep
+            : _categoryForTimelineSource(b.section, blockType),
         source: RoutineSource.onboarding,
         priority: _priorityForBlockType(blockType),
         hardBlock: blockType == RoutineBlockType.hardBlock,
@@ -341,6 +411,8 @@ class OnboardingCompletionService {
         )
         .toList();
 
+    final unscheduled = <UnscheduledRoutineSuggestion>[];
+    final warnings = <String>[];
     for (final flex in flexibleItems) {
       final blockType = switch (flex.blockType) {
         TimelineBlockDraft.softBlockKey => RoutineBlockType.softBlock,
@@ -349,54 +421,51 @@ class OnboardingCompletionService {
         _ => RoutineBlockType.flexibleTask,
       };
 
-      // Ensure no overlap per day
-      var placedAnyDay = false;
-      final successfulDays = <int>[];
-      var currentStartMinute = flex.startMinute;
-
-      for (final day in flex.repeatDays) {
-        final duration = flex.durationMinutes;
-        var start = currentStartMinute;
-        var moved = true;
-
-        // Scan for conflicts on this specific day
-        while (moved && start + duration <= 24 * 60) {
-          moved = false;
-          for (final existing in scheduled) {
-            if (!existing.repeatDays.contains(day)) continue;
-            // Basic overlap check
-            final eStart = existing.startMinute;
-            final eEnd =
-                existing.crossesMidnight ||
-                    existing.endsNextDay ||
-                    existing.endMinute <= eStart
-                ? (24 * 60) + existing.endMinute
-                : existing.endMinute;
-
-            final overlaps = start < eEnd && (start + duration) > eStart;
-            if (overlaps) {
-              start = eEnd + 10; // Push 10 minutes past the existing block
-              moved = true;
-            }
-          }
-        }
-
-        if (start + duration <= 24 * 60) {
-          currentStartMinute = start;
-          successfulDays.add(day);
-          placedAnyDay = true;
+      final duration = flex.durationMinutes;
+      final requestedDays =
+          (flex.repeatDays.isEmpty
+                ? <int>[1, 2, 3, 4, 5, 6, 7]
+                : flex.repeatDays.toSet().toList())
+            ..sort();
+      final daysByStartMinute = <int, List<int>>{};
+      final failedDays = <int>[];
+      for (final day in requestedDays) {
+        final start = _firstAvailableStart(
+          requestedStart: flex.startMinute,
+          duration: duration,
+          day: day,
+          scheduled: scheduled,
+        );
+        if (start == null) {
+          failedDays.add(day);
+        } else {
+          daysByStartMinute.putIfAbsent(start, () => []).add(day);
         }
       }
 
-      if (placedAnyDay) {
+      for (final entry in daysByStartMinute.entries) {
+        final days = entry.value..sort();
+        final startMinute = entry.key;
+        final unchanged =
+            daysByStartMinute.length == 1 &&
+            failedDays.isEmpty &&
+            startMinute == flex.startMinute &&
+            days.join(',') == requestedDays.join(',');
         scheduled.add(
           RoutineItem(
-            id: flex.id,
+            id: unchanged
+                ? flex.id
+                : _scheduleVariantId(
+                    flex.id,
+                    startMinute: startMinute,
+                    duration: duration,
+                    repeatDays: days,
+                  ),
             userId: draft.uid,
             title: flex.title,
-            startMinute: currentStartMinute,
-            endMinute: currentStartMinute + flex.durationMinutes,
-            repeatDays: successfulDays, // Only repeat on days we could fit it
+            startMinute: startMinute,
+            endMinute: startMinute + duration,
+            repeatDays: days,
             blockType: blockType,
             category: _categoryForTimelineSource(flex.source, blockType),
             source: RoutineSource.onboarding,
@@ -405,30 +474,106 @@ class OnboardingCompletionService {
             notes: flex.source,
           ),
         );
-      } else {
-        // Fallback: Add as a tiny unscheduled suggestion (0 duration)
-        scheduled.add(
-          RoutineItem(
-            id: flex.id,
-            userId: draft.uid,
-            title: '[Tiny] ${flex.title}',
-            startMinute: 0,
-            endMinute: 5,
-            repeatDays: flex.repeatDays,
-            blockType: RoutineBlockType.flexibleTask,
-            category: _categoryForTimelineSource(
-              flex.source,
-              RoutineBlockType.flexibleTask,
-            ),
-            source: RoutineSource.onboarding,
-            priority: RoutinePriority.goodToDo,
-            notes: 'Unscheduled fallback due to schedule overflow',
+        if (startMinute != flex.startMinute) {
+          warnings.add(
+            '${flex.title} needs review: ${_weekdayList(days)} was placed at '
+            '${_minuteLabel(startMinute)} instead of ${_minuteLabel(flex.startMinute)}.',
+          );
+        }
+      }
+      if (failedDays.isNotEmpty) {
+        final digest = sha256.convert(
+          utf8.encode(
+            'unscheduled-v1\u001f${draft.uid}\u001f${flex.id}\u001f${failedDays.join(',')}',
           ),
+        );
+        unscheduled.add(
+          UnscheduledRoutineSuggestion(
+            id: 'uns_${digest.toString().substring(0, 32)}',
+            sourceItemId: flex.id,
+            title: flex.title,
+            reason: 'no_available_time',
+            repeatDays: failedDays,
+            durationMinutes: duration,
+          ),
+        );
+        warnings.add(
+          '${flex.title} is unscheduled on ${_weekdayList(failedDays)}. Choose a time in Routine.',
         );
       }
     }
 
-    return scheduled;
+    return _RoutineScheduleBuildResult(
+      items: scheduled,
+      unscheduledSuggestions: unscheduled,
+      warnings: warnings,
+    );
+  }
+
+  static int? _firstAvailableStart({
+    required int requestedStart,
+    required int duration,
+    required int day,
+    required List<RoutineItem> scheduled,
+  }) {
+    if (duration <= 0 || duration > 24 * 60) return null;
+    final intervals = <({int start, int end})>[];
+    final previousDay = day == 1 ? 7 : day - 1;
+    for (final item in scheduled) {
+      final overnight =
+          item.crossesMidnight ||
+          item.endsNextDay ||
+          item.endMinute <= item.startMinute;
+      if (item.repeatDays.contains(day)) {
+        intervals.add((
+          start: item.startMinute,
+          end: overnight ? 24 * 60 : item.endMinute,
+        ));
+      }
+      if (overnight && item.repeatDays.contains(previousDay)) {
+        intervals.add((start: 0, end: item.endMinute));
+      }
+    }
+    intervals.sort((a, b) => a.start.compareTo(b.start));
+    var start = requestedStart.clamp(0, 1439);
+    while (start + duration <= 24 * 60) {
+      ({int start, int end})? overlap;
+      for (final interval in intervals) {
+        if (start < interval.end && start + duration > interval.start) {
+          overlap = interval;
+          break;
+        }
+      }
+      if (overlap == null) return start;
+      start = overlap.end + 10;
+    }
+    return null;
+  }
+
+  static String _scheduleVariantId(
+    String sourceId, {
+    required int startMinute,
+    required int duration,
+    required List<int> repeatDays,
+  }) {
+    final digest = sha256.convert(
+      utf8.encode(
+        'schedule-variant-v1\u001f$sourceId\u001f$startMinute\u001f$duration\u001f${repeatDays.join(',')}',
+      ),
+    );
+    return 'sv_${digest.toString().substring(0, 32)}';
+  }
+
+  static String _weekdayList(List<int> days) {
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days.map((day) => names[day - 1]).join(', ');
+  }
+
+  static String _minuteLabel(int minute) {
+    final hour = minute ~/ 60;
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    final suffix = hour >= 12 ? 'PM' : 'AM';
+    return '$displayHour:${(minute % 60).toString().padLeft(2, '0')} $suffix';
   }
 
   static RoutineBlockType _routineBlockTypeForDraft(String blockType) {
@@ -689,4 +834,16 @@ class OnboardingCompletionService {
         )
         .join(' ');
   }
+}
+
+class _RoutineScheduleBuildResult {
+  const _RoutineScheduleBuildResult({
+    required this.items,
+    required this.unscheduledSuggestions,
+    required this.warnings,
+  });
+
+  final List<RoutineItem> items;
+  final List<UnscheduledRoutineSuggestion> unscheduledSuggestions;
+  final List<String> warnings;
 }
