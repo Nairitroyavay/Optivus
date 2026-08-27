@@ -1,3 +1,7 @@
+"""Archived one-time frontend migration. Do not execute."""
+
+raise SystemExit("Archived migration: do not run against the current repository.")
+
 import re
 
 # 1. Update BaseTimelineStep (Replace TabBar with OnboardingChip Row)

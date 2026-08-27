@@ -1,3 +1,7 @@
+"""Archived one-time frontend migration. Do not execute."""
+
+raise SystemExit("Archived migration: do not run against the current repository.")
+
 import json
 
 new_code = """

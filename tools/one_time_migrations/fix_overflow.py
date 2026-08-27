@@ -1,3 +1,7 @@
+"""Archived one-time frontend migration. Do not execute."""
+
+raise SystemExit("Archived migration: do not run against the current repository.")
+
 import re
 
 file_path = '/Users/roy/optivus2/Optivus/lib/features/onboarding/steps/base_timeline_step.dart'
