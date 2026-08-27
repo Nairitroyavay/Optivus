@@ -1344,6 +1344,216 @@ service cloud.firestore {
         && before.status != "completed";
     }
 
+    function validOnboardingRun(data, runId) {
+      return data.keys().hasOnly([
+        "jobId", "ownerUid", "stage", "status", "stagesCompleted", "sourceFingerprint",
+        "draftRevision", "retryCount", "failureCode", "failureStage", "retryable",
+        "publicMessageKey", "diagnosticCategory", "safeCauseType", "failedEntityIds", "failureOccurredAt",
+        "expectedRoutineIds", "createdRoutineIds", "existingRoutineIds", "repairedRoutineIds", "failedRoutineIds",
+        "expectedHistoryIds", "appliedHistoryIds", "existingHistoryIds", "repairedHistoryIds", "failedHistoryIds",
+        "expectedHabitIds", "createdHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
+        "expectedAcceptanceIds", "appliedAcceptanceIds", "existingAcceptanceIds", "repairedAcceptanceIds", "failedAcceptanceIds",
+        "createdAt", "updatedAt", "completedAt", "schemaVersion"
+      ])
+      && data.keys().hasAll([
+        "jobId", "ownerUid", "stage", "status", "stagesCompleted", "sourceFingerprint",
+        "draftRevision", "retryCount", "failedEntityIds",
+        "expectedRoutineIds", "createdRoutineIds", "existingRoutineIds", "repairedRoutineIds", "failedRoutineIds",
+        "expectedHistoryIds", "appliedHistoryIds", "existingHistoryIds", "repairedHistoryIds", "failedHistoryIds",
+        "expectedHabitIds", "createdHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
+        "expectedAcceptanceIds", "appliedAcceptanceIds", "existingAcceptanceIds", "repairedAcceptanceIds", "failedAcceptanceIds",
+        "createdAt", "updatedAt", "schemaVersion"
+      ])
+      && data.ownerUid == request.auth.uid
+      && data.jobId == runId
+      && runId is string
+      && runId.size() > 0
+      && runId.size() <= 128
+      && data.schemaVersion == 3
+      && data.sourceFingerprint is string
+      && data.sourceFingerprint.matches("^[a-f0-9]{64}$")
+      && data.draftRevision is int
+      && data.draftRevision >= 1
+      && validOnboardingJobStage(data.stage)
+      && validOnboardingJobStatus(data.status)
+      && data.retryCount is int
+      && data.retryCount >= 0
+      && data.stagesCompleted is map
+      && validOnboardingCompletedStages(data.stagesCompleted)
+      && data.failedEntityIds is list
+      && data.expectedRoutineIds is list
+      && data.createdRoutineIds is list
+      && data.existingRoutineIds is list
+      && data.repairedRoutineIds is list
+      && data.failedRoutineIds is list
+      && data.expectedHistoryIds is list
+      && data.appliedHistoryIds is list
+      && data.existingHistoryIds is list
+      && data.repairedHistoryIds is list
+      && data.failedHistoryIds is list
+      && data.expectedHabitIds is list
+      && data.createdHabitIds is list
+      && data.existingHabitIds is list
+      && data.repairedHabitIds is list
+      && data.failedHabitIds is list
+      && data.expectedAcceptanceIds is list
+      && data.appliedAcceptanceIds is list
+      && data.existingAcceptanceIds is list
+      && data.repairedAcceptanceIds is list
+      && data.failedAcceptanceIds is list
+      && data.createdAt is timestamp
+      && data.updatedAt is timestamp
+      && (data.status == "completed"
+        ? (data.stage == "completed" && data.completedAt is timestamp)
+        : !data.keys().hasAny(["completedAt"]))
+      && ((data.status == "retryableFailure" || data.status == "fatalFailure")
+        ? (data.failureCode is string
+          && data.failureStage is string
+          && validOnboardingJobStage(data.failureStage)
+          && data.retryable is bool
+          && data.publicMessageKey is string
+          && data.diagnosticCategory is string
+          && data.safeCauseType is string
+          && data.failureOccurredAt is timestamp)
+        : !data.keys().hasAny([
+            "failureCode", "failureStage", "retryable", "publicMessageKey",
+            "diagnosticCategory", "safeCauseType", "failureOccurredAt"
+          ]));
+    }
+
+    function validOnboardingRunTransition(before, after, runId) {
+      return validOnboardingRun(after, runId)
+        && after.ownerUid == before.ownerUid
+        && after.jobId == before.jobId
+        && after.createdAt == before.createdAt
+        && after.schemaVersion == before.schemaVersion
+        && after.sourceFingerprint == before.sourceFingerprint
+        && after.draftRevision == before.draftRevision
+        && after.retryCount >= before.retryCount
+        && onboardingJobStageRank(after.stage) >= onboardingJobStageRank(before.stage)
+        && onboardingJobStageRank(after.stage) <= onboardingJobStageRank(before.stage) + 1
+        && (after.stage == before.stage
+          || after.stagesCompleted[before.stage] == true)
+        && before.status != "completed";
+    }
+
+    function validOnboardingCurrentRun(data, uid) {
+      return data.keys().hasOnly([
+          "ownerUid", "currentRunId", "sourceFingerprint", "draftRevision",
+          "status", "updatedAt", "schemaVersion"
+        ])
+        && data.keys().hasAll([
+          "ownerUid", "currentRunId", "sourceFingerprint", "draftRevision",
+          "status", "updatedAt", "schemaVersion"
+        ])
+        && data.ownerUid == uid
+        && data.ownerUid == request.auth.uid
+        && data.currentRunId is string
+        && data.currentRunId.size() > 0
+        && data.currentRunId.size() <= 128
+        && data.sourceFingerprint is string
+        && data.sourceFingerprint.matches("^[a-f0-9]{64}$")
+        && data.draftRevision is int
+        && data.draftRevision >= 1
+        && data.status == "active"
+        && data.updatedAt is timestamp
+        && data.schemaVersion == 1;
+    }
+
+    function validConflictAcceptance(data, acceptanceId, uid) {
+      return data.keys().hasOnly([
+          "acceptanceId", "ownerUid", "canonicalPairHash", "firstSourceBlockId",
+          "secondSourceBlockId", "firstProjectedRoutineId", "secondProjectedRoutineId",
+          "conflictType", "scope", "dateKey", "applicableWeekdays", "timezoneId",
+          "firstScheduleFingerprint", "secondScheduleFingerprint", "combinedScheduleFingerprint",
+          "sourceBundleFingerprint", "projectionId", "acceptedAt", "acceptedFrom",
+          "status", "invalidatedAt", "invalidationReason", "schemaVersion"
+        ])
+        && data.keys().hasAll([
+          "acceptanceId", "ownerUid", "canonicalPairHash", "firstSourceBlockId",
+          "secondSourceBlockId", "firstProjectedRoutineId", "secondProjectedRoutineId",
+          "conflictType", "scope", "dateKey", "applicableWeekdays", "timezoneId",
+          "firstScheduleFingerprint", "secondScheduleFingerprint", "combinedScheduleFingerprint",
+          "sourceBundleFingerprint", "projectionId", "acceptedAt", "acceptedFrom",
+          "status", "invalidatedAt", "invalidationReason", "schemaVersion"
+        ])
+        && data.ownerUid == uid
+        && data.ownerUid == request.auth.uid
+        && data.acceptanceId == acceptanceId
+        && acceptanceId.matches("^ca_[a-f0-9]{40}$")
+        && data.schemaVersion == 2
+        && data.canonicalPairHash.matches("^[a-f0-9]{64}$")
+        && data.firstSourceBlockId is string
+        && data.firstSourceBlockId.size() > 0
+        && data.firstSourceBlockId.size() <= 256
+        && data.secondSourceBlockId is string
+        && data.secondSourceBlockId.size() > 0
+        && data.secondSourceBlockId.size() <= 256
+        && data.firstSourceBlockId != data.secondSourceBlockId
+        && data.firstProjectedRoutineId is string
+        && data.firstProjectedRoutineId.size() <= 128
+        && data.secondProjectedRoutineId is string
+        && data.secondProjectedRoutineId.size() <= 128
+        && data.conflictType in ["compatibleOverlap", "duplicateRoutine"]
+        && data.scope in ["singleOccurrence", "recurringWeekdays"]
+        && data.dateKey is string
+        && (data.scope == "singleOccurrence"
+          ? data.dateKey.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+          : data.dateKey == "")
+        && data.applicableWeekdays is list
+        && data.applicableWeekdays.size() > 0
+        && data.applicableWeekdays.size() <= 7
+        && data.applicableWeekdays.size() == data.applicableWeekdays.toSet().size()
+        && data.applicableWeekdays.toSet().hasOnly([1, 2, 3, 4, 5, 6, 7])
+        && data.timezoneId is string
+        && data.timezoneId.size() > 0
+        && data.timezoneId.size() <= 128
+        && data.firstScheduleFingerprint.matches("^[a-f0-9]{64}$")
+        && data.secondScheduleFingerprint.matches("^[a-f0-9]{64}$")
+        && data.combinedScheduleFingerprint.matches("^[a-f0-9]{64}$")
+        && data.sourceBundleFingerprint is string
+        && (data.sourceBundleFingerprint == ""
+          || data.sourceBundleFingerprint.matches("^[a-f0-9]{64}$"))
+        && data.projectionId is string
+        && data.projectionId.size() <= 256
+        && data.acceptedAt is timestamp
+        && data.acceptedFrom in ["onboarding", "routineResolver"]
+        && data.status in ["active", "invalidated", "revoked"]
+        && (data.status == "active"
+          ? data.invalidatedAt == null && data.invalidationReason == null
+          : data.invalidatedAt is timestamp
+            && data.invalidationReason is string
+            && data.invalidationReason.size() > 0
+            && data.invalidationReason.size() <= 256);
+    }
+
+    function validConflictAcceptanceTransition(before, after, acceptanceId, uid) {
+      return validConflictAcceptance(after, acceptanceId, uid)
+        && after.acceptanceId == before.acceptanceId
+        && after.ownerUid == before.ownerUid
+        && after.canonicalPairHash == before.canonicalPairHash
+        && after.firstSourceBlockId == before.firstSourceBlockId
+        && after.secondSourceBlockId == before.secondSourceBlockId
+        && after.firstProjectedRoutineId == before.firstProjectedRoutineId
+        && after.secondProjectedRoutineId == before.secondProjectedRoutineId
+        && after.conflictType == before.conflictType
+        && after.scope == before.scope
+        && after.dateKey == before.dateKey
+        && after.applicableWeekdays == before.applicableWeekdays
+        && after.timezoneId == before.timezoneId
+        && after.firstScheduleFingerprint == before.firstScheduleFingerprint
+        && after.secondScheduleFingerprint == before.secondScheduleFingerprint
+        && after.combinedScheduleFingerprint == before.combinedScheduleFingerprint
+        && after.sourceBundleFingerprint == before.sourceBundleFingerprint
+        && after.projectionId == before.projectionId
+        && after.acceptedAt == before.acceptedAt
+        && after.acceptedFrom == before.acceptedFrom
+        && after.schemaVersion == before.schemaVersion
+        && (after.status == before.status
+          || (before.status == "active"
+            && after.status in ["invalidated", "revoked"]));
+    }
+
     function validGoalKeys(data) {
       return data.keys().hasOnly([
         "id",
@@ -1554,7 +1764,36 @@ service cloud.firestore {
       allow read: if verifiedOwner(uid);
       allow create, update: if verifiedOwner(uid)
         && ((docId == "draft" && validOnboardingDraft(request.resource.data, uid))
-            || (docId == "completionBundle" && validOnboardingCompletionBundle(request.resource.data, uid)));
+            || (docId == "completionBundle" && validOnboardingCompletionBundle(request.resource.data, uid))
+            || (docId == "currentRun" && validOnboardingCurrentRun(request.resource.data, uid)));
+      allow delete: if false;
+    }
+
+    match /users/{uid}/onboardingRuns/{runId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validOnboardingRun(request.resource.data, runId)
+        && request.resource.data.stage == "validateInput"
+        && (request.resource.data.status == "pending"
+          || request.resource.data.status == "running")
+        && request.resource.data.stagesCompleted.size() == 0;
+      allow update: if verifiedOwner(uid)
+        && validOnboardingRunTransition(resource.data, request.resource.data, runId);
+      allow delete: if false;
+    }
+
+    match /users/{uid}/conflictAcceptances/{acceptanceId} {
+      allow read: if verifiedOwner(uid);
+      allow create: if verifiedOwner(uid)
+        && validConflictAcceptance(request.resource.data, acceptanceId, uid)
+        && request.resource.data.status == "active";
+      allow update: if verifiedOwner(uid)
+        && validConflictAcceptanceTransition(
+          resource.data,
+          request.resource.data,
+          acceptanceId,
+          uid
+        );
       allow delete: if false;
     }
 

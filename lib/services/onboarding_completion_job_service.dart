@@ -514,8 +514,9 @@ class OnboardingCompletionJobService {
               );
               batch.set(
                 firestore!.doc(
-                  FirestoreUserPaths.onboardingCompletionJob(
+                  FirestoreUserPaths.onboardingRun(
                     updatedJob.ownerUid,
+                    updatedJob.jobId,
                   ),
                 ),
                 updatedJob.toFirestoreMap(),

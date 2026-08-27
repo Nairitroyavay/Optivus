@@ -310,6 +310,88 @@ function onboardingJobData(uid = "user123", overrides = {}) {
   };
 }
 
+function onboardingRunData(uid = "user123", runId = "run-001", overrides = {}) {
+  return {
+    jobId: runId,
+    ownerUid: uid,
+    stage: "validateInput",
+    status: "running",
+    stagesCompleted: {},
+    sourceFingerprint: fingerprint,
+    draftRevision: 7,
+    retryCount: 0,
+    failedEntityIds: [],
+    expectedRoutineIds: [],
+    createdRoutineIds: [],
+    existingRoutineIds: [],
+    repairedRoutineIds: [],
+    failedRoutineIds: [],
+    expectedHistoryIds: [],
+    appliedHistoryIds: [],
+    existingHistoryIds: [],
+    repairedHistoryIds: [],
+    failedHistoryIds: [],
+    expectedHabitIds: [],
+    createdHabitIds: [],
+    existingHabitIds: [],
+    repairedHabitIds: [],
+    failedHabitIds: [],
+    expectedAcceptanceIds: [],
+    appliedAcceptanceIds: [],
+    existingAcceptanceIds: [],
+    repairedAcceptanceIds: [],
+    failedAcceptanceIds: [],
+    createdAt,
+    updatedAt,
+    schemaVersion: 3,
+    ...overrides,
+  };
+}
+
+function currentRunData(uid = "user123", runId = "run-001", overrides = {}) {
+  return {
+    ownerUid: uid,
+    currentRunId: runId,
+    sourceFingerprint: fingerprint,
+    draftRevision: 7,
+    status: "active",
+    updatedAt,
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
+const acceptanceId = `ca_${"a".repeat(40)}`;
+
+function conflictAcceptanceData(uid = "user123", overrides = {}) {
+  return {
+    acceptanceId,
+    ownerUid: uid,
+    canonicalPairHash: "b".repeat(64),
+    firstSourceBlockId: "class-source-1",
+    secondSourceBlockId: "breakfast-source-1",
+    firstProjectedRoutineId: "onb_class_1",
+    secondProjectedRoutineId: "onb_breakfast_1",
+    conflictType: "compatibleOverlap",
+    scope: "recurringWeekdays",
+    dateKey: "",
+    applicableWeekdays: [1, 3, 5],
+    timezoneId: "Asia/Calcutta",
+    firstScheduleFingerprint: "c".repeat(64),
+    secondScheduleFingerprint: "d".repeat(64),
+    combinedScheduleFingerprint: "e".repeat(64),
+    sourceBundleFingerprint: fingerprint,
+    projectionId: "onboarding-run-001-v1",
+    acceptedAt: createdAt,
+    acceptedFrom: "onboarding",
+    status: "active",
+    invalidatedAt: null,
+    invalidationReason: null,
+    schemaVersion: 2,
+    ...overrides,
+  };
+}
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: "optivus-lifeos",
@@ -1039,5 +1121,146 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       onboardingProjectionId: "projection-1",
       sourceFingerprint: fingerprint,
     })));
+  });
+
+  describe("Phase 4.6.7 production onboarding lifecycle paths", () => {
+    it("allows the verified owner to create, read, and advance a schema-v3 onboarding run", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+
+      await assertSucceeds(ref.set(onboardingRunData()));
+      await assertSucceeds(ref.get());
+      await assertSucceeds(ref.update({
+        stage: "persistDraft",
+        stagesCompleted: { validateInput: true },
+        updatedAt: completedAt,
+      }));
+    });
+
+    it("rejects cross-owner onboarding-run access and owner or job-id spoofing", async () => {
+      const other = ownerDb("other_user");
+      const crossRef = other.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+      await assertFails(crossRef.get());
+      await assertFails(crossRef.set(onboardingRunData()));
+
+      const owner = ownerDb();
+      const ref = owner.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+      await assertFails(ref.set(onboardingRunData("other_user")));
+      await assertFails(ref.set(onboardingRunData("user123", "different-run")));
+    });
+
+    it("rejects malformed, skipped, regressed, and post-completion onboarding-run transitions", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+      await assertFails(ref.set(onboardingRunData("user123", "run-001", { schemaVersion: 2 })));
+      await assertFails(ref.set(onboardingRunData("user123", "run-001", { unexpected: true })));
+      await assertSucceeds(ref.set(onboardingRunData()));
+      await assertFails(ref.update({ stage: "verifyDraft", updatedAt: completedAt }));
+      await assertFails(ref.update({ retryCount: -1, updatedAt: completedAt }));
+
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminRef = context.firestore().collection("users").doc("user123").collection("onboardingRuns").doc("completed-run");
+        await adminRef.set(onboardingRunData("user123", "completed-run", {
+          stage: "completed",
+          status: "completed",
+          stagesCompleted: {
+            validateInput: true,
+            persistDraft: true,
+            verifyDraft: true,
+            persistBundle: true,
+            verifyBundle: true,
+            reconcileRoutines: true,
+            verifyRoutines: true,
+            projectRoutineHistory: true,
+            verifyRoutineHistory: true,
+            reconcileHabitSystems: true,
+            verifyHabitSystems: true,
+            reloadControllers: true,
+            verifyFrontendState: true,
+            finalizeProfile: true,
+          },
+          completedAt,
+        }));
+      });
+      const completedRef = db.collection("users").doc("user123").collection("onboardingRuns").doc("completed-run");
+      await assertFails(completedRef.update({ retryCount: 1, updatedAt: completedAt }));
+    });
+
+    it("allows the verified owner to create and replace the current-run pointer", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("onboarding").doc("currentRun");
+      await assertSucceeds(ref.set(currentRunData()));
+      await assertSucceeds(ref.get());
+      await assertSucceeds(ref.set(currentRunData("user123", "run-002", {
+        sourceFingerprint: "f".repeat(64),
+        draftRevision: 8,
+      })));
+    });
+
+    it("rejects cross-owner and malformed current-run pointers", async () => {
+      const owner = ownerDb();
+      const ref = owner.collection("users").doc("user123").collection("onboarding").doc("currentRun");
+      await assertFails(ref.set(currentRunData("other_user")));
+      await assertFails(ref.set(currentRunData("user123", "")));
+      await assertFails(ref.set(currentRunData("user123", "run-001", { status: "completed" })));
+      await assertFails(ref.set(currentRunData("user123", "run-001", { arbitrary: true })));
+
+      const other = ownerDb("other_user");
+      const crossRef = other.collection("users").doc("user123").collection("onboarding").doc("currentRun");
+      await assertFails(crossRef.get());
+      await assertFails(crossRef.set(currentRunData()));
+    });
+
+    it("allows canonical acceptance creation, owner read, and one-way invalidation", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("conflictAcceptances").doc(acceptanceId);
+      await assertSucceeds(ref.set(conflictAcceptanceData()));
+      await assertSucceeds(ref.get());
+      await assertSucceeds(ref.update({
+        status: "invalidated",
+        invalidatedAt: completedAt,
+        invalidationReason: "supersededByCurrentSchedule",
+      }));
+      await assertFails(ref.update({
+        status: "active",
+        invalidatedAt: null,
+        invalidationReason: null,
+      }));
+      await assertFails(ref.delete());
+    });
+
+    it("rejects cross-owner acceptance access, owner spoofing, and document-id spoofing", async () => {
+      const other = ownerDb("other_user");
+      const crossRef = other.collection("users").doc("user123").collection("conflictAcceptances").doc(acceptanceId);
+      await assertFails(crossRef.get());
+      await assertFails(crossRef.set(conflictAcceptanceData()));
+
+      const owner = ownerDb();
+      const collection = owner.collection("users").doc("user123").collection("conflictAcceptances");
+      await assertFails(collection.doc(acceptanceId).set(conflictAcceptanceData("other_user")));
+      await assertFails(collection.doc(`ca_${"9".repeat(40)}`).set(conflictAcceptanceData()));
+    });
+
+    it("rejects malformed acceptance scope, recurrence, timezone, fingerprints, schema, and unknown fields", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("conflictAcceptances").doc(acceptanceId);
+      await assertFails(ref.set(conflictAcceptanceData("user123", { scope: "singleOccurrence" })));
+      await assertFails(ref.set(conflictAcceptanceData("user123", { applicableWeekdays: [1, 1] })));
+      await assertFails(ref.set(conflictAcceptanceData("user123", { applicableWeekdays: [0] })));
+      await assertFails(ref.set(conflictAcceptanceData("user123", { timezoneId: "" })));
+      await assertFails(ref.set(conflictAcceptanceData("user123", { combinedScheduleFingerprint: "bad" })));
+      await assertFails(ref.set(conflictAcceptanceData("user123", { schemaVersion: 1 })));
+      await assertFails(ref.set(conflictAcceptanceData("user123", { arbitrary: true })));
+    });
+
+    it("rejects prohibited conflict types and immutable acceptance identity mutation", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("conflictAcceptances").doc(acceptanceId);
+      await assertFails(ref.set(conflictAcceptanceData("user123", { conflictType: "sleepOverlap" })));
+      await assertSucceeds(ref.set(conflictAcceptanceData()));
+      await assertFails(ref.update({ firstScheduleFingerprint: "f".repeat(64) }));
+      await assertFails(ref.update({ applicableWeekdays: [2, 4] }));
+      await assertFails(ref.update({ projectionId: "another-projection-v1" }));
+    });
   });
 });
