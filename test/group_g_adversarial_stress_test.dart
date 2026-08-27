@@ -38,6 +38,8 @@ void main() {
             final isSleepB = catB == RoutineCategory.sleep;
             final isMealA = catA == RoutineCategory.eating;
             final isMealB = catB == RoutineCategory.eating;
+            final isFixedA = catA == RoutineCategory.fixed;
+            final isFixedB = catB == RoutineCategory.fixed;
 
             final typeA =
                 (catA == RoutineCategory.classBlock ||
@@ -119,17 +121,33 @@ void main() {
                         'Sleep overlap must trigger sleepConflict blocking conflict',
                   );
                   expect(valResult.isValid, isFalse);
-                } else if (itemA.isHardBlock && itemB.isHardBlock) {
-                  // Non-strict hard vs non-strict hard (e.g. fixed vs fixed) => hardBlockConflict, blocking, invalid
+                } else if ((isMealA && (isStrictB || isFixedB)) ||
+                    (isMealB && (isStrictA || isFixedA)) ||
+                    (isFixedA && (isStrictB || isFixedB)) ||
+                    (isFixedB && isStrictA)) {
+                  // Explicitly compatible pairs still block until the user
+                  // durably accepts the overlap.
                   expect(
                     conflicts.any(
                       (c) =>
-                          c.type == RoutineConflictType.hardBlockConflict &&
-                          c.blocking,
+                          c.type == RoutineConflictType.compatibleOverlap &&
+                          c.blocking &&
+                          c.canKeepBoth,
                     ),
                     isTrue,
                     reason:
-                        'Hard vs Hard non-strict overlap must trigger hardBlockConflict',
+                        'Compatible overlap must require explicit acceptance',
+                  );
+                  expect(valResult.isValid, isFalse);
+                } else if (itemA.isHardBlock && itemB.isHardBlock) {
+                  expect(
+                    conflicts.any(
+                      (c) =>
+                          c.type == RoutineConflictType.unavailableTime &&
+                          c.blocking &&
+                          !c.canKeepBoth,
+                    ),
+                    isTrue,
                   );
                   expect(valResult.isValid, isFalse);
                 } else if (isMealA && isMealB) {
@@ -409,7 +427,7 @@ void main() {
               isTrue,
             );
 
-            // 4. Verify soft conflicts detected as timeOverlap with blocking = false:
+            // 4. Verify compatible overlaps require durable acceptance:
             // - Campus Lunch vs CS Lab (Eating vs Class)
             final softLunch = conflicts.firstWhere(
               (c) =>
@@ -417,8 +435,11 @@ void main() {
                       c.otherItemId == 'class_cs_lab') ||
                   (c.itemId == 'class_cs_lab' && c.otherItemId == 'meal_lunch'),
             );
-            expect(softLunch.type, equals(RoutineConflictType.timeOverlap));
-            expect(softLunch.blocking, isFalse);
+            expect(
+              softLunch.type,
+              equals(RoutineConflictType.compatibleOverlap),
+            );
+            expect(softLunch.blocking, isTrue);
             expect(softLunch.canKeepBoth, isTrue);
           },
         );
@@ -688,9 +709,7 @@ void main() {
             ], DateTime(2026, 7, 27));
             expect(
               conflicts.any(
-                (c) =>
-                    c.type == RoutineConflictType.overnightConflict &&
-                    c.blocking,
+                (c) => c.type == RoutineConflictType.timeOverlap && !c.blocking,
               ),
               isTrue,
             );

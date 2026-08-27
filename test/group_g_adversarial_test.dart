@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/features/routine/services/routine_validation_service.dart';
-import 'package:optivus/features/routine/domain/routine_conflict.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
@@ -395,273 +394,272 @@ void main() {
     });
   });
 
-  group('Adversarial Stress Testing — Issue 32: Exam Priority & Keyword Matching', () {
-    test('32.A Multi-Exam Overlaps & Class Schedule Template Preservation', () {
-      final candidates = <RoutineImportCandidateBlock>[
-        RoutineImportCandidateBlock(
-          id: 'c1',
-          title: 'Math 101',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 540, // 09:00
-          endMinute: 600, // 10:00
-          hasFixedTime: true,
-          repeatDays: const [1, 3, 5], // Mon, Wed, Fri
-        ),
-        RoutineImportCandidateBlock(
-          id: 'c2',
-          title: 'Physics 101',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 600, // 10:00
-          endMinute: 660, // 11:00
-          hasFixedTime: true,
-          repeatDays: const [1, 3, 5], // Mon, Wed, Fri
-        ),
-        RoutineImportCandidateBlock(
-          id: 'e1',
-          title: 'Math Midterm Exam',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 570, // 09:30 (Overlaps Math 101 & Physics 101)
-          endMinute: 690, // 11:30
-          hasFixedTime: true,
-          repeatDays: const [3], // Wed
-        ),
-        RoutineImportCandidateBlock(
-          id: 'e2',
-          title: 'Physics Pop-Quiz & Assessment',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 630, // 10:30 (Overlaps e1, Math 101, Physics 101)
-          endMinute: 750, // 12:30
-          hasFixedTime: true,
-          repeatDays: const [3], // Wed
-        ),
-      ];
+  group(
+    'Adversarial Stress Testing — Issue 32: Exam Priority & Keyword Matching',
+    () {
+      test(
+        '32.A Multi-Exam Overlaps & Class Schedule Template Preservation',
+        () {
+          final candidates = <RoutineImportCandidateBlock>[
+            RoutineImportCandidateBlock(
+              id: 'c1',
+              title: 'Math 101',
+              category: 'classes',
+              blockType: 'hard',
+              hardBlock: true,
+              startMinute: 540, // 09:00
+              endMinute: 600, // 10:00
+              hasFixedTime: true,
+              repeatDays: const [1, 3, 5], // Mon, Wed, Fri
+            ),
+            RoutineImportCandidateBlock(
+              id: 'c2',
+              title: 'Physics 101',
+              category: 'classes',
+              blockType: 'hard',
+              hardBlock: true,
+              startMinute: 600, // 10:00
+              endMinute: 660, // 11:00
+              hasFixedTime: true,
+              repeatDays: const [1, 3, 5], // Mon, Wed, Fri
+            ),
+            RoutineImportCandidateBlock(
+              id: 'e1',
+              title: 'Math Midterm Exam',
+              category: 'classes',
+              blockType: 'hard',
+              hardBlock: true,
+              startMinute: 570, // 09:30 (Overlaps Math 101 & Physics 101)
+              endMinute: 690, // 11:30
+              hasFixedTime: true,
+              repeatDays: const [3], // Wed
+            ),
+            RoutineImportCandidateBlock(
+              id: 'e2',
+              title: 'Physics Pop-Quiz & Assessment',
+              category: 'classes',
+              blockType: 'hard',
+              hardBlock: true,
+              startMinute: 630, // 10:30 (Overlaps e1, Math 101, Physics 101)
+              endMinute: 750, // 12:30
+              hasFixedTime: true,
+              repeatDays: const [3], // Wed
+            ),
+          ];
 
-      final result = mapOnboarding4Candidates(
-        candidates: candidates,
-        config: ScheduleSetupConfig.classSetup,
+          final result = mapOnboarding4Candidates(
+            candidates: candidates,
+            config: ScheduleSetupConfig.classSetup,
+          );
+
+          // Verify that all 4 blocks are kept intact
+          expect(result.blocks.length, equals(4));
+
+          final c1Block = result.blocks.firstWhere((b) => b.id == 'c1');
+          expect(
+            c1Block.repeatDays,
+            equals([1, 3, 5]),
+            reason: 'Regular Math 101 repeatDays preserved',
+          );
+
+          final c2Block = result.blocks.firstWhere((b) => b.id == 'c2');
+          expect(
+            c2Block.repeatDays,
+            equals([1, 3, 5]),
+            reason: 'Regular Physics 101 repeatDays preserved',
+          );
+
+          final e1Block = result.blocks.firstWhere((b) => b.id == 'e1');
+          expect(e1Block.repeatDays, equals([3]));
+
+          final e2Block = result.blocks.firstWhere((b) => b.id == 'e2');
+          expect(e2Block.repeatDays, equals([3]));
+        },
       );
 
-      // Verify that all 4 blocks are kept intact
-      expect(result.blocks.length, equals(4));
+      test('32.B Uppercase, Mixed-Case, Hyphenated & Variant Exam Keywords', () {
+        final examTitles = [
+          'CHEMISTRY EXAM',
+          'Math MidTerm',
+          'Bio Pop-Quiz',
+          'CS Unit Test',
+          'Psychology ASSESSMENT',
+          'Organic Chem FINAL',
+          'History Mid-Term Exam',
+          'Physics Final Examination',
+        ];
 
-      final c1Block = result.blocks.firstWhere((b) => b.id == 'c1');
-      expect(
-        c1Block.repeatDays,
-        equals([1, 3, 5]),
-        reason: 'Regular Math 101 repeatDays preserved',
-      );
+        for (final title in examTitles) {
+          expect(
+            isExamCandidateTitle(title),
+            isTrue,
+            reason: 'Title "$title" should be recognized as an exam candidate',
+          );
+        }
 
-      final c2Block = result.blocks.firstWhere((b) => b.id == 'c2');
-      expect(
-        c2Block.repeatDays,
-        equals([1, 3, 5]),
-        reason: 'Regular Physics 101 repeatDays preserved',
-      );
+        final nonExamTitles = [
+          'Regular Lecture',
+          'Weekly Discussion',
+          'Lab Session',
+        ];
 
-      final e1Block = result.blocks.firstWhere((b) => b.id == 'e1');
-      expect(e1Block.repeatDays, equals([3]));
+        for (final title in nonExamTitles) {
+          expect(
+            isExamCandidateTitle(title),
+            isFalse,
+            reason:
+                'Title "$title" should NOT be recognized as an exam candidate',
+          );
+        }
+      });
 
-      final e2Block = result.blocks.firstWhere((b) => b.id == 'e2');
-      expect(e2Block.repeatDays, equals([3]));
-    });
+      test('32.C Candidate Mapping Invariant & Filtering Edge Cases', () {
+        final candidates = <RoutineImportCandidateBlock>[
+          // Blank title -> droppedNoTitle
+          RoutineImportCandidateBlock(
+            id: 'bad_title',
+            title: '   ',
+            category: 'classes',
+            blockType: 'hard',
+            hardBlock: true,
+            startMinute: 540,
+            endMinute: 600,
+            repeatDays: const [1],
+          ),
+          // endMinute <= startMinute -> droppedInvalidTime
+          RoutineImportCandidateBlock(
+            id: 'bad_time',
+            title: 'Reversed Time Class',
+            category: 'classes',
+            blockType: 'hard',
+            hardBlock: true,
+            startMinute: 600,
+            endMinute: 540,
+            repeatDays: const [1],
+          ),
+          // noFixedTime -> droppedInvalidTime
+          RoutineImportCandidateBlock(
+            id: 'no_fixed',
+            title: 'TBD Class',
+            category: 'classes',
+            blockType: 'hard',
+            hardBlock: true,
+            startMinute: 540,
+            endMinute: 600,
+            hasFixedTime: false,
+            repeatDays: const [1],
+          ),
+          // Empty repeat days -> droppedNoRepeatDays
+          RoutineImportCandidateBlock(
+            id: 'no_days',
+            title: 'Unassigned Day Class',
+            category: 'classes',
+            blockType: 'hard',
+            hardBlock: true,
+            startMinute: 540,
+            endMinute: 600,
+            repeatDays: const [],
+          ),
+          // Valid full week class (1..7) -> mapped
+          RoutineImportCandidateBlock(
+            id: 'full_week_class',
+            title: 'Daily Seminar',
+            category: 'classes',
+            blockType: 'hard',
+            hardBlock: true,
+            startMinute: 540,
+            endMinute: 600,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+          ),
+        ];
 
-    test('32.B Uppercase, Mixed-Case, Hyphenated & Variant Exam Keywords', () {
-      final examTitles = [
-        'CHEMISTRY EXAM',
-        'Math MidTerm',
-        'Bio Pop-Quiz',
-        'CS Unit Test',
-        'Psychology ASSESSMENT',
-        'Organic Chem FINAL',
-        'History Mid-Term Exam',
-        'Physics Final Examination',
-      ];
-
-      for (final title in examTitles) {
-        expect(
-          isExamCandidateTitle(title),
-          isTrue,
-          reason: 'Title "$title" should be recognized as an exam candidate',
+        final mapped = mapOnboarding4Candidates(
+          candidates: candidates,
+          config: ScheduleSetupConfig.classSetup,
         );
-      }
 
-      final nonExamTitles = [
-        'Regular Lecture',
-        'Weekly Discussion',
-        'Lab Session',
-      ];
+        expect(mapped.droppedNoTitle, equals(1));
+        expect(mapped.droppedInvalidTime, equals(2));
+        expect(mapped.droppedNoRepeatDays, equals(1));
+        expect(mapped.blocks.length, equals(1));
+        expect(mapped.blocks.first.id, equals('full_week_class'));
+        expect(mapped.blocks.first.repeatDays, equals([1, 2, 3, 4, 5, 6, 7]));
+      });
 
-      for (final title in nonExamTitles) {
-        expect(
-          isExamCandidateTitle(title),
-          isFalse,
-          reason:
-              'Title "$title" should NOT be recognized as an exam candidate',
-        );
-      }
-    });
+      test(
+        '32.D Probing Substring False Positives & Hyphenated Exclusions in Exam Keyword Matcher',
+        () {
+          // Substring false positives where words contain exam keywords as substrings
+          expect(
+            isExamCandidateTitle('Software Testing'),
+            isTrue,
+            reason: 'contains "test"',
+          );
+          expect(
+            isExamCandidateTitle('Programming Contest'),
+            isTrue,
+            reason: 'contains "test" in "contest"',
+          );
+          expect(
+            isExamCandidateTitle('Finalize Report'),
+            isTrue,
+            reason: 'contains "final" in "finalize"',
+          );
+          expect(
+            isExamCandidateTitle('Reading Example'),
+            isTrue,
+            reason: 'contains "exam" in "example"',
+          );
 
-    test('32.C Candidate Mapping Invariant & Filtering Edge Cases', () {
-      final candidates = <RoutineImportCandidateBlock>[
-        // Blank title -> droppedNoTitle
-        RoutineImportCandidateBlock(
-          id: 'bad_title',
-          title: '   ',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 540,
-          endMinute: 600,
+          // Hyphenated term without exact keyword match
+          expect(
+            isExamCandidateTitle('Physics Mid-Term'),
+            isFalse,
+            reason: '"mid-term" does not contain "midterm"',
+          );
+        },
+      );
+
+      test('31.E Probing Overnight Soft Block Conflict Behavior', () {
+        final nightSoft1 = RoutineItem(
+          id: 'night_soft_1',
+          title: 'Late Reading',
+          startMinute: 1410, // 23:30
+          endMinute: 90, // 01:30
+          crossesMidnight: true,
           repeatDays: const [1],
-        ),
-        // endMinute <= startMinute -> droppedInvalidTime
-        RoutineImportCandidateBlock(
-          id: 'bad_time',
-          title: 'Reversed Time Class',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 600,
-          endMinute: 540,
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.habit,
+        );
+
+        final nightSoft2 = RoutineItem(
+          id: 'night_soft_2',
+          title: 'Late Music',
+          startMinute: 1420, // 23:40
+          endMinute: 60, // 01:00
+          crossesMidnight: true,
           repeatDays: const [1],
-        ),
-        // noFixedTime -> droppedInvalidTime
-        RoutineImportCandidateBlock(
-          id: 'no_fixed',
-          title: 'TBD Class',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 540,
-          endMinute: 600,
-          hasFixedTime: false,
-          repeatDays: const [1],
-        ),
-        // Empty repeat days -> droppedNoRepeatDays
-        RoutineImportCandidateBlock(
-          id: 'no_days',
-          title: 'Unassigned Day Class',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 540,
-          endMinute: 600,
-          repeatDays: const [],
-        ),
-        // Valid full week class (1..7) -> mapped
-        RoutineImportCandidateBlock(
-          id: 'full_week_class',
-          title: 'Daily Seminar',
-          category: 'classes',
-          blockType: 'hard',
-          hardBlock: true,
-          startMinute: 540,
-          endMinute: 600,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-        ),
-      ];
-
-      final mapped = mapOnboarding4Candidates(
-        candidates: candidates,
-        config: ScheduleSetupConfig.classSetup,
-      );
-
-      expect(mapped.droppedNoTitle, equals(1));
-      expect(mapped.droppedInvalidTime, equals(2));
-      expect(mapped.droppedNoRepeatDays, equals(1));
-      expect(mapped.blocks.length, equals(1));
-      expect(mapped.blocks.first.id, equals('full_week_class'));
-      expect(mapped.blocks.first.repeatDays, equals([1, 2, 3, 4, 5, 6, 7]));
-    });
-
-    test(
-      '32.D Probing Substring False Positives & Hyphenated Exclusions in Exam Keyword Matcher',
-      () {
-        // Substring false positives where words contain exam keywords as substrings
-        expect(
-          isExamCandidateTitle('Software Testing'),
-          isTrue,
-          reason: 'contains "test"',
-        );
-        expect(
-          isExamCandidateTitle('Programming Contest'),
-          isTrue,
-          reason: 'contains "test" in "contest"',
-        );
-        expect(
-          isExamCandidateTitle('Finalize Report'),
-          isTrue,
-          reason: 'contains "final" in "finalize"',
-        );
-        expect(
-          isExamCandidateTitle('Reading Example'),
-          isTrue,
-          reason: 'contains "exam" in "example"',
+          blockType: RoutineBlockType.softBlock,
+          category: RoutineCategory.habit,
         );
 
-        // Hyphenated term without exact keyword match
-        expect(
-          isExamCandidateTitle('Physics Mid-Term'),
-          isFalse,
-          reason: '"mid-term" does not contain "midterm"',
+        final result = RoutineValidationService.validate(
+          RoutineValidationContext(
+            candidate: nightSoft2,
+            existingTemplates: [nightSoft1],
+            occurrences: const [],
+            evaluationDate: DateTime(2026, 7, 27),
+            operation: RoutineValidationOperation.create,
+            authenticatedOwnerUid: 'test_user',
+          ),
         );
-      },
-    );
 
-    test('31.E Probing Overnight Soft Block Conflict Behavior', () {
-      final nightSoft1 = RoutineItem(
-        id: 'night_soft_1',
-        title: 'Late Reading',
-        startMinute: 1410, // 23:30
-        endMinute: 90, // 01:30
-        crossesMidnight: true,
-        repeatDays: const [1],
-        blockType: RoutineBlockType.softBlock,
-        category: RoutineCategory.habit,
-      );
-
-      final nightSoft2 = RoutineItem(
-        id: 'night_soft_2',
-        title: 'Late Music',
-        startMinute: 1420, // 23:40
-        endMinute: 60, // 01:00
-        crossesMidnight: true,
-        repeatDays: const [1],
-        blockType: RoutineBlockType.softBlock,
-        category: RoutineCategory.habit,
-      );
-
-      final result = RoutineValidationService.validate(
-        RoutineValidationContext(
-          candidate: nightSoft2,
-          existingTemplates: [nightSoft1],
-          occurrences: const [],
-          evaluationDate: DateTime(2026, 7, 27),
-          operation: RoutineValidationOperation.create,
-          authenticatedOwnerUid: 'test_user',
-        ),
-      );
-
-      // Verify that overnight soft blocks escalate to blocking overnightConflict
-      expect(
-        result.isValid,
-        isFalse,
-        reason:
-            'Overnight soft block overlap escalates to blocking overnightConflict',
-      );
-      expect(
-        result.conflicts.first.type,
-        equals(RoutineConflictType.overnightConflict),
-      );
-      expect(result.conflicts.first.blocking, isTrue);
-    });
-  });
+        expect(result.isValid, isTrue);
+        // Validation only returns conflict details when a blocker prevents the
+        // write. Informational soft/soft overlaps remain valid and are surfaced
+        // by RoutineConflictEngine in the Routine UI.
+        expect(result.conflicts, isEmpty);
+      });
+    },
+  );
 }

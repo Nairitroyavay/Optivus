@@ -85,8 +85,7 @@ class OnboardingCompletionJobService {
     final operationKey = '$uid:$runId';
     final activeOperation = _inFlight[operationKey];
     if (activeOperation != null) return activeOperation;
-    final operationGeneration =
-        (_operationGenerationByOwner[uid] ?? 0) + 1;
+    final operationGeneration = (_operationGenerationByOwner[uid] ?? 0) + 1;
     _operationGenerationByOwner[uid] = operationGeneration;
     final authGeneration = reader == null
         ? null
@@ -806,9 +805,7 @@ class OnboardingCompletionJobService {
         existing.draftRevision != draftRevision) {
       throw StateError('Onboarding run identity collision.');
     }
-    return existing.copyWith(
-      updatedAt: now,
-    );
+    return existing.copyWith(updatedAt: now);
   }
 
   Future<OnboardingCompletionJob> _beginStage(
@@ -889,9 +886,7 @@ class OnboardingCompletionJobService {
       if (activate) {
         final batch = firestore!.batch();
         batch.set(
-          firestore!.doc(
-            FirestoreUserPaths.onboardingRun(job.uid, job.jobId),
-          ),
+          firestore!.doc(FirestoreUserPaths.onboardingRun(job.uid, job.jobId)),
           job.toFirestoreMap(),
         );
         batch.set(
@@ -1064,7 +1059,7 @@ final onboardingCompletionJobServiceProvider =
     Provider<OnboardingCompletionJobService>((ref) {
       final firebaseMode =
           ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase;
-      return OnboardingCompletionJobService(
+      final service = OnboardingCompletionJobService(
         onboardingRepository: ref.watch(onboardingRepositoryProvider),
         profileRepository: ref.watch(profileRepositoryProvider),
         routineRepository: ref.watch(routineRepositoryProvider),
@@ -1076,6 +1071,8 @@ final onboardingCompletionJobServiceProvider =
         requireFrontendHydration: firebaseMode,
         requireRoutineVerification: firebaseMode,
       );
+      ref.onDispose(service.cancelAll);
+      return service;
     });
 
 final onboardingCompletionJobProvider =

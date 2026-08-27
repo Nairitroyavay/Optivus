@@ -49,15 +49,13 @@ void main() {
           ),
         );
 
-        expect(
-          result.isValid,
-          isTrue,
-          reason:
-              'Single hard vs soft block overlap is non-blocking timeOverlap',
-        );
+        expect(result.isValid, isFalse);
         expect(
           engineConflicts.any(
-            (c) => c.type == RoutineConflictType.timeOverlap && !c.blocking,
+            (c) =>
+                c.type == RoutineConflictType.compatibleOverlap &&
+                c.blocking &&
+                c.canKeepBoth,
           ),
           isTrue,
         );
@@ -188,7 +186,9 @@ void main() {
         expect(
           result.conflicts.any(
             (c) =>
-                c.type == RoutineConflictType.hardBlockConflict && c.blocking,
+                c.type == RoutineConflictType.compatibleOverlap &&
+                c.blocking &&
+                c.canKeepBoth,
           ),
           isTrue,
         );

@@ -42,8 +42,11 @@ class RoutineOnboardingProjection {
     DateTime? now,
   }) {
     validateOwnerUid(bundle.uid);
-    final resolvedSlot = slot ??
-        (bundle.runId.isEmpty ? 'onboarding-legacy' : 'onboarding-${bundle.runId}');
+    final resolvedSlot =
+        slot ??
+        (bundle.runId.isEmpty
+            ? 'onboarding-legacy'
+            : 'onboarding-${bundle.runId}');
     final normalized = <RoutineItem>[];
     final usedIds = <String>{};
     final occurrenceCounts = <String, int>{};

@@ -627,6 +627,8 @@ RoutineProjectionReceipt _receiptForCategories(
   return RoutineProjectionReceipt(
     id: receipt.id,
     ownerUid: receipt.ownerUid,
+    slot: receipt.slot,
+    revision: receipt.revision,
     source: receipt.source,
     sourceBundleSchemaVersion: receipt.sourceBundleSchemaVersion,
     sourceBundleId: receipt.sourceBundleId,

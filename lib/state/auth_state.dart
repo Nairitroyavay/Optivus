@@ -1058,7 +1058,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void _resetSignedOutState({String? targetUserUid}) {
     _ref.read(authGenerationProvider.notifier).state++;
-    OnboardingCompletionJobService.resetForSignedOut();
     _ref.invalidate(onboardingCompletionJobServiceProvider);
     _ref.invalidate(onboardingCompletionJobProvider);
     _ref.read(recoveryRetryControllerProvider.notifier).resetForSignedOut();

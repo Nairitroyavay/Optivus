@@ -82,6 +82,8 @@ void main() {
       final receipt = RoutineProjectionReceipt(
         id: plan.receipt.id,
         ownerUid: 'uid-7d',
+        slot: plan.slot,
+        revision: plan.revision,
         sourceBundleSchemaVersion: plan.receipt.sourceBundleSchemaVersion,
         sourceBundleId: plan.receipt.sourceBundleId,
         sourceBundleFingerprint: 'a' * 64, // Invalid mismatch fingerprint

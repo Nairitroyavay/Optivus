@@ -537,6 +537,8 @@ void main() {
         final partialReceipt = RoutineProjectionReceipt(
           id: plan.projectionId,
           ownerUid: uid,
+          slot: plan.slot,
+          revision: plan.revision,
           sourceBundleSchemaVersion: OnboardingCompletionBundle.schemaVersion,
           sourceBundleId: plan.sourceBundleId,
           sourceBundleFingerprint: plan.fingerprint,

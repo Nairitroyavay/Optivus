@@ -205,35 +205,26 @@ class FirebaseOnboardingCompletionRepository
         SetOptions(merge: true),
       );
     }
-    batch.set(
-      _firestore.doc(FirestoreUserPaths.coachPreferences(uid)),
-      {
-        ..._baseDoc(uid, source: 'onboarding'),
-        'name': bundle.coachPreferences.name,
-        'style': bundle.coachPreferences.style,
-        'allowRoutineContext': bundle.coachPreferences.allowRoutineContext,
-        'allowTrackerContext': bundle.coachPreferences.allowTrackerContext,
-        'allowGoalsContext': bundle.coachPreferences.allowGoalsContext,
-        'allowProfileContext': bundle.coachPreferences.allowProfileContext,
-        'shareSelectedNotesOnly':
-            bundle.coachPreferences.shareSelectedNotesOnly,
-      },
-      SetOptions(merge: true),
-    );
-    batch.set(
-      _firestore.doc(FirestoreUserPaths.notificationPreferences(uid)),
-      {
-        ..._baseDoc(uid, source: 'onboarding'),
-        'morningStart': bundle.notificationPreferences.morningStart,
-        'nextTask': bundle.notificationPreferences.nextTask,
-        'eating': bundle.notificationPreferences.eating,
-        'badHabitCheckIn': bundle.notificationPreferences.badHabitCheckIn,
-        'savings': bundle.notificationPreferences.savings,
-        'nightReflection': bundle.notificationPreferences.nightReflection,
-        'intensity': bundle.notificationPreferences.intensity.name,
-      },
-      SetOptions(merge: true),
-    );
+    batch.set(_firestore.doc(FirestoreUserPaths.coachPreferences(uid)), {
+      ..._baseDoc(uid, source: 'onboarding'),
+      'name': bundle.coachPreferences.name,
+      'style': bundle.coachPreferences.style,
+      'allowRoutineContext': bundle.coachPreferences.allowRoutineContext,
+      'allowTrackerContext': bundle.coachPreferences.allowTrackerContext,
+      'allowGoalsContext': bundle.coachPreferences.allowGoalsContext,
+      'allowProfileContext': bundle.coachPreferences.allowProfileContext,
+      'shareSelectedNotesOnly': bundle.coachPreferences.shareSelectedNotesOnly,
+    }, SetOptions(merge: true));
+    batch.set(_firestore.doc(FirestoreUserPaths.notificationPreferences(uid)), {
+      ..._baseDoc(uid, source: 'onboarding'),
+      'morningStart': bundle.notificationPreferences.morningStart,
+      'nextTask': bundle.notificationPreferences.nextTask,
+      'eating': bundle.notificationPreferences.eating,
+      'badHabitCheckIn': bundle.notificationPreferences.badHabitCheckIn,
+      'savings': bundle.notificationPreferences.savings,
+      'nightReflection': bundle.notificationPreferences.nightReflection,
+      'intensity': bundle.notificationPreferences.intensity.name,
+    }, SetOptions(merge: true));
     return batch.commit();
   }
 }

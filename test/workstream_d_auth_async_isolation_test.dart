@@ -120,14 +120,13 @@ class DelayingAiClient implements RoutineImportAiClient {
 void main() {
   group('Workstream D - Authentication & Async Isolation', () {
     test(
-      'OnboardingCompletionJobService resetForSignedOut clears in-flight jobs and rejects empty UID',
+      'OnboardingCompletionJobService rejects empty UID after cancellation',
       () async {
-        OnboardingCompletionJobService.resetForSignedOut();
-
         final service = OnboardingCompletionJobService(
           onboardingRepository: FakeOnboardingRepository(),
           profileRepository: FakeProfileRepository(),
         );
+        service.cancelAll();
 
         final emptyBundle = OnboardingCompletionBundle(
           uid: 'test',

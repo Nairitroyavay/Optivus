@@ -375,7 +375,7 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<String?> currentIdToken() async {
     try {
       final user = _auth.currentUser;
-      return user?.getIdToken(true);
+      return await user?.getIdToken(true);
     } catch (e) {
       throw mapAuthError(e);
     }

@@ -11,8 +11,11 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
+import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/features/routine/services/routine_conflict_engine.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/state/app_state.dart';
@@ -900,7 +903,7 @@ void main() {
     );
   });
 
-  test('final preview does not block class and work overlaps', () {
+  test('final preview blocks incompatible class and work overlaps', () {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
       baseTimeline: BaseTimelineDraft(
@@ -926,14 +929,14 @@ void main() {
 
     final preview = draft.buildFinalPreview();
 
-    expect(preview.blockingWarnings, isEmpty);
-    expect(preview.warnings.join('\n'), isNot(contains('Resolve or accept')));
+    expect(preview.blockingWarnings, hasLength(1));
+    expect(preview.warnings.join('\n'), contains('Resolve or accept'));
     expect(
       draft.validateStep(
         OnboardingDraft.lastStepIndex,
         List<bool>.filled(OnboardingDraft.stepCount, true),
       ),
-      isNull,
+      isNotNull,
     );
   });
 
@@ -999,7 +1002,7 @@ void main() {
 
       expect(find.text('Choose how to handle overlaps'), findsOneWidget);
       expect(find.text('Morning Class + Breakfast'), findsOneWidget);
-      expect(find.text('Overlap on Monday'), findsOneWidget);
+      expect(find.text('Overlap Monday'), findsOneWidget);
 
       final keepBoth = find.byKey(
         ValueKey('onboarding-final-keep-both-$conflictKey'),
@@ -1009,15 +1012,22 @@ void main() {
       await tester.pumpAndSettle();
 
       final acceptedDraft = notifier.state.draft;
+      expect(acceptedDraft.baseTimeline.conflictAcceptances, hasLength(1));
       expect(
-        acceptedDraft.baseTimeline.acceptedConflictKeys,
-        contains(conflictKey),
+        acceptedDraft
+            .baseTimeline
+            .conflictAcceptances
+            .single
+            .applicableWeekdays,
+        contains(1),
       );
       expect(acceptedDraft.timelineConflictsRequiringAcceptance(), isEmpty);
       expect(acceptedDraft.buildFinalPreview().blockingWarnings, isEmpty);
       expect(find.text('Choose how to handle overlaps'), findsNothing);
 
-      final bundle = OnboardingCompletionService.buildBundle(acceptedDraft);
+      final completedDraft = acceptedDraft.copyWith(onboardingCompleted: true);
+      final bundle = OnboardingCompletionService.buildBundle(completedDraft);
+      expect(bundle.conflictAcceptances, hasLength(1));
       expect(
         bundle.routineItemsForApp.map((item) => item.id),
         containsAll(<String>[classBlock.id, breakfastBlock.id]),
@@ -1031,6 +1041,49 @@ void main() {
             .map((item) => item.startMinute),
         containsAll(<int>[8 * 60, 8 * 60 + 15]),
       );
+
+      final database = FakeRoutineDatabase();
+      final onboardingRepository = FakeOnboardingRepository(
+        routineDatabase: database,
+      );
+      await onboardingRepository.completeOnboarding(
+        finalDraft: completedDraft,
+        bundle: bundle,
+      );
+
+      // Simulate a cold restart plus sign-out/sign-in by reconstructing the
+      // serialized draft and repository facade over the durable account data.
+      final restoredDraft = OnboardingDraft.fromMap(
+        completedDraft.toFirestoreMap(),
+      );
+      final restartedRoutineRepository = FakeRoutineRepository(
+        database: database,
+      );
+      final restoredItems = await restartedRoutineRepository.fetchRoutineItems(
+        completedDraft.uid,
+      );
+      final restoredAcceptances = database
+          .acceptancesByUid[completedDraft.uid]!
+          .values
+          .toList(growable: false);
+
+      expect(restoredDraft.baseTimeline.conflictAcceptances, hasLength(1));
+      expect(restoredDraft.timelineConflictsRequiringAcceptance(), isEmpty);
+      expect(
+        restoredItems.map((item) => item.onboardingSourceItemId),
+        containsAll(<String>[classBlock.id, breakfastBlock.id]),
+      );
+      expect(restoredAcceptances, hasLength(1));
+
+      final restoredConflicts = RoutineConflictEngine.detect(
+        restoredItems,
+        DateTime(2026, 8, 31),
+        conflictAcceptances: restoredAcceptances,
+        timezoneId: completedDraft.timezoneId,
+      );
+      expect(restoredConflicts, hasLength(1));
+      expect(restoredConflicts.single.blocking, isFalse);
+      expect(restoredConflicts.single.acceptanceId, isNotNull);
     },
   );
 
@@ -1585,7 +1638,7 @@ void main() {
         OnboardingDraft.lastStepIndex,
         nextDraft.stepCompleted,
       ),
-      isNull,
+      contains('Resolve or accept'),
     );
   });
 

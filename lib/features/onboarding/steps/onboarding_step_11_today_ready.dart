@@ -638,7 +638,9 @@ class _BlockingConflictRow extends StatelessWidget {
               ),
               if (conflict.canKeepBoth)
                 FilledButton.tonal(
-                  key: ValueKey('onboarding-final-keep-both-${group.key}'),
+                  key: ValueKey(
+                    'onboarding-final-keep-both-${group.conflicts.first.key}',
+                  ),
                   onPressed: () => onKeepBoth(group.weekdays),
                   child: const Text('Keep Both on These Days'),
                 ),

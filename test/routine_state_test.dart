@@ -67,7 +67,7 @@ void main() {
   });
 
   group('routine conflicts', () {
-    test('blocks overlapping hard blocks', () {
+    test('compatible hard blocks require explicit acceptance', () {
       final conflicts = RoutineConflictEngine.detect([
         RoutineItem(
           id: 'class',
@@ -88,11 +88,12 @@ void main() {
       ], DateTime.now());
 
       expect(conflicts, isNotEmpty);
-      expect(conflicts.first.type, RoutineConflictType.hardBlockConflict);
+      expect(conflicts.first.type, RoutineConflictType.compatibleOverlap);
       expect(conflicts.first.blocking, isTrue);
+      expect(conflicts.first.canKeepBoth, isTrue);
     });
 
-    test('Keep both disabled for hard-block conflict', () {
+    test('Keep both enabled for compatible hard-block conflict', () {
       final conflicts = RoutineConflictEngine.detect([
         RoutineItem(
           id: 'class',
@@ -113,7 +114,7 @@ void main() {
       ], DateTime.now());
 
       expect(conflicts, isNotEmpty);
-      expect(conflicts.first.canKeepBoth, isFalse);
+      expect(conflicts.first.canKeepBoth, isTrue);
     });
 
     test(
@@ -140,7 +141,7 @@ void main() {
         expect(conflicts, isNotEmpty);
         expect(conflicts.first.type, RoutineConflictType.timeOverlap);
         expect(conflicts.first.blocking, isFalse);
-        expect(conflicts.first.canKeepBoth, isTrue);
+        expect(conflicts.first.canKeepBoth, isFalse);
       },
     );
   });

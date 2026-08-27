@@ -255,13 +255,11 @@ class OnboardingCompletionService {
         first,
         ownerUid: owner,
         timezoneId: draft.timezoneId,
-        revision: draft.revision,
       );
       final secondDescriptor = timelineScheduleDescriptor(
         second,
         ownerUid: owner,
         timezoneId: draft.timezoneId,
-        revision: draft.revision,
       );
       final decision = ConflictPolicy.classify(
         firstDescriptor,

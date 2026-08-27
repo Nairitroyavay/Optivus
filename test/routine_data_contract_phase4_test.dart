@@ -329,6 +329,7 @@ void main() {
       final firstDraft = _completedDraft('user-a');
       final secondDraft = firstDraft.copyWith(
         updatedAt: DateTime.utc(2026, 7, 24),
+        incrementRevision: false,
       );
       final first = RoutineOnboardingProjection.build(
         OnboardingCompletionService.buildBundle(firstDraft),
@@ -337,7 +338,7 @@ void main() {
         OnboardingCompletionService.buildBundle(secondDraft),
       );
 
-      expect(first.projectionId, 'onboarding-initial-v1');
+      expect(first.projectionId, '${first.receipt.slot}-v1');
       expect(
         first.items.map((item) => item.id),
         second.items.map((item) => item.id),
@@ -373,7 +374,7 @@ void main() {
             (item) =>
                 item.userId == 'user-a' &&
                 item.source == RoutineSource.onboarding &&
-                item.onboardingProjectionId == 'onboarding-initial-v1' &&
+                item.onboardingProjectionId == first.receipt.id &&
                 item.status == RoutineStatus.planned,
           ),
           isTrue,

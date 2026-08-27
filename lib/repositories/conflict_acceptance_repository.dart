@@ -83,6 +83,10 @@ void _validateOwner(String uid) {
 
 final conflictAcceptanceRepositoryProvider =
     Provider<ConflictAcceptanceRepository>((ref) {
+      final routineRepository = ref.watch(routineRepositoryProvider);
+      if (routineRepository is FakeRoutineRepository) {
+        return FakeConflictAcceptanceRepository(routineRepository.database);
+      }
       if (ref.watch(optivusBackendModeProvider) ==
           OptivusBackendMode.firebase) {
         return FirestoreConflictAcceptanceRepository();

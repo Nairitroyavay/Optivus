@@ -110,6 +110,8 @@ class RoutineOnboardingEventProjector {
       receipt = RoutineProjectionReceipt(
         id: plan.projectionId,
         ownerUid: bundle.uid,
+        slot: plan.slot,
+        revision: plan.revision,
         sourceBundleSchemaVersion: OnboardingCompletionBundle.schemaVersion,
         sourceBundleId: plan.sourceBundleId,
         sourceBundleFingerprint: plan.fingerprint,

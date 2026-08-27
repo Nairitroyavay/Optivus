@@ -147,7 +147,9 @@ void main() {
         final receipt = RoutineProjectionReceipt(
           id: plan.projectionId,
           ownerUid: 'user_0701',
-          sourceBundleSchemaVersion: 1,
+          slot: plan.slot,
+          revision: plan.revision,
+          sourceBundleSchemaVersion: plan.receipt.sourceBundleSchemaVersion,
           sourceBundleId: plan.sourceBundleId,
           sourceBundleFingerprint: plan.fingerprint,
           expectedItemIds: itemIds,
@@ -713,6 +715,7 @@ void main() {
             'source',
             'revision',
             'sourceFingerprint',
+            'timezoneId',
             'currentStep',
             'stepCompleted',
             'stepDirty',
@@ -749,6 +752,7 @@ void main() {
 
           const allowedKeys = {
             'uid',
+            'runId',
             'schemaVersion',
             'version',
             'source',
@@ -775,6 +779,9 @@ void main() {
             'expectedHabitIds',
             'acceptedSourceIds',
             'generatedSourceIds',
+            'conflictAcceptances',
+            'expectedAcceptanceIds',
+            'unscheduledRoutineSuggestions',
           };
           expect(map.keys.toSet().difference(allowedKeys), isEmpty);
         },

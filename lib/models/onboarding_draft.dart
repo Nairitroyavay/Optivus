@@ -449,13 +449,11 @@ class OnboardingDraft {
         first,
         ownerUid: owner,
         timezoneId: timezoneId,
-        revision: revision,
       ),
       second: timelineScheduleDescriptor(
         second,
         ownerUid: owner,
         timezoneId: timezoneId,
-        revision: revision,
       ),
       conflictType: conflict.conflictType,
       scope: ConflictAcceptanceScope.recurringWeekdays,
@@ -1743,13 +1741,11 @@ class BaseTimelineDraft {
               first,
               ownerUid: ownerUid,
               timezoneId: timezoneId,
-              revision: revision,
             );
             final secondDescriptor = timelineScheduleDescriptor(
               second,
               ownerUid: ownerUid,
               timezoneId: timezoneId,
-              revision: revision,
             );
             final decision = ConflictPolicy.classify(
               firstDescriptor,
@@ -2532,7 +2528,6 @@ ConflictScheduleDescriptor timelineScheduleDescriptor(
   TimelineBlockDraft block, {
   required String ownerUid,
   required String timezoneId,
-  required int revision,
   String projectionId = '',
   String? projectedItemId,
 }) {
@@ -2567,7 +2562,10 @@ ConflictScheduleDescriptor timelineScheduleDescriptor(
     source: block.source,
     activeStatus: 'active',
     projectionId: projectionId,
-    revision: revision,
+    // Source-draft acceptance is tied to schedule content. The onboarding
+    // draft revision also advances for lifecycle-only writes (save/complete),
+    // so including it would revoke an unchanged accepted overlap on restart.
+    revision: 1,
     schemaVersion: OnboardingDraft.schemaVersion,
   );
 }
@@ -3248,8 +3246,11 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
           ? block.endMinute
           : last.endMinute;
 
-      final combinedDishes = <String>{...last.dishes, ...block.dishes}.toList()
-        ..sort();
+      final combinedDishes = <String>[];
+      final seenDishes = <String>{};
+      for (final dish in [...last.dishes, ...block.dishes]) {
+        if (seenDishes.add(dish)) combinedDishes.add(dish);
+      }
       final sourceIds = <String>{
         ...(last.provenanceSourceIds.isEmpty
             ? [last.id]

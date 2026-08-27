@@ -8,7 +8,9 @@ String stableOnboardingRunId({
   required int draftRevision,
 }) {
   if (ownerUid.trim().isEmpty || sourceFingerprint.trim().isEmpty) {
-    throw ArgumentError('Onboarding run identity requires owner and fingerprint.');
+    throw ArgumentError(
+      'Onboarding run identity requires owner and fingerprint.',
+    );
   }
   final digest = sha256.convert(
     utf8.encode(

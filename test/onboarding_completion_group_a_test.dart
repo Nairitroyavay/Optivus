@@ -115,7 +115,7 @@ void main() {
     );
   });
 
-  group('Issue 2: Fixed projection ID deconstruction', () {
+  group('Issue 2: Run-scoped projection ID construction', () {
     test(
       'RoutineOnboardingProjection constructs projectionId from slot and revision',
       () {
@@ -125,8 +125,11 @@ void main() {
         final bundle = OnboardingCompletionService.buildBundle(draft);
 
         final defaultPlan = RoutineOnboardingProjection.build(bundle);
-        expect(defaultPlan.projectionId, equals('onboarding-initial-v1'));
-        expect(defaultPlan.receipt.slot, equals('onboarding-initial'));
+        expect(
+          defaultPlan.projectionId,
+          equals('onboarding-${bundle.runId}-v1'),
+        );
+        expect(defaultPlan.receipt.slot, equals('onboarding-${bundle.runId}'));
         expect(defaultPlan.receipt.revision, equals(1));
 
         final customPlan = RoutineOnboardingProjection.build(
