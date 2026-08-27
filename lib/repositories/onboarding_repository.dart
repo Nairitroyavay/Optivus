@@ -480,7 +480,6 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           intermediateProfilePatch,
           SetOptions(merge: true),
         );
-
         final expectedItemIds =
             plan.items.map((item) => item.id).toSet().toList()..sort();
         final createdItemIds = <String>[];
