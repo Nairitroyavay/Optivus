@@ -153,6 +153,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     final readiness = _readStepReadiness(step);
     if (!readiness.canRevealPrimary) {
+      ref
           .read(mockOnboardingProvider.notifier)
           .setValidationMessage(
             readiness.validationMessage ??
