@@ -25,7 +25,7 @@ import 'package:optivus/services/routine_onboarding_projection.dart';
 
 void main() {
   test(
-    'new verified Firebase account creates its first draft instead of entering recovery',
+    'new verified Firebase account opens a local Step 0 draft without entering restore',
     () async {
       const user = AuthUser(
         uid: 'brand-new-user',
@@ -46,7 +46,13 @@ void main() {
       addTearDown(container.dispose);
       addTearDown(authRepository.dispose);
 
-      container.read(authProvider);
+      final statuses = <AuthFlowStatus>[];
+      final subscription = container.listen<AuthState>(
+        authProvider,
+        (_, next) => statuses.add(next.status),
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
       authRepository.emit(user);
       await pumpEventQueue(times: 20);
 
@@ -55,17 +61,70 @@ void main() {
         AuthFlowStatus.signedInOnboardingIncomplete,
       );
       expect(container.read(authProvider).backendRestoreFailed, isFalse);
-      expect(onboardingRepository.draft?.uid, user.uid);
+      expect(statuses, isNot(contains(AuthFlowStatus.restoringOnboarding)));
+      expect(onboardingRepository.draft, isNull);
       expect(
-        onboardingRepository.draft?.baseTimeline.blocks.map(
-          (block) => block.id,
-        ),
+        container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .blocks
+            .map((block) => block.id),
         containsAll(<String>[
           BaseTimelineDraft.fixedSleepId,
           BaseTimelineDraft.fixedBathId,
         ]),
       );
       expect(container.read(mockOnboardingProvider).draft.uid, user.uid);
+    },
+  );
+
+  testWidgets(
+    'fresh account never shows restore copy while checking for a draft',
+    (tester) async {
+      const user = AuthUser(
+        uid: 'fresh-delayed-user',
+        email: 'fresh-delayed@example.com',
+        emailVerified: true,
+      );
+      final authRepository = _ControllableAuthRepository();
+      final profileRepository = await _profileRepositoryFor(
+        user,
+        onboardingCompleted: false,
+      );
+      final draftCompleter = Completer<OnboardingDraft?>();
+      final onboardingRepository = _ControlledOnboardingRepository(
+        draftCompleter: draftCompleter,
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _firebaseOverrides(
+            authRepository: authRepository,
+            profileRepository: profileRepository,
+            onboardingRepository: onboardingRepository,
+          ),
+          child: const OptivusApp(),
+        ),
+      );
+      addTearDown(authRepository.dispose);
+
+      authRepository.emit(user);
+      for (var i = 0; i < 8; i++) {
+        await tester.pump();
+      }
+
+      expect(find.text('Starting Optivus...'), findsOneWidget);
+      expect(find.text('Restoring your setup...'), findsNothing);
+
+      draftCompleter.complete(null);
+      for (var i = 0; i < 12; i++) {
+        await tester.pump();
+      }
+
+      expect(find.text('Welcome to\nOptivus'), findsOneWidget);
+      expect(find.text('Restoring your setup...'), findsNothing);
+      expect(onboardingRepository.draft, isNull);
     },
   );
 
@@ -81,6 +140,7 @@ void main() {
       final profileRepository = await _profileRepositoryFor(
         user,
         onboardingCompleted: false,
+        onboardingStep: 4,
       );
       final draftCompleter = Completer<OnboardingDraft?>();
       final onboardingRepository = _ControlledOnboardingRepository(
@@ -161,6 +221,7 @@ void main() {
       final profileRepository = await _profileRepositoryFor(
         user,
         onboardingCompleted: false,
+        onboardingStep: 4,
       );
       final draftCompleter = Completer<OnboardingDraft?>();
       final onboardingRepository = _ControlledOnboardingRepository(
@@ -228,11 +289,11 @@ void main() {
 
       expect(
         container.read(authProvider).status,
-        AuthFlowStatus.backendRestoreFailed,
+        AuthFlowStatus.reconnectRequired,
       );
       expect(
         container.read(authProvider).errorMessage,
-        'Could not restore setup. Check your connection and try again.',
+        "We couldn't reconnect yet.",
       );
       expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
 
@@ -344,6 +405,7 @@ List<Override> _firebaseOverrides({
 Future<FakeProfileRepository> _profileRepositoryFor(
   AuthUser user, {
   required bool onboardingCompleted,
+  int? onboardingStep,
 }) async {
   final repository = FakeProfileRepository();
   await repository.saveUserProfile(
@@ -353,7 +415,9 @@ Future<FakeProfileRepository> _profileRepositoryFor(
       displayName: user.displayName ?? '',
     ).copyWith(
       onboardingCompleted: onboardingCompleted,
-      onboardingStep: onboardingCompleted ? OnboardingDraft.lastStepIndex : 0,
+      onboardingStep:
+          onboardingStep ??
+          (onboardingCompleted ? OnboardingDraft.lastStepIndex : 0),
       updatedAt: DateTime.utc(2026, 6, 5),
     ),
   );

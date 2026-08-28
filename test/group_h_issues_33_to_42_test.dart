@@ -37,7 +37,7 @@ void main() {
 
   group('Group H - Issue 34: Typed Error Presentation and User Messaging', () {
     testWidgets(
-      'Renders failure reason chip and action titles & descriptions',
+      'Renders friendly Needs Action UI with hidden technical details',
       (tester) async {
         final fakeAuthRepo = FakeAuthRepository();
         final container = ProviderContainer(
@@ -53,13 +53,13 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Setup Verification Incomplete'), findsOneWidget);
-        expect(find.textContaining('Reason:'), findsOneWidget);
-        expect(find.text('Retry Connection'), findsWidgets);
         expect(
-          find.text('Retry the last operation after a network failure.'),
+          find.text('We couldn’t finish loading\nyour setup'),
           findsOneWidget,
         );
+        expect(find.text('Try Again'), findsOneWidget);
+        expect(find.text('Technical details'), findsOneWidget);
+        expect(find.textContaining('Reason:'), findsNothing);
       },
     );
   });

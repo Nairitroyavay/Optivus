@@ -71,7 +71,7 @@ void main() {
         } catch (_) {}
 
         final authState = container.read(authProvider);
-        expect(authState.status, equals(AuthFlowStatus.backendRestoreFailed));
+        expect(authState.status, equals(AuthFlowStatus.reconnectRequired));
         expect(authState.user, isNotNull);
       },
     );

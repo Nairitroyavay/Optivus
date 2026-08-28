@@ -10,6 +10,7 @@ import '../../views/screens/verify_email_screen.dart';
 import '../../views/screens/loading_screen.dart';
 import '../../views/screens/app_shell.dart';
 import '../../features/recovery/screens/onboarding_recovery_screen.dart';
+import '../../features/recovery/screens/onboarding_startup_status_screens.dart';
 import '../../features/onboarding/onboarding_flow.dart';
 import '../../state/auth_state.dart';
 import '../../state/app_state.dart';
@@ -21,13 +22,13 @@ import '../../features/routine/providers/routine_navigation_provider.dart';
 import '../../features/coach/providers/coach_navigation_provider.dart';
 import '../../features/goals/providers/goals_navigation_provider.dart';
 import '../../features/home/providers/home_navigation_provider.dart';
+import '../../services/session_destination_resolver.dart';
 
 class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
 
   RouterNotifier(this._ref) {
     _ref.listen(authProvider, (previous, next) => notifyListeners());
-    _ref.listen(mockUserProfileProvider, (previous, next) => notifyListeners());
   }
 }
 
@@ -41,67 +42,35 @@ String? optivusAuthRedirect({
 }) {
   final isSignedOutRoute =
       uri.path == '/login' || uri.path.startsWith('/signup') || uri.path == '/';
-  final isVerifyRoute = uri.path == '/verify-email';
+  final destination = authState.sessionDestination;
 
-  if (authState.isLoading) {
-    if (isSignedOutRoute && authState.user == null) return null;
-    return uri.path == '/loading' ? null : '/loading';
-  }
-
-  if (!authState.isLoggedIn) {
-    return isSignedOutRoute ? null : '/';
-  }
-
-  final needsVerify =
-      authState.emailUnverified ||
-      (authState.user != null &&
-          authState.user!.providerId == 'password' &&
-          !authState.user!.emailVerified);
-
-  if (needsVerify) {
-    return isVerifyRoute ? null : '/verify-email';
-  }
-
-  if (isVerifyRoute) {
-    return authState.onboardingComplete ? '/app?tab=0' : '/onboarding';
-  }
-
-  final isProjectionFailed =
-      userProfile.onboardingProjectionStatus == 'failed' ||
-      authState.backendRestoreFailed ||
-      authState.onboardingFailureReason != null;
-
-  final onboardingInputCompleted = userProfile.onboardingInputCompleted;
-  final onboardingCompleted = userProfile.onboardingCompleted;
-
-  if (isProjectionFailed) {
-    if (!onboardingInputCompleted && authState.onboardingIncomplete) {
-      if (uri.path != '/onboarding') return '/onboarding';
-      return null;
-    }
-    return uri.path == '/onboarding/recovery' ? null : '/onboarding/recovery';
-  }
-
-  if (!onboardingInputCompleted || authState.onboardingIncomplete) {
-    if (uri.path != '/onboarding') return '/onboarding';
-    return null;
-  }
-
-  if (!onboardingCompleted) {
-    if (uri.path != '/onboarding/recovery' && uri.path != '/loading') {
-      return '/onboarding/recovery';
-    }
-    return null;
-  }
-
-  if (isSignedOutRoute ||
-      uri.path == '/loading' ||
-      uri.path == '/onboarding' ||
-      uri.path == '/onboarding/recovery') {
-    return '/app?tab=0';
-  }
-
-  return null;
+  return switch (destination.kind) {
+    SessionDestinationKind.resolving =>
+      (isSignedOutRoute && authState.user == null) || uri.path == '/loading'
+          ? null
+          : '/loading',
+    SessionDestinationKind.signedOut => isSignedOutRoute ? null : '/',
+    SessionDestinationKind.verifyEmail =>
+      uri.path == '/verify-email' ? null : '/verify-email',
+    SessionDestinationKind.freshOnboarding ||
+    SessionDestinationKind.resumeOnboarding =>
+      uri.path == '/onboarding' ? null : '/onboarding',
+    SessionDestinationKind.finishOnboarding =>
+      uri.path == '/onboarding/finishing' ? null : '/onboarding/finishing',
+    SessionDestinationKind.reconnect =>
+      uri.path == '/onboarding/reconnect' ? null : '/onboarding/reconnect',
+    SessionDestinationKind.needsAction =>
+      uri.path == '/onboarding/needs-action'
+          ? null
+          : '/onboarding/needs-action',
+    SessionDestinationKind.home =>
+      isSignedOutRoute ||
+              uri.path == '/loading' ||
+              uri.path.startsWith('/onboarding') ||
+              uri.path == '/verify-email'
+          ? '/app?tab=0'
+          : null,
+  };
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -193,8 +162,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const OnboardingFlow(),
       ),
       GoRoute(
-        path: '/onboarding/recovery',
+        path: '/onboarding/finishing',
+        builder: (context, state) => const FinishingOnboardingScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/reconnect',
+        builder: (context, state) => const OnboardingReconnectScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/needs-action',
         builder: (context, state) => const OnboardingRecoveryScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding/recovery',
+        redirect: (context, state) => '/onboarding/needs-action',
       ),
       GoRoute(
         path: '/app',

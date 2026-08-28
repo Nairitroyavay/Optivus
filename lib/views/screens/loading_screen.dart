@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/state/auth_state.dart';
-import 'package:optivus/widgets/app_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 
 import 'package:optivus/core/utils/asset_precache_service.dart';
@@ -55,13 +54,9 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final restoreFailed = auth.backendRestoreFailed;
     final message =
         widget.message ??
-        (restoreFailed
-            ? auth.errorMessage ??
-                  'Could not restore setup. Check your connection and try again.'
-            : auth.isBackendRestoreInProgress
+        (auth.isRestoringOnboarding
             ? 'Restoring your setup...'
             : 'Starting Optivus...');
 
@@ -85,73 +80,22 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Spacer(flex: 2),
-
-              // Pulsing glass logo
+              const Spacer(),
               ScaleTransition(scale: _pulse, child: const GlassLogo()),
-              const SizedBox(height: 28),
-
-              // App name
-              const Text(
-                'Optivus',
-                style: TextStyle(
-                  fontSize: 42,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF0F111A),
-                  letterSpacing: -1,
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // Yellow accent divider
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFD426),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Tagline
-              Text(
-                'PLAN. EXECUTE. BECOME.',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.blueGrey.shade700,
-                  letterSpacing: 2.5,
-                ),
-              ),
-
-              const Spacer(flex: 2),
-
+              const SizedBox(height: 30),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: restoreFailed
-                      ? const Color(0xFF9F1239)
-                      : Colors.blueGrey.shade700,
+                style: const TextStyle(
+                  fontSize: 14,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF5D6470),
                 ),
               ),
               const SizedBox(height: 18),
-              if (restoreFailed)
-                SizedBox(
-                  width: 220,
-                  child: AppButton(
-                    text: 'Try Again',
-                    onPressed: () {
-                      ref.read(authProvider.notifier).retryBackendRestore();
-                    },
-                  ),
-                )
-              else
-                _LoadingDots(controller: _controller),
-              const SizedBox(height: 48),
+              _LoadingDots(controller: _controller),
+              const Spacer(),
             ],
           ),
         ),

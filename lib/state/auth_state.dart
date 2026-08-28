@@ -16,6 +16,7 @@ import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
+import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
@@ -47,6 +48,7 @@ import 'package:optivus/services/onboarding_account_migration_service.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/state/auth_generation.dart';
+import 'package:optivus/services/session_destination_resolver.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
@@ -62,8 +64,12 @@ enum AuthFlowStatus {
   signedOut,
   signedInEmailUnverified,
   signedInOnboardingIncomplete,
+  finishingOnboarding,
   signedInOnboardingComplete,
+  reconnectRequired,
+  needsAction,
   error,
+  @Deprecated('Use reconnectRequired or needsAction.')
   backendRestoreFailed,
 }
 
@@ -75,6 +81,9 @@ class AuthState {
   final OnboardingFailureReason? onboardingFailureReason;
   final List<OnboardingRecoveryAction> recoveryActions;
   final DateTime? lastVerificationEmailSent;
+  final int? resumeStep;
+  final String? completionRunId;
+  final String? startupReasonCode;
 
   const AuthState({
     this.user,
@@ -84,6 +93,9 @@ class AuthState {
     this.onboardingFailureReason,
     this.recoveryActions = const [],
     this.lastVerificationEmailSent,
+    this.resumeStep,
+    this.completionRunId,
+    this.startupReasonCode,
   });
 
   bool get isLoggedIn => user != null;
@@ -105,9 +117,43 @@ class AuthState {
       status == AuthFlowStatus.signedInOnboardingComplete;
   bool get hasError =>
       status == AuthFlowStatus.error ||
+      status == AuthFlowStatus.reconnectRequired ||
+      status == AuthFlowStatus.needsAction ||
       status == AuthFlowStatus.backendRestoreFailed;
   bool get backendRestoreFailed =>
       status == AuthFlowStatus.backendRestoreFailed;
+
+  SessionDestination get sessionDestination {
+    return switch (status) {
+      AuthFlowStatus.loading ||
+      AuthFlowStatus.loadingBackendUser ||
+      AuthFlowStatus.restoringOnboarding =>
+        const SessionDestination.resolving(),
+      AuthFlowStatus.signedOut => const SessionDestination.signedOut(),
+      AuthFlowStatus.signedInEmailUnverified =>
+        const SessionDestination.verifyEmail(),
+      AuthFlowStatus.signedInOnboardingIncomplete =>
+        resumeStep == null
+            ? const SessionDestination.freshOnboarding()
+            : SessionDestination.resumeOnboarding(resumeStep!),
+      AuthFlowStatus.finishingOnboarding => SessionDestination.finishOnboarding(
+        runId: completionRunId,
+      ),
+      AuthFlowStatus.signedInOnboardingComplete =>
+        const SessionDestination.home(),
+      AuthFlowStatus.reconnectRequired => SessionDestination.reconnect(
+        reasonCode: startupReasonCode,
+      ),
+      AuthFlowStatus.needsAction ||
+      AuthFlowStatus.backendRestoreFailed => SessionDestination.needsAction(
+        startupReasonCode ?? 'setup_requires_attention',
+      ),
+      AuthFlowStatus.error =>
+        user == null
+            ? const SessionDestination.signedOut()
+            : const SessionDestination.needsAction('authenticated_error'),
+    };
+  }
 
   AuthState copyWith({
     AuthUser? user,
@@ -117,32 +163,51 @@ class AuthState {
     OnboardingFailureReason? onboardingFailureReason,
     List<OnboardingRecoveryAction>? recoveryActions,
     DateTime? lastVerificationEmailSent,
+    int? resumeStep,
+    String? completionRunId,
+    String? startupReasonCode,
     bool clearUser = false,
     bool clearError = false,
+    bool clearStartupDestination = false,
   }) {
     return AuthState(
       user: clearUser ? null : (user ?? this.user),
       status: status ?? this.status,
-      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      failureReason: clearError ? null : (failureReason ?? this.failureReason),
-      onboardingFailureReason: clearError
+      errorMessage: clearError && errorMessage == null
+          ? null
+          : (errorMessage ?? this.errorMessage),
+      failureReason: clearError && failureReason == null
+          ? null
+          : (failureReason ?? this.failureReason),
+      onboardingFailureReason: clearError && onboardingFailureReason == null
           ? null
           : (onboardingFailureReason ?? this.onboardingFailureReason),
-      recoveryActions: clearError
+      recoveryActions: clearError && recoveryActions == null
           ? const []
           : (recoveryActions ?? this.recoveryActions),
       lastVerificationEmailSent:
           lastVerificationEmailSent ?? this.lastVerificationEmailSent,
+      resumeStep: clearStartupDestination && resumeStep == null
+          ? null
+          : (resumeStep ?? this.resumeStep),
+      completionRunId: clearStartupDestination && completionRunId == null
+          ? null
+          : (completionRunId ?? this.completionRunId),
+      startupReasonCode: clearStartupDestination && startupReasonCode == null
+          ? null
+          : (startupReasonCode ?? this.startupReasonCode),
     );
   }
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
+  static const Duration _startupResolutionTimeout = Duration(seconds: 12);
   final AuthRepository _repository;
   final Ref _ref;
   late final StreamSubscription<AuthUser?> _authSubscription;
   int _backendRestoreGeneration = 0;
   int _authOperationGeneration = 0;
+  final Set<Timer> _startupTimers = <Timer>{};
 
   AuthNotifier(this._repository, Ref ref)
     : _ref = ref,
@@ -164,8 +229,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
   void dispose() {
     _backendRestoreGeneration++;
     _authOperationGeneration++;
+    for (final timer in _startupTimers) {
+      timer.cancel();
+    }
+    _startupTimers.clear();
     _authSubscription.cancel();
     super.dispose();
+  }
+
+  Future<T> _bounded<T>(Future<T> operation, Duration timeout) {
+    final completer = Completer<T>();
+    late final Timer timer;
+    timer = Timer(timeout, () {
+      _startupTimers.remove(timer);
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('Startup resolution timed out.'),
+        );
+      }
+    });
+    _startupTimers.add(timer);
+    operation.then(
+      (value) {
+        timer.cancel();
+        _startupTimers.remove(timer);
+        if (!completer.isCompleted) completer.complete(value);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        timer.cancel();
+        _startupTimers.remove(timer);
+        if (!completer.isCompleted) {
+          completer.completeError(error, stackTrace);
+        }
+      },
+    );
+    return completer.future;
   }
 
   Future<void> login(String email, String password) async {
@@ -185,7 +283,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
-      await _loadOrCreateBackendUserState(user);
+      await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
@@ -228,7 +326,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         if (!_isCurrentAuthOperation(operation)) return;
         return;
       }
-      await _loadOrCreateBackendUserState(user);
+      await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
@@ -260,7 +358,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final user = await _repository.signInAnonymously();
       if (!_isCurrentAuthOperation(operation)) return;
-      await _loadOrCreateBackendUserState(user);
+      await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
@@ -311,7 +409,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
-      await _loadOrCreateBackendUserState(user, isAnonymousLink: true);
+      await _loadBackendWithTimeout(user, isAnonymousLink: true);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
@@ -385,7 +483,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    await _loadOrCreateBackendUserState(user);
+    if (state.status == AuthFlowStatus.finishingOnboarding) {
+      await _resumeOnboardingCompletion();
+      return;
+    }
+
+    await _loadBackendWithTimeout(user);
   }
 
   Future<void> checkEmailVerification() async {
@@ -484,7 +587,123 @@ class AuthNotifier extends StateNotifier<AuthState> {
       user: user,
       status: AuthFlowStatus.signedInOnboardingComplete,
       clearError: true,
+      clearStartupDestination: true,
     );
+  }
+
+  Future<void> _resumeOnboardingCompletion() async {
+    final user = state.user ?? _repository.currentUser;
+    if (user == null || user.uid.trim().isEmpty) return;
+    final ownerUid = user.uid;
+    final capturedAuthGeneration = _ref.read(authGenerationProvider);
+
+    bool isActiveOwner() {
+      return mounted &&
+          state.user?.uid == ownerUid &&
+          _ref.read(authGenerationProvider) == capturedAuthGeneration;
+    }
+
+    state = state.copyWith(
+      user: user,
+      status: AuthFlowStatus.finishingOnboarding,
+      clearError: true,
+    );
+    try {
+      final repository = _ref.read(onboardingRepositoryProvider);
+      final draft = await _bounded(
+        repository.fetchDraft(ownerUid),
+        _startupResolutionTimeout,
+      );
+      if (!isActiveOwner()) return;
+      if (draft == null || !isDurablyFinalOnboardingDraft(draft)) {
+        final profile = _ref.read(mockUserProfileProvider);
+        final destination = resolveOnboardingSessionDestination(
+          ownerUid: ownerUid,
+          profile: profile,
+          draft: draft,
+        );
+        _applySessionDestination(user, destination);
+        return;
+      }
+
+      var bundle = await _bounded(
+        repository.fetchCompletionBundle(ownerUid),
+        _startupResolutionTimeout,
+      );
+      if (!isActiveOwner()) return;
+      bundle ??= OnboardingCompletionService.buildBundle(draft);
+      if (bundle.uid != ownerUid ||
+          bundle.draftRevision != draft.revision ||
+          bundle.sourceFingerprint != draft.effectiveSourceFingerprint) {
+        throw StateError('Completion inputs do not match the saved setup.');
+      }
+
+      final job = await _bounded(
+        _ref
+            .read(onboardingCompletionJobServiceProvider)
+            .runCompletionJob(
+              uid: ownerUid,
+              finalDraft: draft,
+              bundle: bundle,
+              reader: _ref.read,
+            ),
+        const Duration(seconds: 60),
+      );
+      if (!isActiveOwner()) return;
+      if (job.status != OnboardingJobStatus.completed ||
+          job.stage != OnboardingCompletionStage.completed) {
+        throw StateError('Completion job stopped before verification.');
+      }
+      await acceptCanonicalOnboardingCompletion(user);
+    } on TimeoutException {
+      if (!isActiveOwner()) return;
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.reconnectRequired,
+        errorMessage: "We couldn't reconnect yet.",
+        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+        recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+        startupReasonCode: 'completion_timeout',
+        clearStartupDestination: true,
+      );
+    } catch (error) {
+      if (!isActiveOwner()) return;
+      OnboardingCompletionJob? job;
+      try {
+        job = await _ref
+            .read(onboardingCompletionJobServiceProvider)
+            .loadCurrentJob(ownerUid);
+      } catch (_) {
+        // The original failure remains authoritative.
+      }
+      if (!isActiveOwner()) return;
+      final fatal =
+          job?.status == OnboardingJobStatus.fatalFailure ||
+          error is ArgumentError;
+      state = state.copyWith(
+        user: user,
+        status: fatal
+            ? AuthFlowStatus.needsAction
+            : AuthFlowStatus.reconnectRequired,
+        errorMessage: fatal
+            ? "We couldn't finish loading your setup."
+            : "We couldn't reconnect yet.",
+        onboardingFailureReason: fatal
+            ? OnboardingFailureReason.unhandledException
+            : OnboardingFailureReason.networkTimeout,
+        recoveryActions: fatal
+            ? const [
+                RetryNetworkAction(),
+                ResetSetupSafelyAction(),
+                SignOutAction(),
+              ]
+            : const [RetryNetworkAction(), SignOutAction()],
+        startupReasonCode: fatal
+            ? (job?.lastFailureCode ?? 'completion_verification_failed')
+            : 'completion_retry_required',
+        clearStartupDestination: true,
+      );
+    }
   }
 
   Future<void> markOnboardingIncomplete(AuthUser user) async {
@@ -507,6 +726,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       user: user,
       status: AuthFlowStatus.signedInOnboardingIncomplete,
       clearError: true,
+      resumeStep: 0,
+      clearStartupDestination: true,
     );
   }
 
@@ -569,15 +790,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
 
     try {
-      await _loadOrCreateBackendUserState(user);
+      await _loadBackendWithTimeout(user);
     } catch (e) {
       if (!mounted) return;
       final mapped = mapAuthError(e);
       state = state.copyWith(
         user: user,
-        status: AuthFlowStatus.backendRestoreFailed,
+        status: AuthFlowStatus.reconnectRequired,
         errorMessage: mapped.message,
         failureReason: mapped.reason,
+        startupReasonCode: 'startup_request_failed',
+        clearStartupDestination: true,
+      );
+    }
+  }
+
+  Future<void> _loadBackendWithTimeout(
+    AuthUser user, {
+    bool isAnonymousLink = false,
+  }) async {
+    try {
+      await _bounded(
+        _loadOrCreateBackendUserState(user, isAnonymousLink: isAnonymousLink),
+        _startupResolutionTimeout,
+      );
+    } on TimeoutException {
+      _backendRestoreGeneration++;
+      if (!mounted || (state.user?.uid ?? user.uid) != user.uid) return;
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.reconnectRequired,
+        errorMessage: "We couldn't reconnect yet.",
+        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+        recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+        startupReasonCode: 'startup_timeout',
+        clearStartupDestination: true,
       );
     }
   }
@@ -597,28 +844,41 @@ class AuthNotifier extends StateNotifier<AuthState> {
       status: AuthFlowStatus.loadingBackendUser,
       clearError: true,
     );
+    final restoreGeneration = ++_backendRestoreGeneration;
     if (!_useFirebaseBackend) {
-      final restoreGen = _backendRestoreGeneration;
       if (user.uid == 'dev-user-12345') {
         await _loadDevSeedState(user);
       } else {
-        await _loadFakeUserState(user, restoreGen);
+        await _loadFakeUserState(user, restoreGeneration);
       }
-      if (!mounted || !_isCurrentRestore(restoreGen)) return;
+      if (!mounted || !_isCurrentRestore(restoreGeneration)) return;
       _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
       _ref.read(fitnessCenterProvider.notifier).setOwnerUid(user.uid);
-      state = state.copyWith(
-        user: user,
-        status: statusFor(
-          user,
-          _ref.read(mockUserProfileProvider).onboardingCompleted,
-        ),
-        clearError: true,
+      final profile = _ref.read(mockUserProfileProvider);
+      final draft = _ref.read(mockOnboardingProvider).draft;
+      final destination = resolveOnboardingSessionDestination(
+        ownerUid: user.uid,
+        profile: profile,
+        draft: draft.uid == user.uid ? draft : null,
       );
+      if (destination.kind == SessionDestinationKind.resumeOnboarding) {
+        _ref
+            .read(mockOnboardingProvider.notifier)
+            .loadSeedData(
+              draft.copyWith(
+                currentStep: destination.resumeStep,
+                stepLoading: List<bool>.filled(
+                  OnboardingDraft.stepCount,
+                  false,
+                ),
+                incrementRevision: false,
+              ),
+            );
+      }
+      _applySessionDestination(user, destination);
       return;
     }
 
-    final restoreGeneration = ++_backendRestoreGeneration;
     final now = DateTime.now();
     final profileRepository = _ref.read(profileRepositoryProvider);
     final regionRepository = _ref.read(regionSettingsRepositoryProvider);
@@ -664,6 +924,97 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (shouldSaveProfile) {
         await profileRepository.saveUserProfile(profile);
         if (!_isCurrentRestore(restoreGeneration)) return;
+      }
+
+      // Onboarding startup only needs the profile, durable draft, and (for a
+      // final draft) its completion job. Profile settings, Routine, History,
+      // Habits, and dashboard hydration must not delay the resume destination.
+      if (!profile.onboardingCompleted) {
+        _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
+
+        // A fresh account must not be labelled as a restore before its draft
+        // has even been read. The profile step is a loader-only hint; the
+        // draft remains the progression authority below.
+        final profileSuggestsResume =
+            profile.onboardingStep > 0 ||
+            profile.onboardingInputCompleted ||
+            (profile.onboardingProjectionStatus.isNotEmpty &&
+                profile.onboardingProjectionStatus != 'none' &&
+                profile.onboardingProjectionStatus != 'pending');
+        if (profileSuggestsResume) {
+          state = state.copyWith(
+            user: user,
+            status: AuthFlowStatus.restoringOnboarding,
+            clearError: true,
+            clearStartupDestination: true,
+          );
+        }
+
+        var savedDraft = await _ref
+            .read(onboardingRepositoryProvider)
+            .fetchDraft(user.uid);
+        if (!_isCurrentRestore(restoreGeneration)) return;
+
+        OnboardingCompletionJob? completionJob;
+        if (savedDraft != null && isDurablyFinalOnboardingDraft(savedDraft)) {
+          completionJob = await _ref
+              .read(onboardingCompletionJobServiceProvider)
+              .loadCurrentJob(user.uid);
+          if (!_isCurrentRestore(restoreGeneration)) return;
+        }
+
+        var destination = resolveOnboardingSessionDestination(
+          ownerUid: user.uid,
+          profile: profile,
+          draft: savedDraft,
+          completionJob: completionJob,
+        );
+
+        if (destination.kind == SessionDestinationKind.freshOnboarding &&
+            savedDraft == null) {
+          savedDraft = OnboardingDraft(
+            uid: user.uid,
+            baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
+            createdAt: now,
+            updatedAt: now,
+          );
+        }
+
+        if (destination.kind == SessionDestinationKind.resumeOnboarding &&
+            state.status != AuthFlowStatus.restoringOnboarding) {
+          state = state.copyWith(
+            user: user,
+            status: AuthFlowStatus.restoringOnboarding,
+            clearError: true,
+            clearStartupDestination: true,
+          );
+        }
+
+        if (savedDraft != null &&
+            (destination.kind == SessionDestinationKind.freshOnboarding ||
+                destination.kind == SessionDestinationKind.resumeOnboarding ||
+                destination.kind == SessionDestinationKind.finishOnboarding)) {
+          final safeStep = durableOnboardingResumeStep(savedDraft);
+          final safeDraft = savedDraft.copyWith(
+            uid: user.uid,
+            currentStep:
+                destination.kind == SessionDestinationKind.finishOnboarding
+                ? OnboardingDraft.lastStepIndex
+                : safeStep,
+            stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+            incrementRevision: false,
+          );
+          _ref.read(mockOnboardingProvider.notifier).loadSeedData(safeDraft);
+          destination = resolveOnboardingSessionDestination(
+            ownerUid: user.uid,
+            profile: profile,
+            draft: savedDraft,
+            completionJob: completionJob,
+          );
+        }
+
+        _applySessionDestination(user, destination);
+        return;
       }
 
       var profileSettings = await profileRepository.fetchProfileSettings(
@@ -774,13 +1125,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
               .fetchDraft(user.uid);
           if (!_isCurrentRestore(restoreGeneration)) return;
 
-          if (draft == null) {
+          if (draft == null || !isDurablyFinalOnboardingDraft(draft)) {
             throw const _RoutineProjectionRestoreException(
               'Routine setup recovery is required because both draft and completion snapshot are missing.',
               reason: OnboardingFailureReason.missingDraftAndBundle,
               actions: [MigrateLegacySetupAction(), ResetSetupSafelyAction()],
             );
-          } else {
+          }
+          try {
+            final rebuilt = OnboardingCompletionService.buildBundle(draft);
+            await _ref
+                .read(onboardingRepositoryProvider)
+                .saveCompletionBundle(rebuilt);
+            bundle = await _ref
+                .read(onboardingRepositoryProvider)
+                .fetchCompletionBundle(user.uid);
+            if (!_isCurrentRestore(restoreGeneration)) return;
+            if (bundle == null ||
+                bundle.uid != user.uid ||
+                bundle.sourceFingerprint != draft.effectiveSourceFingerprint ||
+                bundle.draftRevision != draft.revision) {
+              throw StateError('Completion snapshot read-back did not match.');
+            }
+          } catch (_) {
             throw const _RoutineProjectionRestoreException(
               'Routine setup recovery is required because the completion snapshot is missing.',
               reason: OnboardingFailureReason.missingBundle,
@@ -903,27 +1270,70 @@ class AuthNotifier extends StateNotifier<AuthState> {
         user: user,
         status: statusFor(user, profile.onboardingCompleted),
         clearError: true,
+        clearStartupDestination: true,
       );
     } on _RoutineProjectionRestoreException catch (error) {
       if (!_isCurrentRestore(restoreGeneration)) return;
       state = state.copyWith(
         user: user,
-        status: AuthFlowStatus.backendRestoreFailed,
+        status: AuthFlowStatus.needsAction,
         errorMessage: error.message,
         onboardingFailureReason: error.reason,
         recoveryActions: error.actions,
+        startupReasonCode: error.reason?.name ?? 'setup_inconsistency',
+        clearStartupDestination: true,
       );
     } catch (e) {
       if (!_isCurrentRestore(restoreGeneration)) return;
       state = state.copyWith(
         user: user,
-        status: AuthFlowStatus.backendRestoreFailed,
-        errorMessage:
-            'Could not restore setup. Check your connection and try again.',
+        status: AuthFlowStatus.reconnectRequired,
+        errorMessage: "We couldn't reconnect yet.",
         onboardingFailureReason: OnboardingFailureReason.networkTimeout,
-        recoveryActions: const [RetryNetworkAction()],
+        recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+        startupReasonCode: 'startup_request_failed',
+        clearStartupDestination: true,
       );
     }
+  }
+
+  void _applySessionDestination(AuthUser user, SessionDestination destination) {
+    final status = switch (destination.kind) {
+      SessionDestinationKind.freshOnboarding ||
+      SessionDestinationKind.resumeOnboarding =>
+        AuthFlowStatus.signedInOnboardingIncomplete,
+      SessionDestinationKind.finishOnboarding =>
+        AuthFlowStatus.finishingOnboarding,
+      SessionDestinationKind.home => AuthFlowStatus.signedInOnboardingComplete,
+      SessionDestinationKind.reconnect => AuthFlowStatus.reconnectRequired,
+      SessionDestinationKind.needsAction => AuthFlowStatus.needsAction,
+      SessionDestinationKind.verifyEmail =>
+        AuthFlowStatus.signedInEmailUnverified,
+      SessionDestinationKind.signedOut => AuthFlowStatus.signedOut,
+      SessionDestinationKind.resolving => AuthFlowStatus.restoringOnboarding,
+    };
+    state = state.copyWith(
+      user: user,
+      status: status,
+      resumeStep: destination.kind == SessionDestinationKind.resumeOnboarding
+          ? destination.resumeStep
+          : null,
+      completionRunId: destination.runId,
+      startupReasonCode: destination.reasonCode,
+      onboardingFailureReason:
+          destination.kind == SessionDestinationKind.needsAction
+          ? OnboardingFailureReason.unhandledException
+          : null,
+      recoveryActions: destination.kind == SessionDestinationKind.needsAction
+          ? const [
+              RetryNetworkAction(),
+              ResetSetupSafelyAction(),
+              SignOutAction(),
+            ]
+          : const [],
+      clearError: true,
+      clearStartupDestination: true,
+    );
   }
 
   bool _isCurrentRestore(int restoreGeneration) {

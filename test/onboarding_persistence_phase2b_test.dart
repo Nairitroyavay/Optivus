@@ -388,10 +388,7 @@ void main() {
           .read(authProvider.notifier)
           .login('completed@example.com', 'password');
 
-      expect(
-        container.read(authProvider).status,
-        AuthFlowStatus.backendRestoreFailed,
-      );
+      expect(container.read(authProvider).status, AuthFlowStatus.needsAction);
       expect(
         container.read(authProvider).errorMessage,
         contains('both draft and completion snapshot are missing'),

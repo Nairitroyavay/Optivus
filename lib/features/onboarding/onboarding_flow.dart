@@ -11,11 +11,13 @@ import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
+import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
+import 'package:optivus/services/session_destination_resolver.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
@@ -56,14 +58,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   int _currentDraftStep() {
     final onboarding = ref.read(mockOnboardingProvider);
-    final requested = onboarding.draft.currentStep.clamp(
-      0,
-      OnboardingDraft.lastStepIndex,
-    );
-    return requested.clamp(
-      0,
-      maxAccessibleOnboardingStep(onboarding.stepCompleted),
-    );
+    return durableOnboardingResumeStep(onboarding.draft);
   }
 
   void _createPageController(int initialStep) {
@@ -199,11 +194,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         },
       );
 
-      final savedDraft = ref.read(mockOnboardingProvider).draft;
-
-      if (step == 2 && savedDraft.baseTimeline.roleChangeWarnings.isNotEmpty) {
+      final draftBeforeInvalidation = ref.read(mockOnboardingProvider).draft;
+      if (step == 2 &&
+          draftBeforeInvalidation.baseTimeline.roleChangeWarnings.isNotEmpty) {
         _invalidateDownstreamStages(2);
       }
+
+      final savedDraft = ref.read(mockOnboardingProvider).draft;
 
       final onboardingRepository = ref.read(onboardingRepositoryProvider);
       await onboardingRepository.saveDraft(savedDraft);
@@ -220,6 +217,24 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
       if (_currentPersistenceUid() != uid) {
         throw StateError('Authenticated account changed during save.');
+      }
+
+      // This profile field is only a startup-loader hint. The saved draft's
+      // completed-step vector remains the sole progression authority.
+      final profile = ref
+          .read(mockUserProfileProvider)
+          .copyWith(
+            onboardingStep: durableOnboardingResumeStep(savedDraft),
+            updatedAt: DateTime.now(),
+          );
+      ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
+      if (OptivusBackendConfig.useFirebase) {
+        try {
+          await ref.read(profileRepositoryProvider).saveUserProfile(profile);
+        } catch (_) {
+          // The draft is already durably verified. Failure to update this
+          // optional hint must not turn a successful step save into failure.
+        }
       }
 
       return true;
@@ -651,10 +666,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (authState.isLoading) {
       return const LoadingScreen(message: 'Restoring your setup...');
     }
-    if (authState.backendRestoreFailed) {
-      return const LoadingScreen();
-    }
-
     if (!_initialDraftReady) {
       _scheduleInitialDraftSync();
       return const LoadingScreen(message: 'Restoring your setup...');

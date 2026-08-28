@@ -54,7 +54,7 @@ void main() {
           userProfile: profileInputCompleted,
           uri: Uri.parse('/onboarding'),
         );
-        expect(redirect2, equals('/onboarding/recovery'));
+        expect(redirect2, equals('/onboarding/needs-action'));
       },
     );
 

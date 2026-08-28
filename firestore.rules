@@ -1043,6 +1043,7 @@ service cloud.firestore {
         "source",
         "revision",
         "sourceFingerprint",
+        "timezoneId",
         "currentStep",
         "stepCompleted",
         "stepDirty",
@@ -1071,7 +1072,7 @@ service cloud.firestore {
     function validOnboardingDraft(data, uid) {
       return validOnboardingDraftKeys(data)
         && data.keys().hasAll([
-          "uid", "schemaVersion", "source", "revision", "sourceFingerprint",
+          "uid", "schemaVersion", "source", "revision", "sourceFingerprint", "timezoneId",
           "currentStep", "stepCompleted", "stepDirty", "stepLoading",
           "onboardingCompleted", "welcomeSaved", "patiencePledgeAccepted",
           "lifeRole", "bodyBasics", "baseTimeline", "badHabitsNotNow",
@@ -1079,12 +1080,15 @@ service cloud.firestore {
           "coachSetup", "notifications", "createdAt", "updatedAt"
         ])
         && data.uid == uid
-        && data.schemaVersion == 2
+        && data.schemaVersion == 3
         && data.source == "onboarding"
         && data.revision is int
         && data.revision >= 1
         && data.sourceFingerprint is string
         && data.sourceFingerprint.matches("^[a-f0-9]{64}$")
+        && data.timezoneId is string
+        && data.timezoneId.size() > 0
+        && data.timezoneId.size() <= 100
         && data.currentStep is int
         && data.currentStep >= 0
         && data.currentStep <= 14

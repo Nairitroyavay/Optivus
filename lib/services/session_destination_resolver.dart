@@ -1,0 +1,137 @@
+import 'package:optivus/models/onboarding_completion_job.dart';
+import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/user_profile.dart';
+
+enum SessionDestinationKind {
+  resolving,
+  signedOut,
+  verifyEmail,
+  freshOnboarding,
+  resumeOnboarding,
+  finishOnboarding,
+  home,
+  reconnect,
+  needsAction,
+}
+
+class SessionDestination {
+  final SessionDestinationKind kind;
+  final int? resumeStep;
+  final String? runId;
+  final String? reasonCode;
+
+  const SessionDestination._(
+    this.kind, {
+    this.resumeStep,
+    this.runId,
+    this.reasonCode,
+  });
+
+  const SessionDestination.resolving()
+    : this._(SessionDestinationKind.resolving);
+  const SessionDestination.signedOut()
+    : this._(SessionDestinationKind.signedOut);
+  const SessionDestination.verifyEmail()
+    : this._(SessionDestinationKind.verifyEmail);
+  const SessionDestination.freshOnboarding()
+    : this._(SessionDestinationKind.freshOnboarding);
+  const SessionDestination.resumeOnboarding(int step)
+    : this._(SessionDestinationKind.resumeOnboarding, resumeStep: step);
+  const SessionDestination.finishOnboarding({String? runId})
+    : this._(SessionDestinationKind.finishOnboarding, runId: runId);
+  const SessionDestination.home() : this._(SessionDestinationKind.home);
+  const SessionDestination.reconnect({String? reasonCode})
+    : this._(SessionDestinationKind.reconnect, reasonCode: reasonCode);
+  const SessionDestination.needsAction(String reasonCode)
+    : this._(SessionDestinationKind.needsAction, reasonCode: reasonCode);
+}
+
+/// Resolves the first step whose completion has not been durably recorded.
+/// `currentStep`, widget state, and controller state deliberately do not
+/// participate in this decision.
+int durableOnboardingResumeStep(OnboardingDraft draft) {
+  for (var step = 0; step < OnboardingDraft.stepCount; step++) {
+    if (step >= draft.stepCompleted.length || !draft.stepCompleted[step]) {
+      return step;
+    }
+  }
+  return OnboardingDraft.lastStepIndex;
+}
+
+bool hasMeaningfulOnboardingProgress(OnboardingDraft draft) {
+  // Only a durably completed step proves that onboarding has started. An
+  // empty draft, a viewed page, an edit/revision, or the legacy welcome marker
+  // must not turn a newly-created account into a restore session.
+  return draft.stepCompleted.any((value) => value);
+}
+
+bool isDurablyFinalOnboardingDraft(OnboardingDraft draft) {
+  return draft.onboardingCompleted &&
+      draft.currentStep == OnboardingDraft.lastStepIndex &&
+      draft.stepCompleted.length == OnboardingDraft.stepCount &&
+      draft.stepCompleted.every((value) => value) &&
+      draft.uid.trim().isNotEmpty;
+}
+
+SessionDestination resolveOnboardingSessionDestination({
+  required String ownerUid,
+  required UserProfile profile,
+  required OnboardingDraft? draft,
+  OnboardingCompletionJob? completionJob,
+}) {
+  if (profile.uid != ownerUid) {
+    return const SessionDestination.needsAction('profile_owner_mismatch');
+  }
+  if (draft != null && draft.uid != ownerUid) {
+    return const SessionDestination.needsAction('draft_owner_mismatch');
+  }
+  if (completionJob != null && completionJob.ownerUid != ownerUid) {
+    return const SessionDestination.needsAction(
+      'completion_job_owner_mismatch',
+    );
+  }
+
+  if (profile.onboardingCompleted) {
+    return const SessionDestination.home();
+  }
+
+  if (draft == null) {
+    final projectionIsPreCompletion =
+        profile.onboardingProjectionStatus.isEmpty ||
+        profile.onboardingProjectionStatus == 'none' ||
+        profile.onboardingProjectionStatus == 'pending';
+    if (!profile.onboardingInputCompleted &&
+        projectionIsPreCompletion &&
+        profile.onboardingStep <= 0 &&
+        completionJob == null) {
+      return const SessionDestination.freshOnboarding();
+    }
+    return const SessionDestination.needsAction(
+      'durable_onboarding_state_missing',
+    );
+  }
+
+  if (isDurablyFinalOnboardingDraft(draft)) {
+    if (completionJob?.status == OnboardingJobStatus.fatalFailure) {
+      return const SessionDestination.needsAction(
+        'completion_job_needs_action',
+      );
+    }
+    return SessionDestination.finishOnboarding(runId: completionJob?.jobId);
+  }
+
+  // A job can exist before its final draft has been durably persisted. In that
+  // case the durable draft proves that Step 14 still needs user completion.
+  if (profile.onboardingInputCompleted &&
+      durableOnboardingResumeStep(draft) < OnboardingDraft.lastStepIndex) {
+    return const SessionDestination.needsAction(
+      'completion_flags_do_not_match_draft',
+    );
+  }
+
+  final resumeStep = durableOnboardingResumeStep(draft);
+  if (hasMeaningfulOnboardingProgress(draft) || completionJob != null) {
+    return SessionDestination.resumeOnboarding(resumeStep);
+  }
+  return const SessionDestination.freshOnboarding();
+}

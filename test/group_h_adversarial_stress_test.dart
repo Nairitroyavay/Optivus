@@ -553,11 +553,14 @@ void main() {
             );
             await tester.pumpAndSettle();
 
-            expect(find.text('Setup Verification Incomplete'), findsOneWidget);
-            expect(find.textContaining('Reason:'), findsOneWidget);
+            expect(
+              find.text('We couldn’t finish loading\nyour setup'),
+              findsOneWidget,
+            );
+            expect(find.text('Technical details'), findsOneWidget);
             expect(
               find.text('Test error message for ${reason.name}'),
-              findsOneWidget,
+              findsNothing,
             );
           }
         },
