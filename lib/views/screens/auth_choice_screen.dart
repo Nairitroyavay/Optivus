@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
+import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/widgets/auth_back_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 
@@ -26,12 +27,17 @@ class AuthChoiceScreen extends StatelessWidget {
           child: SafeArea(
             child: Padding(
               key: const Key('auth-choice-safe-content'),
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+              padding: const EdgeInsets.fromLTRB(
+                AuthLayout.horizontalPadding,
+                AuthLayout.backButtonTopInset,
+                AuthLayout.horizontalPadding,
+                AuthLayout.backButtonBottomInset,
+              ),
               child: Column(
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: OnboardingStageBackButton(
+                    child: AuthBackButton(
                       onTap: () =>
                           context.canPop() ? context.pop() : context.go('/'),
                     ),

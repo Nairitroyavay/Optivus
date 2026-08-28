@@ -12,7 +12,9 @@ import 'package:optivus/widgets/wavy_loading_indicator.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/core/utils/auth_form_readiness.dart';
-import 'package:optivus/core/utils/focus_utils.dart';
+import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/widgets/auth_text_field.dart';
+import 'package:optivus/widgets/auth_back_button.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLOUR TOKENS
@@ -49,8 +51,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   String? _emailError;
   String? _passwordError;
   bool _ctaRevealed = false;
-  final _emailFieldKey = GlobalKey();
-  final _passwordFieldKey = GlobalKey();
   // final AuthRepository _authRepository = AuthRepository(AuthService());
 
   @override
@@ -103,28 +103,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _passwordError = passwordError;
     });
     if (emailError != null) {
-      _focusAndReveal(_emailFocus, _emailFieldKey);
+      _emailFocus.requestFocus();
       return false;
     }
     if (passwordError != null) {
-      _focusAndReveal(_passFocus, _passwordFieldKey);
+      _passFocus.requestFocus();
       return false;
     }
     return true;
-  }
-
-  void _focusAndReveal(FocusNode focusNode, GlobalKey key) {
-    focusNode.requestFocus();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final fieldContext = key.currentContext;
-      if (fieldContext == null) return;
-      Scrollable.ensureVisible(
-        fieldContext,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        alignment: 0.2,
-      );
-    });
   }
 
   // ── Firebase sign in ──────────────────────────────────────────────────────
@@ -171,13 +157,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (email.isEmpty) {
       setState(() => _emailError = 'Enter your email to reset your password.');
-      _focusAndReveal(_emailFocus, _emailFieldKey);
+      _emailFocus.requestFocus();
       return;
     }
 
     if (!isBasicEmailFormatValid(email)) {
       setState(() => _emailError = 'Please enter a valid email address.');
-      _focusAndReveal(_emailFocus, _emailFieldKey);
+      _emailFocus.requestFocus();
       return;
     }
 
@@ -209,7 +195,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authLoading = ref.watch(authProvider).isLoading;
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final media = MediaQuery.of(context);
+    final keyboardOpen = media.viewInsets.bottom > 0;
+    final allowAdaptiveScroll =
+        media.size.height < 650 || media.textScaler.scale(16) > 19.2;
 
     return PopScope(
       canPop: !keyboardOpen,
@@ -234,48 +223,87 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               children: [
                 Expanded(
                   child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    key: const Key('login-form-scroll'),
+                    physics: allowAdaptiveScroll
+                        ? const BouncingScrollPhysics()
+                        : const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AuthLayout.horizontalPadding,
+                    ),
                     child: Column(
                       children: [
-                        const SizedBox(height: 50),
+                        const SizedBox(height: AuthLayout.backButtonTopInset),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: AuthBackButton(
+                            onTap: () => context.canPop()
+                                ? context.pop()
+                                : context.go('/signup'),
+                          ),
+                        ),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          height: keyboardOpen ? 4 : 8,
+                        ),
 
                         // Logo
-                        const GlassLogo(),
-                        const SizedBox(height: 32),
+                        AnimatedContainer(
+                          key: const Key('login-logo'),
+                          duration: const Duration(milliseconds: 180),
+                          curve: Curves.easeOutCubic,
+                          width: keyboardOpen
+                              ? 44
+                              : AuthLayout.standardLogoSize,
+                          height: keyboardOpen
+                              ? 44
+                              : AuthLayout.standardLogoSize,
+                          child: const FittedBox(child: GlassLogo()),
+                        ),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          height: keyboardOpen ? 4 : 8,
+                        ),
 
                         // Welcome back
-                        const Text(
+                        Text(
                           'Welcome back.',
                           style: TextStyle(
-                            fontSize: 30,
+                            fontSize: keyboardOpen ? 22 : 26,
                             fontWeight: FontWeight.w900,
                             color: _kInk,
                             letterSpacing: -0.8,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         Text(
                           'Sign in to your Optivus account.',
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: 14,
                             color: Colors.blueGrey.shade600,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 36),
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          height: keyboardOpen ? 6 : 14,
+                        ),
 
                         // Form
                         LiquidGlassPanel(
-                          padding: const EdgeInsets.all(24),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: keyboardOpen ? 12 : 14,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               // Email
                               _FieldLabel('Email'),
-                              const SizedBox(height: 6),
-                              _GlassInput(
-                                key: _emailFieldKey,
+                              const SizedBox(
+                                height: AuthLayout.labelToFieldGap,
+                              ),
+                              AuthTextField(
                                 controller: _emailCtrl,
                                 focusNode: _emailFocus,
                                 semanticLabel: 'Email',
@@ -287,13 +315,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                               if (_emailError != null)
                                 _InlineFieldError(message: _emailError!),
-                              const SizedBox(height: 18),
+                              const SizedBox(height: AuthLayout.fieldGap),
 
                               // Password
                               _FieldLabel('Password'),
-                              const SizedBox(height: 6),
-                              _GlassInput(
-                                key: _passwordFieldKey,
+                              const SizedBox(
+                                height: AuthLayout.labelToFieldGap,
+                              ),
+                              AuthTextField(
                                 controller: _passCtrl,
                                 focusNode: _passFocus,
                                 semanticLabel: 'Password',
@@ -302,22 +331,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 obscure: _obscurePass,
                                 autofillHints: const [AutofillHints.password],
                                 onSubmit: (_) => _signIn(),
-                                suffix: Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: IconButton(
-                                    icon: Icon(
-                                      _obscurePass
-                                          ? Icons.visibility_off_outlined
-                                          : Icons.visibility_outlined,
-                                      color: Colors.grey.shade600,
-                                      size: 20,
-                                    ),
-                                    tooltip: _obscurePass
-                                        ? 'Show password'
-                                        : 'Hide password',
-                                    onPressed: () => setState(
-                                      () => _obscurePass = !_obscurePass,
-                                    ),
+                                suffix: AuthEyeButton(
+                                  obscure: _obscurePass,
+                                  onToggle: () => setState(
+                                    () => _obscurePass = !_obscurePass,
                                   ),
                                 ),
                               ),
@@ -348,24 +365,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                         // Error/Success messages
                         if (_errorMsg != null) ...[
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           _ErrorBanner(message: _errorMsg!),
                         ],
 
                         if (_successMsg != null) ...[
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           _SuccessBanner(message: _successMsg!),
                         ],
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 14),
                         const _DisabledAuthProviders(),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 14),
                         _AuthRoutePrompt(
                           prompt: "Don't have an account?",
                           action: 'Sign Up',
                           onPressed: () => context.push('/signup'),
                         ),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 10),
                       ],
                     ),
                   ),
@@ -374,7 +391,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   curve: Curves.easeOutCubic,
-                  height: _ctaRevealed || authLoading ? 88 : 0,
+                  height: _ctaRevealed || authLoading ? 74 : 0,
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 200),
                     switchInCurve: Curves.easeOutCubic,
@@ -394,7 +411,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           )
                         : Padding(
                             key: const ValueKey('login-primary-visible'),
-                            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                            padding: const EdgeInsets.fromLTRB(24, 4, 24, 10),
                             child: authLoading
                                 ? _LoadingButton(
                                     operation: _authOperation,
@@ -423,16 +440,12 @@ class _DisabledAuthProviders extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: const [
+    return const Column(
+      children: [
         _DisabledProviderButton(
+          key: Key('login-google'),
           icon: Icons.g_mobiledata_rounded,
           label: 'Continue with Google',
-        ),
-        SizedBox(height: 10),
-        _DisabledProviderButton(
-          icon: Icons.apple_rounded,
-          label: 'Continue with Apple',
         ),
       ],
     );
@@ -443,7 +456,11 @@ class _DisabledProviderButton extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _DisabledProviderButton({required this.icon, required this.label});
+  const _DisabledProviderButton({
+    super.key,
+    required this.icon,
+    required this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -452,10 +469,11 @@ class _DisabledProviderButton extends StatelessWidget {
       child: Opacity(
         opacity: 0.48,
         child: Container(
-          height: 52,
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.45),
-            borderRadius: BorderRadius.circular(26),
+            borderRadius: BorderRadius.circular(25),
             border: Border.all(
               color: Colors.white.withValues(alpha: 0.85),
               width: 1,
@@ -463,15 +481,20 @@ class _DisabledProviderButton extends StatelessWidget {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: _kInk, size: 24),
+              Icon(icon, color: _kInk, size: 22),
               const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: _kInk,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _kInk,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
@@ -550,11 +573,26 @@ class _AuthRoutePrompt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(prompt, style: TextStyle(color: Colors.grey.shade600)),
-        TextButton(onPressed: onPressed, child: Text(action)),
+        Text(
+          prompt,
+          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+        ),
+        TextButton(
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(
+            action,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          ),
+        ),
       ],
     );
   }
@@ -698,189 +736,6 @@ class _LoadingButton extends StatelessWidget {
               WavyLoadingIndicator(size: 30, operation: operation),
               const SizedBox(width: 10),
               Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassInput extends StatefulWidget {
-  final TextEditingController controller;
-  final FocusNode focusNode;
-  final String hint;
-  final IconData icon;
-  final bool obscure;
-  final TextInputType keyboardType;
-  final FocusNode? next;
-  final Widget? suffix;
-  final void Function(String)? onSubmit;
-  final String? semanticLabel;
-  final Iterable<String>? autofillHints;
-
-  const _GlassInput({
-    super.key,
-    required this.controller,
-    required this.focusNode,
-    required this.hint,
-    required this.icon,
-    this.obscure = false,
-    this.keyboardType = TextInputType.text,
-    this.next,
-    this.suffix,
-    this.onSubmit,
-    this.semanticLabel,
-    this.autofillHints,
-  });
-
-  @override
-  State<_GlassInput> createState() => _GlassInputState();
-}
-
-class _GlassInputState extends State<_GlassInput> {
-  bool _focused = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.focusNode.addListener(_handleFocusChanged);
-  }
-
-  void _handleFocusChanged() {
-    if (mounted) setState(() => _focused = widget.focusNode.hasFocus);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_handleFocusChanged);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: _focused ? 0.28 : 0.18),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(
-          color: _focused
-              ? _kAmber.withValues(alpha: 0.70)
-              : Colors.white.withValues(alpha: 0.85),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: _focused
-                ? _kAmber.withValues(alpha: 0.18)
-                : Colors.black.withValues(alpha: 0.08),
-            blurRadius: _focused ? 18 : 24,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: Colors.white.withValues(alpha: 0.50),
-            blurRadius: 16,
-            spreadRadius: -2,
-            offset: const Offset(-2, -2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28.5),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28.5),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      stops: const [0.0, 0.15, 0.4, 1.0],
-                      colors: [
-                        Colors.white.withValues(alpha: 0.95),
-                        Colors.white.withValues(alpha: 0.40),
-                        Colors.white.withValues(alpha: 0.0),
-                        Colors.black.withValues(alpha: 0.03),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              TextField(
-                controller: widget.controller,
-                focusNode: widget.focusNode,
-                obscureText: widget.obscure,
-                keyboardType: widget.keyboardType,
-                autofillHints: widget.autofillHints,
-                onTapOutside: dismissPrimaryFocusOnTapOutside,
-                textInputAction: widget.next != null
-                    ? TextInputAction.next
-                    : TextInputAction.done,
-                onSubmitted:
-                    widget.onSubmit ??
-                    (_) {
-                      if (widget.next != null) {
-                        FocusScope.of(context).requestFocus(widget.next);
-                      } else {
-                        FocusManager.instance.primaryFocus?.unfocus();
-                      }
-                    },
-                style: const TextStyle(
-                  color: Color(0xFF1E202A),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                  letterSpacing: 0.3,
-                ),
-                cursorColor: _kAmber,
-                decoration: InputDecoration(
-                  prefixIcon: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: Colors.white.withValues(alpha: 0.25),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.5),
-                          width: 1,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            offset: const Offset(2, 2),
-                            blurRadius: 6,
-                          ),
-                          BoxShadow(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            offset: const Offset(-2, -2),
-                            blurRadius: 6,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        widget.icon,
-                        color: _focused ? _kAmber : const Color(0xFF1E202A),
-                        size: 22,
-                      ),
-                    ),
-                  ),
-                  suffixIcon: widget.suffix,
-                  hintText: widget.hint,
-                  hintStyle: TextStyle(
-                    color: const Color(0xFF1E202A).withValues(alpha: 0.40),
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                    letterSpacing: 0.2,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 18),
-                ),
-              ),
             ],
           ),
         ),

@@ -8,6 +8,8 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/app_button.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
+import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/widgets/auth_back_button.dart';
 
 const _kInk = Color(0xFF0F111A);
 const _kSub = Color(0xFF6B7280);
@@ -149,156 +151,174 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
     final email = auth.user?.email ?? 'your email address';
     final busy = _checking || auth.isLoading;
 
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [_kCream, _kBg],
-            stops: [0.0, 0.55],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _signOut();
+        }
+      },
+      child: Scaffold(
+        body: Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [_kCream, _kBg],
+              stops: [0.0, 0.55],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 52),
-                        Container(
-                          width: 70,
-                          height: 70,
-                          decoration: const BoxDecoration(
-                            color: _kInk,
-                            shape: BoxShape.circle,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AuthLayout.horizontalPadding,
+              ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: AuthLayout.backButtonTopInset),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: AuthBackButton(onTap: _signOut),
                           ),
-                          child: const Icon(
-                            Icons.mark_email_read_outlined,
-                            color: Colors.white,
-                            size: 32,
+                          const SizedBox(height: 16),
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: const BoxDecoration(
+                              color: _kInk,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.mark_email_read_outlined,
+                              color: Colors.white,
+                              size: 32,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 28),
-                        const Text(
-                          'Verify your email',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w900,
-                            color: _kInk,
-                            letterSpacing: -0.8,
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Verify your email',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w900,
+                              color: _kInk,
+                              letterSpacing: -0.8,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'We sent a verification link to:',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blueGrey.shade600,
+                          const SizedBox(height: 10),
+                          Text(
+                            'We sent a verification link to:',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blueGrey.shade600,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 18),
-                        LiquidGlassPanel(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 16,
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.alternate_email_rounded,
-                                color: _kAmber,
-                                size: 22,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  email,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: _kInk,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w800,
+                          const SizedBox(height: 18),
+                          LiquidGlassPanel(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 16,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.alternate_email_rounded,
+                                  color: _kAmber,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    email,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: _kInk,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 18),
-                        const Text(
-                          'Check your inbox and tap the verification link. Then return here and press I verified.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: _kSub,
-                            fontSize: 14,
-                            height: 1.45,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        if (_error != null) ...[
                           const SizedBox(height: 18),
-                          _MessageBanner(
-                            message: _error!,
-                            color: _kRed,
-                            icon: Icons.error_outline_rounded,
+                          const Text(
+                            'Check your inbox and tap the verification link. Then return here and press I verified.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: _kSub,
+                              fontSize: 14,
+                              height: 1.45,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ],
-                        if (_success != null) ...[
+                          if (_error != null) ...[
+                            const SizedBox(height: 18),
+                            _MessageBanner(
+                              message: _error!,
+                              color: _kRed,
+                              icon: Icons.error_outline_rounded,
+                            ),
+                          ],
+                          if (_success != null) ...[
+                            const SizedBox(height: 18),
+                            _MessageBanner(
+                              message: _success!,
+                              color: _kGreen,
+                              icon: Icons.check_circle_outline_rounded,
+                            ),
+                          ],
                           const SizedBox(height: 18),
-                          _MessageBanner(
-                            message: _success!,
-                            color: _kGreen,
-                            icon: Icons.check_circle_outline_rounded,
+                          _VerificationHelpCard(
+                            cooldown: _cooldown,
+                            resending: _resending,
+                            onResend: _resend,
+                            onTryAnotherEmail: _signOut,
                           ),
+                          const SizedBox(height: 36),
                         ],
-                        const SizedBox(height: 18),
-                        _VerificationHelpCard(
-                          cooldown: _cooldown,
-                          resending: _resending,
-                          onResend: _resend,
-                          onTryAnotherEmail: _signOut,
-                        ),
-                        const SizedBox(height: 36),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                busy
-                    ? _LoadingButton(operation: _verifyOperation)
-                    : AppButton(text: 'I verified', onPressed: _checkVerified),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _SecondaryButton(
-                        label: 'Try another email',
-                        icon: Icons.edit_outlined,
-                        onTap: _signOut,
+                  busy
+                      ? _LoadingButton(operation: _verifyOperation)
+                      : AppButton(
+                          text: 'I verified',
+                          onPressed: _checkVerified,
+                        ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _SecondaryButton(
+                          label: 'Try another email',
+                          icon: Icons.edit_outlined,
+                          onTap: _signOut,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _SecondaryButton(
-                        label: 'Log out',
-                        icon: Icons.logout_rounded,
-                        danger: true,
-                        onTap: _signOut,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _SecondaryButton(
+                          label: 'Log out',
+                          icon: Icons.logout_rounded,
+                          danger: true,
+                          onTap: _signOut,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-              ],
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
             ),
           ),
         ),
