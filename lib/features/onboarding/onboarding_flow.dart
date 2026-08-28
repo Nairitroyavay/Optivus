@@ -9,6 +9,8 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/coach_models.dart';
+import 'package:optivus/models/onboarding_state.dart';
+import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
@@ -44,6 +46,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   bool _isSaving = false; // Double-tap prevention for Save
   bool _isNavigating = false; // Double-tap prevention for Next
   bool _isHandlingPopGesture = false;
+  final Set<int> _stepsWithRevealedPrimaryCta = <int>{};
 
   @override
   void initState() {
@@ -147,6 +150,17 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   // Core Save step action — with double-tap prevention
   Future<bool> _saveStep(int step) async {
     if (_isSaving) return false; // Prevent double tap
+
+    final readiness = _readStepReadiness(step);
+    if (!readiness.canRevealPrimary) {
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(
+            readiness.validationMessage ??
+                'Complete the required information before continuing.',
+          );
+      return false;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -171,53 +185,18 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       ref.read(mockOnboardingProvider.notifier).setStepLoading(step, true);
       ref.read(mockOnboardingProvider.notifier).clearValidation();
 
-      final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
-      onboardingNotifier.saveStep(
-        step,
-        uid: uid,
-        transform: (draft) {
-          if (step == 0) {
-            return draft.copyWith(welcomeSaved: true);
-          }
-          if (step == 3) {
-            return draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
-          }
-          if (step == onboardingFixedStepIndex) {
-            return draft.copyWith(
-              baseTimeline: draft.baseTimeline.withRequiredFixedBlocks(),
-            );
-          }
-          if (step == OnboardingDraft.lastStepIndex) {
-            return draft.copyWith(finalPreview: draft.buildFinalPreview());
-          }
-          return draft;
-        },
-      );
-
-      final draftBeforeInvalidation = ref.read(mockOnboardingProvider).draft;
-      if (step == 2 &&
-          draftBeforeInvalidation.baseTimeline.roleChangeWarnings.isNotEmpty) {
-        _invalidateDownstreamStages(2);
-      }
-
-      final savedDraft = ref.read(mockOnboardingProvider).draft;
+      final savedDraft = _buildStepSaveCandidate(step: step, uid: uid);
 
       final onboardingRepository = ref.read(onboardingRepositoryProvider);
       await onboardingRepository.saveDraft(savedDraft);
       await onboardingRepository.flushPendingDraftSave();
-
-      final verifiedState = ref.read(mockOnboardingProvider);
-      if (verifiedState.draft.uid != savedDraft.uid ||
-          verifiedState.draft.revision != savedDraft.revision ||
-          verifiedState.draft.currentStep != savedDraft.currentStep ||
-          step >= verifiedState.stepCompleted.length ||
-          !verifiedState.stepCompleted[step] ||
-          verifiedState.stepDirty[step]) {
-        throw StateError('Onboarding save verification failed.');
-      }
       if (_currentPersistenceUid() != uid) {
         throw StateError('Authenticated account changed during save.');
       }
+
+      // Completion becomes visible to navigation only after the repository
+      // acknowledges the durable write.
+      ref.read(mockOnboardingProvider.notifier).setDraft(savedDraft);
 
       // This profile field is only a startup-loader hint. The saved draft's
       // completed-step vector remains the sole progression authority.
@@ -254,9 +233,52 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
   }
 
+  OnboardingDraft _buildStepSaveCandidate({
+    required int step,
+    required String uid,
+  }) {
+    final now = DateTime.now();
+    var draft = ref.read(mockOnboardingProvider).draft;
+    if (step == 0) {
+      draft = draft.copyWith(welcomeSaved: true);
+    } else if (step == 3) {
+      draft = draft.copyWith(bodyBasics: draft.bodyBasics.withEstimates());
+    } else if (step == onboardingFixedStepIndex) {
+      draft = draft.copyWith(
+        baseTimeline: draft.baseTimeline.withRequiredFixedBlocks(),
+      );
+    } else if (step == OnboardingDraft.lastStepIndex) {
+      draft = draft.copyWith(finalPreview: draft.buildFinalPreview());
+    }
+
+    final completed = List<bool>.from(draft.stepCompleted)..[step] = true;
+    final dirty = List<bool>.from(draft.stepDirty)..[step] = false;
+    final loading = List<bool>.from(draft.stepLoading)..[step] = false;
+    return draft.copyWith(
+      uid: uid,
+      currentStep: step,
+      stepCompleted: completed,
+      stepDirty: dirty,
+      stepLoading: loading,
+      createdAt: draft.createdAt ?? now,
+      updatedAt: now,
+    );
+  }
+
   // Next step trigger action — with double-tap prevention
   void _onNextPressed() async {
     if (_isNavigating) return; // Prevent double tap
+
+    final readiness = _readStepReadiness(_currentPage);
+    if (_currentPage >= 1 && _currentPage <= 13 && !readiness.canSubmit) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setValidationMessage(
+            readiness.validationMessage ??
+                'Complete the required information before continuing.',
+          );
+      return;
+    }
     setState(() => _isNavigating = true);
 
     try {
@@ -434,25 +456,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
     if (mounted && authUser == null) {
       context.go('/app?tab=0');
-    }
-  }
-
-  void _invalidateDownstreamStages(int fromStep) {
-    final onboardingState = ref.read(mockOnboardingProvider);
-    final completed = List<bool>.from(onboardingState.stepCompleted);
-    var changed = false;
-    for (var i = fromStep + 1; i <= OnboardingDraft.lastStepIndex; i++) {
-      if (completed[i]) {
-        completed[i] = false;
-        changed = true;
-      }
-    }
-    if (changed) {
-      for (var i = fromStep + 1; i <= OnboardingDraft.lastStepIndex; i++) {
-        ref
-            .read(mockOnboardingProvider.notifier)
-            .setStepCompleted(i, completed[i]);
-      }
     }
   }
 
@@ -659,6 +662,97 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     );
   }
 
+  bool _classJobReviewReady(
+    OnboardingDraft draft,
+    List<ClassRoutineBlock> classBlocks,
+    List<ClassRoutineBlock> workBlocks,
+  ) {
+    final role = draft.lifeRole.lifeRole;
+    final classesRequired =
+        role == LifeRoleDraft.studentKey ||
+        role == LifeRoleDraft.studentWorkingKey;
+    final workRequired =
+        role == LifeRoleDraft.workingKey ||
+        role == LifeRoleDraft.studentWorkingKey ||
+        role == LifeRoleDraft.businessKey;
+    final classesReady = _timelineBlocksFromLocalSchedule(
+      classBlocks,
+      'classes',
+    ).isNotEmpty;
+    final workReady = _timelineBlocksFromLocalSchedule(
+      workBlocks,
+      'job_work_business',
+    ).isNotEmpty;
+    return (!classesRequired || classesReady) && (!workRequired || workReady);
+  }
+
+  bool _uploadBusyForStep(int step, UploadState uploadState) {
+    if (uploadState.sourceFeature != OnboardingDraft.sourceOnboarding ||
+        !uploadState.isBusy) {
+      return false;
+    }
+    return switch (step) {
+      onboardingClassJobStepIndex =>
+        uploadState.purpose == UploadedAssetPurpose.classTimetable ||
+            uploadState.purpose == UploadedAssetPurpose.workSchedule,
+      onboardingEatingStepIndex =>
+        uploadState.purpose == UploadedAssetPurpose.eatingMenu,
+      onboardingSkinCareStepIndex =>
+        uploadState.purpose == UploadedAssetPurpose.skinCare,
+      _ => false,
+    };
+  }
+
+  OnboardingStepReadiness _evaluateReadiness({
+    required int step,
+    required OnboardingState onboardingState,
+    required RoutineImportAiState aiState,
+    required UploadState uploadState,
+    required List<ClassRoutineBlock> classBlocks,
+    required List<ClassRoutineBlock> workBlocks,
+  }) {
+    final aiBusy =
+        (step == onboardingClassJobStepIndex ||
+            step == onboardingEatingStepIndex) &&
+        aiState.isExtracting;
+    final asyncIdle =
+        !onboardingState.stepLoading[step] &&
+        !aiBusy &&
+        !_uploadBusyForStep(step, uploadState);
+    final classJobReviewReady =
+        step == onboardingClassJobStepIndex && onboardingState.stepDirty[step]
+        ? _classJobReviewReady(onboardingState.draft, classBlocks, workBlocks)
+        : null;
+
+    return evaluateOnboardingStepReadiness(
+      draft: onboardingState.draft,
+      step: step,
+      completedSteps: onboardingState.stepCompleted,
+      dirtySteps: onboardingState.stepDirty,
+      runtime: OnboardingStepRuntimeState(
+        asyncIdle: asyncIdle,
+        saveIdle: !_isSaving && !_isNavigating,
+        classJobReviewReady: classJobReviewReady,
+      ),
+    );
+  }
+
+  OnboardingStepReadiness _readStepReadiness(int step) {
+    final onboardingState = ref.read(mockOnboardingProvider);
+    return _evaluateReadiness(
+      step: step,
+      onboardingState: onboardingState,
+      aiState: ref.read(routineImportAiControllerProvider),
+      uploadState: ref.read(uploadControllerProvider),
+      classBlocks: step == onboardingClassJobStepIndex
+          ? ref.read(onboardingClassTimelineProvider)
+          : const <ClassRoutineBlock>[],
+      workBlocks: step == onboardingClassJobStepIndex
+          ? ref.read(onboardingWorkTimelineProvider)
+          : const <ClassRoutineBlock>[],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -675,15 +769,21 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         onboardingState.stepCompleted[_currentPage] &&
         !onboardingState.stepDirty[_currentPage];
     final bool showSave = false; // Globally hidden for onboarding.
-    final readiness = evaluateOnboardingStepReadiness(
-      draft: onboardingState.draft,
+    final aiState = ref.watch(routineImportAiControllerProvider);
+    final uploadState = ref.watch(uploadControllerProvider);
+    final classBlocks = _currentPage == onboardingClassJobStepIndex
+        ? ref.watch(onboardingClassTimelineProvider)
+        : const <ClassRoutineBlock>[];
+    final workBlocks = _currentPage == onboardingClassJobStepIndex
+        ? ref.watch(onboardingWorkTimelineProvider)
+        : const <ClassRoutineBlock>[];
+    final readiness = _evaluateReadiness(
       step: _currentPage,
-      completedSteps: onboardingState.stepCompleted,
-      asyncIdle: !_isNavigating && !onboardingState.stepLoading[_currentPage],
-      saveIdle: !_isSaving,
-      externalReviewCompleted: _currentPage == onboardingSkinCareStepIndex
-          ? onboarding7CanContinue(onboardingState.draft.baseTimeline)
-          : null,
+      onboardingState: onboardingState,
+      aiState: aiState,
+      uploadState: uploadState,
+      classBlocks: classBlocks,
+      workBlocks: workBlocks,
     );
 
     String ctaLabel = 'Next Step';
@@ -691,30 +791,23 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         !_isNavigating &&
         !_isSaving &&
         !onboardingState.stepLoading[_currentPage];
-    final classJobActionBusy =
-        _currentPage == onboardingClassJobStepIndex &&
-        _classJobActionBusy(onboardingState.draft, watch: true);
-
     if (_currentPage == 0) {
       ctaLabel = 'Get Started';
     } else if (_currentPage == OnboardingDraft.lastStepIndex) {
       ctaLabel = 'Enter Optivus';
       ctaEnabled = !_isNavigating && !_isSaving;
     }
-    if (classJobActionBusy) {
-      ctaEnabled = false;
-    }
-    if (_currentPage == onboardingSkinCareStepIndex) {
-      ctaEnabled =
-          ctaEnabled &&
-          onboarding7CanContinue(onboardingState.draft.baseTimeline);
-    }
     ctaEnabled = ctaEnabled && readiness.canSubmit;
-    final showPrimaryCta =
-        readiness.canRevealPrimary ||
-        onboardingState.stepCompleted[_currentPage] ||
-        _isSaving ||
-        _isNavigating;
+    if (_currentPage >= 1 && _currentPage <= 13 && readiness.canRevealPrimary) {
+      _stepsWithRevealedPrimaryCta.add(_currentPage);
+    }
+    final showPrimaryCta = shouldShowOnboardingPrimaryCta(
+      step: _currentPage,
+      readiness: readiness,
+      revealedDuringInteraction: _stepsWithRevealedPrimaryCta.contains(
+        _currentPage,
+      ),
+    );
 
     return PopScope(
       canPop: false,
@@ -918,52 +1011,38 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       allNewBlocks.addAll(visibleWorkBlocks);
     }
 
-    final uid = _currentPersistenceUid();
-    if (uid == null) {
-      ref
-          .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(
-            'Please verify your email before saving onboarding.',
-          );
-      return true;
-    }
-
+    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+      final base = draft.baseTimeline;
+      final nextBlocks =
+          base.blocks
+              .where(
+                (b) =>
+                    b.section != 'classes' && b.section != 'job_work_business',
+              )
+              .toList()
+            ..addAll(allNewBlocks);
+      final nextPending = base.pendingFutureImports
+          .where(
+            (entry) =>
+                entry.section != onboardingSectionClasses &&
+                entry.section != onboardingSectionWork,
+          )
+          .toList(growable: false);
+      return draft.copyWith(
+        baseTimeline: base.copyWith(
+          classJobSetupStep: 5,
+          blocks: nextBlocks,
+          pendingFutureImports: nextPending,
+        ),
+        clearFinalPreview: true,
+      );
+    });
     ref
         .read(mockOnboardingProvider.notifier)
-        .saveStep(
-          onboardingClassJobStepIndex,
-          uid: uid,
-          transform: (draft) {
-            final base = draft.baseTimeline;
-            final nextBlocks =
-                base.blocks
-                    .where(
-                      (b) =>
-                          b.section != 'classes' &&
-                          b.section != 'job_work_business',
-                    )
-                    .toList()
-                  ..addAll(allNewBlocks);
-            final nextPending = base.pendingFutureImports
-                .where(
-                  (entry) =>
-                      entry.section != onboardingSectionClasses &&
-                      entry.section != onboardingSectionWork,
-                )
-                .toList(growable: false);
-            return draft.copyWith(
-              baseTimeline: base.copyWith(
-                classJobSetupStep: 5,
-                blocks: nextBlocks,
-                pendingFutureImports: nextPending,
-              ),
-              clearFinalPreview: true,
-            );
-          },
-        );
-    await _persistCurrentDraftAfterNavigation();
+        .setStepDirty(onboardingClassJobStepIndex, true);
 
-    // Return false to let outer flow advance to step 5
+    // The outer flow now performs the only durable save/verification and may
+    // advance only after that succeeds.
     return false;
   }
 

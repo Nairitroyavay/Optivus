@@ -36,23 +36,7 @@ class OnboardingGlassCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: selected
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.10),
-                  blurRadius: 20,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 8),
-                ),
-              ]
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+        boxShadow: [],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
@@ -71,7 +55,7 @@ class OnboardingGlassCard extends StatelessWidget {
                     alpha: selected ? 0.25 : (isDark ? 0.08 : 0.15),
                   ),
                   Colors.white.withValues(alpha: 0.0),
-                  Colors.black.withValues(alpha: isDark ? 0.15 : 0.02),
+                  Colors.white.withValues(alpha: isDark ? 0.04 : 0.0),
                 ],
                 stops: const [0.0, 0.5, 1.0],
               ),
@@ -100,18 +84,18 @@ class OnboardingGlassCard extends StatelessWidget {
                 ),
                 if (selected)
                   Positioned(
-                    top: -10,
-                    right: -10,
-                    width: 60,
-                    height: 40,
-                    child: ImageFiltered(
-                      imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: OptivusColors.brandAccent.withValues(
-                            alpha: 0.2,
-                          ),
-                          shape: BoxShape.circle,
+                    top: -15,
+                    right: -15,
+                    width: 70,
+                    height: 50,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            OptivusColors.brandAccent.withValues(alpha: 0.22),
+                            OptivusColors.brandAccent.withValues(alpha: 0.0),
+                          ],
                         ),
                       ),
                     ),
@@ -155,19 +139,24 @@ class OnboardingScrollView extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: userScrollable
-              ? const AlwaysScrollableScrollPhysics()
-              : const NeverScrollableScrollPhysics(),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: effectivePadding,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: isLandscape
-                  ? 0.0
-                  : math.max(0.0, constraints.maxHeight - bottomReserve),
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+          child: SingleChildScrollView(
+            physics: userScrollable
+                ? const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  )
+                : const NeverScrollableScrollPhysics(),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: effectivePadding,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: isLandscape
+                    ? 0.0
+                    : math.max(0.0, constraints.maxHeight - bottomReserve),
+              ),
+              child: child,
             ),
-            child: child,
           ),
         );
       },
@@ -194,14 +183,7 @@ class OnboardingGlassPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.10),
-            blurRadius: 40,
-            spreadRadius: 5,
-            offset: const Offset(0, 16),
-          ),
-        ],
+        boxShadow: [],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
@@ -221,7 +203,7 @@ class OnboardingGlassPanel extends StatelessWidget {
                 colors: [
                   Colors.white.withValues(alpha: 0.35),
                   Colors.white.withValues(alpha: 0.05),
-                  Colors.black.withValues(alpha: 0.02),
+                  Colors.white.withValues(alpha: 0.0),
                 ],
                 stops: const [0.0, 0.4, 1.0],
               ),
@@ -641,20 +623,7 @@ class OnboardingActionPill extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
-            boxShadow: [
-              if (selected)
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                )
-              else
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-            ],
+            boxShadow: [],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(radius),
@@ -835,13 +804,7 @@ class OnboardingIconPill extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: [],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
@@ -949,7 +912,7 @@ class OnboardingDayDroplet extends StatelessWidget {
                       : [
                           Colors.white.withValues(alpha: 0.6),
                           Colors.white.withValues(alpha: 0.1),
-                          Colors.black.withValues(alpha: 0.02),
+                          Colors.white.withValues(alpha: 0.0),
                         ],
                 ),
               ),
@@ -1015,13 +978,7 @@ class OnboardingLiquidToggle extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: value ? 0.12 : 0.05),
-              blurRadius: value ? 16 : 6,
-              offset: Offset(0, value ? 6.0 : 3.0),
-            ),
-          ],
+          boxShadow: [],
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
@@ -1099,7 +1056,9 @@ class OnboardingLiquidToggle extends StatelessWidget {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
+                            color: (value ? accent : Colors.black).withValues(
+                              alpha: value ? 0.2 : 0.05,
+                            ),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -1237,14 +1196,9 @@ class _OnboardingLiquidSliderState extends State<OnboardingLiquidSlider> {
                             border: Border.all(color: Colors.white, width: 2.0),
                             boxShadow: [
                               BoxShadow(
-                                color: widget.accent.withValues(alpha: 0.6),
-                                blurRadius: 14,
-                                spreadRadius: 2,
-                              ),
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 6,
-                                offset: const Offset(0, 3),
+                                color: widget.accent.withValues(alpha: 0.4),
+                                blurRadius: 10,
+                                spreadRadius: 1,
                               ),
                             ],
                           ),
@@ -1346,13 +1300,7 @@ class OnboardingUnitToggle extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          boxShadow: [],
         ),
         child: Stack(
           children: [
@@ -1559,14 +1507,9 @@ class _OnboardingLiquidContinuousSliderState
                         border: Border.all(color: Colors.white, width: 2.0),
                         boxShadow: [
                           BoxShadow(
-                            color: widget.accent.withValues(alpha: 0.6),
-                            blurRadius: 14,
-                            spreadRadius: 2,
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3),
+                            color: widget.accent.withValues(alpha: 0.4),
+                            blurRadius: 10,
+                            spreadRadius: 1,
                           ),
                         ],
                       ),

@@ -262,25 +262,24 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       _createError = null;
     });
     ref.read(mockOnboardingProvider.notifier).clearValidation();
-
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    if (!mounted) return;
-
-    final draft = ref.read(mockOnboardingProvider).draft;
-    final base = draft.baseTimeline;
-    final bodyContext = onboarding5MealBodyContextFromDraft(draft);
-    debugPrint(
-      '[Onboarding5] GENERATE source=create '
-      'hasBodyBasics=${bodyContext.hasBodyBasics}',
-    );
-    final uid = ref.read(authProvider).user?.uid ?? draft.uid;
-    final authGeneration = ref.read(authGenerationProvider);
-    final idToken =
-        await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-    if (!_isCurrentSession(uid, authGeneration)) return;
-    final nutritionClient = ref.read(nutritionAiClientProvider);
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepLoading(onboardingEatingStepIndex, true);
 
     try {
+      final draft = ref.read(mockOnboardingProvider).draft;
+      final base = draft.baseTimeline;
+      final bodyContext = onboarding5MealBodyContextFromDraft(draft);
+      debugPrint(
+        '[Onboarding5] GENERATE source=create '
+        'hasBodyBasics=${bodyContext.hasBodyBasics}',
+      );
+      final uid = ref.read(authProvider).user?.uid ?? draft.uid;
+      final authGeneration = ref.read(authGenerationProvider);
+      final idToken =
+          await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+      if (!_isCurrentSession(uid, authGeneration)) return;
+      final nutritionClient = ref.read(nutritionAiClientProvider);
       final result = await nutritionClient.generateEatingRoutine(
         uid: uid,
         idToken: idToken,
@@ -366,6 +365,13 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           'provider_unavailable',
         ]);
       });
+    } finally {
+      if (mounted) {
+        setState(() => _creatingRoutine = false);
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingEatingStepIndex, false);
+      }
     }
   }
 

@@ -116,13 +116,7 @@ class _OnboardingSaveButtonState extends State<OnboardingSaveButton>
                         : Colors.white.withValues(alpha: 0.8),
                     width: 1.5,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  boxShadow: [],
                 ),
                 child: Stack(
                   clipBehavior: Clip.none,

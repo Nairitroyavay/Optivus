@@ -1621,9 +1621,10 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     final completed = List<bool>.from(state.draft.stepCompleted);
     final dirty = List<bool>.from(state.draft.stepDirty);
 
-    // Step 2 is role selection. Since we just updated it, it is completed.
-    completed[2] = true;
-    dirty[2] = false;
+    // A role tap is input, not durable completion. Dynamic role fields still
+    // need validation and an explicit Next/save before Step 3 is unlocked.
+    completed[2] = false;
+    dirty[2] = true;
 
     // Step 4 is cleared, so it is incomplete and dirty
     completed[onboardingClassJobStepIndex] = false;

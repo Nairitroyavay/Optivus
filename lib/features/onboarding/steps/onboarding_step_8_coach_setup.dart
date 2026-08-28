@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
@@ -84,6 +83,7 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
         Expanded(
           child: OnboardingScrollView(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            userScrollable: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -197,16 +197,16 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
                       Positioned(
                         left: -10,
                         top: -10,
-                        child: ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: OptivusColors.aquaAccent.withValues(
-                                alpha: 0.3,
-                              ),
+                        width: 70,
+                        height: 70,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                OptivusColors.aquaAccent.withValues(alpha: 0.35),
+                                OptivusColors.aquaAccent.withValues(alpha: 0.0),
+                              ],
                             ),
                           ),
                         ),

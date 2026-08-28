@@ -153,18 +153,12 @@ class _LiquidGlassOnboardingIndicatorState
                   Colors.white.withValues(alpha: 0.15),
                 ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
+              boxShadow: [],
             ),
             child: Stack(
               clipBehavior: Clip.hardEdge,
               children: [
-                // Inner tube shadow for 3D depth
+                // Inner tube highlight for 3D depth
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
@@ -173,7 +167,7 @@ class _LiquidGlassOnboardingIndicatorState
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          Colors.black.withValues(alpha: 0.08),
+                          Colors.white.withValues(alpha: 0.2),
                           Colors.transparent,
                           Colors.white.withValues(alpha: 0.3),
                         ],
@@ -215,7 +209,7 @@ class _LiquidGlassOnboardingIndicatorState
                         shape: BoxShape.circle,
                         color: widget.completedSteps[i]
                             ? OptivusColors.success.withValues(alpha: 0.9)
-                            : Colors.black.withValues(alpha: 0.12),
+                            : Colors.white.withValues(alpha: 0.5),
                       ),
                     ),
                   ),
@@ -228,11 +222,6 @@ class _LiquidGlassOnboardingIndicatorState
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(_pillH / 2),
                       boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
                         BoxShadow(
                           color: OptivusColors.success.withValues(alpha: 0.4),
                           blurRadius: 16,
@@ -257,7 +246,7 @@ class _LiquidGlassOnboardingIndicatorState
                               colors: [
                                 Colors.white.withValues(alpha: 0.25),
                                 Colors.white.withValues(alpha: 0.0),
-                                Colors.black.withValues(alpha: 0.05),
+                                Colors.white.withValues(alpha: 0.0),
                               ],
                             ),
                           ),
@@ -528,7 +517,7 @@ class OnboardingStepShell extends StatelessWidget {
                         padding: EdgeInsets.only(
                           bottom: keyboardOpen
                               ? MediaQuery.viewInsetsOf(context).bottom
-                              : bottomCtaHeight + media.padding.bottom,
+                              : 0,
                         ),
                         child: child,
                       ),
@@ -556,47 +545,52 @@ class OnboardingStepShell extends StatelessWidget {
                           padding: const EdgeInsets.fromLTRB(24, 8, 24, 14),
                           child: IgnorePointer(
                             ignoring: !showPrimaryCta,
-                            child: AnimatedOpacity(
-                              opacity: showPrimaryCta ? 1 : 0,
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              child: AnimatedSlide(
-                                offset: showPrimaryCta
-                                    ? Offset.zero
-                                    : const Offset(0, 0.05),
+                            child: ExcludeSemantics(
+                              excluding: !showPrimaryCta,
+                              child: AnimatedOpacity(
+                                opacity: showPrimaryCta ? 1 : 0,
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeOutCubic,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    LiquidBlobButton(
-                                      label: ctaLabel,
-                                      onPressed: onNext,
-                                      isLoading: ctaLoading,
-                                      enabled: ctaEnabled,
-                                      fullWidth: true,
-                                    ),
-                                    AnimatedSize(
-                                      duration: const Duration(
-                                        milliseconds: 180,
+                                child: AnimatedSlide(
+                                  offset: showPrimaryCta
+                                      ? Offset.zero
+                                      : const Offset(0, 0.05),
+                                  duration: const Duration(milliseconds: 200),
+                                  curve: Curves.easeOutCubic,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      LiquidBlobButton(
+                                        label: ctaLabel,
+                                        onPressed: onNext,
+                                        isLoading: ctaLoading,
+                                        enabled: ctaEnabled,
+                                        fullWidth: true,
                                       ),
-                                      curve: Curves.easeOutCubic,
-                                      child: currentPage == 0
-                                          ? const Padding(
-                                              padding: EdgeInsets.only(top: 12),
-                                              child: Text(
-                                                'By continuing, you agree to our Terms & Policy',
-                                                textAlign: TextAlign.center,
-                                                style: TextStyle(
-                                                  color: Color(0xFF6F737C),
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
+                                      AnimatedSize(
+                                        duration: const Duration(
+                                          milliseconds: 180,
+                                        ),
+                                        curve: Curves.easeOutCubic,
+                                        child: currentPage == 0
+                                            ? const Padding(
+                                                padding: EdgeInsets.only(
+                                                  top: 12,
                                                 ),
-                                              ),
-                                            )
-                                          : const SizedBox.shrink(),
-                                    ),
-                                  ],
+                                                child: Text(
+                                                  'By continuing, you agree to our Terms & Policy',
+                                                  textAlign: TextAlign.center,
+                                                  style: TextStyle(
+                                                    color: Color(0xFF6F737C),
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),

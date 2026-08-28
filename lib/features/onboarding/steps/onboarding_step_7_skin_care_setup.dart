@@ -1591,6 +1591,9 @@ class _HasProductsModeScreenState
       _generationError = null;
       _uploadError = null;
     });
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepLoading(onboardingSkinCareStepIndex, true);
 
     try {
       if (kDebugMode) {
@@ -1978,6 +1981,13 @@ class _HasProductsModeScreenState
         _generating = false;
         _generationError = onboarding7UnexpectedAiMessage(error);
       });
+    } finally {
+      if (mounted) {
+        setState(() => _generating = false);
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingSkinCareStepIndex, false);
+      }
     }
   }
 
@@ -3198,6 +3208,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _findingProducts = true;
       _generationError = null;
     });
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepLoading(onboardingSkinCareStepIndex, true);
 
     try {
       final user = ref.read(authProvider).user;
@@ -3333,6 +3346,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         _findingProducts = false;
         _generationError = onboarding7UnexpectedAiMessage(error);
       });
+    } finally {
+      if (mounted) {
+        setState(() => _findingProducts = false);
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingSkinCareStepIndex, false);
+      }
     }
   }
 
@@ -3380,6 +3400,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _generating = true;
       _generationError = null;
     });
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepLoading(onboardingSkinCareStepIndex, true);
 
     try {
       final user = ref.read(authProvider).user;
@@ -3510,6 +3533,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         _generating = false;
         _generationError = onboarding7UnexpectedAiMessage(error);
       });
+    } finally {
+      if (mounted) {
+        setState(() => _generating = false);
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingSkinCareStepIndex, false);
+      }
     }
   }
 

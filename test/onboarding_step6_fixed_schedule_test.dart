@@ -627,18 +627,11 @@ void main() {
     // We should be on Step 6
     expect(find.text('Fixed Schedule'), findsOneWidget);
 
-    // Tap Next Step
-    await tester.tap(find.text('Next Step'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-
+    // Progressive CTA: Next Step is hidden because the schedule is invalid
     final newDraft = container.read(mockOnboardingProvider).draft;
     expect(newDraft.currentStep, 6);
-    expect(
-      find.text('Sleep and wake time cannot be the same.'),
-      findsOneWidget,
-    );
     expect(newDraft.stepCompleted[6], isFalse);
+    expect(newDraft.baseTimeline.validateFixedSchedule(), isNotNull);
   });
 
   testWidgets('Test 14: restore/rebuild persistence', (tester) async {

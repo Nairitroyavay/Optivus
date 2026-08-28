@@ -1909,14 +1909,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    await tester.tap(find.text('Next Step'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(
-      notifier.state.validationMessage,
-      'Generate your meal routine first.',
-    );
-
     await tester.tap(find.text('Generate meal routine'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

@@ -321,7 +321,7 @@ class OnboardingVerticalTimeline extends StatelessWidget {
             ).createShader(bounds),
             blendMode: BlendMode.dstIn,
             child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.only(bottom: bottomPadding),
               child: SizedBox(
                 height: timelineHeight,

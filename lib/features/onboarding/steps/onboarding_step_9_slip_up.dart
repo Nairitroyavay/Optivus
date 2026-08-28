@@ -45,6 +45,7 @@ class OnboardingStep12 extends ConsumerWidget {
         Expanded(
           child: OnboardingScrollView(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            userScrollable: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
