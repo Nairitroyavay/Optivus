@@ -153,6 +153,7 @@ class OnboardingCompletionJobService {
           status: OnboardingJobStatus.running,
           updatedAt: now,
           clearLastError: true,
+          clearLastFailure: true,
         );
         await _saveJobStatus(job, activate: true);
 

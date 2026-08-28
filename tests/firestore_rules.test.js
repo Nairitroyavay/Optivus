@@ -156,6 +156,40 @@ function userData(uid = "user123", overrides = {}) {
 
 const fingerprint =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const canonicalRunId = `run_${"1".repeat(40)}`;
+const canonicalAcceptanceId = `ca_${"a".repeat(40)}`;
+
+const completionBundleRequiredKeys = [
+  "uid",
+  "runId",
+  "schemaVersion",
+  "source",
+  "sourceFingerprint",
+  "draftRevision",
+  "createdAt",
+  "updatedAt",
+  "onboardingCompleted",
+  "userProfilePatch",
+  "baseTimelineBlocks",
+  "finalTimelineItems",
+  "routineItemsForApp",
+  "goodHabitTemplates",
+  "badHabitCheckIns",
+  "identityGoalSystems",
+  "notificationPreferences",
+  "coachPreferences",
+  "uploadedAssetReferences",
+  "warnings",
+  "duplicateSystemKeysMerged",
+  "expectedRoutineIds",
+  "expectedHistoryIds",
+  "expectedHabitIds",
+  "acceptedSourceIds",
+  "generatedSourceIds",
+  "conflictAcceptances",
+  "expectedAcceptanceIds",
+  "unscheduledRoutineSuggestions",
+];
 
 function profileSettingsData(uid = "user123", overrides = {}) {
   return {
@@ -250,7 +284,8 @@ function onboardingDraftData(uid = "user123", overrides = {}) {
 function completionBundleData(uid = "user123", overrides = {}) {
   return {
     uid,
-    schemaVersion: 1,
+    runId: canonicalRunId,
+    schemaVersion: 2,
     source: "onboarding",
     sourceFingerprint: fingerprint,
     draftRevision: 7,
@@ -272,9 +307,52 @@ function completionBundleData(uid = "user123", overrides = {}) {
     expectedHabitIds: [],
     acceptedSourceIds: [],
     generatedSourceIds: [],
+    conflictAcceptances: [],
+    expectedAcceptanceIds: [],
+    unscheduledRoutineSuggestions: [],
     createdAt,
     updatedAt,
     ...overrides,
+  };
+}
+
+function completionBundleConflictAcceptanceData(uid = "user123") {
+  return {
+    acceptanceId: canonicalAcceptanceId,
+    ownerUid: uid,
+    canonicalPairHash: "b".repeat(64),
+    firstSourceBlockId: "class-source-1",
+    secondSourceBlockId: "breakfast-source-1",
+    firstProjectedRoutineId: "onb_class_1",
+    secondProjectedRoutineId: "onb_breakfast_1",
+    conflictType: "compatibleOverlap",
+    scope: "recurringWeekdays",
+    dateKey: "",
+    applicableWeekdays: [1, 3, 5],
+    timezoneId: "Asia/Calcutta",
+    firstScheduleFingerprint: "c".repeat(64),
+    secondScheduleFingerprint: "d".repeat(64),
+    combinedScheduleFingerprint: "e".repeat(64),
+    sourceBundleFingerprint: fingerprint,
+    projectionId: `onboarding-${canonicalRunId}`,
+    acceptedAt: createdAt.toISOString(),
+    acceptedFrom: "onboarding",
+    status: "active",
+    invalidatedAt: null,
+    invalidationReason: null,
+    schemaVersion: 2,
+  };
+}
+
+function unscheduledRoutineSuggestionData() {
+  return {
+    id: "suggestion-1",
+    sourceItemId: "source-1",
+    title: "Review schedule",
+    reason: "No conflict-free slot",
+    repeatDays: [1, 3, 5],
+    durationMinutes: 30,
+    schemaVersion: 1,
   };
 }
 
@@ -347,6 +425,21 @@ function onboardingRunData(uid = "user123", runId = "run-001", overrides = {}) {
     schemaVersion: 3,
     ...overrides,
   };
+}
+
+function failedOnboardingRunData(uid = "user123", runId = "run-001", overrides = {}) {
+  return onboardingRunData(uid, runId, {
+    status: "retryableFailure",
+    retryCount: 1,
+    failureCode: "persist_bundle_failed",
+    failureStage: "persistBundle",
+    retryable: true,
+    publicMessageKey: "error_persist_bundle",
+    diagnosticCategory: "transient_failure",
+    safeCauseType: "FirebaseException",
+    failureOccurredAt: completedAt,
+    ...overrides,
+  });
 }
 
 function currentRunData(uid = "user123", runId = "run-001", overrides = {}) {
@@ -1002,13 +1095,114 @@ describe("Phase 4.6.4 canonical production contracts", () => {
     await assertFails(ref.set(appPreferencesData("other_user")));
   });
 
-  it("accepts canonical CompletionBundle and rejects wrong timestamps/fingerprint/unknown fields", async () => {
-    const db = ownerDb();
-    const ref = db.collection("users").doc("user123").collection("onboarding").doc("completionBundle");
-    await assertSucceeds(ref.set(completionBundleData()));
-    await assertFails(ref.set(completionBundleData("user123", { createdAt: createdAt.toISOString() })));
-    await assertFails(ref.set(completionBundleData("user123", { sourceFingerprint: "not-a-fingerprint" })));
-    await assertFails(ref.set(completionBundleData("user123", { arbitrary: true })));
+  describe("schema-v2 CompletionBundle contract", () => {
+    function bundleRef(db = ownerDb()) {
+      return db.collection("users").doc("user123").collection("onboarding").doc("completionBundle");
+    }
+
+    it("keeps the canonical fixture in exact required-key and schema parity", () => {
+      expect(Object.keys(completionBundleData()).sort()).toEqual(
+        [...completionBundleRequiredKeys].sort(),
+      );
+      expect(completionBundleData().schemaVersion).toBe(2);
+    });
+
+    it("allows a valid schema-v2 create", async () => {
+      await assertSucceeds(bundleRef().set(completionBundleData()));
+    });
+
+    it("allows a valid schema-v2 full overwrite for the same owner and run", async () => {
+      const ref = bundleRef();
+      await assertSucceeds(ref.set(completionBundleData()));
+      await assertSucceeds(ref.set(completionBundleData("user123", {
+        updatedAt: completedAt,
+        warnings: ["schedule-adjusted"],
+      })));
+    });
+
+    it("allows non-empty conflict, acceptance-ID, and unscheduled-suggestion metadata", async () => {
+      await assertSucceeds(bundleRef().set(completionBundleData("user123", {
+        conflictAcceptances: [completionBundleConflictAcceptanceData()],
+        expectedAcceptanceIds: [canonicalAcceptanceId],
+        unscheduledRoutineSuggestions: [unscheduledRoutineSuggestionData()],
+      })));
+    });
+
+    it("allows unique expectedAcceptanceIds", async () => {
+      await assertSucceeds(bundleRef().set(completionBundleData("user123", {
+        expectedAcceptanceIds: [canonicalAcceptanceId, `ca_${"b".repeat(40)}`],
+      })));
+    });
+
+    it("rejects duplicate expectedAcceptanceIds", async () => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        expectedAcceptanceIds: [canonicalAcceptanceId, canonicalAcceptanceId],
+      })));
+    });
+
+    it("rejects schemaVersion 1", async () => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        schemaVersion: 1,
+      })));
+    });
+
+    it.each([
+      "runId",
+      "conflictAcceptances",
+      "expectedAcceptanceIds",
+      "unscheduledRoutineSuggestions",
+    ])("requires the schema-v2 %s field", async (field) => {
+      const data = completionBundleData();
+      delete data[field];
+      await assertFails(bundleRef().set(data));
+    });
+
+    it("rejects an unknown extra top-level key", async () => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        arbitrary: true,
+      })));
+    });
+
+    it("rejects malformed run IDs", async () => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        runId: "run-not-canonical",
+      })));
+    });
+
+    it("rejects a bundle UID that differs from the owner path", async () => {
+      await assertFails(bundleRef().set(completionBundleData("other-user")));
+    });
+
+    it("rejects malformed source fingerprints", async () => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        sourceFingerprint: "not-a-fingerprint",
+      })));
+    });
+
+    it("rejects draftRevision below one", async () => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        draftRevision: 0,
+      })));
+    });
+
+    it("rejects wrong top-level timestamp types", async () => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        createdAt: createdAt.toISOString(),
+      })));
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        updatedAt: updatedAt.toISOString(),
+      })));
+    });
+
+    it.each([
+      ["conflictAcceptances", {}],
+      ["expectedAcceptanceIds", {}],
+      ["unscheduledRoutineSuggestions", {}],
+    ])("rejects a wrong %s field type", async (field, value) => {
+      await assertFails(bundleRef().set(completionBundleData("user123", {
+        [field]: value,
+      })));
+    });
   });
 
   it("accepts canonical CompletionJob and rejects alternate uid/in_progress schema", async () => {
@@ -1136,6 +1330,92 @@ describe("Phase 4.6.4 canonical production contracts", () => {
   });
 
   describe("Phase 4.6.7 production onboarding lifecycle paths", () => {
+    it("allows canonical failure metadata while retryableFailure", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+
+      await assertSucceeds(ref.set(onboardingRunData()));
+      await assertSucceeds(ref.set(failedOnboardingRunData()));
+    });
+
+    it("allows retryableFailure to return to running after failure keys are removed", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+
+      await assertSucceeds(ref.set(onboardingRunData()));
+      await assertSucceeds(ref.set(failedOnboardingRunData()));
+      await assertSucceeds(ref.set(onboardingRunData("user123", "run-001", {
+        retryCount: 1,
+        updatedAt: completedAt,
+      })));
+    });
+
+    it("rejects running retry payloads retaining any canonical failure-only key", async () => {
+      const staleFailureCases = [
+        { failureCode: "persist_bundle_failed" },
+        { safeCauseType: "FirebaseException" },
+      ];
+
+      for (let index = 0; index < staleFailureCases.length; index++) {
+        const runId = `stale-run-${index}`;
+        const db = ownerDb();
+        const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc(runId);
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+          const adminRef = context.firestore().collection("users").doc("user123").collection("onboardingRuns").doc(runId);
+          await adminRef.set(failedOnboardingRunData("user123", runId));
+        });
+
+        await assertFails(ref.set(onboardingRunData("user123", runId, {
+          retryCount: 1,
+          updatedAt: completedAt,
+          ...staleFailureCases[index],
+        })));
+      }
+    });
+
+    it("allows an atomic retry activation when both run and currentRun are valid", async () => {
+      const db = ownerDb();
+      const runRef = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+      const pointerRef = db.collection("users").doc("user123").collection("onboarding").doc("currentRun");
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminRef = context.firestore().collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+        await adminRef.set(failedOnboardingRunData());
+      });
+
+      const batch = db.batch();
+      batch.set(runRef, onboardingRunData("user123", "run-001", {
+        retryCount: 1,
+        updatedAt: completedAt,
+      }));
+      batch.set(pointerRef, currentRunData());
+      await assertSucceeds(batch.commit());
+
+      expect((await runRef.get()).data().status).toBe("running");
+      expect((await pointerRef.get()).exists).toBe(true);
+    });
+
+    it("rejects the whole activation batch when the running run retains failure metadata", async () => {
+      const db = ownerDb();
+      const runRef = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+      const pointerRef = db.collection("users").doc("user123").collection("onboarding").doc("currentRun");
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const adminRef = context.firestore().collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
+        await adminRef.set(failedOnboardingRunData());
+      });
+
+      const batch = db.batch();
+      batch.set(runRef, onboardingRunData("user123", "run-001", {
+        retryCount: 1,
+        updatedAt: completedAt,
+        failureCode: "persist_bundle_failed",
+      }));
+      batch.set(pointerRef, currentRunData());
+      await assertFails(batch.commit());
+
+      expect((await runRef.get()).data().status).toBe("retryableFailure");
+      expect((await pointerRef.get()).exists).toBe(false);
+    });
+
     it("allows the verified owner to create, read, and advance a schema-v3 onboarding run", async () => {
       const db = ownerDb();
       const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");

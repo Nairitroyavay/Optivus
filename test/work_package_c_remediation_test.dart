@@ -750,11 +750,10 @@ void main() {
           final map = bundle.toFirestoreMap();
           expect(map.containsKey('moneyGoal'), isFalse);
 
-          const allowedKeys = {
+          const requiredKeys = {
             'uid',
             'runId',
             'schemaVersion',
-            'version',
             'source',
             'draftRevision',
             'sourceFingerprint',
@@ -770,7 +769,6 @@ void main() {
             'identityGoalSystems',
             'notificationPreferences',
             'coachPreferences',
-            'moneyGoal',
             'uploadedAssetReferences',
             'warnings',
             'duplicateSystemKeysMerged',
@@ -783,7 +781,16 @@ void main() {
             'expectedAcceptanceIds',
             'unscheduledRoutineSuggestions',
           };
-          expect(map.keys.toSet().difference(allowedKeys), isEmpty);
+          expect(map.keys.toSet(), requiredKeys);
+          expect(
+            map['schemaVersion'],
+            OnboardingCompletionBundle.schemaVersion,
+          );
+          expect(map['schemaVersion'], 2);
+          expect(
+            map['expectedAcceptanceIds'],
+            everyElement(isA<String>()),
+          );
         },
       );
 

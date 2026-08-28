@@ -1127,8 +1127,8 @@ service cloud.firestore {
     function validOnboardingCompletionBundleKeys(data) {
       return data.keys().hasOnly([
         "uid",
+        "runId",
         "schemaVersion",
-        "version",
         "source",
         "sourceFingerprint",
         "draftRevision",
@@ -1152,24 +1152,34 @@ service cloud.firestore {
         "expectedHistoryIds",
         "expectedHabitIds",
         "acceptedSourceIds",
-        "generatedSourceIds"
+        "generatedSourceIds",
+        "conflictAcceptances",
+        "expectedAcceptanceIds",
+        "unscheduledRoutineSuggestions"
       ]);
+    }
+
+    function validOnboardingRunId(runId) {
+      return runId is string
+        && runId.matches("^run_[a-f0-9]{40}$");
     }
 
     function validOnboardingCompletionBundle(data, uid) {
       return validOnboardingCompletionBundleKeys(data)
         && data.keys().hasAll([
-          "uid", "schemaVersion", "source", "sourceFingerprint", "draftRevision",
+          "uid", "runId", "schemaVersion", "source", "sourceFingerprint", "draftRevision",
           "createdAt", "updatedAt", "onboardingCompleted", "userProfilePatch",
           "baseTimelineBlocks", "finalTimelineItems", "routineItemsForApp",
           "goodHabitTemplates", "badHabitCheckIns", "identityGoalSystems",
           "notificationPreferences", "coachPreferences", "uploadedAssetReferences",
           "warnings", "duplicateSystemKeysMerged", "expectedRoutineIds",
           "expectedHistoryIds", "expectedHabitIds", "acceptedSourceIds",
-          "generatedSourceIds"
+          "generatedSourceIds", "conflictAcceptances", "expectedAcceptanceIds",
+          "unscheduledRoutineSuggestions"
         ])
         && data.uid == uid
-        && data.schemaVersion == 1
+        && validOnboardingRunId(data.runId)
+        && data.schemaVersion == 2
         && data.source == "onboarding"
         && data.sourceFingerprint is string
         && data.sourceFingerprint.matches("^[a-f0-9]{64}$")
@@ -1196,6 +1206,10 @@ service cloud.firestore {
         && data.expectedHabitIds.size() == data.expectedHabitIds.toSet().size()
         && data.acceptedSourceIds is list
         && data.generatedSourceIds is list
+        && data.conflictAcceptances is list
+        && data.expectedAcceptanceIds is list
+        && data.expectedAcceptanceIds.size() == data.expectedAcceptanceIds.toSet().size()
+        && data.unscheduledRoutineSuggestions is list
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         && (!data.keys().hasAny(["moneyGoal"]) || data.moneyGoal is map);
