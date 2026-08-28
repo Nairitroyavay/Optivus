@@ -709,7 +709,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
             incrementRevision: false,
           );
           _ref.read(mockOnboardingProvider.notifier).loadSeedData(safeDraft);
-        } else if (createdProfile) {
+        } else if (createdProfile ||
+            (!profile.onboardingCompleted &&
+                !profile.onboardingInputCompleted &&
+                (profile.onboardingProjectionStatus.isEmpty ||
+                    profile.onboardingProjectionStatus == 'none' ||
+                    profile.onboardingProjectionStatus == 'pending'))) {
           // A newly verified account has no onboarding draft yet. This is the
           // expected first-run state, not missing/corrupt recovery data.
           final freshDraft = OnboardingDraft(

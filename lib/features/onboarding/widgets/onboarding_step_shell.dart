@@ -364,6 +364,7 @@ class OnboardingStepShell extends StatelessWidget {
   final bool isSaved;
   final bool saveEnabled;
   final String ctaLabel;
+  final bool showPrimaryCta;
   final bool ctaEnabled;
   final bool ctaLoading;
   final Widget? topLeftOverlay;
@@ -384,6 +385,7 @@ class OnboardingStepShell extends StatelessWidget {
     required this.isSaved,
     required this.saveEnabled,
     required this.ctaLabel,
+    this.showPrimaryCta = true,
     required this.ctaEnabled,
     required this.ctaLoading,
     this.topLeftOverlay,
@@ -526,7 +528,7 @@ class OnboardingStepShell extends StatelessWidget {
                         padding: EdgeInsets.only(
                           bottom: keyboardOpen
                               ? MediaQuery.viewInsetsOf(context).bottom
-                              : 0,
+                              : bottomCtaHeight + media.padding.bottom,
                         ),
                         child: child,
                       ),
@@ -552,35 +554,52 @@ class OnboardingStepShell extends StatelessWidget {
                         top: false,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(24, 8, 24, 14),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              LiquidBlobButton(
-                                label: ctaLabel,
-                                onPressed: onNext,
-                                isLoading: ctaLoading,
-                                enabled: ctaEnabled,
-                                fullWidth: true,
-                              ),
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 180),
+                          child: IgnorePointer(
+                            ignoring: !showPrimaryCta,
+                            child: AnimatedOpacity(
+                              opacity: showPrimaryCta ? 1 : 0,
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              child: AnimatedSlide(
+                                offset: showPrimaryCta
+                                    ? Offset.zero
+                                    : const Offset(0, 0.05),
+                                duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeOutCubic,
-                                child: currentPage == 0
-                                    ? const Padding(
-                                        padding: EdgeInsets.only(top: 12),
-                                        child: Text(
-                                          'By continuing, you agree to our Terms & Policy',
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: Color(0xFF6F737C),
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      )
-                                    : const SizedBox.shrink(),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    LiquidBlobButton(
+                                      label: ctaLabel,
+                                      onPressed: onNext,
+                                      isLoading: ctaLoading,
+                                      enabled: ctaEnabled,
+                                      fullWidth: true,
+                                    ),
+                                    AnimatedSize(
+                                      duration: const Duration(
+                                        milliseconds: 180,
+                                      ),
+                                      curve: Curves.easeOutCubic,
+                                      child: currentPage == 0
+                                          ? const Padding(
+                                              padding: EdgeInsets.only(top: 12),
+                                              child: Text(
+                                                'By continuing, you agree to our Terms & Policy',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: Color(0xFF6F737C),
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            )
+                                          : const SizedBox.shrink(),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),

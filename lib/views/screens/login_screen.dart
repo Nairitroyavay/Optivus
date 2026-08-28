@@ -11,6 +11,8 @@ import 'package:optivus/widgets/liquid_glass_panel.dart';
 import 'package:optivus/widgets/wavy_loading_indicator.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/core/utils/auth_form_readiness.dart';
+import 'package:optivus/core/utils/focus_utils.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLOUR TOKENS
@@ -44,10 +46,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void>? _authOperation;
   String? _errorMsg;
   String? _successMsg;
+  String? _emailError;
+  String? _passwordError;
+  bool _ctaRevealed = false;
+  final _emailFieldKey = GlobalKey();
+  final _passwordFieldKey = GlobalKey();
   // final AuthRepository _authRepository = AuthRepository(AuthService());
 
   @override
+  void initState() {
+    super.initState();
+    _emailCtrl.addListener(_handleFormChanged);
+    _passCtrl.addListener(_handleFormChanged);
+  }
+
+  @override
   void dispose() {
+    _emailCtrl.removeListener(_handleFormChanged);
+    _passCtrl.removeListener(_handleFormChanged);
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _emailFocus.dispose();
@@ -57,20 +73,58 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // ── Validation ────────────────────────────────────────────────────────────
 
-  String? _validate() {
+  bool get _formReady =>
+      isLoginFormReady(email: _emailCtrl.text, password: _passCtrl.text);
+
+  void _handleFormChanged() {
+    final emailValid = isBasicEmailFormatValid(_emailCtrl.text);
+    final passwordPresent = _passCtrl.text.isNotEmpty;
+    final ready = emailValid && passwordPresent;
+    setState(() {
+      if (ready) _ctaRevealed = true;
+      if (emailValid) _emailError = null;
+      if (passwordPresent) _passwordError = null;
+      _errorMsg = null;
+      _successMsg = null;
+    });
+  }
+
+  bool _validate() {
     final email = _emailCtrl.text.trim();
     final pass = _passCtrl.text;
-
-    if (email.isEmpty) return 'Please enter your email address.';
-    if (!RegExp(
-      r'^[\w\.\+\-]+@[\w\-]+\.[a-z]{2,}$',
-      caseSensitive: false,
-    ).hasMatch(email)) {
-      return 'Please enter a valid email address.';
+    final emailError = email.isEmpty
+        ? 'Please enter your email address.'
+        : (!isBasicEmailFormatValid(email)
+              ? 'Please enter a valid email address.'
+              : null);
+    final passwordError = pass.isEmpty ? 'Please enter your password.' : null;
+    setState(() {
+      _emailError = emailError;
+      _passwordError = passwordError;
+    });
+    if (emailError != null) {
+      _focusAndReveal(_emailFocus, _emailFieldKey);
+      return false;
     }
-    if (pass.isEmpty) return 'Please enter your password.';
-    if (pass.length < 8) return 'Password must be at least 8 characters.';
-    return null;
+    if (passwordError != null) {
+      _focusAndReveal(_passFocus, _passwordFieldKey);
+      return false;
+    }
+    return true;
+  }
+
+  void _focusAndReveal(FocusNode focusNode, GlobalKey key) {
+    focusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final fieldContext = key.currentContext;
+      if (fieldContext == null) return;
+      Scrollable.ensureVisible(
+        fieldContext,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        alignment: 0.2,
+      );
+    });
   }
 
   // ── Firebase sign in ──────────────────────────────────────────────────────
@@ -78,13 +132,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _signIn() async {
     FocusScope.of(context).unfocus();
 
-    final error = _validate();
-    if (error != null) {
-      setState(() => _errorMsg = error);
-      return;
-    }
-
-    if (ref.read(authProvider).isLoading) return;
+    if (!_validate()) return;
+    if (ref.read(authProvider).isLoading || _authOperation != null) return;
 
     final authOperation = ref
         .read(authProvider.notifier)
@@ -121,17 +170,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final email = _emailCtrl.text.trim();
 
     if (email.isEmpty) {
-      setState(
-        () => _errorMsg = 'Enter your email above to reset your password.',
-      );
+      setState(() => _emailError = 'Enter your email to reset your password.');
+      _focusAndReveal(_emailFocus, _emailFieldKey);
       return;
     }
 
-    if (!RegExp(
-      r'^[\w\.\+\-]+@[\w\-]+\.[a-z]{2,}$',
-      caseSensitive: false,
-    ).hasMatch(email)) {
-      setState(() => _errorMsg = 'Please enter a valid email address.');
+    if (!isBasicEmailFormatValid(email)) {
+      setState(() => _emailError = 'Please enter a valid email address.');
+      _focusAndReveal(_emailFocus, _emailFieldKey);
       return;
     }
 
@@ -149,16 +195,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _resetLoading = false;
         _successMsg = 'Password reset email sent to $email.';
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Password reset email sent to $email'),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      );
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -173,183 +209,208 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authLoading = ref.watch(authProvider).isLoading;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [_kCream, _kBg],
-            stops: [0.0, 0.55],
+    return PopScope(
+      canPop: !keyboardOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && keyboardOpen) {
+          FocusManager.instance.primaryFocus?.unfocus();
+        }
+      },
+      child: Scaffold(
+        body: Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [_kCream, _kBg],
+              stops: [0.0, 0.55],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 50),
+          child: SafeArea(
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 50),
 
-                      // Logo
-                      const GlassLogo(),
-                      const SizedBox(height: 32),
+                        // Logo
+                        const GlassLogo(),
+                        const SizedBox(height: 32),
 
-                      // Welcome back
-                      const Text(
-                        'Welcome back.',
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w900,
-                          color: _kInk,
-                          letterSpacing: -0.8,
+                        // Welcome back
+                        const Text(
+                          'Welcome back.',
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w900,
+                            color: _kInk,
+                            letterSpacing: -0.8,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Sign in to your Optivus account.',
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.blueGrey.shade600,
-                          fontWeight: FontWeight.w500,
+                        const SizedBox(height: 6),
+                        Text(
+                          'Sign in to your Optivus account.',
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: Colors.blueGrey.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 36),
+                        const SizedBox(height: 36),
 
-                      // Form
-                      LiquidGlassPanel(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Email
-                            _FieldLabel('Email'),
-                            const SizedBox(height: 6),
-                            _GlassInput(
-                              controller: _emailCtrl,
-                              focusNode: _emailFocus,
-                              hint: 'you@example.com',
-                              icon: Icons.email_outlined,
-                              keyboardType: TextInputType.emailAddress,
-                              next: _passFocus,
-                            ),
-                            const SizedBox(height: 18),
+                        // Form
+                        LiquidGlassPanel(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Email
+                              _FieldLabel('Email'),
+                              const SizedBox(height: 6),
+                              _GlassInput(
+                                key: _emailFieldKey,
+                                controller: _emailCtrl,
+                                focusNode: _emailFocus,
+                                semanticLabel: 'Email',
+                                hint: 'you@example.com',
+                                icon: Icons.email_outlined,
+                                keyboardType: TextInputType.emailAddress,
+                                autofillHints: const [AutofillHints.email],
+                                next: _passFocus,
+                              ),
+                              if (_emailError != null)
+                                _InlineFieldError(message: _emailError!),
+                              const SizedBox(height: 18),
 
-                            // Password
-                            _FieldLabel('Password'),
-                            const SizedBox(height: 6),
-                            _GlassInput(
-                              controller: _passCtrl,
-                              focusNode: _passFocus,
-                              hint: 'Your password',
-                              icon: Icons.lock_outline,
-                              obscure: _obscurePass,
-                              onSubmit: (_) => _signIn(),
-                              suffix: Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: IconButton(
-                                  icon: Icon(
-                                    _obscurePass
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined,
-                                    color: Colors.grey.shade600,
-                                    size: 20,
-                                  ),
-                                  onPressed: () => setState(
-                                    () => _obscurePass = !_obscurePass,
+                              // Password
+                              _FieldLabel('Password'),
+                              const SizedBox(height: 6),
+                              _GlassInput(
+                                key: _passwordFieldKey,
+                                controller: _passCtrl,
+                                focusNode: _passFocus,
+                                semanticLabel: 'Password',
+                                hint: 'Your password',
+                                icon: Icons.lock_outline,
+                                obscure: _obscurePass,
+                                autofillHints: const [AutofillHints.password],
+                                onSubmit: (_) => _signIn(),
+                                suffix: Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      _obscurePass
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: Colors.grey.shade600,
+                                      size: 20,
+                                    ),
+                                    tooltip: _obscurePass
+                                        ? 'Show password'
+                                        : 'Hide password',
+                                    onPressed: () => setState(
+                                      () => _obscurePass = !_obscurePass,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 10),
+                              if (_passwordError != null)
+                                _InlineFieldError(message: _passwordError!),
+                              const SizedBox(height: 10),
 
-                            // Forgot password
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: GestureDetector(
-                                onTap: _resetLoading ? null : _forgotPassword,
-                                child: Text(
-                                  _resetLoading
-                                      ? 'Sending reset email...'
-                                      : 'Forgot Password?',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: _kAmber,
+                              // Forgot password
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: GestureDetector(
+                                  onTap: _resetLoading ? null : _forgotPassword,
+                                  child: Text(
+                                    _resetLoading
+                                        ? 'Sending reset email...'
+                                        : 'Forgot Password?',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: _kAmber,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
 
-                      // Error/Success messages
-                      if (_errorMsg != null) ...[
-                        const SizedBox(height: 16),
-                        _ErrorBanner(message: _errorMsg!),
+                        // Error/Success messages
+                        if (_errorMsg != null) ...[
+                          const SizedBox(height: 16),
+                          _ErrorBanner(message: _errorMsg!),
+                        ],
+
+                        if (_successMsg != null) ...[
+                          const SizedBox(height: 16),
+                          _SuccessBanner(message: _successMsg!),
+                        ],
+
+                        const SizedBox(height: 20),
+                        const _DisabledAuthProviders(),
+                        const SizedBox(height: 24),
+                        _AuthRoutePrompt(
+                          prompt: "Don't have an account?",
+                          action: 'Sign Up',
+                          onPressed: () => context.push('/signup'),
+                        ),
+                        const SizedBox(height: 24),
                       ],
-
-                      if (_successMsg != null) ...[
-                        const SizedBox(height: 16),
-                        _SuccessBanner(message: _successMsg!),
-                      ],
-
-                      const SizedBox(height: 20),
-                      const _DisabledAuthProviders(),
-                      const SizedBox(height: 40),
-                    ],
+                    ),
                   ),
                 ),
-              ),
 
-              // Sign In button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: authLoading
-                    ? _LoadingButton(operation: _authOperation)
-                    : AppButton(text: 'Sign In', onPressed: _signIn),
-              ),
-              const SizedBox(height: 20),
-
-              // Go to signup
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      "Don't have an account?",
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  height: _ctaRevealed || authLoading ? 88 : 0,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    switchInCurve: Curves.easeOutCubic,
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.05),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
                       ),
                     ),
-                    TextButton(
-                      onPressed: () => context.go('/signup'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: _kInk,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'Sign Up',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ],
+                    child: !_ctaRevealed && !authLoading
+                        ? const SizedBox.shrink(
+                            key: ValueKey('login-primary-hidden'),
+                          )
+                        : Padding(
+                            key: const ValueKey('login-primary-visible'),
+                            padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                            child: authLoading
+                                ? _LoadingButton(
+                                    operation: _authOperation,
+                                    label: 'Signing in…',
+                                  )
+                                : AppButton(
+                                    key: const Key('login-submit'),
+                                    text: 'Sign In',
+                                    enabled: _formReady,
+                                    onPressed: _formReady ? _signIn : null,
+                                  ),
+                          ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -439,6 +500,62 @@ class _FieldLabel extends StatelessWidget {
         color: _kSub,
         letterSpacing: 0.4,
       ),
+    );
+  }
+}
+
+class _InlineFieldError extends StatelessWidget {
+  final String message;
+
+  const _InlineFieldError({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      label: message,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 7, left: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded, size: 15, color: _kRed),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: _kRed,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthRoutePrompt extends StatelessWidget {
+  final String prompt;
+  final String action;
+  final VoidCallback onPressed;
+
+  const _AuthRoutePrompt({
+    required this.prompt,
+    required this.action,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(prompt, style: TextStyle(color: Colors.grey.shade600)),
+        TextButton(onPressed: onPressed, child: Text(action)),
+      ],
     );
   }
 }
@@ -533,8 +650,9 @@ class _SuccessBanner extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 class _LoadingButton extends StatelessWidget {
   final Future<void>? operation;
+  final String label;
 
-  const _LoadingButton({this.operation});
+  const _LoadingButton({this.operation, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -574,8 +692,13 @@ class _LoadingButton extends StatelessWidget {
               width: 1.5,
             ),
           ),
-          child: Center(
-            child: WavyLoadingIndicator(size: 36, operation: operation),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              WavyLoadingIndicator(size: 30, operation: operation),
+              const SizedBox(width: 10),
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+            ],
           ),
         ),
       ),
@@ -593,8 +716,11 @@ class _GlassInput extends StatefulWidget {
   final FocusNode? next;
   final Widget? suffix;
   final void Function(String)? onSubmit;
+  final String? semanticLabel;
+  final Iterable<String>? autofillHints;
 
   const _GlassInput({
+    super.key,
     required this.controller,
     required this.focusNode,
     required this.hint,
@@ -604,6 +730,8 @@ class _GlassInput extends StatefulWidget {
     this.next,
     this.suffix,
     this.onSubmit,
+    this.semanticLabel,
+    this.autofillHints,
   });
 
   @override
@@ -616,9 +744,17 @@ class _GlassInputState extends State<_GlassInput> {
   @override
   void initState() {
     super.initState();
-    widget.focusNode.addListener(
-      () => setState(() => _focused = widget.focusNode.hasFocus),
-    );
+    widget.focusNode.addListener(_handleFocusChanged);
+  }
+
+  void _handleFocusChanged() {
+    if (mounted) setState(() => _focused = widget.focusNode.hasFocus);
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode.removeListener(_handleFocusChanged);
+    super.dispose();
   }
 
   @override
@@ -679,6 +815,8 @@ class _GlassInputState extends State<_GlassInput> {
                 focusNode: widget.focusNode,
                 obscureText: widget.obscure,
                 keyboardType: widget.keyboardType,
+                autofillHints: widget.autofillHints,
+                onTapOutside: dismissPrimaryFocusOnTapOutside,
                 textInputAction: widget.next != null
                     ? TextInputAction.next
                     : TextInputAction.done,
@@ -687,6 +825,8 @@ class _GlassInputState extends State<_GlassInput> {
                     (_) {
                       if (widget.next != null) {
                         FocusScope.of(context).requestFocus(widget.next);
+                      } else {
+                        FocusManager.instance.primaryFocus?.unfocus();
                       }
                     },
                 style: const TextStyle(

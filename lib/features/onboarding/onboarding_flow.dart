@@ -22,6 +22,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
+import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
 
 // ── Main Onboarding Flow Wizard ──────────────────────────────────────────────
 class OnboardingFlow extends ConsumerStatefulWidget {
@@ -54,11 +55,15 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   int _currentDraftStep() {
-    return ref
-        .read(mockOnboardingProvider)
-        .draft
-        .currentStep
-        .clamp(0, OnboardingDraft.lastStepIndex);
+    final onboarding = ref.read(mockOnboardingProvider);
+    final requested = onboarding.draft.currentStep.clamp(
+      0,
+      OnboardingDraft.lastStepIndex,
+    );
+    return requested.clamp(
+      0,
+      maxAccessibleOnboardingStep(onboarding.stepCompleted),
+    );
   }
 
   void _createPageController(int initialStep) {
@@ -171,9 +176,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       ref.read(mockOnboardingProvider.notifier).setStepLoading(step, true);
       ref.read(mockOnboardingProvider.notifier).clearValidation();
 
-      // Simulate offline-first save database delay
-      await Future.delayed(const Duration(milliseconds: 600));
-
       final onboardingNotifier = ref.read(mockOnboardingProvider.notifier);
       onboardingNotifier.saveStep(
         step,
@@ -206,6 +208,19 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       final onboardingRepository = ref.read(onboardingRepositoryProvider);
       await onboardingRepository.saveDraft(savedDraft);
       await onboardingRepository.flushPendingDraftSave();
+
+      final verifiedState = ref.read(mockOnboardingProvider);
+      if (verifiedState.draft.uid != savedDraft.uid ||
+          verifiedState.draft.revision != savedDraft.revision ||
+          verifiedState.draft.currentStep != savedDraft.currentStep ||
+          step >= verifiedState.stepCompleted.length ||
+          !verifiedState.stepCompleted[step] ||
+          verifiedState.stepDirty[step]) {
+        throw StateError('Onboarding save verification failed.');
+      }
+      if (_currentPersistenceUid() != uid) {
+        throw StateError('Authenticated account changed during save.');
+      }
 
       return true;
     } catch (e) {
@@ -254,7 +269,20 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
 
       // Otherwise slide to the next step
-      _currentPage++;
+      final latestState = ref.read(mockOnboardingProvider);
+      final nextPage = _currentPage + 1;
+      if (!canAccessOnboardingStep(
+        targetStep: nextPage,
+        completedSteps: latestState.stepCompleted,
+      )) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(
+              'This step is available after the previous step is saved.',
+            );
+        return;
+      }
+      _currentPage = nextPage;
       ref.read(mockOnboardingProvider.notifier).setStep(_currentPage);
       await _pageController.animateToPage(
         _currentPage,
@@ -394,19 +422,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
   }
 
-  int _lastCompletedStep(List<bool> completedSteps) {
-    var lastCompleted = 0;
-
-    for (var i = 0; i < completedSteps.length; i++) {
-      if (!completedSteps[i]) {
-        break;
-      }
-      lastCompleted = i;
-    }
-
-    return lastCompleted;
-  }
-
   void _invalidateDownstreamStages(int fromStep) {
     final onboardingState = ref.read(mockOnboardingProvider);
     final completed = List<bool>.from(onboardingState.stepCompleted);
@@ -439,9 +454,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return;
     }
 
-    final lastCompleted = _lastCompletedStep(onboardingState.stepCompleted);
     final isBackward = boundedIndex < _currentPage;
-    final isSavedForwardStep = boundedIndex <= lastCompleted;
+    final isSavedForwardStep = canAccessOnboardingStep(
+      targetStep: boundedIndex,
+      completedSteps: onboardingState.stepCompleted,
+    );
     final hasUnsavedForwardStep =
         !isBackward &&
         onboardingState.stepDirty
@@ -530,8 +547,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await _saveStep(_currentPage);
-              if (ctx.mounted) Navigator.of(ctx).pop(true);
+              final saved = await _saveStep(_currentPage);
+              if (saved && ctx.mounted) Navigator.of(ctx).pop(true);
             },
             child: const Text('Save & Go Back'),
           ),
@@ -647,6 +664,16 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         onboardingState.stepCompleted[_currentPage] &&
         !onboardingState.stepDirty[_currentPage];
     final bool showSave = false; // Globally hidden for onboarding.
+    final readiness = evaluateOnboardingStepReadiness(
+      draft: onboardingState.draft,
+      step: _currentPage,
+      completedSteps: onboardingState.stepCompleted,
+      asyncIdle: !_isNavigating && !onboardingState.stepLoading[_currentPage],
+      saveIdle: !_isSaving,
+      externalReviewCompleted: _currentPage == onboardingSkinCareStepIndex
+          ? onboarding7CanContinue(onboardingState.draft.baseTimeline)
+          : null,
+    );
 
     String ctaLabel = 'Next Step';
     bool ctaEnabled =
@@ -671,6 +698,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           ctaEnabled &&
           onboarding7CanContinue(onboardingState.draft.baseTimeline);
     }
+    ctaEnabled = ctaEnabled && readiness.canSubmit;
+    final showPrimaryCta =
+        readiness.canRevealPrimary ||
+        onboardingState.stepCompleted[_currentPage] ||
+        _isSaving ||
+        _isNavigating;
 
     return PopScope(
       canPop: false,
@@ -691,6 +724,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         isSaved: isSaved,
         saveEnabled: !_isSaving && !onboardingState.stepLoading[_currentPage],
         ctaLabel: ctaLabel,
+        showPrimaryCta: showPrimaryCta,
         ctaEnabled: ctaEnabled,
         ctaLoading: _isNavigating,
         topLeftOverlay: _showTopLeftOverlay(onboardingState.draft)

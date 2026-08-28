@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../views/screens/welcome_screen.dart';
 import '../../views/screens/login_screen.dart';
 import '../../views/screens/signup_screen.dart';
+import '../../views/screens/auth_choice_screen.dart';
 import '../../views/screens/verify_email_screen.dart';
 import '../../views/screens/loading_screen.dart';
 import '../../views/screens/app_shell.dart';
@@ -39,10 +40,11 @@ String? optivusAuthRedirect({
   required Uri uri,
 }) {
   final isSignedOutRoute =
-      uri.path == '/login' || uri.path == '/signup' || uri.path == '/';
+      uri.path == '/login' || uri.path.startsWith('/signup') || uri.path == '/';
   final isVerifyRoute = uri.path == '/verify-email';
 
   if (authState.isLoading) {
+    if (isSignedOutRoute && authState.user == null) return null;
     return uri.path == '/loading' ? null : '/loading';
   }
 
@@ -176,6 +178,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/signup',
+        builder: (context, state) => const AuthChoiceScreen(),
+      ),
+      GoRoute(
+        path: '/signup/create',
         builder: (context, state) => const SignupScreen(),
       ),
       GoRoute(

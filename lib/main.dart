@@ -12,20 +12,9 @@ import 'package:optivus/core/utils/platform_channel_boundary.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.dark,
-      systemNavigationBarDividerColor: Colors.transparent,
-    ),
-  );
 
   await safePlatformCall(
-    call: () =>
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky),
+    call: () => SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
     fallback: null,
     operationName: 'setEnabledSystemUIMode',
   );
