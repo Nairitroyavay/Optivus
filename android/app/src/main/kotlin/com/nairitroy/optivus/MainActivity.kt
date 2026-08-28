@@ -7,7 +7,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.nairitroy.optivus/notification_intent"
+    private val NOTIFICATION_CHANNEL = "com.nairitroy.optivus/notification_intent"
+    private val EMAIL_LAUNCHER_CHANNEL = "com.nairitroy.optivus/email_launcher"
     private var initialPayload: Map<String, String>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,7 +44,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NOTIFICATION_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getInitialNotificationPayload" -> {
                     result.success(initialPayload)
@@ -51,6 +52,38 @@ class MainActivity : FlutterActivity() {
                 "clearInitialNotificationPayload" -> {
                     initialPayload = null
                     result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, EMAIL_LAUNCHER_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "openEmailApp" -> {
+                    try {
+                        val emailIntent = Intent(Intent.ACTION_MAIN).apply {
+                            addCategory(Intent.CATEGORY_APP_EMAIL)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        if (emailIntent.resolveActivity(packageManager) != null) {
+                            startActivity(emailIntent)
+                            result.success(true)
+                        } else {
+                            val mailtoIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("mailto:")).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            if (mailtoIntent.resolveActivity(packageManager) != null) {
+                                startActivity(mailtoIntent)
+                                result.success(true)
+                            } else {
+                                result.success(false)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        result.error("INTENT_ERROR", e.message, null)
+                    }
                 }
                 else -> {
                     result.notImplemented()

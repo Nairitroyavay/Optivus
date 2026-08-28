@@ -222,6 +222,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
           clearError: true,
+          lastVerificationEmailSent: DateTime.now(),
         );
         await _repository.sendEmailVerification();
         if (!_isCurrentAuthOperation(operation)) return;
@@ -388,13 +389,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> checkEmailVerification() async {
+    final operation = ++_authOperationGeneration;
+    final targetUid = state.user?.uid;
+    if (targetUid == null) return;
+
     try {
       final user = await _repository.reloadCurrentUser();
+      if (!_isCurrentAuthOperation(operation)) return;
       if (user == null) {
         _resetSignedOutState();
         state = const AuthState(status: AuthFlowStatus.signedOut);
         return;
       }
+      if (user.uid != targetUid) return;
 
       if (_needsEmailVerification(user)) {
         state = state.copyWith(
@@ -409,6 +416,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       await _loadOrCreateBackendUserState(user);
     } catch (error) {
+      if (!_isCurrentAuthOperation(operation)) rethrow;
       if (error.toString().contains('Email not verified yet.')) {
         rethrow;
       }
