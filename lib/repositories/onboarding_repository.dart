@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -13,6 +14,9 @@ import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/routine_projection_receipt_validator.dart';
 
 import 'package:optivus/core/utils/debouncer.dart';
+
+const onboardingReconcileTransactionTimeout = Duration(seconds: 120);
+const onboardingReceiptFinalizeTransactionTimeout = Duration(seconds: 120);
 
 abstract class OnboardingRepository {
   Future<OnboardingDraft?> fetchDraft(String uid);
@@ -29,7 +33,14 @@ abstract class OnboardingRepository {
   });
 }
 
-class FakeOnboardingRepository implements OnboardingRepository {
+abstract interface class RoutineProjectionReceiptFinalizer {
+  Future<RoutineProjectionReceipt> finalizeRoutineProjectionReceipt({
+    required OnboardingCompletionBundle bundle,
+  });
+}
+
+class FakeOnboardingRepository
+    implements OnboardingRepository, RoutineProjectionReceiptFinalizer {
   final FakeRoutineDatabase routineDatabase;
   Map<String, OnboardingDraft> _drafts = {};
   Map<String, OnboardingCompletionBundle> _bundles = {};
@@ -195,7 +206,7 @@ class FakeOnboardingRepository implements OnboardingRepository {
         failedItemIds.add(item.id);
       }
     }
-    final receipt = _receiptForCategories(
+    final receipt = routineProjectionReceiptForCategories(
       plan.receipt,
       expectedItemIds: expectedItemIds,
       createdItemIds: createdItemIds,
@@ -229,6 +240,51 @@ class FakeOnboardingRepository implements OnboardingRepository {
       outcome: RoutineProjectionOutcome.projected,
       receipt: receipt,
     );
+  }
+
+  @override
+  Future<RoutineProjectionReceipt> finalizeRoutineProjectionReceipt({
+    required OnboardingCompletionBundle bundle,
+  }) async {
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final receipt =
+        routineDatabase.receiptsByUid[bundle.uid]?[plan.projectionId];
+    final actualItems =
+        routineDatabase.itemsByUid[bundle.uid]?.values.toList() ??
+        const <RoutineItem>[];
+    final validation = const RoutineProjectionReceiptValidator().validate(
+      receipt: receipt,
+      actualItems: actualItems,
+      ownerUid: bundle.uid,
+      plan: plan,
+    );
+    if (!validation.isValid || receipt == null) {
+      throw StateError('Routine projection receipt cannot be finalized.');
+    }
+    final storedAcceptances =
+        routineDatabase.acceptancesByUid[bundle.uid] ?? const {};
+    final acceptancesValid = plan.conflictAcceptances.every((expected) {
+      final actual = storedAcceptances[expected.acceptanceId];
+      return actual != null && _isExpectedAcceptance(actual, expected);
+    });
+    if (!acceptancesValid) {
+      throw StateError('Routine projection acceptances cannot be finalized.');
+    }
+    if (receipt.status == 'completed' && receipt.cursor == receipt.totalCount) {
+      return receipt;
+    }
+    if (receipt.status != 'pending') {
+      throw StateError('Routine projection receipt cannot be finalized.');
+    }
+    final now = DateTime.now().toUtc();
+    final finalized = receipt.copyWith(
+      status: 'completed',
+      cursor: receipt.totalCount,
+      updatedAt: now,
+      completedAt: now,
+    );
+    routineDatabase.receiptsByUid[bundle.uid]![plan.projectionId] = finalized;
+    return finalized;
   }
 
   OnboardingCompletionBundle? savedCompletionBundle(String uid) {
@@ -266,7 +322,8 @@ bool _hasExpectedRoutineProjectionIdentity({
       actualItem.schemaVersion == RoutineItem.currentSchemaVersion;
 }
 
-class FirestoreOnboardingRepository implements OnboardingRepository {
+class FirestoreOnboardingRepository
+    implements OnboardingRepository, RoutineProjectionReceiptFinalizer {
   final FirebaseFirestore? _injectedFirestore;
   final RoutineTemplateFirestoreCodec _routineCodec;
   final RoutineProjectionReceiptFirestoreCodec _receiptCodec;
@@ -379,9 +436,18 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           ),
         )
         .toList(growable: false);
+    final routineCount = itemReferences.length;
+    final acceptanceCount = acceptanceReferences.length;
+    final estimatedReads = 4 + routineCount + acceptanceCount;
+    final stopwatch = Stopwatch()..start();
+    debugPrint(
+      'OnboardingReconcile: routineCount=$routineCount '
+      'acceptanceCount=$acceptanceCount estimatedReads=$estimatedReads '
+      'elapsedMs=0 result=started',
+    );
 
     try {
-      return await _firestore.runTransaction((transaction) async {
+      final result = await _firestore.runTransaction((transaction) async {
         final receiptSnapshot = await transaction.get(receiptReference);
         final draftReference = _firestore.doc(
           FirestoreUserPaths.onboardingDraft(bundle.uid),
@@ -469,8 +535,12 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
         );
         final intermediateProfilePatch =
             Map<String, dynamic>.from(bundle.userProfilePatch)
+              ..removeWhere((_, value) => value == null)
               ..remove('source')
               ..remove('createdAt');
+        // The bundle is schema v2, but /users/{uid} remains profile schema v1.
+        // Normalize persisted v2 bundle patches too so retries can recover.
+        intermediateProfilePatch['schemaVersion'] = 1;
         intermediateProfilePatch['updatedAt'] = FieldValue.serverTimestamp();
         intermediateProfilePatch['onboardingInputCompleted'] = true;
         intermediateProfilePatch['onboardingProjectionStatus'] = 'pending';
@@ -550,13 +620,22 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           );
         }
 
-        final receipt = _receiptForCategories(
+        final receipt = routineProjectionReceiptForCategories(
           plan.receipt,
           expectedItemIds: expectedItemIds,
           createdItemIds: createdItemIds,
           existingItemIds: existingItemIds,
           repairedItemIds: repairedItemIds,
           failedItemIds: failedItemIds,
+        );
+        debugPrint(
+          'OnboardingReconcilePlan: expectedCount=${expectedItemIds.length} '
+          'createdCount=${createdItemIds.length} '
+          'existingCount=${existingItemIds.length} '
+          'repairedCount=${repairedItemIds.length} '
+          'failedCount=${failedItemIds.length} '
+          'projectedCount=${receipt.projectedItemIds.length} '
+          'cursor=${receipt.cursor} status=${receipt.status}',
         );
         final receiptData = _receiptCodec.toFirestore(receipt);
         receiptData['createdAt'] = FieldValue.serverTimestamp();
@@ -567,17 +646,140 @@ class FirestoreOnboardingRepository implements OnboardingRepository {
           outcome: RoutineProjectionOutcome.projected,
           receipt: receipt,
         );
-      });
-    } on RoutineProjectionRetryRequiredException {
-      rethrow;
-    } on FormatException {
-      rethrow;
-    } on ArgumentError {
-      rethrow;
+      }, timeout: onboardingReconcileTransactionTimeout);
+      debugPrint(
+        'OnboardingReconcile: routineCount=$routineCount '
+        'acceptanceCount=$acceptanceCount estimatedReads=$estimatedReads '
+        'elapsedMs=${stopwatch.elapsedMilliseconds} '
+        'result=${result.outcome.name}',
+      );
+      return result;
     } catch (error) {
+      debugPrint(
+        'OnboardingReconcile: routineCount=$routineCount '
+        'acceptanceCount=$acceptanceCount estimatedReads=$estimatedReads '
+        'elapsedMs=${stopwatch.elapsedMilliseconds} result=failure '
+        'category=${_onboardingReconcileFailureCategory(error)}',
+      );
+      if (error is RoutineProjectionRetryRequiredException ||
+          error is FormatException ||
+          error is ArgumentError) {
+        rethrow;
+      }
       throw RoutineProjectionRetryRequiredException(error);
     }
   }
+
+  @override
+  Future<RoutineProjectionReceipt> finalizeRoutineProjectionReceipt({
+    required OnboardingCompletionBundle bundle,
+  }) async {
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final receiptReference = _firestore.doc(
+      FirestoreUserPaths.routineProjection(bundle.uid, plan.projectionId),
+    );
+    final itemReferences = plan.items
+        .map(
+          (item) => _firestore.doc(
+            FirestoreUserPaths.routineItem(bundle.uid, item.id),
+          ),
+        )
+        .toList(growable: false);
+    final acceptanceReferences = plan.conflictAcceptances
+        .map(
+          (acceptance) => _firestore.doc(
+            FirestoreUserPaths.conflictAcceptance(
+              bundle.uid,
+              acceptance.acceptanceId,
+            ),
+          ),
+        )
+        .toList(growable: false);
+
+    return _firestore.runTransaction((transaction) async {
+      final receiptSnapshot = await transaction.get(receiptReference);
+      final itemSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+      for (final reference in itemReferences) {
+        itemSnapshots.add(await transaction.get(reference));
+      }
+      final acceptanceSnapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+      for (final reference in acceptanceReferences) {
+        acceptanceSnapshots.add(await transaction.get(reference));
+      }
+
+      final receiptData = receiptSnapshot.data();
+      if (!receiptSnapshot.exists || receiptData == null) {
+        throw StateError('Routine projection receipt cannot be finalized.');
+      }
+      final receipt = _receiptCodec.fromFirestore(
+        documentId: receiptSnapshot.id,
+        data: receiptData,
+      );
+      final validation = const RoutineProjectionReceiptValidator().validate(
+        receipt: receipt,
+        actualItems: _routineItemsFromSnapshots(itemSnapshots, _routineCodec),
+        ownerUid: bundle.uid,
+        plan: plan,
+      );
+      if (!validation.isValid) {
+        throw StateError('Routine projection receipt cannot be finalized.');
+      }
+      final acceptancesValid =
+          plan.conflictAcceptances.length == acceptanceSnapshots.length &&
+          List<bool>.generate(plan.conflictAcceptances.length, (index) {
+            final data = acceptanceSnapshots[index].data();
+            if (data == null) return false;
+            return _isExpectedAcceptance(
+              ConflictAcceptance.fromMap(data),
+              plan.conflictAcceptances[index],
+            );
+          }).every((valid) => valid);
+      if (!acceptancesValid) {
+        throw StateError('Routine projection acceptances cannot be finalized.');
+      }
+      if (receipt.status == 'completed' &&
+          receipt.cursor == receipt.totalCount) {
+        return receipt;
+      }
+      if (receipt.status != 'pending') {
+        throw StateError('Routine projection receipt cannot be finalized.');
+      }
+
+      transaction.update(receiptReference, {
+        'status': 'completed',
+        'cursor': receipt.totalCount,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'completedAt': FieldValue.serverTimestamp(),
+      });
+      final now = DateTime.now().toUtc();
+      debugPrint(
+        'OnboardingReceiptFinalize: routineCount=${itemReferences.length} '
+        'acceptanceCount=${acceptanceReferences.length} result=completed',
+      );
+      return receipt.copyWith(
+        status: 'completed',
+        cursor: receipt.totalCount,
+        updatedAt: now,
+        completedAt: now,
+      );
+    }, timeout: onboardingReceiptFinalizeTransactionTimeout);
+  }
+}
+
+String _onboardingReconcileFailureCategory(Object error) {
+  if (error is FirebaseException) {
+    return 'firestore_${error.code}';
+  }
+  if (error is RoutineProjectionRetryRequiredException) {
+    return 'retry_required';
+  }
+  if (error is FormatException) {
+    return 'format';
+  }
+  if (error is ArgumentError) {
+    return 'argument';
+  }
+  return 'unexpected';
 }
 
 List<RoutineItem> _routineItemsFromSnapshots(
@@ -608,7 +810,8 @@ RoutineItem? _routineItemFromSnapshot(
   }
 }
 
-RoutineProjectionReceipt _receiptForCategories(
+@visibleForTesting
+RoutineProjectionReceipt routineProjectionReceiptForCategories(
   RoutineProjectionReceipt receipt, {
   required List<String> expectedItemIds,
   required List<String> createdItemIds,
@@ -622,8 +825,14 @@ RoutineProjectionReceipt _receiptForCategories(
     ...repairedItemIds,
   }.toList()..sort();
 
-  final initialCursor = existingItemIds.length;
-  final isCompleted = initialCursor >= expectedItemIds.length;
+  final expectedIdSet = expectedItemIds.toSet();
+  final projectedIdSet = projectedItemIds.toSet();
+  final accountedCount = projectedIdSet.length;
+  final isCompleted =
+      failedItemIds.isEmpty &&
+      expectedIdSet.length == expectedItemIds.length &&
+      projectedIdSet.length == expectedIdSet.length &&
+      projectedIdSet.containsAll(expectedIdSet);
   return RoutineProjectionReceipt(
     id: receipt.id,
     ownerUid: receipt.ownerUid,
@@ -641,7 +850,7 @@ RoutineProjectionReceipt _receiptForCategories(
     projectedItemIds: projectedItemIds,
     eventSchemaVersion: receipt.eventSchemaVersion,
     status: isCompleted ? 'completed' : 'pending',
-    cursor: initialCursor,
+    cursor: accountedCount,
     totalCount: expectedItemIds.length,
     createdAt: receipt.createdAt,
     updatedAt: receipt.updatedAt,
@@ -708,7 +917,7 @@ bool _isExpectedAcceptance(
 }
 
 final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {
-  final repository =
+  final OnboardingRepository repository =
       ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase
       ? FirestoreOnboardingRepository()
       : FakeOnboardingRepository(

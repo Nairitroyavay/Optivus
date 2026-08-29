@@ -275,6 +275,9 @@ void main() {
       final draft = _createCompletedDraft('uid-9a');
       final bundle = OnboardingCompletionService.buildBundle(draft);
 
+      expect(bundle.userProfilePatch['schemaVersion'], equals(1));
+      expect(bundle.userProfilePatch, isNot(contains('workingExtra')));
+      expect(bundle.userProfilePatch, isNot(contains('businessMode')));
       expect(bundle.userProfilePatch['onboardingInputCompleted'], isTrue);
       expect(
         bundle.userProfilePatch['onboardingProjectionStatus'],
@@ -284,7 +287,7 @@ void main() {
     });
 
     test(
-      'OnboardingCompletionJobService requires completed receipt before profile update',
+      'OnboardingCompletionJobService verifies a successful projection before profile update',
       () async {
         final db = FakeRoutineDatabase();
         final onboardingRepo = FakeOnboardingRepository(routineDatabase: db);
@@ -303,34 +306,13 @@ void main() {
           UserProfile.empty(uid: 'uid-9b', email: 'test@example.com'),
         );
 
-        // Before completing event projection, completeOnboarding sets receipt status to 'pending'
-        await onboardingRepo.completeOnboarding(
+        final projection = await onboardingRepo.completeOnboarding(
           finalDraft: draft,
           bundle: bundle,
         );
+        expect(projection.receipt.status, equals('completed'));
+        expect(projection.receipt.cursor, equals(2));
 
-        // Running job update profile directly when receipt is pending should fail
-        await expectLater(
-          jobService.runCompletionJob(
-            uid: 'uid-9b',
-            finalDraft: draft,
-            bundle: bundle,
-          ),
-          throwsA(isA<StateError>()),
-        );
-
-        // Mark receipt status as completed
-        final plan = RoutineOnboardingProjection.build(bundle);
-        final currentReceipt = db.receiptsByUid['uid-9b']![plan.projectionId]!;
-        db.receiptsByUid['uid-9b']![plan.projectionId] = currentReceipt
-            .copyWith(
-              status: 'completed',
-              cursor: 2,
-              totalCount: 2,
-              completedAt: DateTime.now(),
-            );
-
-        // Now job completion succeeds and sets profile onboardingCompleted: true
         final job = await jobService.runCompletionJob(
           uid: 'uid-9b',
           finalDraft: draft,

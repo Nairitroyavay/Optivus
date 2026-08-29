@@ -105,6 +105,8 @@ function projectionData(uid = "user123", overrides = {}) {
   return {
     id: "onboarding-initial-v1",
     ownerUid: uid,
+    slot: "onboarding-initial",
+    revision: 1,
     source: "onboarding",
     sourceBundleSchemaVersion: 1,
     sourceBundleId: "bundle-1",
@@ -157,6 +159,7 @@ function userData(uid = "user123", overrides = {}) {
 const fingerprint =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const canonicalRunId = `run_${"1".repeat(40)}`;
+const canonicalProjectionId = `onboarding-${canonicalRunId}-v1`;
 const canonicalAcceptanceId = `ca_${"a".repeat(40)}`;
 
 const completionBundleRequiredKeys = [
@@ -589,6 +592,118 @@ describe("Firestore Rules for syncAllowances and syncEvents", () => {
 });
 
 describe("Firestore Rules for Routine durability", () => {
+  it("allows only canonical run-scoped onboarding projection IDs", async () => {
+    const db = ownerDb();
+    const projections = db
+      .collection("users")
+      .doc("user123")
+      .collection("routineProjections");
+
+    await assertSucceeds(
+      projections
+        .doc(canonicalProjectionId)
+        .set(
+          projectionData("user123", {
+            id: canonicalProjectionId,
+            slot: `onboarding-${canonicalRunId}`,
+          })
+        )
+    );
+    await assertFails(
+      projections
+        .doc("onboarding-run_not-canonical-v1")
+        .set(projectionData("user123", { id: "onboarding-run_not-canonical-v1" }))
+    );
+    await assertFails(
+      projections
+        .doc(canonicalProjectionId)
+        .set(projectionData("user123", { id: "onboarding-initial-v1" }))
+    );
+    await assertFails(
+      projections.doc(canonicalProjectionId).set(
+        projectionData("user123", {
+          id: canonicalProjectionId,
+          slot: "onboarding-initial",
+        })
+      )
+    );
+    await assertFails(
+      projections.doc(canonicalProjectionId).set(
+        projectionData("user123", {
+          id: canonicalProjectionId,
+          slot: `onboarding-${canonicalRunId}`,
+          revision: 2,
+        })
+      )
+    );
+  });
+
+  it("allows the full onboarding reconcile write-set atomically", async () => {
+    const db = ownerDb();
+    const user = db.collection("users").doc("user123");
+    await assertSucceeds(user.set(userData()));
+
+    const batch = db.batch();
+    batch.set(
+      user.collection("onboarding").doc("draft"),
+      onboardingDraftData("user123", {
+        currentStep: 14,
+        stepCompleted: Array(15).fill(true),
+        onboardingCompleted: true,
+      })
+    );
+    batch.set(
+      user.collection("onboarding").doc("completionBundle"),
+      completionBundleData()
+    );
+    batch.set(
+      user,
+      {
+        schemaVersion: 1,
+        onboardingInputCompleted: true,
+        onboardingProjectionStatus: "pending",
+        onboardingCompleted: false,
+        updatedAt,
+      },
+      { merge: true }
+    );
+    for (let index = 0; index < 53; index += 1) {
+      const itemId = `onb_${index.toString(16).padStart(40, "0")}`;
+      batch.set(
+        user.collection("routineItems").doc(itemId),
+        routineItemData("user123", itemId, {
+          source: "onboarding",
+          onboardingProjectionId: canonicalProjectionId,
+          onboardingSourceItemId: `source-${index}`,
+        })
+      );
+    }
+    for (let index = 0; index < 17; index += 1) {
+      const id = `ca_${(index + 1).toString(16).padStart(40, "0")}`;
+      batch.set(
+        user.collection("conflictAcceptances").doc(id),
+        conflictAcceptanceData("user123", {
+          acceptanceId: id,
+          projectionId: canonicalProjectionId,
+        })
+      );
+    }
+    batch.set(
+      user.collection("routineProjections").doc(canonicalProjectionId),
+      projectionData("user123", {
+        id: canonicalProjectionId,
+        slot: `onboarding-${canonicalRunId}`,
+        projectedItemIds: Array.from(
+          { length: 53 },
+          (_, index) => `onb_${index.toString(16).padStart(40, "0")}`
+        ),
+        totalCount: 53,
+      })
+    );
+
+    await assertSucceeds(batch.commit());
+  });
+
   it("allows verified owner Routine template reads and writes", async () => {
     const db = ownerDb();
     const docRef = db.collection("users").doc("user123").collection("routineItems").doc("routine-item-1");

@@ -650,11 +650,29 @@ service cloud.firestore {
           : true);
     }
 
-    function validRoutineProjectionReceipt(data, projectionId) {
+    function validRoutineProjectionId(projectionId) {
       return projectionId == "onboarding-initial-v1"
+        || projectionId.matches("^onboarding-run_[a-f0-9]{40}-v1$");
+    }
+
+    function validRoutineProjectionIdentity(data, projectionId) {
+      return data.slot is string
+        && data.revision == 1
+        && ((projectionId == "onboarding-initial-v1"
+              && data.slot == "onboarding-initial")
+          || (projectionId.matches("^onboarding-run_[a-f0-9]{40}-v1$")
+              && data.slot.matches("^onboarding-run_[a-f0-9]{40}$")
+              && projectionId == data.slot + "-v1"));
+    }
+
+    function validRoutineProjectionReceipt(data, projectionId) {
+      return validRoutineProjectionId(projectionId)
+        && validRoutineProjectionIdentity(data, projectionId)
         && data.keys().hasOnly([
           "id",
           "ownerUid",
+          "slot",
+          "revision",
           "source",
           "sourceBundleSchemaVersion",
           "sourceBundleId",
@@ -673,6 +691,8 @@ service cloud.firestore {
         && data.keys().hasAll([
           "id",
           "ownerUid",
+          "slot",
+          "revision",
           "source",
           "sourceBundleSchemaVersion",
           "sourceBundleId",
@@ -724,6 +744,8 @@ service cloud.firestore {
       return validRoutineProjectionReceipt(after, projectionId)
         && before.id == after.id
         && before.ownerUid == after.ownerUid
+        && before.slot == after.slot
+        && before.revision == after.revision
         && before.source == after.source
         && before.sourceBundleSchemaVersion == after.sourceBundleSchemaVersion
         && before.sourceBundleId == after.sourceBundleId

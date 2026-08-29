@@ -39,6 +39,11 @@ void main() {
     expect(completion.receipt.existingItemIds, contains(plan.items.first.id));
     expect(completion.receipt.projectedItemIds, hasLength(3));
 
+    // Explicitly configure pending receipt to exercise outbox batching
+    harness.database.receiptsByUid['uid-a']![plan.projectionId] = completion
+        .receipt
+        .copyWith(status: 'pending', cursor: 1, clearCompletedAt: true);
+
     final result = await const RoutineOnboardingEventProjector()
         .projectCreatedEvents(read: harness.container.read, bundle: bundle);
 
@@ -65,61 +70,66 @@ void main() {
     expect(await harness.eventsFor('uid-b'), isEmpty);
   });
 
-  test(
-    'resumes interrupted projection without duplicating event IDs',
-    () async {
-      final harness = _ProjectionHarness();
-      addTearDown(harness.dispose);
+  test('resumes interrupted projection without duplicating event IDs', () async {
+    final harness = _ProjectionHarness();
+    addTearDown(harness.dispose);
 
-      final bundle = _bundle(uid: 'uid-resume', itemCount: 105);
-      final plan = RoutineOnboardingProjection.build(bundle);
-      await harness.onboarding.completeOnboarding(
-        finalDraft: _completedDraft('uid-resume'),
+    final bundle = _bundle(uid: 'uid-resume', itemCount: 105);
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final completion = await harness.onboarding.completeOnboarding(
+      finalDraft: _completedDraft('uid-resume'),
+      bundle: bundle,
+    );
+
+    // Explicitly configure pending receipt at cursor 0 to exercise batch interruption & resumption
+    harness.database.receiptsByUid['uid-resume']![plan.projectionId] =
+        completion.receipt.copyWith(
+          status: 'pending',
+          cursor: 0,
+          clearCompletedAt: true,
+        );
+
+    var batchCalls = 0;
+    harness.transactions.onBeforeMutation = () async {
+      batchCalls++;
+      if (batchCalls == 2) {
+        throw StateError('Injected projector interruption');
+      }
+    };
+
+    await expectLater(
+      const RoutineOnboardingEventProjector().projectCreatedEvents(
+        read: harness.container.read,
         bundle: bundle,
-      );
+      ),
+      throwsA(isA<RoutineProjectionRetryRequiredException>()),
+    );
 
-      var batchCalls = 0;
-      harness.transactions.onBeforeMutation = () async {
-        batchCalls++;
-        if (batchCalls == 2) {
-          throw StateError('Injected projector interruption');
-        }
-      };
+    var receipt = await harness.routines.fetchProjectionReceipt(
+      'uid-resume',
+      plan.projectionId,
+    );
+    expect(receipt?.status, 'pending');
+    expect(receipt?.cursor, RoutineOnboardingEventProjector.batchSize);
+    expect(await harness.eventsFor('uid-resume'), hasLength(100));
 
-      await expectLater(
-        const RoutineOnboardingEventProjector().projectCreatedEvents(
-          read: harness.container.read,
-          bundle: bundle,
-        ),
-        throwsA(isA<RoutineProjectionRetryRequiredException>()),
-      );
+    harness.transactions.onBeforeMutation = null;
+    final resumed = await const RoutineOnboardingEventProjector()
+        .projectCreatedEvents(read: harness.container.read, bundle: bundle);
 
-      var receipt = await harness.routines.fetchProjectionReceipt(
-        'uid-resume',
-        plan.projectionId,
-      );
-      expect(receipt?.status, 'pending');
-      expect(receipt?.cursor, RoutineOnboardingEventProjector.batchSize);
-      expect(await harness.eventsFor('uid-resume'), hasLength(100));
+    expect(resumed.attemptedCount, 5);
+    receipt = await harness.routines.fetchProjectionReceipt(
+      'uid-resume',
+      plan.projectionId,
+    );
+    expect(receipt?.status, 'completed');
+    expect(receipt?.cursor, 105);
 
-      harness.transactions.onBeforeMutation = null;
-      final resumed = await const RoutineOnboardingEventProjector()
-          .projectCreatedEvents(read: harness.container.read, bundle: bundle);
-
-      expect(resumed.attemptedCount, 5);
-      receipt = await harness.routines.fetchProjectionReceipt(
-        'uid-resume',
-        plan.projectionId,
-      );
-      expect(receipt?.status, 'completed');
-      expect(receipt?.cursor, 105);
-
-      final events = await harness.eventsFor('uid-resume');
-      expect(events, hasLength(105));
-      expect(events.map((event) => event.eventId).toSet(), hasLength(105));
-      expect(events.every((event) => event.ownerUid == 'uid-resume'), isTrue);
-    },
-  );
+    final events = await harness.eventsFor('uid-resume');
+    expect(events, hasLength(105));
+    expect(events.map((event) => event.eventId).toSet(), hasLength(105));
+    expect(events.every((event) => event.ownerUid == 'uid-resume'), isTrue);
+  });
 }
 
 class _ProjectionHarness {

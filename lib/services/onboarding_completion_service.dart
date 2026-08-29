@@ -617,7 +617,7 @@ class OnboardingCompletionService {
     final now = DateTime.now();
     return {
       'uid': draft.uid,
-      'schemaVersion': OnboardingCompletionBundle.schemaVersion,
+      'schemaVersion': 1,
       'createdAt': draft.createdAt?.toIso8601String() ?? now.toIso8601String(),
       'updatedAt': now.toIso8601String(),
       'onboardingInputCompleted': true,
@@ -625,8 +625,10 @@ class OnboardingCompletionService {
       'onboardingCompleted': false,
       'onboardingStep': OnboardingDraft.lastStepIndex,
       'lifeRole': draft.lifeRole.lifeRole ?? '',
-      'workingExtra': draft.lifeRole.workType,
-      'businessMode': draft.lifeRole.businessMode,
+      if (draft.lifeRole.workType != null)
+        'workingExtra': draft.lifeRole.workType,
+      if (draft.lifeRole.businessMode != null)
+        'businessMode': draft.lifeRole.businessMode,
       'exerciseLevel': draft.lifeRole.exerciseLevel ?? '',
       'waterIntake': draft.lifeRole.waterIntake ?? '',
       'stressLevel': draft.lifeRole.stressLevel ?? '',

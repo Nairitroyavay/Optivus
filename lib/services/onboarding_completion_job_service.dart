@@ -641,18 +641,16 @@ class OnboardingCompletionJobService {
       }
       return;
     }
-    final receipt = await activeRepository.fetchProjectionReceipt(
+    var receipt = await activeRepository.fetchProjectionReceipt(
       uid,
       plan.projectionId,
     );
     if (receipt == null ||
-        receipt.status != 'completed' ||
-        receipt.cursor != receipt.totalCount ||
         receipt.sourceBundleFingerprint != plan.fingerprint) {
       throw StateError('Routine projection receipt verification failed.');
     }
     final items = await activeRepository.fetchRoutineItems(uid);
-    final validation = const RoutineProjectionReceiptValidator().validate(
+    var validation = const RoutineProjectionReceiptValidator().validate(
       receipt: receipt,
       actualItems: items,
       ownerUid: uid,
@@ -681,6 +679,31 @@ class OnboardingCompletionJobService {
       final actual = storedById[expected.acceptanceId];
       if (actual == null || !_matchesExpectedAcceptance(actual, expected)) {
         throw StateError('Conflict acceptance read-back verification failed.');
+      }
+    }
+    if (receipt.status != 'completed' || receipt.cursor != receipt.totalCount) {
+      final finalizer = onboardingRepository;
+      if (receipt.status != 'pending' ||
+          finalizer is! RoutineProjectionReceiptFinalizer) {
+        throw StateError('Routine projection receipt verification failed.');
+      }
+      await (finalizer as RoutineProjectionReceiptFinalizer)
+          .finalizeRoutineProjectionReceipt(bundle: bundle);
+      receipt = await activeRepository.fetchProjectionReceipt(
+        uid,
+        plan.projectionId,
+      );
+      validation = const RoutineProjectionReceiptValidator().validate(
+        receipt: receipt,
+        actualItems: items,
+        ownerUid: uid,
+        plan: plan,
+      );
+      if (receipt == null ||
+          receipt.status != 'completed' ||
+          receipt.cursor != receipt.totalCount ||
+          !validation.isValid) {
+        throw StateError('Routine projection receipt verification failed.');
       }
     }
   }
