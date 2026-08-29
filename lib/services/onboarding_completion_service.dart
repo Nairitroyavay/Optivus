@@ -17,6 +17,7 @@ import 'package:optivus/services/habit_system_onboarding_projection.dart';
 import 'package:optivus/services/onboarding_run_identity.dart';
 import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/services/session_destination_resolver.dart';
 
 enum OnboardingRecoveryTier {
   verifiedBundleFound,
@@ -55,6 +56,28 @@ class OnboardingCompletionResult {
 
 class OnboardingCompletionService {
   const OnboardingCompletionService._();
+
+  static bool bundleMatchesFinalDraft({
+    required String uid,
+    required OnboardingDraft draft,
+    required OnboardingCompletionBundle bundle,
+  }) {
+    if (!isDurablyFinalOnboardingDraft(draft) ||
+        uid.trim().isEmpty ||
+        draft.uid != uid ||
+        bundle.uid != uid ||
+        bundle.version != OnboardingCompletionBundle.schemaVersion ||
+        bundle.sourceFingerprint != draft.effectiveSourceFingerprint ||
+        bundle.draftRevision != draft.revision) {
+      return false;
+    }
+    return bundle.runId ==
+        stableOnboardingRunId(
+          ownerUid: uid,
+          sourceFingerprint: draft.effectiveSourceFingerprint,
+          draftRevision: draft.revision,
+        );
+  }
 
   static Future<OnboardingCompletionResult> recoverCompletionState({
     required String uid,

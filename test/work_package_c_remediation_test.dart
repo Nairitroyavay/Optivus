@@ -276,6 +276,66 @@ void main() {
     );
 
     test(
+      'reconcileProjectedSystems repairs prior onboarding fingerprints and retries idempotently',
+      () async {
+        final fakeHabitRepo = FakeHabitSystemsRepository();
+        const ownerUid = 'habit_projection_repair_owner';
+        const projectionId = 'proj_onboard_hs_v1_habit_projection_repair_owner';
+        final now = DateTime.utc(2026, 8, 29);
+        final priorSystems = List.generate(
+          3,
+          (index) => HabitSystemRecord(
+            systemId: 'habit_projection_repair_$index',
+            ownerUid: ownerUid,
+            title: 'Habit projection repair $index',
+            description: 'Prior projection',
+            category: RoutineCategory.habit,
+            systemType: HabitSystemType.goodHabit,
+            source: 'onboarding',
+            onboardingSourceId: 'source-$index',
+            onboardingProjectionId: projectionId,
+            sourceFingerprint: 'a' * 64,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        for (final system in priorSystems) {
+          final created = await fakeHabitRepo.createSystem(
+            system: system,
+            operationId: 'seed-${system.systemId}',
+          );
+          expect(created.success, isTrue);
+        }
+
+        final currentSystems = [
+          for (final system in priorSystems)
+            system.copyWith(
+              description: 'Current projection',
+              sourceFingerprint: 'b' * 64,
+              updatedAt: now.add(const Duration(minutes: 1)),
+            ),
+        ];
+        final repaired = await fakeHabitRepo.reconcileProjectedSystems(
+          ownerUid: ownerUid,
+          projectionId: projectionId,
+          systems: currentSystems,
+        );
+        expect(repaired.success, isTrue);
+        expect(repaired.repairedSystemIds, hasLength(3));
+        expect(repaired.failedSystemIds, isEmpty);
+
+        final retried = await fakeHabitRepo.reconcileProjectedSystems(
+          ownerUid: ownerUid,
+          projectionId: projectionId,
+          systems: currentSystems,
+        );
+        expect(retried.success, isTrue);
+        expect(retried.existingSystemIds, hasLength(3));
+        expect(retried.repairedSystemIds, isEmpty);
+      },
+    );
+
+    test(
       'ISSUE-10-01: RoutineNotifier loadForOwner guards against concurrent duplicate loads',
       () async {
         final fakeRepo = FakeRoutineRepository();
@@ -787,10 +847,7 @@ void main() {
             OnboardingCompletionBundle.schemaVersion,
           );
           expect(map['schemaVersion'], 2);
-          expect(
-            map['expectedAcceptanceIds'],
-            everyElement(isA<String>()),
-          );
+          expect(map['expectedAcceptanceIds'], everyElement(isA<String>()));
         },
       );
 

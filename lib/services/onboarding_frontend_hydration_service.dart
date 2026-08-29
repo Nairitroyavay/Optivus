@@ -78,6 +78,20 @@ class HabitSystemProjectionFailureException implements Exception {
 class OnboardingFrontendHydrationService {
   const OnboardingFrontendHydrationService();
 
+  Future<void> restoreVerifiedFrontendState({
+    required OptivusProviderReader read,
+    required OnboardingCompletionBundle bundle,
+  }) async {
+    if (bundle.uid.trim().isEmpty) {
+      throw ArgumentError('Cannot restore onboarding with empty bundle.uid.');
+    }
+    await Future.wait<void>([
+      read(routineNotifierProvider.notifier).loadForOwner(bundle.uid),
+      read(habitSystemsNotifierProvider.notifier).loadForOwner(bundle.uid),
+    ]);
+    verifyFrontendState(read: read, bundle: bundle);
+  }
+
   Future<OnboardingFrontendHydrationResult> hydrate({
     required OptivusProviderReader read,
     required OnboardingCompletionBundle bundle,

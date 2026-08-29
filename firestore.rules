@@ -720,7 +720,9 @@ service cloud.firestore {
           || data.eventSchemaVersion == 1)
         && (!data.keys().hasAny(["totalCount"])
           || (data.totalCount is int
-            && data.totalCount == data.projectedItemIds.size()))
+            && (data.status == "completed"
+              ? data.totalCount == data.projectedItemIds.size()
+              : data.totalCount >= data.projectedItemIds.size())))
         && (!data.keys().hasAny(["cursor"])
           || (data.cursor is int
             && data.cursor >= 0
@@ -935,7 +937,9 @@ service cloud.firestore {
         && request.resource.data.source == resource.data.source
         && request.resource.data.createdAt == resource.data.createdAt
         && (!resource.data.keys().hasAny(["onboardingProjectionId"]) 
-            || request.resource.data.onboardingProjectionId == resource.data.onboardingProjectionId)
+            || request.resource.data.onboardingProjectionId == resource.data.onboardingProjectionId
+            || (resource.data.source == "onboarding"
+                && validRoutineProjectionId(request.resource.data.onboardingProjectionId)))
         && (!resource.data.keys().hasAny(["onboardingSourceItemId"]) 
             || request.resource.data.onboardingSourceItemId == resource.data.onboardingSourceItemId)
         && (!resource.data.keys().hasAny(["createdByOperationId"]) 
@@ -958,11 +962,22 @@ service cloud.firestore {
           == resource.data.occurrenceDateKey
         && request.resource.data.createdAt == resource.data.createdAt
         && (!resource.data.keys().hasAny(["onboardingProjectionId"])
-          || request.resource.data.onboardingProjectionId == resource.data.onboardingProjectionId)
+          || request.resource.data.onboardingProjectionId == resource.data.onboardingProjectionId
+          || (resource.data.source == "onboarding"
+            && request.resource.data.source == "onboarding"
+            && validRoutineProjectionId(resource.data.onboardingProjectionId)
+            && validRoutineProjectionId(request.resource.data.onboardingProjectionId)))
         && (!resource.data.keys().hasAny(["onboardingSourceItemId"])
           || request.resource.data.onboardingSourceItemId == resource.data.onboardingSourceItemId)
         && (!resource.data.keys().hasAny(["sourceFingerprint"])
-          || request.resource.data.sourceFingerprint == resource.data.sourceFingerprint);
+          || request.resource.data.sourceFingerprint == resource.data.sourceFingerprint
+          || (resource.data.source == "onboarding"
+            && request.resource.data.source == "onboarding"
+            && validRoutineProjectionId(resource.data.onboardingProjectionId)
+            && validRoutineProjectionId(request.resource.data.onboardingProjectionId)
+            && resource.data.sourceFingerprint is string
+            && resource.data.sourceFingerprint.matches("^[a-f0-9]{64}$")
+            && request.resource.data.sourceFingerprint.matches("^[a-f0-9]{64}$")));
       allow delete: if verifiedOwner(uid)
         && resource.data.ownerUid == request.auth.uid;
     }
@@ -1267,7 +1282,7 @@ service cloud.firestore {
       && data.retryCount is int
       && data.retryCount >= 0
       && data.stagesCompleted is map
-      && validOnboardingCompletedStages(data.stagesCompleted)
+      && validOnboardingCompletedStages(data.stagesCompleted, data.stage)
       && data.failedEntityIds is list
       && data.expectedRoutineIds is list
       && data.createdRoutineIds is list
@@ -1314,7 +1329,7 @@ service cloud.firestore {
           && data.failureOccurredAt is timestamp));
     }
 
-    function validOnboardingCompletedStages(stages) {
+    function validOnboardingCompletedStages(stages, currentStage) {
       return stages.keys().hasOnly([
           "validateInput", "persistDraft", "verifyDraft", "persistBundle",
           "verifyBundle", "reconcileRoutines", "verifyRoutines",
@@ -1322,20 +1337,8 @@ service cloud.firestore {
           "reconcileHabitSystems", "verifyHabitSystems", "reloadControllers",
           "verifyFrontendState", "finalizeProfile"
         ])
-        && (!stages.keys().hasAny(["validateInput"]) || stages.validateInput == true)
-        && (!stages.keys().hasAny(["persistDraft"]) || stages.persistDraft == true)
-        && (!stages.keys().hasAny(["verifyDraft"]) || stages.verifyDraft == true)
-        && (!stages.keys().hasAny(["persistBundle"]) || stages.persistBundle == true)
-        && (!stages.keys().hasAny(["verifyBundle"]) || stages.verifyBundle == true)
-        && (!stages.keys().hasAny(["reconcileRoutines"]) || stages.reconcileRoutines == true)
-        && (!stages.keys().hasAny(["verifyRoutines"]) || stages.verifyRoutines == true)
-        && (!stages.keys().hasAny(["projectRoutineHistory"]) || stages.projectRoutineHistory == true)
-        && (!stages.keys().hasAny(["verifyRoutineHistory"]) || stages.verifyRoutineHistory == true)
-        && (!stages.keys().hasAny(["reconcileHabitSystems"]) || stages.reconcileHabitSystems == true)
-        && (!stages.keys().hasAny(["verifyHabitSystems"]) || stages.verifyHabitSystems == true)
-        && (!stages.keys().hasAny(["reloadControllers"]) || stages.reloadControllers == true)
-        && (!stages.keys().hasAny(["verifyFrontendState"]) || stages.verifyFrontendState == true)
-        && (!stages.keys().hasAny(["finalizeProfile"]) || stages.finalizeProfile == true);
+        && (!stages.keys().hasAny([currentStage])
+          || stages[currentStage] == true);
     }
 
     function validOnboardingJobStage(stage) {
@@ -1419,7 +1422,7 @@ service cloud.firestore {
       && data.retryCount is int
       && data.retryCount >= 0
       && data.stagesCompleted is map
-      && validOnboardingCompletedStages(data.stagesCompleted)
+      && validOnboardingCompletedStages(data.stagesCompleted, data.stage)
       && data.failedEntityIds is list
       && data.expectedRoutineIds is list
       && data.createdRoutineIds is list
@@ -1462,14 +1465,69 @@ service cloud.firestore {
     }
 
     function validOnboardingRunTransition(before, after, runId) {
-      return validOnboardingRun(after, runId)
+      return after.diff(before).affectedKeys().hasOnly([
+          "stage", "status", "stagesCompleted", "retryCount",
+          "failureCode", "failureStage", "retryable", "publicMessageKey",
+          "diagnosticCategory", "safeCauseType", "failedEntityIds", "failureOccurredAt",
+          "expectedRoutineIds", "createdRoutineIds", "existingRoutineIds", "repairedRoutineIds", "failedRoutineIds",
+          "expectedHistoryIds", "appliedHistoryIds", "existingHistoryIds", "repairedHistoryIds", "failedHistoryIds",
+          "expectedHabitIds", "createdHabitIds", "existingHabitIds", "repairedHabitIds", "failedHabitIds",
+          "expectedAcceptanceIds", "appliedAcceptanceIds", "existingAcceptanceIds", "repairedAcceptanceIds", "failedAcceptanceIds",
+          "updatedAt", "completedAt"
+        ])
+        && after.ownerUid == request.auth.uid
         && after.ownerUid == before.ownerUid
         && after.jobId == before.jobId
+        && after.jobId == runId
         && after.createdAt == before.createdAt
         && after.schemaVersion == before.schemaVersion
+        && after.schemaVersion == 3
         && after.sourceFingerprint == before.sourceFingerprint
         && after.draftRevision == before.draftRevision
+        && validOnboardingJobStage(after.stage)
+        && validOnboardingJobStatus(after.status)
+        && after.stagesCompleted is map
+        && validOnboardingCompletedStages(after.stagesCompleted, after.stage)
+        && after.retryCount is int
         && after.retryCount >= before.retryCount
+        && after.failedEntityIds is list
+        && after.expectedRoutineIds is list
+        && after.createdRoutineIds is list
+        && after.existingRoutineIds is list
+        && after.repairedRoutineIds is list
+        && after.failedRoutineIds is list
+        && after.expectedHistoryIds is list
+        && after.appliedHistoryIds is list
+        && after.existingHistoryIds is list
+        && after.repairedHistoryIds is list
+        && after.failedHistoryIds is list
+        && after.expectedHabitIds is list
+        && after.createdHabitIds is list
+        && after.existingHabitIds is list
+        && after.repairedHabitIds is list
+        && after.failedHabitIds is list
+        && after.expectedAcceptanceIds is list
+        && after.appliedAcceptanceIds is list
+        && after.existingAcceptanceIds is list
+        && after.repairedAcceptanceIds is list
+        && after.failedAcceptanceIds is list
+        && after.updatedAt is timestamp
+        && (after.status == "completed"
+          ? (after.stage == "completed" && after.completedAt is timestamp)
+          : !after.keys().hasAny(["completedAt"]))
+        && ((after.status == "retryableFailure" || after.status == "fatalFailure")
+          ? (after.failureCode is string
+            && after.failureStage is string
+            && validOnboardingJobStage(after.failureStage)
+            && after.retryable is bool
+            && after.publicMessageKey is string
+            && after.diagnosticCategory is string
+            && after.safeCauseType is string
+            && after.failureOccurredAt is timestamp)
+          : !after.keys().hasAny([
+              "failureCode", "failureStage", "retryable", "publicMessageKey",
+              "diagnosticCategory", "safeCauseType", "failureOccurredAt"
+            ]))
         && onboardingJobStageRank(after.stage) >= onboardingJobStageRank(before.stage)
         && onboardingJobStageRank(after.stage) <= onboardingJobStageRank(before.stage) + 1
         && (after.stage == before.stage
@@ -1870,7 +1928,14 @@ service cloud.firestore {
         && (!resource.data.keys().hasAny(["onboardingProjectionId"])
           || request.resource.data.onboardingProjectionId == resource.data.onboardingProjectionId)
         && (!resource.data.keys().hasAny(["sourceFingerprint"])
-          || request.resource.data.sourceFingerprint == resource.data.sourceFingerprint)
+          || request.resource.data.sourceFingerprint == resource.data.sourceFingerprint
+          || (resource.data.source == "onboarding"
+            && request.resource.data.source == "onboarding"
+            && resource.data.onboardingSourceId == request.resource.data.onboardingSourceId
+            && resource.data.onboardingProjectionId == request.resource.data.onboardingProjectionId
+            && resource.data.sourceFingerprint is string
+            && resource.data.sourceFingerprint.matches("^[a-f0-9]{64}$")
+            && request.resource.data.sourceFingerprint.matches("^[a-f0-9]{64}$")))
         && request.resource.data.version == resource.data.version + 1;
       allow delete: if verifiedOwner(uid)
         && resource.data.ownerUid == request.auth.uid;

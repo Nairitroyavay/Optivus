@@ -1422,6 +1422,60 @@ describe("Phase 4.6.4 canonical production contracts", () => {
     await assertSucceeds(projectedRef.set(projectedHistory));
   });
 
+  it("allows canonical prior-projection History repair and rejects identity drift", async () => {
+    const db = ownerDb();
+    const collection = db.collection("users").doc("user123").collection("routineHistory");
+    const ref = collection.doc("projected-history-repair");
+    const priorProjection = `onboarding-run_${"a".repeat(40)}-v1`;
+    const currentProjection = `onboarding-run_${"b".repeat(40)}-v1`;
+    const priorFingerprint = "c".repeat(64);
+    const currentFingerprint = "d".repeat(64);
+    const original = occurrenceData("user123", "projected-history-repair", {
+      status: "active",
+      source: "onboarding",
+      action: "project",
+      operationKey: "onboarding_history_prior",
+      onboardingProjectionId: priorProjection,
+      onboardingSourceItemId: "source-1",
+      sourceFingerprint: priorFingerprint,
+    });
+    delete original.movedToDateKey;
+    delete original.movedStartMinute;
+    delete original.movedEndMinute;
+    await assertSucceeds(ref.set(original));
+
+    await assertSucceeds(ref.update({
+      action: "repair",
+      operationKey: "onboarding_history_current_repair",
+      onboardingProjectionId: currentProjection,
+      sourceFingerprint: currentFingerprint,
+      updatedAt: completedAt,
+    }));
+
+    await assertFails(ref.update({
+      onboardingProjectionId: "invalid-projection",
+      sourceFingerprint: "e".repeat(64),
+      updatedAt: updatedAt,
+    }));
+    await assertFails(ref.update({
+      onboardingProjectionId: `onboarding-run_${"e".repeat(40)}-v1`,
+      onboardingSourceItemId: "different-source",
+      sourceFingerprint: "f".repeat(64),
+      updatedAt: updatedAt,
+    }));
+    await assertFails(ref.update({
+      onboardingProjectionId: `onboarding-run_${"e".repeat(40)}-v1`,
+      sourceFingerprint: "not-a-canonical-fingerprint",
+      updatedAt: updatedAt,
+    }));
+    await assertFails(ref.update({
+      routineItemId: "different-routine",
+      onboardingProjectionId: `onboarding-run_${"e".repeat(40)}-v1`,
+      sourceFingerprint: "f".repeat(64),
+      updatedAt: updatedAt,
+    }));
+  });
+
   it("rejects wrong-source Habit conversion and accepts exact onboarding Habit", async () => {
     const db = ownerDb();
     const collection = db.collection("users").doc("user123").collection("habitSystems");
@@ -1442,6 +1496,41 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       onboardingProjectionId: "projection-1",
       sourceFingerprint: fingerprint,
     })));
+  });
+
+  it("allows canonical onboarding Habit fingerprint repair and rejects identity spoofing", async () => {
+    const db = ownerDb();
+    const ref = db.collection("users").doc("user123").collection("habitSystems").doc("onboarding-habit");
+    const projectionId = "proj_onboard_hs_v1_user123";
+    await assertSucceeds(ref.set(habitSystemData("user123", "onboarding-habit", {
+      source: "onboarding",
+      onboardingSourceId: "source-1",
+      onboardingProjectionId: projectionId,
+      sourceFingerprint: "b".repeat(64),
+    })));
+
+    await assertSucceeds(ref.update({
+      sourceFingerprint: "c".repeat(64),
+      version: 2,
+      updatedAt: completedAt,
+    }));
+    await assertFails(ref.update({
+      onboardingSourceId: "different-source",
+      sourceFingerprint: "d".repeat(64),
+      version: 3,
+      updatedAt,
+    }));
+    await assertFails(ref.update({
+      onboardingProjectionId: "different-projection",
+      sourceFingerprint: "d".repeat(64),
+      version: 3,
+      updatedAt,
+    }));
+    await assertFails(ref.update({
+      sourceFingerprint: "not-a-canonical-fingerprint",
+      version: 3,
+      updatedAt,
+    }));
   });
 
   describe("Phase 4.6.7 production onboarding lifecycle paths", () => {
@@ -1540,6 +1629,74 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await assertSucceeds(ref.update({
         stage: "persistDraft",
         stagesCompleted: { validateInput: true },
+        updatedAt: completedAt,
+      }));
+    });
+
+    it("allows production-sized late-stage checkpoint and failure accounting writes", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-habit-stage");
+      const routineIds = Array.from({ length: 53 }, (_, index) => `routine-${index}`);
+      const historyIds = Array.from({ length: 53 }, (_, index) => `history-${index}`);
+      const acceptanceIds = Array.from({ length: 17 }, (_, index) => `acceptance-${index}`);
+      const habitIds = Array.from({ length: 3 }, (_, index) => `habit-${index}`);
+      const stagesBefore = {
+        validateInput: true,
+        persistDraft: true,
+        verifyDraft: true,
+        persistBundle: true,
+        verifyBundle: true,
+        reconcileRoutines: true,
+        verifyRoutines: true,
+        projectRoutineHistory: true,
+        verifyRoutineHistory: true,
+        reconcileHabitSystems: true,
+        verifyHabitSystems: true,
+        reloadControllers: true,
+      };
+      const running = onboardingRunData("user123", "run-habit-stage", {
+        stage: "verifyFrontendState",
+        stagesCompleted: {
+          ...stagesBefore,
+        },
+        expectedRoutineIds: routineIds,
+        repairedRoutineIds: routineIds,
+        expectedHistoryIds: historyIds,
+        repairedHistoryIds: historyIds,
+        expectedAcceptanceIds: acceptanceIds,
+        appliedAcceptanceIds: acceptanceIds,
+        expectedHabitIds: habitIds,
+        repairedHabitIds: habitIds,
+      });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context.firestore().doc(ref.path).set(running);
+      });
+
+      await assertSucceeds(ref.set({
+        ...running,
+        stagesCompleted: {
+          ...stagesBefore,
+          verifyFrontendState: true,
+        },
+        updatedAt: completedAt,
+      }));
+
+      await assertSucceeds(ref.set({
+        ...running,
+        status: "retryableFailure",
+        retryCount: 1,
+        stagesCompleted: {
+          ...stagesBefore,
+          verifyFrontendState: true,
+        },
+        failureCode: "frontend_state_verification_failed",
+        failureStage: "verifyFrontendState",
+        retryable: true,
+        publicMessageKey: "error_habit_projection_failed",
+        diagnosticCategory: "habit_projection_failed",
+        safeCauseType: "HabitSystemProjectionFailureException",
+        failedEntityIds: habitIds,
+        failureOccurredAt: completedAt,
         updatedAt: completedAt,
       }));
     });
@@ -1668,6 +1825,65 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await assertFails(ref.update({ firstScheduleFingerprint: "f".repeat(64) }));
       await assertFails(ref.update({ applicableWeekdays: [2, 4] }));
       await assertFails(ref.update({ projectionId: "another-projection-v1" }));
+    });
+
+    it("allows onboarding routine repair to update projectionId to canonical format while rejecting invalid formats", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("routineItems").doc("projected-repair-1");
+      await assertSucceeds(ref.set(routineItemData("user123", "projected-repair-1", {
+        source: "onboarding",
+        onboardingProjectionId: "onboarding-initial-v1",
+        onboardingSourceItemId: "source-1",
+      })));
+
+      // Valid new canonical projection ID
+      const canonicalRunId = "a".repeat(40);
+      const newProjId = `onboarding-run_${canonicalRunId}-v1`;
+      await assertSucceeds(ref.update({
+        onboardingProjectionId: newProjId,
+        updatedAt: completedAt,
+      }));
+
+      // Invalid projection ID format rejected
+      await assertFails(ref.update({
+        onboardingProjectionId: "invalid-projection-format",
+        updatedAt: completedAt,
+      }));
+    });
+
+    it("handles pending vs completed routine projection receipt totalCount constraints", async () => {
+      const db = ownerDb();
+      const canonicalRunId = "b".repeat(40);
+      const projId = `onboarding-run_${canonicalRunId}-v1`;
+      const docRef = db.collection("users").doc("user123").collection("routineProjections").doc(projId);
+
+      // Pending receipt with partial projected items succeeds
+      await assertSucceeds(docRef.set(projectionData("user123", {
+        id: projId,
+        slot: `onboarding-run_${canonicalRunId}`,
+        status: "pending",
+        cursor: 32,
+        totalCount: 52,
+        projectedItemIds: Array.from(
+          { length: 32 },
+          (_, index) => `onb_${index.toString(16).padStart(40, "0")}`
+        ),
+      })));
+
+      // Completed receipt with mismatching totalCount and projectedItemIds size fails
+      const invalidCompletedRef = db.collection("users").doc("user123").collection("routineProjections").doc(`onboarding-run_${"c".repeat(40)}-v1`);
+      await assertFails(invalidCompletedRef.set(projectionData("user123", {
+        id: `onboarding-run_${"c".repeat(40)}-v1`,
+        slot: `onboarding-run_${"c".repeat(40)}`,
+        status: "completed",
+        cursor: 32,
+        totalCount: 52,
+        completedAt: completedAt,
+        projectedItemIds: Array.from(
+          { length: 32 },
+          (_, index) => `onb_${index.toString(16).padStart(40, "0")}`
+        ),
+      })));
     });
   });
 });

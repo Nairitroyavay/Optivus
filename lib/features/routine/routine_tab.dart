@@ -25,6 +25,7 @@ import 'package:optivus/features/routine/widgets/routine_write_status_banner.dar
 import 'package:optivus/features/routine/sheets/add_routine_sheet.dart';
 import 'package:optivus/features/routine/sheets/ai_assistant_sheet.dart';
 import 'package:optivus/features/routine/sheets/routine_detail_sheet.dart';
+import 'package:optivus/state/app_state.dart';
 
 /// The rebuilt Routine tab — full timeline control center.
 ///
@@ -40,6 +41,7 @@ class RoutineTab extends ConsumerStatefulWidget {
 class _RoutineTabState extends ConsumerState<RoutineTab> {
   Timer? _minuteTimer;
   RoutineDetailTarget _activeDetail = RoutineDetailTarget.none;
+  bool _initialRoutineLoadRequested = false;
 
   @override
   void initState() {
@@ -48,6 +50,29 @@ class _RoutineTabState extends ConsumerState<RoutineTab> {
     _minuteTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (mounted) setState(() {});
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_ensureCompletedAccountRoutinesLoaded());
+    });
+  }
+
+  Future<void> _ensureCompletedAccountRoutinesLoaded() async {
+    if (!mounted || _initialRoutineLoadRequested) return;
+    final profile = ref.read(mockUserProfileProvider);
+    final routineState = ref.read(routineNotifierProvider);
+    if (!profile.onboardingCompleted ||
+        profile.uid.trim().isEmpty ||
+        routineState.loading ||
+        routineState.items.isNotEmpty) {
+      return;
+    }
+    _initialRoutineLoadRequested = true;
+    try {
+      await ref
+          .read(routineNotifierProvider.notifier)
+          .loadForOwner(profile.uid);
+    } catch (_) {
+      // RoutineState retains the safe loading error and normal recovery UI.
+    }
   }
 
   @override

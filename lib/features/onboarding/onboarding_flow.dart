@@ -6,6 +6,7 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/coach_models.dart';
@@ -354,12 +355,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       }
     }
 
-    final saveSuccess = await _saveStep(OnboardingDraft.lastStepIndex);
-    if (!saveSuccess) {
-      return;
-    }
-
-    final savedDraft = ref.read(mockOnboardingProvider).draft;
     final authUser = ref.read(authProvider).user;
     if (authUser != null &&
         authUser.providerId == 'password' &&
@@ -382,20 +377,54 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return;
     }
 
-    final draftForBundle = savedDraft.copyWith(uid: uid);
-    final now = DateTime.now();
-    final finalDraft = draftForBundle.copyWith(
-      onboardingCompleted: true,
-      currentStep: OnboardingDraft.lastStepIndex,
-      stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
-      stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
-      stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
-      finalPreview:
-          draftForBundle.finalPreview ?? draftForBundle.buildFinalPreview(),
-      createdAt: draftForBundle.createdAt ?? now,
-      updatedAt: now,
-    );
-    final bundle = OnboardingCompletionService.buildBundle(finalDraft);
+    late final OnboardingDraft finalDraft;
+    late final OnboardingCompletionBundle bundle;
+    final onboardingRepository = ref.read(onboardingRepositoryProvider);
+    if (isDurablyFinalOnboardingDraft(onboarding.draft)) {
+      finalDraft = onboarding.draft;
+      final storedBundle = await onboardingRepository.fetchCompletionBundle(
+        uid,
+      );
+      if (storedBundle != null) {
+        if (!OnboardingCompletionService.bundleMatchesFinalDraft(
+          uid: uid,
+          draft: finalDraft,
+          bundle: storedBundle,
+        )) {
+          ref
+              .read(mockOnboardingProvider.notifier)
+              .setValidationMessage(
+                'Saved completion state does not match this setup. '
+                'Please try again after it finishes syncing.',
+              );
+          return;
+        }
+        bundle = storedBundle;
+      } else {
+        bundle = OnboardingCompletionService.buildBundle(finalDraft);
+      }
+    } else {
+      final saveSuccess = await _saveStep(OnboardingDraft.lastStepIndex);
+      if (!saveSuccess) {
+        return;
+      }
+
+      final savedDraft = ref.read(mockOnboardingProvider).draft;
+      final draftForBundle = savedDraft.copyWith(uid: uid);
+      final now = DateTime.now();
+      finalDraft = draftForBundle.copyWith(
+        onboardingCompleted: true,
+        currentStep: OnboardingDraft.lastStepIndex,
+        stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+        stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
+        stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+        finalPreview:
+            draftForBundle.finalPreview ?? draftForBundle.buildFinalPreview(),
+        createdAt: draftForBundle.createdAt ?? now,
+        updatedAt: now,
+      );
+      bundle = OnboardingCompletionService.buildBundle(finalDraft);
+    }
     String? blockingWarning;
     for (final warning in bundle.warnings) {
       if (warning.startsWith('Resolve or accept')) {

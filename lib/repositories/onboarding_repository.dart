@@ -183,7 +183,6 @@ class FakeOnboardingRepository
           actualItem: existingItem,
           expectedItem: item,
           ownerUid: bundle.uid,
-          projectionId: plan.projectionId,
         )) {
           failedItemIds.add(item.id);
           continue;
@@ -311,15 +310,20 @@ bool _hasExpectedRoutineProjectionIdentity({
   required RoutineItem actualItem,
   required RoutineItem expectedItem,
   required String ownerUid,
-  required String projectionId,
 }) {
+  final hasValidProjection =
+      actualItem.onboardingProjectionId != null &&
+      actualItem.onboardingProjectionId!.trim().isNotEmpty;
   return actualItem.id == expectedItem.id &&
       actualItem.userId == ownerUid &&
-      actualItem.onboardingProjectionId == projectionId &&
       actualItem.onboardingSourceItemId ==
           expectedItem.onboardingSourceItemId &&
+      actualItem.onboardingSourceItemId != null &&
+      actualItem.onboardingSourceItemId!.isNotEmpty &&
       actualItem.source == RoutineSource.onboarding &&
-      actualItem.schemaVersion == RoutineItem.currentSchemaVersion;
+      hasValidProjection &&
+      actualItem.schemaVersion >= 1 &&
+      actualItem.schemaVersion <= RoutineItem.currentSchemaVersion;
 }
 
 class FirestoreOnboardingRepository
@@ -579,7 +583,6 @@ class FirestoreOnboardingRepository
                   actualItem: existingItem,
                   expectedItem: item,
                   ownerUid: bundle.uid,
-                  projectionId: plan.projectionId,
                 )) {
               failedItemIds.add(item.id);
               continue;
@@ -589,6 +592,10 @@ class FirestoreOnboardingRepository
                 ownerUid: bundle.uid,
                 item: item,
               );
+              final existingData = itemSnapshots[index].data();
+              if (existingData != null && existingData['createdAt'] != null) {
+                data['createdAt'] = existingData['createdAt'];
+              }
               data['updatedAt'] = FieldValue.serverTimestamp();
               transaction.set(itemReferences[index], data);
               repairedItemIds.add(item.id);
@@ -638,8 +645,17 @@ class FirestoreOnboardingRepository
           'cursor=${receipt.cursor} status=${receipt.status}',
         );
         final receiptData = _receiptCodec.toFirestore(receipt);
-        receiptData['createdAt'] = FieldValue.serverTimestamp();
+        final existingReceiptData = receiptSnapshot.data();
+        if (existingReceiptData != null &&
+            existingReceiptData['createdAt'] != null) {
+          receiptData['createdAt'] = existingReceiptData['createdAt'];
+        } else {
+          receiptData['createdAt'] = FieldValue.serverTimestamp();
+        }
         receiptData['updatedAt'] = FieldValue.serverTimestamp();
+        if (receipt.status == 'completed') {
+          receiptData['completedAt'] = FieldValue.serverTimestamp();
+        }
         transaction.set(receiptReference, receiptData);
 
         return RoutineProjectionResult(

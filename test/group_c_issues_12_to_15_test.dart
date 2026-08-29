@@ -236,6 +236,57 @@ void main() {
     );
 
     test(
+      'verified frontend restore hydrates controllers without reprojection writes',
+      () async {
+        final habitRepo = _ReadOnlyTrackingHabitSystemsRepository();
+        final routineRepo = FakeRoutineRepository();
+        final container = ProviderContainer(
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            habitSystemsRepositoryProvider.overrideWithValue(habitRepo),
+            routineRepositoryProvider.overrideWithValue(routineRepo),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        final bundle = OnboardingCompletionBundle.fromMap({
+          'uid': 'verified_restore_owner',
+          'goodHabitTemplates': [
+            {
+              'id': 'verified_restore_habit',
+              'systemKey': 'verified_restore',
+              'title': 'Verified Restore Habit',
+              'durationMinutes': 15,
+            },
+          ],
+        });
+        final expectedSystem = HabitSystemOnboardingProjection.build(
+          bundle,
+          const [],
+        ).single;
+        final created = await habitRepo.createSystem(
+          system: expectedSystem,
+          operationId: 'seed-verified-restore',
+        );
+        expect(created.success, isTrue);
+
+        await const OnboardingFrontendHydrationService()
+            .restoreVerifiedFrontendState(
+              read: container.read,
+              bundle: bundle,
+            );
+
+        expect(habitRepo.reconcileCalled, isFalse);
+        expect(
+          container.read(habitSystemsNotifierProvider).systems,
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
       'OnboardingFrontendHydrationService reloads Habit Systems after reconcile',
       () async {
         final habitRepo = _DelayedVisibilityHabitSystemsRepository();
@@ -545,6 +596,25 @@ class _DelayedVisibilityHabitSystemsRepository
     fetchAfterReconcileCount++;
     return super.fetchHabitSystems(uid);
   }
+
+  @override
+  Future<HabitSystemWriteResult> reconcileProjectedSystems({
+    required String ownerUid,
+    required String projectionId,
+    required List<HabitSystemRecord> systems,
+  }) async {
+    reconcileCalled = true;
+    return super.reconcileProjectedSystems(
+      ownerUid: ownerUid,
+      projectionId: projectionId,
+      systems: systems,
+    );
+  }
+}
+
+class _ReadOnlyTrackingHabitSystemsRepository
+    extends FakeHabitSystemsRepository {
+  bool reconcileCalled = false;
 
   @override
   Future<HabitSystemWriteResult> reconcileProjectedSystems({

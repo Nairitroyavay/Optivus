@@ -571,7 +571,6 @@ bool _sameProjectionIdentity(
       actual.source == 'onboarding' &&
       actual.onboardingSourceId == expected.onboardingSourceId &&
       actual.onboardingProjectionId == expected.onboardingProjectionId &&
-      actual.sourceFingerprint == expected.sourceFingerprint &&
       actual.schemaVersion == expected.schemaVersion;
 }
 
@@ -580,6 +579,7 @@ bool _sameProjectedSystem(
   HabitSystemRecord expected,
 ) {
   return _sameProjectionIdentity(actual, expected) &&
+      actual.sourceFingerprint == expected.sourceFingerprint &&
       actual.title == expected.title &&
       actual.description == expected.description &&
       actual.category == expected.category &&

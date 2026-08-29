@@ -12,6 +12,51 @@ import 'package:optivus/services/onboarding_completion_service.dart';
 
 void main() {
   test(
+    'Step 14 retry reuses only the exact persisted final-draft bundle identity',
+    () {
+      const uid = 'completion-same-run-user';
+      final draft = _completedDraft(uid);
+      final bundle = OnboardingCompletionService.buildBundle(draft);
+
+      expect(
+        OnboardingCompletionService.bundleMatchesFinalDraft(
+          uid: uid,
+          draft: draft,
+          bundle: bundle,
+        ),
+        isTrue,
+      );
+      expect(
+        OnboardingCompletionService.bundleMatchesFinalDraft(
+          uid: uid,
+          draft: draft,
+          bundle: OnboardingCompletionBundle.fromMap(
+            Map<String, dynamic>.from(bundle.toMap())
+              ..['runId'] = 'run_0000000000000000000000000000000000000000',
+          ),
+        ),
+        isFalse,
+      );
+      expect(
+        OnboardingCompletionService.bundleMatchesFinalDraft(
+          uid: uid,
+          draft: draft.copyWith(),
+          bundle: bundle,
+        ),
+        isFalse,
+      );
+      expect(
+        OnboardingCompletionService.bundleMatchesFinalDraft(
+          uid: 'different-owner',
+          draft: draft,
+          bundle: bundle,
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test(
     'Step 14 completion persists and verifies the schema-v2 bundle before reconciliation',
     () async {
       const uid = 'completion-schema-v2-pipeline-user';

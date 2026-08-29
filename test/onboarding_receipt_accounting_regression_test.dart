@@ -221,6 +221,119 @@ void main() {
       expect(acceptancesBefore, hasLength(1));
       expect(fixture.database.acceptancesByUid[fixture.uid], acceptancesBefore);
     });
+
+    test(
+      'prior legacy projection ID repairs into current projection',
+      () async {
+        final fixture = _Fixture(uid: 'receipt-legacy-repair', itemCount: 3);
+        final legacyItem = fixture.plan.items.first.copyWith(
+          onboardingProjectionId: 'onboarding-initial-v1',
+        );
+        fixture.database.itemsByUid[fixture.uid] = {legacyItem.id: legacyItem};
+
+        final result = await fixture.project();
+
+        expect(result.receipt.createdItemIds, hasLength(2));
+        expect(result.receipt.existingItemIds, isEmpty);
+        expect(result.receipt.repairedItemIds, [legacyItem.id]);
+        expect(result.receipt.failedItemIds, isEmpty);
+        _expectCompletedAccounting(result.receipt, expectedCount: 3);
+        final stored =
+            fixture.database.itemsByUid[fixture.uid]![legacyItem.id]!;
+        expect(stored.onboardingProjectionId, fixture.plan.projectionId);
+      },
+    );
+
+    test(
+      'prior run-scoped projection ID repairs into new run projection',
+      () async {
+        final fixture = _Fixture(uid: 'receipt-run-repair', itemCount: 3);
+        final priorRunItem = fixture.plan.items.first.copyWith(
+          onboardingProjectionId:
+              'onboarding-run_0000000000000000000000000000000000000000-v1',
+        );
+        fixture.database.itemsByUid[fixture.uid] = {
+          priorRunItem.id: priorRunItem,
+        };
+
+        final result = await fixture.project();
+
+        expect(result.receipt.createdItemIds, hasLength(2));
+        expect(result.receipt.existingItemIds, isEmpty);
+        expect(result.receipt.repairedItemIds, [priorRunItem.id]);
+        expect(result.receipt.failedItemIds, isEmpty);
+        _expectCompletedAccounting(result.receipt, expectedCount: 3);
+      },
+    );
+
+    test(
+      'unrelated manual routine with colliding ID is not overwritten and fails safely',
+      () async {
+        final fixture = _Fixture(uid: 'receipt-manual-collision', itemCount: 3);
+        final collidingManual = fixture.plan.items.first.copyWith(
+          source: RoutineSource.manual,
+          onboardingProjectionId: null,
+        );
+        fixture.database.itemsByUid[fixture.uid] = {
+          collidingManual.id: collidingManual,
+        };
+
+        final result = await fixture.project();
+
+        expect(result.receipt.failedItemIds, [collidingManual.id]);
+        expect(result.receipt.repairedItemIds, isEmpty);
+        expect(result.receipt.status, 'pending');
+        expect(
+          fixture.database.itemsByUid[fixture.uid]![collidingManual.id]!.source,
+          RoutineSource.manual,
+        );
+      },
+    );
+
+    test('wrong onboarding source item identity fails safely', () async {
+      final fixture = _Fixture(uid: 'receipt-wrong-source-item', itemCount: 3);
+      final wrongSource = fixture.plan.items.first.copyWith(
+        onboardingSourceItemId: 'completely-different-source-item',
+        onboardingProjectionId: 'onboarding-initial-v1',
+      );
+      fixture.database.itemsByUid[fixture.uid] = {wrongSource.id: wrongSource};
+
+      final result = await fixture.project();
+
+      expect(result.receipt.failedItemIds, [wrongSource.id]);
+      expect(result.receipt.repairedItemIds, isEmpty);
+      expect(result.receipt.status, 'pending');
+    });
+
+    test(
+      'mixed production workload: 32 new + 20 prior-projection routines',
+      () async {
+        final fixture = _Fixture(uid: 'receipt-prod-mixed', itemCount: 52);
+        final prior20 = {
+          for (var i = 0; i < 20; i++)
+            fixture.plan.items[i].id: fixture.plan.items[i].copyWith(
+              onboardingProjectionId: 'onboarding-initial-v1',
+            ),
+        };
+        fixture.database.itemsByUid[fixture.uid] = prior20;
+
+        final result = await fixture.project();
+
+        expect(result.receipt.createdItemIds, hasLength(32));
+        expect(result.receipt.existingItemIds, isEmpty);
+        expect(result.receipt.repairedItemIds, hasLength(20));
+        expect(result.receipt.failedItemIds, isEmpty);
+        expect(result.receipt.projectedItemIds, hasLength(52));
+        expect(result.receipt.cursor, 52);
+        expect(result.receipt.totalCount, 52);
+        _expectCompletedAccounting(result.receipt, expectedCount: 52);
+
+        // Retry after repair: should be idempotent noOp with completed receipt
+        final retryResult = await fixture.project();
+        expect(retryResult.outcome, RoutineProjectionOutcome.noOp);
+        _expectCompletedAccounting(retryResult.receipt, expectedCount: 52);
+      },
+    );
   });
 }
 

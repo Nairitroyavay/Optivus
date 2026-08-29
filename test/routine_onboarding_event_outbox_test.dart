@@ -130,6 +130,77 @@ void main() {
     expect(events.map((event) => event.eventId).toSet(), hasLength(105));
     expect(events.every((event) => event.ownerUid == 'uid-resume'), isTrue);
   });
+
+  test(
+    'repairs 52 legitimate prior-projection History records into the current run',
+    () async {
+      final harness = _ProjectionHarness();
+      addTearDown(harness.dispose);
+
+      const uid = 'uid-history-repair';
+      final priorBundle = _bundle(
+        uid: uid,
+        itemCount: 52,
+        runId: 'run_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        sourceFingerprint:
+            'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      );
+      await harness.onboarding.completeOnboarding(
+        finalDraft: _completedDraft(uid),
+        bundle: priorBundle,
+      );
+      final prior = await const RoutineOnboardingEventProjector()
+          .projectCreatedEvents(
+            read: harness.container.read,
+            bundle: priorBundle,
+          );
+      expect(prior.appliedEventIds, hasLength(52));
+      expect(prior.failedEventIds, isEmpty);
+
+      final currentBundle = _bundle(
+        uid: uid,
+        itemCount: 52,
+        runId: 'run_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        sourceFingerprint:
+            'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      );
+      await harness.onboarding.completeOnboarding(
+        finalDraft: _completedDraft(uid),
+        bundle: currentBundle,
+      );
+      final repaired = await const RoutineOnboardingEventProjector()
+          .projectCreatedEvents(
+            read: harness.container.read,
+            bundle: currentBundle,
+          );
+
+      expect(repaired.expectedEventIds, hasLength(52));
+      expect(repaired.appliedEventIds, isEmpty);
+      expect(repaired.existingEventIds, isEmpty);
+      expect(repaired.repairedEventIds, hasLength(52));
+      expect(repaired.failedEventIds, isEmpty);
+      final currentPlan = RoutineOnboardingProjection.build(currentBundle);
+      final stored = await harness.history.fetchHistory(uid);
+      expect(stored, hasLength(52));
+      expect(
+        stored.every(
+          (record) =>
+              record.onboardingProjectionId == currentPlan.projectionId &&
+              record.sourceFingerprint == currentBundle.sourceFingerprint,
+        ),
+        isTrue,
+      );
+
+      final retry = await const RoutineOnboardingEventProjector()
+          .projectCreatedEvents(
+            read: harness.container.read,
+            bundle: currentBundle,
+          );
+      expect(retry.existingEventIds, hasLength(52));
+      expect(retry.repairedEventIds, isEmpty);
+      expect(retry.failedEventIds, isEmpty);
+    },
+  );
 }
 
 class _ProjectionHarness {
@@ -194,10 +265,13 @@ OnboardingDraft _completedDraft(String uid) {
 OnboardingCompletionBundle _bundle({
   required String uid,
   required int itemCount,
+  String runId = '',
+  String sourceFingerprint = '',
 }) {
   final now = DateTime.utc(2026, 7, 24, 8);
   return OnboardingCompletionBundle(
     uid: uid,
+    runId: runId,
     createdAt: now,
     updatedAt: now,
     userProfilePatch: const {'onboardingCompleted': true},
@@ -226,5 +300,6 @@ OnboardingCompletionBundle _bundle({
     uploadedAssetReferences: const [],
     warnings: const [],
     duplicateSystemKeysMerged: const [],
+    sourceFingerprint: sourceFingerprint,
   );
 }

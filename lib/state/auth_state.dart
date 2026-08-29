@@ -201,7 +201,7 @@ class AuthState {
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  static const Duration _startupResolutionTimeout = Duration(seconds: 12);
+  static const Duration _startupResolutionTimeout = Duration(seconds: 30);
   final AuthRepository _repository;
   final Ref _ref;
   late final StreamSubscription<AuthUser?> _authSubscription;
@@ -1223,7 +1223,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         }
 
         try {
-          await const OnboardingFrontendHydrationService().hydrate(
+          await const OnboardingFrontendHydrationService()
+              .restoreVerifiedFrontendState(
             read: _ref.read,
             bundle: bundle,
           );
