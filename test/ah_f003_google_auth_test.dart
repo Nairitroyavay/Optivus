@@ -22,7 +22,7 @@ const _googleUser = AuthUser(
   email: 'google@example.com',
   displayName: 'Google Person',
   emailVerified: true,
-  providerId: 'google.com',
+  providerIds: {'google.com'},
 );
 
 void main() {
@@ -230,7 +230,7 @@ void main() {
       const unverifiedProviderFact = AuthUser(
         uid: 'google-provider-fact',
         emailVerified: false,
-        providerId: 'google.com',
+        providerIds: {'google.com'},
       );
       expect(
         AuthNotifier.statusFor(unverifiedProviderFact, false),
@@ -256,7 +256,7 @@ void main() {
         user = const AuthUser(
           uid: 'second-google-uid',
           emailVerified: true,
-          providerId: 'google.com',
+          providerIds: {'google.com'},
         );
         await container.read(authProvider.notifier).signInWithGoogle();
         await pumpEventQueue(times: 30);

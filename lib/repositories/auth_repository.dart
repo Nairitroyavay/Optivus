@@ -12,7 +12,12 @@ class AuthUser {
   final String? displayName;
   final bool emailVerified;
   final bool isAnonymous;
-  final String providerId;
+
+  /// Every provider currently linked to this Firebase UID.
+  ///
+  /// Provider ordering is deliberately discarded because Firebase does not
+  /// define `providerData` order as an identity or authorization contract.
+  final Set<String> providerIds;
 
   const AuthUser({
     required this.uid,
@@ -20,8 +25,28 @@ class AuthUser {
     this.displayName,
     this.emailVerified = false,
     this.isAnonymous = false,
-    this.providerId = 'password',
+    this.providerIds = const {'password'},
   });
+
+  bool get hasPasswordProvider => providerIds.contains('password');
+  bool get hasGoogleProvider => providerIds.contains('google.com');
+
+  /// Password-only accounts require Firebase email verification. A linked
+  /// Google provider is a supported Firebase verification fact, so mixed
+  /// provider accounts are not classified by whichever provider appears first.
+  bool get needsEmailVerification =>
+      hasPasswordProvider && !hasGoogleProvider && !emailVerified;
+
+  /// Deterministic legacy display value. Security and routing decisions must
+  /// use [providerIds] and the explicit provider helpers above.
+  @Deprecated('Use providerIds and explicit provider-membership helpers.')
+  String get providerId {
+    if (hasGoogleProvider) return 'google.com';
+    if (hasPasswordProvider) return 'password';
+    if (isAnonymous) return 'anonymous';
+    final sortedProviders = providerIds.toList(growable: false)..sort();
+    return sortedProviders.isEmpty ? 'password' : sortedProviders.first;
+  }
 }
 
 /// Abstract repository interface for authentication.
@@ -57,25 +82,33 @@ abstract class AuthRepository {
 }
 
 AuthUser _authUserFromFirebase(firebase_auth.User user) {
-  final providerIds = user.providerData
-      .map((provider) => provider.providerId)
-      .toSet();
-  // A Firebase account can expose more than one linked provider. Prefer the
-  // trusted Google provider so a Google-authenticated account is never treated
-  // as an unverified password-only account because of provider list ordering.
-  final providerId = providerIds.contains('google.com')
-      ? 'google.com'
-      : providerIds.contains('password')
-      ? 'password'
-      : (providerIds.isNotEmpty ? providerIds.first : 'password');
-
-  return AuthUser(
+  return authUserFromProviderFacts(
     uid: user.uid,
     email: user.email,
     displayName: user.displayName,
     emailVerified: user.emailVerified,
     isAnonymous: user.isAnonymous,
-    providerId: providerId,
+    providerIds: user.providerData.map((provider) => provider.providerId),
+  );
+}
+
+/// Pure provider-data mapping used by Firebase and deterministic unit tests.
+@visibleForTesting
+AuthUser authUserFromProviderFacts({
+  required String uid,
+  String? email,
+  String? displayName,
+  bool emailVerified = false,
+  bool isAnonymous = false,
+  Iterable<String> providerIds = const <String>[],
+}) {
+  return AuthUser(
+    uid: uid,
+    email: email,
+    displayName: displayName,
+    emailVerified: emailVerified,
+    isAnonymous: isAnonymous,
+    providerIds: Set<String>.unmodifiable(providerIds),
   );
 }
 
@@ -85,6 +118,7 @@ class FakeAuthRepository implements AuthRepository {
   final _authStateController = StreamController<AuthUser?>.broadcast();
   AuthUser? _currentUser;
   bool _verificationEmailSent = false;
+  bool signOutShouldFail = false;
 
   FakeAuthRepository() {
     // Start signed out.
@@ -96,6 +130,14 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   AuthUser? get currentUser => _currentUser;
+
+  /// Deterministic auth-listener control for provider, refresh, and UID-switch
+  /// tests without live Firebase.
+  @visibleForTesting
+  void emitUserForTesting(AuthUser? user) {
+    _currentUser = user;
+    _authStateController.add(user);
+  }
 
   @override
   Future<AuthUser> signIn(String email, String password) async {
@@ -132,7 +174,7 @@ class FakeAuthRepository implements AuthRepository {
       email: 'google.user@example.com',
       displayName: 'Google User',
       emailVerified: true,
-      providerId: 'google.com',
+      providerIds: {'google.com'},
     );
     _authStateController.add(_currentUser);
     return _currentUser;
@@ -168,7 +210,7 @@ class FakeAuthRepository implements AuthRepository {
       displayName: 'Guest',
       emailVerified: true,
       isAnonymous: true,
-      providerId: 'anonymous',
+      providerIds: const {'anonymous'},
     );
     _authStateController.add(_currentUser);
     return _currentUser!;
@@ -198,7 +240,7 @@ class FakeAuthRepository implements AuthRepository {
       displayName: name?.trim() ?? user.displayName,
       emailVerified: false,
       isAnonymous: false,
-      providerId: 'password',
+      providerIds: const {'password'},
     );
     _authStateController.add(_currentUser);
     return _currentUser!;
@@ -222,7 +264,7 @@ class FakeAuthRepository implements AuthRepository {
         displayName: user.displayName,
         emailVerified: true,
         isAnonymous: user.isAnonymous,
-        providerId: user.providerId,
+        providerIds: user.providerIds,
       );
       _authStateController.add(_currentUser);
     }
@@ -244,6 +286,12 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<void> signOut() async {
     await Future.delayed(const Duration(milliseconds: 500));
+    if (signOutShouldFail) {
+      throw const AuthFailureException(
+        reason: AuthFailureReason.networkFailure,
+        message: 'Sign-out could not be completed. Please try again.',
+      );
+    }
     _currentUser = null;
     _verificationEmailSent = false;
     _authStateController.add(null);

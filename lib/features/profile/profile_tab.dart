@@ -271,8 +271,18 @@ class _ProfileMainScreen extends ConsumerWidget {
                             title: 'Log out',
                             iconColor: OptivusColors.textSecondary,
                             onTap: () => showLogoutDialog(context, () async {
-                              await ref.read(authProvider.notifier).logout();
-                              if (context.mounted) context.go('/');
+                              try {
+                                await ref.read(authProvider.notifier).logout();
+                                if (context.mounted) context.go('/');
+                              } catch (_) {
+                                if (!context.mounted) return;
+                                final message =
+                                    ref.read(authProvider).errorMessage ??
+                                    'We couldn\'t sign you out. Please try again.';
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(message)),
+                                );
+                              }
                             }),
                           ),
                         ],

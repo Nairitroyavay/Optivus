@@ -117,7 +117,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   bool _needsEmailVerification(AuthUser? user) {
-    return user != null && user.providerId == 'password' && !user.emailVerified;
+    return user?.needsEmailVerification ?? false;
   }
 
   String? _currentPersistenceUid() {
@@ -356,9 +356,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     final authUser = ref.read(authProvider).user;
-    if (authUser != null &&
-        authUser.providerId == 'password' &&
-        !authUser.emailVerified) {
+    if (authUser?.needsEmailVerification ?? false) {
       ref
           .read(mockOnboardingProvider.notifier)
           .setValidationMessage(

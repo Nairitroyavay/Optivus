@@ -1139,7 +1139,10 @@ final mockMindNoteProvider =
 class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
   MockCoachNotifier() : super(const []);
 
+  int _sessionGeneration = 0;
+
   void resetEmpty() {
+    _sessionGeneration++;
     state = const [];
   }
 
@@ -1158,6 +1161,7 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
   }
 
   void sendMessage(String sessionId, String content) {
+    final sessionGeneration = _sessionGeneration;
     final now = DateTime.now();
     final timeStr =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
@@ -1179,8 +1183,15 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
 
     // Trigger mock AI response after 1.5 seconds delay
     Timer(const Duration(milliseconds: 1500), () {
+      if (!mounted || sessionGeneration != _sessionGeneration) return;
       _generateCoachReply(sessionId, content);
     });
+  }
+
+  @override
+  void dispose() {
+    _sessionGeneration++;
+    super.dispose();
   }
 
   void createNewSession(

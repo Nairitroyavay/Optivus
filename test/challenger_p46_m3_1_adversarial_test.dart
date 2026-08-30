@@ -49,7 +49,7 @@ void main() {
             email: 'incomplete@example.com',
             isAnonymous: false,
             emailVerified: true,
-            providerId: 'password',
+            providerIds: {'password'},
           );
 
           // Seed an incomplete draft with stepCompleted containing false
@@ -121,7 +121,7 @@ void main() {
           email: 'restart@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
 
         container.read(authProvider.notifier).state = const AuthState(
@@ -162,7 +162,7 @@ void main() {
             email: 'nodraft@example.com',
             isAnonymous: false,
             emailVerified: true,
-            providerId: 'password',
+            providerIds: {'password'},
           );
 
           container.read(authProvider.notifier).state = const AuthState(
@@ -203,7 +203,7 @@ void main() {
             email: 'partial@example.com',
             isAnonymous: false,
             emailVerified: true,
-            providerId: 'password',
+            providerIds: {'password'},
           );
 
           final partialDraft = OnboardingDraft(
@@ -271,7 +271,7 @@ void main() {
             email: 'maxattempts@example.com',
             isAnonymous: false,
             emailVerified: true,
-            providerId: 'password',
+            providerIds: {'password'},
           );
 
           container.read(authProvider.notifier).state = const AuthState(
@@ -325,7 +325,7 @@ void main() {
           email: 'usera@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
 
         final notifier = container.read(authProvider.notifier);
@@ -363,7 +363,7 @@ void main() {
           email: 'usera@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
 
         const userB = AuthUser(
@@ -371,7 +371,7 @@ void main() {
           email: 'userb@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
 
         // Draft for User A
@@ -431,7 +431,7 @@ void main() {
           email: 'usera@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
 
         const userB = AuthUser(
@@ -439,7 +439,7 @@ void main() {
           email: 'userb@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
 
         final notifier = container.read(authProvider.notifier);
@@ -499,7 +499,7 @@ void main() {
             email: 'rapid$i@example.com',
             isAnonymous: false,
             emailVerified: true,
-            providerId: 'password',
+            providerIds: {'password'},
           );
           notifier.state = AuthState(
             user: user,

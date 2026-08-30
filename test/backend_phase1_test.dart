@@ -32,7 +32,7 @@ void main() {
         uid: 'u1',
         email: 'person@example.com',
         emailVerified: false,
-        providerId: 'password',
+        providerIds: {'password'},
       );
 
       expect(
@@ -46,7 +46,7 @@ void main() {
         uid: 'u1',
         email: 'person@example.com',
         emailVerified: true,
-        providerId: 'password',
+        providerIds: {'password'},
       );
 
       expect(
@@ -60,7 +60,7 @@ void main() {
         uid: 'u1',
         email: 'person@example.com',
         emailVerified: true,
-        providerId: 'password',
+        providerIds: {'password'},
       );
 
       expect(

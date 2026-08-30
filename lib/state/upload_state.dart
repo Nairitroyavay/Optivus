@@ -75,6 +75,7 @@ class UploadController extends StateNotifier<UploadState> {
   final AuthRepository _authRepository;
   final ImagePrepareService _imagePrepareService;
   final R2UploadClient _r2UploadClient;
+  int _operationGeneration = 0;
 
   UploadController({
     required UploadedAssetRepository assetRepository,
@@ -88,6 +89,7 @@ class UploadController extends StateNotifier<UploadState> {
        super(const UploadState());
 
   void resetForSignedOut() {
+    _operationGeneration++;
     state = const UploadState();
   }
 
@@ -111,6 +113,7 @@ class UploadController extends StateNotifier<UploadState> {
       );
       return null;
     }
+    final operationGeneration = ++_operationGeneration;
     if (OptivusUploadConfig.mode == OptivusUploadMode.disabled) {
       state = state.copyWith(
         status: UploadFlowStatus.failed,
@@ -147,6 +150,7 @@ class UploadController extends StateNotifier<UploadState> {
         clearError: true,
       );
       final pickedFile = await _imagePrepareService.pickImageFile();
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
       if (pickedFile == null) {
         state = state.copyWith(status: UploadFlowStatus.idle, clearError: true);
         return null;
@@ -157,12 +161,14 @@ class UploadController extends StateNotifier<UploadState> {
         pickedFile,
         purpose: purpose,
       );
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
       if (preparedImage == null) {
         state = state.copyWith(status: UploadFlowStatus.idle, clearError: true);
         return null;
       }
 
       uploadIdToken = await _authRepository.currentIdToken();
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
       if (uploadIdToken == null || uploadIdToken.trim().isEmpty) {
         throw const CloudflareClientException(
           'Please sign in again before uploading a photo.',
@@ -178,6 +184,7 @@ class UploadController extends StateNotifier<UploadState> {
         sizeBytes: preparedImage.sizeBytes,
         idToken: uploadIdToken,
       );
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
 
       state = state.copyWith(status: UploadFlowStatus.uploading);
       await _r2UploadClient.uploadBytes(
@@ -185,12 +192,14 @@ class UploadController extends StateNotifier<UploadState> {
         contentType: preparedImage.contentType,
         bytes: preparedImage.bytes,
       );
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
       await _r2UploadClient.markUploadComplete(
         assetId: signedUpload.assetId,
         objectKey: signedUpload.objectKey,
         sizeBytes: preparedImage.sizeBytes,
         idToken: uploadIdToken,
       );
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
       uploadCompleted = true;
 
       final now = DateTime.now();
@@ -220,6 +229,7 @@ class UploadController extends StateNotifier<UploadState> {
       savingMetadata = true;
       await _assetRepository.saveAsset(asset);
       savingMetadata = false;
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
 
       final postSaveActiveUser = _authRepository.currentUser;
       if (postSaveActiveUser == null ||
@@ -248,6 +258,7 @@ class UploadController extends StateNotifier<UploadState> {
           idToken: uploadIdToken,
         );
         if (cleanupSucceeded) {
+          if (!_isCurrentOperation(uid, operationGeneration)) return null;
           state = state.copyWith(
             status: UploadFlowStatus.failed,
             errorMessage: _metadataSaveFailedMessage,
@@ -277,6 +288,7 @@ class UploadController extends StateNotifier<UploadState> {
           // Metadata was already the failing step; keep the UI error generic.
         }
       }
+      if (!_isCurrentOperation(uid, operationGeneration)) return null;
       state = state.copyWith(
         status: UploadFlowStatus.failed,
         asset: failedAsset,
@@ -327,6 +339,8 @@ class UploadController extends StateNotifier<UploadState> {
     required String uid,
     required String assetId,
   }) async {
+    if (_authRepository.currentUser?.uid != uid) return;
+    final operationGeneration = ++_operationGeneration;
     final current = state.asset;
     try {
       final asset =
@@ -335,6 +349,7 @@ class UploadController extends StateNotifier<UploadState> {
               current.assetId == assetId
           ? current
           : await _assetRepository.fetchAsset(uid: uid, assetId: assetId);
+      if (!_isCurrentOperation(uid, operationGeneration)) return;
 
       state = asset == null
           ? state.copyWith(
@@ -353,6 +368,7 @@ class UploadController extends StateNotifier<UploadState> {
       final objectKey = asset?.r2Key.trim() ?? '';
       if (objectKey.isNotEmpty) {
         final idToken = await _authRepository.currentIdToken();
+        if (!_isCurrentOperation(uid, operationGeneration)) return;
         if (idToken == null || idToken.trim().isEmpty) {
           throw const CloudflareClientException(
             'Please sign in again before removing the photo.',
@@ -362,9 +378,11 @@ class UploadController extends StateNotifier<UploadState> {
           objectKey: objectKey,
           idToken: idToken,
         );
+        if (!_isCurrentOperation(uid, operationGeneration)) return;
       }
 
       await _assetRepository.markDeleted(uid: uid, assetId: assetId);
+      if (!_isCurrentOperation(uid, operationGeneration)) return;
       final deletedAsset = asset?.copyWith(
         status: UploadedAssetStatus.deleted,
         updatedAt: DateTime.now(),
@@ -378,6 +396,7 @@ class UploadController extends StateNotifier<UploadState> {
               clearError: true,
             );
     } catch (error) {
+      if (!_isCurrentOperation(uid, operationGeneration)) return;
       state = state.copyWith(
         status: UploadFlowStatus.failed,
         errorMessage: _friendlyUploadError(error),
@@ -386,7 +405,13 @@ class UploadController extends StateNotifier<UploadState> {
   }
 
   void clear() {
+    _operationGeneration++;
     state = const UploadState();
+  }
+
+  bool _isCurrentOperation(String uid, int operationGeneration) {
+    return _operationGeneration == operationGeneration &&
+        _authRepository.currentUser?.uid == uid;
   }
 
   UploadedAsset _failedAsset({

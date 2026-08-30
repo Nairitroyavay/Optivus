@@ -43,7 +43,7 @@ void main() {
           email: 'test@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
         container.read(authProvider.notifier).state = const AuthState(
           user: testUser,
@@ -90,7 +90,7 @@ void main() {
           email: 'test@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
         container.read(authProvider.notifier).state = const AuthState(
           user: testUser,
@@ -129,7 +129,7 @@ void main() {
           email: 'test@example.com',
           isAnonymous: false,
           emailVerified: true,
-          providerId: 'password',
+          providerIds: {'password'},
         );
         container.read(authProvider.notifier).state = const AuthState(
           user: testUser,

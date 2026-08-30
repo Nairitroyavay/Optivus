@@ -79,7 +79,7 @@ void main() {
 
   group('Work Package A - PATH3-15-01: Full state purge on logout', () {
     test(
-      'Logout cancels RecoveryRetryController timer and purges states',
+      'Failed logout retains RecoveryRetryController and authenticated state',
       () async {
         final fakeAuth = TestFailingAuthRepository();
         final container = ProviderContainer(
@@ -113,21 +113,22 @@ void main() {
           await container.read(authProvider.notifier).logout();
         } catch (_) {}
 
+        expect(container.read(authProvider).user, isNotNull);
         expect(
           container.read(authProvider).status,
-          equals(AuthFlowStatus.signedOut),
+          isNot(equals(AuthFlowStatus.signedOut)),
         );
         expect(
           container.read(recoveryRetryControllerProvider).isCoolingDown,
-          isFalse,
+          isTrue,
         );
         expect(
           container.read(recoveryRetryControllerProvider).attemptCount,
-          equals(0),
+          equals(1),
         );
         expect(
           container.read(profileDetailViewRequestProvider).view,
-          equals(ProfileDetailView.none),
+          equals(ProfileDetailView.editProfile),
         );
       },
     );

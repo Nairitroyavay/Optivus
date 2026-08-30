@@ -36,6 +36,7 @@ import 'package:optivus/features/recovery/services/recovery_retry_controller.dar
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
 import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/home/providers/home_dashboard_provider.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 import 'package:optivus/features/home/providers/home_navigation_provider.dart';
@@ -276,6 +277,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!_isCurrentAuthOperation(operation)) return;
 
       if (_needsEmailVerification(user)) {
+        _clearStateForIdentityBoundary(user);
         state = state.copyWith(
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
@@ -371,6 +373,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!_isCurrentAuthOperation(operation)) return;
       createdUser = user;
       if (_needsEmailVerification(user)) {
+        _clearStateForIdentityBoundary(user);
         state = state.copyWith(
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
@@ -454,6 +457,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       if (_needsEmailVerification(user)) {
+        _clearStateForIdentityBoundary(user);
         state = state.copyWith(
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
@@ -484,22 +488,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     ++_authOperationGeneration;
+    final authenticatedState = state;
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       await _repository.signOut();
     } catch (error) {
       final mapped = mapAuthError(error);
-      state = state.copyWith(
-        status: AuthFlowStatus.error,
-        errorMessage: mapped.message,
+      state = authenticatedState.copyWith(
+        errorMessage:
+            'We couldn\'t sign you out. You are still signed in. Please try again.',
         failureReason: mapped.reason,
       );
       rethrow;
-    } finally {
-      _resetSignedOutState();
-      if (mounted) {
-        state = const AuthState(status: AuthFlowStatus.signedOut);
-      }
+    }
+    _backendRestoreGeneration++;
+    _resetSignedOutState();
+    if (mounted) {
+      state = const AuthState(status: AuthFlowStatus.signedOut);
     }
   }
 
@@ -797,8 +802,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   static bool _needsEmailVerification(AuthUser user) {
-    final isPasswordProvider = user.providerId == 'password';
-    return isPasswordProvider && !user.emailVerified;
+    return user.needsEmailVerification;
   }
 
   Future<void> _handleAuthStateChange(AuthUser? user) async {
@@ -816,15 +820,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     final isAccountSwitch =
         previousUser != null && previousUser.uid != user.uid;
+    final isInitialSignIn = previousUser == null;
+    final isSameUidRefresh = previousUser?.uid == user.uid;
+
+    if (isSameUidRefresh &&
+        _needsEmailVerification(previousUser!) ==
+            _needsEmailVerification(user)) {
+      state = state.copyWith(user: user);
+      return;
+    }
+
+    if (isAccountSwitch || isInitialSignIn) {
+      _authOperationGeneration++;
+    }
 
     if (_needsEmailVerification(user)) {
-      if (isAccountSwitch) {
-        state = state.copyWith(
-          user: user,
-          status: AuthFlowStatus.loadingBackendUser,
-          clearError: true,
-        );
-        _resetSignedOutState(targetUserUid: user.uid);
+      if (isAccountSwitch || isInitialSignIn) {
+        _clearStateForIdentityBoundary(user);
       }
       state = state.copyWith(
         user: user,
@@ -832,16 +844,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
         clearError: true,
       );
       return;
-    }
-
-    if (isAccountSwitch) {
-      _authOperationGeneration++;
-      state = state.copyWith(
-        user: user,
-        status: AuthFlowStatus.loadingBackendUser,
-        clearError: true,
-      );
-      _resetSignedOutState(targetUserUid: user.uid);
     }
 
     try {
@@ -893,7 +895,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = const AuthState(status: AuthFlowStatus.signedOut);
       return;
     }
-    _resetSignedOutState(targetUserUid: user.uid);
+    if (!isAnonymousLink) {
+      _clearStateForIdentityBoundary(user);
+    }
     state = state.copyWith(
       user: user,
       status: AuthFlowStatus.loadingBackendUser,
@@ -1279,10 +1283,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
         try {
           await const OnboardingFrontendHydrationService()
-              .restoreVerifiedFrontendState(
-            read: _ref.read,
-            bundle: bundle,
-          );
+              .restoreVerifiedFrontendState(read: _ref.read, bundle: bundle);
         } on RoutineProjectionFailureException catch (pe) {
           throw _RoutineProjectionRestoreException(
             'Routine setup recovery is required because projection failed: ${pe.message}',
@@ -1535,7 +1536,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
-  void _resetSignedOutState({String? targetUserUid}) {
+  void _resetSignedOutState({String? preserveOnboardingUid}) {
     _ref.read(authGenerationProvider.notifier).state++;
     _ref.invalidate(onboardingCompletionJobServiceProvider);
     _ref.invalidate(onboardingCompletionJobProvider);
@@ -1544,10 +1545,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(trackerSessionLinksProvider.notifier).resetForSignedOut();
     _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
     _ref.read(mockUserProfileProvider.notifier).resetForSignedOut();
-    if (targetUserUid == null ||
-        _ref.read(mockOnboardingProvider).draft.uid != targetUserUid) {
+    if (preserveOnboardingUid == null ||
+        _ref.read(mockOnboardingProvider).draft.uid != preserveOnboardingUid) {
       _ref.read(mockOnboardingProvider.notifier).resetForSignedOut();
     }
+    _ref.invalidate(onboardingClassTimelineProvider);
+    _ref.invalidate(onboardingWorkTimelineProvider);
     _ref.read(profileSettingsProvider.notifier).resetForSignedOut();
     _ref.read(homeDashboardProvider.notifier).resetForSignedOut();
     _ref.read(homeMindNoteProvider.notifier).resetForSignedOut();
@@ -1555,6 +1558,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(trackerSettingsProvider.notifier).resetForSignedOut();
     _ref.read(routineImportAiControllerProvider.notifier).resetForSignedOut();
     _ref.read(uploadControllerProvider.notifier).resetForSignedOut();
+    _ref.read(aiRoutineSuggestionsEnabledProvider.notifier).state = true;
+    _ref.read(conflictResolverEnabledProvider.notifier).state = true;
+    _ref.read(routineNotificationsEnabledProvider.notifier).state = true;
     _ref.read(appNavigationProvider.notifier).resetForSignedOut();
     _ref.read(toastQueueProvider.notifier).resetForSignedOut();
     _ref.read(homeDetailViewRequestProvider.notifier).state =
@@ -1571,6 +1577,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
         GoalsDetailTarget.none;
     _ref.read(regionSettingsProvider.notifier).resetForSignedOut();
     _resetUserScopedMockState();
+  }
+
+  /// The single in-process privacy boundary for null -> A and A -> B.
+  /// Clearing is synchronous and occurs before the new UID is published or
+  /// hydrated, so listeners can never observe the new account with old state.
+  void _clearStateForIdentityBoundary(AuthUser nextUser) {
+    if (state.user?.uid == nextUser.uid) return;
+    final previousUid = state.user?.uid;
+    _backendRestoreGeneration++;
+    _resetSignedOutState(
+      preserveOnboardingUid: previousUid == null ? nextUser.uid : null,
+    );
   }
 
   Future<void> executeRecoveryAction(OnboardingRecoveryAction action) async {
@@ -1615,9 +1633,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void _resetUserScopedMockState() {
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
-    if (!_useFirebaseBackend) {
-      _ref.read(mockRoutineProvider.notifier).resetForSignedOut();
-    }
+    _ref.read(mockRoutineProvider.notifier).resetForSignedOut();
     _ref.read(mockTrackerProvider.notifier).resetForSignedOut();
     _ref.read(mockGoalProvider.notifier).resetForSignedOut();
     _ref.read(mockMindNoteProvider.notifier).resetForSignedOut();

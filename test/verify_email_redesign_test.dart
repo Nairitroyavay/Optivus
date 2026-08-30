@@ -76,7 +76,7 @@ class _TestAuthRepo implements AuthRepository {
         displayName: user!.displayName,
         emailVerified: true,
         isAnonymous: user!.isAnonymous,
-        providerId: user!.providerId,
+        providerIds: user!.providerIds,
       );
     }
     return user;

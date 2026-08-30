@@ -170,7 +170,7 @@ void main() {
             uid: 'uv-123',
             email: 'unverified@optivus.dev',
             emailVerified: false,
-            providerId: 'password',
+            providerIds: {'password'},
           );
 
           final statusWithCompletedTrue = AuthNotifier.statusFor(

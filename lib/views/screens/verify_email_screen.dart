@@ -194,12 +194,30 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
 
   Future<void> _useAnotherEmail() async {
     if (ref.read(authProvider).isLoading) return;
-    await ref.read(authProvider.notifier).logout();
+    try {
+      await ref.read(authProvider.notifier).logout();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            ref.read(authProvider).errorMessage ??
+            'We couldn\'t sign you out. Please try again.';
+      });
+    }
   }
 
   Future<void> _signOut() async {
     if (ref.read(authProvider).isLoading) return;
-    await ref.read(authProvider.notifier).logout();
+    try {
+      await ref.read(authProvider.notifier).logout();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            ref.read(authProvider).errorMessage ??
+            'We couldn\'t sign you out. Please try again.';
+      });
+    }
   }
 
   void _showLeaveConfirmation() {
