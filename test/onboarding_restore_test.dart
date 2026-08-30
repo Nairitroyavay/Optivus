@@ -442,6 +442,9 @@ OnboardingDraft _draftFor(String uid, {required int currentStep}) {
 }
 
 class _ControllableAuthRepository implements AuthRepository {
+  @override
+  Future<AuthUser?> signInWithGoogle() async => null;
+
   final StreamController<AuthUser?> _controller =
       StreamController<AuthUser?>.broadcast();
   AuthUser? _currentUser;

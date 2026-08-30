@@ -458,6 +458,9 @@ OnboardingDraft _draftWithUploadReferences() {
 }
 
 class _ImmediateAuthRepository implements AuthRepository {
+  @override
+  Future<AuthUser?> signInWithGoogle() async => null;
+
   final AuthUser user;
 
   const _ImmediateAuthRepository(this.user);

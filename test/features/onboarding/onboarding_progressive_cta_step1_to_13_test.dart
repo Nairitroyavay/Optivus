@@ -36,6 +36,9 @@ class _FakeAuthNotifier extends StateNotifier<AuthState>
   Future<void> signInAnonymously() async {}
 
   @override
+  Future<bool> signInWithGoogle() async => false;
+
+  @override
   Future<void> linkAnonymousWithEmail(
     String email,
     String password, {

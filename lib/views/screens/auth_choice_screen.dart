@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/utils/auth_error_mapper.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 import 'package:optivus/widgets/liquid_glass_panel.dart';
 
-class AuthChoiceScreen extends StatelessWidget {
+class AuthChoiceScreen extends ConsumerWidget {
   const AuthChoiceScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authLoading = ref.watch(authProvider).isLoading;
+
+    Future<void> signInWithGoogle() async {
+      try {
+        await ref.read(authProvider.notifier).signInWithGoogle();
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
+      }
+    }
+
     return PopScope(
       canPop: true,
       child: Material(
@@ -83,15 +99,8 @@ class AuthChoiceScreen extends StatelessWidget {
                         _AuthChoiceButton(
                           key: const Key('auth-choice-google'),
                           label: 'Continue with Google',
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Google sign-in is not configured yet.',
-                                ),
-                              ),
-                            );
-                          },
+                          loading: authLoading,
+                          onTap: authLoading ? null : signInWithGoogle,
                         ),
                       ],
                     ),
@@ -129,13 +138,15 @@ class AuthChoiceScreen extends StatelessWidget {
 class _AuthChoiceButton extends StatelessWidget {
   final IconData? icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool loading;
 
   const _AuthChoiceButton({
     super.key,
     this.icon,
     required this.label,
     required this.onTap,
+    this.loading = false,
   });
 
   @override
@@ -172,7 +183,14 @@ class _AuthChoiceButton extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (icon != null) ...[
+                  if (loading) ...[
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    ),
+                    const SizedBox(width: 10),
+                  ] else if (icon != null) ...[
                     Icon(icon, color: OptivusColors.ink, size: 24),
                     const SizedBox(width: 10),
                   ],

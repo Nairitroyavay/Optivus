@@ -785,6 +785,9 @@ class _ProjectionHarness {
 }
 
 class _StaticAuthRepository implements AuthRepository {
+  @override
+  Future<AuthUser?> signInWithGoogle() async => null;
+
   final AuthUser user;
 
   const _StaticAuthRepository(this.user);

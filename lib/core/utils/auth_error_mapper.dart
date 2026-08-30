@@ -5,6 +5,7 @@ enum AuthFailureReason {
   invalidCredentials,
   invalidToken,
   emailAlreadyInUse,
+  accountCollision,
   weakPassword,
   userDisabled,
   tooManyRequests,

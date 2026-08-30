@@ -207,6 +207,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   late final StreamSubscription<AuthUser?> _authSubscription;
   int _backendRestoreGeneration = 0;
   int _authOperationGeneration = 0;
+  bool _googleAuthInFlight = false;
   final Set<Timer> _startupTimers = <Timer>{};
 
   AuthNotifier(this._repository, Ref ref)
@@ -295,6 +296,60 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       rethrow;
     } finally {
+      if (_isCurrentAuthOperation(operation) && state.isAuthenticating) {
+        state = state.copyWith(
+          status: statusFor(
+            state.user,
+            _ref.read(mockUserProfileProvider).onboardingCompleted,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Starts the one shared Google authentication flow used by all auth entry
+  /// screens. Firebase's auth-state stream remains the sole owner of backend
+  /// reconstruction and destination resolution after credential exchange.
+  Future<bool> signInWithGoogle() async {
+    if (_googleAuthInFlight || state.isLoading) return false;
+
+    _googleAuthInFlight = true;
+    final operation = ++_authOperationGeneration;
+    final previousUser = state.user;
+    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
+    try {
+      final user = await _repository.signInWithGoogle();
+      if (!_isCurrentAuthOperation(operation)) return false;
+      if (user == null) {
+        state = state.copyWith(
+          user: previousUser,
+          clearUser: previousUser == null,
+          status: statusFor(
+            previousUser,
+            _ref.read(mockUserProfileProvider).onboardingCompleted,
+          ),
+          clearError: true,
+        );
+        return false;
+      }
+
+      // Do not navigate or reconstruct here. FirebaseAuth.authStateChanges
+      // delivers the authenticated identity to _handleAuthStateChange, which
+      // uses the normal UID-owned backend bootstrap and destination resolver.
+      return true;
+    } catch (error) {
+      if (!_isCurrentAuthOperation(operation)) return false;
+      final mapped = mapAuthError(error);
+      state = state.copyWith(
+        user: previousUser,
+        clearUser: previousUser == null,
+        status: AuthFlowStatus.error,
+        errorMessage: mapped.message,
+        failureReason: mapped.reason,
+      );
+      rethrow;
+    } finally {
+      _googleAuthInFlight = false;
       if (_isCurrentAuthOperation(operation) && state.isAuthenticating) {
         state = state.copyWith(
           status: statusFor(

@@ -511,6 +511,9 @@ Uint8List _jpegBytes({required int width, required int height}) {
 
 class _TokenAuthRepository implements AuthRepository {
   @override
+  Future<AuthUser?> signInWithGoogle() async => null;
+
+  @override
   Stream<AuthUser?> get authStateChanges => const Stream<AuthUser?>.empty();
 
   @override

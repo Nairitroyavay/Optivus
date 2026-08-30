@@ -21,6 +21,9 @@ class _FakeEmailLauncherService implements EmailLauncherService {
 }
 
 class _TestAuthRepo implements AuthRepository {
+  @override
+  Future<AuthUser?> signInWithGoogle() async => null;
+
   AuthUser? user;
   bool verificationEmailSent = false;
   int reloadCount = 0;

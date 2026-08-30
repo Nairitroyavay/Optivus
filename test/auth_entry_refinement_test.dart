@@ -74,7 +74,9 @@ void main() {
       ],
     );
     addTearDown(router.dispose);
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.text('Get Started'));
     await tester.pumpAndSettle();
@@ -169,5 +171,5 @@ Widget _testApp() {
     ],
   );
   addTearDown(router.dispose);
-  return MaterialApp.router(routerConfig: router);
+  return ProviderScope(child: MaterialApp.router(routerConfig: router));
 }

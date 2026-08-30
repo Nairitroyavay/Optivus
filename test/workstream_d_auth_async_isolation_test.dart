@@ -17,6 +17,9 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/features/home/providers/home_mind_note_provider.dart';
 
 class TestFakeAuthRepository implements AuthRepository {
+  @override
+  Future<AuthUser?> signInWithGoogle() async => null;
+
   AuthUser? _currentUser;
   final _controller = StreamController<AuthUser?>.broadcast();
 

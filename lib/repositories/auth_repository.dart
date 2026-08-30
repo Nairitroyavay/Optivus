@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 
 /// A simple user model for authentication purposes.
@@ -30,6 +32,9 @@ abstract class AuthRepository {
 
   Future<AuthUser> signIn(String email, String password);
 
+  /// Starts the native Google flow. A null result means the user cancelled.
+  Future<AuthUser?> signInWithGoogle();
+
   Future<AuthUser> signUp(String email, String password, {String? name});
 
   Future<AuthUser> signInAnonymously();
@@ -52,9 +57,17 @@ abstract class AuthRepository {
 }
 
 AuthUser _authUserFromFirebase(firebase_auth.User user) {
-  final providerId = user.providerData.isNotEmpty
-      ? user.providerData.first.providerId
-      : 'password';
+  final providerIds = user.providerData
+      .map((provider) => provider.providerId)
+      .toSet();
+  // A Firebase account can expose more than one linked provider. Prefer the
+  // trusted Google provider so a Google-authenticated account is never treated
+  // as an unverified password-only account because of provider list ordering.
+  final providerId = providerIds.contains('google.com')
+      ? 'google.com'
+      : providerIds.contains('password')
+      ? 'password'
+      : (providerIds.isNotEmpty ? providerIds.first : 'password');
 
   return AuthUser(
     uid: user.uid,
@@ -109,6 +122,20 @@ class FakeAuthRepository implements AuthRepository {
 
     _authStateController.add(_currentUser);
     return _currentUser!;
+  }
+
+  @override
+  Future<AuthUser?> signInWithGoogle() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    _currentUser = const AuthUser(
+      uid: 'fake-google-user',
+      email: 'google.user@example.com',
+      displayName: 'Google User',
+      emailVerified: true,
+      providerId: 'google.com',
+    );
+    _authStateController.add(_currentUser);
+    return _currentUser;
   }
 
   @override
@@ -223,11 +250,112 @@ class FakeAuthRepository implements AuthRepository {
   }
 }
 
+/// Small injectable boundary around the official native Google SDK.
+abstract class GoogleIdentityClient {
+  /// Returns a Google ID token, or null when the account chooser is cancelled.
+  Future<String?> authenticate();
+
+  Future<void> signOut();
+}
+
+class NativeGoogleIdentityClient implements GoogleIdentityClient {
+  final GoogleSignIn _googleSignIn;
+  static Future<void>? _sharedInitialization;
+
+  NativeGoogleIdentityClient({GoogleSignIn? googleSignIn})
+    : _googleSignIn = googleSignIn ?? GoogleSignIn.instance;
+
+  Future<void> _ensureInitialized() {
+    // google_sign_in 7.x requires initialize to be invoked exactly once.
+    return _sharedInitialization ??= _googleSignIn.initialize();
+  }
+
+  @override
+  Future<String?> authenticate() async {
+    try {
+      await _ensureInitialized();
+      if (!_googleSignIn.supportsAuthenticate()) {
+        throw const AuthFailureException(
+          reason: AuthFailureReason.unknown,
+          message: 'Google sign-in is unavailable on this device.',
+        );
+      }
+      final account = await _googleSignIn.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw const AuthFailureException(
+          reason: AuthFailureReason.invalidToken,
+          message: 'Google sign-in could not be completed. Please try again.',
+        );
+      }
+      return idToken;
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled) return null;
+      throw AuthFailureException(
+        reason: error.code == GoogleSignInExceptionCode.interrupted
+            ? AuthFailureReason.networkFailure
+            : AuthFailureReason.unknown,
+        message: error.code == GoogleSignInExceptionCode.interrupted
+            ? 'Google sign-in was interrupted. Please try again.'
+            : 'Google sign-in could not be completed. Please try again.',
+        originalError: error,
+      );
+    }
+  }
+
+  @override
+  Future<void> signOut() async {
+    await _ensureInitialized();
+    await _googleSignIn.signOut();
+  }
+}
+
+typedef GoogleCredentialExchange =
+    Future<AuthUser> Function(firebase_auth.OAuthCredential credential);
+
+/// Acquires a Google ID token and exchanges it for a Firebase-owned identity.
+/// Keeping this boundary injectable makes OAuth deterministic in unit tests
+/// without bypassing the real production credential construction.
+class FirebaseGoogleAuthenticationFlow {
+  final GoogleIdentityClient _identityClient;
+  final GoogleCredentialExchange _exchangeCredential;
+
+  FirebaseGoogleAuthenticationFlow({
+    required GoogleIdentityClient identityClient,
+    required GoogleCredentialExchange exchangeCredential,
+  }) : _identityClient = identityClient,
+       _exchangeCredential = exchangeCredential;
+
+  Future<AuthUser?> signIn() async {
+    try {
+      final idToken = await _identityClient.authenticate();
+      if (idToken == null) return null;
+      final credential = firebase_auth.GoogleAuthProvider.credential(
+        idToken: idToken,
+      );
+      return await _exchangeCredential(credential);
+    } catch (error) {
+      throw mapGoogleAuthError(error);
+    }
+  }
+}
+
 class FirebaseAuthRepository implements AuthRepository {
   final firebase_auth.FirebaseAuth _auth;
+  final GoogleIdentityClient _googleIdentityClient;
+  late final FirebaseGoogleAuthenticationFlow _googleAuthenticationFlow;
 
-  FirebaseAuthRepository({firebase_auth.FirebaseAuth? auth})
-    : _auth = auth ?? firebase_auth.FirebaseAuth.instance;
+  FirebaseAuthRepository({
+    firebase_auth.FirebaseAuth? auth,
+    GoogleIdentityClient? googleIdentityClient,
+  }) : _auth = auth ?? firebase_auth.FirebaseAuth.instance,
+       _googleIdentityClient =
+           googleIdentityClient ?? NativeGoogleIdentityClient() {
+    _googleAuthenticationFlow = FirebaseGoogleAuthenticationFlow(
+      identityClient: _googleIdentityClient,
+      exchangeCredential: _exchangeGoogleCredential,
+    );
+  }
 
   @override
   AuthUser? get currentUser {
@@ -260,6 +388,25 @@ class FirebaseAuthRepository implements AuthRepository {
     } catch (e) {
       throw mapAuthError(e);
     }
+  }
+
+  @override
+  Future<AuthUser?> signInWithGoogle() {
+    return _googleAuthenticationFlow.signIn();
+  }
+
+  Future<AuthUser> _exchangeGoogleCredential(
+    firebase_auth.OAuthCredential googleCredential,
+  ) async {
+    final credential = await _auth.signInWithCredential(googleCredential);
+    final user = credential.user;
+    if (user == null) {
+      throw firebase_auth.FirebaseAuthException(
+        code: 'missing-user',
+        message: 'Firebase Google sign-in did not return a user.',
+      );
+    }
+    return _authUserFromFirebase(user);
   }
 
   @override
@@ -392,10 +539,51 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async {
+    final hadGoogleProvider =
+        _auth.currentUser?.providerData.any(
+          (provider) => provider.providerId == 'google.com',
+        ) ??
+        false;
     try {
       await _auth.signOut();
     } catch (e) {
       throw mapAuthError(e);
     }
+    if (hadGoogleProvider) {
+      try {
+        await _googleIdentityClient.signOut();
+      } catch (error) {
+        // Firebase is already signed out. Keep local logout authoritative and
+        // log only the error type; Google/OAuth token values are never logged.
+        debugPrint(
+          'Google sign-out cleanup failed safely (${error.runtimeType}).',
+        );
+      }
+    }
   }
+}
+
+AuthFailureException mapGoogleAuthError(Object error) {
+  if (error is AuthFailureException) return error;
+  if (error is firebase_auth.FirebaseAuthException) {
+    if (error.code == 'account-exists-with-different-credential' ||
+        error.code == 'credential-already-in-use') {
+      return AuthFailureException(
+        reason: AuthFailureReason.accountCollision,
+        message:
+            'An account already exists with this email. Sign in with your original method to continue; it cannot be merged from Google sign-in.',
+        originalError: error,
+      );
+    }
+    final mapped = mapAuthError(error);
+    if (mapped.reason != AuthFailureReason.unknown &&
+        error.code != 'invalid-credential') {
+      return mapped;
+    }
+  }
+  return AuthFailureException(
+    reason: AuthFailureReason.unknown,
+    message: 'Google sign-in could not be completed. Please try again.',
+    originalError: error,
+  );
 }

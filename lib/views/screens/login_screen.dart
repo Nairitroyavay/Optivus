@@ -46,6 +46,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePass = true;
   bool _resetLoading = false;
   Future<void>? _authOperation;
+  Future<bool>? _googleOperation;
   String? _errorMsg;
   String? _successMsg;
   String? _emailError;
@@ -119,7 +120,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     FocusScope.of(context).unfocus();
 
     if (!_validate()) return;
-    if (ref.read(authProvider).isLoading || _authOperation != null) return;
+    if (ref.read(authProvider).isLoading ||
+        _authOperation != null ||
+        _googleOperation != null) {
+      return;
+    }
 
     final authOperation = ref
         .read(authProvider.notifier)
@@ -145,6 +150,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         setState(() => _authOperation = null);
       }
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    FocusScope.of(context).unfocus();
+    if (ref.read(authProvider).isLoading ||
+        _authOperation != null ||
+        _googleOperation != null) {
+      return;
+    }
+
+    final operation = ref.read(authProvider.notifier).signInWithGoogle();
+    setState(() {
+      _errorMsg = null;
+      _successMsg = null;
+      _googleOperation = operation;
+    });
+    try {
+      await operation;
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _errorMsg = friendlyAuthError(error));
+    } finally {
+      if (mounted) setState(() => _googleOperation = null);
     }
   }
 
@@ -375,7 +404,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ],
 
                         const SizedBox(height: 14),
-                        const _DisabledAuthProviders(),
+                        _GoogleAuthProviderButton(
+                          loading: _googleOperation != null,
+                          onPressed: authLoading ? null : _signInWithGoogle,
+                        ),
                         const SizedBox(height: 14),
                         _AuthRoutePrompt(
                           prompt: "Don't have an account?",
@@ -435,69 +467,71 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-class _DisabledAuthProviders extends StatelessWidget {
-  const _DisabledAuthProviders();
+class _GoogleAuthProviderButton extends StatelessWidget {
+  final bool loading;
+  final VoidCallback? onPressed;
 
-  @override
-  Widget build(BuildContext context) {
-    return const Column(
-      children: [
-        _DisabledProviderButton(
-          key: Key('login-google'),
-          icon: Icons.g_mobiledata_rounded,
-          label: 'Continue with Google',
-        ),
-      ],
-    );
-  }
-}
-
-class _DisabledProviderButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _DisabledProviderButton({
-    super.key,
-    required this.icon,
-    required this.label,
+  const _GoogleAuthProviderButton({
+    this.loading = false,
+    required this.onPressed,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: '$label is not configured yet.',
+    return Semantics(
+      button: true,
+      label: 'Continue with Google',
       child: Opacity(
-        opacity: 0.48,
-        child: Container(
-          height: 50,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.45),
+        opacity: onPressed == null && !loading ? 0.48 : 1,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: const Key('login-google'),
             borderRadius: BorderRadius.circular(25),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.85),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: _kInk, size: 22),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _kInk,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+            onTap: onPressed,
+            child: Container(
+              height: 50,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  width: 1,
                 ),
               ),
-            ],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (loading)
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2.4),
+                    )
+                  else
+                    const Icon(
+                      Icons.g_mobiledata_rounded,
+                      color: _kInk,
+                      size: 22,
+                    ),
+                  const SizedBox(width: 8),
+                  const Flexible(
+                    child: Text(
+                      'Continue with Google',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: _kInk,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
