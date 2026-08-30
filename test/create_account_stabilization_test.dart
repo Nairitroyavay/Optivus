@@ -227,19 +227,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('auth screens reuse canonical AuthBackButton', (tester) async {
-    await tester.pumpWidget(_authScreen(const AuthChoiceScreen()));
-    expect(find.byType(AuthBackButton), findsOneWidget);
+  testWidgets(
+    'auth entry screens reuse Back while verification blocks bypass',
+    (tester) async {
+      await tester.pumpWidget(_authScreen(const AuthChoiceScreen()));
+      expect(find.byType(AuthBackButton), findsOneWidget);
 
-    await tester.pumpWidget(_authScreen(const SignupScreen()));
-    expect(find.byType(AuthBackButton), findsOneWidget);
+      await tester.pumpWidget(_authScreen(const SignupScreen()));
+      expect(find.byType(AuthBackButton), findsOneWidget);
 
-    await tester.pumpWidget(_authScreen(const LoginScreen()));
-    expect(find.byType(AuthBackButton), findsOneWidget);
+      await tester.pumpWidget(_authScreen(const LoginScreen()));
+      expect(find.byType(AuthBackButton), findsOneWidget);
 
-    await tester.pumpWidget(_authScreen(const VerifyEmailScreen()));
-    expect(find.byType(AuthBackButton), findsOneWidget);
-  });
+      await tester.pumpWidget(_authScreen(const VerifyEmailScreen()));
+      expect(find.byType(AuthBackButton), findsNothing);
+    },
+  );
 
   testWidgets('all auth text fields share 50px standard height', (
     tester,

@@ -1,35 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
-import 'package:optivus/services/native/email_launcher_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/views/screens/verify_email_screen.dart';
-import 'package:optivus/widgets/auth_back_button.dart';
-
-class _FakeEmailLauncherService implements EmailLauncherService {
-  bool shouldSucceed = true;
-  int openEmailCallCount = 0;
-
-  @override
-  Future<bool> openEmailApp() async {
-    openEmailCallCount++;
-    return shouldSucceed;
-  }
-}
 
 class _TestAuthRepo implements AuthRepository {
-  @override
-  Future<AuthUser?> signInWithGoogle() async => null;
-
   AuthUser? user;
   bool verificationEmailSent = false;
   int reloadCount = 0;
-  bool shouldVerifyOnReload = false;
-  Exception? reloadException;
-  Exception? resendException;
+  int signOutCount = 0;
+  bool verifyOnReload = false;
+  Object? reloadError;
+  Object? resendError;
+  Object? signOutError;
+  Completer<void>? reloadGate;
 
   _TestAuthRepo({required this.user});
 
@@ -37,10 +26,13 @@ class _TestAuthRepo implements AuthRepository {
   AuthUser? get currentUser => user;
 
   @override
-  Stream<AuthUser?> get authStateChanges => Stream.value(user);
+  Stream<AuthUser?> get authStateChanges => const Stream.empty();
 
   @override
   Future<AuthUser> signIn(String email, String password) async => user!;
+
+  @override
+  Future<AuthUser?> signInWithGoogle() async => null;
 
   @override
   Future<AuthUser> signUp(
@@ -61,15 +53,16 @@ class _TestAuthRepo implements AuthRepository {
 
   @override
   Future<void> sendEmailVerification() async {
-    if (resendException != null) throw resendException!;
+    if (resendError case final error?) throw error;
     verificationEmailSent = true;
   }
 
   @override
   Future<AuthUser?> reloadCurrentUser() async {
     reloadCount++;
-    if (reloadException != null) throw reloadException!;
-    if (shouldVerifyOnReload && user != null) {
+    await reloadGate?.future;
+    if (reloadError case final error?) throw error;
+    if (verifyOnReload && user != null) {
       user = AuthUser(
         uid: user!.uid,
         email: user!.email,
@@ -90,15 +83,10 @@ class _TestAuthRepo implements AuthRepository {
 
   @override
   Future<void> signOut() async {
+    signOutCount++;
+    if (signOutError case final error?) throw error;
     user = null;
   }
-}
-
-Future<void> _setRealmeView(WidgetTester tester) async {
-  tester.view.physicalSize = const Size(1080, 2400);
-  tester.view.devicePixelRatio = 3;
-  addTearDown(tester.view.resetPhysicalSize);
-  addTearDown(tester.view.resetDevicePixelRatio);
 }
 
 class _TestAuthNotifier extends AuthNotifier {
@@ -107,18 +95,29 @@ class _TestAuthNotifier extends AuthNotifier {
   }
 }
 
-Widget _buildTestScreen({
-  required AuthState authState,
-  required AuthRepository repo,
-  required EmailLauncherService emailLauncher,
+const _defaultUser = AuthUser(
+  uid: 'user-123',
+  email: 'testuser@example.com',
+  emailVerified: false,
+);
+
+Widget _buildScreen({
+  required _TestAuthRepo repo,
+  AuthState? state,
+  TextScaler textScaler = TextScaler.noScaling,
 }) {
+  final authState =
+      state ??
+      const AuthState(
+        user: _defaultUser,
+        status: AuthFlowStatus.signedInEmailUnverified,
+      );
   return ProviderScope(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
       authProvider.overrideWith(
         (ref) => _TestAuthNotifier(repo, ref, authState),
       ),
-      emailLauncherServiceProvider.overrideWithValue(emailLauncher),
       mockUserProfileProvider.overrideWith(
         (ref) => MockUserProfileNotifier()
           ..loadSeedData(
@@ -129,409 +128,388 @@ Widget _buildTestScreen({
           ),
       ),
     ],
-    child: const MaterialApp(home: VerifyEmailScreen()),
+    child: MaterialApp(
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+        child: child!,
+      ),
+      home: const VerifyEmailScreen(),
+    ),
   );
+}
+
+Future<void> _setLogicalViewport(
+  WidgetTester tester, {
+  Size logicalSize = const Size(393, 873),
+  double devicePixelRatio = 1.0,
+}) async {
+  tester.view.physicalSize = Size(
+    logicalSize.width * devicePixelRatio,
+    logicalSize.height * devicePixelRatio,
+  );
+  tester.view.devicePixelRatio = devicePixelRatio;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
+Future<void> _tapAnimatedButton(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pump(const Duration(milliseconds: 200));
 }
 
 void main() {
   setUp(() {
-    TestWidgetsFlutterBinding.ensureInitialized();
+    // Default setup
   });
 
   testWidgets(
-    'VerifyEmailScreen fits Realme 6 viewport and displays simplified hierarchy',
+    'renders single primary verification card, identity, steps, and bounded CTA',
     (tester) async {
-      await _setRealmeView(tester);
+      await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+      final repo = _TestAuthRepo(user: _defaultUser);
+      await tester.pumpWidget(_buildScreen(repo: repo));
+      await tester.pump();
 
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'testuser@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user);
-      final launcher = _FakeEmailLauncherService();
-
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-
-      // Canonical Back Button
-      expect(find.byType(AuthBackButton), findsOneWidget);
-
-      // Hero Elements
+      // Top title and copy
       expect(find.text('Verify your email'), findsOneWidget);
-      expect(find.text('We sent a verification link to:'), findsOneWidget);
-      expect(find.text('testuser@example.com'), findsOneWidget);
+      expect(find.text('We sent you a verification link'), findsOneWidget);
+
+      // Exactly ONE primary verification card
+      final cardFinder = find.byKey(const Key('verify-email-card'));
+      expect(cardFinder, findsOneWidget);
+
+      // Identity inside verification card
       expect(
-        find.text(
-          'Check your inbox and tap the link.\nWe’ll continue automatically when you return.',
+        find.descendant(
+          of: cardFinder,
+          matching: find.text('SENT TO'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: cardFinder,
+          matching: find.text('testuser@example.com'),
         ),
         findsOneWidget,
       );
 
-      // Action Hierarchy
+      // Step 1 inside card
       expect(
-        find.byKey(const Key('verify-email-open-email')),
+        find.descendant(
+          of: cardFinder,
+          matching: find.text('Open your email'),
+        ),
         findsOneWidget,
-      ); // Primary
+      );
       expect(
-        find.byKey(const Key('verify-email-resend')),
+        find.descendant(
+          of: cardFinder,
+          matching: find.text('Tap the verification link we sent.'),
+        ),
         findsOneWidget,
-      ); // Secondary
-      expect(
-        find.byKey(const Key('verify-email-manual-check')),
-        findsOneWidget,
-      ); // Fallback
-      expect(
-        find.text('Didn’t receive it? Check Spam or Promotions.'),
-        findsOneWidget,
-      ); // Help
-      expect(
-        find.byKey(const Key('verify-email-use-another')),
-        findsOneWidget,
-      ); // Tertiary
-      expect(
-        find.byKey(const Key('verify-email-sign-out')),
-        findsOneWidget,
-      ); // Lowest emphasis
+      );
 
-      // Verify no duplicate actions
+      // Step 2 inside card
+      expect(
+        find.descendant(
+          of: cardFinder,
+          matching: find.text('Return to Optivus'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: cardFinder,
+          matching: find.text('We\'ll check it automatically.'),
+        ),
+        findsOneWidget,
+      );
+
+      // Passive waiting status inside card
+      expect(
+        find.descendant(
+          of: cardFinder,
+          matching: find.text('Waiting for verification'),
+        ),
+        findsOneWidget,
+      );
+
+      // Check verification CTA exists with bounded dimensions
+      final checkFinder = find.byKey(const Key('verify-email-check'));
+      expect(checkFinder, findsOneWidget);
+      expect(find.text('Check verification'), findsOneWidget);
+      final checkSize = tester.getSize(checkFinder);
+      expect(checkSize.height, inInclusiveRange(54.0, 58.0));
+      expect(checkSize.width, lessThanOrEqualTo(340.0));
+      expect(checkSize.width, lessThan(393.0)); // Not edge-to-edge
+
+      // Compact resend line
+      expect(find.text('Didn\'t get it?'), findsOneWidget);
+      expect(find.text('Resend email'), findsOneWidget);
+
+      // Tertiary actions
       expect(find.text('Use another email'), findsOneWidget);
       expect(find.text('Sign out'), findsOneWidget);
 
-      // Verify no obsolete large troubleshooting cards or old duplicate buttons
-      expect(find.text('Try another email'), findsNothing);
-      expect(find.text('Log out'), findsNothing);
-      expect(find.text('Make sure the email address is correct'), findsNothing);
-
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'Open email action dispatches to platform EmailLauncherService and handles failure gracefully',
-    (tester) async {
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'test@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user);
-      final launcher = _FakeEmailLauncherService()..shouldSucceed = false;
-
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final openBtn = find.byKey(const Key('verify-email-open-email'));
-      await tester.tap(openBtn);
-      await tester.pump(const Duration(milliseconds: 200));
-      await tester.pump(const Duration(milliseconds: 200));
-
-      expect(launcher.openEmailCallCount, 1);
-      // Fallback message shown when opening fails
+      // No permanent spam / promotions sentence in primary hierarchy
       expect(
-        find.text(
-          'We couldn’t open an email app. Open your inbox manually, then return here.',
-        ),
-        findsOneWidget,
+        find.text('Didn\'t receive it? Check Spam or Promotions.'),
+        findsNothing,
       );
+
+      // No uncaught exceptions
+      expect(tester.takeException(), isNull);
+
+      // Fits on common Android screen without scrolling
+      final scrollable = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const Key('verify-email-scroll-view')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scrollable.position.maxScrollExtent, 0);
     },
   );
 
+  testWidgets('removes mail launcher UI, failure copy, and old action label', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+    final repo = _TestAuthRepo(user: _defaultUser);
+    await tester.pumpWidget(_buildScreen(repo: repo));
+
+    expect(find.text('Open email'), findsNothing);
+    expect(find.text('Open inbox'), findsNothing);
+    expect(find.textContaining('couldn\'t open an email app'), findsNothing);
+    expect(find.text('I\'ve verified'), findsNothing);
+    expect(find.text('I’ve verified'), findsNothing);
+  });
+
+  testWidgets('check uses authoritative action and blocks concurrent taps', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+    final gate = Completer<void>();
+    final repo = _TestAuthRepo(user: _defaultUser)..reloadGate = gate;
+    await tester.pumpWidget(_buildScreen(repo: repo));
+
+    final check = find.byKey(const Key('verify-email-check'));
+    await _tapAnimatedButton(tester, check);
+    await tester.tap(check);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(repo.reloadCount, 1);
+    expect(find.text('Checking...'), findsOneWidget);
+    gate.complete();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text(
+        'Not verified yet. Tap the link in your email, then try again.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('check failure is compact and keeps message region stable', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+    final repo = _TestAuthRepo(user: _defaultUser)
+      ..reloadError = Exception('internal-firebase-detail');
+    await tester.pumpWidget(_buildScreen(repo: repo));
+    final before = tester.getTopLeft(
+      find.byKey(const Key('verify-email-message-region')),
+    );
+
+    await _tapAnimatedButton(
+      tester,
+      find.byKey(const Key('verify-email-check')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.text('Couldn\'t check verification. Try again.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('firebase'), findsNothing);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('verify-email-message-region'))),
+      before,
+    );
+  });
+
   testWidgets(
-    'Resend button enforces cooldown and shows contained progress and success',
+    'resend preserves ready, progress, temporary helper, and cooldown states',
     (tester) async {
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'test@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user);
-      final launcher = _FakeEmailLauncherService();
-
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final resendBtn = find.byKey(const Key('verify-email-resend'));
+      await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+      final repo = _TestAuthRepo(user: _defaultUser);
+      await tester.pumpWidget(_buildScreen(repo: repo));
       expect(find.text('Resend email'), findsOneWidget);
 
-      await tester.tap(resendBtn);
+      final resend = find.text('Resend email');
+      await tester.ensureVisible(resend);
+      await tester.tap(resend);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 200));
 
       expect(repo.verificationEmailSent, isTrue);
       expect(
-        find.text('Verification email sent. Check your inbox.'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Resend in'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'Manual check "I’ve verified" does not fake verification if server reports unverified',
-    (tester) async {
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'test@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user)..shouldVerifyOnReload = false;
-      final launcher = _FakeEmailLauncherService();
-
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final manualCheckBtn = find.byKey(const Key('verify-email-manual-check'));
-      await tester.tap(manualCheckBtn);
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(repo.reloadCount, 1);
-      expect(
         find.text(
-          'We couldn’t confirm it yet. Tap the link in your email, then try again.',
+          'Sent again. Check Spam or Promotions if it doesn\'t arrive.',
         ),
         findsOneWidget,
       );
+      expect(find.textContaining('Resend available in'), findsOneWidget);
     },
   );
 
-  testWidgets(
-    'Automatic check on AppLifecycleState.resumed triggers verification check and shows success if verified',
-    (tester) async {
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'test@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user)..shouldVerifyOnReload = true;
-      final launcher = _FakeEmailLauncherService();
-
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-
-      // Simulate app backgrounding and resuming
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      await tester.pump();
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(repo.reloadCount, 1);
-      expect(find.text('Email verified ✓'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'Back button opens confirmation dialog and does not silently sign out on cancel',
-    (tester) async {
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'test@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user);
-      final launcher = _FakeEmailLauncherService();
-
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
-        ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-
-      final backButton = find.byType(AuthBackButton);
-      await tester.tap(backButton);
-      await tester.pump(const Duration(milliseconds: 300));
-
-      // Dialog is displayed
-      expect(find.text('Leave verification?'), findsOneWidget);
-      expect(find.text('Stay here'), findsOneWidget);
-
-      // Cancel leaves user on the screen
-      await tester.tap(find.text('Stay here'));
-      await tester.pump(const Duration(milliseconds: 300));
-
-      expect(find.text('Leave verification?'), findsNothing);
-      expect(find.text('Verify your email'), findsOneWidget);
-    },
-  );
-
-  testWidgets('Back button dialog "Sign out" triggers sign out', (
+  testWidgets('existing cooldown renders in its reserved action region', (
     tester,
   ) async {
-    final user = const AuthUser(
-      uid: 'user-123',
-      email: 'test@example.com',
-      emailVerified: false,
-    );
-    final repo = _TestAuthRepo(user: user);
-    final launcher = _FakeEmailLauncherService();
-
+    await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+    final repo = _TestAuthRepo(user: _defaultUser);
     await tester.pumpWidget(
-      _buildTestScreen(
-        authState: AuthState(
-          user: user,
-          status: AuthFlowStatus.signedInEmailUnverified,
-        ),
+      _buildScreen(
         repo: repo,
-        emailLauncher: launcher,
+        state: AuthState(
+          user: _defaultUser,
+          status: AuthFlowStatus.signedInEmailUnverified,
+          lastVerificationEmailSent: DateTime.now().subtract(
+            const Duration(seconds: 18),
+          ),
+        ),
       ),
     );
-    await tester.pump(const Duration(milliseconds: 300));
 
-    final backButton = find.byType(AuthBackButton);
-    await tester.tap(backButton);
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // Tap Sign out button inside dialog
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Sign out'));
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(repo.currentUser, isNull);
+    expect(find.textContaining('Resend available in'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('verify-email-resend'))).height,
+      greaterThanOrEqualTo(36),
+    );
   });
 
-  testWidgets('Tertiary "Use another email" triggers sign out', (tester) async {
-    final user = const AuthUser(
-      uid: 'user-123',
-      email: 'test@example.com',
-      emailVerified: false,
-    );
-    final repo = _TestAuthRepo(user: user);
-    final launcher = _FakeEmailLauncherService();
-
-    await tester.pumpWidget(
-      _buildTestScreen(
-        authState: AuthState(
-          user: user,
-          status: AuthFlowStatus.signedInEmailUnverified,
-        ),
-        repo: repo,
-        emailLauncher: launcher,
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-
-    await tester.tap(find.byKey(const Key('verify-email-use-another')));
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(repo.currentUser, isNull);
+  testWidgets('use another email and sign out both use transactional logout', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+    for (final key in const [
+      Key('verify-email-use-another'),
+      Key('verify-email-sign-out'),
+    ]) {
+      final repo = _TestAuthRepo(user: _defaultUser);
+      await tester.pumpWidget(_buildScreen(repo: repo));
+      final action = find.byKey(key);
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pump();
+      expect(repo.signOutCount, 1);
+      expect(repo.currentUser, isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
   });
 
   testWidgets(
-    'Friendly error mapping presents clean message on resend failure without raw exception details',
+    'failed logout retains verified-route identity and shows safe error',
     (tester) async {
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'test@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user)
-        ..resendException = Exception('network-request-failed');
-      final launcher = _FakeEmailLauncherService();
-
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
-        ),
-      );
+      await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+      final repo = _TestAuthRepo(user: _defaultUser)
+        ..signOutError = Exception('firebase-raw-signout-detail');
+      await tester.pumpWidget(_buildScreen(repo: repo));
+      final signOut = find.byKey(const Key('verify-email-sign-out'));
+      await tester.ensureVisible(signOut);
+      await tester.tap(signOut);
       await tester.pump(const Duration(milliseconds: 300));
 
-      await tester.tap(find.byKey(const Key('verify-email-resend')));
-      await tester.pump(const Duration(milliseconds: 300));
-
+      expect(repo.currentUser, same(_defaultUser));
+      expect(find.text('Verify your email'), findsOneWidget);
       expect(
-        find.text('Network error. Check your connection and retry.'),
+        find.text('Couldn\'t sign out. Please try again.'),
         findsOneWidget,
       );
-      expect(
-        find.textContaining('Exception: network-request-failed'),
-        findsNothing,
-      );
+      expect(find.textContaining('raw-signout'), findsNothing);
     },
   );
 
-  testWidgets(
-    'Resend cooldown reconciles remaining time from lastVerificationEmailSent on mount',
-    (tester) async {
-      final user = const AuthUser(
-        uid: 'user-123',
-        email: 'test@example.com',
-        emailVerified: false,
-      );
-      final repo = _TestAuthRepo(user: user);
-      final launcher = _FakeEmailLauncherService();
+  testWidgets('visual and Android back cannot bypass verification', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+    final repo = _TestAuthRepo(user: _defaultUser);
+    await tester.pumpWidget(_buildScreen(repo: repo));
 
-      // Email was sent 20 seconds ago -> 40 seconds remaining
-      final lastSent = DateTime.now().subtract(const Duration(seconds: 20));
+    expect(find.byIcon(Icons.arrow_back), findsNothing);
+    expect(find.byIcon(Icons.arrow_back_ios), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('Verify your email'), findsOneWidget);
+    expect(repo.currentUser, same(_defaultUser));
+  });
 
-      await tester.pumpWidget(
-        _buildTestScreen(
-          authState: AuthState(
-            user: user,
-            status: AuthFlowStatus.signedInEmailUnverified,
-            lastVerificationEmailSent: lastSent,
-          ),
-          repo: repo,
-          emailLauncher: launcher,
+  testWidgets('representative logical viewports render cleanly without overflow', (
+    tester,
+  ) async {
+    for (final logicalSize in const [
+      Size(360, 800), // compact Android
+      Size(393, 873), // common Android / RMX2001 logical equivalent
+      Size(412, 915), // larger Android
+    ]) {
+      await _setLogicalViewport(tester, logicalSize: logicalSize);
+      final repo = _TestAuthRepo(user: _defaultUser);
+      await tester.pumpWidget(_buildScreen(repo: repo));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Verify your email'), findsOneWidget);
+      expect(find.byKey(const Key('verify-email-card')), findsOneWidget);
+      expect(find.text('Check verification'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('long email, missing email, and large text remain usable', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester, logicalSize: const Size(360, 800));
+    const longUser = AuthUser(
+      uid: 'long-email-user',
+      email:
+          'a.very.long.production.account.identity.for.mobile.testing@example-long-domain.com',
+      emailVerified: false,
+    );
+    final repo = _TestAuthRepo(user: longUser);
+    await tester.pumpWidget(
+      _buildScreen(
+        repo: repo,
+        state: const AuthState(
+          user: longUser,
+          status: AuthFlowStatus.signedInEmailUnverified,
         ),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
+        textScaler: const TextScaler.linear(1.5),
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text(longUser.email!), findsOneWidget);
+    expect(find.text('Check verification'), findsOneWidget);
 
-      expect(find.textContaining('Resend in'), findsOneWidget);
-    },
-  );
+    const missingEmailUser = AuthUser(
+      uid: 'missing-email-user',
+      emailVerified: false,
+    );
+    final missingRepo = _TestAuthRepo(user: missingEmailUser);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(
+      _buildScreen(
+        repo: missingRepo,
+        state: const AuthState(
+          user: missingEmailUser,
+          status: AuthFlowStatus.signedInEmailUnverified,
+        ),
+      ),
+    );
+    expect(find.text('Email address unavailable'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
