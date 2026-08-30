@@ -1016,15 +1016,22 @@ class BodyBasicsDraft {
     double? calorieEstimate,
     double? proteinEstimate,
     bool? bodyDataCompleted,
+    bool clearBmiEstimate = false,
+    bool clearCalorieEstimate = false,
+    bool clearProteinEstimate = false,
   }) {
     return BodyBasicsDraft(
       ageRange: ageRange ?? this.ageRange,
       heightCm: heightCm ?? this.heightCm,
       weightKg: weightKg ?? this.weightKg,
       gender: gender ?? this.gender,
-      bmiEstimate: bmiEstimate ?? this.bmiEstimate,
-      calorieEstimate: calorieEstimate ?? this.calorieEstimate,
-      proteinEstimate: proteinEstimate ?? this.proteinEstimate,
+      bmiEstimate: clearBmiEstimate ? null : (bmiEstimate ?? this.bmiEstimate),
+      calorieEstimate: clearCalorieEstimate
+          ? null
+          : (calorieEstimate ?? this.calorieEstimate),
+      proteinEstimate: clearProteinEstimate
+          ? null
+          : (proteinEstimate ?? this.proteinEstimate),
       bodyDataCompleted: bodyDataCompleted ?? this.bodyDataCompleted,
     );
   }
@@ -1033,7 +1040,12 @@ class BodyBasicsDraft {
     final height = heightCm;
     final weight = weightKg;
     if (height == null || weight == null || height <= 0 || weight <= 0) {
-      return copyWith(bodyDataCompleted: false);
+      return copyWith(
+        bodyDataCompleted: false,
+        clearBmiEstimate: true,
+        clearCalorieEstimate: true,
+        clearProteinEstimate: true,
+      );
     }
     final meters = height / 100.0;
     final bmi = weight / (meters * meters);

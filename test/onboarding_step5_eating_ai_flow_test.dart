@@ -86,6 +86,12 @@ void main() {
       // Set up a draft that leads directly to the create routine screen
       final draft = OnboardingDraft(
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+        bodyBasics: const BodyBasicsDraft(
+          ageRange: '25-34',
+          heightCm: 175,
+          weightKg: 72,
+          gender: 'male',
+        ).withEstimates(),
         baseTimeline: const BaseTimelineDraft(
           eatingSetupPath: onboardingEatingPathCreate,
           eatingSetupStep: 1,

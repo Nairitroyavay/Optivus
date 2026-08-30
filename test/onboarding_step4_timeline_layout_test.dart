@@ -1880,6 +1880,12 @@ void main() {
       currentStep: onboardingEatingStepIndex,
       stepCompleted: completed,
       stepDirty: dirty,
+      bodyBasics: const BodyBasicsDraft(
+        ageRange: '25-34',
+        heightCm: 175,
+        weightKg: 72,
+        gender: 'male',
+      ).withEstimates(),
       baseTimeline: const BaseTimelineDraft(
         eatingSetupPath: onboardingEatingPathCreate,
         eatingSetupStep: 1,

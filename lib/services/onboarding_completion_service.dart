@@ -657,12 +657,17 @@ class OnboardingCompletionService {
       'stressLevel': draft.lifeRole.stressLevel ?? '',
       'sleepQuality': draft.lifeRole.sleepQuality ?? '',
       'ageRange': draft.bodyBasics.ageRange ?? '',
-      'height': draft.bodyBasics.heightCm ?? 0.0,
-      'weight': draft.bodyBasics.weightKg ?? 0.0,
+      if (draft.bodyBasics.heightCm != null)
+        'height': draft.bodyBasics.heightCm,
+      if (draft.bodyBasics.weightKg != null)
+        'weight': draft.bodyBasics.weightKg,
       'gender': draft.bodyBasics.gender ?? '',
-      'bmiEstimate': draft.bodyBasics.bmiEstimate ?? 0.0,
-      'calorieEstimate': draft.bodyBasics.calorieEstimate ?? 0.0,
-      'proteinEstimate': draft.bodyBasics.proteinEstimate ?? 0.0,
+      if (draft.bodyBasics.bmiEstimate != null)
+        'bmiEstimate': draft.bodyBasics.bmiEstimate,
+      if (draft.bodyBasics.calorieEstimate != null)
+        'calorieEstimate': draft.bodyBasics.calorieEstimate,
+      if (draft.bodyBasics.proteinEstimate != null)
+        'proteinEstimate': draft.bodyBasics.proteinEstimate,
       'coachName': _coachName(draft),
       'coachStyle': draft.coachSetup.coachStyle ?? '',
       'slipUpStyle': draft.slipUpHandling ?? '',

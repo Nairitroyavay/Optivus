@@ -13,36 +13,25 @@ class OnboardingStep3 extends ConsumerStatefulWidget {
 }
 
 class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
+  static const _minimumHeightCm = 120.0;
+  static const _maximumHeightCm = 220.0;
+  static const _minimumWeightKg = 40.0;
+  static const _maximumWeightKg = 150.0;
+
   bool _isHeightMetric = true;
   bool _isWeightMetric = true;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final body = ref.read(mockOnboardingProvider).draft.bodyBasics;
-      if (body.heightCm == null || body.weightKg == null) {
-        _updateBody(
-          body
-              .copyWith(
-                heightCm: body.heightCm ?? 170.0,
-                weightKg: body.weightKg ?? 70.0,
-              )
-              .withEstimates(),
-        );
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final body = ref.watch(mockOnboardingProvider).draft.bodyBasics;
-    final heightCm = body.heightCm ?? 170.0;
-    final weightKg = body.weightKg ?? 70.0;
-    final totalInches = heightCm / 2.54;
+    final displayHeightCm =
+        body.heightCm ?? (_minimumHeightCm + _maximumHeightCm) / 2;
+    final displayWeightKg =
+        body.weightKg ?? (_minimumWeightKg + _maximumWeightKg) / 2;
+    final totalInches = displayHeightCm / 2.54;
     final feet = totalInches ~/ 12;
     final inches = (totalInches % 12).round();
-    final lbs = weightKg * 2.20462;
+    final lbs = displayWeightKg * 2.20462;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,6 +118,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                 _SliderCard(
                   title: 'Height',
                   trailing: OnboardingUnitToggle(
+                    key: const ValueKey('height-unit-toggle'),
                     option1: 'CM',
                     option2: 'FT',
                     isOption1: _isHeightMetric,
@@ -138,12 +128,14 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                       ? body.heightCm == null
                             ? 'Set cm'
                             : '${body.heightCm!.toInt()} cm'
+                      : body.heightCm == null
+                      ? 'Set ft'
                       : "$feet'$inches\"",
                   value: _isHeightMetric
-                      ? heightCm
+                      ? displayHeightCm
                       : totalInches.clamp(48.0, 84.0),
-                  min: _isHeightMetric ? 120 : 48,
-                  max: _isHeightMetric ? 220 : 84,
+                  min: _isHeightMetric ? _minimumHeightCm : 48,
+                  max: _isHeightMetric ? _maximumHeightCm : 84,
                   onChanged: (value) {
                     _updateBody(
                       body
@@ -156,11 +148,13 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                         .read(mockOnboardingProvider.notifier)
                         .setStepDirty(3, true);
                   },
+                  sliderKey: const ValueKey('height-slider'),
                 ),
                 const SizedBox(height: 14),
                 _SliderCard(
                   title: 'Weight',
                   trailing: OnboardingUnitToggle(
+                    key: const ValueKey('weight-unit-toggle'),
                     option1: 'KG',
                     option2: 'LB',
                     isOption1: _isWeightMetric,
@@ -170,10 +164,14 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                       ? body.weightKg == null
                             ? 'Set kg'
                             : '${body.weightKg!.toInt()} kg'
+                      : body.weightKg == null
+                      ? 'Set lbs'
                       : '${lbs.round()} lbs',
-                  value: _isWeightMetric ? weightKg : lbs.clamp(88.0, 330.0),
-                  min: _isWeightMetric ? 40 : 88,
-                  max: _isWeightMetric ? 150 : 330,
+                  value: _isWeightMetric
+                      ? displayWeightKg
+                      : lbs.clamp(88.0, 330.0),
+                  min: _isWeightMetric ? _minimumWeightKg : 88,
+                  max: _isWeightMetric ? _maximumWeightKg : 330,
                   onChanged: (value) {
                     _updateBody(
                       body
@@ -186,6 +184,7 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                         .read(mockOnboardingProvider.notifier)
                         .setStepDirty(3, true);
                   },
+                  sliderKey: const ValueKey('weight-slider'),
                 ),
                 const SizedBox(height: 14),
                 OnboardingGlassCard(
@@ -278,6 +277,7 @@ class _SliderCard extends StatelessWidget {
   final double max;
   final ValueChanged<double> onChanged;
   final Widget? trailing;
+  final Key? sliderKey;
 
   const _SliderCard({
     required this.title,
@@ -287,6 +287,7 @@ class _SliderCard extends StatelessWidget {
     required this.max,
     required this.onChanged,
     this.trailing,
+    this.sliderKey,
   });
 
   @override
@@ -305,6 +306,7 @@ class _SliderCard extends StatelessWidget {
             ],
           ),
           OnboardingLiquidContinuousSlider(
+            key: sliderKey,
             value: value,
             valueLabel: valueLabel,
             min: min,

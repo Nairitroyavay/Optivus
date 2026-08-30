@@ -274,6 +274,13 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         '[Onboarding5] GENERATE source=create '
         'hasBodyBasics=${bodyContext.hasBodyBasics}',
       );
+      if (!bodyContext.hasBodyBasics) {
+        setState(() {
+          _createError =
+              'Complete Body Basics with your height and weight before generating a meal routine.';
+        });
+        return;
+      }
       final uid = ref.read(authProvider).user?.uid ?? draft.uid;
       final authGeneration = ref.read(authGenerationProvider);
       final idToken =
@@ -922,7 +929,7 @@ class _EatingGeneratedSummaryRow extends StatelessWidget {
   final String style;
   final String eatingType;
   final int mealsPerDay;
-  final int targetCalories;
+  final int? targetCalories;
   final VoidCallback onEdit;
 
   const _EatingGeneratedSummaryRow({
@@ -937,7 +944,7 @@ class _EatingGeneratedSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary =
-        '${_goalLabel(bodyGoal)} · ${_styleLabel(style)} · ${_typeLabel(eatingType)} · $mealsPerDay meals · ~$targetCalories kcal';
+        '${_goalLabel(bodyGoal)} · ${_styleLabel(style)} · ${_typeLabel(eatingType)} · $mealsPerDay meals · ${targetCalories == null ? 'calorie target unavailable' : '~$targetCalories kcal'}';
     return OnboardingGlassCard(
       tint: Colors.white.withValues(alpha: 0.10),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1844,9 +1851,9 @@ class Onboarding5MealBodyContext {
   final int? age;
   final String? gender;
   final double? bmi;
-  final int estimatedBmr;
-  final int estimatedMaintenanceCalories;
-  final int targetCalories;
+  final int? estimatedBmr;
+  final int? estimatedMaintenanceCalories;
+  final int? targetCalories;
   final double? proteinTarget;
   final int mealsPerDay;
   final String eatingType;
@@ -1942,23 +1949,26 @@ Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
       height > 0 &&
       age != null &&
       body.gender != null;
-  final safeWeight = weight != null && weight > 0 ? weight : 70.0;
-  final safeHeight = height != null && height > 0 ? height : 170.0;
-  final safeAge = age ?? 25;
-  final bmr = _estimateBmr(
-    weightKg: safeWeight,
-    heightCm: safeHeight,
-    age: safeAge,
-    gender: body.gender,
-  );
-  final maintenance = body.calorieEstimate != null && body.calorieEstimate! > 0
+  final bmr = hasBodyBasics
+      ? _estimateBmr(
+          weightKg: weight,
+          heightCm: height,
+          age: age,
+          gender: body.gender,
+        )
+      : null;
+  final maintenance = !hasBodyBasics
+      ? null
+      : body.calorieEstimate != null && body.calorieEstimate! > 0
       ? body.calorieEstimate!.round()
-      : (bmr * _activityFactorForLifeRole(draft.lifeRole)).round();
-  final target = _targetCalories(
-    maintenanceCalories: maintenance,
-    bodyGoal: bodyGoal,
-    gender: body.gender,
-  );
+      : (bmr! * _activityFactorForLifeRole(draft.lifeRole)).round();
+  final target = maintenance == null
+      ? null
+      : _targetCalories(
+          maintenanceCalories: maintenance,
+          bodyGoal: bodyGoal,
+          gender: body.gender,
+        );
   final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
 
   return Onboarding5MealBodyContext(
