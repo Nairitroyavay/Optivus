@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/verification_lifecycle_state.dart';
 
 const _ink = OptivusColors.ink;
 const _sub = OptivusColors.textSecondary;
@@ -22,142 +22,43 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
     with WidgetsBindingObserver {
-  // Preserve the resend policy that predates this visual redesign.
-  static const _resendCooldownSeconds = 60;
-
-  bool _checking = false;
-  bool _resending = false;
-  int _cooldown = 0;
-  Timer? _timer;
-  String? _error;
-  String? _success;
+  late final VerificationLifecycleController _lifecycleController;
 
   @override
   void initState() {
     super.initState();
+    _lifecycleController = ref.read(verificationLifecycleProvider.notifier);
     WidgetsBinding.instance.addObserver(this);
-    _cooldown = _calculateRemainingCooldown();
-    if (_cooldown > 0) _startCooldown();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _lifecycleController.activate();
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _timer?.cancel();
+    _lifecycleController.detach();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
-    final remaining = _calculateRemainingCooldown();
-    if (mounted) setState(() => _cooldown = remaining);
-    if (remaining > 0) {
-      _startCooldown();
+    if (state == AppLifecycleState.resumed) {
+      _lifecycleController.resume();
     } else {
-      _timer?.cancel();
-    }
-    // Existing return-to-app check; no polling/backoff is introduced here.
-    _checkVerified(isAutomatic: true);
-  }
-
-  int _calculateRemainingCooldown() {
-    final lastSent = ref.read(authProvider).lastVerificationEmailSent;
-    if (lastSent == null) return 0;
-    final elapsed = DateTime.now().difference(lastSent).inSeconds;
-    final remaining = _resendCooldownSeconds - elapsed;
-    return remaining > 0 ? remaining : 0;
-  }
-
-  void _startCooldown() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      final remaining = _calculateRemainingCooldown();
-      if (remaining <= 0) {
-        timer.cancel();
-        setState(() => _cooldown = 0);
-      } else {
-        setState(() => _cooldown = remaining);
-      }
-    });
-  }
-
-  Future<void> _checkVerified({bool isAutomatic = false}) async {
-    if (!mounted || _checking || _resending) return;
-    final currentUid = ref.read(authProvider).user?.uid;
-    if (currentUid == null) return;
-    setState(() {
-      _checking = true;
-      if (!isAutomatic) {
-        _error = null;
-        _success = null;
-      }
-    });
-    try {
-      await ref.read(authProvider.notifier).checkEmailVerification();
-      if (!mounted) return;
-      final updated = ref.read(authProvider);
-      if (updated.user?.uid != currentUid) return;
-      if (updated.user?.emailVerified == true) {
-        setState(() => _success = 'Email verified');
-      }
-    } catch (error) {
-      if (!mounted) return;
-      final updated = ref.read(authProvider);
-      if (updated.user?.uid != currentUid || isAutomatic) return;
-      setState(() {
-        _error = error.toString().contains('Email not verified yet.')
-            ? 'Not verified yet. Tap the link in your email, then try again.'
-            : 'Couldn\'t check verification. Try again.';
-      });
-    } finally {
-      if (mounted) setState(() => _checking = false);
-    }
-  }
-
-  Future<void> _resend() async {
-    if (!mounted || _resending || _checking || _cooldown > 0) return;
-    setState(() {
-      _resending = true;
-      _error = null;
-      _success = null;
-    });
-    try {
-      await ref.read(authProvider.notifier).resendEmailVerification();
-      if (!mounted) return;
-      _cooldown = _calculateRemainingCooldown();
-      if (_cooldown == 0) _cooldown = _resendCooldownSeconds;
-      setState(
-        () => _success =
-            'Sent again. Check Spam or Promotions if it doesn\'t arrive.',
-      );
-      _startCooldown();
-    } catch (_) {
-      if (mounted) {
-        setState(
-          () => _error = 'Couldn\'t resend the email. Try again shortly.',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _resending = false);
+      _lifecycleController.pause();
     }
   }
 
   Future<void> _logout() async {
     if (ref.read(authProvider).isLoading) return;
-    setState(() {
-      _error = null;
-      _success = null;
-    });
+    final controller = ref.read(verificationLifecycleProvider.notifier)
+      ..clearMessage();
     try {
       await ref.read(authProvider.notifier).logout();
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Couldn\'t sign out. Please try again.');
+        controller.showAccountError('Couldn\'t sign out. Please try again.');
       }
     }
   }
@@ -165,11 +66,16 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final lifecycle = ref.watch(verificationLifecycleProvider);
     final email = auth.user?.email?.trim();
     final displayEmail = email == null || email.isEmpty
         ? 'Email address unavailable'
         : email;
-    final actionsEnabled = !auth.isLoading && !_checking && !_resending;
+    final actionsEnabled =
+        !auth.isLoading && !lifecycle.checking && !lifecycle.resendInFlight;
+    final isError =
+        lifecycle.messageKind != null &&
+        lifecycle.messageKind != VerificationMessageKind.success;
 
     return PopScope(
       // The auth router owns this destination. System Back stays here; the
@@ -231,25 +137,32 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
                             _VerificationCard(email: displayEmail),
                             const SizedBox(height: 10),
                             _StableMessageRegion(
-                              error: _error,
-                              success: _success,
+                              error: isError ? lifecycle.message : null,
+                              success: isError ? null : lifecycle.message,
                             ),
                             const SizedBox(height: 8),
                             _CheckVerificationButton(
                               key: const Key('verify-email-check'),
-                              checking: _checking,
+                              checking: lifecycle.checking,
                               enabled: actionsEnabled,
                               onPressed: actionsEnabled
-                                  ? () => _checkVerified(isAutomatic: false)
+                                  ? () => ref
+                                        .read(
+                                          verificationLifecycleProvider
+                                              .notifier,
+                                        )
+                                        .checkNow(manual: true)
                                   : null,
                             ),
                             const SizedBox(height: 14),
                             _ResendAction(
                               key: const Key('verify-email-resend'),
-                              cooldown: _cooldown,
-                              resending: _resending,
+                              cooldown: lifecycle.resendSecondsRemaining,
+                              resending: lifecycle.resendInFlight,
                               enabled: actionsEnabled,
-                              onResend: _resend,
+                              onResend: () => ref
+                                  .read(verificationLifecycleProvider.notifier)
+                                  .resend(),
                             ),
                             const SizedBox(height: 18),
                             _TextAction(
@@ -319,10 +232,7 @@ class _HeroIcon extends StatelessWidget {
       ),
       child: const Center(
         child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: _ink,
-            shape: BoxShape.circle,
-          ),
+          decoration: BoxDecoration(color: _ink, shape: BoxShape.circle),
           child: Padding(
             padding: EdgeInsets.all(9),
             child: Icon(
@@ -416,11 +326,7 @@ class _VerificationCard extends StatelessWidget {
           ),
 
           const SizedBox(height: 14),
-          const Divider(
-            height: 1,
-            thickness: 1,
-            color: Color(0x12000000),
-          ),
+          const Divider(height: 1, thickness: 1, color: Color(0x12000000)),
           const SizedBox(height: 14),
 
           // ── Step 1 ───────────────────────────────────────────
@@ -440,11 +346,7 @@ class _VerificationCard extends StatelessWidget {
           ),
 
           const SizedBox(height: 14),
-          const Divider(
-            height: 1,
-            thickness: 1,
-            color: Color(0x12000000),
-          ),
+          const Divider(height: 1, thickness: 1, color: Color(0x12000000)),
           const SizedBox(height: 12),
 
           // ── Passive Waiting Status ────────────────────────────
@@ -566,10 +468,7 @@ class _PassiveWaitingStatusState extends State<_PassiveWaitingStatus>
               );
             },
             child: const DecoratedBox(
-              decoration: BoxDecoration(
-                color: _amber,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: _amber, shape: BoxShape.circle),
               child: SizedBox(width: 8, height: 8),
             ),
           ),
@@ -612,9 +511,9 @@ class _StableMessageRegion extends StatelessWidget {
   Widget build(BuildContext context) {
     final message = error ?? success;
     final isError = error != null;
-    return ConstrainedBox(
+    return SizedBox(
       key: const Key('verify-email-message-region'),
-      constraints: const BoxConstraints(minHeight: 40),
+      height: 48,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 180),
         child: message == null
@@ -625,11 +524,14 @@ class _StableMessageRegion extends StatelessWidget {
               )
             : Container(
                 key: ValueKey(message),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 2,
+                ),
                 alignment: Alignment.center,
                 child: Text(
                   message,
-                  maxLines: 3,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -698,22 +600,23 @@ class _CheckVerificationButtonState extends State<_CheckVerificationButton>
             duration: const Duration(milliseconds: 180),
             opacity: isInteractive ? 1.0 : 0.48,
             child: GestureDetector(
-              onTapDown: isInteractive ? (_) => _pressController.forward() : null,
+              onTapDown: isInteractive
+                  ? (_) => _pressController.forward()
+                  : null,
               onTapUp: isInteractive
                   ? (_) async {
                       await _pressController.reverse();
                       widget.onPressed?.call();
                     }
                   : null,
-              onTapCancel: isInteractive ? () => _pressController.reverse() : null,
+              onTapCancel: isInteractive
+                  ? () => _pressController.reverse()
+                  : null,
               child: AnimatedBuilder(
                 animation: _pressController,
                 builder: (context, child) {
                   final scale = 1.0 - (_pressController.value * 0.03);
-                  return Transform.scale(
-                    scale: scale,
-                    child: child,
-                  );
+                  return Transform.scale(scale: scale, child: child);
                 },
                 child: Container(
                   height: 56,
@@ -767,8 +670,9 @@ class _CheckVerificationButtonState extends State<_CheckVerificationButton>
                                   height: 50,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: const Color(0xFF92E0FF)
-                                        .withValues(alpha: 0.35),
+                                    color: const Color(
+                                      0xFF92E0FF,
+                                    ).withValues(alpha: 0.35),
                                   ),
                                 ),
                               ),
@@ -780,8 +684,9 @@ class _CheckVerificationButtonState extends State<_CheckVerificationButton>
                                   height: 45,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: const Color(0xFFFFC6BA)
-                                        .withValues(alpha: 0.35),
+                                    color: const Color(
+                                      0xFFFFC6BA,
+                                    ).withValues(alpha: 0.35),
                                   ),
                                 ),
                               ),

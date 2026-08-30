@@ -559,7 +559,6 @@ class FirebaseAuthRepository implements AuthRepository {
       await user.reload();
       final refreshed = _auth.currentUser;
       if (refreshed == null) return null;
-      await refreshed.getIdToken(true);
       return _authUserFromFirebase(refreshed);
     } catch (e) {
       throw mapAuthError(e);

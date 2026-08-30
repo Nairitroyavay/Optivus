@@ -462,6 +462,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
           clearError: true,
+          lastVerificationEmailSent: DateTime.now(),
         );
         await _repository.sendEmailVerification();
         if (!_isCurrentAuthOperation(operation)) return;
@@ -570,19 +571,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
-          errorMessage:
-              'We could not confirm it yet. Tap the link in your email, then try again.',
-          failureReason: AuthFailureReason.invalidCredentials,
+          clearError: true,
         );
-        throw Exception('Email not verified yet.');
+        return;
       }
 
+      // Refresh the verified claim only after Firebase's fresh post-reload
+      // user confirms verification. Unverified polling does not churn tokens.
+      await _repository.currentIdToken();
+      if (!_isCurrentAuthOperation(operation)) return;
       await _loadOrCreateBackendUserState(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
-      if (error.toString().contains('Email not verified yet.')) {
-        rethrow;
-      }
       final mapped = mapAuthError(error);
       state = state.copyWith(
         status: AuthFlowStatus.signedInEmailUnverified,

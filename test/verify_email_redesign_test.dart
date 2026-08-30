@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/verification_lifecycle_state.dart';
 import 'package:optivus/views/screens/verify_email_screen.dart';
 
 class _TestAuthRepo implements AuthRepository {
@@ -14,11 +16,15 @@ class _TestAuthRepo implements AuthRepository {
   bool verificationEmailSent = false;
   int reloadCount = 0;
   int signOutCount = 0;
+  int tokenRefreshCount = 0;
+  int verificationEmailSendCount = 0;
   bool verifyOnReload = false;
   Object? reloadError;
   Object? resendError;
   Object? signOutError;
   Completer<void>? reloadGate;
+  Completer<void>? resendGate;
+  final authEvents = StreamController<AuthUser?>.broadcast();
 
   _TestAuthRepo({required this.user});
 
@@ -26,7 +32,7 @@ class _TestAuthRepo implements AuthRepository {
   AuthUser? get currentUser => user;
 
   @override
-  Stream<AuthUser?> get authStateChanges => const Stream.empty();
+  Stream<AuthUser?> get authStateChanges => authEvents.stream;
 
   @override
   Future<AuthUser> signIn(String email, String password) async => user!;
@@ -53,6 +59,8 @@ class _TestAuthRepo implements AuthRepository {
 
   @override
   Future<void> sendEmailVerification() async {
+    verificationEmailSendCount++;
+    await resendGate?.future;
     if (resendError case final error?) throw error;
     verificationEmailSent = true;
   }
@@ -76,7 +84,10 @@ class _TestAuthRepo implements AuthRepository {
   }
 
   @override
-  Future<String?> currentIdToken() async => 'fake-token';
+  Future<String?> currentIdToken() async {
+    tokenRefreshCount++;
+    return 'fake-token';
+  }
 
   @override
   Future<void> sendPasswordResetEmail(String email) async {}
@@ -105,6 +116,8 @@ Widget _buildScreen({
   required _TestAuthRepo repo,
   AuthState? state,
   TextScaler textScaler = TextScaler.noScaling,
+  VerificationLifecyclePolicy policy = const VerificationLifecyclePolicy(),
+  DateTime Function()? now,
 }) {
   final authState =
       state ??
@@ -118,6 +131,8 @@ Widget _buildScreen({
       authProvider.overrideWith(
         (ref) => _TestAuthNotifier(repo, ref, authState),
       ),
+      verificationLifecyclePolicyProvider.overrideWithValue(policy),
+      if (now != null) verificationClockProvider.overrideWithValue(now),
       mockUserProfileProvider.overrideWith(
         (ref) => MockUserProfileNotifier()
           ..loadSeedData(
@@ -158,6 +173,28 @@ Future<void> _tapAnimatedButton(WidgetTester tester, Finder finder) async {
   await tester.pump(const Duration(milliseconds: 200));
 }
 
+ProviderContainer _container(WidgetTester tester) {
+  return ProviderScope.containerOf(
+    tester.element(find.byType(VerifyEmailScreen)),
+  );
+}
+
+class _MutableClock {
+  DateTime value = DateTime(2026, 1, 1, 12);
+
+  DateTime call() => value;
+
+  void advance(Duration duration) => value = value.add(duration);
+}
+
+const _fastPollingPolicy = VerificationLifecyclePolicy(
+  pollIntervals: [
+    Duration(milliseconds: 100),
+    Duration(milliseconds: 200),
+    Duration(milliseconds: 300),
+  ],
+);
+
 void main() {
   setUp(() {
     // Default setup
@@ -181,10 +218,7 @@ void main() {
 
       // Identity inside verification card
       expect(
-        find.descendant(
-          of: cardFinder,
-          matching: find.text('SENT TO'),
-        ),
+        find.descendant(of: cardFinder, matching: find.text('SENT TO')),
         findsOneWidget,
       );
       expect(
@@ -197,10 +231,7 @@ void main() {
 
       // Step 1 inside card
       expect(
-        find.descendant(
-          of: cardFinder,
-          matching: find.text('Open your email'),
-        ),
+        find.descendant(of: cardFinder, matching: find.text('Open your email')),
         findsOneWidget,
       );
       expect(
@@ -304,12 +335,8 @@ void main() {
     expect(find.text('Checking...'), findsOneWidget);
     gate.complete();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      find.text(
-        'Not verified yet. Tap the link in your email, then try again.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Waiting for verification'), findsOneWidget);
+    expect(find.textContaining('invalid'), findsNothing);
   });
 
   testWidgets('check failure is compact and keeps message region stable', (
@@ -330,7 +357,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(
-      find.text('Couldn\'t check verification. Try again.'),
+      find.text('Couldn\'t check verification. Please try again.'),
       findsOneWidget,
     );
     expect(find.textContaining('firebase'), findsNothing);
@@ -382,6 +409,7 @@ void main() {
         ),
       ),
     );
+    await tester.pump();
 
     expect(find.textContaining('Resend available in'), findsOneWidget);
     expect(
@@ -447,27 +475,28 @@ void main() {
     expect(repo.currentUser, same(_defaultUser));
   });
 
-  testWidgets('representative logical viewports render cleanly without overflow', (
-    tester,
-  ) async {
-    for (final logicalSize in const [
-      Size(360, 800), // compact Android
-      Size(393, 873), // common Android / RMX2001 logical equivalent
-      Size(412, 915), // larger Android
-    ]) {
-      await _setLogicalViewport(tester, logicalSize: logicalSize);
-      final repo = _TestAuthRepo(user: _defaultUser);
-      await tester.pumpWidget(_buildScreen(repo: repo));
-      await tester.pump();
+  testWidgets(
+    'representative logical viewports render cleanly without overflow',
+    (tester) async {
+      for (final logicalSize in const [
+        Size(360, 800), // compact Android
+        Size(393, 873), // common Android / RMX2001 logical equivalent
+        Size(412, 915), // larger Android
+      ]) {
+        await _setLogicalViewport(tester, logicalSize: logicalSize);
+        final repo = _TestAuthRepo(user: _defaultUser);
+        await tester.pumpWidget(_buildScreen(repo: repo));
+        await tester.pump();
 
-      expect(tester.takeException(), isNull);
-      expect(find.text('Verify your email'), findsOneWidget);
-      expect(find.byKey(const Key('verify-email-card')), findsOneWidget);
-      expect(find.text('Check verification'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        expect(find.text('Verify your email'), findsOneWidget);
+        expect(find.byKey(const Key('verify-email-card')), findsOneWidget);
+        expect(find.text('Check verification'), findsOneWidget);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-    }
-  });
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
 
   testWidgets('long email, missing email, and large text remain usable', (
     tester,
@@ -511,5 +540,289 @@ void main() {
     );
     expect(find.text('Email address unavailable'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'foreground polling pauses, resumes immediately, and stays single',
+    (tester) async {
+      await _setLogicalViewport(tester);
+      final repo = _TestAuthRepo(user: _defaultUser);
+      await tester.pumpWidget(
+        _buildScreen(repo: repo, policy: _fastPollingPolicy),
+      );
+      await tester.pump();
+      expect(repo.reloadCount, 1);
+      expect(repo.verificationEmailSendCount, 0);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(repo.reloadCount, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(repo.reloadCount, 2);
+      expect(repo.verificationEmailSendCount, 0);
+      await tester.pump(const Duration(milliseconds: 110));
+      expect(repo.reloadCount, 3);
+
+      for (var cycle = 0; cycle < 3; cycle++) {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        await tester.pump();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+      }
+      expect(repo.reloadCount, 6);
+      await tester.pump(const Duration(milliseconds: 110));
+      expect(repo.reloadCount, 7);
+    },
+  );
+
+  testWidgets(
+    'verified reload refreshes token once and uses destination pipeline',
+    (tester) async {
+      await _setLogicalViewport(tester);
+      final repo = _TestAuthRepo(user: _defaultUser)..verifyOnReload = true;
+      await tester.pumpWidget(_buildScreen(repo: repo));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final auth = _container(tester).read(authProvider);
+      expect(repo.reloadCount, 1);
+      expect(repo.tokenRefreshCount, 1);
+      expect(auth.user?.uid, _defaultUser.uid);
+      expect(auth.user?.emailVerified, isTrue);
+      expect(
+        auth.sessionDestination.kind,
+        isNot(SessionDestinationKind.verifyEmail),
+      );
+      await tester.pump(const Duration(seconds: 31));
+      expect(repo.reloadCount, 1);
+    },
+  );
+
+  testWidgets('automatic and manual checks share one in-flight success', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester);
+    final gate = Completer<void>();
+    final repo = _TestAuthRepo(user: _defaultUser)
+      ..reloadGate = gate
+      ..verifyOnReload = true;
+    await tester.pumpWidget(_buildScreen(repo: repo));
+    await tester.pump();
+    final controller = _container(
+      tester,
+    ).read(verificationLifecycleProvider.notifier);
+
+    controller.checkNow(manual: true);
+    controller.checkNow(manual: true);
+    expect(repo.reloadCount, 1);
+    gate.complete();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(repo.tokenRefreshCount, 1);
+    expect(
+      _container(
+        tester,
+      ).read(verificationLifecycleProvider).verificationConfirmed,
+      isTrue,
+    );
+  });
+
+  testWidgets(
+    'resend is deduplicated and deadline accounts for background time',
+    (tester) async {
+      await _setLogicalViewport(tester);
+      final clock = _MutableClock();
+      final gate = Completer<void>();
+      final repo = _TestAuthRepo(user: _defaultUser)..resendGate = gate;
+      await tester.pumpWidget(_buildScreen(repo: repo, now: clock.call));
+      await tester.pump();
+      final controller = _container(
+        tester,
+      ).read(verificationLifecycleProvider.notifier);
+
+      controller.resend();
+      controller.resend();
+      expect(repo.verificationEmailSendCount, 1);
+      gate.complete();
+      await tester.pump();
+      expect(
+        _container(
+          tester,
+        ).read(verificationLifecycleProvider).resendSecondsRemaining,
+        60,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      clock.advance(const Duration(seconds: 55));
+      await tester.pump(const Duration(seconds: 10));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(
+        _container(
+          tester,
+        ).read(verificationLifecycleProvider).resendSecondsRemaining,
+        5,
+      );
+      expect(repo.verificationEmailSendCount, 1);
+    },
+  );
+
+  testWidgets('resend distinguishes network and escalating capped throttles', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester);
+    final clock = _MutableClock();
+    final repo = _TestAuthRepo(user: _defaultUser)
+      ..resendError = Exception('network-request-failed');
+    await tester.pumpWidget(_buildScreen(repo: repo, now: clock.call));
+    await tester.pump();
+    final container = _container(tester);
+    final controller = container.read(verificationLifecycleProvider.notifier);
+
+    await controller.resend();
+    expect(
+      container.read(verificationLifecycleProvider).messageKind,
+      VerificationMessageKind.network,
+    );
+    expect(
+      container.read(verificationLifecycleProvider).message,
+      contains('connection'),
+    );
+
+    repo.resendError = Exception('too-many-requests');
+    const expected = [120, 240, 480, 900, 900];
+    for (var index = 0; index < expected.length; index++) {
+      await controller.resend();
+      final lifecycle = container.read(verificationLifecycleProvider);
+      expect(lifecycle.resendThrottleStreak, index + 1);
+      expect(lifecycle.resendSecondsRemaining, expected[index]);
+      expect(lifecycle.messageKind, VerificationMessageKind.rateLimited);
+      clock.advance(Duration(seconds: expected[index]));
+      await tester.pump(const Duration(seconds: 1));
+    }
+
+    repo.resendError = null;
+    await controller.resend();
+    final recovered = container.read(verificationLifecycleProvider);
+    expect(recovered.resendThrottleStreak, 0);
+    expect(recovered.resendSecondsRemaining, 60);
+  });
+
+  testWidgets('check errors distinguish network, rate limit, and unknown', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester);
+    final clock = _MutableClock();
+    final repo = _TestAuthRepo(user: _defaultUser)
+      ..reloadError = Exception('network-request-failed');
+    await tester.pumpWidget(_buildScreen(repo: repo, now: clock.call));
+    await tester.pump();
+    var lifecycle = _container(tester).read(verificationLifecycleProvider);
+    expect(lifecycle.messageKind, VerificationMessageKind.network);
+    expect(lifecycle.message, contains('connection'));
+
+    repo.reloadError = Exception('too-many-requests');
+    await _container(
+      tester,
+    ).read(verificationLifecycleProvider.notifier).checkNow(manual: true);
+    lifecycle = _container(tester).read(verificationLifecycleProvider);
+    expect(lifecycle.messageKind, VerificationMessageKind.rateLimited);
+    expect(lifecycle.verificationThrottleStreak, 1);
+
+    clock.advance(const Duration(seconds: 120));
+    repo.reloadError = Exception('firebase-internal-secret');
+    await _container(
+      tester,
+    ).read(verificationLifecycleProvider.notifier).checkNow(manual: true);
+    lifecycle = _container(tester).read(verificationLifecycleProvider);
+    expect(lifecycle.messageKind, VerificationMessageKind.firebaseFailure);
+    expect(lifecycle.message, isNot(contains('secret')));
+  });
+
+  testWidgets('UID switch and disposal ignore late verification results', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester);
+    final gate = Completer<void>();
+    final repo = _TestAuthRepo(user: _defaultUser)..reloadGate = gate;
+    await tester.pumpWidget(_buildScreen(repo: repo));
+    await tester.pump();
+
+    const userB = AuthUser(
+      uid: 'user-b',
+      email: 'b@example.com',
+      emailVerified: false,
+    );
+    repo.user = userB;
+    repo.authEvents.add(userB);
+    await tester.pump();
+    gate.complete();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(_container(tester).read(authProvider).user?.uid, userB.uid);
+    expect(repo.tokenRefreshCount, 0);
+
+    final disposeGate = Completer<void>();
+    final disposeRepo = _TestAuthRepo(user: _defaultUser)
+      ..reloadGate = disposeGate;
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(_buildScreen(repo: disposeRepo));
+    await tester.pump();
+    await tester.pumpWidget(const SizedBox.shrink());
+    disposeGate.complete();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('same UID refresh preserves the active verification session', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester);
+    final gate = Completer<void>();
+    final repo = _TestAuthRepo(user: _defaultUser)..reloadGate = gate;
+    await tester.pumpWidget(_buildScreen(repo: repo));
+    await tester.pump();
+
+    repo.authEvents.add(
+      const AuthUser(
+        uid: 'user-123',
+        email: 'refreshed@example.com',
+        emailVerified: false,
+      ),
+    );
+    await tester.pump();
+    expect(
+      _container(tester).read(verificationLifecycleProvider).foreground,
+      isTrue,
+    );
+    gate.complete();
+    await tester.pump();
+    expect(repo.reloadCount, 1);
+  });
+
+  testWidgets('sign-out during reload ignores late verification result safely', (
+    tester,
+  ) async {
+    await _setLogicalViewport(tester);
+    final gate = Completer<void>();
+    final repo = _TestAuthRepo(user: _defaultUser)
+      ..reloadGate = gate
+      ..verifyOnReload = true;
+    await tester.pumpWidget(_buildScreen(repo: repo));
+    await tester.pump();
+
+    final authNotifier = _container(tester).read(authProvider.notifier);
+    await authNotifier.logout();
+    await tester.pump();
+
+    expect(_container(tester).read(authProvider).isSignedOut, isTrue);
+    gate.complete();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(repo.tokenRefreshCount, 0);
+    expect(_container(tester).read(authProvider).isSignedOut, isTrue);
   });
 }
