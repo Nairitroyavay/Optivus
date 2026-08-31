@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -23,6 +24,33 @@ import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/services/background_sync_wake_lock_manager.dart';
 
 typedef Reader = T Function<T>(ProviderListenable<T> provider);
+
+/// Read-only view of the durable `currentRun` pointer and its referenced job.
+///
+/// Keeping pointer existence separate from [job] lets session reconstruction
+/// distinguish "no completion run" from a dangling/corrupt reference.
+class OnboardingCurrentRunSnapshot {
+  final bool hasPointer;
+  final String? runId;
+  final String? ownerUid;
+  final int? pointerSchemaVersion;
+  final OnboardingCompletionJob? job;
+
+  const OnboardingCurrentRunSnapshot({
+    required this.hasPointer,
+    this.runId,
+    this.ownerUid,
+    this.pointerSchemaVersion,
+    this.job,
+  });
+
+  const OnboardingCurrentRunSnapshot.none()
+    : hasPointer = false,
+      runId = null,
+      ownerUid = null,
+      pointerSchemaVersion = null,
+      job = null;
+}
 
 class OnboardingCompletionJobService {
   final OnboardingRepository onboardingRepository;
@@ -120,6 +148,13 @@ class OnboardingCompletionJobService {
   Future<OnboardingCompletionJob?> loadCurrentJob(String uid) {
     if (uid.trim().isEmpty) return Future.value(null);
     return _loadCurrentJob(uid);
+  }
+
+  Future<OnboardingCurrentRunSnapshot> loadCurrentRunSnapshot(String uid) {
+    if (uid.trim().isEmpty) {
+      return Future.value(const OnboardingCurrentRunSnapshot.none());
+    }
+    return _loadCurrentRunSnapshot(uid);
   }
 
   Future<OnboardingCompletionJob> _runCompletionJob({
@@ -862,13 +897,35 @@ class OnboardingCompletionJobService {
   }
 
   Future<OnboardingCompletionJob?> _loadCurrentJob(String uid) async {
+    final snapshot = await _loadCurrentRunSnapshot(uid);
+    return snapshot.job;
+  }
+
+  Future<OnboardingCurrentRunSnapshot> _loadCurrentRunSnapshot(
+    String uid,
+  ) async {
     if (firestore != null) {
       final pointer = await firestore!
           .doc(FirestoreUserPaths.onboardingCurrentRun(uid))
           .get();
-      final runId = pointer.data()?['currentRunId'] as String?;
+      final pointerData = pointer.data();
+      final runId = pointerData?['currentRunId'] as String?;
       if (runId != null && runId.isNotEmpty) {
-        return _loadJobStatus(uid, runId);
+        return OnboardingCurrentRunSnapshot(
+          hasPointer: true,
+          runId: runId,
+          ownerUid: pointerData?['ownerUid'] as String?,
+          pointerSchemaVersion: (pointerData?['schemaVersion'] as num?)
+              ?.toInt(),
+          job: await _loadJobStatus(uid, runId),
+        );
+      }
+      if (pointerData != null) {
+        return OnboardingCurrentRunSnapshot(
+          hasPointer: true,
+          ownerUid: pointerData['ownerUid'] as String?,
+          pointerSchemaVersion: (pointerData['schemaVersion'] as num?)?.toInt(),
+        );
       }
       // Read-only compatibility for a legacy fixed job. A new attempt always
       // creates a canonical run rather than mutating this document.
@@ -876,12 +933,27 @@ class OnboardingCompletionJobService {
           .doc(FirestoreUserPaths.onboardingCompletionJob(uid))
           .get();
       final legacyData = legacy.data();
-      return legacyData == null
-          ? null
-          : OnboardingCompletionJob.fromMap(legacyData);
+      if (legacyData == null) {
+        return const OnboardingCurrentRunSnapshot.none();
+      }
+      final legacyJob = OnboardingCompletionJob.fromMap(legacyData);
+      return OnboardingCurrentRunSnapshot(
+        hasPointer: true,
+        runId: legacyJob.jobId,
+        ownerUid: legacyJob.ownerUid,
+        pointerSchemaVersion: 1,
+        job: legacyJob,
+      );
     }
     final runId = _memoryCurrentRunIds[uid];
-    return runId == null ? null : _memoryJobs['$uid:$runId'];
+    if (runId == null) return const OnboardingCurrentRunSnapshot.none();
+    return OnboardingCurrentRunSnapshot(
+      hasPointer: true,
+      runId: runId,
+      ownerUid: uid,
+      pointerSchemaVersion: 1,
+      job: _memoryJobs['$uid:$runId'],
+    );
   }
 
   Future<OnboardingCompletionJob?> _loadJobStatus(
@@ -1084,6 +1156,7 @@ final onboardingCompletionJobServiceProvider =
     Provider<OnboardingCompletionJobService>((ref) {
       final firebaseMode =
           ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase;
+      final firebaseReady = firebaseMode && Firebase.apps.isNotEmpty;
       final service = OnboardingCompletionJobService(
         onboardingRepository: ref.watch(onboardingRepositoryProvider),
         profileRepository: ref.watch(profileRepositoryProvider),
@@ -1091,10 +1164,10 @@ final onboardingCompletionJobServiceProvider =
         conflictAcceptanceRepository: ref.watch(
           conflictAcceptanceRepositoryProvider,
         ),
-        firestore: firebaseMode ? FirebaseFirestore.instance : null,
-        requirePersistentJobs: firebaseMode,
-        requireFrontendHydration: firebaseMode,
-        requireRoutineVerification: firebaseMode,
+        firestore: firebaseReady ? FirebaseFirestore.instance : null,
+        requirePersistentJobs: firebaseReady,
+        requireFrontendHydration: firebaseReady,
+        requireRoutineVerification: firebaseReady,
       );
       ref.onDispose(service.cancelAll);
       return service;

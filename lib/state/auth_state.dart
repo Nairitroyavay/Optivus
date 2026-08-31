@@ -4,31 +4,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
-import 'package:optivus/features/profile/models/profile_settings_models.dart';
 import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
 import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/features/routine/routine_state.dart';
-import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/repositories/auth_repository.dart';
-import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
-import 'package:optivus/repositories/region_settings_repository.dart';
-import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
-import 'package:optivus/services/routine_onboarding_projection.dart';
-import 'package:optivus/services/routine_projection_receipt_validator.dart';
 
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/mock_seed_data.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/user_profile.dart';
-import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
-import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/core/utils/liquid_toast_manager.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
@@ -50,12 +41,23 @@ import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
+import 'package:optivus/services/server_reconstructor.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
     return FirebaseAuthRepository();
   }
   return FakeAuthRepository();
+});
+
+final serverReconstructorProvider = Provider<ServerReconstructor>((ref) {
+  return ServerReconstructor(
+    source: RepositoryServerReconstructionSource(
+      profileRepository: ref.watch(profileRepositoryProvider),
+      onboardingRepository: ref.watch(onboardingRepositoryProvider),
+      completionJobService: ref.watch(onboardingCompletionJobServiceProvider),
+    ),
+  );
 });
 
 enum AuthFlowStatus {
@@ -85,6 +87,7 @@ class AuthState {
   final int? resumeStep;
   final String? completionRunId;
   final String? startupReasonCode;
+  final ReconstructionResult? reconstructionResult;
 
   const AuthState({
     this.user,
@@ -97,6 +100,7 @@ class AuthState {
     this.resumeStep,
     this.completionRunId,
     this.startupReasonCode,
+    this.reconstructionResult,
   });
 
   bool get isLoggedIn => user != null;
@@ -125,6 +129,16 @@ class AuthState {
       status == AuthFlowStatus.backendRestoreFailed;
 
   SessionDestination get sessionDestination {
+    final reconstructed = reconstructionResult;
+    if (reconstructed != null &&
+        reconstructed.ownerUid == user?.uid &&
+        (status == AuthFlowStatus.signedInOnboardingIncomplete ||
+            status == AuthFlowStatus.finishingOnboarding ||
+            status == AuthFlowStatus.signedInOnboardingComplete ||
+            status == AuthFlowStatus.needsAction ||
+            status == AuthFlowStatus.backendRestoreFailed)) {
+      return resolveReconstructionDestination(reconstructed);
+    }
     return switch (status) {
       AuthFlowStatus.loading ||
       AuthFlowStatus.loadingBackendUser ||
@@ -167,9 +181,11 @@ class AuthState {
     int? resumeStep,
     String? completionRunId,
     String? startupReasonCode,
+    ReconstructionResult? reconstructionResult,
     bool clearUser = false,
     bool clearError = false,
     bool clearStartupDestination = false,
+    bool clearReconstructionResult = false,
   }) {
     return AuthState(
       user: clearUser ? null : (user ?? this.user),
@@ -197,6 +213,9 @@ class AuthState {
       startupReasonCode: clearStartupDestination && startupReasonCode == null
           ? null
           : (startupReasonCode ?? this.startupReasonCode),
+      reconstructionResult: clearReconstructionResult
+          ? null
+          : (reconstructionResult ?? this.reconstructionResult),
     );
   }
 }
@@ -210,6 +229,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   int _authOperationGeneration = 0;
   bool _googleAuthInFlight = false;
   final Set<Timer> _startupTimers = <Timer>{};
+  final Map<String, Future<void>> _reconstructionInFlightByUid = {};
 
   AuthNotifier(this._repository, Ref ref)
     : _ref = ref,
@@ -235,6 +255,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       timer.cancel();
     }
     _startupTimers.clear();
+    _reconstructionInFlightByUid.clear();
     _authSubscription.cancel();
     super.dispose();
   }
@@ -648,6 +669,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       status: AuthFlowStatus.signedInOnboardingComplete,
       clearError: true,
       clearStartupDestination: true,
+      clearReconstructionResult: true,
     );
   }
 
@@ -788,6 +810,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       clearError: true,
       resumeStep: 0,
       clearStartupDestination: true,
+      clearReconstructionResult: true,
     );
   }
 
@@ -866,11 +889,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     AuthUser user, {
     bool isAnonymousLink = false,
   }) async {
+    final existing = _reconstructionInFlightByUid[user.uid];
+    if (existing != null) {
+      await existing;
+      return;
+    }
+    final operation = _loadOrCreateBackendUserState(
+      user,
+      isAnonymousLink: isAnonymousLink,
+    );
+    _reconstructionInFlightByUid[user.uid] = operation;
     try {
-      await _bounded(
-        _loadOrCreateBackendUserState(user, isAnonymousLink: isAnonymousLink),
-        _startupResolutionTimeout,
-      );
+      await _bounded(operation, _startupResolutionTimeout);
     } on TimeoutException {
       _backendRestoreGeneration++;
       if (!mounted || (state.user?.uid ?? user.uid) != user.uid) return;
@@ -883,6 +913,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         startupReasonCode: 'startup_timeout',
         clearStartupDestination: true,
       );
+    } finally {
+      if (identical(_reconstructionInFlightByUid[user.uid], operation)) {
+        _reconstructionInFlightByUid.remove(user.uid);
+      }
     }
   }
 
@@ -902,6 +936,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       user: user,
       status: AuthFlowStatus.loadingBackendUser,
       clearError: true,
+      clearReconstructionResult: true,
     );
     final restoreGeneration = ++_backendRestoreGeneration;
     if (!_useFirebaseBackend) {
@@ -938,423 +973,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    final now = DateTime.now();
-    final profileRepository = _ref.read(profileRepositoryProvider);
-    final regionRepository = _ref.read(regionSettingsRepositoryProvider);
-    final appPreferencesRepository = _ref.read(
-      appPreferencesRepositoryProvider,
-    );
-
-    state = state.copyWith(
-      user: user,
-      status: AuthFlowStatus.loadingBackendUser,
-      clearError: true,
-    );
     _ref.read(routineNotifierProvider.notifier).resetForSignedOut();
     _ref.read(habitSystemsNotifierProvider.notifier).resetForSignedOut();
-
-    try {
-      var profile = await profileRepository.fetchUserProfile(user.uid);
-      if (!_isCurrentRestore(restoreGeneration)) return;
-
-      final createdProfile = profile == null;
-      final fetchedEmail = profile?.email ?? '';
-      final fetchedDisplayName = profile?.displayName ?? '';
-      profile ??= UserProfile.empty(
-        uid: user.uid,
-        email: user.email ?? '',
-        displayName: user.displayName ?? '',
-      ).copyWith(createdAt: now, updatedAt: now);
-
-      profile = profile.copyWith(
-        uid: user.uid,
-        email: profile.email.isEmpty ? user.email ?? '' : profile.email,
-        displayName: profile.displayName.isEmpty
-            ? user.displayName ?? ''
-            : profile.displayName,
-        updatedAt: profile.updatedAt ?? now,
-      );
-
-      final shouldSaveProfile =
-          createdProfile ||
-          (fetchedEmail.isEmpty && (user.email ?? '').isNotEmpty) ||
-          (fetchedDisplayName.isEmpty && (user.displayName ?? '').isNotEmpty);
-
-      if (shouldSaveProfile) {
-        await profileRepository.saveUserProfile(profile);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-      }
-
-      // Onboarding startup only needs the profile, durable draft, and (for a
-      // final draft) its completion job. Profile settings, Routine, History,
-      // Habits, and dashboard hydration must not delay the resume destination.
-      if (!profile.onboardingCompleted) {
-        _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
-
-        // A fresh account must not be labelled as a restore before its draft
-        // has even been read. The profile step is a loader-only hint; the
-        // draft remains the progression authority below.
-        final profileSuggestsResume =
-            profile.onboardingStep > 0 ||
-            profile.onboardingInputCompleted ||
-            (profile.onboardingProjectionStatus.isNotEmpty &&
-                profile.onboardingProjectionStatus != 'none' &&
-                profile.onboardingProjectionStatus != 'pending');
-        if (profileSuggestsResume) {
-          state = state.copyWith(
-            user: user,
-            status: AuthFlowStatus.restoringOnboarding,
-            clearError: true,
-            clearStartupDestination: true,
-          );
-        }
-
-        var savedDraft = await _ref
-            .read(onboardingRepositoryProvider)
-            .fetchDraft(user.uid);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-
-        OnboardingCompletionJob? completionJob;
-        if (savedDraft != null && isDurablyFinalOnboardingDraft(savedDraft)) {
-          completionJob = await _ref
-              .read(onboardingCompletionJobServiceProvider)
-              .loadCurrentJob(user.uid);
-          if (!_isCurrentRestore(restoreGeneration)) return;
-        }
-
-        var destination = resolveOnboardingSessionDestination(
-          ownerUid: user.uid,
-          profile: profile,
-          draft: savedDraft,
-          completionJob: completionJob,
-        );
-
-        if (destination.kind == SessionDestinationKind.freshOnboarding &&
-            savedDraft == null) {
-          savedDraft = OnboardingDraft(
-            uid: user.uid,
-            baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
-            createdAt: now,
-            updatedAt: now,
-          );
-        }
-
-        if (destination.kind == SessionDestinationKind.resumeOnboarding &&
-            state.status != AuthFlowStatus.restoringOnboarding) {
-          state = state.copyWith(
-            user: user,
-            status: AuthFlowStatus.restoringOnboarding,
-            clearError: true,
-            clearStartupDestination: true,
-          );
-        }
-
-        if (savedDraft != null &&
-            (destination.kind == SessionDestinationKind.freshOnboarding ||
-                destination.kind == SessionDestinationKind.resumeOnboarding ||
-                destination.kind == SessionDestinationKind.finishOnboarding)) {
-          final safeStep = durableOnboardingResumeStep(savedDraft);
-          final safeDraft = savedDraft.copyWith(
-            uid: user.uid,
-            currentStep:
-                destination.kind == SessionDestinationKind.finishOnboarding
-                ? OnboardingDraft.lastStepIndex
-                : safeStep,
-            stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
-            incrementRevision: false,
-          );
-          _ref.read(mockOnboardingProvider.notifier).loadSeedData(safeDraft);
-          destination = resolveOnboardingSessionDestination(
-            ownerUid: user.uid,
-            profile: profile,
-            draft: savedDraft,
-            completionJob: completionJob,
-          );
-        }
-
-        _applySessionDestination(user, destination);
-        return;
-      }
-
-      var profileSettings = await profileRepository.fetchProfileSettings(
-        user.uid,
-      );
-      if (!_isCurrentRestore(restoreGeneration)) return;
-      if (createdProfile &&
-          profileSettings.name.trim().isEmpty &&
-          profile.displayName.trim().isNotEmpty) {
-        profileSettings = profileSettings.copyWith(name: profile.displayName);
-        await profileRepository.saveProfileSettings(user.uid, profileSettings);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-      }
-
-      var regionSettings = await regionRepository.fetchRegionSettings(user.uid);
-      if (!_isCurrentRestore(restoreGeneration)) return;
-      if (regionSettings == null) {
-        regionSettings = RegionSettings.defaultForUser(user.uid);
-        await regionRepository.saveRegionSettings(regionSettings);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-      }
-
-      var preferences = await appPreferencesRepository.fetchAppPreferences(
-        user.uid,
-      );
-      if (!_isCurrentRestore(restoreGeneration)) return;
-      if (preferences == null) {
-        preferences = const UserPreferences();
-        await appPreferencesRepository.saveAppPreferences(
-          user.uid,
-          preferences,
-        );
-        if (!_isCurrentRestore(restoreGeneration)) return;
-      }
-
-      _ref.read(mockUserProfileProvider.notifier).loadSeedData(profile);
-      if (!profile.onboardingCompleted) {
-        state = state.copyWith(
-          user: user,
-          status: AuthFlowStatus.restoringOnboarding,
-          clearError: true,
-        );
-        final savedDraft = await _ref
-            .read(onboardingRepositoryProvider)
-            .fetchDraft(user.uid);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-        if (savedDraft != null) {
-          final safeDraft = savedDraft.copyWith(
-            uid: user.uid,
-            stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
-            incrementRevision: false,
-          );
-          _ref.read(mockOnboardingProvider.notifier).loadSeedData(safeDraft);
-        } else if (createdProfile ||
-            (!profile.onboardingCompleted &&
-                !profile.onboardingInputCompleted &&
-                (profile.onboardingProjectionStatus.isEmpty ||
-                    profile.onboardingProjectionStatus == 'none' ||
-                    profile.onboardingProjectionStatus == 'pending'))) {
-          // A newly verified account has no onboarding draft yet. This is the
-          // expected first-run state, not missing/corrupt recovery data.
-          final freshDraft = OnboardingDraft(
-            uid: user.uid,
-            baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
-            createdAt: now,
-            updatedAt: now,
-          );
-          await _ref.read(onboardingRepositoryProvider).saveDraft(freshDraft);
-          if (!_isCurrentRestore(restoreGeneration)) return;
-          _ref.read(mockOnboardingProvider.notifier).loadSeedData(freshDraft);
-        } else {
-          throw const _RoutineProjectionRestoreException(
-            'Setup recovery is required because the onboarding draft is missing.',
-            reason: OnboardingFailureReason.missingDraftAndBundle,
-            actions: [MigrateLegacySetupAction(), ResetSetupSafelyAction()],
-          );
-        }
-      }
-      _resetUserScopedMockState();
-      _ref
-          .read(profileSettingsProvider.notifier)
-          .loadProfileSettings(profileSettings);
-      _ref.read(profileSettingsProvider.notifier).loadPreferences(preferences);
-      _ref.read(regionSettingsProvider.notifier).loadSettings(regionSettings);
-
-      if (profile.onboardingCompleted) {
-        OnboardingCompletionBundle? bundle;
-        try {
-          bundle = await _ref
-              .read(onboardingRepositoryProvider)
-              .fetchCompletionBundle(user.uid);
-        } catch (e) {
-          throw _RoutineProjectionRestoreException(
-            'Routine setup recovery is required because the completion snapshot is corrupted: $e',
-            reason: OnboardingFailureReason.corruptedBundle,
-            actions: const [
-              RebuildBundleFromVerifiedDraftAction(),
-              MigrateLegacySetupAction(),
-              ResetSetupSafelyAction(),
-            ],
-          );
-        }
-        if (!_isCurrentRestore(restoreGeneration)) return;
-
-        if (bundle == null || bundle.uid != user.uid) {
-          final draft = await _ref
-              .read(onboardingRepositoryProvider)
-              .fetchDraft(user.uid);
-          if (!_isCurrentRestore(restoreGeneration)) return;
-
-          if (draft == null || !isDurablyFinalOnboardingDraft(draft)) {
-            throw const _RoutineProjectionRestoreException(
-              'Routine setup recovery is required because both draft and completion snapshot are missing.',
-              reason: OnboardingFailureReason.missingDraftAndBundle,
-              actions: [MigrateLegacySetupAction(), ResetSetupSafelyAction()],
-            );
-          }
-          try {
-            final rebuilt = OnboardingCompletionService.buildBundle(draft);
-            await _ref
-                .read(onboardingRepositoryProvider)
-                .saveCompletionBundle(rebuilt);
-            bundle = await _ref
-                .read(onboardingRepositoryProvider)
-                .fetchCompletionBundle(user.uid);
-            if (!_isCurrentRestore(restoreGeneration)) return;
-            if (bundle == null ||
-                bundle.uid != user.uid ||
-                bundle.sourceFingerprint != draft.effectiveSourceFingerprint ||
-                bundle.draftRevision != draft.revision) {
-              throw StateError('Completion snapshot read-back did not match.');
-            }
-          } catch (_) {
-            throw const _RoutineProjectionRestoreException(
-              'Routine setup recovery is required because the completion snapshot is missing.',
-              reason: OnboardingFailureReason.missingBundle,
-              actions: [
-                RebuildBundleFromVerifiedDraftAction(),
-                ResetSetupSafelyAction(),
-              ],
-            );
-          }
-        }
-
-        final completedDraft = await _ref
-            .read(onboardingRepositoryProvider)
-            .fetchDraft(user.uid);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-        final draftVerified =
-            completedDraft != null &&
-            completedDraft.uid == user.uid &&
-            completedDraft.onboardingCompleted &&
-            completedDraft.currentStep == OnboardingDraft.lastStepIndex &&
-            completedDraft.stepCompleted.length == OnboardingDraft.stepCount &&
-            completedDraft.stepCompleted.every((value) => value) &&
-            completedDraft.revision == bundle.draftRevision &&
-            completedDraft.effectiveSourceFingerprint ==
-                bundle.sourceFingerprint;
-        if (!draftVerified) {
-          throw const _RoutineProjectionRestoreException(
-            'Setup recovery is required because the final draft and completion snapshot do not match.',
-            reason: OnboardingFailureReason.corruptedBundle,
-            actions: [MigrateLegacySetupAction(), ResetSetupSafelyAction()],
-          );
-        }
-        _ref
-            .read(mockOnboardingProvider.notifier)
-            .loadSeedData(
-              completedDraft.copyWith(
-                stepLoading: List<bool>.filled(
-                  OnboardingDraft.stepCount,
-                  false,
-                ),
-                incrementRevision: false,
-              ),
-            );
-
-        final plan = RoutineOnboardingProjection.build(bundle);
-        final routineRepo = _ref.read(routineRepositoryProvider);
-        final receipt = await routineRepo.fetchProjectionReceipt(
-          user.uid,
-          plan.projectionId,
-        );
-        if (!_isCurrentRestore(restoreGeneration)) return;
-
-        final actualItems = await routineRepo.fetchRoutineItems(user.uid);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-
-        final validation = const RoutineProjectionReceiptValidator().validate(
-          receipt: receipt,
-          actualItems: actualItems,
-          ownerUid: user.uid,
-          plan: plan,
-        );
-        if (!validation.isValid) {
-          throw _RoutineProjectionRestoreException(
-            'Routine setup recovery is required because its projection '
-            'receipt is invalid: ${validation.failureReason}',
-            reason: OnboardingFailureReason.projectionFailed,
-            actions: const [
-              RepairProjectionAction(),
-              RetryNetworkAction(),
-              RebuildBundleFromVerifiedDraftAction(),
-            ],
-          );
-        }
-
-        try {
-          await const OnboardingFrontendHydrationService()
-              .restoreVerifiedFrontendState(read: _ref.read, bundle: bundle);
-        } on RoutineProjectionFailureException catch (pe) {
-          throw _RoutineProjectionRestoreException(
-            'Routine setup recovery is required because projection failed: ${pe.message}',
-            reason: OnboardingFailureReason.projectionFailed,
-            actions: const [
-              RepairProjectionAction(),
-              RetryNetworkAction(),
-              RebuildBundleFromVerifiedDraftAction(),
-            ],
-          );
-        }
-        if (!_isCurrentRestore(restoreGeneration)) return;
-        final projectedReceipt = await routineRepo.fetchProjectionReceipt(
-          user.uid,
-          plan.projectionId,
-        );
-        if (!_isCurrentRestore(restoreGeneration)) return;
-        if (projectedReceipt == null ||
-            projectedReceipt.status != 'completed' ||
-            projectedReceipt.cursor != projectedReceipt.totalCount ||
-            projectedReceipt.sourceBundleFingerprint != plan.fingerprint) {
-          throw const _RoutineProjectionRestoreException(
-            'Routine setup recovery is required because History projection '
-            'did not complete.',
-            reason: OnboardingFailureReason.projectionFailed,
-            actions: [
-              RepairProjectionAction(),
-              RetryNetworkAction(),
-              RebuildBundleFromVerifiedDraftAction(),
-            ],
-          );
-        }
-      } else {
-        await _ref
-            .read(routineNotifierProvider.notifier)
-            .loadForOwner(user.uid);
-        if (!_isCurrentRestore(restoreGeneration)) return;
-      }
-
-      state = state.copyWith(
-        user: user,
-        status: statusFor(user, profile.onboardingCompleted),
-        clearError: true,
-        clearStartupDestination: true,
-      );
-    } on _RoutineProjectionRestoreException catch (error) {
-      if (!_isCurrentRestore(restoreGeneration)) return;
-      state = state.copyWith(
-        user: user,
-        status: AuthFlowStatus.needsAction,
-        errorMessage: error.message,
-        onboardingFailureReason: error.reason,
-        recoveryActions: error.actions,
-        startupReasonCode: error.reason?.name ?? 'setup_inconsistency',
-        clearStartupDestination: true,
-      );
-    } catch (e) {
-      if (!_isCurrentRestore(restoreGeneration)) return;
-      state = state.copyWith(
-        user: user,
-        status: AuthFlowStatus.reconnectRequired,
-        errorMessage: "We couldn't reconnect yet.",
-        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
-        recoveryActions: const [RetryNetworkAction(), SignOutAction()],
-        startupReasonCode: 'startup_request_failed',
-        clearStartupDestination: true,
-      );
-    }
+    await _reconstructAndHydrate(user, restoreGeneration);
   }
 
-  void _applySessionDestination(AuthUser user, SessionDestination destination) {
+  void _applySessionDestination(
+    AuthUser user,
+    SessionDestination destination, {
+    ReconstructionResult? reconstructionResult,
+  }) {
     final status = switch (destination.kind) {
       SessionDestinationKind.freshOnboarding ||
       SessionDestinationKind.resumeOnboarding =>
@@ -1388,9 +1016,146 @@ class AuthNotifier extends StateNotifier<AuthState> {
               SignOutAction(),
             ]
           : const [],
+      reconstructionResult: reconstructionResult,
+      clearReconstructionResult: reconstructionResult == null,
       clearError: true,
       clearStartupDestination: true,
     );
+  }
+
+  Future<void> _reconstructAndHydrate(
+    AuthUser user,
+    int restoreGeneration,
+  ) async {
+    try {
+      final result = await _ref
+          .read(serverReconstructorProvider)
+          .reconstruct(
+            uid: user.uid,
+            email: user.email ?? '',
+            displayName: user.displayName ?? '',
+            onProfileLoaded: (profile) {
+              if (!_isCurrentRestore(restoreGeneration)) return;
+              final suggestsResume =
+                  profile != null &&
+                  (profile.onboardingStep > 0 ||
+                      profile.onboardingInputCompleted ||
+                      (profile.onboardingProjectionStatus.isNotEmpty &&
+                          profile.onboardingProjectionStatus != 'none' &&
+                          profile.onboardingProjectionStatus != 'pending'));
+              if (suggestsResume) {
+                state = state.copyWith(
+                  user: user,
+                  status: AuthFlowStatus.restoringOnboarding,
+                  clearError: true,
+                  clearStartupDestination: true,
+                );
+              }
+            },
+          );
+      if (!_isCurrentRestore(restoreGeneration) ||
+          state.user?.uid != user.uid) {
+        return;
+      }
+
+      // Nothing user-visible is hydrated until the complete durable snapshot
+      // has been decoded and classified.
+      _ref.read(mockUserProfileProvider.notifier).loadSeedData(result.profile);
+      switch (result) {
+        case ReconstructionFresh():
+          final now = DateTime.now();
+          _ref
+              .read(mockOnboardingProvider.notifier)
+              .loadSeedData(
+                OnboardingDraft(
+                  uid: user.uid,
+                  baseTimeline: const BaseTimelineDraft()
+                      .withRequiredFixedBlocks(),
+                  createdAt: now,
+                  updatedAt: now,
+                ),
+              );
+        case ReconstructionIncomplete(:final step, :final draft):
+          _ref
+              .read(mockOnboardingProvider.notifier)
+              .loadSeedData(
+                draft.copyWith(
+                  currentStep: step,
+                  stepLoading: List<bool>.filled(
+                    OnboardingDraft.stepCount,
+                    false,
+                  ),
+                  incrementRevision: false,
+                ),
+              );
+        case ReconstructionFinishing(:final draft):
+          _ref
+              .read(mockOnboardingProvider.notifier)
+              .loadSeedData(
+                draft.copyWith(
+                  currentStep: OnboardingDraft.lastStepIndex,
+                  stepLoading: List<bool>.filled(
+                    OnboardingDraft.stepCount,
+                    false,
+                  ),
+                  incrementRevision: false,
+                ),
+              );
+        case ReconstructionCompleted(:final draft):
+          _ref
+              .read(mockOnboardingProvider.notifier)
+              .loadSeedData(
+                draft.copyWith(
+                  stepLoading: List<bool>.filled(
+                    OnboardingDraft.stepCount,
+                    false,
+                  ),
+                  incrementRevision: false,
+                ),
+              );
+        case ReconstructionRecovery():
+          _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+      }
+      if (!_isCurrentRestore(restoreGeneration) ||
+          state.user?.uid != user.uid) {
+        return;
+      }
+      _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
+      _ref.read(fitnessCenterProvider.notifier).setOwnerUid(user.uid);
+      _applySessionDestination(
+        user,
+        resolveReconstructionDestination(result),
+        reconstructionResult: result,
+      );
+      if (result case ReconstructionRecovery(
+        :final reason,
+        :final diagnostics,
+      )) {
+        final missingCompletedState =
+            diagnostics['code'] == 'completed_profile_without_final_draft';
+        state = state.copyWith(
+          errorMessage: missingCompletedState
+              ? 'Setup recovery is required because both draft and completion snapshot are missing.'
+              : 'Setup recovery is required because durable onboarding state is inconsistent.',
+          onboardingFailureReason: missingCompletedState
+              ? OnboardingFailureReason.missingDraftAndBundle
+              : OnboardingFailureReason.unhandledException,
+          startupReasonCode: 'reconstruction_${reason.name}',
+        );
+      }
+    } on ReconstructionBootstrapException catch (error) {
+      if (!_isCurrentRestore(restoreGeneration)) return;
+      state = state.copyWith(
+        user: user,
+        status: AuthFlowStatus.reconnectRequired,
+        errorMessage: "We couldn't reconnect yet.",
+        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+        recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+        startupReasonCode: 'reconstruction_${error.reason.name}',
+        clearStartupDestination: true,
+        clearReconstructionResult: true,
+      );
+    }
   }
 
   bool _isCurrentRestore(int restoreGeneration) {
@@ -1649,15 +1414,3 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final repository = ref.watch(authRepositoryProvider);
   return AuthNotifier(repository, ref);
 });
-
-class _RoutineProjectionRestoreException implements Exception {
-  final String message;
-  final OnboardingFailureReason? reason;
-  final List<OnboardingRecoveryAction> actions;
-
-  const _RoutineProjectionRestoreException(
-    this.message, {
-    this.reason,
-    this.actions = const [],
-  });
-}

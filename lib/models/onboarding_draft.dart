@@ -13,6 +13,7 @@ class OnboardingDraft {
   static const int lastStepIndex = stepCount - 1;
 
   final String uid;
+  final int storedSchemaVersion;
   final int currentStep;
   final List<bool> stepCompleted;
   final List<bool> stepDirty;
@@ -42,6 +43,7 @@ class OnboardingDraft {
 
   const OnboardingDraft({
     this.uid = '',
+    this.storedSchemaVersion = schemaVersion,
     this.currentStep = 0,
     this.stepCompleted = const [
       false,
@@ -121,6 +123,8 @@ class OnboardingDraft {
     final migrateLegacySteps = _shouldMigrateLegacySteps(map);
     return OnboardingDraft(
       uid: map['uid'] as String? ?? '',
+      storedSchemaVersion:
+          (map['schemaVersion'] as num?)?.toInt() ?? schemaVersion,
       currentStep: _migratedStepIndex(
         (map['currentStep'] as num?)?.toInt() ?? 0,
         migrateLegacySteps: migrateLegacySteps,
@@ -242,6 +246,7 @@ class OnboardingDraft {
 
   OnboardingDraft copyWith({
     String? uid,
+    int? storedSchemaVersion,
     int? currentStep,
     List<bool>? stepCompleted,
     List<bool>? stepDirty,
@@ -274,6 +279,7 @@ class OnboardingDraft {
   }) {
     return OnboardingDraft(
       uid: uid ?? this.uid,
+      storedSchemaVersion: storedSchemaVersion ?? this.storedSchemaVersion,
       currentStep: (currentStep ?? this.currentStep)
           .clamp(0, lastStepIndex)
           .toInt(),

@@ -1,6 +1,7 @@
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/user_profile.dart';
+import 'package:optivus/services/server_reconstructor.dart';
 
 enum SessionDestinationKind {
   resolving,
@@ -44,6 +45,23 @@ class SessionDestination {
     : this._(SessionDestinationKind.reconnect, reasonCode: reasonCode);
   const SessionDestination.needsAction(String reasonCode)
     : this._(SessionDestinationKind.needsAction, reasonCode: reasonCode);
+}
+
+/// The single destination mapping for an already reconstructed server session.
+SessionDestination resolveReconstructionDestination(
+  ReconstructionResult result,
+) {
+  return switch (result) {
+    ReconstructionFresh() => const SessionDestination.freshOnboarding(),
+    ReconstructionIncomplete(:final step) =>
+      SessionDestination.resumeOnboarding(step),
+    ReconstructionFinishing(:final runId) =>
+      SessionDestination.finishOnboarding(runId: runId),
+    ReconstructionCompleted() => const SessionDestination.home(),
+    ReconstructionRecovery(:final reason) => SessionDestination.needsAction(
+      'reconstruction_${reason.name}',
+    ),
+  };
 }
 
 /// Resolves the first step whose completion has not been durably recorded.

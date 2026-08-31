@@ -1,10 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserProfile {
+  static const int currentSchemaVersion = 1;
+
   final String uid;
   final String email;
   final String displayName;
   final String accountStatus;
+  final int schemaVersion;
 
   // Timestamps
   final DateTime? createdAt;
@@ -50,6 +53,7 @@ class UserProfile {
     required this.email,
     required this.displayName,
     this.accountStatus = 'active',
+    this.schemaVersion = currentSchemaVersion,
     this.createdAt,
     this.updatedAt,
     bool? onboardingInputCompleted,
@@ -104,7 +108,7 @@ class UserProfile {
       'accountStatus': accountStatus,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
-      'schemaVersion': 1,
+      'schemaVersion': schemaVersion,
       'onboardingInputCompleted': onboardingInputCompleted,
       'onboardingProjectionStatus': onboardingProjectionStatus,
       'onboardingCompleted': onboardingCompleted,
@@ -137,7 +141,7 @@ class UserProfile {
       'accountStatus': accountStatus,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
-      'schemaVersion': 1,
+      'schemaVersion': schemaVersion,
       'onboardingInputCompleted': onboardingInputCompleted,
       'onboardingProjectionStatus': onboardingProjectionStatus,
       'onboardingCompleted': onboardingCompleted,
@@ -169,6 +173,7 @@ class UserProfile {
       email: map['email'] as String? ?? '',
       displayName: map['displayName'] as String? ?? '',
       accountStatus: map['accountStatus'] as String? ?? 'active',
+      schemaVersion: (map['schemaVersion'] as num?)?.toInt() ?? 1,
       createdAt: _dateTimeFromMapValue(map['createdAt']),
       updatedAt: _dateTimeFromMapValue(map['updatedAt']),
       onboardingInputCompleted:
@@ -207,6 +212,7 @@ class UserProfile {
     String? email,
     String? displayName,
     String? accountStatus,
+    int? schemaVersion,
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? onboardingInputCompleted,
@@ -245,6 +251,7 @@ class UserProfile {
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
       accountStatus: accountStatus ?? this.accountStatus,
+      schemaVersion: schemaVersion ?? this.schemaVersion,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       onboardingInputCompleted: nextInputCompleted,

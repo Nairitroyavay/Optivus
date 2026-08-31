@@ -535,7 +535,7 @@ void main() {
     );
 
     test(
-      'Firebase auth restore loads receipt-backed canonical Routine once',
+      'Firebase auth reconstruction defers receipt-backed Routine until post-route load',
       () async {
         const user = AuthUser(
           uid: 'user-a',
@@ -593,6 +593,10 @@ void main() {
           container.read(authProvider).status,
           AuthFlowStatus.signedInOnboardingComplete,
         );
+        expect(container.read(routineNotifierProvider).items, isEmpty);
+        await container
+            .read(routineNotifierProvider.notifier)
+            .loadForOwner(user.uid);
         expect(container.read(routineNotifierProvider).items, hasLength(1));
         expect(container.read(mockRoutineProvider), isEmpty);
       },
