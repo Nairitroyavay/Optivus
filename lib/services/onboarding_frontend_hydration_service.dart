@@ -78,6 +78,23 @@ class HabitSystemProjectionFailureException implements Exception {
 class OnboardingFrontendHydrationService {
   const OnboardingFrontendHydrationService();
 
+  /// Read-only durable verification used by completion terminalization.
+  Future<void> verifyPersistedHabitSystems({
+    required OptivusProviderReader read,
+    required OnboardingCompletionBundle bundle,
+  }) async {
+    final routineItems = RoutineOnboardingProjection.build(bundle).items;
+    final expected = HabitSystemOnboardingProjection.build(
+      bundle,
+      routineItems,
+    );
+    if (expected.isEmpty) return;
+    final persisted = await read(
+      habitSystemsRepositoryProvider,
+    ).fetchHabitSystems(bundle.uid);
+    _verifyProjectedHabitSystemsPersisted(persisted, expected);
+  }
+
   Future<void> restoreVerifiedFrontendState({
     required OptivusProviderReader read,
     required OnboardingCompletionBundle bundle,

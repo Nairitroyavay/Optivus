@@ -86,6 +86,26 @@ class RoutineOnboardingEventProjector {
     return _historyRecords(bundle).map((record) => record.id).toList()..sort();
   }
 
+  /// Read-only durable verification used by completion terminalization.
+  Future<void> verifyProjectedHistory({
+    required RoutineProjectorReader read,
+    required OnboardingCompletionBundle bundle,
+  }) async {
+    final expected = _historyRecords(bundle);
+    final actualById = {
+      for (final record in await read(
+        routineHistoryRepositoryProvider,
+      ).fetchHistory(bundle.uid))
+        record.id: record,
+    };
+    for (final expectedRecord in expected) {
+      final actual = actualById[expectedRecord.id];
+      if (actual == null || !_matchesHistoryRecord(actual, expectedRecord)) {
+        throw StateError('Routine History terminal verification failed.');
+      }
+    }
+  }
+
   Future<RoutineOnboardingEventProjectionResult> projectCreatedEvents({
     required RoutineProjectorReader read,
     required OnboardingCompletionBundle bundle,

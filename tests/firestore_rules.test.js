@@ -1750,15 +1750,85 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await assertFails(completedRef.update({ retryCount: 1, updatedAt: completedAt }));
     });
 
-    it("allows the verified owner to create and replace the current-run pointer", async () => {
+    it("allows creation but rejects replacing the authoritative current-run identity", async () => {
       const db = ownerDb();
       const ref = db.collection("users").doc("user123").collection("onboarding").doc("currentRun");
       await assertSucceeds(ref.set(currentRunData()));
       await assertSucceeds(ref.get());
-      await assertSucceeds(ref.set(currentRunData("user123", "run-002", {
+      await assertFails(ref.set(currentRunData("user123", "run-002", {
         sourceFingerprint: "f".repeat(64),
         draftRevision: 8,
       })));
+    });
+
+    it("allows only an atomic profile + run + currentRun completion boundary", async () => {
+      const db = ownerDb();
+      const profileRef = db.collection("users").doc("user123");
+      const runRef = profileRef.collection("onboardingRuns").doc("run-001");
+      const pointerRef = profileRef.collection("onboarding").doc("currentRun");
+      const stages = {
+        validateInput: true,
+        persistDraft: true,
+        verifyDraft: true,
+        persistBundle: true,
+        verifyBundle: true,
+        reconcileRoutines: true,
+        verifyRoutines: true,
+        projectRoutineHistory: true,
+        verifyRoutineHistory: true,
+        reconcileHabitSystems: true,
+        verifyHabitSystems: true,
+        reloadControllers: true,
+        verifyFrontendState: true,
+      };
+      const activeRun = onboardingRunData("user123", "run-001", {
+        stage: "finalizeProfile",
+        status: "running",
+        stagesCompleted: stages,
+      });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(profileRef.path).set(userData());
+        await admin.doc(runRef.path).set(activeRun);
+        await admin.doc(pointerRef.path).set(currentRunData());
+      });
+      const completedProfile = userData("user123", {
+        onboardingInputCompleted: true,
+        onboardingProjectionStatus: "completed",
+        onboardingCompleted: true,
+        updatedAt: completedAt,
+      });
+      const completedRun = {
+        ...activeRun,
+        stage: "completed",
+        status: "completed",
+        stagesCompleted: { ...stages, finalizeProfile: true },
+        updatedAt: completedAt,
+        completedAt,
+      };
+      const completedPointer = currentRunData("user123", "run-001", {
+        status: "completed",
+        updatedAt: completedAt,
+      });
+
+      const incompleteBatch = db.batch();
+      incompleteBatch.set(runRef, completedRun);
+      incompleteBatch.set(pointerRef, completedPointer);
+      await assertFails(incompleteBatch.commit());
+      expect((await runRef.get()).data().status).toBe("running");
+      expect((await pointerRef.get()).data().status).toBe("active");
+
+      const terminalBatch = db.batch();
+      terminalBatch.set(profileRef, completedProfile);
+      terminalBatch.set(runRef, completedRun);
+      terminalBatch.set(pointerRef, completedPointer);
+      await assertSucceeds(terminalBatch.commit());
+      expect((await profileRef.get()).data().onboardingCompleted).toBe(true);
+      expect((await runRef.get()).data().status).toBe("completed");
+      expect((await pointerRef.get()).data().status).toBe("completed");
+
+      await assertFails(pointerRef.set(currentRunData()));
+      await assertFails(runRef.update({ status: "running", completedAt: null }));
     });
 
     it("rejects cross-owner and malformed current-run pointers", async () => {

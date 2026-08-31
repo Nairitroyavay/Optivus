@@ -1532,7 +1532,9 @@ service cloud.firestore {
         && onboardingJobStageRank(after.stage) <= onboardingJobStageRank(before.stage) + 1
         && (after.stage == before.stage
           || after.stagesCompleted[before.stage] == true)
-        && before.status != "completed";
+        && before.status != "completed"
+        && (after.status != "completed"
+          || validCompletedTerminalState(after.ownerUid, runId));
     }
 
     function validOnboardingCurrentRun(data, uid) {
@@ -1553,9 +1555,39 @@ service cloud.firestore {
         && data.sourceFingerprint.matches("^[a-f0-9]{64}$")
         && data.draftRevision is int
         && data.draftRevision >= 1
-        && data.status == "active"
+        && data.status in ["active", "completed"]
         && data.updatedAt is timestamp
         && data.schemaVersion == 1;
+    }
+
+    function validOnboardingCurrentRunTransition(before, after, uid) {
+      return validOnboardingCurrentRun(after, uid)
+        && after.ownerUid == before.ownerUid
+        && after.currentRunId == before.currentRunId
+        && after.sourceFingerprint == before.sourceFingerprint
+        && after.draftRevision == before.draftRevision
+        && after.schemaVersion == before.schemaVersion
+        && (after.status == before.status
+          || (before.status == "active" && after.status == "completed"))
+        && (after.status != "completed"
+          || validCompletedTerminalState(uid, after.currentRunId));
+    }
+
+    function validCompletedTerminalState(uid, runId) {
+      let profile = getAfter(/databases/$(database)/documents/users/$(uid)).data;
+      let pointer = getAfter(/databases/$(database)/documents/users/$(uid)/onboarding/currentRun).data;
+      let run = getAfter(/databases/$(database)/documents/users/$(uid)/onboardingRuns/$(runId)).data;
+      return profile.uid == uid
+        && profile.onboardingCompleted == true
+        && profile.onboardingInputCompleted == true
+        && profile.onboardingProjectionStatus == "completed"
+        && pointer.ownerUid == uid
+        && pointer.currentRunId == runId
+        && pointer.status == "completed"
+        && run.ownerUid == uid
+        && run.jobId == runId
+        && run.status == "completed"
+        && run.stage == "completed";
     }
 
     function validConflictAcceptance(data, acceptanceId, uid) {
@@ -1860,10 +1892,21 @@ service cloud.firestore {
     // PATH3-SEC-02: Hardened Onboarding Draft & Completion Bundle schemas
     match /users/{uid}/onboarding/{docId} {
       allow read: if verifiedOwner(uid);
-      allow create, update: if verifiedOwner(uid)
+      allow create: if verifiedOwner(uid)
         && ((docId == "draft" && validOnboardingDraft(request.resource.data, uid))
             || (docId == "completionBundle" && validOnboardingCompletionBundle(request.resource.data, uid))
-            || (docId == "currentRun" && validOnboardingCurrentRun(request.resource.data, uid)));
+            || (docId == "currentRun"
+              && validOnboardingCurrentRun(request.resource.data, uid)
+              && request.resource.data.status == "active"));
+      allow update: if verifiedOwner(uid)
+        && ((docId == "draft" && validOnboardingDraft(request.resource.data, uid))
+            || (docId == "completionBundle" && validOnboardingCompletionBundle(request.resource.data, uid))
+            || (docId == "currentRun"
+              && validOnboardingCurrentRunTransition(
+                resource.data,
+                request.resource.data,
+                uid
+              )));
       allow delete: if false;
     }
 

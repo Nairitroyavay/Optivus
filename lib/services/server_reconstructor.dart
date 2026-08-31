@@ -341,7 +341,22 @@ ReconstructionResult classifyServerReconstruction({
       'current_run_dangling',
     );
   }
+  if (currentRun.hasPointer &&
+      currentRun.pointerStatus != null &&
+      currentRun.pointerStatus != 'active' &&
+      currentRun.pointerStatus != 'completed') {
+    return recovery(
+      ReconstructionRecoveryReason.durableStateConflict,
+      'current_run_status_invalid',
+    );
+  }
   final job = currentRun.job;
+  final effectivePointerStatus =
+      currentRun.pointerStatus ??
+      (job?.status == OnboardingJobStatus.completed &&
+              job?.stage == OnboardingCompletionStage.completed
+          ? 'completed'
+          : 'active');
   if (job != null &&
       (job.jobId != currentRun.runId ||
           (draft != null &&
@@ -376,12 +391,23 @@ ReconstructionResult classifyServerReconstruction({
         'completed_profile_bundle_invalid',
       );
     }
+    if (job?.status == OnboardingJobStatus.fatalFailure) {
+      return recovery(
+        ReconstructionRecoveryReason.completionFatalFailure,
+        'completed_profile_terminal_failure',
+      );
+    }
     if (job != null &&
         (job.status != OnboardingJobStatus.completed ||
-            job.stage != OnboardingCompletionStage.completed)) {
-      return recovery(
-        ReconstructionRecoveryReason.durableStateConflict,
-        'completed_profile_nonterminal_run',
+            job.stage != OnboardingCompletionStage.completed ||
+            effectivePointerStatus != 'completed')) {
+      return ReconstructionFinishing(
+        ownerUid: ownerUid,
+        profile: profile,
+        runId: currentRun.runId!,
+        draft: draft,
+        completionJob: job,
+        completionBundle: completionBundle,
       );
     }
     return ReconstructionCompleted(

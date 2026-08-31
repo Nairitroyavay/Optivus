@@ -13,6 +13,7 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
+import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/services/onboarding_frontend_hydration_service.dart';
 import 'package:optivus/services/onboarding_run_identity.dart';
 import 'package:optivus/services/routine_onboarding_event_projector.dart';
@@ -22,6 +23,7 @@ import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_generation.dart';
 
 import 'package:optivus/services/background_sync_wake_lock_manager.dart';
+import 'package:optivus/services/completion_terminalization_proof.dart';
 
 typedef Reader = T Function<T>(ProviderListenable<T> provider);
 
@@ -34,6 +36,9 @@ class OnboardingCurrentRunSnapshot {
   final String? runId;
   final String? ownerUid;
   final int? pointerSchemaVersion;
+  final String? pointerStatus;
+  final String? sourceFingerprint;
+  final int? draftRevision;
   final OnboardingCompletionJob? job;
 
   const OnboardingCurrentRunSnapshot({
@@ -41,6 +46,9 @@ class OnboardingCurrentRunSnapshot {
     this.runId,
     this.ownerUid,
     this.pointerSchemaVersion,
+    this.pointerStatus,
+    this.sourceFingerprint,
+    this.draftRevision,
     this.job,
   });
 
@@ -49,7 +57,23 @@ class OnboardingCurrentRunSnapshot {
       runId = null,
       ownerUid = null,
       pointerSchemaVersion = null,
+      pointerStatus = null,
+      sourceFingerprint = null,
+      draftRevision = null,
       job = null;
+
+  CompletionTerminalizationState toTerminalizationState() {
+    return CompletionTerminalizationState(
+      hasPointer: hasPointer,
+      runId: runId,
+      ownerUid: ownerUid,
+      pointerSchemaVersion: pointerSchemaVersion,
+      pointerStatus: pointerStatus,
+      sourceFingerprint: sourceFingerprint,
+      draftRevision: draftRevision,
+      job: job,
+    );
+  }
 }
 
 class OnboardingCompletionJobService {
@@ -64,6 +88,7 @@ class OnboardingCompletionJobService {
   final bool requireRoutineVerification;
   final Map<String, OnboardingCompletionJob> _memoryJobs = {};
   final Map<String, String> _memoryCurrentRunIds = {};
+  final Map<String, String> _memoryCurrentRunStatuses = {};
 
   final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
   final Map<String, int> _operationGenerationByOwner = {};
@@ -179,9 +204,25 @@ class OnboardingCompletionJobService {
           draftRevision: finalDraft.revision,
           now: now,
         );
+        if (job.status == OnboardingJobStatus.fatalFailure) {
+          throw StateError(
+            'A fatally failed completion run cannot be terminalized.',
+          );
+        }
         if (job.status == OnboardingJobStatus.completed &&
             job.stage == OnboardingCompletionStage.completed) {
-          return job;
+          await _verifyDurableCompletionOutputs(
+            uid: uid,
+            bundle: bundle,
+            reader: reader,
+          );
+          return await _terminalizeCompletion(
+            uid: uid,
+            expectedRunId: runId,
+            draft: finalDraft,
+            bundle: bundle,
+            durableOutputsVerified: true,
+          );
         }
 
         job = job.copyWith(
@@ -525,55 +566,21 @@ class OnboardingCompletionJobService {
               OnboardingCompletionStage.finalizeProfile,
             );
             _verifyFinalizationAccounting(job);
-            var profile = await profileRepository.fetchUserProfile(uid);
-            if (profile == null) {
-              throw StateError(
-                'Root UserProfile is required for finalization.',
-              );
-            }
-            profile = profile.copyWith(
-              onboardingInputCompleted: true,
-              onboardingProjectionStatus: 'completed',
-              onboardingCompleted: true,
-              updatedAt: DateTime.now(),
-            );
-            final updatedJob = _stageCompletedCopy(
-              job,
-              OnboardingCompletionStage.finalizeProfile,
-            );
-            if (firestore != null) {
-              final batch = firestore!.batch();
-              batch.set(
-                firestore!.doc(FirestoreUserPaths.user(profile.uid)),
-                profile.toFirestoreMap(),
-                SetOptions(merge: true),
-              );
-              batch.set(
-                firestore!.doc(
-                  FirestoreUserPaths.onboardingRun(
-                    updatedJob.ownerUid,
-                    updatedJob.jobId,
-                  ),
-                ),
-                updatedJob.toFirestoreMap(),
-              );
-              await batch.commit();
-            } else {
-              await profileRepository.saveUserProfile(profile);
-              await _saveJobStatus(updatedJob);
-            }
-            job = updatedJob;
           }
 
           checkSession();
-          job = job.copyWith(
-            status: OnboardingJobStatus.completed,
-            stage: OnboardingCompletionStage.completed,
-            updatedAt: DateTime.now(),
-            completedAt: DateTime.now(),
+          await _verifyDurableCompletionOutputs(
+            uid: uid,
+            bundle: bundle,
+            reader: reader,
           );
-          await _saveJobStatus(job);
-          return job;
+          return await _terminalizeCompletion(
+            uid: uid,
+            expectedRunId: runId,
+            draft: finalDraft,
+            bundle: bundle,
+            durableOutputsVerified: true,
+          );
         } catch (e) {
           final now = DateTime.now();
           final failure = _buildSanitizedFailure(e, job.stage);
@@ -659,6 +666,276 @@ class OnboardingCompletionJobService {
         )) {
       throw StateError('Completion bundle read-back verification failed.');
     }
+  }
+
+  Future<void> _verifyDurableCompletionOutputs({
+    required String uid,
+    required OnboardingCompletionBundle bundle,
+    Reader? reader,
+  }) async {
+    await _verifyRoutineProjectionReadOnly(
+      uid: uid,
+      bundle: bundle,
+      reader: reader,
+    );
+    if (reader != null) {
+      await const RoutineOnboardingEventProjector().verifyProjectedHistory(
+        read: reader,
+        bundle: bundle,
+      );
+      await const OnboardingFrontendHydrationService()
+          .verifyPersistedHabitSystems(read: reader, bundle: bundle);
+      return;
+    }
+    if (requireRoutineVerification &&
+        (bundle.expectedHistoryIds.isNotEmpty ||
+            bundle.expectedHabitIds.isNotEmpty)) {
+      throw StateError(
+        'Durable history and habit verification dependencies are required.',
+      );
+    }
+  }
+
+  Future<void> _verifyRoutineProjectionReadOnly({
+    required String uid,
+    required OnboardingCompletionBundle bundle,
+    Reader? reader,
+  }) async {
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final activeRepository = reader != null
+        ? reader(routineRepositoryProvider)
+        : routineRepository;
+    if (activeRepository == null) {
+      if (requireRoutineVerification) {
+        throw StateError('Routine repository is required for verification.');
+      }
+      return;
+    }
+    final receipt = await activeRepository.fetchProjectionReceipt(
+      uid,
+      plan.projectionId,
+    );
+    final items = await activeRepository.fetchRoutineItems(uid);
+    final validation = const RoutineProjectionReceiptValidator().validate(
+      receipt: receipt,
+      actualItems: items,
+      ownerUid: uid,
+      plan: plan,
+    );
+    if (receipt == null ||
+        receipt.status != 'completed' ||
+        receipt.cursor != receipt.totalCount ||
+        !validation.isValid) {
+      throw StateError('Routine projection terminal verification failed.');
+    }
+    final acceptanceRepository = reader != null
+        ? reader(conflictAcceptanceRepositoryProvider)
+        : conflictAcceptanceRepository;
+    if (acceptanceRepository == null) {
+      if (bundle.expectedAcceptanceIds.isNotEmpty) {
+        throw StateError(
+          'Conflict acceptance repository is required for verification.',
+        );
+      }
+      return;
+    }
+    final stored = await acceptanceRepository.fetchForOwner(uid);
+    final byId = {
+      for (final acceptance in stored) acceptance.acceptanceId: acceptance,
+    };
+    for (final expected in plan.conflictAcceptances) {
+      final actual = byId[expected.acceptanceId];
+      if (actual == null || !_matchesExpectedAcceptance(actual, expected)) {
+        throw StateError('Conflict acceptance terminal verification failed.');
+      }
+    }
+  }
+
+  Future<OnboardingCompletionJob> _terminalizeCompletion({
+    required String uid,
+    required String expectedRunId,
+    required OnboardingDraft draft,
+    required OnboardingCompletionBundle bundle,
+    required bool durableOutputsVerified,
+  }) async {
+    if (firestore == null) {
+      final profile = await profileRepository.fetchUserProfile(uid);
+      final currentRun = await _loadCurrentRunSnapshot(uid);
+      if (profile == null) {
+        throw StateError('Root UserProfile is required for finalization.');
+      }
+      final proofBundleMap = Map<String, dynamic>.from(bundle.toMap());
+      if (bundle.runId.isEmpty) proofBundleMap['runId'] = expectedRunId;
+      // Non-persistent test repositories predate contract metadata. Production
+      // Firestore bundles cannot omit these fields under the schema-v2 rules.
+      proofBundleMap['expectedRoutineIds'] = currentRun.job!.expectedRoutineIds;
+      proofBundleMap['expectedHistoryIds'] = currentRun.job!.expectedHistoryIds;
+      proofBundleMap['expectedHabitIds'] = currentRun.job!.expectedHabitIds;
+      proofBundleMap['expectedAcceptanceIds'] =
+          currentRun.job!.expectedAcceptanceIds;
+      final proofBundle = OnboardingCompletionBundle.fromMap(proofBundleMap);
+      final proof = CompletionTerminalizationProof.evaluate(
+        authenticatedUid: uid,
+        expectedRunId: expectedRunId,
+        profile: profile,
+        draft: draft,
+        bundle: proofBundle,
+        currentRun: currentRun.toTerminalizationState(),
+        durableOutputsVerified: durableOutputsVerified,
+      );
+      if (proof.disposition ==
+          CompletionTerminalizationDisposition.alreadyTerminal) {
+        return currentRun.job!;
+      }
+      if (!proof.canTerminalize) {
+        throw StateError(
+          'Completion terminalization proof failed: ${proof.reason.name}.',
+        );
+      }
+      final now = DateTime.now();
+      final persistedJob = currentRun.job!;
+      final completedJob = persistedJob.status == OnboardingJobStatus.completed
+          ? persistedJob
+          : _completedJob(persistedJob, now);
+      final completedProfile = profile.copyWith(
+        onboardingInputCompleted: true,
+        onboardingProjectionStatus: 'completed',
+        onboardingCompleted: true,
+        updatedAt: now,
+      );
+      await profileRepository.saveUserProfile(completedProfile);
+      _memoryJobs['$uid:$expectedRunId'] = completedJob;
+      _memoryCurrentRunIds[uid] = expectedRunId;
+      _memoryCurrentRunStatuses[uid] = 'completed';
+      return completedJob;
+    }
+
+    try {
+      return await firestore!.runTransaction<OnboardingCompletionJob>((
+        tx,
+      ) async {
+        final profileRef = firestore!.doc(FirestoreUserPaths.user(uid));
+        final pointerRef = firestore!.doc(
+          FirestoreUserPaths.onboardingCurrentRun(uid),
+        );
+        final runRef = firestore!.doc(
+          FirestoreUserPaths.onboardingRun(uid, expectedRunId),
+        );
+        final draftRef = firestore!.doc(
+          FirestoreUserPaths.onboardingDraft(uid),
+        );
+        final bundleRef = firestore!.doc(
+          FirestoreUserPaths.onboardingCompletionBundle(uid),
+        );
+
+        // Firestore requires every transaction read to precede its writes.
+        final profileDoc = await tx.get(profileRef);
+        final pointerDoc = await tx.get(pointerRef);
+        final runDoc = await tx.get(runRef);
+        final draftDoc = await tx.get(draftRef);
+        final bundleDoc = await tx.get(bundleRef);
+        final profileData = profileDoc.data();
+        final pointerData = pointerDoc.data();
+        final runData = runDoc.data();
+        final draftData = draftDoc.data();
+        final bundleData = bundleDoc.data();
+        if (profileData == null ||
+            pointerData == null ||
+            runData == null ||
+            draftData == null ||
+            bundleData == null) {
+          throw StateError('Terminalization control document is missing.');
+        }
+        final persistedProfile = UserProfile.fromFirestoreMap(profileData);
+        final persistedDraft = OnboardingDraft.fromMap(draftData);
+        final persistedBundle = OnboardingCompletionBundle.fromMap(bundleData);
+        final persistedJob = OnboardingCompletionJob.fromMap(runData);
+        final currentRun = OnboardingCurrentRunSnapshot(
+          hasPointer: true,
+          runId: pointerData['currentRunId'] as String?,
+          ownerUid: pointerData['ownerUid'] as String?,
+          pointerSchemaVersion: (pointerData['schemaVersion'] as num?)?.toInt(),
+          pointerStatus: pointerData['status'] as String?,
+          sourceFingerprint: pointerData['sourceFingerprint'] as String?,
+          draftRevision: (pointerData['draftRevision'] as num?)?.toInt(),
+          job: persistedJob,
+        );
+        final proof = CompletionTerminalizationProof.evaluate(
+          authenticatedUid: uid,
+          expectedRunId: expectedRunId,
+          profile: persistedProfile,
+          draft: persistedDraft,
+          bundle: persistedBundle,
+          currentRun: currentRun.toTerminalizationState(),
+          durableOutputsVerified: durableOutputsVerified,
+        );
+        if (proof.disposition ==
+            CompletionTerminalizationDisposition.alreadyTerminal) {
+          return persistedJob;
+        }
+        if (!proof.canTerminalize) {
+          throw StateError(
+            'Completion terminalization proof failed: ${proof.reason.name}.',
+          );
+        }
+
+        final now = DateTime.now();
+        final completedJob =
+            persistedJob.status == OnboardingJobStatus.completed
+            ? persistedJob
+            : _completedJob(persistedJob, now);
+        final completedProfile = persistedProfile.copyWith(
+          onboardingInputCompleted: true,
+          onboardingProjectionStatus: 'completed',
+          onboardingCompleted: true,
+          updatedAt: now,
+        );
+        if (persistedJob.status != OnboardingJobStatus.completed) {
+          tx.set(profileRef, completedProfile.toFirestoreMap());
+          tx.set(runRef, completedJob.toFirestoreMap());
+        }
+        tx.set(pointerRef, _runPointerMap(completedJob, status: 'completed'));
+        return completedJob;
+      });
+    } catch (_) {
+      // A lost response is ambiguous. Resolve it by authoritative reread before
+      // allowing the caller to retry or display a failure.
+      final profile = await profileRepository.fetchUserProfile(uid);
+      final currentRun = await _loadCurrentRunSnapshot(uid);
+      if (profile != null && currentRun.job != null) {
+        final proof = CompletionTerminalizationProof.evaluate(
+          authenticatedUid: uid,
+          expectedRunId: expectedRunId,
+          profile: profile,
+          draft: draft,
+          bundle: bundle,
+          currentRun: currentRun.toTerminalizationState(),
+          durableOutputsVerified: durableOutputsVerified,
+        );
+        if (proof.disposition ==
+            CompletionTerminalizationDisposition.alreadyTerminal) {
+          return currentRun.job!;
+        }
+      }
+      rethrow;
+    }
+  }
+
+  OnboardingCompletionJob _completedJob(
+    OnboardingCompletionJob job,
+    DateTime completedAt,
+  ) {
+    final stages = Map<String, bool>.from(job.stagesCompleted)
+      ..[OnboardingCompletionStage.finalizeProfile.name] = true;
+    return job.copyWith(
+      status: OnboardingJobStatus.completed,
+      stage: OnboardingCompletionStage.completed,
+      stagesCompleted: stages,
+      updatedAt: completedAt,
+      completedAt: completedAt,
+      clearLastError: true,
+      clearLastFailure: true,
+    );
   }
 
   Future<void> _verifyRoutineProjection({
@@ -917,6 +1194,9 @@ class OnboardingCompletionJobService {
           ownerUid: pointerData?['ownerUid'] as String?,
           pointerSchemaVersion: (pointerData?['schemaVersion'] as num?)
               ?.toInt(),
+          pointerStatus: pointerData?['status'] as String?,
+          sourceFingerprint: pointerData?['sourceFingerprint'] as String?,
+          draftRevision: (pointerData?['draftRevision'] as num?)?.toInt(),
           job: await _loadJobStatus(uid, runId),
         );
       }
@@ -925,6 +1205,9 @@ class OnboardingCompletionJobService {
           hasPointer: true,
           ownerUid: pointerData['ownerUid'] as String?,
           pointerSchemaVersion: (pointerData['schemaVersion'] as num?)?.toInt(),
+          pointerStatus: pointerData['status'] as String?,
+          sourceFingerprint: pointerData['sourceFingerprint'] as String?,
+          draftRevision: (pointerData['draftRevision'] as num?)?.toInt(),
         );
       }
       // Read-only compatibility for a legacy fixed job. A new attempt always
@@ -942,6 +1225,11 @@ class OnboardingCompletionJobService {
         runId: legacyJob.jobId,
         ownerUid: legacyJob.ownerUid,
         pointerSchemaVersion: 1,
+        pointerStatus: legacyJob.status == OnboardingJobStatus.completed
+            ? 'completed'
+            : 'active',
+        sourceFingerprint: legacyJob.sourceFingerprint,
+        draftRevision: legacyJob.draftRevision,
         job: legacyJob,
       );
     }
@@ -952,6 +1240,9 @@ class OnboardingCompletionJobService {
       runId: runId,
       ownerUid: uid,
       pointerSchemaVersion: 1,
+      pointerStatus: _memoryCurrentRunStatuses[uid] ?? 'active',
+      sourceFingerprint: _memoryJobs['$uid:$runId']?.sourceFingerprint,
+      draftRevision: _memoryJobs['$uid:$runId']?.draftRevision,
       job: _memoryJobs['$uid:$runId'],
     );
   }
@@ -1004,7 +1295,10 @@ class OnboardingCompletionJobService {
       );
     }
     _memoryJobs['${job.uid}:${job.jobId}'] = job;
-    if (activate) _memoryCurrentRunIds[job.uid] = job.jobId;
+    if (activate) {
+      _memoryCurrentRunIds[job.uid] = job.jobId;
+      _memoryCurrentRunStatuses[job.uid] = 'active';
+    }
   }
 
   Map<String, dynamic> _runPointerMap(
