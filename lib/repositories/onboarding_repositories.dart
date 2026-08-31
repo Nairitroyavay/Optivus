@@ -37,10 +37,13 @@ abstract class OnboardingCompletionRepository {
 }
 
 class FirebaseOnboardingDraftRepository implements OnboardingDraftRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirebaseOnboardingDraftRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<OnboardingDraft?> fetchDraft(String uid) async {
@@ -60,10 +63,13 @@ class FirebaseOnboardingDraftRepository implements OnboardingDraftRepository {
 }
 
 class FirebaseUserProfileRepository implements UserProfileRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirebaseUserProfileRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<UserProfile?> fetchProfile(String uid) async {
@@ -88,10 +94,13 @@ class FirebaseUserProfileRepository implements UserProfileRepository {
 }
 
 class FirebaseRoutineSetupRepository implements RoutineSetupRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirebaseRoutineSetupRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<void> saveRoutineItems(String uid, List<RoutineItem> items) async {
@@ -108,10 +117,13 @@ class FirebaseRoutineSetupRepository implements RoutineSetupRepository {
 }
 
 class FirebasePreferencesRepository implements PreferencesRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirebasePreferencesRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<void> saveCoachPreferences(String uid, CoachPreferences preferences) {
@@ -147,10 +159,13 @@ class FirebasePreferencesRepository implements PreferencesRepository {
 
 class FirebaseOnboardingCompletionRepository
     implements OnboardingCompletionRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirebaseOnboardingCompletionRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<void> saveCompletionBundle(OnboardingCompletionBundle bundle) {

@@ -44,10 +44,12 @@ import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
-    return FirebaseAuthRepository();
-  }
-  return FakeAuthRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirebaseAuthRepository.new,
+        fake: FakeAuthRepository.new,
+      );
 });
 
 final serverReconstructorProvider = Provider<ServerReconstructor>((ref) {
@@ -235,11 +237,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     : _ref = ref,
       super(
         AuthState(
-          status:
-              ref.read(optivusBackendModeProvider) ==
-                  OptivusBackendMode.firebase
-              ? AuthFlowStatus.loading
-              : AuthFlowStatus.signedOut,
+          status: ref.read(fakeDataAllowedProvider)
+              ? AuthFlowStatus.signedOut
+              : AuthFlowStatus.loading,
         ),
       ) {
     _authSubscription = _repository.authStateChanges.listen(
@@ -1177,10 +1177,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   bool get _useFirebaseBackend {
-    return _ref.read(optivusBackendModeProvider) == OptivusBackendMode.firebase;
+    return !_ref.read(fakeBackendPolicyProvider).fakeDataAllowed;
   }
 
   Future<void> _loadDevSeedState(AuthUser user) async {
+    final policy = _ref.read(fakeBackendPolicyProvider);
+    policy.ensureValid();
+    if (!policy.fakeDataAllowed) {
+      throw StateError('MockSeedData requested outside allowed fake mode.');
+    }
     final now = DateTime.now();
     final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
     _ref

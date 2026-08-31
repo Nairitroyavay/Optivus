@@ -5,8 +5,13 @@ import 'sheets/home_notification_sheet.dart';
 
 class HomeHeader extends StatelessWidget {
   final String userName;
+  final bool showDemoNotifications;
 
-  const HomeHeader({super.key, required this.userName});
+  const HomeHeader({
+    super.key,
+    required this.userName,
+    this.showDemoNotifications = false,
+  });
 
   String _getTimeGreeting() {
     final hour = DateTime.now().hour;
@@ -89,21 +94,24 @@ class HomeHeader extends StatelessWidget {
             HomeIconPill(
               icon: Icons.notifications_none,
               accent: OptivusColors.textPrimary,
-              onTap: () => HomeNotificationSheet.show(context),
+              onTap: showDemoNotifications
+                  ? () => HomeNotificationSheet.show(context)
+                  : null,
             ),
-            Positioned(
-              top: 6,
-              right: 6,
-              child: Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: OptivusColors.homeAccent,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
+            if (showDemoNotifications)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: OptivusColors.homeAccent,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ],

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/user_profile.dart';
 
 abstract class UserProfileRepository {
@@ -33,6 +34,19 @@ class FakeUserProfileRepository implements UserProfileRepository {
   }
 }
 
+class UnavailableFirebaseUserProfileRepository
+    implements UserProfileRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Legacy user profile');
+  }
+}
+
 final userProfileRepositoryProvider = Provider<UserProfileRepository>((ref) {
-  return FakeUserProfileRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseUserProfileRepository.new,
+        fake: FakeUserProfileRepository.new,
+      );
 });

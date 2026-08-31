@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 
 abstract class HabitRepository {
@@ -44,6 +45,18 @@ class FakeHabitRepository implements HabitRepository {
   }
 }
 
+class UnavailableFirebaseHabitRepository implements HabitRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Habits');
+  }
+}
+
 final habitRepositoryProvider = Provider<HabitRepository>((ref) {
-  return FakeHabitRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseHabitRepository.new,
+        fake: FakeHabitRepository.new,
+      );
 });

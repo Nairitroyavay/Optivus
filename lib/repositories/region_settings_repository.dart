@@ -24,10 +24,13 @@ class FakeRegionSettingsRepository implements RegionSettingsRepository {
 }
 
 class FirestoreRegionSettingsRepository implements RegionSettingsRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirestoreRegionSettingsRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<RegionSettings?> fetchRegionSettings(String userId) async {
@@ -49,8 +52,10 @@ class FirestoreRegionSettingsRepository implements RegionSettingsRepository {
 final regionSettingsRepositoryProvider = Provider<RegionSettingsRepository>((
   ref,
 ) {
-  if (OptivusBackendConfig.useFirebase) {
-    return FirestoreRegionSettingsRepository();
-  }
-  return FakeRegionSettingsRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreRegionSettingsRepository.new,
+        fake: FakeRegionSettingsRepository.new,
+      );
 });

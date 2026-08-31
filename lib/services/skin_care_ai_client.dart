@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
+import 'package:optivus/config/backend_config.dart';
 
 final skinCareAiClientProvider = Provider<SkinCareAiClient>((ref) {
   if (OptivusAiWorkersConfig.useWorker &&
@@ -10,7 +11,8 @@ final skinCareAiClientProvider = Provider<SkinCareAiClient>((ref) {
     return WorkerSkinCareAiClient();
   }
   if (OptivusAiWorkersConfig.mode == OptivusAiWorkerMode.fake &&
-      OptivusAiWorkersConfig.allowFakeAiForTestsOnly) {
+      OptivusAiWorkersConfig.allowFakeAiForTestsOnly &&
+      ref.watch(fakeDataAllowedProvider)) {
     return const FakeSkinCareAiClient();
   }
   if (!OptivusAiWorkersConfig.useWorker) {

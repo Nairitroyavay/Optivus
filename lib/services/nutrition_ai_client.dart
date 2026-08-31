@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/routine_import_review.dart';
 
 class MissingConfigException implements Exception {
@@ -43,7 +44,8 @@ final nutritionAiClientModeProvider = Provider<NutritionAiClientMode>((ref) {
     }
     return NutritionAiClientMode.worker;
   }
-  if (OptivusAiWorkersConfig.allowFakeAiForTestsOnly) {
+  if (OptivusAiWorkersConfig.allowFakeAiForTestsOnly &&
+      ref.watch(fakeDataAllowedProvider)) {
     if (OptivusAiWorkersConfig.mode == OptivusAiWorkerMode.disabled) {
       return NutritionAiClientMode.disabled;
     }

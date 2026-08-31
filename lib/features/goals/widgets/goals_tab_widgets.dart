@@ -459,7 +459,7 @@ class TodayIdentityFocusCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${primaryGoal.streakDays > 0 ? primaryGoal.streakDays : 3} this week',
+                      '${primaryGoal.streakDays} this week',
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,

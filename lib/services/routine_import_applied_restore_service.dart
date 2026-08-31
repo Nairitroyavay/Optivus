@@ -76,8 +76,7 @@ class RoutineImportAppliedRestoreService {
         ? missing.map((item) => item.id).toList(growable: false)
         : const <String>[];
 
-    if (restoredIds.isNotEmpty &&
-        read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
+    if (restoredIds.isNotEmpty && read(fakeDataAllowedProvider)) {
       read(mockRoutineProvider.notifier).mergeMissing(
         missing.where((item) => restoredIds.contains(item.id)).toList(),
       );

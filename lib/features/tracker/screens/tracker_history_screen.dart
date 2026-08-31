@@ -25,7 +25,10 @@ class _TrackerHistoryScreenState extends ConsumerState<TrackerHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final region = ref.watch(regionSettingsProvider);
-    final entries = _buildEntries(ref.watch(mockTrackerProvider), region);
+    final entries = buildTrackerHistoryEntries(
+      ref.watch(mockTrackerProvider),
+      region,
+    );
     final visible = _filter == 'All'
         ? entries
         : entries.where((entry) => entry.category == _filter).toList();
@@ -166,168 +169,130 @@ class _TrackerHistoryScreenState extends ConsumerState<TrackerHistoryScreen> {
   bool _isThisWeek(TrackerHistoryEntry entry) {
     return DateTime.now().difference(entry.occurredAt).inDays < 7;
   }
+}
 
-  List<TrackerHistoryEntry> _buildEntries(
-    MockTrackerState state,
-    RegionSettings region,
-  ) {
-    final now = DateTime.now();
-    final entries = <TrackerHistoryEntry>[
-      TrackerHistoryEntry(
-        id: 'screen-summary',
-        trackerType: 'screenTime',
-        category: 'Focus',
-        title: 'Screen Time summary',
-        subtitle: '${state.screenTimeApps.length} apps reviewed',
-        occurredAt: now.subtract(const Duration(hours: 1)),
-        valueLabel: 'Risk review',
+List<TrackerHistoryEntry> buildTrackerHistoryEntries(
+  MockTrackerState state,
+  RegionSettings region, {
+  DateTime? now,
+}) {
+  final occurredNow = now ?? DateTime.now();
+  final entries = <TrackerHistoryEntry>[];
+
+  entries.addAll(
+    state.trackerSessions.map(
+      (session) => TrackerHistoryEntry(
+        id: session.id,
+        trackerType: session.title,
+        category: session.category == 'Habits'
+            ? 'Bad Habits'
+            : session.category,
+        title: session.title,
+        subtitle: session.isCompleted ? 'Completed session' : 'Pending session',
+        occurredAt: session.timestamp,
+        valueLabel: '${session.value}',
+        completed: session.isCompleted,
       ),
-      TrackerHistoryEntry(
-        id: 'sleep-local',
-        trackerType: 'sleep',
+    ),
+  );
+  entries.addAll(
+    state.savingsEntries.map(
+      (entry) => TrackerHistoryEntry(
+        id: entry.id,
+        trackerType: 'money',
+        category: 'Finance',
+        title: entry.isConfirmed ? 'Money saving entry' : 'Potential saving',
+        subtitle: entry.description,
+        occurredAt: entry.createdAt,
+        valueLabel: formatMoney(entry.amount, region),
+        completed: entry.isConfirmed,
+      ),
+    ),
+  );
+  entries.addAll(
+    state.hydrationLogs.map(
+      (log) => TrackerHistoryEntry(
+        id: log.id,
+        trackerType: 'hydration',
         category: 'Body',
-        title: 'Sleep log',
-        subtitle: 'Manual overnight sleep belongs to wake-up day',
-        occurredAt: now.subtract(const Duration(hours: 7)),
-        valueLabel: '9h',
+        title: 'Hydration log',
+        subtitle: log.timestamp,
+        occurredAt: occurredNow,
+        valueLabel: '${log.amountMl}ml',
       ),
-      TrackerHistoryEntry(
-        id: 'focus-local',
+    ),
+  );
+  entries.addAll(
+    state.fitnessActivities.map(
+      (activity) => TrackerHistoryEntry(
+        id: activity.id,
+        trackerType: 'fitness',
+        category: 'Body',
+        title: 'Fitness activity',
+        subtitle: activity.activityType.label,
+        occurredAt: activity.startedAt,
+        valueLabel: '${activity.distanceKm.toStringAsFixed(1)} km',
+      ),
+    ),
+  );
+  entries.addAll(
+    state.badHabitLogs.map(
+      (log) => TrackerHistoryEntry(
+        id: log.id,
+        trackerType: log.habitType.name,
+        category: 'Bad Habits',
+        title: 'Bad habit log',
+        subtitle: '${log.title}: ${log.status.name}',
+        occurredAt: log.loggedAt,
+        valueLabel: log.potentialSaved > 0
+            ? 'Rs ${log.potentialSaved.toStringAsFixed(0)}'
+            : null,
+      ),
+    ),
+  );
+  entries.addAll(
+    state.focusSessions.map(
+      (session) => TrackerHistoryEntry(
+        id: session.id,
         trackerType: 'focus',
         category: 'Focus',
         title: 'Focus session',
-        subtitle: 'Routine-linked deep work block',
-        occurredAt: now.subtract(const Duration(days: 2)),
-        valueLabel: '45m',
+        subtitle: session.linkedRoutineTitle ?? session.mode.name,
+        occurredAt: session.completedAt ?? session.startedAt,
+        valueLabel: '${session.completedMinutes}m',
       ),
-      TrackerHistoryEntry(
-        id: 'nutrition-local',
+    ),
+  );
+  entries.addAll(
+    state.sleepLogs.map(
+      (log) => TrackerHistoryEntry(
+        id: log.id,
+        trackerType: 'sleep',
+        category: 'Body',
+        title: 'Sleep log',
+        subtitle: log.quality.name,
+        occurredAt: log.wakeDateTime,
+        valueLabel: '${(log.durationMinutes / 60).toStringAsFixed(1)}h',
+      ),
+    ),
+  );
+  entries.addAll(
+    state.nutritionLogs.map(
+      (log) => TrackerHistoryEntry(
+        id: log.id,
         trackerType: 'nutrition',
         category: 'Body',
         title: 'Nutrition log',
-        subtitle: 'Lunch marked done with protein estimate',
-        occurredAt: now.subtract(const Duration(days: 8)),
-        valueLabel: '32g protein',
+        subtitle: log.mealType.name,
+        occurredAt: log.loggedAt,
+        valueLabel: '${log.estimatedProtein.toStringAsFixed(0)}g protein',
+        completed: log.done,
       ),
-    ];
+    ),
+  );
 
-    entries.addAll(
-      state.trackerSessions.map(
-        (session) => TrackerHistoryEntry(
-          id: session.id,
-          trackerType: session.title,
-          category: session.category == 'Habits'
-              ? 'Bad Habits'
-              : session.category,
-          title: session.title,
-          subtitle: session.isCompleted
-              ? 'Completed session'
-              : 'Pending session',
-          occurredAt: session.timestamp,
-          valueLabel: '${session.value}',
-          completed: session.isCompleted,
-        ),
-      ),
-    );
-    entries.addAll(
-      state.savingsEntries.map(
-        (entry) => TrackerHistoryEntry(
-          id: entry.id,
-          trackerType: 'money',
-          category: 'Finance',
-          title: entry.isConfirmed ? 'Money saving entry' : 'Potential saving',
-          subtitle: entry.description,
-          occurredAt: entry.createdAt,
-          valueLabel: formatMoney(entry.amount, region),
-          completed: entry.isConfirmed,
-        ),
-      ),
-    );
-    entries.addAll(
-      state.hydrationLogs.map(
-        (log) => TrackerHistoryEntry(
-          id: log.id,
-          trackerType: 'hydration',
-          category: 'Body',
-          title: 'Hydration log',
-          subtitle: log.timestamp,
-          occurredAt: now,
-          valueLabel: '${log.amountMl}ml',
-        ),
-      ),
-    );
-    entries.addAll(
-      state.fitnessActivities.map(
-        (activity) => TrackerHistoryEntry(
-          id: activity.id,
-          trackerType: 'fitness',
-          category: 'Body',
-          title: 'Fitness activity',
-          subtitle: activity.activityType.label,
-          occurredAt: activity.startedAt,
-          valueLabel: '${activity.distanceKm.toStringAsFixed(1)} km',
-        ),
-      ),
-    );
-    entries.addAll(
-      state.badHabitLogs.map(
-        (log) => TrackerHistoryEntry(
-          id: log.id,
-          trackerType: log.habitType.name,
-          category: 'Bad Habits',
-          title: 'Bad habit log',
-          subtitle: '${log.title}: ${log.status.name}',
-          occurredAt: log.loggedAt,
-          valueLabel: log.potentialSaved > 0
-              ? 'Rs ${log.potentialSaved.toStringAsFixed(0)}'
-              : null,
-        ),
-      ),
-    );
-    entries.addAll(
-      state.focusSessions.map(
-        (session) => TrackerHistoryEntry(
-          id: session.id,
-          trackerType: 'focus',
-          category: 'Focus',
-          title: 'Focus session',
-          subtitle: session.linkedRoutineTitle ?? session.mode.name,
-          occurredAt: session.completedAt ?? session.startedAt,
-          valueLabel: '${session.completedMinutes}m',
-        ),
-      ),
-    );
-    entries.addAll(
-      state.sleepLogs.map(
-        (log) => TrackerHistoryEntry(
-          id: log.id,
-          trackerType: 'sleep',
-          category: 'Body',
-          title: 'Sleep log',
-          subtitle: log.quality.name,
-          occurredAt: log.wakeDateTime,
-          valueLabel: '${(log.durationMinutes / 60).toStringAsFixed(1)}h',
-        ),
-      ),
-    );
-    entries.addAll(
-      state.nutritionLogs.map(
-        (log) => TrackerHistoryEntry(
-          id: log.id,
-          trackerType: 'nutrition',
-          category: 'Body',
-          title: 'Nutrition log',
-          subtitle: log.mealType.name,
-          occurredAt: log.loggedAt,
-          valueLabel: '${log.estimatedProtein.toStringAsFixed(0)}g protein',
-          completed: log.done,
-        ),
-      ),
-    );
-
-    entries.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
-    return entries;
-  }
+  entries.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+  return entries;
 }
 
 class _HistorySection extends StatelessWidget {

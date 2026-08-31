@@ -311,10 +311,12 @@ final fakeRoutineDatabaseProvider = Provider<FakeRoutineDatabase>((ref) {
 });
 
 final routineRepositoryProvider = Provider<RoutineRepository>((ref) {
-  if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
-    return FirestoreRoutineRepository();
-  }
-  return FakeRoutineRepository(
-    database: ref.watch(fakeRoutineDatabaseProvider),
-  );
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreRoutineRepository.new,
+        fake: () => FakeRoutineRepository(
+          database: ref.watch(fakeRoutineDatabaseProvider),
+        ),
+      );
 });

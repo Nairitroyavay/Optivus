@@ -1,10 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 
 class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
-  HomeDashboardNotifier() : super(_initialMockState());
+  HomeDashboardNotifier({required bool fakeDataAllowed})
+    : _fakeDataAllowed = fakeDataAllowed,
+      super(_initialEmptyState());
 
-  static HomeDashboardState _initialMockState() {
+  final bool _fakeDataAllowed;
+
+  static HomeDashboardState _initialEmptyState() {
     return const HomeDashboardState(
       identityFocus: IdentityFocus(primaryIdentity: '', primaryProof: ''),
       nowNextAction: null,
@@ -33,7 +38,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
 
   void resetForSignedOut() {
     _ownerUid = null;
-    state = _initialMockState();
+    state = _initialEmptyState();
   }
 
   void completeCheckIn(String checkInId, String option, {String? targetUid}) {
@@ -58,6 +63,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
   }
 
   void cycleNowNextState({String? targetUid}) {
+    if (!_fakeDataAllowed) return;
     if (targetUid != null && _ownerUid != null && targetUid != _ownerUid) {
       return;
     }
@@ -120,5 +126,7 @@ class HomeDashboardNotifier extends StateNotifier<HomeDashboardState> {
 
 final homeDashboardProvider =
     StateNotifierProvider<HomeDashboardNotifier, HomeDashboardState>((ref) {
-      return HomeDashboardNotifier();
+      return HomeDashboardNotifier(
+        fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+      );
     });

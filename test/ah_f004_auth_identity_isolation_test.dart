@@ -389,7 +389,7 @@ void main() {
 
   group('AH-F004 async stale work protections', () {
     test('delayed coach AI response does not write after account reset', () async {
-      final notifier = MockCoachNotifier();
+      final notifier = MockCoachNotifier(fakeDataAllowed: true);
       addTearDown(notifier.dispose);
 
       notifier.createNewSession(

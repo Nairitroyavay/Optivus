@@ -933,12 +933,14 @@ bool _isExpectedAcceptance(
 }
 
 final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {
-  final OnboardingRepository repository =
-      ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase
-      ? FirestoreOnboardingRepository()
-      : FakeOnboardingRepository(
+  final OnboardingRepository repository = ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreOnboardingRepository.new,
+        fake: () => FakeOnboardingRepository(
           routineDatabase: ref.watch(fakeRoutineDatabaseProvider),
-        );
+        ),
+      );
   ref.onDispose(repository.dispose);
   return repository;
 });

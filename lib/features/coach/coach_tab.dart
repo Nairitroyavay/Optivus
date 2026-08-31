@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
@@ -28,7 +29,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
   final FocusNode _focusNode = FocusNode();
 
   bool _isTyping = false;
-  String _selectedSessionId = 'session-1'; // Default seeded session
+  String _selectedSessionId = '';
   CoachDetailView _activeDetail = CoachDetailView.none;
 
   @override
@@ -59,6 +60,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
   }
 
   void _sendMessage(String text) {
+    if (!ref.read(fakeDataAllowedProvider)) return;
     if (text.trim().isEmpty) return;
     if (_selectedSessionId.isEmpty) return;
 
@@ -93,6 +95,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
   }
 
   void _createSession(CoachSessionOption option) {
+    if (!ref.read(fakeDataAllowedProvider)) return;
     final prefs = ref.read(mockCoachPreferencesProvider);
     ref
         .read(mockCoachProvider.notifier)
@@ -151,6 +154,7 @@ class _CoachTabState extends ConsumerState<CoachTab> {
 
     final sessions = ref.watch(mockCoachProvider);
     final coachPreferences = ref.watch(mockCoachPreferencesProvider);
+    final fakeDataAllowed = ref.watch(fakeDataAllowedProvider);
 
     if (_activeDetail != CoachDetailView.none) {
       return PopScope(
@@ -194,8 +198,9 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                         ),
                         const SizedBox(height: 10),
                         ElevatedButton(
-                          onPressed: () =>
-                              _openDetail(CoachDetailView.newSession),
+                          onPressed: fakeDataAllowed
+                              ? () => _openDetail(CoachDetailView.newSession)
+                              : null,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: OptivusColors.coachAccent,
                             foregroundColor: Colors.white,
@@ -271,9 +276,10 @@ class _CoachTabState extends ConsumerState<CoachTab> {
                         child: CoachMessageBubble(
                           message: CoachMessage(
                             id: 'empty',
-                            content:
-                                'Hello, I’m ${coachPreferences.name}, your personal AI coach.\nHow can I support you today?',
-                            timestamp: 'Just now',
+                            content: fakeDataAllowed
+                                ? 'Hello, I’m ${coachPreferences.name}, your personal AI coach.\nHow can I support you today?'
+                                : 'No messages yet.',
+                            timestamp: '',
                             isFromCoach: true,
                           ),
                           onBuildActionCard: _buildActionCard,

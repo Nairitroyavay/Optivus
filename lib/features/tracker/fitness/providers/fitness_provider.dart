@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/tracker_models.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -66,6 +67,7 @@ class FitnessCenterState {
   final List<FitnessRecord> records;
   final List<FitnessInsight> insights;
   final List<FitnessMetricPoint> weeklyMetrics;
+  final bool containsDemoData;
 
   const FitnessCenterState({
     required this.selectedActivityType,
@@ -78,7 +80,23 @@ class FitnessCenterState {
     required this.records,
     required this.insights,
     required this.weeklyMetrics,
+    this.containsDemoData = false,
   });
+
+  factory FitnessCenterState.empty() {
+    return FitnessCenterState(
+      selectedActivityType: FitnessActivityType.walk,
+      selectedMapStyleId: fitnessMapStyles.first.id,
+      selectedGraphMetric: 'Distance',
+      activeActivity: null,
+      completedActivity: null,
+      recentActivities: const [],
+      goals: const [],
+      records: const [],
+      insights: const [],
+      weeklyMetrics: const [],
+    );
+  }
 
   factory FitnessCenterState.mock() {
     return FitnessCenterState(
@@ -149,6 +167,7 @@ class FitnessCenterState {
           bodyScore: 62,
         ),
       ],
+      containsDemoData: true,
     );
   }
 
@@ -164,6 +183,7 @@ class FitnessCenterState {
     List<FitnessRecord>? records,
     List<FitnessInsight>? insights,
     List<FitnessMetricPoint>? weeklyMetrics,
+    bool? containsDemoData,
   }) {
     return FitnessCenterState(
       selectedActivityType: selectedActivityType ?? this.selectedActivityType,
@@ -178,27 +198,35 @@ class FitnessCenterState {
       records: records ?? this.records,
       insights: insights ?? this.insights,
       weeklyMetrics: weeklyMetrics ?? this.weeklyMetrics,
+      containsDemoData: containsDemoData ?? this.containsDemoData,
     );
   }
 
-  double get todayDistanceKm => 2.4;
-  int get todayActiveMinutes => 28;
-  int get todayCalories => 142;
-  int get todaySteps => 3820;
-  int get bodyScorePercent => 62;
-  String get workoutStatus => 'Pending';
-  double get weeklyDistanceKm => 8.4;
-  int get weeklySessions => 3;
-  int get activeMinutesThisWeek => 124;
-  int get workoutSessionsThisWeek => 3;
-  String get bestPaceLabel => '6\'55"/km';
-  double get weeklyDistanceGoalKm => 15;
+  double get todayDistanceKm => containsDemoData ? 2.4 : 0;
+  int get todayActiveMinutes => containsDemoData ? 28 : 0;
+  int get todayCalories => containsDemoData ? 142 : 0;
+  int get todaySteps => containsDemoData ? 3820 : 0;
+  int get bodyScorePercent => containsDemoData ? 62 : 0;
+  String get workoutStatus => containsDemoData ? 'Pending' : 'No activity';
+  double get weeklyDistanceKm => containsDemoData ? 8.4 : 0;
+  int get weeklySessions => containsDemoData ? 3 : 0;
+  int get activeMinutesThisWeek => containsDemoData ? 124 : 0;
+  int get workoutSessionsThisWeek => containsDemoData ? 3 : 0;
+  String get bestPaceLabel => containsDemoData ? '6\'55"/km' : '—';
+  double get weeklyDistanceGoalKm => containsDemoData ? 15 : 0;
 }
 
 class FitnessCenterNotifier extends StateNotifier<FitnessCenterState> {
-  FitnessCenterNotifier(this._ref) : super(FitnessCenterState.mock());
+  FitnessCenterNotifier(this._ref, {required bool fakeDataAllowed})
+    : _fakeDataAllowed = fakeDataAllowed,
+      super(
+        fakeDataAllowed
+            ? FitnessCenterState.mock()
+            : FitnessCenterState.empty(),
+      );
 
   final Ref _ref;
+  final bool _fakeDataAllowed;
   String? _ownerUid;
 
   String? get ownerUid => _ownerUid;
@@ -209,7 +237,7 @@ class FitnessCenterNotifier extends StateNotifier<FitnessCenterState> {
 
   void resetForSignedOut() {
     _ownerUid = null;
-    state = FitnessCenterState.mock();
+    state = FitnessCenterState.empty();
   }
 
   void selectActivityType(FitnessActivityType activityType) {
@@ -314,13 +342,17 @@ class FitnessCenterNotifier extends StateNotifier<FitnessCenterState> {
   }) {
     final now = DateTime.now();
     final type = active.activityType;
-    final route = type.isOutdoor ? _mockRoute(active.id) : const <RoutePoint>[];
+    final route = _fakeDataAllowed && type.isOutdoor
+        ? _mockRoute(active.id)
+        : const <RoutePoint>[];
     final duration = Duration(
       seconds: elapsedSeconds != null && elapsedSeconds > 0
           ? elapsedSeconds
-          : _defaultDurationSeconds(type),
+          : (_fakeDataAllowed ? _defaultDurationSeconds(type) : 0),
     );
-    final distanceMeters = _defaultDistanceMeters(type);
+    final distanceMeters = _fakeDataAllowed
+        ? _defaultDistanceMeters(type)
+        : 0.0;
     final pace = distanceMeters <= 0
         ? null
         : duration.inSeconds / 60 / (distanceMeters / 1000);
@@ -337,10 +369,12 @@ class FitnessCenterNotifier extends StateNotifier<FitnessCenterState> {
       distanceMeters: distanceMeters,
       avgPace: type == FitnessActivityType.cycling ? null : pace,
       avgSpeed: type == FitnessActivityType.cycling ? speed : null,
-      caloriesEstimate: _defaultCalories(type),
-      elevationGain: type.isOutdoor ? _defaultElevationGain(type) : null,
+      caloriesEstimate: _fakeDataAllowed ? _defaultCalories(type) : 0,
+      elevationGain: _fakeDataAllowed && type.isOutdoor
+          ? _defaultElevationGain(type)
+          : null,
       route: route,
-      routeBounds: type.isOutdoor
+      routeBounds: _fakeDataAllowed && type.isOutdoor
           ? const RouteBounds(
               north: 12.9772,
               south: 12.9709,
@@ -349,8 +383,11 @@ class FitnessCenterNotifier extends StateNotifier<FitnessCenterState> {
             )
           : null,
       status: FitnessActivityStatus.completed,
-      exercisesCompleted: completedExercises ?? _defaultExercises(type).length,
-      setsCompleted: setsCompleted ?? (type.isWorkout ? 3 : 0),
+      exercisesCompleted:
+          completedExercises ??
+          (_fakeDataAllowed ? _defaultExercises(type).length : 0),
+      setsCompleted:
+          setsCompleted ?? (_fakeDataAllowed && type.isWorkout ? 3 : 0),
       updatedAt: now,
     );
   }
@@ -358,7 +395,10 @@ class FitnessCenterNotifier extends StateNotifier<FitnessCenterState> {
 
 final fitnessCenterProvider =
     StateNotifierProvider<FitnessCenterNotifier, FitnessCenterState>((ref) {
-      return FitnessCenterNotifier(ref);
+      return FitnessCenterNotifier(
+        ref,
+        fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+      );
     });
 
 class FitnessRouteQuality {

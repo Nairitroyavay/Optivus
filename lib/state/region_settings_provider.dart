@@ -6,7 +6,7 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
   final RegionSettingsRepository _repository;
 
   RegionSettingsNotifier(this._repository)
-    : super(RegionSettings.defaultForUser('mock-user-123'));
+    : super(RegionSettings.defaultForUser(''));
 
   Future<void> loadForUser(String userId) async {
     state =

@@ -1154,8 +1154,7 @@ class SanitizedFailurePayload {
 
 final onboardingCompletionJobServiceProvider =
     Provider<OnboardingCompletionJobService>((ref) {
-      final firebaseMode =
-          ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase;
+      final firebaseMode = !ref.watch(fakeDataAllowedProvider);
       final firebaseReady = firebaseMode && Firebase.apps.isNotEmpty;
       final service = OnboardingCompletionJobService(
         onboardingRepository: ref.watch(onboardingRepositoryProvider),

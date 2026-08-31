@@ -27,10 +27,13 @@ class FakeAppPreferencesRepository implements AppPreferencesRepository {
 }
 
 class FirestoreAppPreferencesRepository implements AppPreferencesRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirestoreAppPreferencesRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<UserPreferences?> fetchAppPreferences(String uid) async {
@@ -66,8 +69,10 @@ class FirestoreAppPreferencesRepository implements AppPreferencesRepository {
 final appPreferencesRepositoryProvider = Provider<AppPreferencesRepository>((
   ref,
 ) {
-  if (OptivusBackendConfig.useFirebase) {
-    return FirestoreAppPreferencesRepository();
-  }
-  return FakeAppPreferencesRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreAppPreferencesRepository.new,
+        fake: FakeAppPreferencesRepository.new,
+      );
 });

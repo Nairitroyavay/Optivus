@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
@@ -401,6 +402,7 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
     return _TrackerGraphCarouselCard(
       activePeriod: _activeMetricView,
       snapshot: snapshot,
+      showDemoData: ref.watch(fakeDataAllowedProvider),
     );
   }
 
@@ -735,28 +737,32 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
   }
 
   Widget _buildRecentActivity(_TrackerUiSnapshot snapshot) {
-    final activities = [
-      {
-        'title': 'Meditation completed',
-        'subtitle': '${snapshot.meditationMinutes} min',
-        'color': OptivusColors.purpleAccent,
-      },
-      {
-        'title': 'Saved ${snapshot.todaySavedLabel}',
-        'subtitle': 'Money System',
-        'color': OptivusColors.mintAccent,
-      },
-      {
-        'title': 'Water logged',
-        'subtitle': '+250ml',
-        'color': OptivusColors.blueAccent,
-      },
-      {
-        'title': 'Fitness Center activity',
-        'subtitle':
-            '${snapshot.weeklyDistanceLabel} km • ${snapshot.workoutSessionCount} sessions',
-        'color': OptivusColors.trackerAccent,
-      },
+    final activities = <Map<String, Object>>[
+      if (snapshot.hasMeditationActivity)
+        {
+          'title': 'Meditation completed',
+          'subtitle': '${snapshot.meditationMinutes} min',
+          'color': OptivusColors.purpleAccent,
+        },
+      if (snapshot.hasSavingsActivity)
+        {
+          'title': 'Saved ${snapshot.todaySavedLabel}',
+          'subtitle': 'Money System',
+          'color': OptivusColors.mintAccent,
+        },
+      if (snapshot.hasHydrationActivity)
+        {
+          'title': 'Water logged',
+          'subtitle': snapshot.hydrationLabel,
+          'color': OptivusColors.blueAccent,
+        },
+      if (snapshot.hasFitnessActivity)
+        {
+          'title': 'Fitness Center activity',
+          'subtitle':
+              '${snapshot.weeklyDistanceLabel} km • ${snapshot.workoutSessionCount} sessions',
+          'color': OptivusColors.trackerAccent,
+        },
     ];
 
     return GestureDetector(
@@ -821,10 +827,12 @@ class _TrackerTabState extends ConsumerState<TrackerTab> {
 class _TrackerGraphCarouselCard extends StatefulWidget {
   final String activePeriod;
   final _TrackerUiSnapshot snapshot;
+  final bool showDemoData;
 
   const _TrackerGraphCarouselCard({
     required this.activePeriod,
     required this.snapshot,
+    required this.showDemoData,
   });
 
   @override
@@ -969,29 +977,37 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
     _TrackerPeriodData period,
     _TrackerUiSnapshot snapshot,
   ) {
+    final emptyValues = List<double>.filled(period.labels.length, 0);
+    List<double> demoOrEmpty(List<double> values) =>
+        widget.showDemoData ? values : emptyValues;
+
     return [
       _TrackerGraphConfig(
         title: '${period.name} Performance',
-        subtitle: 'Energy vs Habits Completed',
-        badgeText: '+12%',
+        subtitle: widget.showDemoData
+            ? 'Energy vs Habits Completed'
+            : 'No performance history recorded',
+        badgeText: widget.showDemoData ? '+12%' : 'No data',
         accentColor: OptivusColors.trackerAccent,
-        values: period.performanceValues,
+        values: demoOrEmpty(period.performanceValues),
         showLineOverlay: true,
       ),
       _TrackerGraphConfig(
         title: 'Life Balance',
-        subtitle: 'Body 72% • Mind 80% • Focus 45%\nFinance 90% • Growth 60%',
-        badgeText: 'Stable',
+        subtitle: widget.showDemoData
+            ? 'Body 72% • Mind 80% • Focus 45%\nFinance 90% • Growth 60%'
+            : 'No balance history recorded',
+        badgeText: widget.showDemoData ? 'Stable' : 'No data',
         accentColor: OptivusColors.blueAccent,
-        values: period.lifeBalanceValues,
+        values: demoOrEmpty(period.lifeBalanceValues),
       ),
       _TrackerGraphConfig(
         title: 'Screen Time',
         subtitle:
             '${snapshot.screenTimeLabel} total • Risk: ${snapshot.screenRisk}\n${snapshot.screenInsight}',
-        badgeText: '-45m',
+        badgeText: widget.showDemoData ? '-45m' : 'No data',
         accentColor: OptivusColors.roseAccent,
-        values: period.screenTimeValues,
+        values: demoOrEmpty(period.screenTimeValues),
       ),
       _TrackerGraphConfig(
         title: 'Money Progress',
@@ -999,7 +1015,9 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
             '${snapshot.confirmedSavedLabel} confirmed • ${snapshot.potentialSavedLabel} potential\nNext level: ${snapshot.nextMoneyLevelLabel}',
         badgeText: snapshot.todaySavedLabel,
         accentColor: OptivusColors.mintAccent,
-        values: snapshot.moneyValuesForPeriod(period),
+        values: widget.showDemoData
+            ? snapshot.moneyValuesForPeriod(period)
+            : snapshot.moneyValuesForPeriod(period, allowDemoFallback: false),
       ),
       _TrackerGraphConfig(
         title: 'Movement & Fitness',
@@ -1007,15 +1025,15 @@ class _TrackerGraphCarouselCardState extends State<_TrackerGraphCarouselCard> {
             '${snapshot.weeklyDistanceLabel} km this week • ${snapshot.activeMinutesLabel} active\n${snapshot.workoutSessionCount} sessions • Best pace ${snapshot.bestPaceLabel}',
         badgeText: '${snapshot.weeklyGoalProgressPercent}%',
         accentColor: OptivusColors.trackerAccent,
-        values: period.movementValues,
+        values: demoOrEmpty(period.movementValues),
       ),
       _TrackerGraphConfig(
         title: 'Consistency',
         subtitle:
             'Meditation ${snapshot.meditationStreakDays}d • Saving ${snapshot.savingStreakDays}d\nWater ${snapshot.waterStreakDays}d • Workout ${snapshot.workoutStreakDays}d',
-        badgeText: 'On track',
+        badgeText: widget.showDemoData ? 'On track' : 'No data',
         accentColor: OptivusColors.purpleAccent,
-        values: period.consistencyValues,
+        values: demoOrEmpty(period.consistencyValues),
       ),
     ];
   }
@@ -1072,6 +1090,10 @@ class _TrackerUiSnapshot {
   final int waterStreakDays;
   final int workoutStreakDays;
   final int meditationStreakDays;
+  final bool hasMeditationActivity;
+  final bool hasSavingsActivity;
+  final bool hasHydrationActivity;
+  final bool hasFitnessActivity;
   final double nextMoneyLevel;
   final List<SavingEntry> savingsEntries;
   final RegionSettings regionSettings;
@@ -1096,6 +1118,10 @@ class _TrackerUiSnapshot {
     required this.waterStreakDays,
     required this.workoutStreakDays,
     required this.meditationStreakDays,
+    required this.hasMeditationActivity,
+    required this.hasSavingsActivity,
+    required this.hasHydrationActivity,
+    required this.hasFitnessActivity,
     required this.nextMoneyLevel,
     required this.savingsEntries,
     required this.regionSettings,
@@ -1105,14 +1131,12 @@ class _TrackerUiSnapshot {
     MockTrackerState state,
     RegionSettings regionSettings,
   ) {
-    final hydrationMl = state.hydrationLogs.isEmpty
-        ? 1200
-        : state.hydrationLogs.fold<int>(
-            0,
-            (total, log) => total + log.amountMl,
-          );
+    final hydrationMl = state.hydrationLogs.fold<int>(
+      0,
+      (total, log) => total + log.amountMl,
+    );
 
-    int meditationMinutes = 5;
+    int meditationMinutes = 0;
     for (final session in state.trackerSessions) {
       final title = session.title.toLowerCase();
       final category = session.category.toLowerCase();
@@ -1122,12 +1146,10 @@ class _TrackerUiSnapshot {
       }
     }
 
-    final screenMinutes = state.screenTimeApps.isEmpty
-        ? 260
-        : state.screenTimeApps.fold<int>(
-            0,
-            (total, app) => total + app.durationMinutes,
-          );
+    final screenMinutes = state.screenTimeApps.fold<int>(
+      0,
+      (total, app) => total + app.durationMinutes,
+    );
     final screenRisk = _highestScreenRisk(state.screenTimeApps);
     final topScreenApp = state.screenTimeApps.isEmpty
         ? null
@@ -1135,11 +1157,9 @@ class _TrackerUiSnapshot {
                 ...state.screenTimeApps,
               ]..sort((a, b) => b.durationMinutes.compareTo(a.durationMinutes)))
               .first;
-    final insightAppName = topScreenApp?.name ?? 'Instagram';
-    final insightMinutes = topScreenApp?.durationMinutes ?? 200;
-    final insightRisk = (topScreenApp?.distractionRisk ?? 'High').toLowerCase();
-    final screenInsight =
-        '$insightAppName ${_formatMinutes(insightMinutes)} → $insightRisk distraction risk';
+    final screenInsight = topScreenApp == null
+        ? 'No screen activity recorded'
+        : '${topScreenApp.name} ${_formatMinutes(topScreenApp.durationMinutes)} → ${topScreenApp.distractionRisk.toLowerCase()} distraction risk';
 
     final today = DateTime.now();
     final todayKey = moneyDateKey(today);
@@ -1160,14 +1180,12 @@ class _TrackerUiSnapshot {
     final potentialSaved = state.moneyGoal.totalPotentialSaved;
 
     final activities = state.fitnessActivities;
-    final weeklyDistanceKm = activities.isEmpty
-        ? 8.4
-        : activities.fold<double>(
-            0,
-            (total, activity) => total + activity.distanceKm,
-          );
+    final weeklyDistanceKm = activities.fold<double>(
+      0,
+      (total, activity) => total + activity.distanceKm,
+    );
     final longestDistanceKm = activities.isEmpty
-        ? 7.4
+        ? 0.0
         : activities
               .map((activity) => activity.distanceKm)
               .reduce((a, b) => a > b ? a : b);
@@ -1176,16 +1194,22 @@ class _TrackerUiSnapshot {
         .where((pace) => pace > 0)
         .toList(growable: false);
     final bestPaceMinutesPerKm = validPaces.isEmpty
-        ? 6.92
+        ? 0.0
         : validPaces.reduce((a, b) => a < b ? a : b);
-    final trackedActiveMinutes = activities.fold<int>(
+    final activeMinutesThisWeek = activities.fold<int>(
       0,
       (total, activity) => total + activity.movingDuration.inMinutes,
     );
-    final activeMinutesThisWeek = trackedActiveMinutes < 124
-        ? 124
-        : trackedActiveMinutes;
-    final workoutSessionCount = activities.isEmpty ? 3 : activities.length;
+    final workoutSessionCount = activities.length;
+    final activeSystemCount = [
+      state.hydrationLogs.isNotEmpty,
+      activities.isNotEmpty,
+      state.trackerSessions.isNotEmpty,
+      state.savingsEntries.isNotEmpty,
+      state.screenTimeApps.isNotEmpty,
+    ].where((active) => active).length;
+
+    final lifeScorePercent = (activeSystemCount / 5 * 100).round();
 
     return _TrackerUiSnapshot(
       hydrationMl: hydrationMl,
@@ -1202,13 +1226,15 @@ class _TrackerUiSnapshot {
       bestPaceMinutesPerKm: bestPaceMinutesPerKm,
       activeMinutesThisWeek: activeMinutesThisWeek,
       workoutSessionCount: workoutSessionCount,
-      lifeScorePercent: 42,
-      activeSystemCount: 5,
-      waterStreakDays: state.hydrationLogs.isEmpty
-          ? 4
-          : state.hydrationLogs.length,
-      workoutStreakDays: activities.isEmpty ? 2 : activities.length,
-      meditationStreakDays: meditationMinutes >= 5 ? 5 : 1,
+      lifeScorePercent: lifeScorePercent,
+      activeSystemCount: activeSystemCount,
+      waterStreakDays: state.hydrationLogs.length,
+      workoutStreakDays: activities.length,
+      meditationStreakDays: meditationMinutes > 0 ? 1 : 0,
+      hasMeditationActivity: meditationMinutes > 0,
+      hasSavingsActivity: state.savingsEntries.isNotEmpty,
+      hasHydrationActivity: state.hydrationLogs.isNotEmpty,
+      hasFitnessActivity: activities.isNotEmpty,
       nextMoneyLevel: state.moneyGoal.nextLevelAmount,
       savingsEntries: state.savingsEntries,
       regionSettings: regionSettings,
@@ -1222,14 +1248,23 @@ class _TrackerUiSnapshot {
   String get potentialSavedLabel => formatMoney(potentialSaved, regionSettings);
   String get weeklyDistanceLabel => _formatDistance(weeklyDistanceKm);
   String get longestDistanceLabel => _formatDistance(longestDistanceKm);
-  String get bestPaceLabel => _formatPace(bestPaceMinutesPerKm);
+  String get bestPaceLabel =>
+      bestPaceMinutesPerKm <= 0 ? '—' : _formatPace(bestPaceMinutesPerKm);
   String get activeMinutesLabel => '${activeMinutesThisWeek}m';
   int get weeklyGoalProgressPercent =>
       ((weeklyDistanceKm / 15).clamp(0.0, 1.0) * 100).round();
   String get nextMoneyLevelLabel => formatMoney(nextMoneyLevel, regionSettings);
 
-  List<double> moneyValuesForPeriod(_TrackerPeriodData period) {
-    if (savingsEntries.isEmpty) return period.moneyValues;
+  List<double> moneyValuesForPeriod(
+    _TrackerPeriodData period, {
+    bool allowDemoFallback = true,
+  }) {
+    if (savingsEntries.isEmpty) {
+      return List<double>.filled(
+        period.labels.length,
+        allowDemoFallback ? 0.05 : 0,
+      );
+    }
 
     final now = DateTime.now();
     final totals = switch (period.name) {

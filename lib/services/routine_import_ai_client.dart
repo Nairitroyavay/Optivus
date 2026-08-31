@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/routine_import_ai_config.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -490,7 +491,8 @@ final routineImportAiClientModeProvider = Provider<RoutineImportAiClientMode>((
     }
     return RoutineImportAiClientMode.worker;
   }
-  if (OptivusRoutineImportAiConfig.allowFakeAiForTestsOnly) {
+  if (OptivusRoutineImportAiConfig.allowFakeAiForTestsOnly &&
+      ref.watch(fakeDataAllowedProvider)) {
     return switch (OptivusRoutineImportAiConfig.mode) {
       OptivusRoutineImportAiMode.disabled => RoutineImportAiClientMode.disabled,
       _ => RoutineImportAiClientMode.fake,

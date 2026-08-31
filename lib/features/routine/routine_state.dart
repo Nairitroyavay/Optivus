@@ -447,7 +447,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           selectedDay: TimelineUtils.dateOnly(DateTime.now()),
         ),
       ) {
-    if (_ref.read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
+    if (_ref.read(fakeDataAllowedProvider)) {
       final initialUid = _ref.read(mockUserProfileProvider).uid.trim();
       if (initialUid.isNotEmpty) {
         _initialLoad = loadForOwner(initialUid);

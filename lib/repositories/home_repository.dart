@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/home/models/home_dashboard_state.dart';
 import 'package:optivus/models/mind_note.dart';
 
@@ -51,12 +52,30 @@ class FakeMindNoteRepository implements MindNoteRepository {
   }
 }
 
+class UnavailableFirebaseHomeRepository
+    implements HomeDashboardRepository, MindNoteRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Home data');
+  }
+}
+
 final homeDashboardRepositoryProvider = Provider<HomeDashboardRepository>((
   ref,
 ) {
-  return FakeHomeDashboardRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseHomeRepository.new,
+        fake: FakeHomeDashboardRepository.new,
+      );
 });
 
 final mindNoteRepositoryProvider = Provider<MindNoteRepository>((ref) {
-  return FakeMindNoteRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseHomeRepository.new,
+        fake: FakeMindNoteRepository.new,
+      );
 });

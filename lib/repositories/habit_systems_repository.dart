@@ -42,8 +42,10 @@ abstract class HabitSystemsRepository {
 }
 
 final habitSystemsRepositoryProvider = Provider<HabitSystemsRepository>((ref) {
-  if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
-    return FirestoreHabitSystemsRepository();
-  }
-  return FakeHabitSystemsRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreHabitSystemsRepository.new,
+        fake: FakeHabitSystemsRepository.new,
+      );
 });

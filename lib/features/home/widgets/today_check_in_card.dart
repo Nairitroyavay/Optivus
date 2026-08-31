@@ -84,9 +84,7 @@ class TodayCheckInCard extends ConsumerWidget {
                 compact: true,
                 accent: activeColor,
                 onTap: () {
-                  final isFirebase =
-                      ref.read(optivusBackendModeProvider) ==
-                      OptivusBackendMode.firebase;
+                  final isFirebase = !ref.read(fakeDataAllowedProvider);
                   final uid = ref.read(authProvider).user?.uid;
 
                   if (item.id == 'money_saved') {

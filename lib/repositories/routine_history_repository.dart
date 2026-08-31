@@ -343,8 +343,10 @@ class FirestoreRoutineHistoryRepository implements RoutineHistoryRepository {
 final routineHistoryRepositoryProvider = Provider<RoutineHistoryRepository>((
   ref,
 ) {
-  if (ref.watch(optivusBackendModeProvider) == OptivusBackendMode.firebase) {
-    return FirestoreRoutineHistoryRepository();
-  }
-  return FakeRoutineHistoryRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreRoutineHistoryRepository.new,
+        fake: FakeRoutineHistoryRepository.new,
+      );
 });

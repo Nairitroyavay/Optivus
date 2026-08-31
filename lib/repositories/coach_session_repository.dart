@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/coach_models.dart';
 
 abstract class CoachSessionRepository {
@@ -58,10 +59,28 @@ class FakeCoachAiRepository implements CoachAiRepository {
   }
 }
 
+class UnavailableFirebaseCoachRepository
+    implements CoachSessionRepository, CoachAiRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Coach data');
+  }
+}
+
 final coachSessionRepositoryProvider = Provider<CoachSessionRepository>((ref) {
-  return FakeCoachSessionRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseCoachRepository.new,
+        fake: FakeCoachSessionRepository.new,
+      );
 });
 
 final coachAiRepositoryProvider = Provider<CoachAiRepository>((ref) {
-  return FakeCoachAiRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseCoachRepository.new,
+        fake: FakeCoachAiRepository.new,
+      );
 });

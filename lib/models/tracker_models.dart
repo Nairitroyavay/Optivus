@@ -223,7 +223,7 @@ class FitnessActivity {
     List<String>? exercises,
     int? setsCompleted,
     int? exercisesCompleted,
-  }) : userId = userId ?? 'mock-user',
+  }) : userId = userId ?? '',
        activityType =
            activityType ??
            FitnessActivityTypeX.fromLegacyType(type ?? 'custom'),
@@ -445,7 +445,7 @@ class FocusSession {
 
   FocusSession({
     required this.id,
-    this.userId = 'mock-user',
+    this.userId = '',
     required this.mode,
     required this.startedAt,
     this.completedAt,
@@ -538,7 +538,7 @@ class BadHabitLog {
 
   BadHabitLog({
     required this.id,
-    this.userId = 'mock-user',
+    this.userId = '',
     required this.habitType,
     required this.title,
     required this.status,
@@ -596,7 +596,7 @@ class SleepLog {
 
   SleepLog({
     required this.id,
-    this.userId = 'mock-user',
+    this.userId = '',
     required this.sleepStartDateTime,
     required this.wakeDateTime,
     required this.durationMinutes,
@@ -610,7 +610,7 @@ class SleepLog {
 
   factory SleepLog.fromRange({
     required String id,
-    String userId = 'mock-user',
+    String userId = '',
     required DateTime sleepStartDateTime,
     required DateTime wakeDateTime,
     required SleepQuality quality,
@@ -671,7 +671,7 @@ class NutritionLog {
 
   NutritionLog({
     required this.id,
-    this.userId = 'mock-user',
+    this.userId = '',
     required this.mealType,
     required this.loggedAt,
     required this.dateKey,
@@ -752,7 +752,7 @@ class TrackerHistoryEntry {
 
   TrackerHistoryEntry({
     required this.id,
-    this.userId = 'mock-user',
+    this.userId = '',
     required this.trackerType,
     required this.category,
     required this.title,

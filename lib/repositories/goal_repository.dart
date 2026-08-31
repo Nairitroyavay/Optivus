@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/goal_models.dart';
 
 abstract class GoalRepository {
@@ -67,6 +68,18 @@ class FakeGoalRepository implements GoalRepository {
   }
 }
 
+class UnavailableFirebaseGoalRepository implements GoalRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Goals');
+  }
+}
+
 final goalRepositoryProvider = Provider<GoalRepository>((ref) {
-  return FakeGoalRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseGoalRepository.new,
+        fake: FakeGoalRepository.new,
+      );
 });

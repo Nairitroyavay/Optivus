@@ -16,6 +16,9 @@ import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/app_preferences_repository.dart';
+import 'package:optivus/repositories/profile_repository.dart';
+import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
@@ -151,6 +154,15 @@ void main() {
             routineImportAiClientProvider.overrideWithValue(routineAi),
             skinCareAiClientProvider.overrideWithValue(skinAi),
             authRepositoryProvider.overrideWithValue(authRepo),
+            profileRepositoryProvider.overrideWithValue(
+              FakeProfileRepository(),
+            ),
+            appPreferencesRepositoryProvider.overrideWithValue(
+              FakeAppPreferencesRepository(),
+            ),
+            regionSettingsRepositoryProvider.overrideWithValue(
+              FakeRegionSettingsRepository(),
+            ),
           ],
         );
         addTearDown(container.dispose);
@@ -926,6 +938,15 @@ void main() {
             uploadedAssetPreviewResolverProvider.overrideWithValue(resolver),
             serverReconstructorProvider.overrideWithValue(reconstructor),
             authRepositoryProvider.overrideWithValue(authRepo),
+            profileRepositoryProvider.overrideWithValue(
+              FakeProfileRepository(),
+            ),
+            appPreferencesRepositoryProvider.overrideWithValue(
+              FakeAppPreferencesRepository(),
+            ),
+            regionSettingsRepositoryProvider.overrideWithValue(
+              FakeRegionSettingsRepository(),
+            ),
           ],
         );
         addTearDown(container.dispose);
@@ -978,6 +999,10 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              optivusBackendModeProvider.overrideWithValue(
+                OptivusBackendMode.fake,
+              ),
+              optivusDebugBuildProvider.overrideWithValue(true),
               mockOnboardingProvider.overrideWith((ref) {
                 final notifier = MockOnboardingNotifier();
                 notifier.loadSeedData(draft);
@@ -1042,6 +1067,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            optivusDebugBuildProvider.overrideWithValue(true),
             mockOnboardingProvider.overrideWith((ref) {
               final notifier = MockOnboardingNotifier();
               notifier.loadSeedData(draft);
@@ -1098,6 +1127,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            optivusDebugBuildProvider.overrideWithValue(true),
             mockOnboardingProvider.overrideWith((ref) {
               final notifier = MockOnboardingNotifier();
               notifier.loadSeedData(draft);

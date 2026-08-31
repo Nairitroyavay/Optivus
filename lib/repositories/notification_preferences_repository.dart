@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/notification_preferences.dart';
 
 abstract class NotificationPreferencesRepository {
@@ -27,7 +28,20 @@ class FakeNotificationPreferencesRepository
   }
 }
 
+class UnavailableFirebaseNotificationPreferencesRepository
+    implements NotificationPreferencesRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Notification preferences');
+  }
+}
+
 final notificationPreferencesRepositoryProvider =
     Provider<NotificationPreferencesRepository>((ref) {
-      return FakeNotificationPreferencesRepository();
+      return ref
+          .watch(fakeBackendPolicyProvider)
+          .selectBackend(
+            firebase: UnavailableFirebaseNotificationPreferencesRepository.new,
+            fake: FakeNotificationPreferencesRepository.new,
+          );
     });

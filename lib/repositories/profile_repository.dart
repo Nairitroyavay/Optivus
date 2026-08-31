@@ -58,10 +58,13 @@ class FakeProfileRepository implements ProfileRepository {
 }
 
 class FirestoreProfileRepository implements ProfileRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirestoreProfileRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<UserProfile?> fetchUserProfile(String uid) async {
@@ -177,6 +180,17 @@ class FakeDataControlRepository implements DataControlRepository {
   }
 }
 
+class UnavailableFirebaseProfileSupportRepository
+    implements
+        PermissionStatusRepository,
+        ConnectedServicesRepository,
+        DataControlRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Profile support data');
+  }
+}
+
 class ProfileSettingsStateDefaults {
   static final permissions = ProfileSettingsStateSeed.permissions;
   static final services = ProfileSettingsStateSeed.services;
@@ -252,23 +266,40 @@ class ProfileSettingsStateSeed {
 }
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
-  if (OptivusBackendConfig.useFirebase) {
-    return FirestoreProfileRepository();
-  }
-  return FakeProfileRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreProfileRepository.new,
+        fake: FakeProfileRepository.new,
+      );
 });
 
 final permissionStatusRepositoryProvider = Provider<PermissionStatusRepository>(
   (ref) {
-    return FakePermissionStatusRepository();
+    return ref
+        .watch(fakeBackendPolicyProvider)
+        .selectBackend(
+          firebase: UnavailableFirebaseProfileSupportRepository.new,
+          fake: FakePermissionStatusRepository.new,
+        );
   },
 );
 
 final connectedServicesRepositoryProvider =
     Provider<ConnectedServicesRepository>((ref) {
-      return FakeConnectedServicesRepository();
+      return ref
+          .watch(fakeBackendPolicyProvider)
+          .selectBackend(
+            firebase: UnavailableFirebaseProfileSupportRepository.new,
+            fake: FakeConnectedServicesRepository.new,
+          );
     });
 
 final dataControlRepositoryProvider = Provider<DataControlRepository>((ref) {
-  return FakeDataControlRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: UnavailableFirebaseProfileSupportRepository.new,
+        fake: FakeDataControlRepository.new,
+      );
 });

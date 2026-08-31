@@ -72,10 +72,13 @@ class FakeUploadedAssetRepository implements UploadedAssetRepository {
 }
 
 class FirestoreUploadedAssetRepository implements UploadedAssetRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirestoreUploadedAssetRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<UploadedAsset?> fetchAsset({
@@ -137,8 +140,10 @@ class FirestoreUploadedAssetRepository implements UploadedAssetRepository {
 final uploadedAssetRepositoryProvider = Provider<UploadedAssetRepository>((
   ref,
 ) {
-  if (OptivusBackendConfig.useFirebase) {
-    return FirestoreUploadedAssetRepository();
-  }
-  return FakeUploadedAssetRepository();
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: FirestoreUploadedAssetRepository.new,
+        fake: FakeUploadedAssetRepository.new,
+      );
 });

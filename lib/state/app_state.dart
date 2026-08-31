@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/models/routine_item.dart';
@@ -165,7 +166,11 @@ final mockUserProfileProvider =
 // 2. Routine Items State Notifier
 // ==========================================
 class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
-  MockRoutineNotifier() : super(const []);
+  MockRoutineNotifier({required bool fakeDataAllowed})
+    : _fakeDataAllowed = fakeDataAllowed,
+      super(const []);
+
+  final bool _fakeDataAllowed;
 
   void resetEmpty() {
     state = const [];
@@ -174,6 +179,9 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
   void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
+    if (!_fakeDataAllowed) {
+      throw StateError('Routine seed data is unavailable outside fake mode.');
+    }
     state = MockSeedData.defaultRoutineItems;
     _checkConflicts();
   }
@@ -314,7 +322,9 @@ class MockRoutineNotifier extends StateNotifier<List<RoutineItem>> {
 
 final mockRoutineProvider =
     StateNotifierProvider<MockRoutineNotifier, List<RoutineItem>>((ref) {
-      return MockRoutineNotifier();
+      return MockRoutineNotifier(
+        fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+      );
     });
 
 // ==========================================
@@ -373,7 +383,11 @@ class MockTrackerState {
 }
 
 class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
-  MockTrackerNotifier() : super(_emptyState());
+  MockTrackerNotifier({required bool fakeDataAllowed})
+    : _fakeDataAllowed = fakeDataAllowed,
+      super(_emptyState());
+
+  final bool _fakeDataAllowed;
 
   static MockTrackerState _emptyState() {
     return MockTrackerState(
@@ -381,7 +395,17 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
       fitnessActivities: const [],
       screenTimeApps: const [],
       trackerSessions: const [],
-      moneyGoal: MoneyGoal(id: 'money-goal-empty'),
+      moneyGoal: MoneyGoal(
+        id: 'money-goal-empty',
+        dailyTarget: 0,
+        tinySaveAmount: 0,
+        streakLevel: 0,
+        currentLevelAmount: 0,
+        nextLevelAmount: 0,
+        levelUpAfterDays: 0,
+        destinationLabel: '',
+        reminderTimeLabel: '',
+      ),
       savingsEntries: const [],
       focusSessions: const [],
       badHabitLogs: const [],
@@ -465,6 +489,9 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
   void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
+    if (!_fakeDataAllowed) {
+      throw StateError('Tracker seed data is unavailable outside fake mode.');
+    }
     state = _seedState();
   }
 
@@ -968,14 +995,20 @@ class MockTrackerNotifier extends StateNotifier<MockTrackerState> {
 
 final mockTrackerProvider =
     StateNotifierProvider<MockTrackerNotifier, MockTrackerState>((ref) {
-      return MockTrackerNotifier();
+      return MockTrackerNotifier(
+        fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+      );
     });
 
 // ==========================================
 // 4. Goals Focus State Notifier
 // ==========================================
 class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
-  MockGoalNotifier() : super(const []);
+  MockGoalNotifier({required bool fakeDataAllowed})
+    : _fakeDataAllowed = fakeDataAllowed,
+      super(const []);
+
+  final bool _fakeDataAllowed;
 
   void resetEmpty() {
     state = const [];
@@ -984,6 +1017,9 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
   void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
+    if (!_fakeDataAllowed) {
+      throw StateError('Goal seed data is unavailable outside fake mode.');
+    }
     state = MockSeedData.defaultGoals;
   }
 
@@ -1076,14 +1112,20 @@ class MockGoalNotifier extends StateNotifier<List<GoalModel>> {
 
 final mockGoalProvider =
     StateNotifierProvider<MockGoalNotifier, List<GoalModel>>((ref) {
-      return MockGoalNotifier();
+      return MockGoalNotifier(
+        fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+      );
     });
 
 // ==========================================
 // 5. Mind Notes State Notifier
 // ==========================================
 class MockMindNoteNotifier extends StateNotifier<List<MindNote>> {
-  MockMindNoteNotifier() : super(const []);
+  MockMindNoteNotifier({required bool fakeDataAllowed})
+    : _fakeDataAllowed = fakeDataAllowed,
+      super(const []);
+
+  final bool _fakeDataAllowed;
 
   void resetEmpty() {
     state = const [];
@@ -1092,6 +1134,9 @@ class MockMindNoteNotifier extends StateNotifier<List<MindNote>> {
   void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
+    if (!_fakeDataAllowed) {
+      throw StateError('Mind-note seed data is unavailable outside fake mode.');
+    }
     state = MockSeedData.defaultMindNotes;
   }
 
@@ -1130,14 +1175,20 @@ class MockMindNoteNotifier extends StateNotifier<List<MindNote>> {
 
 final mockMindNoteProvider =
     StateNotifierProvider<MockMindNoteNotifier, List<MindNote>>((ref) {
-      return MockMindNoteNotifier();
+      return MockMindNoteNotifier(
+        fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+      );
     });
 
 // ==========================================
 // 6. AI Coach Sessions State Notifier
 // ==========================================
 class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
-  MockCoachNotifier() : super(const []);
+  MockCoachNotifier({required bool fakeDataAllowed})
+    : _fakeDataAllowed = fakeDataAllowed,
+      super(const []);
+
+  final bool _fakeDataAllowed;
 
   int _sessionGeneration = 0;
 
@@ -1149,6 +1200,7 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
   void resetForSignedOut() => resetEmpty();
 
   void loadSeedData() {
+    _ensureFakeDataAllowed();
     state = MockSeedData.defaultCoachSessions;
   }
 
@@ -1161,6 +1213,7 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
   }
 
   void sendMessage(String sessionId, String content) {
+    _ensureFakeDataAllowed();
     final sessionGeneration = _sessionGeneration;
     final now = DateTime.now();
     final timeStr =
@@ -1200,6 +1253,7 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
     String coachName,
     String coachStyle,
   ) {
+    _ensureFakeDataAllowed();
     final session = CoachSession(
       id: 'session-${DateTime.now().millisecondsSinceEpoch}',
       title: title,
@@ -1221,6 +1275,7 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
   }
 
   void _generateCoachReply(String sessionId, String userContent) {
+    if (!_fakeDataAllowed) return;
     final now = DateTime.now();
     final timeStr =
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}';
@@ -1310,11 +1365,19 @@ class MockCoachNotifier extends StateNotifier<List<CoachSession>> {
           session,
     ];
   }
+
+  void _ensureFakeDataAllowed() {
+    if (!_fakeDataAllowed) {
+      throw StateError('Mock Coach data is unavailable outside fake mode.');
+    }
+  }
 }
 
 final mockCoachProvider =
     StateNotifierProvider<MockCoachNotifier, List<CoachSession>>((ref) {
-      return MockCoachNotifier();
+      return MockCoachNotifier(
+        fakeDataAllowed: ref.watch(fakeDataAllowedProvider),
+      );
     });
 
 class MockCoachPreferencesNotifier extends StateNotifier<CoachPreferences> {

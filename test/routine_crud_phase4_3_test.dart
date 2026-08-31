@@ -5,6 +5,7 @@ import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/routine/models/routine_write_result.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/repositories/conflict_acceptance_repository.dart';
 import 'package:optivus/repositories/routine_history_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/repositories/routine_transaction_repository.dart';
@@ -93,6 +94,9 @@ void main() {
           ),
           optivusBackendModeProvider.overrideWithValue(
             OptivusBackendMode.firebase,
+          ),
+          conflictAcceptanceRepositoryProvider.overrideWithValue(
+            FakeConflictAcceptanceRepository(database),
           ),
           routineTransactionRepositoryProvider.overrideWith(
             (ref) => FakeRoutineTransactionRepository(

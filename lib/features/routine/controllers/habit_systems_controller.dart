@@ -73,7 +73,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
 
   HabitSystemsNotifier(this._repository, this._ref)
     : super(const HabitSystemsState()) {
-    if (_ref.read(optivusBackendModeProvider) == OptivusBackendMode.fake) {
+    if (_ref.read(fakeDataAllowedProvider)) {
       final initialUid = _ref.read(mockUserProfileProvider).uid.trim();
       if (initialUid.isNotEmpty) {
         loadForOwner(initialUid);

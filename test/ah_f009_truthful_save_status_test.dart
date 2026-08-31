@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
@@ -179,52 +180,58 @@ void main() {
       expect(notifier.state.stepCompleted[4], isFalse);
     });
 
-    test('core failure and process-death truth: in-memory edit vs server durable value', () async {
-      const serverVal = 'VALUE_OLD';
-      const userVal = 'VALUE_NEW';
-      final repository = _ControlledRepository(failuresRemaining: 1);
-      repository.durableDraft = const OnboardingDraft(
-        uid: 'user-1',
-        patiencePledgeText: serverVal,
-      );
-
-      final notifier = MockOnboardingNotifier();
-      notifier.loadSeedData(repository.durableDraft!);
-      expect(notifier.state.draft.patiencePledgeText, serverVal);
-
-      // User makes an edit in process memory
-      notifier.updateDraft((d) => d.copyWith(patiencePledgeText: userVal));
-      notifier.setStepDirty(1, true);
-
-      // Save fails
-      try {
-        await repository.saveDraft(notifier.state.draft);
-      } catch (_) {
-        notifier.markStepSyncFailed(
-          1,
-          message:
-              "Couldn't sync your changes. Your changes are still open here. Retry before leaving this step.",
+    test(
+      'core failure and process-death truth: in-memory edit vs server durable value',
+      () async {
+        const serverVal = 'VALUE_OLD';
+        const userVal = 'VALUE_NEW';
+        final repository = _ControlledRepository(failuresRemaining: 1);
+        repository.durableDraft = const OnboardingDraft(
+          uid: 'user-1',
+          patiencePledgeText: serverVal,
         );
-      }
 
-      // UI/Provider: VALUE_NEW remains visible in memory, status is failed/unsynced
-      expect(notifier.state.draft.patiencePledgeText, userVal);
-      expect(notifier.state.stepSaveStatus[1], SaveSyncStatus.failed);
-      expect(notifier.state.hasUnsyncedChangesAt(1), isTrue);
-      expect(notifier.state.validationMessage, contains("Couldn't sync"));
-      expect(notifier.state.validationMessage, contains('still open here'));
-      expect(notifier.state.validationMessage, isNot(contains('Saved locally')));
+        final notifier = MockOnboardingNotifier();
+        notifier.loadSeedData(repository.durableDraft!);
+        expect(notifier.state.draft.patiencePledgeText, serverVal);
 
-      // Server: VALUE_OLD remains authoritative
-      expect(repository.durableDraft?.patiencePledgeText, serverVal);
+        // User makes an edit in process memory
+        notifier.updateDraft((d) => d.copyWith(patiencePledgeText: userVal));
+        notifier.setStepDirty(1, true);
 
-      // Simulate process death & fresh reconstruct from server: returns VALUE_OLD
-      final freshProcessState = OnboardingState(
-        draft: (await repository.fetchDraft('user-1'))!,
-      );
-      expect(freshProcessState.draft.patiencePledgeText, serverVal);
-      expect(freshProcessState.hasUnsyncedChangesAt(1), isFalse);
-    });
+        // Save fails
+        try {
+          await repository.saveDraft(notifier.state.draft);
+        } catch (_) {
+          notifier.markStepSyncFailed(
+            1,
+            message:
+                "Couldn't sync your changes. Your changes are still open here. Retry before leaving this step.",
+          );
+        }
+
+        // UI/Provider: VALUE_NEW remains visible in memory, status is failed/unsynced
+        expect(notifier.state.draft.patiencePledgeText, userVal);
+        expect(notifier.state.stepSaveStatus[1], SaveSyncStatus.failed);
+        expect(notifier.state.hasUnsyncedChangesAt(1), isTrue);
+        expect(notifier.state.validationMessage, contains("Couldn't sync"));
+        expect(notifier.state.validationMessage, contains('still open here'));
+        expect(
+          notifier.state.validationMessage,
+          isNot(contains('Saved locally')),
+        );
+
+        // Server: VALUE_OLD remains authoritative
+        expect(repository.durableDraft?.patiencePledgeText, serverVal);
+
+        // Simulate process death & fresh reconstruct from server: returns VALUE_OLD
+        final freshProcessState = OnboardingState(
+          draft: (await repository.fetchDraft('user-1'))!,
+        );
+        expect(freshProcessState.draft.patiencePledgeText, serverVal);
+        expect(freshProcessState.hasUnsyncedChangesAt(1), isFalse);
+      },
+    );
   });
 
   group('AH-F009 onboarding failure UX', () {
@@ -242,15 +249,24 @@ void main() {
       final initialCalls = repository.saveCalls;
 
       // Attempt to jump forward before step 1 is complete
-      await tester.tapAt(tester.getCenter(find.byType(LiquidGlassOnboardingIndicator)) + const Offset(60, 0));
+      await tester.tapAt(
+        tester.getCenter(find.byType(LiquidGlassOnboardingIndicator)) +
+            const Offset(60, 0),
+      );
       await tester.pump();
 
       // No network write attempted for step 1
       expect(repository.saveCalls, initialCalls);
       expect(notifier.state.stepSaveStatus[1], isNot(SaveSyncStatus.failed));
       expect(notifier.state.stepSaveStatus[1], isNot(SaveSyncStatus.saving));
-      expect(notifier.state.validationMessage, contains('Use Next Step to unlock'));
-      expect(notifier.state.validationMessage, isNot(contains("Couldn't sync")));
+      expect(
+        notifier.state.validationMessage,
+        contains('Use Next Step to unlock'),
+      );
+      expect(
+        notifier.state.validationMessage,
+        isNot(contains("Couldn't sync")),
+      );
       expect(find.text('Retry'), findsNothing);
     });
 
@@ -350,27 +366,39 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            profileRepositoryProvider.overrideWithValue(FakeProfileRepository()),
+            profileRepositoryProvider.overrideWithValue(
+              FakeProfileRepository(),
+            ),
             appPreferencesRepositoryProvider.overrideWithValue(
               FakeAppPreferencesRepository(),
             ),
           ],
-          child: MaterialApp(
-            home: ReportBugScreen(onBack: () {}),
-          ),
+          child: MaterialApp(home: ReportBugScreen(onBack: () {})),
         ),
       );
       await tester.pump();
 
-      await tester.enterText(find.widgetWithText(TextField, 'Bug title'), 'Crash on scroll');
-      await tester.enterText(find.widgetWithText(TextField, 'What happened?'), 'App froze on step 3');
-      await tester.enterText(find.widgetWithText(TextField, 'Which screen?'), 'Onboarding step 3');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Bug title'),
+        'Crash on scroll',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'What happened?'),
+        'App froze on step 3',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Which screen?'),
+        'Onboarding step 3',
+      );
       await tester.pump();
 
       await tester.tap(find.text('Submit bug report'));
       await tester.pump();
 
-      expect(find.text('Bug report recorded for this session.'), findsOneWidget);
+      expect(
+        find.text('Bug report recorded for this session.'),
+        findsOneWidget,
+      );
       expect(find.textContaining('submitted locally'), findsNothing);
       expect(find.textContaining('Saved locally'), findsNothing);
     });
@@ -391,6 +419,8 @@ Future<void> _pumpFlow(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.fake),
+        optivusDebugBuildProvider.overrideWithValue(true),
         mockOnboardingProvider.overrideWith((_) {
           final notifier = MockOnboardingNotifier()..reset('test-user');
           capture(notifier);

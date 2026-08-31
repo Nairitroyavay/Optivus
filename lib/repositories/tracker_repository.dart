@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/money_models.dart';
 import 'package:optivus/models/tracker_models.dart';
 
@@ -188,36 +189,63 @@ class FakeMoneyRepository implements MoneyRepository {
   }
 }
 
+class UnavailableFirebaseTrackerRepositories
+    implements
+        TrackerRepository,
+        TrackerHistoryRepository,
+        FocusRepository,
+        BadHabitRepository,
+        SleepRepository,
+        NutritionRepository,
+        FitnessRepository,
+        MoneyRepository {
+  const UnavailableFirebaseTrackerRepositories();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    throw const FirebaseFeatureUnavailableException('Tracker data');
+  }
+}
+
+T _selectTrackerBackend<T>(Ref ref, {required T Function() fake}) {
+  return ref
+      .watch(fakeBackendPolicyProvider)
+      .selectBackend(
+        firebase: () => const UnavailableFirebaseTrackerRepositories() as T,
+        fake: fake,
+      );
+}
+
 final trackerRepositoryProvider = Provider<TrackerRepository>((ref) {
-  return FakeTrackerRepository();
+  return _selectTrackerBackend(ref, fake: FakeTrackerRepository.new);
 });
 
 final trackerHistoryRepositoryProvider = Provider<TrackerHistoryRepository>((
   ref,
 ) {
-  return FakeTrackerHistoryRepository();
+  return _selectTrackerBackend(ref, fake: FakeTrackerHistoryRepository.new);
 });
 
 final focusRepositoryProvider = Provider<FocusRepository>((ref) {
-  return FakeFocusRepository();
+  return _selectTrackerBackend(ref, fake: FakeFocusRepository.new);
 });
 
 final badHabitRepositoryProvider = Provider<BadHabitRepository>((ref) {
-  return FakeBadHabitRepository();
+  return _selectTrackerBackend(ref, fake: FakeBadHabitRepository.new);
 });
 
 final sleepRepositoryProvider = Provider<SleepRepository>((ref) {
-  return FakeSleepRepository();
+  return _selectTrackerBackend(ref, fake: FakeSleepRepository.new);
 });
 
 final nutritionRepositoryProvider = Provider<NutritionRepository>((ref) {
-  return FakeNutritionRepository();
+  return _selectTrackerBackend(ref, fake: FakeNutritionRepository.new);
 });
 
 final fitnessRepositoryProvider = Provider<FitnessRepository>((ref) {
-  return FakeFitnessRepository();
+  return _selectTrackerBackend(ref, fake: FakeFitnessRepository.new);
 });
 
 final moneyRepositoryProvider = Provider<MoneyRepository>((ref) {
-  return FakeMoneyRepository();
+  return _selectTrackerBackend(ref, fake: FakeMoneyRepository.new);
 });

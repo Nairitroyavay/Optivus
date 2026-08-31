@@ -123,7 +123,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   String? _currentPersistenceUid() {
     final authUser = ref.read(authProvider).user;
     if (_needsEmailVerification(authUser)) return null;
-    if (OptivusBackendConfig.useFirebase && authUser == null) return null;
+    if (!ref.read(fakeDataAllowedProvider) && authUser == null) return null;
     return authUser?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
   }
 
@@ -234,7 +234,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             updatedAt: DateTime.now(),
           );
       ref.read(mockUserProfileProvider.notifier).updateProfile(profile);
-      if (OptivusBackendConfig.useFirebase) {
+      if (!ref.read(fakeDataAllowedProvider)) {
         try {
           await ref.read(profileRepositoryProvider).saveUserProfile(profile);
         } catch (_) {

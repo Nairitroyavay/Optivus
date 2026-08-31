@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/app/optivus_app.dart';
@@ -36,7 +37,15 @@ Future<Widget> buildOptivusRoot({
   FirebaseInitializer? initializeFirebase,
 }) async {
   try {
-    final shouldUseFirebase = useFirebase ?? OptivusBackendConfig.useFirebase;
+    final requestedMode = useFirebase == null
+        ? OptivusBackendConfig.mode
+        : (useFirebase ? OptivusBackendMode.firebase : OptivusBackendMode.fake);
+    final policy = FakeBackendPolicy(
+      isDebugBuild: kDebugMode,
+      backendMode: requestedMode,
+    );
+    policy.ensureValid();
+    final shouldUseFirebase = requestedMode == OptivusBackendMode.firebase;
     final resolvedOptions = shouldUseFirebase
         ? (firebaseOptions ?? DefaultFirebaseOptions.currentPlatform)
         : null;
@@ -49,7 +58,7 @@ Future<Widget> buildOptivusRoot({
               Firebase.initializeApp(options: options))(resolvedOptions);
       debugPrint('Optivus backend mode: Firebase initialized');
     } else {
-      debugPrint('Optivus backend mode: fake frontend/dev mode');
+      debugPrint('Optivus backend: FAKE (debug only)');
     }
     return const ProviderScope(child: OptivusApp());
   } catch (error) {

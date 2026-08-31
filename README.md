@@ -23,14 +23,18 @@ active flows production-ready.
 
 Important warnings:
 
-- `OPTIVUS_BACKEND` and `OPTIVUS_UPLOAD_MODE` default to fake for local
-  development. Staging, production, and release startup now fail closed unless
+- `OPTIVUS_BACKEND` defaults to Firebase; fake backend data requires an
+  explicit debug-only `OPTIVUS_BACKEND=fake`. `OPTIVUS_UPLOAD_MODE` still
+  defaults to fake for local development, but its fake client is reachable only
+  through that same central debug + fake backend gate. Staging, production, and release startup fail closed unless
   Firebase, R2, the matching Firebase project, and every Worker URL are
   explicit.
 - The fake upload client can simulate success without retaining bytes and must
   remain limited to an intentional development build.
-- Most post-onboarding feature repositories are in-memory/fake.
-- Home, Tracker, and Coach contain seeded or deterministic demo content.
+- Post-onboarding features without Firebase implementations report unavailable
+  behavior in Firebase mode instead of instantiating their in-memory fakes.
+- Home, Tracker, and Coach demo content is restricted to explicit debug fake
+  mode; their Firebase-mode initial state is empty.
 - Worker URLs checked into Flutter configuration point to development names.
   The runtime guard rejects them in staging/production, and no remote
   deployment has been verified.
@@ -151,11 +155,12 @@ The main mode is selected at compile time:
 
 | Mode | Command definition | Behavior |
 | --- | --- | --- |
-| Fake | `--dart-define=OPTIVUS_BACKEND=fake` | Default. Uses local/fake Auth and configured repositories. Most feature data is session-only. |
+| Fake | `--dart-define=OPTIVUS_BACKEND=fake` | Debug builds only. Uses local/fake Auth and configured repositories. Most feature data is session-only. |
 | Firebase | `--dart-define=OPTIVUS_BACKEND=firebase` | Initializes Firebase and selects implemented Firebase Auth, Profile/settings, Onboarding, upload-metadata, and import-review repositories. Routine, Goals, Tracker, Coach, Home/Mind, notifications, native status, and data-control execution are still not fully durable. |
 
-Always set the backend explicitly in team commands. The current default is not
-a safe release configuration.
+Always set the backend explicitly in team commands. Missing or unknown backend
+configuration resolves to Firebase, and non-debug fake configuration fails
+closed before fake repositories can be constructed.
 
 ### Firebase development run
 
@@ -266,7 +271,7 @@ belongs in a Dart define.
 | Definition | Values/default | Requirement |
 | --- | --- | --- |
 | `OPTIVUS_APP_ENV` | `development` (default), `staging`, `production` | Staging/production and every release build activate fail-closed live-service validation. |
-| `OPTIVUS_BACKEND` | `fake` (default), `firebase` | Staging/production/release requires `firebase`. Firebase is currently Android-only. |
+| `OPTIVUS_BACKEND` | `fake`, `firebase` (default) | Fake requires a debug build; staging/production/release requires `firebase`. Firebase is currently Android-only. |
 | `OPTIVUS_FIREBASE_PROJECT_ID` | Empty by default | Required for staging/production/release and must match generated Android Firebase options. |
 | `OPTIVUS_UPLOAD_MODE` | `fake` (default), `disabled`, `r2` | Use `disabled` for safe offline work; staging/production/release requires `r2` and its Worker URL. |
 | `OPTIVUS_R2_UPLOAD_WORKER_URL` | Empty by default | Required when upload mode is `r2`; missing configuration fails visibly. |

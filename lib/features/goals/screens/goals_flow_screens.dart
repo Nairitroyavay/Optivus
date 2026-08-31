@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/core/widgets/liquid_inputs.dart';
@@ -204,6 +205,7 @@ class _GoalDetailInlineScreenState
     final goal = ref
         .watch(mockGoalProvider)
         .firstWhere((goal) => goal.id == widget.goalId);
+    final fakeDataAllowed = ref.watch(fakeDataAllowedProvider);
     if (!_initialized) {
       _purpose.text = goal.purposeStatement;
       _proof.text = goal.dailyProof.title;
@@ -257,14 +259,15 @@ class _GoalDetailInlineScreenState
             ),
           ],
         ),
-        LiquidDetailSection(
-          title: 'Milestones',
-          children: const [
-            _MilestoneLine(label: 'Week 1: start identity', done: true),
-            _MilestoneLine(label: 'Week 2: consistency proof', done: true),
-            _MilestoneLine(label: 'Month 1: visible progress', done: false),
-          ],
-        ),
+        if (fakeDataAllowed)
+          LiquidDetailSection(
+            title: 'Milestones',
+            children: const [
+              _MilestoneLine(label: 'Week 1: start identity', done: true),
+              _MilestoneLine(label: 'Week 2: consistency proof', done: true),
+              _MilestoneLine(label: 'Month 1: visible progress', done: false),
+            ],
+          ),
         LiquidDetailSection(
           title: 'Weekly progress',
           children: [

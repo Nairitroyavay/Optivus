@@ -58,10 +58,13 @@ class FakeRoutineImportReviewRepository
 
 class FirestoreRoutineImportReviewRepository
     implements RoutineImportReviewRepository {
-  final FirebaseFirestore _firestore;
+  final FirebaseFirestore? _injectedFirestore;
 
   FirestoreRoutineImportReviewRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _injectedFirestore = firestore;
+
+  FirebaseFirestore get _firestore =>
+      _injectedFirestore ?? FirebaseFirestore.instance;
 
   @override
   Future<List<RoutineImportReviewDraft>> fetchReviews(String uid) async {
@@ -110,8 +113,10 @@ class FirestoreRoutineImportReviewRepository
 
 final routineImportReviewRepositoryProvider =
     Provider<RoutineImportReviewRepository>((ref) {
-      if (OptivusBackendConfig.useFirebase) {
-        return FirestoreRoutineImportReviewRepository();
-      }
-      return FakeRoutineImportReviewRepository();
+      return ref
+          .watch(fakeBackendPolicyProvider)
+          .selectBackend(
+            firebase: FirestoreRoutineImportReviewRepository.new,
+            fake: FakeRoutineImportReviewRepository.new,
+          );
     });

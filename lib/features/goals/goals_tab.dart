@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/features/coach/providers/coach_navigation_provider.dart';
 import 'package:optivus/features/goals/providers/goals_navigation_provider.dart';
@@ -92,6 +93,7 @@ class _GoalsMain extends ConsumerWidget {
     final bottomReserve = liquidTabBarReserve(context);
 
     final goals = ref.watch(mockGoalProvider);
+    final fakeDataAllowed = ref.watch(fakeDataAllowedProvider);
 
     final overloadCount = goals
         .where((g) => g.dailyProof.selectedDifficulty == 'strong')
@@ -189,28 +191,32 @@ class _GoalsMain extends ConsumerWidget {
                     GoalHealthCard(activeCount: overloadCount),
                     const SizedBox(height: 32),
 
-                    const GoalsSectionHeader(title: 'WEEKLY PROGRESS'),
-                    const WeeklyGoalProgressCard(),
-                    const SizedBox(height: 32),
+                    if (goals.isNotEmpty && fakeDataAllowed) ...[
+                      const GoalsSectionHeader(title: 'WEEKLY PROGRESS'),
+                      const WeeklyGoalProgressCard(),
+                      const SizedBox(height: 32),
 
-                    const GoalsSectionHeader(title: 'INSIGHTS'),
-                    const GoalInsightsCard(),
-                    const SizedBox(height: 32),
+                      const GoalsSectionHeader(title: 'INSIGHTS'),
+                      const GoalInsightsCard(),
+                      const SizedBox(height: 32),
 
-                    const GoalsSectionHeader(title: 'MILESTONES'),
-                    const MilestonesCard(),
-                    const SizedBox(height: 32),
+                      const GoalsSectionHeader(title: 'MILESTONES'),
+                      const MilestonesCard(),
+                      const SizedBox(height: 32),
+                    ],
 
-                    const GoalsSectionHeader(title: 'UPCOMING REVIEWS'),
-                    GestureDetector(
-                      onTap: () => onOpen(
-                        const GoalsDetailTarget(
-                          view: GoalsDetailView.weeklyReview,
+                    if (fakeDataAllowed) ...[
+                      const GoalsSectionHeader(title: 'UPCOMING REVIEWS'),
+                      GestureDetector(
+                        onTap: () => onOpen(
+                          const GoalsDetailTarget(
+                            view: GoalsDetailView.weeklyReview,
+                          ),
                         ),
+                        child: const UpcomingReviewsCard(),
                       ),
-                      child: const UpcomingReviewsCard(),
-                    ),
-                    const SizedBox(height: 32),
+                      const SizedBox(height: 32),
+                    ],
 
                     GestureDetector(
                       onTap: () => onOpen(

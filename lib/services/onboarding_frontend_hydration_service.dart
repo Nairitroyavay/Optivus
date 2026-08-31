@@ -108,8 +108,7 @@ class OnboardingFrontendHydrationService {
     final expectedHabitSystemIds = habitSystemProjections
         .map((system) => system.systemId)
         .toSet();
-    final firebaseMode =
-        read(optivusBackendModeProvider) == OptivusBackendMode.firebase;
+    final firebaseMode = !read(fakeDataAllowedProvider);
     final routineBefore = read(
       routineNotifierProvider,
     ).items.map((item) => item.id).toSet();

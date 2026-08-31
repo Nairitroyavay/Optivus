@@ -274,7 +274,12 @@ void main() {
       addTearDown(auth.dispose);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [authRepositoryProvider.overrideWithValue(auth)],
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            authRepositoryProvider.overrideWithValue(auth),
+          ],
           child: const MaterialApp(home: AuthChoiceScreen()),
         ),
       );
@@ -296,7 +301,12 @@ void main() {
       addTearDown(auth.dispose);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [authRepositoryProvider.overrideWithValue(auth)],
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            authRepositoryProvider.overrideWithValue(auth),
+          ],
           child: const MaterialApp(home: LoginScreen()),
         ),
       );

@@ -2,12 +2,16 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
+import 'package:optivus/config/backend_config.dart';
 
 final coachAiClientProvider = Provider<CoachAiClient>((ref) {
   if (OptivusAiWorkersConfig.useWorker) {
     return WorkerCoachAiClient();
   }
-  return const FakeCoachAiClient();
+  if (ref.watch(fakeDataAllowedProvider)) {
+    return const FakeCoachAiClient();
+  }
+  return const UnavailableCoachAiClient();
 });
 
 class CoachAiResult {
@@ -36,6 +40,19 @@ abstract class CoachAiClient {
     required String idToken,
     required Map<String, dynamic> context,
   });
+}
+
+class UnavailableCoachAiClient implements CoachAiClient {
+  const UnavailableCoachAiClient();
+
+  @override
+  Future<CoachAiResult> getReply({
+    required String uid,
+    required String idToken,
+    required Map<String, dynamic> context,
+  }) async {
+    return CoachAiResult.error('Coach AI is not configured.');
+  }
 }
 
 class FakeCoachAiClient implements CoachAiClient {

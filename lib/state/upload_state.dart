@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/upload_config.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -800,7 +801,10 @@ final r2UploadClientProvider = Provider<R2UploadClient>((ref) {
   if (OptivusUploadConfig.useR2 && OptivusUploadConfig.hasWorkerUrl) {
     return RealR2UploadClient();
   }
-  return FakeR2UploadClient();
+  if (ref.watch(fakeDataAllowedProvider)) return FakeR2UploadClient();
+  // The real client reports the existing typed missing-configuration/network
+  // failure on use; Firebase mode must never simulate a successful upload.
+  return RealR2UploadClient();
 });
 
 final uploadedAssetPreviewResolverProvider =

@@ -623,12 +623,13 @@ class FakeRoutineTransactionRepository implements RoutineTransactionRepository {
 
 final routineTransactionRepositoryProvider =
     Provider<RoutineTransactionRepository>((ref) {
-      if (ref.watch(optivusBackendModeProvider) ==
-          OptivusBackendMode.firebase) {
-        return FirestoreRoutineTransactionRepository();
-      }
-      return FakeRoutineTransactionRepository(
-        routineRepository: ref.watch(routineRepositoryProvider),
-        historyRepository: ref.watch(routineHistoryRepositoryProvider),
-      );
+      return ref
+          .watch(fakeBackendPolicyProvider)
+          .selectBackend(
+            firebase: FirestoreRoutineTransactionRepository.new,
+            fake: () => FakeRoutineTransactionRepository(
+              routineRepository: ref.watch(routineRepositoryProvider),
+              historyRepository: ref.watch(routineHistoryRepositoryProvider),
+            ),
+          );
     });

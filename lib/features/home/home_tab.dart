@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/widgets/liquid_detail_scaffold.dart';
 import 'package:optivus/core/utils/currency_formatter.dart';
 import 'package:optivus/state/app_state.dart';
@@ -39,6 +40,7 @@ class HomeTab extends ConsumerWidget {
     );
 
     final dashboardState = ref.watch(homeDashboardProvider);
+    final fakeDataAllowed = ref.watch(fakeDataAllowedProvider);
     final trackerState = ref.watch(mockTrackerProvider);
     final region = ref.watch(regionSettingsProvider);
     final todayMoneySaved = _confirmedMoneySavedToday(trackerState);
@@ -98,7 +100,10 @@ class HomeTab extends ConsumerWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: HomeHeader(userName: userName),
+              child: HomeHeader(
+                userName: userName,
+                showDemoNotifications: fakeDataAllowed,
+              ),
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -109,19 +114,10 @@ class HomeTab extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TodayIdentityCard(
-                      identity:
-                          (dashboardState.identityFocus != null &&
-                              dashboardState
-                                  .identityFocus!
-                                  .primaryIdentity
-                                  .isNotEmpty)
-                          ? dashboardState.identityFocus!
-                          : IdentityFocus(
-                              primaryIdentity: profile.lifeRole.isNotEmpty
-                                  ? profile.lifeRole
-                                  : 'Optivus Explorer',
-                              primaryProof: 'Daily System Execution',
-                            ),
+                      identity: resolveHomeIdentityFocus(
+                        dashboardState.identityFocus,
+                        profile.lifeRole,
+                      ),
                       onTap: () =>
                           ref.read(appNavigationProvider.notifier).goToGoals(),
                     ),
@@ -162,6 +158,19 @@ class HomeTab extends ConsumerWidget {
       ),
     );
   }
+}
+
+IdentityFocus? resolveHomeIdentityFocus(
+  IdentityFocus? dashboardIdentity,
+  String profileLifeRole,
+) {
+  if (dashboardIdentity != null &&
+      dashboardIdentity.primaryIdentity.trim().isNotEmpty) {
+    return dashboardIdentity;
+  }
+  final realRole = profileLifeRole.trim();
+  if (realRole.isEmpty) return null;
+  return IdentityFocus(primaryIdentity: realRole, primaryProof: '');
 }
 
 String _safeHomeDisplayName({

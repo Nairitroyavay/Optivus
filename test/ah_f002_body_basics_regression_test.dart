@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_3_body_basics.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
@@ -176,6 +177,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.fake,
+            ),
+            optivusDebugBuildProvider.overrideWithValue(true),
             mockOnboardingProvider.overrideWith(
               (_) => MockOnboardingNotifier()..loadSeedData(draft),
             ),

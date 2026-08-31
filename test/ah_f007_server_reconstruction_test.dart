@@ -11,6 +11,10 @@ import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/app_preferences_repository.dart';
+import 'package:optivus/repositories/profile_repository.dart';
+import 'package:optivus/repositories/region_settings_repository.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
@@ -163,20 +167,27 @@ void main() {
       },
     );
 
-    test('mismatched completion bundle revision or fingerprint is typed Recovery', () {
-      final draft = _finalDraft(uid);
-      final bundle = _bundle(uid, draft, draftRevision: draft.revision + 1);
-      final result = _classify(
-        profile: _profile(uid, inputCompleted: true, projectionStatus: 'completed'),
-        draft: draft,
-        bundle: bundle,
-        run: _run(_job(uid, draft, status: OnboardingJobStatus.completed)),
-      );
-      expect(
-        (result as ReconstructionRecovery).reason,
-        ReconstructionRecoveryReason.invalidCompletionBundle,
-      );
-    });
+    test(
+      'mismatched completion bundle revision or fingerprint is typed Recovery',
+      () {
+        final draft = _finalDraft(uid);
+        final bundle = _bundle(uid, draft, draftRevision: draft.revision + 1);
+        final result = _classify(
+          profile: _profile(
+            uid,
+            inputCompleted: true,
+            projectionStatus: 'completed',
+          ),
+          draft: draft,
+          bundle: bundle,
+          run: _run(_job(uid, draft, status: OnboardingJobStatus.completed)),
+        );
+        expect(
+          (result as ReconstructionRecovery).reason,
+          ReconstructionRecoveryReason.invalidCompletionBundle,
+        );
+      },
+    );
 
     test('currentRun job input mismatch with draft is typed Recovery', () {
       final draft = _finalDraft(uid);
@@ -187,7 +198,11 @@ void main() {
         draftRevision: draft.revision + 1,
       );
       final result = _classify(
-        profile: _profile(uid, inputCompleted: true, projectionStatus: 'pending'),
+        profile: _profile(
+          uid,
+          inputCompleted: true,
+          projectionStatus: 'pending',
+        ),
         draft: draft,
         bundle: _bundle(uid, draft),
         run: _run(mismatchedJob),
@@ -549,147 +564,241 @@ void main() {
       },
     );
 
-    test('Google sign-in and password login converge on identical ReconstructionResult', () async {
-      final draft = _validDraftAtStep(uid, 4);
-      final snapshot = ServerReconstructionSnapshot(
-        profile: _profile(uid),
-        draft: draft,
-        completionBundle: null,
-        currentRun: const OnboardingCurrentRunSnapshot.none(),
-      );
-
-      final authPass = _StreamAuthRepository();
-      final containerPass = _authContainer(authPass, _SnapshotSource(snapshot));
-      addTearDown(containerPass.dispose);
-      addTearDown(authPass.dispose);
-      authPass.emit(const AuthUser(uid: uid, emailVerified: true, providerIds: {'password'}));
-      await pumpEventQueue(times: 20);
-      final passResult = containerPass.read(authProvider).reconstructionResult;
-      final passDest = containerPass.read(authProvider).sessionDestination;
-
-      final authGoogle = _StreamAuthRepository();
-      final containerGoogle = _authContainer(authGoogle, _SnapshotSource(snapshot));
-      addTearDown(containerGoogle.dispose);
-      addTearDown(authGoogle.dispose);
-      authGoogle.emit(const AuthUser(uid: uid, emailVerified: true, providerIds: {'google.com'}));
-      await pumpEventQueue(times: 20);
-      final googleResult = containerGoogle.read(authProvider).reconstructionResult;
-      final googleDest = containerGoogle.read(authProvider).sessionDestination;
-
-      expect(passResult, isA<ReconstructionIncomplete>());
-      expect(googleResult, isA<ReconstructionIncomplete>());
-      expect((passResult as ReconstructionIncomplete).step, 4);
-      expect((googleResult as ReconstructionIncomplete).step, 4);
-      expect(passDest.kind, googleDest.kind);
-      expect(passDest.resumeStep, googleDest.resumeStep);
-    });
-
-    test('adversarial stale A completed state does not pollute B incomplete reconstruction', () async {
-      const userA = AuthUser(uid: 'account-a', emailVerified: true);
-      const userB = AuthUser(uid: 'account-b', emailVerified: true);
-      final draftB = _validDraftAtStep('account-b', 4);
-      final auth = _StreamAuthRepository();
-
-      final snapshotsByUid = <String, ServerReconstructionSnapshot>{
-        'account-a': ServerReconstructionSnapshot(
-          profile: _profile('account-a', inputCompleted: true, projectionStatus: 'completed'),
-          draft: _finalDraft('account-a'),
-          completionBundle: _bundle('account-a', _finalDraft('account-a')),
-          currentRun: _run(_job('account-a', _finalDraft('account-a'), status: OnboardingJobStatus.completed)),
-        ),
-        'account-b': ServerReconstructionSnapshot(
-          profile: _profile('account-b'),
-          draft: draftB,
-          completionBundle: null,
-          currentRun: const OnboardingCurrentRunSnapshot.none(),
-        ),
-      };
-
-      final source = _MultiUserSnapshotSource(snapshotsByUid);
-      final container = _authContainer(auth, source);
-      addTearDown(container.dispose);
-      addTearDown(auth.dispose);
-
-      auth.emit(userA);
-      await pumpEventQueue(times: 20);
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInOnboardingComplete);
-      expect(container.read(mockUserProfileProvider).uid, 'account-a');
-
-      auth.emit(userB);
-      await pumpEventQueue(times: 20);
-
-      final authStateB = container.read(authProvider);
-      expect(authStateB.user?.uid, 'account-b');
-      expect(authStateB.status, AuthFlowStatus.signedInOnboardingIncomplete);
-      expect(authStateB.resumeStep, 4);
-      expect(authStateB.reconstructionResult, isA<ReconstructionIncomplete>());
-      expect(container.read(mockUserProfileProvider).uid, 'account-b');
-      expect(container.read(mockOnboardingProvider).draft.uid, 'account-b');
-      expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
-    });
-
-    test('email verification success handoff converges into server reconstruction', () async {
-      const unverifiedUser = AuthUser(uid: uid, emailVerified: false, providerIds: {'password'});
-      const verifiedUser = AuthUser(uid: uid, emailVerified: true, providerIds: {'password'});
-      final auth = _StreamAuthRepository();
-      final draft = _validDraftAtStep(uid, 4);
-      final source = _SnapshotSource(
-        ServerReconstructionSnapshot(
+    test(
+      'Google sign-in and password login converge on identical ReconstructionResult',
+      () async {
+        final draft = _validDraftAtStep(uid, 4);
+        final snapshot = ServerReconstructionSnapshot(
           profile: _profile(uid),
           draft: draft,
           completionBundle: null,
           currentRun: const OnboardingCurrentRunSnapshot.none(),
-        ),
-      );
-      final container = _authContainer(auth, source);
-      addTearDown(container.dispose);
-      addTearDown(auth.dispose);
+        );
 
-      auth.emit(unverifiedUser);
-      await pumpEventQueue(times: 20);
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInEmailUnverified);
-      expect(container.read(authProvider).sessionDestination.kind, SessionDestinationKind.verifyEmail);
+        final authPass = _StreamAuthRepository();
+        final containerPass = _authContainer(
+          authPass,
+          _SnapshotSource(snapshot),
+        );
+        addTearDown(containerPass.dispose);
+        addTearDown(authPass.dispose);
+        authPass.emit(
+          const AuthUser(
+            uid: uid,
+            emailVerified: true,
+            providerIds: {'password'},
+          ),
+        );
+        await pumpEventQueue(times: 20);
+        final passResult = containerPass
+            .read(authProvider)
+            .reconstructionResult;
+        final passDest = containerPass.read(authProvider).sessionDestination;
 
-      auth.emit(verifiedUser);
-      await container.read(authProvider.notifier).checkEmailVerification();
-      await pumpEventQueue(times: 20);
+        final authGoogle = _StreamAuthRepository();
+        final containerGoogle = _authContainer(
+          authGoogle,
+          _SnapshotSource(snapshot),
+        );
+        addTearDown(containerGoogle.dispose);
+        addTearDown(authGoogle.dispose);
+        authGoogle.emit(
+          const AuthUser(
+            uid: uid,
+            emailVerified: true,
+            providerIds: {'google.com'},
+          ),
+        );
+        await pumpEventQueue(times: 20);
+        final googleResult = containerGoogle
+            .read(authProvider)
+            .reconstructionResult;
+        final googleDest = containerGoogle
+            .read(authProvider)
+            .sessionDestination;
 
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInOnboardingIncomplete);
-      expect(container.read(authProvider).reconstructionResult, isA<ReconstructionIncomplete>());
-      expect((container.read(authProvider).reconstructionResult as ReconstructionIncomplete).step, 4);
-    });
+        expect(passResult, isA<ReconstructionIncomplete>());
+        expect(googleResult, isA<ReconstructionIncomplete>());
+        expect((passResult as ReconstructionIncomplete).step, 4);
+        expect((googleResult as ReconstructionIncomplete).step, 4);
+        expect(passDest.kind, googleDest.kind);
+        expect(passDest.resumeStep, googleDest.resumeStep);
+      },
+    );
 
-    test('transient reconstruction failure followed by retry recovers cleanly', () async {
-      const user = AuthUser(uid: uid, emailVerified: true);
-      final auth = _StreamAuthRepository();
-      final draft = _validDraftAtStep(uid, 4);
-      final snapshot = ServerReconstructionSnapshot(
-        profile: _profile(uid),
-        draft: draft,
-        completionBundle: null,
-        currentRun: const OnboardingCurrentRunSnapshot.none(),
-      );
-      final source = _FailableSnapshotSource(
-        snapshot,
-        error: FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
-      );
-      final container = _authContainer(auth, source);
-      addTearDown(container.dispose);
-      addTearDown(auth.dispose);
+    test(
+      'adversarial stale A completed state does not pollute B incomplete reconstruction',
+      () async {
+        const userA = AuthUser(uid: 'account-a', emailVerified: true);
+        const userB = AuthUser(uid: 'account-b', emailVerified: true);
+        final draftB = _validDraftAtStep('account-b', 4);
+        final auth = _StreamAuthRepository();
 
-      auth.emit(user);
-      await pumpEventQueue(times: 20);
-      expect(container.read(authProvider).status, AuthFlowStatus.reconnectRequired);
-      expect(container.read(authProvider).reconstructionResult, isNull);
+        final snapshotsByUid = <String, ServerReconstructionSnapshot>{
+          'account-a': ServerReconstructionSnapshot(
+            profile: _profile(
+              'account-a',
+              inputCompleted: true,
+              projectionStatus: 'completed',
+            ),
+            draft: _finalDraft('account-a'),
+            completionBundle: _bundle('account-a', _finalDraft('account-a')),
+            currentRun: _run(
+              _job(
+                'account-a',
+                _finalDraft('account-a'),
+                status: OnboardingJobStatus.completed,
+              ),
+            ),
+          ),
+          'account-b': ServerReconstructionSnapshot(
+            profile: _profile('account-b'),
+            draft: draftB,
+            completionBundle: null,
+            currentRun: const OnboardingCurrentRunSnapshot.none(),
+          ),
+        };
 
-      source.error = null;
-      await container.read(authProvider.notifier).retryBackendRestore();
-      await pumpEventQueue(times: 20);
+        final source = _MultiUserSnapshotSource(snapshotsByUid);
+        final container = _authContainer(auth, source);
+        addTearDown(container.dispose);
+        addTearDown(auth.dispose);
 
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInOnboardingIncomplete);
-      expect(container.read(authProvider).reconstructionResult, isA<ReconstructionIncomplete>());
-      expect((container.read(authProvider).reconstructionResult as ReconstructionIncomplete).step, 4);
-    });
+        auth.emit(userA);
+        await pumpEventQueue(times: 20);
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInOnboardingComplete,
+        );
+        expect(container.read(mockUserProfileProvider).uid, 'account-a');
+
+        auth.emit(userB);
+        await pumpEventQueue(times: 20);
+
+        final authStateB = container.read(authProvider);
+        expect(authStateB.user?.uid, 'account-b');
+        expect(authStateB.status, AuthFlowStatus.signedInOnboardingIncomplete);
+        expect(authStateB.resumeStep, 4);
+        expect(
+          authStateB.reconstructionResult,
+          isA<ReconstructionIncomplete>(),
+        );
+        expect(container.read(mockUserProfileProvider).uid, 'account-b');
+        expect(container.read(mockOnboardingProvider).draft.uid, 'account-b');
+        expect(container.read(mockOnboardingProvider).draft.currentStep, 4);
+      },
+    );
+
+    test(
+      'email verification success handoff converges into server reconstruction',
+      () async {
+        const unverifiedUser = AuthUser(
+          uid: uid,
+          emailVerified: false,
+          providerIds: {'password'},
+        );
+        const verifiedUser = AuthUser(
+          uid: uid,
+          emailVerified: true,
+          providerIds: {'password'},
+        );
+        final auth = _StreamAuthRepository();
+        final draft = _validDraftAtStep(uid, 4);
+        final source = _SnapshotSource(
+          ServerReconstructionSnapshot(
+            profile: _profile(uid),
+            draft: draft,
+            completionBundle: null,
+            currentRun: const OnboardingCurrentRunSnapshot.none(),
+          ),
+        );
+        final container = _authContainer(auth, source);
+        addTearDown(container.dispose);
+        addTearDown(auth.dispose);
+
+        auth.emit(unverifiedUser);
+        await pumpEventQueue(times: 20);
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInEmailUnverified,
+        );
+        expect(
+          container.read(authProvider).sessionDestination.kind,
+          SessionDestinationKind.verifyEmail,
+        );
+
+        auth.emit(verifiedUser);
+        await container.read(authProvider.notifier).checkEmailVerification();
+        await pumpEventQueue(times: 20);
+
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInOnboardingIncomplete,
+        );
+        expect(
+          container.read(authProvider).reconstructionResult,
+          isA<ReconstructionIncomplete>(),
+        );
+        expect(
+          (container.read(authProvider).reconstructionResult
+                  as ReconstructionIncomplete)
+              .step,
+          4,
+        );
+      },
+    );
+
+    test(
+      'transient reconstruction failure followed by retry recovers cleanly',
+      () async {
+        const user = AuthUser(uid: uid, emailVerified: true);
+        final auth = _StreamAuthRepository();
+        final draft = _validDraftAtStep(uid, 4);
+        final snapshot = ServerReconstructionSnapshot(
+          profile: _profile(uid),
+          draft: draft,
+          completionBundle: null,
+          currentRun: const OnboardingCurrentRunSnapshot.none(),
+        );
+        final source = _FailableSnapshotSource(
+          snapshot,
+          error: FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'unavailable',
+          ),
+        );
+        final container = _authContainer(auth, source);
+        addTearDown(container.dispose);
+        addTearDown(auth.dispose);
+
+        auth.emit(user);
+        await pumpEventQueue(times: 20);
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.reconnectRequired,
+        );
+        expect(container.read(authProvider).reconstructionResult, isNull);
+
+        source.error = null;
+        await container.read(authProvider.notifier).retryBackendRestore();
+        await pumpEventQueue(times: 20);
+
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInOnboardingIncomplete,
+        );
+        expect(
+          container.read(authProvider).reconstructionResult,
+          isA<ReconstructionIncomplete>(),
+        );
+        expect(
+          (container.read(authProvider).reconstructionResult
+                  as ReconstructionIncomplete)
+              .step,
+          4,
+        );
+      },
+    );
   });
 }
 
@@ -916,6 +1025,16 @@ ProviderContainer _authContainer(
     overrides: [
       optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
       authRepositoryProvider.overrideWithValue(auth),
+      profileRepositoryProvider.overrideWithValue(FakeProfileRepository()),
+      appPreferencesRepositoryProvider.overrideWithValue(
+        FakeAppPreferencesRepository(),
+      ),
+      regionSettingsRepositoryProvider.overrideWithValue(
+        FakeRegionSettingsRepository(),
+      ),
+      uploadedAssetRepositoryProvider.overrideWithValue(
+        FakeUploadedAssetRepository(),
+      ),
       serverReconstructorProvider.overrideWithValue(
         ServerReconstructor(source: source),
       ),
@@ -1032,7 +1151,8 @@ class _MultiUserSnapshotSource implements ServerReconstructionSource {
     String uid, {
     void Function(UserProfile? profile)? onProfileLoaded,
   }) async {
-    final snapshot = snapshots[uid] ??
+    final snapshot =
+        snapshots[uid] ??
         ServerReconstructionSnapshot(
           profile: _profile(uid),
           draft: null,
