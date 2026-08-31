@@ -39,4 +39,13 @@ class AuthLayout {
 
   /// Standard auth logo dimension.
   static const double standardLogoSize = 88.0;
+
+  /// Compact auth logo dimension when keyboard is visible.
+  static const double compactLogoSize = 44.0;
+
+  /// Auth cream background surface color.
+  static const Color authBackgroundColor = Color(0xFFFCF8EE);
+
+  /// Auth top gradient color.
+  static const Color authGradientTopColor = Color(0xFFF6E6B4);
 }

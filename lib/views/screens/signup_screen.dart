@@ -13,6 +13,7 @@ import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/core/utils/password_policy.dart';
 import 'package:optivus/core/utils/auth_form_readiness.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/theme/optivus_motion.dart';
 import 'package:optivus/core/widgets/auth_text_field.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
@@ -335,12 +336,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Widget build(BuildContext context) {
     final authLoading = ref.watch(authProvider).isLoading;
     final media = MediaQuery.of(context);
-    final keyboardOpen = media.viewInsets.bottom > 0;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final allowAdaptiveScroll =
         media.size.height < 650 || media.textScaler.scale(16) > 19.2;
     final showPasswordGuidance = _passFocus.hasFocus;
     final showCtaDock = (_ctaRevealed || authLoading) && !keyboardOpen;
-    final fieldGap = keyboardOpen ? 6.0 : 10.0;
 
     return PopScope(
       canPop: !keyboardOpen,
@@ -350,8 +350,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         }
       },
       child: Scaffold(
+        backgroundColor: AuthLayout.authBackgroundColor,
         body: Container(
           width: double.infinity,
+          height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -385,57 +387,61 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           ),
                         ),
                         AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           height: keyboardOpen ? 4 : 8,
                         ),
                         AnimatedContainer(
                           key: const Key('signup-logo'),
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           width: keyboardOpen
-                              ? 44
+                              ? AuthLayout.compactLogoSize
                               : AuthLayout.standardLogoSize,
                           height: keyboardOpen
-                              ? 44
+                              ? AuthLayout.compactLogoSize
                               : AuthLayout.standardLogoSize,
                           child: const FittedBox(child: GlassLogo()),
                         ),
                         AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           height: keyboardOpen ? 4 : 8,
                         ),
 
                         // Title
                         AnimatedContainer(
                           key: const Key('signup-title'),
-                          duration: const Duration(milliseconds: 180),
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           height: keyboardOpen ? 22 : 28,
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
-                            child: Text(
-                              'Create your Optivus account',
-                              maxLines: 1,
+                            child: AnimatedDefaultTextStyle(
+                              duration: OptivusMotion.standardDuration,
+                              curve: Curves.easeInOutCubic,
                               style: TextStyle(
                                 fontSize: keyboardOpen ? 18 : 22,
                                 fontWeight: FontWeight.w900,
                                 color: _kInk,
                                 letterSpacing: -0.6,
                               ),
+                              child: const Text(
+                                'Create your Optivus account',
+                                maxLines: 1,
+                              ),
                             ),
                           ),
                         ),
                         AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           height: keyboardOpen ? 6 : 10,
                         ),
 
                         // Form panel
                         LiquidGlassPanel(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: keyboardOpen ? 10 : 12,
-                          ),
+                          padding: AuthLayout.formPanelPadding,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -454,7 +460,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                               ),
                               if (_nameError != null)
                                 _InlineFieldError(message: _nameError!),
-                              SizedBox(height: fieldGap),
+                              const SizedBox(height: AuthLayout.fieldGap),
 
                               // Email
                               _FieldLabel('Email'),
@@ -472,7 +478,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                               ),
                               if (_emailError != null)
                                 _InlineFieldError(message: _emailError!),
-                              SizedBox(height: fieldGap),
+                              const SizedBox(height: AuthLayout.fieldGap),
 
                               // Password
                               _FieldLabel('Password'),
@@ -501,8 +507,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
                               // Live password rules panel
                               AnimatedSize(
-                                duration: const Duration(milliseconds: 180),
-                                curve: Curves.easeOutCubic,
+                                duration: OptivusMotion.standardDuration,
+                                curve: Curves.easeInOutCubic,
                                 child: !showPasswordGuidance
                                     ? const SizedBox.shrink()
                                     : Padding(
@@ -515,7 +521,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                         ),
                                       ),
                               ),
-                              SizedBox(height: fieldGap),
+                              const SizedBox(height: AuthLayout.fieldGap),
 
                               // Confirm Password and its local validation
                               // move together above the keyboard.
@@ -557,7 +563,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                 ],
                               ),
 
-                              SizedBox(height: fieldGap),
+                              const SizedBox(height: AuthLayout.fieldGap),
 
                               // Terms
                               Text(
@@ -599,11 +605,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 ),
 
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
+                  duration: OptivusMotion.standardDuration,
+                  curve: Curves.easeInOutCubic,
                   height: showCtaDock ? 74 : 0,
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
+                    duration: OptivusMotion.fastDuration,
                     child: !showCtaDock
                         ? const SizedBox.shrink(
                             key: ValueKey('signup-primary-hidden'),

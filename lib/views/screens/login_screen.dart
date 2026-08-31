@@ -13,6 +13,7 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/core/utils/auth_form_readiness.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/theme/optivus_motion.dart';
 import 'package:optivus/core/widgets/auth_text_field.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 
@@ -225,7 +226,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authLoading = ref.watch(authProvider).isLoading;
     final media = MediaQuery.of(context);
-    final keyboardOpen = media.viewInsets.bottom > 0;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final allowAdaptiveScroll =
         media.size.height < 650 || media.textScaler.scale(16) > 19.2;
 
@@ -237,8 +238,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       },
       child: Scaffold(
+        backgroundColor: AuthLayout.authBackgroundColor,
         body: Container(
           width: double.infinity,
+          height: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -271,38 +274,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                         AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           height: keyboardOpen ? 4 : 8,
                         ),
 
                         // Logo
                         AnimatedContainer(
                           key: const Key('login-logo'),
-                          duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           width: keyboardOpen
-                              ? 44
+                              ? AuthLayout.compactLogoSize
                               : AuthLayout.standardLogoSize,
                           height: keyboardOpen
-                              ? 44
+                              ? AuthLayout.compactLogoSize
                               : AuthLayout.standardLogoSize,
                           child: const FittedBox(child: GlassLogo()),
                         ),
                         AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           height: keyboardOpen ? 4 : 8,
                         ),
 
                         // Welcome back
-                        Text(
-                          'Welcome back.',
+                        AnimatedDefaultTextStyle(
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           style: TextStyle(
                             fontSize: keyboardOpen ? 22 : 26,
                             fontWeight: FontWeight.w900,
                             color: _kInk,
                             letterSpacing: -0.8,
                           ),
+                          child: const Text('Welcome back.', maxLines: 1),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -314,16 +320,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                         ),
                         AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: OptivusMotion.standardDuration,
+                          curve: Curves.easeInOutCubic,
                           height: keyboardOpen ? 6 : 14,
                         ),
 
                         // Form
                         LiquidGlassPanel(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: keyboardOpen ? 12 : 14,
-                          ),
+                          padding: AuthLayout.formPanelPadding,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -421,12 +425,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
 
                 AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
+                  duration: OptivusMotion.standardDuration,
+                  curve: Curves.easeInOutCubic,
                   height: _ctaRevealed || authLoading ? 74 : 0,
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    switchInCurve: Curves.easeOutCubic,
+                    duration: OptivusMotion.fastDuration,
+                    switchInCurve: Curves.easeInOutCubic,
                     transitionBuilder: (child, animation) => FadeTransition(
                       opacity: animation,
                       child: SlideTransition(
