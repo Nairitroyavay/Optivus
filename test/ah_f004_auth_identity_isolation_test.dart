@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:optivus/app/app_navigation_controller.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/router/app_router.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
@@ -286,6 +287,8 @@ void main() {
             .read(mockUserProfileProvider)
             .copyWith(displayName: 'Preserved A');
         container.read(mockUserProfileProvider.notifier).loadSeedData(profile);
+        container.read(appNavigationProvider.notifier).goToGoals();
+        final establishedStatus = container.read(authProvider).status;
 
         auth.emit(
           const AuthUser(
@@ -306,6 +309,8 @@ void main() {
           container.read(authProvider).user?.email,
           'refreshed-a@example.com',
         );
+        expect(container.read(authProvider).status, establishedStatus);
+        expect(container.read(appNavigationProvider), 4);
       },
     );
 

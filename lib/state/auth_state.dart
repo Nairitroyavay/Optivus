@@ -510,13 +510,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     ++_authOperationGeneration;
-    final authenticatedState = state;
-    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     try {
       await _repository.signOut();
     } catch (error) {
       final mapped = mapAuthError(error);
-      state = authenticatedState.copyWith(
+      state = state.copyWith(
         errorMessage:
             'We couldn\'t sign you out. You are still signed in. Please try again.',
         failureReason: mapped.reason,
@@ -849,6 +847,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (isSameUidRefresh &&
         _needsEmailVerification(previousUser!) ==
             _needsEmailVerification(user)) {
+      // Same-session Firebase auth, token, reload, and metadata events update
+      // identity facts in place. In particular, do not publish a resolving
+      // state or clear the typed reconstruction result: the router and all
+      // navigation providers must retain the established authenticated URI.
+      // Genuine reconstruction retries enter through retryBackendRestore;
+      // verification changes continue below and reconstruct authoritatively.
       state = state.copyWith(user: user);
       return;
     }

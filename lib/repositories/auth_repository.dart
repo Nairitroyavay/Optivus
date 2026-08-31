@@ -413,7 +413,12 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Stream<AuthUser?> get authStateChanges {
-    return _auth.authStateChanges().map((user) {
+    // Firebase userChanges includes auth, token-refresh, reload, and user
+    // metadata notifications. AuthNotifier deliberately treats a same-UID
+    // notification with unchanged verification requirements as an in-place
+    // metadata refresh, so these broader events never require navigation
+    // teardown or a second server reconstruction.
+    return _auth.userChanges().map((user) {
       return user == null ? null : _authUserFromFirebase(user);
     });
   }
