@@ -343,6 +343,7 @@ class OnboardingStepShell extends StatelessWidget {
   final double pageOffset;
   final List<bool> completedSteps;
   final String? validationMessage;
+  final VoidCallback? onRetry;
   final Widget child;
   final void Function(int) onDotTap;
   final ValueChanged<int> onIndicatorDraggedTo;
@@ -364,6 +365,7 @@ class OnboardingStepShell extends StatelessWidget {
     required this.pageOffset,
     required this.completedSteps,
     required this.validationMessage,
+    this.onRetry,
     required this.child,
     required this.onDotTap,
     required this.onIndicatorDraggedTo,
@@ -508,6 +510,14 @@ class OnboardingStepShell extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+                                  if (onRetry != null) ...[
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      key: const Key('onboarding-sync-retry'),
+                                      onPressed: onRetry,
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),

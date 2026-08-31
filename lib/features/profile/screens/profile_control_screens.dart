@@ -1534,7 +1534,7 @@ class _ReportBugScreenState extends ConsumerState<ReportBugScreen> {
             tint: OptivusColors.success.withValues(alpha: 0.08),
             children: const [
               Text(
-                'Bug report submitted locally.',
+                'Bug report recorded for this session.',
                 style: TextStyle(
                   fontWeight: FontWeight.w900,
                   color: OptivusColors.success,

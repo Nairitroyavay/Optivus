@@ -1495,9 +1495,19 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
 
   void setStepDirty(int step, bool dirty) {
     final list = _setStepValue(state.draft.stepDirty, step, dirty);
+    final statuses = _setSaveStatus(
+      state.stepSaveStatus,
+      step,
+      dirty
+          ? SaveSyncStatus.dirty
+          : (state.stepCompleted[step]
+                ? SaveSyncStatus.synced
+                : SaveSyncStatus.clean),
+    );
     state = state.copyWith(
       draft: state.draft.copyWith(stepDirty: list),
       stepDirty: list,
+      stepSaveStatus: statuses,
     );
   }
 
@@ -1506,7 +1516,96 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     state = state.copyWith(
       draft: state.draft.copyWith(stepLoading: list),
       stepLoading: list,
+      stepSaveStatus: loading
+          ? _setSaveStatus(state.stepSaveStatus, step, SaveSyncStatus.saving)
+          : state.stepSaveStatus,
     );
+  }
+
+  void markStepSyncFailed(int step, {required String message}) {
+    final dirty = _setStepValue(state.draft.stepDirty, step, true);
+    final loading = _setStepValue(state.draft.stepLoading, step, false);
+    state = state.copyWith(
+      draft: state.draft.copyWith(stepDirty: dirty, stepLoading: loading),
+      stepDirty: dirty,
+      stepLoading: loading,
+      stepSaveStatus: _setSaveStatus(
+        state.stepSaveStatus,
+        step,
+        SaveSyncStatus.failed,
+      ),
+      validationMessage: message,
+    );
+  }
+
+  void markStepSaving(int step) {
+    state = state.copyWith(
+      stepSaveStatus: _setSaveStatus(
+        state.stepSaveStatus,
+        step,
+        SaveSyncStatus.saving,
+      ),
+    );
+  }
+
+  bool acknowledgeDraftSync({
+    required int step,
+    required int submittedRevision,
+  }) {
+    if (state.draft.revision != submittedRevision) {
+      state = state.copyWith(
+        stepSaveStatus: _setSaveStatus(
+          state.stepSaveStatus,
+          step,
+          SaveSyncStatus.dirty,
+        ),
+      );
+      return false;
+    }
+    state = state.copyWith(
+      stepSaveStatus: _setSaveStatus(
+        state.stepSaveStatus,
+        step,
+        SaveSyncStatus.synced,
+      ),
+      clearValidation: true,
+    );
+    return true;
+  }
+
+  /// Acknowledges only the exact draft revision submitted by the save.
+  /// Newer in-memory edits remain visible and dirty.
+  bool acknowledgeStepSave({
+    required int step,
+    required int submittedRevision,
+    required OnboardingDraft savedDraft,
+  }) {
+    if (state.draft.revision != submittedRevision) {
+      final dirty = _setStepValue(state.draft.stepDirty, step, true);
+      state = state.copyWith(
+        draft: state.draft.copyWith(stepDirty: dirty),
+        stepDirty: dirty,
+        stepSaveStatus: _setSaveStatus(
+          state.stepSaveStatus,
+          step,
+          SaveSyncStatus.dirty,
+        ),
+        validationMessage:
+            'Your latest changes still need to sync. Retry before leaving this step.',
+      );
+      return false;
+    }
+
+    state = state.copyWith(
+      draft: savedDraft,
+      stepSaveStatus: _setSaveStatus(
+        state.stepSaveStatus,
+        step,
+        SaveSyncStatus.synced,
+      ),
+      clearValidation: true,
+    );
+    return true;
   }
 
   void setValidationMessage(String? msg) {
@@ -1518,7 +1617,12 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
   }
 
   void updateDraft(OnboardingDraft Function(OnboardingDraft draft) update) {
-    state = state.copyWith(draft: update(state.draft), clearValidation: true);
+    state = state.copyWith(
+      draft: update(state.draft),
+      // Keep a sync failure visible while the user continues editing the
+      // in-memory draft. A retry (or successful acknowledgement) clears it.
+      clearValidation: !state.stepSaveStatus.contains(SaveSyncStatus.failed),
+    );
   }
 
   void setDraft(OnboardingDraft draft) {
@@ -1674,6 +1778,19 @@ class MockOnboardingNotifier extends StateNotifier<OnboardingState> {
     if (step >= 0 && step < list.length) {
       list[step] = value;
     }
+    return list;
+  }
+
+  static List<SaveSyncStatus> _setSaveStatus(
+    List<SaveSyncStatus> source,
+    int step,
+    SaveSyncStatus value,
+  ) {
+    final list = List<SaveSyncStatus>.generate(
+      OnboardingDraft.stepCount,
+      (index) => index < source.length ? source[index] : SaveSyncStatus.clean,
+    );
+    if (step >= 0 && step < list.length) list[step] = value;
     return list;
   }
 }

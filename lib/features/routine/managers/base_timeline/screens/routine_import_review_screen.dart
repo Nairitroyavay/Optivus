@@ -1138,7 +1138,8 @@ class _RoutineImportReviewScreenState
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _errorMessage = error.toString();
+        _errorMessage =
+            "Couldn't sync your changes. Your changes are still open here. Try again.";
       });
     }
   }
@@ -1262,7 +1263,32 @@ class _RoutineImportReviewScreenState
       clearFinalPreview: true,
     );
     ref.read(mockOnboardingProvider.notifier).loadSeedData(nextDraft);
-    await repository.saveDraft(nextDraft);
+    final notifier = ref.read(mockOnboardingProvider.notifier);
+    final submittedRevision = nextDraft.revision;
+    notifier.markStepSaving(stepIndex);
+    try {
+      await repository.saveDraft(nextDraft);
+      await repository.flushPendingDraftSave();
+      if (!mounted ||
+          ref.read(mockOnboardingProvider).draft.uid != review.uid) {
+        return;
+      }
+      notifier.acknowledgeDraftSync(
+        step: stepIndex,
+        submittedRevision: submittedRevision,
+      );
+    } catch (_) {
+      if (!mounted ||
+          ref.read(mockOnboardingProvider).draft.uid != review.uid) {
+        return;
+      }
+      notifier.markStepSyncFailed(
+        stepIndex,
+        message:
+            "Couldn't sync your changes. Your changes are still open here. Retry before leaving this step.",
+      );
+      rethrow;
+    }
   }
 
   Future<void> _openCandidateEditor(

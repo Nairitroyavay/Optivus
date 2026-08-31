@@ -127,30 +127,46 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return authUser?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
   }
 
+  bool _stillOwnsDraft(String uid) =>
+      _currentPersistenceUid() == uid &&
+      ref.read(mockOnboardingProvider).draft.uid == uid;
+
   Future<void> _persistCurrentDraftAfterNavigation() async {
     final uid = _currentPersistenceUid();
     if (uid == null) return;
 
-    final draft = ref.read(mockOnboardingProvider).draft.copyWith(uid: uid);
+    final step = ref.read(mockOnboardingProvider).currentStep;
+    final sourceDraft = ref.read(mockOnboardingProvider).draft;
+    final submittedRevision = sourceDraft.revision;
+    final draft = sourceDraft.copyWith(uid: uid, incrementRevision: false);
+    ref.read(mockOnboardingProvider.notifier).markStepSaving(step);
 
     try {
       await ref.read(onboardingRepositoryProvider).saveDraft(draft);
       await ref.read(onboardingRepositoryProvider).flushPendingDraftSave();
     } catch (_) {
       if (!mounted) return;
+      if (!_stillOwnsDraft(uid)) return;
       ref
           .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(
-            OptivusBackendConfig.useFirebase
-                ? 'Your progress is saved locally, but cloud sync failed. Please check your connection.'
-                : null,
+          .markStepSyncFailed(
+            step,
+            message:
+                "Couldn't sync your changes. Your changes are still open here. Retry before leaving this step.",
           );
+      return;
     }
+    if (!mounted) return;
+    if (!_stillOwnsDraft(uid)) return;
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .acknowledgeDraftSync(step: step, submittedRevision: submittedRevision);
   }
 
   // Core Save step action — with double-tap prevention
   Future<bool> _saveStep(int step) async {
     if (_isSaving) return false; // Prevent double tap
+    String? saveOwnerUid;
 
     final readiness = _readStepReadiness(step);
     if (!readiness.canRevealPrimary) {
@@ -183,10 +199,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             );
         return false;
       }
+      saveOwnerUid = uid;
 
       ref.read(mockOnboardingProvider.notifier).setStepLoading(step, true);
       ref.read(mockOnboardingProvider.notifier).clearValidation();
 
+      final submittedRevision = ref.read(mockOnboardingProvider).draft.revision;
       final savedDraft = _buildStepSaveCandidate(step: step, uid: uid);
 
       final onboardingRepository = ref.read(onboardingRepositoryProvider);
@@ -198,7 +216,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
       // Completion becomes visible to navigation only after the repository
       // acknowledges the durable write.
-      ref.read(mockOnboardingProvider.notifier).setDraft(savedDraft);
+      final acknowledged = ref
+          .read(mockOnboardingProvider.notifier)
+          .acknowledgeStepSave(
+            step: step,
+            submittedRevision: submittedRevision,
+            savedDraft: savedDraft,
+          );
+      if (!acknowledged) return false;
 
       // This profile field is only a startup-loader hint. The saved draft's
       // completed-step vector remains the sole progression authority.
@@ -220,17 +245,21 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
       return true;
     } catch (e) {
-      ref.read(mockOnboardingProvider.notifier).setStepDirty(step, true);
+      if (saveOwnerUid != null && !_stillOwnsDraft(saveOwnerUid)) {
+        return false;
+      }
       ref
           .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(
-            OptivusBackendConfig.useFirebase
-                ? 'Could not save this step. Please check your connection and try again.'
-                : 'Could not save this step. Please try again.',
+          .markStepSyncFailed(
+            step,
+            message:
+                "Couldn't sync your changes. Your changes are still open here. Retry before leaving this step.",
           );
       return false;
     } finally {
-      ref.read(mockOnboardingProvider.notifier).setStepLoading(step, false);
+      if (saveOwnerUid == null || _stillOwnsDraft(saveOwnerUid)) {
+        ref.read(mockOnboardingProvider.notifier).setStepLoading(step, false);
+      }
       if (mounted) setState(() => _isSaving = false);
     }
   }
@@ -559,7 +588,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Exit Onboarding?'),
-        content: const Text('Your progress will be saved. Exit to main menu?'),
+        content: const Text(
+          'Exit to the main menu? Changes that have not synced may be lost.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -794,8 +825,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     }
 
     final bool isSaved =
-        onboardingState.stepCompleted[_currentPage] &&
-        !onboardingState.stepDirty[_currentPage];
+        onboardingState.stepSaveStatus[_currentPage] == SaveSyncStatus.synced;
     final bool showSave = false; // Globally hidden for onboarding.
     final aiState = ref.watch(routineImportAiControllerProvider);
     final uploadState = ref.watch(uploadControllerProvider);
@@ -847,6 +877,21 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         pageOffset: _pageOffset,
         completedSteps: onboardingState.stepCompleted,
         validationMessage: onboardingState.validationMessage,
+        onRetry:
+            onboardingState.stepSaveStatus[_currentPage] ==
+                    SaveSyncStatus.failed ||
+                (onboardingState.stepSaveStatus[_currentPage] ==
+                        SaveSyncStatus.dirty &&
+                    (onboardingState.validationMessage?.startsWith(
+                              'Your latest changes still need to sync.',
+                            ) ==
+                            true ||
+                        onboardingState.validationMessage?.startsWith(
+                              "Couldn't sync your changes.",
+                            ) ==
+                            true))
+            ? () => _saveStep(_currentPage)
+            : null,
         onDotTap: _onDotTapped,
         onIndicatorDraggedTo: _onIndicatorDraggedTo,
         onNext: _onNextPressed,

@@ -74,7 +74,7 @@ class _OnboardingStep13State extends ConsumerState<OnboardingStep13> {
           child: OnboardingSectionTitle(
             title: 'Notifications',
             subtitle:
-                'Reminder preferences are saved locally here. No system permission dialog is requested during onboarding.',
+                'Set reminder preferences here. No system permission dialog is requested during onboarding.',
           ),
         ),
         Expanded(

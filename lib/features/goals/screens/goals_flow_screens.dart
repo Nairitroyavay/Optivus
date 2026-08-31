@@ -422,7 +422,7 @@ class _WeeklyReviewInlineScreenState
             tint: OptivusColors.success.withValues(alpha: 0.08),
             children: const [
               Text(
-                'Weekly review saved locally.',
+                'Weekly review is still open in this session.',
                 style: TextStyle(
                   color: OptivusColors.success,
                   fontWeight: FontWeight.w900,

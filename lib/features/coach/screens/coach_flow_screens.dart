@@ -224,7 +224,7 @@ class _CoachSettingsInlineScreenState
             tint: OptivusColors.success.withValues(alpha: 0.08),
             children: const [
               Text(
-                'Settings saved locally.',
+                'Settings updated for this session.',
                 style: TextStyle(
                   color: OptivusColors.success,
                   fontWeight: FontWeight.w900,

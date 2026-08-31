@@ -104,4 +104,4 @@ When Firebase is intentionally enabled later:
 - No AI request is made.
 - No upload or R2 signed URL flow is made.
 - No real notification permission is requested.
-- Placeholder import entries are stored locally in the onboarding draft for future text/photo review flows.
+- Placeholder import entries are held in the onboarding draft for future text/photo review flows; unsynced drafts in process memory are not durable storage.

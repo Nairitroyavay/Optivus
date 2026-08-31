@@ -500,9 +500,29 @@ class _OnboardingClassSetupWidgetState
         ? authUser!.uid.trim()
         : draft.uid.trim();
     if (uid.isEmpty) return;
-    await ref
-        .read(onboardingRepositoryProvider)
-        .saveDraft(draft.copyWith(uid: uid));
+    final submittedRevision = draft.revision;
+    final notifier = ref.read(mockOnboardingProvider.notifier);
+    notifier.markStepSaving(widget.stepIndex);
+    try {
+      final repository = ref.read(onboardingRepositoryProvider);
+      await repository.saveDraft(
+        draft.copyWith(uid: uid, incrementRevision: false),
+      );
+      await repository.flushPendingDraftSave();
+      if (!mounted || ref.read(mockOnboardingProvider).draft.uid != uid) return;
+      notifier.acknowledgeDraftSync(
+        step: widget.stepIndex,
+        submittedRevision: submittedRevision,
+      );
+    } catch (_) {
+      if (!mounted || ref.read(mockOnboardingProvider).draft.uid != uid) return;
+      notifier.markStepSyncFailed(
+        widget.stepIndex,
+        message:
+            "Couldn't sync your changes. Your changes are still open here. Retry before leaving this step.",
+      );
+      rethrow;
+    }
   }
 
   void _persistCurrentDraftSoon() {
