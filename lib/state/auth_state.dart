@@ -1032,6 +1032,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
     int restoreGeneration,
   ) async {
     try {
+      // Asset metadata hydrates alongside AH-F007 idempotently. Preview resolution remains
+      // asynchronous and never blocks destination classification.
+      final assetHydration = _ref
+          .read(restoredUploadsProvider.notifier)
+          .hydrate(uid: user.uid);
       final result = await _ref
           .read(serverReconstructorProvider)
           .reconstruct(
@@ -1120,6 +1125,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         case ReconstructionRecovery():
           _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
       }
+      await assetHydration;
       if (!_isCurrentRestore(restoreGeneration) ||
           state.user?.uid != user.uid) {
         return;
@@ -1327,6 +1333,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(trackerSettingsProvider.notifier).resetForSignedOut();
     _ref.read(routineImportAiControllerProvider.notifier).resetForSignedOut();
     _ref.read(uploadControllerProvider.notifier).resetForSignedOut();
+    _ref.read(restoredUploadsProvider.notifier).resetForSignedOut();
     _ref.read(aiRoutineSuggestionsEnabledProvider.notifier).state = true;
     _ref.read(conflictResolverEnabledProvider.notifier).state = true;
     _ref.read(routineNotificationsEnabledProvider.notifier).state = true;

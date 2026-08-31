@@ -1020,44 +1020,42 @@ bool _isSupportedSkinCareImageContentType(String contentType) {
 
 String _skinCareImageContentTypeFromR2Key(String r2Key) {
   final key = r2Key.split('?').first.toLowerCase();
-  if (key.endsWith('.jpg') || key.endsWith('.jpeg')) return 'image/jpeg';
   if (key.endsWith('.png')) return 'image/png';
   if (key.endsWith('.webp')) return 'image/webp';
   if (key.endsWith('.heic')) return 'image/heic';
   if (key.endsWith('.heif')) return 'image/heif';
   if (key.endsWith('.gif')) return 'image/gif';
   if (key.endsWith('.pdf')) return 'application/pdf';
-  return '';
+  return 'image/jpeg';
 }
 
-UploadedAsset? _skinCareProductPhotoAssetFromDraft(OnboardingDraft draft) {
+UploadedAsset? _durableSkinCareAssetFromDraft(OnboardingDraft draft) {
   final base = draft.baseTimeline;
-  final r2Key = base.skinCareProductPhotoR2Key?.trim();
-  if (r2Key == null || r2Key.isEmpty) return null;
+  final assetId = base.skinCareProductPhotoAssetId?.trim() ?? '';
+  final r2Key = base.skinCareProductPhotoR2Key?.trim() ?? '';
   final createdAt =
       base.skinCareProductPhotoCreatedAt ??
       DateTime.fromMillisecondsSinceEpoch(0);
-  final updatedAt = base.skinCareProductPhotoUpdatedAt ?? createdAt;
-  final fileName = r2Key.split('/').where((part) => part.isNotEmpty).lastOrNull;
-  return UploadedAsset(
-    assetId: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
-        ? base.skinCareProductPhotoAssetId!.trim()
-        : r2Key,
+  final asset = UploadedAsset(
+    assetId: assetId,
     ownerUid: draft.uid,
     sourceFeature: OnboardingDraft.sourceOnboarding,
     purpose: UploadedAssetPurpose.skinCare,
-    fileName: fileName ?? 'skin-care-products',
+    fileName: r2Key.split('/').lastOrNull ?? 'skin-care-photo.jpg',
     contentType: _skinCareImageContentTypeFromR2Key(r2Key),
     sizeBytes: 0,
     r2Key: r2Key,
-    status: uploadedAssetStatusFromString(
-      base.skinCareProductPhotoStatus?.trim().isNotEmpty == true
-          ? base.skinCareProductPhotoStatus
-          : 'uploaded',
-    ),
+    status: uploadedAssetStatusFromString(base.skinCareProductPhotoStatus),
     createdAt: createdAt,
-    updatedAt: updatedAt,
+    updatedAt: base.skinCareProductPhotoUpdatedAt ?? createdAt,
   );
+  return uploadedAssetIsDurablyUploadedForSlot(
+        asset: asset,
+        uid: draft.uid,
+        purpose: UploadedAssetPurpose.skinCare,
+      )
+      ? asset
+      : null;
 }
 
 _ProductInputSource _initialProductInputSource(BaseTimelineDraft base) {
@@ -1393,7 +1391,13 @@ class _HasProductsModeScreenState
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.base.skinCareProductNames);
-    _inputSource = _initialProductInputSource(widget.base);
+    _uploadedAsset = ref
+        .read(restoredUploadsProvider)
+        .forPurpose(UploadedAssetPurpose.skinCare)
+        ?.asset;
+    _inputSource = _uploadedAsset != null
+        ? _ProductInputSource.photo
+        : _initialProductInputSource(widget.base);
     _photoProductsReviewed =
         _inputSource == _ProductInputSource.photo &&
         _controller.text.trim().isNotEmpty;
@@ -1435,7 +1439,7 @@ class _HasProductsModeScreenState
     if (!mounted) return;
 
     final latestUploadState = ref.read(uploadControllerProvider);
-    final latestAsset = asset ?? latestUploadState.asset;
+    final latestAsset = asset;
     if (latestAsset != null) {
       updateBaseTimelineDraft(
         ref,
@@ -1456,7 +1460,8 @@ class _HasProductsModeScreenState
         _inputSource = _ProductInputSource.photo;
         _photoProductsReviewed = false;
         _reviewedPhotoDetails = const [];
-      } else if (_inputSource == _ProductInputSource.photo) {
+      } else if (_uploadedAsset == null &&
+          _inputSource == _ProductInputSource.photo) {
         _inputSource = _ProductInputSource.none;
       }
       _uploadError = latestUploadState.status == UploadFlowStatus.failed
@@ -1464,6 +1469,9 @@ class _HasProductsModeScreenState
           : null;
       _generationError = null;
     });
+    if (latestAsset != null) {
+      ref.read(restoredUploadsProvider.notifier).registerUploaded(latestAsset);
+    }
   }
 
   Future<void> _removeUploadedAsset() async {
@@ -1474,7 +1482,13 @@ class _HasProductsModeScreenState
         uploadState.isBusy;
     if (uploadBusy || _removingPhoto) return;
     final draft = ref.read(mockOnboardingProvider).draft;
-    final asset = _uploadedAsset ?? _skinCareProductPhotoAssetFromDraft(draft);
+    final asset =
+        _uploadedAsset ??
+        ref
+            .read(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset ??
+        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
     if (asset != null && asset.assetId.trim().isNotEmpty) {
       setState(() {
         _removingPhoto = true;
@@ -1497,6 +1511,12 @@ class _HasProductsModeScreenState
         return;
       }
       ref.read(uploadControllerProvider.notifier).clear();
+      ref
+          .read(restoredUploadsProvider.notifier)
+          .removePurpose(
+            uid: draft.uid,
+            purpose: UploadedAssetPurpose.skinCare,
+          );
     }
     final hasTypedProducts = _controller.text.trim().isNotEmpty;
     setState(() {
@@ -1533,9 +1553,11 @@ class _HasProductsModeScreenState
     final activeSource = _inputSource;
     final asset =
         _uploadedAsset ??
-        _skinCareProductPhotoAssetFromDraft(
-          ref.read(mockOnboardingProvider).draft,
-        );
+        ref
+            .read(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset ??
+        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
     var typedProductDetails = onboarding7ParseTypedProductDetails(
       _controller.text,
     );
@@ -1994,9 +2016,13 @@ class _HasProductsModeScreenState
   @override
   Widget build(BuildContext context) {
     final generated = widget.blocks.isNotEmpty;
-    final draft = ref.watch(mockOnboardingProvider).draft;
     final effectiveAsset =
-        _uploadedAsset ?? _skinCareProductPhotoAssetFromDraft(draft);
+        _uploadedAsset ??
+        ref
+            .watch(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset ??
+        _durableSkinCareAssetFromDraft(ref.watch(mockOnboardingProvider).draft);
     final uploadState = ref.watch(uploadControllerProvider);
     final uploadApplies =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
@@ -3048,9 +3074,10 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   @override
   void initState() {
     super.initState();
-    _uploadedAsset = _skinCareProductPhotoAssetFromDraft(
-      ref.read(mockOnboardingProvider).draft,
-    );
+    _uploadedAsset = ref
+        .read(restoredUploadsProvider)
+        .forPurpose(UploadedAssetPurpose.skinCare)
+        ?.asset;
     _showProductSelection =
         widget.base.skinCareProductRecommendations.isNotEmpty;
   }
@@ -3085,7 +3112,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     if (!mounted) return;
 
     final latestUploadState = ref.read(uploadControllerProvider);
-    final latestAsset = asset ?? latestUploadState.asset;
+    final latestAsset = asset;
     if (latestAsset != null) {
       updateBaseTimelineDraft(
         ref,
@@ -3106,11 +3133,16 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       );
     }
     setState(() {
-      _uploadedAsset = latestAsset;
+      if (latestAsset != null) {
+        _uploadedAsset = latestAsset;
+      }
       _uploadError = latestUploadState.status == UploadFlowStatus.failed
           ? _friendlySkinCareUploadMessage(latestUploadState.errorMessage)
           : null;
     });
+    if (latestAsset != null) {
+      ref.read(restoredUploadsProvider.notifier).registerUploaded(latestAsset);
+    }
   }
 
   Future<void> _removeUploadedAsset() async {
@@ -3121,7 +3153,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         uploadState.isBusy;
     if (uploadBusy || _removingPhoto) return;
     final draft = ref.read(mockOnboardingProvider).draft;
-    final asset = _uploadedAsset ?? _skinCareProductPhotoAssetFromDraft(draft);
+    final asset =
+        _uploadedAsset ??
+        ref
+            .read(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset ??
+        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
     if (asset != null && asset.assetId.trim().isNotEmpty) {
       setState(() {
         _removingPhoto = true;
@@ -3144,6 +3182,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         return;
       }
       ref.read(uploadControllerProvider.notifier).clear();
+      ref
+          .read(restoredUploadsProvider.notifier)
+          .removePurpose(
+            uid: draft.uid,
+            purpose: UploadedAssetPurpose.skinCare,
+          );
     }
     setState(() {
       _uploadedAsset = null;
@@ -3179,9 +3223,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     );
     final asset =
         _uploadedAsset ??
-        _skinCareProductPhotoAssetFromDraft(
-          ref.read(mockOnboardingProvider).draft,
-        );
+        ref
+            .read(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset ??
+        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
     if (asset == null ||
         asset.r2Key.trim().isEmpty ||
         currentBase.skinCareSkinType == null ||
@@ -3370,9 +3416,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         .toList(growable: false);
     final asset =
         _uploadedAsset ??
-        _skinCareProductPhotoAssetFromDraft(
-          ref.read(mockOnboardingProvider).draft,
-        );
+        ref
+            .read(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset ??
+        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
     if (selected.isEmpty) {
       setState(() => _generationError = 'Select at least one product.');
       return;
@@ -3634,7 +3682,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final base = draft.baseTimeline;
     final effectiveAsset =
-        _uploadedAsset ?? _skinCareProductPhotoAssetFromDraft(draft);
+        _uploadedAsset ??
+        ref
+            .watch(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset ??
+        _durableSkinCareAssetFromDraft(draft);
     final uploadState = ref.watch(uploadControllerProvider);
     final uploadApplies =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
@@ -4269,7 +4322,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   }
 }
 
-class _SkinCarePhotoTarget extends StatelessWidget {
+class _SkinCarePhotoTarget extends ConsumerWidget {
   final UploadedAsset? asset;
   final bool busy;
   final String? busyLabel;
@@ -4289,9 +4342,19 @@ class _SkinCarePhotoTarget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final preview = asset?.localPreviewPath;
-    final showFile = preview != null && File(preview).existsSync();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preview = asset == null
+        ? null
+        : usableUploadedAssetLocalPreviewPath(asset!);
+    final restored = ref
+        .watch(restoredUploadsProvider)
+        .forPurpose(UploadedAssetPurpose.skinCare);
+    final remotePreview = restored?.asset.assetId == asset?.assetId
+        ? restored?.previewUri
+        : null;
+    final previewStatus = restored?.asset.assetId == asset?.assetId
+        ? restored?.previewStatus
+        : UploadedAssetPreviewStatus.unavailable;
     final fileName = asset?.fileName.trim();
 
     return GestureDetector(
@@ -4314,76 +4377,23 @@ class _SkinCarePhotoTarget extends StatelessWidget {
                     ? const SizedBox.shrink()
                     : ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: showFile
-                            ? Image.file(File(preview), fit: BoxFit.cover)
-                            : Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    asset == null
-                                        ? Icons.add_photo_alternate_rounded
-                                        : Icons.image_rounded,
-                                    color: enabled
-                                        ? OptivusColors.roseAccent
-                                        : OptivusColors.textSecondary,
-                                    size: 24,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    asset == null
-                                        ? 'Add photo'
-                                        : 'Photo uploaded',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w900,
-                                      color: enabled
-                                          ? OptivusColors.textPrimary
-                                          : OptivusColors.textSecondary,
-                                    ),
-                                  ),
-                                  if (helperText != null) ...[
-                                    const SizedBox(height: 4),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      child: Text(
-                                        helperText!,
-                                        textAlign: TextAlign.center,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 9.5,
-                                          height: 1.15,
-                                          fontWeight: FontWeight.w800,
-                                          color: OptivusColors.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ] else if (asset != null &&
-                                      fileName != null &&
-                                      fileName.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                      ),
-                                      child: Text(
-                                        fileName,
-                                        textAlign: TextAlign.center,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: OptivusColors.textSecondary,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                        child: preview != null
+                            ? Image.file(
+                                File(preview),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) =>
+                                    _fallback(previewStatus, fileName),
+                              )
+                            : remotePreview != null
+                            ? Image.network(
+                                remotePreview.toString(),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, _, _) => _fallback(
+                                  UploadedAssetPreviewStatus.unavailable,
+                                  fileName,
+                                ),
+                              )
+                            : _fallback(previewStatus, fileName),
                       ),
               ),
               if (busy)
@@ -4444,6 +4454,68 @@ class _SkinCarePhotoTarget extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _fallback(
+    UploadedAssetPreviewStatus? previewStatus,
+    String? fileName,
+  ) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          asset == null
+              ? Icons.add_photo_alternate_rounded
+              : Icons.check_circle_rounded,
+          color: enabled
+              ? OptivusColors.roseAccent
+              : OptivusColors.textSecondary,
+          size: 24,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          asset == null ? 'Add photo' : 'Photo uploaded',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: enabled
+                ? OptivusColors.textPrimary
+                : OptivusColors.textSecondary,
+          ),
+        ),
+        if (asset != null) ...[
+          if (fileName != null && fileName.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              fileName,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ],
+          const SizedBox(height: 2),
+          Text(
+            previewStatus == UploadedAssetPreviewStatus.loading
+                ? 'Loading preview…'
+                : 'Preview unavailable',
+            style: const TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: OptivusColors.textSecondary,
+            ),
+          ),
+        ] else if (helperText != null) ...[
+          const SizedBox(height: 4),
+          Text(helperText!, textAlign: TextAlign.center),
+        ],
+      ],
     );
   }
 }

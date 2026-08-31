@@ -59,6 +59,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final path = base.eatingSetupPath;
     final eatingBlocks = base.confirmedBlocksForSection('eating');
     final isChoice = base.eatingSetupStep == 0;
+    final restoredEntry = ref.watch(restoredUploadsProvider).forPurpose(
+      UploadedAssetPurpose.eatingMenu,
+    );
+    final effectiveAsset = _uploadedAsset ?? restoredEntry?.asset;
 
     if (isChoice) {
       return Padding(
@@ -80,7 +84,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
       child: path == onboardingEatingPathHasRoutine
           ? _EatingUploadTimelineScreen(
-              asset: _uploadedAsset,
+              asset: effectiveAsset,
               uploadError: _uploadError,
               generationError: _generationError,
               selectedDay: _selectedDay,
@@ -128,14 +132,44 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
     final uploadState = ref.read(uploadControllerProvider);
     setState(() {
-      _uploadedAsset = asset ?? uploadState.asset;
+      if (asset != null) {
+        _uploadedAsset = asset;
+      }
       _uploadError = uploadState.status == UploadFlowStatus.failed
           ? _friendlyUploadMessage(uploadState.errorMessage)
           : null;
     });
+    if (asset != null) {
+      ref.read(restoredUploadsProvider.notifier).registerUploaded(asset);
+    }
   }
 
-  void _removeUploadedRoutine() {
+  Future<void> _removeUploadedRoutine() async {
+    final uid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    final asset =
+        _uploadedAsset ??
+        ref
+            .read(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.eatingMenu)
+            ?.asset;
+    if (asset != null) {
+      await ref
+          .read(uploadControllerProvider.notifier)
+          .markDeleted(uid: uid, assetId: asset.assetId);
+      if (!mounted) return;
+      if (ref.read(uploadControllerProvider).status == UploadFlowStatus.failed) {
+        setState(() {
+          _uploadError = "Couldn't remove the photo. Try again.";
+        });
+        return;
+      }
+      ref.read(restoredUploadsProvider.notifier).removePurpose(
+        uid: uid,
+        purpose: UploadedAssetPurpose.eatingMenu,
+      );
+    }
     setState(() {
       _uploadedAsset = null;
       _uploadError = null;
@@ -151,7 +185,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         '[Onboarding5] AI mode: ${OptivusAiWorkersConfig.mode.name.toUpperCase()}',
       );
     }
-    final asset = _uploadedAsset;
+    final asset =
+        _uploadedAsset ??
+        ref
+            .read(restoredUploadsProvider)
+            .forPurpose(UploadedAssetPurpose.eatingMenu)
+            ?.asset;
     setState(() => _generationError = null);
     ref.read(mockOnboardingProvider.notifier).clearValidation();
 
@@ -992,16 +1031,26 @@ class _EatingGeneratedSummaryRow extends StatelessWidget {
   }
 }
 
-class _EatingPhotoTarget extends StatelessWidget {
+class _EatingPhotoTarget extends ConsumerWidget {
   final UploadedAsset? asset;
   final VoidCallback onRemove;
 
   const _EatingPhotoTarget({required this.asset, required this.onRemove});
 
   @override
-  Widget build(BuildContext context) {
-    final preview = asset?.localPreviewPath;
-    final showFile = preview != null && File(preview).existsSync();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preview = asset == null
+        ? null
+        : usableUploadedAssetLocalPreviewPath(asset!);
+    final restored = ref.watch(restoredUploadsProvider).forPurpose(
+      UploadedAssetPurpose.eatingMenu,
+    );
+    final remotePreview = restored?.asset.assetId == asset?.assetId
+        ? restored?.previewUri
+        : null;
+    final previewStatus = restored?.asset.assetId == asset?.assetId
+        ? restored?.previewStatus
+        : UploadedAssetPreviewStatus.unavailable;
 
     return Container(
       height: 70,
@@ -1015,28 +1064,21 @@ class _EatingPhotoTarget extends StatelessWidget {
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: showFile
-                  ? Image.file(File(preview), fit: BoxFit.cover)
-                  : Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          asset == null
-                              ? Icons.add_photo_alternate_rounded
-                              : Icons.image_rounded,
-                          color: OptivusColors.roseAccent,
-                          size: 24,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          asset == null ? 'Add photo' : 'Photo uploaded',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
+              child: preview != null
+                  ? Image.file(
+                      File(preview),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _fallback(previewStatus),
+                    )
+                  : remotePreview != null
+                  ? Image.network(
+                      remotePreview.toString(),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => _fallback(
+                        UploadedAssetPreviewStatus.unavailable,
+                      ),
+                    )
+                  : _fallback(previewStatus),
             ),
           ),
           if (asset != null)
@@ -1062,6 +1104,33 @@ class _EatingPhotoTarget extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _fallback(UploadedAssetPreviewStatus? status) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          asset == null
+              ? Icons.add_photo_alternate_rounded
+              : Icons.check_circle_rounded,
+          color: OptivusColors.roseAccent,
+          size: 24,
+        ),
+        const SizedBox(height: 3),
+        Text(
+          asset == null ? 'Add photo' : 'Photo uploaded',
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+        ),
+        if (asset != null)
+          Text(
+            status == UploadedAssetPreviewStatus.loading
+                ? 'Loading preview…'
+                : 'Preview unavailable',
+            style: const TextStyle(fontSize: 9),
+          ),
+      ],
     );
   }
 }

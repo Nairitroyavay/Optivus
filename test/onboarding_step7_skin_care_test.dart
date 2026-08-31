@@ -3694,7 +3694,7 @@ void main() {
       await tester.pumpWidget(
         buildTestWidget(
           draft: _hasProductsDraft(
-            productPhotoAssetId: 'skin-asset',
+            productPhotoAssetId: 'restored-products',
             productPhotoR2Key:
                 'users/uid-1/onboarding/skin_care/restored-products.jpg',
             productPhotoStatus: 'uploaded',
@@ -3717,7 +3717,7 @@ void main() {
       await tester.pumpWidget(
         buildTestWidget(
           draft: _hasProductsDraft(
-            productPhotoAssetId: 'skin-asset',
+            productPhotoAssetId: 'restored-products',
             productPhotoR2Key:
                 'users/uid-1/onboarding/skin_care/restored-products.heic',
             productPhotoStatus: 'uploaded',
@@ -5525,8 +5525,10 @@ void main() {
     final base = BaseTimelineDraft(
       skinCareSetupPath: 'no_products',
       skinCareDesiredApplicationsPerDay: 2,
+      skinCareProductPhotoAssetId: 'skin-asset',
       skinCareProductPhotoR2Key:
           'users/uid-1/onboarding/skin_care/skin-asset.jpg',
+      skinCareProductPhotoStatus: 'uploaded',
       skinCareSuggestedProducts: const ['Minimalist Gentle Cleanser'],
       blocks: _skinCareBlocksForEveryDay(1),
     );

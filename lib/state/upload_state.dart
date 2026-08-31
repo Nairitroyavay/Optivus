@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/upload_config.dart';
+import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
@@ -16,6 +19,348 @@ enum UploadFlowStatus {
   savingMetadata,
   uploaded,
   failed,
+}
+
+enum UploadedAssetPreviewStatus { loading, available, unavailable }
+
+bool uploadedAssetIsDurablyUploadedForSlot({
+  required UploadedAsset asset,
+  required String uid,
+  required UploadedAssetPurpose purpose,
+}) {
+  return asset.ownerUid == uid &&
+      asset.purpose == purpose &&
+      asset.sourceFeature == OnboardingDraft.sourceOnboarding &&
+      asset.assetId.trim().isNotEmpty &&
+      asset.r2Key.trim().isNotEmpty &&
+      _uploadedAssetR2IdentityMatches(asset) &&
+      asset.status == UploadedAssetStatus.uploaded;
+}
+
+bool _uploadedAssetR2IdentityMatches(UploadedAsset asset) {
+  final key = asset.r2Key.trim();
+  if (key.contains('..') || key.contains(r'\') || key.contains('//')) {
+    return false;
+  }
+  final parts = key.split('/');
+  if (parts.length != 5 ||
+      parts[0] != 'users' ||
+      parts[1] != asset.ownerUid ||
+      parts[2] != asset.sourceFeature ||
+      parts[3] != asset.purpose.wireName) {
+    return false;
+  }
+  final fileName = parts[4];
+  final lastDot = fileName.lastIndexOf('.');
+  return lastDot > 0 &&
+      lastDot < fileName.length - 1 &&
+      fileName.substring(0, lastDot) == asset.assetId;
+}
+
+String? usableUploadedAssetLocalPreviewPath(UploadedAsset asset) {
+  final path = asset.localPreviewPath?.trim();
+  if (path == null || path.isEmpty) return null;
+  try {
+    return File(path).existsSync() ? path : null;
+  } on FileSystemException {
+    return null;
+  }
+}
+
+class RestoredUploadedAsset {
+  final UploadedAsset asset;
+  final UploadedAssetPreviewStatus previewStatus;
+  final Uri? previewUri;
+
+  const RestoredUploadedAsset({
+    required this.asset,
+    this.previewStatus = UploadedAssetPreviewStatus.loading,
+    this.previewUri,
+  });
+
+  RestoredUploadedAsset copyWith({
+    UploadedAssetPreviewStatus? previewStatus,
+    Uri? previewUri,
+    bool clearPreviewUri = false,
+  }) {
+    return RestoredUploadedAsset(
+      asset: asset,
+      previewStatus: previewStatus ?? this.previewStatus,
+      previewUri: clearPreviewUri ? null : (previewUri ?? this.previewUri),
+    );
+  }
+}
+
+class RestoredUploadsState {
+  final String? uid;
+  final bool isHydrating;
+  final Map<UploadedAssetPurpose, RestoredUploadedAsset> assetsByPurpose;
+  final String? errorMessage;
+
+  const RestoredUploadsState({
+    this.uid,
+    this.isHydrating = false,
+    this.assetsByPurpose = const {},
+    this.errorMessage,
+  });
+
+  RestoredUploadedAsset? forPurpose(UploadedAssetPurpose purpose) =>
+      assetsByPurpose[purpose];
+}
+
+abstract interface class UploadedAssetPreviewResolver {
+  Future<Uri?> resolvePreview({
+    required String uid,
+    required UploadedAsset asset,
+  });
+}
+
+/// R2 objects are private and the current upload Worker has no authenticated
+/// read endpoint. Keep durable presence truthful without inventing a public URL.
+class UnavailableUploadedAssetPreviewResolver
+    implements UploadedAssetPreviewResolver {
+  const UnavailableUploadedAssetPreviewResolver();
+
+  @override
+  Future<Uri?> resolvePreview({
+    required String uid,
+    required UploadedAsset asset,
+  }) async => null;
+}
+
+class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
+  final UploadedAssetRepository _assetRepository;
+  final UploadedAssetPreviewResolver _previewResolver;
+  int _sessionGeneration = 0;
+  final Map<UploadedAssetPurpose, int> _previewGenerations = {};
+  Future<void>? _inFlightHydration;
+  String? _inFlightHydrationUid;
+
+  RestoredUploadsController({
+    required UploadedAssetRepository assetRepository,
+    required UploadedAssetPreviewResolver previewResolver,
+  }) : _assetRepository = assetRepository,
+       _previewResolver = previewResolver,
+       super(const RestoredUploadsState());
+
+  Future<void> hydrate({required String uid, bool force = false}) {
+    final normalizedUid = uid.trim();
+    if (normalizedUid.isEmpty) {
+      resetForSignedOut();
+      return Future.value();
+    }
+    if (!force &&
+        _inFlightHydrationUid == normalizedUid &&
+        _inFlightHydration != null) {
+      return _inFlightHydration!;
+    }
+    if (!force &&
+        state.uid == normalizedUid &&
+        !state.isHydrating &&
+        state.errorMessage == null) {
+      return Future.value();
+    }
+
+    final hydration = _hydrate(normalizedUid);
+    _inFlightHydrationUid = normalizedUid;
+    _inFlightHydration = hydration;
+    hydration.whenComplete(() {
+      if (identical(_inFlightHydration, hydration)) {
+        _inFlightHydration = null;
+        _inFlightHydrationUid = null;
+      }
+    });
+    return hydration;
+  }
+
+  Future<void> _hydrate(String normalizedUid) async {
+    final sessionGeneration = ++_sessionGeneration;
+    _previewGenerations.clear();
+    state = RestoredUploadsState(uid: normalizedUid, isHydrating: true);
+    try {
+      final candidates = [
+        ...await _assetRepository.fetchRecentAssets(
+          uid: normalizedUid,
+          sourceFeature: OnboardingDraft.sourceOnboarding,
+          limit: 100,
+        ),
+      ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      if (sessionGeneration != _sessionGeneration ||
+          state.uid != normalizedUid) {
+        return;
+      }
+
+      final byPurpose = <UploadedAssetPurpose, RestoredUploadedAsset>{};
+      final removedPurposes = <UploadedAssetPurpose>{};
+      for (final asset in candidates) {
+        if (asset.ownerUid != normalizedUid ||
+            asset.sourceFeature != OnboardingDraft.sourceOnboarding ||
+            removedPurposes.contains(asset.purpose) ||
+            byPurpose.containsKey(asset.purpose)) {
+          continue;
+        }
+        if (asset.status == UploadedAssetStatus.deleted) {
+          removedPurposes.add(asset.purpose);
+          continue;
+        }
+        if (!_isValidUploadedAsset(asset, normalizedUid)) continue;
+        byPurpose[asset.purpose] = RestoredUploadedAsset(asset: asset);
+      }
+      state = RestoredUploadsState(
+        uid: normalizedUid,
+        assetsByPurpose: Map.unmodifiable(byPurpose),
+      );
+      for (final purpose in byPurpose.keys) {
+        final previewGeneration = _nextPreviewGeneration(purpose);
+        _resolvePreview(
+          uid: normalizedUid,
+          purpose: purpose,
+          sessionGeneration: sessionGeneration,
+          previewGeneration: previewGeneration,
+        );
+      }
+    } catch (_) {
+      if (sessionGeneration != _sessionGeneration ||
+          state.uid != normalizedUid) {
+        return;
+      }
+      state = RestoredUploadsState(
+        uid: normalizedUid,
+        errorMessage: 'Uploaded photos could not be restored yet.',
+      );
+    }
+  }
+
+  void registerUploaded(UploadedAsset asset) {
+    final uid = state.uid;
+    if (uid == null || !_isValidUploadedAsset(asset, uid)) return;
+    final previewGeneration = _nextPreviewGeneration(asset.purpose);
+    final next = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
+      state.assetsByPurpose,
+    );
+    next[asset.purpose] = RestoredUploadedAsset(asset: asset);
+    state = RestoredUploadsState(
+      uid: uid,
+      assetsByPurpose: Map.unmodifiable(next),
+    );
+    _resolvePreview(
+      uid: uid,
+      purpose: asset.purpose,
+      sessionGeneration: _sessionGeneration,
+      previewGeneration: previewGeneration,
+    );
+  }
+
+  void removePurpose({
+    required String uid,
+    required UploadedAssetPurpose purpose,
+  }) {
+    if (state.uid != uid) return;
+    _nextPreviewGeneration(purpose);
+    final next = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
+      state.assetsByPurpose,
+    )..remove(purpose);
+    state = RestoredUploadsState(
+      uid: uid,
+      assetsByPurpose: Map.unmodifiable(next),
+    );
+  }
+
+  Future<void> retryPreview(UploadedAssetPurpose purpose) async {
+    final uid = state.uid;
+    if (uid == null || state.assetsByPurpose[purpose] == null) return;
+    final previewGeneration = _nextPreviewGeneration(purpose);
+    _setPreviewState(
+      purpose,
+      UploadedAssetPreviewStatus.loading,
+      clearPreviewUri: true,
+    );
+    await _resolvePreview(
+      uid: uid,
+      purpose: purpose,
+      sessionGeneration: _sessionGeneration,
+      previewGeneration: previewGeneration,
+    );
+  }
+
+  void resetForSignedOut() {
+    _sessionGeneration++;
+    _previewGenerations.clear();
+    _inFlightHydration = null;
+    _inFlightHydrationUid = null;
+    state = const RestoredUploadsState();
+  }
+
+  int _nextPreviewGeneration(UploadedAssetPurpose purpose) {
+    final next = (_previewGenerations[purpose] ?? 0) + 1;
+    _previewGenerations[purpose] = next;
+    return next;
+  }
+
+  Future<void> _resolvePreview({
+    required String uid,
+    required UploadedAssetPurpose purpose,
+    required int sessionGeneration,
+    required int previewGeneration,
+  }) async {
+    final current = state.assetsByPurpose[purpose];
+    if (current == null) return;
+    Uri? uri;
+    try {
+      uri = await _previewResolver.resolvePreview(
+        uid: uid,
+        asset: current.asset,
+      );
+    } catch (_) {
+      uri = null;
+    }
+    if (sessionGeneration != _sessionGeneration ||
+        _previewGenerations[purpose] != previewGeneration ||
+        state.uid != uid) {
+      return;
+    }
+    final latest = state.assetsByPurpose[purpose];
+    if (latest == null || latest.asset.assetId != current.asset.assetId) return;
+    _setPreviewState(
+      purpose,
+      uri == null
+          ? UploadedAssetPreviewStatus.unavailable
+          : UploadedAssetPreviewStatus.available,
+      previewUri: uri,
+      clearPreviewUri: uri == null,
+    );
+  }
+
+  void _setPreviewState(
+    UploadedAssetPurpose purpose,
+    UploadedAssetPreviewStatus previewStatus, {
+    Uri? previewUri,
+    bool clearPreviewUri = false,
+  }) {
+    final current = state.assetsByPurpose[purpose];
+    if (current == null) return;
+    final next = Map<UploadedAssetPurpose, RestoredUploadedAsset>.from(
+      state.assetsByPurpose,
+    );
+    next[purpose] = current.copyWith(
+      previewStatus: previewStatus,
+      previewUri: previewUri,
+      clearPreviewUri: clearPreviewUri,
+    );
+    state = RestoredUploadsState(
+      uid: state.uid,
+      assetsByPurpose: Map.unmodifiable(next),
+      errorMessage: state.errorMessage,
+    );
+  }
+
+  static bool _isValidUploadedAsset(UploadedAsset asset, String uid) {
+    return uploadedAssetIsDurablyUploadedForSlot(
+      asset: asset,
+      uid: uid,
+      purpose: asset.purpose,
+    );
+  }
 }
 
 class UploadState {
@@ -457,6 +802,21 @@ final r2UploadClientProvider = Provider<R2UploadClient>((ref) {
   }
   return FakeR2UploadClient();
 });
+
+final uploadedAssetPreviewResolverProvider =
+    Provider<UploadedAssetPreviewResolver>(
+      (ref) => const UnavailableUploadedAssetPreviewResolver(),
+    );
+
+final restoredUploadsProvider =
+    StateNotifierProvider<RestoredUploadsController, RestoredUploadsState>((
+      ref,
+    ) {
+      return RestoredUploadsController(
+        assetRepository: ref.watch(uploadedAssetRepositoryProvider),
+        previewResolver: ref.watch(uploadedAssetPreviewResolverProvider),
+      );
+    });
 
 final uploadControllerProvider =
     StateNotifierProvider<UploadController, UploadState>((ref) {

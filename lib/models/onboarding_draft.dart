@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:optivus/features/routine/domain/conflict_policy.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
+import 'package:optivus/models/uploaded_asset.dart';
 
 class OnboardingDraft {
   static const int schemaVersion = 3;
@@ -2006,7 +2007,11 @@ class BaseTimelineDraft {
   String? validateSkinCareSetup() {
     if (skinCareSkipped) return null;
     if (skinCareSetupPath == 'no_products') {
-      if (skinCareProductPhotoR2Key?.trim().isNotEmpty != true) {
+      final hasDurableUploadedPhoto =
+          skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
+          skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
+          skinCareProductPhotoStatus == UploadedAssetStatus.uploaded.wireName;
+      if (!hasDurableUploadedPhoto) {
         return 'Add a face photo to personalize your product recommendations.';
       }
     }

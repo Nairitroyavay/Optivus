@@ -848,7 +848,7 @@ class _OnboardingStep4UnifiedState
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _initFromDraft();
+      setState(_initFromDraft);
     });
   }
 
@@ -900,6 +900,37 @@ class _OnboardingStep4UnifiedState
         );
       }
     }
+    _restorePhotosFromDurableState();
+  }
+
+  void _restorePhotosFromDurableState() {
+    final restored = ref.read(restoredUploadsProvider);
+    final uid = ref.read(mockOnboardingProvider).draft.uid;
+    if (restored.uid != uid) return;
+    for (final target in _uploadTargets) {
+      final entry = restored.forPurpose(target.purpose);
+      if (entry == null ||
+          !uploadedAssetIsDurablyUploadedForSlot(
+            asset: entry.asset,
+            uid: uid,
+            purpose: target.purpose,
+          )) {
+        continue;
+      }
+      final slot = _PhotoSlot(
+        asset: entry.asset,
+        label: target.thumbnailLabel,
+        source: target.source,
+        purpose: target.purpose,
+      );
+      final index = _photos.indexWhere((item) => item.source == target.source);
+      if (index < 0) {
+        _photos.add(slot);
+      } else if (_photos[index].asset.assetId != entry.asset.assetId) {
+        _photos[index] = slot;
+      }
+    }
+    _photos.sort(_comparePhotoSlots);
   }
 
   // ---- Helpers ----
@@ -1189,11 +1220,17 @@ class _OnboardingStep4UnifiedState
   }
 
   // ---- Upload ----
-  Future<void> _pickAndUpload(_UploadTarget target) async {
+  Future<void> _pickAndUpload(
+    _UploadTarget target, {
+    bool replacing = false,
+  }) async {
     if (_isUploading || _isGenerating) return;
-    if (_photoForSource(target.source) != null ||
-        _photos.length >= _maxPhotos ||
-        _hasAllPhotos) {
+    final previousIndex = _photos.indexWhere(
+      (photo) => photo.source == target.source,
+    );
+    if ((!replacing && previousIndex >= 0) ||
+        (!replacing && _photos.length >= _maxPhotos) ||
+        (!replacing && _hasAllPhotos)) {
       setState(() => _generationError = _photoLimitMessage());
       return;
     }
@@ -1230,15 +1267,20 @@ class _OnboardingStep4UnifiedState
       return;
     }
 
+    ref.read(restoredUploadsProvider.notifier).registerUploaded(asset);
+
     setState(() {
-      _photos.add(
-        _PhotoSlot(
-          asset: asset,
-          label: target.thumbnailLabel,
-          source: target.source,
-          purpose: target.purpose,
-        ),
+      final replacement = _PhotoSlot(
+        asset: asset,
+        label: target.thumbnailLabel,
+        source: target.source,
+        purpose: target.purpose,
       );
+      if (previousIndex >= 0) {
+        _photos[previousIndex] = replacement;
+      } else {
+        _photos.add(replacement);
+      }
       _photos.sort(_comparePhotoSlots);
       _generationError = null;
       _timelineError = null;
@@ -1246,12 +1288,35 @@ class _OnboardingStep4UnifiedState
     _markClassJobDirty();
   }
 
-  void _removePhotoForSource(RoutineImportReviewSource source) {
+  Future<void> _removePhotoForSource(RoutineImportReviewSource source) async {
     if (_isUploading || _isGenerating) return;
     final index = _photos.indexWhere((photo) => photo.source == source);
     if (index < 0) return;
     final removed = _photos[index];
     setState(() {
+      _isUploading = true;
+      _generationError = null;
+    });
+    await ref
+        .read(uploadControllerProvider.notifier)
+        .markDeleted(
+          uid: removed.asset.ownerUid,
+          assetId: removed.asset.assetId,
+        );
+    if (!mounted) return;
+    final deletionState = ref.read(uploadControllerProvider);
+    if (deletionState.status == UploadFlowStatus.failed) {
+      setState(() {
+        _isUploading = false;
+        _generationError = "Couldn't remove the photo. Try again.";
+      });
+      return;
+    }
+    ref
+        .read(restoredUploadsProvider.notifier)
+        .removePurpose(uid: removed.asset.ownerUid, purpose: removed.purpose);
+    setState(() {
+      _isUploading = false;
       _photos.removeAt(index);
       _generationError = null;
       _timelineError = null;
@@ -2216,6 +2281,13 @@ class _OnboardingStep4UnifiedState
   // ======================================================================
   @override
   Widget build(BuildContext context) {
+    ref.listen<RestoredUploadsState>(restoredUploadsProvider, (previous, next) {
+      if (previous?.assetsByPurpose == next.assetsByPurpose) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(_restorePhotosFromDurableState);
+      });
+    });
     ref.listen<String?>(
       mockOnboardingProvider.select((s) => s.draft.lifeRole.lifeRole),
       (previous, current) {
@@ -2588,8 +2660,16 @@ class _OnboardingStep4UnifiedState
   }
 
   Widget _buildPhotoThumbnail(_PhotoSlot photo, _UploadTarget target) {
-    final previewPath = photo.asset.localPreviewPath;
-    final hasPreview = previewPath != null && File(previewPath).existsSync();
+    final previewPath = usableUploadedAssetLocalPreviewPath(photo.asset);
+    final restored = ref
+        .watch(restoredUploadsProvider)
+        .forPurpose(photo.purpose);
+    final remotePreview = restored?.asset.assetId == photo.asset.assetId
+        ? restored?.previewUri
+        : null;
+    final previewStatus = restored?.asset.assetId == photo.asset.assetId
+        ? restored?.previewStatus
+        : UploadedAssetPreviewStatus.unavailable;
 
     return SizedBox(
       width: 56,
@@ -2615,18 +2695,30 @@ class _OnboardingStep4UnifiedState
                 ),
               ],
             ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: hasPreview
-                  ? Image.file(File(previewPath), fit: BoxFit.cover)
-                  : Container(
-                      color: _accent.withValues(alpha: 0.1),
-                      child: Icon(
-                        Icons.image_rounded,
-                        color: _accent,
-                        size: 24,
-                      ),
-                    ),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _isUploading || _isGenerating
+                  ? null
+                  : () => _pickAndUpload(target, replacing: true),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: previewPath != null
+                    ? Image.file(
+                        File(previewPath),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) =>
+                            _uploadedPreviewFallback(previewStatus),
+                      )
+                    : remotePreview != null
+                    ? Image.network(
+                        remotePreview.toString(),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => _uploadedPreviewFallback(
+                          UploadedAssetPreviewStatus.unavailable,
+                        ),
+                      )
+                    : _uploadedPreviewFallback(previewStatus),
+              ),
             ),
           ),
           // Label
@@ -2689,6 +2781,36 @@ class _OnboardingStep4UnifiedState
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _uploadedPreviewFallback(UploadedAssetPreviewStatus? status) {
+    return Container(
+      color: _accent.withValues(alpha: 0.1),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      alignment: Alignment.center,
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_rounded, color: _accent, size: 14),
+            const Text(
+              'Photo uploaded',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 6.5, fontWeight: FontWeight.w900),
+            ),
+            Text(
+              status == UploadedAssetPreviewStatus.loading
+                  ? 'Loading preview…'
+                  : 'Preview unavailable',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 5.5),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2764,6 +2886,7 @@ class _OnboardingStep4UnifiedState
       width: 48,
       height: 48,
       child: GestureDetector(
+        key: const ValueKey('onboarding-step4-generate-button'),
         behavior: HitTestBehavior.opaque,
         onTap: enabled && !spinning ? _runGeneration : null,
         child: Opacity(
