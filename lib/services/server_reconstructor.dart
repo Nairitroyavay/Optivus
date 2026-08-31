@@ -7,6 +7,7 @@ import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/services/onboarding_run_identity.dart';
 
 enum ReconstructionLifecycle {
@@ -444,27 +445,16 @@ ReconstructionResult classifyServerReconstruction({
     );
   }
 
-  final step = earliestValidOnboardingResumeStep(draft);
+  final resumeValidation = validateOnboardingResume(draft);
   if (!hasReconstructionProgress(draft)) {
     return ReconstructionFresh(ownerUid: ownerUid, profile: profile);
   }
   return ReconstructionIncomplete(
     ownerUid: ownerUid,
     profile: profile,
-    step: step,
+    step: resumeValidation.resumeStep,
     draft: draft,
   );
-}
-
-/// Validates every durably marked predecessor instead of trusting currentStep.
-int earliestValidOnboardingResumeStep(OnboardingDraft draft) {
-  for (var step = 0; step < OnboardingDraft.stepCount; step++) {
-    if (step >= draft.stepCompleted.length || !draft.stepCompleted[step]) {
-      return step;
-    }
-    if (draft.validateStep(step, draft.stepCompleted) != null) return step;
-  }
-  return OnboardingDraft.lastStepIndex;
 }
 
 bool hasReconstructionProgress(OnboardingDraft draft) {
@@ -473,7 +463,6 @@ bool hasReconstructionProgress(OnboardingDraft draft) {
 
 bool isReconstructionFinalDraft(OnboardingDraft draft) {
   return draft.onboardingCompleted &&
-      draft.currentStep == OnboardingDraft.lastStepIndex &&
       draft.stepCompleted.length == OnboardingDraft.stepCount &&
       draft.stepCompleted.every((value) => value) &&
       draft.uid.trim().isNotEmpty;

@@ -5946,11 +5946,58 @@ void main() {
     useAndroidWidth(tester);
     final draft = OnboardingDraft(
       currentStep: onboardingSkinCareStepIndex,
+      welcomeSaved: true,
+      patiencePledgeAccepted: true,
       stepCompleted: List<bool>.generate(
         OnboardingDraft.stepCount,
         (index) => index < onboardingSkinCareStepIndex,
       ),
-      baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+        exerciseLevel: 'moderate',
+        waterIntake: 'medium',
+        stressLevel: 'medium',
+        sleepQuality: 'good',
+      ),
+      bodyBasics: const BodyBasicsDraft(
+        ageRange: '25-34',
+        heightCm: 175,
+        weightKg: 70,
+        gender: 'other',
+      ),
+      baseTimeline: const BaseTimelineDraft(
+        eatingSetupPath: 'create',
+        blocks: [
+          TimelineBlockDraft(
+            id: BaseTimelineDraft.fixedSleepId,
+            section: 'fixed',
+            title: 'Sleep',
+            startMinute: 1380,
+            endMinute: 420,
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.hardBlockKey,
+            crossesMidnight: true,
+          ),
+          TimelineBlockDraft(
+            id: BaseTimelineDraft.fixedBathId,
+            section: 'fixed',
+            title: 'Bath',
+            startMinute: 430,
+            endMinute: 460,
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'meal',
+            section: 'eating',
+            title: 'Lunch',
+            startMinute: 720,
+            endMinute: 750,
+            repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ],
+      ),
     );
     await tester.pumpWidget(
       ProviderScope(

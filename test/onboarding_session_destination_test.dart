@@ -4,6 +4,7 @@ import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 
@@ -191,12 +192,11 @@ void main() {
           ..[4] = false
           ..[5] = false
           ..[14] = false;
-        final draft = OnboardingDraft(
-          uid: owner,
-          currentStep: 13,
-          welcomeSaved: true,
-          stepCompleted: completed,
-        );
+        final draft = _draft(
+          owner,
+          firstIncompleteStep: OnboardingDraft.lastStepIndex,
+          currentViewedStep: 13,
+        ).copyWith(stepCompleted: completed, incrementRevision: false);
 
         expect(durableOnboardingResumeStep(draft), 4);
       },
@@ -305,6 +305,69 @@ OnboardingDraft _draft(
     stepCompleted: completed,
     stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
     stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+    patiencePledgeAccepted: true,
+    lifeRole: const LifeRoleDraft(
+      lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+      exerciseLevel: 'moderate',
+      waterIntake: 'medium',
+      stressLevel: 'medium',
+      sleepQuality: 'good',
+    ),
+    bodyBasics: const BodyBasicsDraft(
+      ageRange: '25-34',
+      heightCm: 175,
+      weightKg: 70,
+      gender: 'other',
+    ),
+    baseTimeline: const BaseTimelineDraft(
+      eatingSetupPath: 'create',
+      skinCareSkipped: true,
+      blocks: [
+        TimelineBlockDraft(
+          id: BaseTimelineDraft.fixedSleepId,
+          section: 'fixed',
+          title: 'Sleep',
+          startMinute: 1380,
+          endMinute: 420,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.hardBlockKey,
+          crossesMidnight: true,
+        ),
+        TimelineBlockDraft(
+          id: BaseTimelineDraft.fixedBathId,
+          section: 'fixed',
+          title: 'Bath',
+          startMinute: 430,
+          endMinute: 460,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+        TimelineBlockDraft(
+          id: 'meal',
+          section: 'eating',
+          title: 'Lunch',
+          startMinute: 720,
+          endMinute: 750,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+      ],
+    ),
+    badHabitsNotNow: true,
+    goodHabitsNotNow: true,
+    identityGoals: const [
+      IdentityGoalDraft(
+        goalKey: 'healthy',
+        displayName: 'Healthy person',
+        systemKeys: [],
+      ),
+    ],
+    coachSetup: const CoachSetupDraft(
+      coachName: 'Nova',
+      coachStyle: 'supportive',
+    ),
+    slipUpHandling: 'restart_small',
+    notifications: const NotificationSetupDraft(preferencesConfirmed: true),
   );
 }
 

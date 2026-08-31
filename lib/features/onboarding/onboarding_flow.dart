@@ -17,6 +17,7 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';

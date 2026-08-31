@@ -542,10 +542,8 @@ void main() {
   testWidgets('Step 6 Next Step saves and advances directly to Step 7', (
     tester,
   ) async {
-    final draft = const OnboardingDraft().copyWith(
-      baseTimeline: const BaseTimelineDraft().withRequiredFixedBlocks(),
-      currentStep: 6,
-      stepCompleted: List.generate(15, (i) => i < 6),
+    final draft = _step6ResumeDraft(
+      const BaseTimelineDraft().withRequiredFixedBlocks(),
     );
     final container = ProviderContainer(
       overrides: [
@@ -596,12 +594,8 @@ void main() {
         })
         .toList();
 
-    final draft = const OnboardingDraft().copyWith(
-      baseTimeline: const BaseTimelineDraft().copyWith(
-        blocks: invalidSleepBlocks,
-      ),
-      currentStep: 6,
-      stepCompleted: List.generate(15, (i) => i < 6),
+    final draft = _step6ResumeDraft(
+      const BaseTimelineDraft().copyWith(blocks: invalidSleepBlocks),
     );
     final container = ProviderContainer(
       overrides: [
@@ -703,6 +697,46 @@ void main() {
     expect(bath.length, 1);
     expect(custom.length, 1);
   });
+}
+
+OnboardingDraft _step6ResumeDraft(BaseTimelineDraft baseTimeline) {
+  return OnboardingDraft(
+    currentStep: 6,
+    welcomeSaved: true,
+    patiencePledgeAccepted: true,
+    stepCompleted: List<bool>.generate(
+      OnboardingDraft.stepCount,
+      (index) => index < 6,
+    ),
+    lifeRole: const LifeRoleDraft(
+      lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+      exerciseLevel: 'moderate',
+      waterIntake: 'medium',
+      stressLevel: 'medium',
+      sleepQuality: 'good',
+    ),
+    bodyBasics: const BodyBasicsDraft(
+      ageRange: '25-34',
+      heightCm: 175,
+      weightKg: 70,
+      gender: 'other',
+    ),
+    baseTimeline: baseTimeline.copyWith(
+      eatingSetupPath: 'create',
+      blocks: [
+        ...baseTimeline.blocks,
+        const TimelineBlockDraft(
+          id: 'meal',
+          section: 'eating',
+          title: 'Lunch',
+          startMinute: 720,
+          endMinute: 750,
+          repeatDays: [1, 2, 3, 4, 5, 6, 7],
+          blockType: TimelineBlockDraft.hardBlockKey,
+        ),
+      ],
+    ),
+  );
 }
 
 class FakeAuthNotifier extends StateNotifier<AuthState>

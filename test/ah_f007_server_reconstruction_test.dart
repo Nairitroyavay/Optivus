@@ -16,6 +16,7 @@ import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/state/app_state.dart';
@@ -61,7 +62,7 @@ void main() {
     test('D optional skin-care skip does not block resume', () {
       final draft = _validDraftAtStep(uid, 8);
       expect(draft.baseTimeline.skinCareSkipped, isTrue);
-      expect(earliestValidOnboardingResumeStep(draft), 8);
+      expect(validateOnboardingResume(draft).resumeStep, 8);
     });
 
     test('E valid active currentRun is Finishing with its runId', () {

@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
 export 'package:optivus/services/onboarding_completion_service.dart'
     show OnboardingRecoveryTier;
 
@@ -88,12 +88,7 @@ class ResumeOnboardingAction extends OnboardingRecoveryAction {
     if (draft.onboardingCompleted) {
       throw StateError('A completed onboarding draft cannot be resumed.');
     }
-    final firstMissingStep = draft.stepCompleted.indexOf(false);
-    final stepToResume = firstMissingStep != -1
-        ? firstMissingStep
-        : (draft.currentStep < OnboardingDraft.lastStepIndex
-              ? draft.currentStep
-              : 0);
+    final stepToResume = validateOnboardingResume(draft).resumeStep;
     final updatedDraft = draft.copyWith(
       currentStep: stepToResume,
       onboardingCompleted: false,

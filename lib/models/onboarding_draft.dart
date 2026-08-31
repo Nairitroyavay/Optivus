@@ -127,7 +127,7 @@ class OnboardingDraft {
       storedSchemaVersion:
           (map['schemaVersion'] as num?)?.toInt() ?? schemaVersion,
       currentStep: _migratedStepIndex(
-        (map['currentStep'] as num?)?.toInt() ?? 0,
+        _readStoredStepIndex(map['currentStep']),
         migrateLegacySteps: migrateLegacySteps,
       ),
       stepCompleted: _readStepBoolList(
@@ -822,6 +822,12 @@ class OnboardingDraft {
   static int _migratedStepIndex(int step, {required bool migrateLegacySteps}) {
     final migrated = migrateLegacySteps && step >= 5 ? step + 3 : step;
     return migrated.clamp(0, lastStepIndex).toInt();
+  }
+
+  static int _readStoredStepIndex(Object? value) {
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? 0;
+    return 0;
   }
 
   static List<bool> _readStepBoolList(

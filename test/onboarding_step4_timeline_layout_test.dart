@@ -1537,11 +1537,23 @@ void main() {
     final draft = OnboardingDraft(
       uid: 'step4-save-user',
       currentStep: onboardingClassJobStepIndex,
+      welcomeSaved: true,
+      patiencePledgeAccepted: true,
       stepCompleted: completed,
       stepDirty: dirty,
       lifeRole: const LifeRoleDraft(
         lifeRole: LifeRoleDraft.studentWorkingKey,
         workType: 'part_time',
+        exerciseLevel: 'moderate',
+        waterIntake: 'medium',
+        stressLevel: 'medium',
+        sleepQuality: 'good',
+      ),
+      bodyBasics: const BodyBasicsDraft(
+        ageRange: '25-34',
+        heightCm: 175,
+        weightKg: 70,
+        gender: 'other',
       ),
       baseTimeline: const BaseTimelineDraft(skinCareSkipped: true),
     );
@@ -1878,8 +1890,17 @@ void main() {
     final draft = OnboardingDraft(
       uid: 'eating-save-user',
       currentStep: onboardingEatingStepIndex,
+      welcomeSaved: true,
+      patiencePledgeAccepted: true,
       stepCompleted: completed,
       stepDirty: dirty,
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+        exerciseLevel: 'moderate',
+        waterIntake: 'medium',
+        stressLevel: 'medium',
+        sleepQuality: 'good',
+      ),
       bodyBasics: const BodyBasicsDraft(
         ageRange: '25-34',
         heightCm: 175,
@@ -1982,8 +2003,23 @@ void main() {
     final draft = OnboardingDraft(
       uid: 'eating-ai-save-user',
       currentStep: onboardingEatingStepIndex,
+      welcomeSaved: true,
+      patiencePledgeAccepted: true,
       stepCompleted: completed,
       stepDirty: dirty,
+      lifeRole: const LifeRoleDraft(
+        lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+        exerciseLevel: 'moderate',
+        waterIntake: 'medium',
+        stressLevel: 'medium',
+        sleepQuality: 'good',
+      ),
+      bodyBasics: const BodyBasicsDraft(
+        ageRange: '25-34',
+        heightCm: 175,
+        weightKg: 70,
+        gender: 'other',
+      ),
       baseTimeline: BaseTimelineDraft(
         eatingSetupPath: onboardingEatingPathHasRoutine,
         eatingSetupStep: 1,
@@ -2164,10 +2200,22 @@ void main() {
     completed[onboardingClassJobStepIndex] = false;
     final draft = OnboardingDraft(
       currentStep: onboardingClassJobStepIndex,
+      welcomeSaved: true,
+      patiencePledgeAccepted: true,
       stepCompleted: completed,
       lifeRole: const LifeRoleDraft(
         lifeRole: LifeRoleDraft.workingKey,
         workType: 'full_time',
+        exerciseLevel: 'moderate',
+        waterIntake: 'medium',
+        stressLevel: 'medium',
+        sleepQuality: 'good',
+      ),
+      bodyBasics: const BodyBasicsDraft(
+        ageRange: '25-34',
+        heightCm: 175,
+        weightKg: 70,
+        gender: 'other',
       ),
       baseTimeline: const BaseTimelineDraft(),
     );
@@ -2276,10 +2324,22 @@ void main() {
       completed[onboardingClassJobStepIndex] = false;
       final draft = OnboardingDraft(
         currentStep: onboardingClassJobStepIndex,
+        welcomeSaved: true,
+        patiencePledgeAccepted: true,
         stepCompleted: completed,
         lifeRole: const LifeRoleDraft(
           lifeRole: LifeRoleDraft.studentWorkingKey,
           workType: 'full_time',
+          exerciseLevel: 'moderate',
+          waterIntake: 'medium',
+          stressLevel: 'medium',
+          sleepQuality: 'good',
+        ),
+        bodyBasics: const BodyBasicsDraft(
+          ageRange: '25-34',
+          heightCm: 175,
+          weightKg: 70,
+          gender: 'other',
         ),
         baseTimeline: const BaseTimelineDraft(),
       );

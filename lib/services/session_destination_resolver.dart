@@ -1,6 +1,7 @@
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/user_profile.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 
 enum SessionDestinationKind {
@@ -64,18 +65,6 @@ SessionDestination resolveReconstructionDestination(
   };
 }
 
-/// Resolves the first step whose completion has not been durably recorded.
-/// `currentStep`, widget state, and controller state deliberately do not
-/// participate in this decision.
-int durableOnboardingResumeStep(OnboardingDraft draft) {
-  for (var step = 0; step < OnboardingDraft.stepCount; step++) {
-    if (step >= draft.stepCompleted.length || !draft.stepCompleted[step]) {
-      return step;
-    }
-  }
-  return OnboardingDraft.lastStepIndex;
-}
-
 bool hasMeaningfulOnboardingProgress(OnboardingDraft draft) {
   // Only a durably completed step proves that onboarding has started. An
   // empty draft, a viewed page, an edit/revision, or the legacy welcome marker
@@ -85,7 +74,6 @@ bool hasMeaningfulOnboardingProgress(OnboardingDraft draft) {
 
 bool isDurablyFinalOnboardingDraft(OnboardingDraft draft) {
   return draft.onboardingCompleted &&
-      draft.currentStep == OnboardingDraft.lastStepIndex &&
       draft.stepCompleted.length == OnboardingDraft.stepCount &&
       draft.stepCompleted.every((value) => value) &&
       draft.uid.trim().isNotEmpty;
