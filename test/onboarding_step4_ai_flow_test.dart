@@ -275,9 +275,7 @@ class MockRoutineImportAiController extends RoutineImportAiController {
   Future<RoutineImportExtractionResult?> runExtraction(
     RoutineImportReviewDraft review,
   ) async {
-    state = const RoutineImportAiState(
-      status: RoutineImportAiStatus.extracting,
-    );
+    state = const RoutineImportAiState.extracting();
     // Hang forever so _isGenerating stays true
     return Completer<RoutineImportExtractionResult>().future;
   }

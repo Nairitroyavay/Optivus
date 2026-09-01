@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/routine_import_ai_config.dart';
+import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
@@ -15,6 +16,7 @@ import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
@@ -721,13 +723,15 @@ class _OnboardingStep4UnifiedState
   static const _kMaxOverlapLane = 2;
   final List<_PhotoSlot> _photos = [];
   bool _isUploading = false;
-  bool _isGenerating = false;
+  late final AiGenerationController _lifecycle;
   String? _generationError;
   String? _timelineError;
   int _day = 0; // 0=Mon … 6=Sun
   bool _didInitFromDraft = false;
   String? _initializedRole;
   String? _frontBlockId;
+
+  bool get _isGenerating => _lifecycle.state.isActive;
 
   // ---- Role helpers ----
   String? get _role => ref.read(mockOnboardingProvider).draft.lifeRole.lifeRole;
@@ -846,10 +850,22 @@ class _OnboardingStep4UnifiedState
   @override
   void initState() {
     super.initState();
+    _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(_initFromDraft);
     });
+  }
+
+  void _onLifecycleChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.removeListener(_onLifecycleChanged);
+    _lifecycle.dispose();
+    super.dispose();
   }
 
   // ---- Init from draft ----
@@ -1674,128 +1690,168 @@ class _OnboardingStep4UnifiedState
       return;
     }
 
-    setState(() {
-      _isGenerating = true;
-      _generationError = null;
-      _timelineError = null;
-    });
     ref.read(mockOnboardingProvider.notifier).clearValidation();
     ref
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingClassJobStepIndex, true);
 
+    final currentAuthGeneration = ref.read(authGenerationProvider);
     final draft = ref.read(mockOnboardingProvider).draft;
-    final aiController = ref.read(routineImportAiControllerProvider.notifier);
-    final successfulSources = <RoutineImportReviewSource>{};
-    final failedSources = <RoutineImportReviewSource>{};
-    final failureMessages = <RoutineImportReviewSource, String>{};
+    final uid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final currentRole = _role;
+    final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
     final photosToProcess = [..._photos]..sort(_comparePhotoSlots);
     _debugLogAiMode();
 
-    try {
-      for (final photo in photosToProcess) {
-        if (!mounted) return;
-        if (photo.source == RoutineImportReviewSource.classes) {
-          ref.read(onboardingClassTimelineProvider.notifier).state = const [];
-        } else {
-          ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
-        }
-        _debugLogExtractionStart(photo);
-
-        if (photo.asset.r2Key.trim().isEmpty) {
-          failedSources.add(photo.source);
-          failureMessages[photo.source] =
-              'Upload incomplete. Please upload again.';
-          continue;
-        }
-
-        final now = DateTime.now();
-        final reviewDraft = RoutineImportReviewDraft(
-          id: 'onboarding_${photo.source.name}_import_review',
-          uid: draft.uid,
-          source: photo.source,
-          status: RoutineImportReviewStatus.needsReview,
-          sourceLabel: photo.label,
-          uploadedAssetId: photo.asset.assetId,
-          uploadedAssetR2Key: photo.asset.r2Key,
-          uploadedAssetStatus: 'uploaded',
-          createdAt: now,
-          updatedAt: now,
-        );
-
-        final result = await aiController.runExtraction(reviewDraft);
-        if (!mounted) return;
-
-        final controllerState = ref.read(routineImportAiControllerProvider);
-        final warnings =
-            result?.warnings ??
-            [controllerState.errorMessage ?? 'No extraction result returned.'];
-        _debugLogExtractionResult(
-          photo: photo,
-          result: result,
-          controllerState: controllerState,
-          warnings: warnings,
-        );
-        final config = _configForSource(photo.source);
-        final mapping = result == null
-            ? const Onboarding4CandidateMappingResult(
-                blocks: <ClassRoutineBlock>[],
-                droppedNoTitle: 0,
-                droppedInvalidTime: 0,
-                droppedNoRepeatDays: 0,
-                droppedNonWork: 0,
-              )
-            : _blocksFromCandidates(result.candidates, config);
-
-        _debugLogExtractionMapped(photo: photo, mapping: mapping);
-
-        if (mapping.blocks.isNotEmpty) {
-          successfulSources.add(photo.source);
-          if (photo.source == RoutineImportReviewSource.classes) {
-            ref.read(onboardingClassTimelineProvider.notifier).state =
-                mapping.blocks;
-          } else {
-            ref.read(onboardingWorkTimelineProvider.notifier).state =
-                mapping.blocks;
-          }
-        } else {
-          failedSources.add(photo.source);
-          failureMessages[photo.source] = onboarding4SourceFailureMessage(
-            source: photo.source,
-            role: _role,
-            warnings: warnings,
-            rawCandidateCount: result?.candidates.length,
-            mappedBlockCount: mapping.blocks.length,
-          );
-        }
-      }
-    } finally {
-      if (mounted) {
-        ref
-            .read(mockOnboardingProvider.notifier)
-            .setStepLoading(onboardingClassJobStepIndex, false);
-      }
-    }
-
-    if (!mounted) return;
-    _debugLogRoleSummary();
-    final anySuccess = successfulSources.isNotEmpty;
-    final partialMessage = _partialFailureMessage(
-      successfulSources: successfulSources,
-      failedSources: failedSources,
-      failureMessages: failureMessages,
-    );
     setState(() {
-      _isGenerating = false;
-      _generationError = partialMessage;
-      if (!anySuccess) {
-        _timelineError = _timelineErrorForFailures(
-          failedSources,
+      _generationError = null;
+      _timelineError = null;
+    });
+
+    final run = await _lifecycle.run<bool>(
+      operationType: 'onboarding-step4-timetable',
+      timeoutPolicy: AiOperationTimeouts.routineImport,
+      retry: isRetry,
+      preparingMessage: 'Getting your timetable ready…',
+      isSessionCurrent: () =>
+          mounted &&
+          ref.read(authGenerationProvider) == currentAuthGeneration &&
+          (ref.read(authProvider).user?.uid ??
+                  ref.read(mockOnboardingProvider).draft.uid) ==
+              uid &&
+          _role == currentRole,
+      mapError: (error) => AiGenerationError(
+        category: AiGenerationErrorCategory.responseInvalid,
+        message: error.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''),
+        canRetry: true,
+      ),
+      operation: (scope) async {
+        scope.transition(
+          AiGenerationPhase.generating,
+          message: _aiLoadingTitle,
+        );
+
+        final aiController =
+            ref.read(routineImportAiControllerProvider.notifier);
+        final successfulSources = <RoutineImportReviewSource>{};
+        final failedSources = <RoutineImportReviewSource>{};
+        final failureMessages = <RoutineImportReviewSource, String>{};
+
+        for (final photo in photosToProcess) {
+          if (!scope.isCurrent) return false;
+          if (photo.source == RoutineImportReviewSource.classes) {
+            ref.read(onboardingClassTimelineProvider.notifier).state = const [];
+          } else {
+            ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
+          }
+          _debugLogExtractionStart(photo);
+
+          if (photo.asset.r2Key.trim().isEmpty) {
+            failedSources.add(photo.source);
+            failureMessages[photo.source] =
+                'Upload incomplete. Please upload again.';
+            continue;
+          }
+
+          final now = DateTime.now();
+          final reviewDraft = RoutineImportReviewDraft(
+            id: 'onboarding_${photo.source.name}_import_review',
+            uid: draft.uid,
+            source: photo.source,
+            status: RoutineImportReviewStatus.needsReview,
+            sourceLabel: photo.label,
+            uploadedAssetId: photo.asset.assetId,
+            uploadedAssetR2Key: photo.asset.r2Key,
+            uploadedAssetStatus: 'uploaded',
+            createdAt: now,
+            updatedAt: now,
+          );
+
+          final result = await aiController.runExtraction(reviewDraft);
+          if (!scope.isCurrent) return false;
+
+          final controllerState = ref.read(routineImportAiControllerProvider);
+          final warnings =
+              result?.warnings ??
+              [controllerState.errorMessage ?? 'No extraction result returned.'];
+          _debugLogExtractionResult(
+            photo: photo,
+            result: result,
+            controllerState: controllerState,
+            warnings: warnings,
+          );
+          final config = _configForSource(photo.source);
+          final mapping = result == null
+              ? const Onboarding4CandidateMappingResult(
+                  blocks: <ClassRoutineBlock>[],
+                  droppedNoTitle: 0,
+                  droppedInvalidTime: 0,
+                  droppedNoRepeatDays: 0,
+                  droppedNonWork: 0,
+                )
+              : _blocksFromCandidates(result.candidates, config);
+
+          _debugLogExtractionMapped(photo: photo, mapping: mapping);
+
+          if (mapping.blocks.isNotEmpty) {
+            successfulSources.add(photo.source);
+            if (photo.source == RoutineImportReviewSource.classes) {
+              ref.read(onboardingClassTimelineProvider.notifier).state =
+                  mapping.blocks;
+            } else {
+              ref.read(onboardingWorkTimelineProvider.notifier).state =
+                  mapping.blocks;
+            }
+          } else {
+            failedSources.add(photo.source);
+            failureMessages[photo.source] = onboarding4SourceFailureMessage(
+              source: photo.source,
+              role: _role,
+              warnings: warnings,
+              rawCandidateCount: result?.candidates.length,
+              mappedBlockCount: mapping.blocks.length,
+            );
+          }
+        }
+
+        _debugLogRoleSummary();
+        final anySuccess = successfulSources.isNotEmpty;
+        final partialMessage = _partialFailureMessage(
+          successfulSources: successfulSources,
+          failedSources: failedSources,
           failureMessages: failureMessages,
         );
+
+        if (!anySuccess) {
+          _timelineError = _timelineErrorForFailures(
+            failedSources,
+            failureMessages: failureMessages,
+          );
+          throw Exception(
+            partialMessage ?? 'AI could not read this. Try again.',
+          );
+        }
+
+        if (partialMessage != null) {
+          _generationError = partialMessage;
+        }
+
+        return true;
+      },
+    );
+
+    if (mounted) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setStepLoading(onboardingClassJobStepIndex, false);
+      if (run.isSuccess) {
+        _markClassJobDirty();
+      } else if (run.error != null) {
+        setState(() {
+          _generationError = run.error!.message;
+        });
       }
-    });
-    if (anySuccess) _markClassJobDirty();
+    }
   }
 
   // ---- Sync local blocks back to provider (for edits) ----
@@ -3091,16 +3147,18 @@ class _OnboardingStep4UnifiedState
   // ======================================================================
   Widget _buildTimelineArea(List<ClassRoutineBlock> allBlocks, bool hasBlocks) {
     // Generating state: show AI reading message
-    if (_isGenerating) {
+    if (_isGenerating ||
+        _lifecycle.state.phase == AiGenerationPhase.error) {
       return SizedBox.expand(
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: AiThinkingCard(
+              state: _lifecycle.state,
               title: _aiLoadingTitle,
               detail: _aiLoadingDetail,
               accent: _accent,
-              isActive: _isGenerating,
+              onRetry: _runGeneration,
             ),
           ),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
@@ -9,27 +10,61 @@ import 'package:optivus/state/auth_generation.dart';
 enum RoutineImportAiStatus { idle, extracting, extracted, failed }
 
 class RoutineImportAiState {
-  final RoutineImportAiStatus status;
+  final AiGenerationState lifecycle;
   final RoutineImportExtractionResult? result;
   final String? errorMessage;
 
   const RoutineImportAiState({
-    this.status = RoutineImportAiStatus.idle,
+    this.lifecycle = const AiGenerationState(),
     this.result,
     this.errorMessage,
   });
 
-  bool get isExtracting => status == RoutineImportAiStatus.extracting;
+  const RoutineImportAiState.extracting({
+    this.result,
+    this.errorMessage,
+  }) : lifecycle = const AiGenerationState(
+         phase: AiGenerationPhase.generating,
+         operationId: 'legacy-extracting',
+         attempt: 1,
+       );
+
+  const RoutineImportAiState.extracted({
+    this.result,
+    this.errorMessage,
+  }) : lifecycle = const AiGenerationState(
+         phase: AiGenerationPhase.success,
+         operationId: 'legacy-extracted',
+         attempt: 1,
+       );
+
+  const RoutineImportAiState.failed({
+    this.result,
+    this.errorMessage,
+  }) : lifecycle = const AiGenerationState(
+         phase: AiGenerationPhase.error,
+         operationId: 'legacy-failed',
+         attempt: 1,
+       );
+
+  RoutineImportAiStatus get status => switch (lifecycle.phase) {
+    AiGenerationPhase.idle => RoutineImportAiStatus.idle,
+    AiGenerationPhase.success => RoutineImportAiStatus.extracted,
+    AiGenerationPhase.error => RoutineImportAiStatus.failed,
+    _ => RoutineImportAiStatus.extracting,
+  };
+
+  bool get isExtracting => lifecycle.isActive;
 
   RoutineImportAiState copyWith({
-    RoutineImportAiStatus? status,
+    AiGenerationState? lifecycle,
     RoutineImportExtractionResult? result,
     String? errorMessage,
     bool clearResult = false,
     bool clearError = false,
   }) {
     return RoutineImportAiState(
-      status: status ?? this.status,
+      lifecycle: lifecycle ?? this.lifecycle,
       result: clearResult ? null : (result ?? this.result),
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
@@ -39,15 +74,17 @@ class RoutineImportAiState {
 class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
   final Ref _ref;
   final RoutineImportAiClient _client;
-  int _operationGeneration = 0;
+  final AiGenerationController _lifecycle = AiGenerationController();
 
   RoutineImportAiController(this._ref, this._client)
-    : super(const RoutineImportAiState());
+    : super(const RoutineImportAiState()) {
+    _lifecycle.addListener(_publishLifecycle);
+  }
 
   Future<RoutineImportExtractionResult?> runExtraction(
     RoutineImportReviewDraft review,
   ) async {
-    if (state.isExtracting) return null;
+    if (_lifecycle.state.isActive) return null;
 
     final user = _ref.read(authProvider).user;
     final preflightError = routineImportAiPreflightError(
@@ -59,101 +96,112 @@ class RoutineImportAiController extends StateNotifier<RoutineImportAiState> {
       return _fail(preflightError);
     }
     final verifiedUser = user!;
-    final operationGeneration = ++_operationGeneration;
     final authGeneration = _ref.read(authGenerationProvider);
     if (verifiedUser.uid.trim().isEmpty) {
       return _fail('Sign in before running AI extraction.');
     }
 
-    final startAssetKey = review.uploadedAssetR2Key;
-
-    final idToken = await _ref.read(authRepositoryProvider).currentIdToken();
-    if (!_isCurrentOperation(
-      verifiedUser.uid,
-      operationGeneration,
-      authGeneration,
-    )) {
+    final run = await _lifecycle.run<RoutineImportExtractionResult>(
+      operationType: 'routine-import',
+      timeoutPolicy: AiOperationTimeouts.routineImport,
+      isSessionCurrent: () =>
+          _ref.read(authProvider).user?.uid == verifiedUser.uid &&
+          _ref.read(authGenerationProvider) == authGeneration,
+      mapError: (error) {
+        if (error is MissingConfigException) {
+          return AiGenerationError(
+            category: AiGenerationErrorCategory.serviceUnavailable,
+            message: error.message,
+            canRetry: true,
+          );
+        }
+        return const AiGenerationError(
+          category: AiGenerationErrorCategory.serviceUnavailable,
+          message: 'AI is temporarily unavailable. Try again.',
+          canRetry: true,
+        );
+      },
+      operation: (scope) async {
+        final idToken = await _ref
+            .read(authRepositoryProvider)
+            .currentIdToken();
+        if (!scope.isCurrent) throw const _StaleAiOperation();
+        if (idToken == null || idToken.trim().isEmpty) {
+          throw const MissingConfigException(
+            'Please sign in again before running AI extraction.',
+          );
+        }
+        scope.transition(
+          AiGenerationPhase.generating,
+          message: 'Reading your schedule…',
+        );
+        return _client.extract(
+          uid: verifiedUser.uid,
+          idToken: idToken,
+          review: review.copyWith(uid: verifiedUser.uid),
+        );
+      },
+    );
+    if (run.ignored || run.duplicate) return null;
+    if (run.error != null) {
+      debugPrint(
+        '[RoutineImportAiController] AI extraction failed '
+        '(${run.error!.category.name}).',
+      );
       return null;
     }
-    if (idToken == null || idToken.trim().isEmpty) {
-      return _fail('Please sign in again before running AI extraction.');
-    }
-
-    state = const RoutineImportAiState(
-      status: RoutineImportAiStatus.extracting,
-    );
-
-    try {
-      final result = await _client.extract(
-        uid: verifiedUser.uid,
-        idToken: idToken,
-        review: review.copyWith(uid: verifiedUser.uid),
-      );
-      final currentUser = _ref.read(authProvider).user;
-      final currentAssetKey = review.uploadedAssetR2Key;
-      if (currentUser == null ||
-          currentUser.uid.trim().isEmpty ||
-          currentUser.uid != verifiedUser.uid ||
-          currentAssetKey != startAssetKey ||
-          !_isCurrentOperation(
-            verifiedUser.uid,
-            operationGeneration,
-            authGeneration,
-          ) ||
-          state.status != RoutineImportAiStatus.extracting) {
-        // Session, account, or source asset changed mid-flight; ignore stale AI extraction result.
-        return null;
-      }
-      state = RoutineImportAiState(
-        status: RoutineImportAiStatus.extracted,
-        result: result,
-      );
-      return result;
-    } on MissingConfigException catch (e) {
-      final currentUser = _ref.read(authProvider).user;
-      if (currentUser == null || currentUser.uid != verifiedUser.uid) {
-        return null;
-      }
-      return _fail(e.message);
-    } catch (e) {
-      debugPrint(
-        '[RoutineImportAiController] AI extraction failed (${e.runtimeType}).',
-      );
-      final currentUser = _ref.read(authProvider).user;
-      if (currentUser == null || currentUser.uid != verifiedUser.uid) {
-        return null;
-      }
-      return _fail('AI extraction failed. Try again later.');
-    }
+    final result = run.value!;
+    state = RoutineImportAiState(lifecycle: _lifecycle.state, result: result);
+    return result;
   }
 
   void reset() {
-    _operationGeneration++;
+    _lifecycle.reset();
     state = const RoutineImportAiState();
   }
 
   void resetForSignedOut() {
-    _operationGeneration++;
+    _lifecycle.reset();
     state = const RoutineImportAiState();
   }
 
   RoutineImportExtractionResult? _fail(String message) {
     state = RoutineImportAiState(
-      status: RoutineImportAiStatus.failed,
+      lifecycle: AiGenerationState(
+        phase: AiGenerationPhase.error,
+        phaseStartedAt: DateTime.now(),
+        message: message,
+        error: AiGenerationError(
+          category: AiGenerationErrorCategory.invalidInput,
+          message: message,
+          canRetry: false,
+        ),
+      ),
       errorMessage: message,
     );
     return null;
   }
 
-  bool _isCurrentOperation(
-    String uid,
-    int operationGeneration,
-    int authGeneration,
-  ) {
-    return _operationGeneration == operationGeneration &&
-        _ref.read(authGenerationProvider) == authGeneration &&
-        _ref.read(authProvider).user?.uid == uid;
+  void _publishLifecycle() {
+    state = RoutineImportAiState(
+      lifecycle: _lifecycle.state,
+      result: _lifecycle.state.phase == AiGenerationPhase.success
+          ? state.result
+          : null,
+      errorMessage: _lifecycle.state.error?.message,
+    );
   }
+
+  @override
+  void dispose() {
+    _lifecycle.removeListener(_publishLifecycle);
+    _lifecycle.dispose();
+    super.dispose();
+  }
+}
+
+class _StaleAiOperation implements Exception {
+  const _StaleAiOperation();
 }
 
 String? routineImportAiPreflightError({

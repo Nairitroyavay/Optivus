@@ -190,9 +190,7 @@ void main() {
 class MockExtractingRoutineImportAiController
     extends RoutineImportAiController {
   MockExtractingRoutineImportAiController(super.ref, super.client) {
-    state = const RoutineImportAiState(
-      status: RoutineImportAiStatus.extracting,
-    );
+    state = const RoutineImportAiState.extracting();
   }
 }
 

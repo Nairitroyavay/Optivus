@@ -5,7 +5,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:optivus/config/ai_workers_config.dart';
+import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
@@ -39,6 +39,13 @@ const String _onboarding7AiFewerRoutinesMessage =
     'AI returned fewer routines than requested. Try again or choose fewer times per day.';
 const String _onboarding7PhotoUnreadableMessage =
     'AI could not read your products. Upload a clearer photo or use typed product names.';
+
+class _SkinCareResponseException implements Exception {
+  final String message;
+  const _SkinCareResponseException(this.message);
+  @override
+  String toString() => message;
+}
 
 enum _ProductInputSource { none, photo, typed }
 
@@ -1376,7 +1383,7 @@ class _HasProductsModeScreenState
   late final TextEditingController _controller;
   UploadedAsset? _uploadedAsset;
   String? _uploadError;
-  bool _generating = false;
+  late final AiGenerationController _lifecycle;
   bool _removingPhoto = false;
   bool _editingExisting = false;
   late bool _photoProductsReviewed;
@@ -1384,12 +1391,12 @@ class _HasProductsModeScreenState
   String? _generationError;
   late _ProductInputSource _inputSource;
   int _selectedDay = DateTime.now().weekday;
-  int _generationRequestId = 0;
   final int _sourceEpoch = 0;
 
   @override
   void initState() {
     super.initState();
+    _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
     _controller = TextEditingController(text: widget.base.skinCareProductNames);
     _uploadedAsset = ref
         .read(restoredUploadsProvider)
@@ -1403,8 +1410,14 @@ class _HasProductsModeScreenState
         _controller.text.trim().isNotEmpty;
   }
 
+  void _onLifecycleChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    _lifecycle.removeListener(_onLifecycleChanged);
+    _lifecycle.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -1541,7 +1554,7 @@ class _HasProductsModeScreenState
   }
 
   Future<void> _generate() async {
-    if (_generating) return;
+    if (_lifecycle.state.isActive) return;
     final uploadState = ref.read(uploadControllerProvider);
     final uploadBusy =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
@@ -1549,7 +1562,6 @@ class _HasProductsModeScreenState
         uploadState.isBusy;
     if (uploadBusy) return;
 
-    ref.read(mockOnboardingProvider.notifier).clearValidation();
     final activeSource = _inputSource;
     final asset =
         _uploadedAsset ??
@@ -1603,13 +1615,13 @@ class _HasProductsModeScreenState
       return;
     }
 
-    final currentRequestId = ++_generationRequestId;
     final currentAuthGeneration = ref.read(authGenerationProvider);
     final currentSourceEpoch = _sourceEpoch;
     final currentSource = activeSource;
+    final user = ref.read(authProvider).user;
+    final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
 
     setState(() {
-      _generating = true;
       _generationError = null;
       _uploadError = null;
     });
@@ -1617,398 +1629,302 @@ class _HasProductsModeScreenState
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
-    try {
-      if (kDebugMode) {
-        debugPrint(
-          '[Onboarding7] skinCareWorkerUrlPresent='
-          '${OptivusAiWorkersConfig.skinCareWorkerUrl.trim().isNotEmpty} '
-          'mode=${OptivusAiWorkersConfig.mode.name} '
-          'activeSource=${activeSource.name} '
-          'productPhotoPresent=${asset != null} '
-          'r2KeyPresent=${asset?.r2Key.trim().isNotEmpty == true}',
-        );
-        if (OptivusAiWorkersConfig.useWorker &&
-            OptivusAiWorkersConfig.skinCareWorkerUrl.trim().isEmpty) {
-          debugPrint(
-            '[Onboarding7] Missing OPTIVUS_SKIN_CARE_WORKER_URL for Skin Care AI.',
+    final isPhotoAnalyze =
+        _inputSource == _ProductInputSource.photo && !_photoProductsReviewed;
+    final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
+
+    final run = await _lifecycle.run<bool>(
+      operationType: isPhotoAnalyze ? 'skin-care-analyze' : 'skin-care-routine',
+      timeoutPolicy: AiOperationTimeouts.skinCare,
+      retry: isRetry,
+      preparingMessage: isPhotoAnalyze
+          ? 'Getting your photo ready…'
+          : 'Getting your skin care preferences ready…',
+      isSessionCurrent: () =>
+          mounted &&
+          ref.read(authGenerationProvider) == currentAuthGeneration &&
+          (ref.read(authProvider).user?.uid ??
+                  ref.read(mockOnboardingProvider).draft.uid) ==
+              uid &&
+          _sourceEpoch == currentSourceEpoch &&
+          _inputSource == currentSource,
+      mapError: (error) => AiGenerationError(
+        category: error is _SkinCareResponseException
+            ? AiGenerationErrorCategory.responseInvalid
+            : AiGenerationErrorCategory.serviceUnavailable,
+        message: error is _SkinCareResponseException
+            ? error.message
+            : onboarding7UnexpectedAiMessage(error),
+        canRetry: true,
+      ),
+      operation: (scope) async {
+        final idToken =
+            await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+        if (!scope.isCurrent) return false;
+        final client = ref.read(skinCareAiClientProvider);
+        final desiredApplicationsPerDay = ref
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .skinCareDesiredApplicationsPerDay;
+        final latestBase = ref.read(mockOnboardingProvider).draft.baseTimeline;
+        final skinType = latestBase.skinCareSkinType ?? 'not_sure';
+        final mainProblem = latestBase.skinCareProblems
+            .where((problem) => problem != 'none')
+            .firstOrNull;
+        final budget = latestBase.skinCareBudget ?? 'medium';
+        final routinePreference = latestBase.skinCarePreference ?? 'balanced';
+
+        if (isPhotoAnalyze) {
+          scope.transition(
+            AiGenerationPhase.analyzing,
+            message: 'Analyzing your skin care products…',
           );
-        }
-      }
-      final user = ref.read(authProvider).user;
-      final idToken =
-          await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-      final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
-      final client = ref.read(skinCareAiClientProvider);
-      final desiredApplicationsPerDay = ref
-          .read(mockOnboardingProvider)
-          .draft
-          .baseTimeline
-          .skinCareDesiredApplicationsPerDay;
-      final latestBase = ref.read(mockOnboardingProvider).draft.baseTimeline;
-      final skinType = latestBase.skinCareSkinType ?? 'not_sure';
-      final mainProblem = latestBase.skinCareProblems
-          .where((problem) => problem != 'none')
-          .firstOrNull;
-      final budget = latestBase.skinCareBudget ?? 'medium';
-      final routinePreference = latestBase.skinCarePreference ?? 'balanced';
-
-      List<SkinCareDetectedProduct> photoProductDetails = [];
-      List<String> photoProductNames = [];
-      List<SkinCareDetectedProduct> ownedProductDetails = [];
-      List<String> ownedProductNames = [];
-      Map<String, dynamic> routineParams;
-
-      if (activeSource == _ProductInputSource.photo &&
-          !_photoProductsReviewed) {
-        final analysis = await client.analyzeProducts(
-          uid: uid,
-          idToken: idToken,
-          productPhotos: [asset!.r2Key.trim()],
-        );
-        if (!mounted ||
-            ref.read(authGenerationProvider) != currentAuthGeneration ||
-            (ref.read(authProvider).user?.uid ??
-                    ref.read(mockOnboardingProvider).draft.uid) !=
-                uid ||
-            _generationRequestId != currentRequestId ||
-            _sourceEpoch != currentSourceEpoch ||
-            _inputSource != currentSource) {
-          if (kDebugMode) {
-            debugPrint(
-              '[Onboarding7] Discarding stale product analysis result.',
+          final analysis = await client.analyzeProducts(
+            uid: uid,
+            idToken: idToken,
+            productPhotos: [asset!.r2Key.trim()],
+          );
+          if (!scope.isCurrent) return false;
+          if (analysis.hasError) {
+            throw _SkinCareResponseException(
+              onboarding7FriendlyAiMessage(
+                analysis.errorMessage,
+                analysis.warnings,
+              ),
             );
           }
-          return;
-        }
-        if (kDebugMode) {
-          debugPrint(
-            '[Onboarding7] product-analysis status='
-            '${analysis.hasError ? 'error' : 'ok'} '
-            'warningCount=${analysis.warnings.length} '
-            'productCount=${analysis.products.length}',
+          final photoProductDetails = analysis.detectedProducts;
+          final photoProductNames = onboarding7ExtractPhotoProductNames(
+            analysis.products,
           );
-        }
-        if (analysis.hasError) {
-          if (!mounted) return;
-          setState(() {
-            _generating = false;
-            _generationError = onboarding7FriendlyAiMessage(
-              analysis.errorMessage,
-              analysis.warnings,
+          final hasMeaningfulPhotoProducts = photoProductDetails.any(
+            (product) => product.hasMeaningfulData,
+          );
+          if (photoProductNames.isEmpty && !hasMeaningfulPhotoProducts) {
+            throw const _SkinCareResponseException(
+              _onboarding7PhotoUnreadableMessage,
             );
-          });
-          return;
-        }
-        photoProductDetails = analysis.detectedProducts;
-        photoProductNames = onboarding7ExtractPhotoProductNames(
-          analysis.products,
-        );
-        final hasMeaningfulPhotoProducts = photoProductDetails.any(
-          (product) => product.hasMeaningfulData,
-        );
-        if (photoProductNames.isEmpty && !hasMeaningfulPhotoProducts) {
-          if (!mounted) return;
-          setState(() {
-            _generating = false;
-            _generationError = _onboarding7PhotoUnreadableMessage;
-          });
-          return;
-        }
-        final reviewText = photoProductDetails
-            .where((product) => product.hasMeaningfulData)
-            .map((product) {
-              final displayName = product.displayName.trim();
-              final name = displayName.isNotEmpty
-                  ? displayName
-                  : product.fallbackLabel.trim();
-              final category = product.category.trim();
-              return category.isEmpty ? name : '$name - $category';
-            })
-            .where((line) => line.isNotEmpty)
-            .join('\n');
-        final fallbackText = photoProductNames.join('\n');
-        _controller.text = reviewText.isNotEmpty ? reviewText : fallbackText;
-        updateBaseTimelineDraft(
-          ref,
-          onboardingSkinCareStepIndex,
-          (base) => base.copyWith(
-            skinCareProductNames: _controller.text,
-            skinCareSkipped: false,
-          ),
-        );
-        if (!mounted) return;
-        setState(() {
+          }
+          final reviewText = photoProductDetails
+              .where((product) => product.hasMeaningfulData)
+              .map((product) {
+                final displayName = product.displayName.trim();
+                final name = displayName.isNotEmpty
+                    ? displayName
+                    : product.fallbackLabel.trim();
+                final category = product.category.trim();
+                return category.isEmpty ? name : '$name - $category';
+              })
+              .where((line) => line.isNotEmpty)
+              .join('\n');
+          final fallbackText = photoProductNames.join('\n');
+          _controller.text = reviewText.isNotEmpty ? reviewText : fallbackText;
+          updateBaseTimelineDraft(
+            ref,
+            onboardingSkinCareStepIndex,
+            (base) => base.copyWith(
+              skinCareProductNames: _controller.text,
+              skinCareSkipped: false,
+            ),
+          );
           _reviewedPhotoDetails = photoProductDetails;
           _photoProductsReviewed = true;
-          _generating = false;
+          return true;
+        } else {
+          scope.transition(
+            AiGenerationPhase.generating,
+            message: 'Building your skin care routine…',
+          );
+          var typedProductDetails = onboarding7ParseTypedProductDetails(
+            _controller.text,
+          );
+          if (_inputSource == _ProductInputSource.photo &&
+              _reviewedPhotoDetails.isNotEmpty) {
+            typedProductDetails = typedProductDetails
+                .map((typed) {
+                  final typedName = typed.displayName.trim().toLowerCase();
+                  final typedCategory = typed.category.trim().toLowerCase();
+                  return _reviewedPhotoDetails.firstWhere(
+                    (detected) =>
+                        (detected.displayName.trim().toLowerCase() == typedName ||
+                            detected.fallbackLabel.trim().toLowerCase() ==
+                                typedName) &&
+                        (typedCategory.isEmpty ||
+                            detected.category.trim().toLowerCase() ==
+                                typedCategory),
+                    orElse: () => typed,
+                  );
+                })
+                .toList(growable: false);
+          }
+          final ownedProductDetails = typedProductDetails;
+          final ownedProductNames = typedProductDetails
+              .map((product) => product.displayName.trim())
+              .where((name) => name.isNotEmpty)
+              .toList(growable: false);
+          final routineParams = {
+            'productInputSource': 'typed',
+            'typedProductDetails': typedProductDetails
+                .map((product) => product.toMap())
+                .toList(),
+            'desiredApplicationsPerDay': desiredApplicationsPerDay,
+            'skinType': skinType,
+            'mainProblem': mainProblem ?? 'none',
+            'budget': budget,
+            'routinePreference': routinePreference,
+          };
+
+          var result = await client.generateRoutine(
+            uid: uid,
+            idToken: idToken,
+            params: routineParams,
+          );
+
+          var didCompactPayloadRetry = false;
+          if (result.hasError && result.errorCode == 'json_payload_too_large') {
+            didCompactPayloadRetry = true;
+            result = await client.generateRoutine(
+              uid: uid,
+              idToken: idToken,
+              params: {
+                ...routineParams,
+                'typedProductDetails': typedProductDetails
+                    .map((product) => product.toCompactRoutinePayload())
+                    .toList(),
+                'compact': true,
+              },
+            );
+          }
+          if (!scope.isCurrent) return false;
+
+          var routinePlans = result.routinePlans;
+          final isExplicitError =
+              result.errorCode == 'missing_worker_url' ||
+              result.errorMessage == 'missing_worker_url' ||
+              result.errorCode == 'client_payload_validation_error' ||
+              result.errorCode == 'too_many_photos' ||
+              (didCompactPayloadRetry &&
+                  result.errorCode == 'json_payload_too_large');
+
+          if (result.hasError && !isExplicitError) {
+            result = OfflineSkinCareRoutineGenerator.generateFallbackRoutine(
+              routineParams,
+            );
+            routinePlans = result.routinePlans;
+          }
+
+          if (result.hasError || routinePlans.isEmpty) {
+            final errMsg = routinePlans.isEmpty && !result.hasError
+                ? _onboarding7AiEmptyMessage
+                : (didCompactPayloadRetry &&
+                        result.errorCode == 'json_payload_too_large'
+                    ? onboarding7CompactPayloadFinalMessage
+                    : onboarding7FriendlyAiMessage(
+                        result.errorMessage,
+                        result.warnings,
+                      ));
+            throw _SkinCareResponseException(errMsg);
+          }
+
+          final partitioned = onboarding7PartitionRoutinePlans(routinePlans);
+          var dailyPlans = partitioned.dailyPlans.where((plan) {
+            if (plan.productNames.isEmpty && plan.missingItems.isNotEmpty) {
+              return false;
+            }
+            if (plan.productNames.isEmpty) {
+              return false;
+            }
+            return true;
+          }).toList();
+          final specialPlans = partitioned.specialCarePlans;
+
+          final specialCareNotesForResult =
+              onboarding7SpecialCareNotesFromAiResult(
+                suggestedProducts: result.suggestedProducts,
+                weeklyRoutine: result.weeklyRoutine,
+                specialCarePlans: specialPlans,
+                ownedProductNames: ownedProductNames,
+              );
+
+          if (result.warnings.any(
+            (warning) =>
+                warning.contains('ai_wrong_daily_slot_count') ||
+                warning.contains('ai_missing_required_slot:') ||
+                warning.contains('ai_extra_daily_slot_count'),
+          )) {
+            updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+              return base.copyWith(
+                skinCareProductNames: _controller.text,
+                skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+                skinCareSkipped: false,
+                skinCareSpecialCareNotes:
+                    base.blocks.any((block) => block.section == 'skin_care')
+                    ? base.skinCareSpecialCareNotes
+                    : specialCareNotesForResult,
+              );
+            });
+            throw _SkinCareResponseException(
+              onboarding7FriendlyAiMessage(null, result.warnings),
+            );
+          }
+
+          final schedule = onboarding7ScheduleSkinCareRoutine(
+            baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
+            routinePlans: dailyPlans,
+            desiredApplicationsPerDay: desiredApplicationsPerDay,
+            ownedProductNames: ownedProductNames,
+            ownedProductDetails: ownedProductDetails,
+            forceEveryDay: true,
+          );
+          if (schedule.hasError || schedule.blocks.isEmpty) {
+            updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+              return base.copyWith(
+                skinCareProductNames: _controller.text,
+                skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+                skinCareSkipped: false,
+                skinCareSpecialCareNotes:
+                    base.blocks.any((block) => block.section == 'skin_care')
+                    ? base.skinCareSpecialCareNotes
+                    : specialCareNotesForResult,
+              );
+            });
+            throw _SkinCareResponseException(
+              schedule.errorMessage ?? _onboarding7AiEmptyMessage,
+            );
+          }
+
+          updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+            final List<TimelineBlockDraft> nextBlocks =
+                base.blocks.where((b) => b.section != 'skin_care').toList()
+                  ..addAll(schedule.blocks);
+            return base.copyWith(
+              blocks: nextBlocks,
+              skinCareProductNames: _controller.text,
+              skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+              skinCareSkipped: false,
+              skinCareSpecialCareNotes: specialCareNotesForResult,
+            );
+          });
+
+          return true;
+        }
+      },
+    );
+
+    if (mounted) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setStepLoading(onboardingSkinCareStepIndex, false);
+      if (run.isSuccess) {
+        setState(() {
+          _editingExisting = false;
           _generationError = null;
         });
-        return;
-      } else {
-        typedProductDetails = onboarding7ParseTypedProductDetails(
-          _controller.text,
-        );
-        if (activeSource == _ProductInputSource.photo &&
-            _reviewedPhotoDetails.isNotEmpty) {
-          typedProductDetails = typedProductDetails
-              .map((typed) {
-                final typedName = typed.displayName.trim().toLowerCase();
-                final typedCategory = typed.category.trim().toLowerCase();
-                return _reviewedPhotoDetails.firstWhere(
-                  (detected) =>
-                      (detected.displayName.trim().toLowerCase() == typedName ||
-                          detected.fallbackLabel.trim().toLowerCase() ==
-                              typedName) &&
-                      (typedCategory.isEmpty ||
-                          detected.category.trim().toLowerCase() ==
-                              typedCategory),
-                  orElse: () => typed,
-                );
-              })
-              .toList(growable: false);
-        }
-        ownedProductDetails = typedProductDetails;
-        ownedProductNames = typedProductDetails
-            .map((product) => product.displayName.trim())
-            .where((name) => name.isNotEmpty)
-            .toList(growable: false);
-        routineParams = {
-          'productInputSource': 'typed',
-          'typedProductDetails': typedProductDetails
-              .map((product) => product.toMap())
-              .toList(),
-          'desiredApplicationsPerDay': desiredApplicationsPerDay,
-          'skinType': skinType,
-          'mainProblem': mainProblem ?? 'none',
-          'budget': budget,
-          'routinePreference': routinePreference,
-        };
-      }
-
-      if (kDebugMode) {
-        debugPrint(
-          '[Onboarding7] activeSource=${activeSource.name} '
-          'typedProductCount=${typedProductDetails.length} '
-          'photoProductCount=${photoProductDetails.length}',
-        );
-      }
-
-      var result = await client.generateRoutine(
-        uid: uid,
-        idToken: idToken,
-        params: routineParams,
-      );
-
-      var didCompactPayloadRetry = false;
-      if (result.hasError && result.errorCode == 'json_payload_too_large') {
-        didCompactPayloadRetry = true;
-        if (kDebugMode) {
-          debugPrint(
-            '[Onboarding7] Payload too large, retrying with compact payload...',
-          );
-        }
-        result = await client.generateRoutine(
-          uid: uid,
-          idToken: idToken,
-          params: {
-            ...routineParams,
-            'typedProductDetails': typedProductDetails
-                .map((product) => product.toCompactRoutinePayload())
-                .toList(),
-            'compact': true,
-          },
-        );
-      }
-
-      if (!mounted ||
-          ref.read(authGenerationProvider) != currentAuthGeneration ||
-          (ref.read(authProvider).user?.uid ??
-                  ref.read(mockOnboardingProvider).draft.uid) !=
-              uid ||
-          _generationRequestId != currentRequestId ||
-          _sourceEpoch != currentSourceEpoch ||
-          _inputSource != currentSource) {
-        if (kDebugMode) {
-          debugPrint(
-            '[Onboarding7] Discarding stale routine generation result.',
-          );
-        }
-        return;
-      }
-
-      if (kDebugMode) {
-        debugPrint(
-          '[Onboarding7] routine-generate status='
-          '${result.hasError ? 'error' : 'ok'} '
-          'warningCount=${result.warnings.length} '
-          'routinePlans=${result.routinePlans.length} '
-          'timelineBlocks=${result.timelineBlocks.length} '
-          'weeklyRoutineCount=${result.weeklyRoutine.length} '
-          'suggestedProductCount=${result.suggestedProducts.length} '
-          'rejectedPlanCount=${result.rejectedPlanReasons.length}',
-        );
-      }
-      var routinePlans = result.routinePlans;
-
-      final isExplicitError =
-          result.errorCode == 'missing_worker_url' ||
-          result.errorMessage == 'missing_worker_url' ||
-          result.errorCode == 'client_payload_validation_error' ||
-          result.errorCode == 'too_many_photos' ||
-          (didCompactPayloadRetry &&
-              result.errorCode == 'json_payload_too_large');
-
-      if (result.hasError && !isExplicitError) {
-        if (kDebugMode) {
-          debugPrint(
-            '[Onboarding7] AI routine generation unavailable; '
-            'using the offline fallback.',
-          );
-        }
-        result = OfflineSkinCareRoutineGenerator.generateFallbackRoutine(
-          routineParams,
-        );
-        routinePlans = result.routinePlans;
-      }
-
-      if (result.hasError || routinePlans.isEmpty) {
-        if (!mounted) return;
+      } else if (run.error != null) {
         setState(() {
-          _generating = false;
-          if (routinePlans.isEmpty && !result.hasError) {
-            _generationError = _onboarding7AiEmptyMessage;
-          } else {
-            _generationError =
-                didCompactPayloadRetry &&
-                    result.errorCode == 'json_payload_too_large'
-                ? onboarding7CompactPayloadFinalMessage
-                : onboarding7FriendlyAiMessage(
-                    result.errorMessage,
-                    result.warnings,
-                  );
-          }
+          _generationError = run.error!.message;
         });
-        return;
-      }
-
-      final partitioned = onboarding7PartitionRoutinePlans(routinePlans);
-      var dailyPlans = partitioned.dailyPlans.where((plan) {
-        if (plan.productNames.isEmpty && plan.missingItems.isNotEmpty) {
-          return false;
-        }
-        if (plan.productNames.isEmpty) {
-          return false;
-        }
-        return true;
-      }).toList();
-      final specialPlans = partitioned.specialCarePlans;
-
-      final specialCareNotesForResult = onboarding7SpecialCareNotesFromAiResult(
-        suggestedProducts: result.suggestedProducts,
-        weeklyRoutine: result.weeklyRoutine,
-        specialCarePlans: specialPlans,
-        ownedProductNames: ownedProductNames,
-      );
-      if (kDebugMode) {
-        debugPrint(
-          '[Onboarding7] dailyPlanPerDayCounts='
-          '${onboarding7RoutinePlanCountsByDay(dailyPlans)} '
-          'desired=$desiredApplicationsPerDay',
-        );
-      }
-
-      if (result.warnings.any(
-        (warning) =>
-            warning.contains('ai_wrong_daily_slot_count') ||
-            warning.contains('ai_missing_required_slot:') ||
-            warning.contains('ai_extra_daily_slot_count'),
-      )) {
-        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-          return base.copyWith(
-            skinCareProductNames: _controller.text,
-            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-            skinCareSkipped: false,
-            skinCareSpecialCareNotes:
-                base.blocks.any((block) => block.section == 'skin_care')
-                ? base.skinCareSpecialCareNotes
-                : specialCareNotesForResult,
-          );
-        });
-        if (!mounted) return;
-        setState(() {
-          _generating = false;
-          _generationError = onboarding7FriendlyAiMessage(
-            null,
-            result.warnings,
-          );
-        });
-        return;
-      }
-
-      final schedule = onboarding7ScheduleSkinCareRoutine(
-        baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
-        routinePlans: dailyPlans,
-        desiredApplicationsPerDay: desiredApplicationsPerDay,
-        ownedProductNames: ownedProductNames,
-        ownedProductDetails: ownedProductDetails,
-        forceEveryDay: true,
-      );
-      if (schedule.hasError || schedule.blocks.isEmpty) {
-        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-          return base.copyWith(
-            skinCareProductNames: _controller.text,
-            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-            skinCareSkipped: false,
-            skinCareSpecialCareNotes:
-                base.blocks.any((block) => block.section == 'skin_care')
-                ? base.skinCareSpecialCareNotes
-                : specialCareNotesForResult,
-          );
-        });
-        if (!mounted) return;
-        setState(() {
-          _generating = false;
-          _generationError =
-              schedule.errorMessage ?? _onboarding7AiEmptyMessage;
-        });
-        return;
-      }
-
-      updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-        final List<TimelineBlockDraft> nextBlocks =
-            base.blocks.where((b) => b.section != 'skin_care').toList()
-              ..addAll(schedule.blocks);
-        return base.copyWith(
-          blocks: nextBlocks,
-          skinCareProductNames: _controller.text,
-          skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-          skinCareSkipped: false,
-          skinCareSpecialCareNotes: specialCareNotesForResult,
-        );
-      });
-
-      if (!mounted) return;
-      setState(() {
-        _generating = false;
-        _editingExisting = false;
-        _generationError = null;
-      });
-    } catch (error) {
-      debugPrint(
-        '[Onboarding7] Product routine generation failed safely '
-        '(${error.runtimeType}).',
-      );
-      if (!mounted) return;
-      setState(() {
-        _generating = false;
-        _generationError = onboarding7UnexpectedAiMessage(error);
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _generating = false);
-        ref
-            .read(mockOnboardingProvider.notifier)
-            .setStepLoading(onboardingSkinCareStepIndex, false);
       }
     }
   }
@@ -2033,7 +1949,7 @@ class _HasProductsModeScreenState
         (uploadApplies && uploadState.status == UploadFlowStatus.failed
             ? _friendlySkinCareUploadMessage(uploadState.errorMessage)
             : null);
-    final busy = uploadBusy || _generating || _removingPhoto;
+    final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final sourceLabel =
         _inputSource == _ProductInputSource.photo && _photoProductsReviewed
         ? 'Review detected products before building'
@@ -2093,7 +2009,7 @@ class _HasProductsModeScreenState
           ? _skinCareUploadStatusLabel(uploadState.status)
           : null,
       busy: busy,
-      generating: _generating,
+      generating: _lifecycle.state.isActive,
       photoEnabled: photoUploadEnabled,
       textInputEnabled: textInputEnabled,
       photoHelper: _inputSource == _ProductInputSource.typed
@@ -2154,15 +2070,20 @@ class _HasProductsModeScreenState
     );
     final message = uploadError ?? _generationError;
 
-    if (_generating) {
+    if (_lifecycle.state.isActive) {
+      final isPhotoAnalyze =
+          _inputSource == _ProductInputSource.photo && !_photoProductsReviewed;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AiThinkingCard(
             title: 'Skin Care AI',
-            detail: 'Building your routine from product names and labels',
+            detail: isPhotoAnalyze
+                ? 'Looking for product names and active ingredients'
+                : 'Building your routine from product names and labels',
             accent: OptivusColors.roseAccent,
-            isActive: true,
+            state: _lifecycle.state,
+            onRetry: _generate,
           ),
           if (message != null) ...[
             const SizedBox(height: 10),
@@ -3062,8 +2983,7 @@ class _NoProductsModeScreen extends ConsumerStatefulWidget {
 class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   UploadedAsset? _uploadedAsset;
   String? _uploadError;
-  bool _findingProducts = false;
-  bool _generating = false;
+  late final AiGenerationController _lifecycle;
   bool _removingPhoto = false;
   int? _pendingDesiredApplicationsPerDay;
   bool _editingExisting = false;
@@ -3074,12 +2994,24 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   @override
   void initState() {
     super.initState();
+    _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
     _uploadedAsset = ref
         .read(restoredUploadsProvider)
         .forPurpose(UploadedAssetPurpose.skinCare)
         ?.asset;
     _showProductSelection =
         widget.base.skinCareProductRecommendations.isNotEmpty;
+  }
+
+  void _onLifecycleChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.removeListener(_onLifecycleChanged);
+    _lifecycle.dispose();
+    super.dispose();
   }
 
   Future<void> _startUpload() async {
@@ -3194,6 +3126,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       _removingPhoto = false;
       _uploadError = null;
       _generationError = null;
+      _showProductSelection = false;
     });
     updateBaseTimelineDraft(
       ref,
@@ -3209,7 +3142,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   }
 
   Future<void> _findProducts() async {
-    if (_findingProducts || _generating) return;
+    if (_lifecycle.state.isActive) return;
     final uploadState = ref.read(uploadControllerProvider);
     final uploadBusy =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
@@ -3250,160 +3183,181 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     }
 
     ref.read(mockOnboardingProvider.notifier).clearValidation();
+    final currentAuthGeneration = ref.read(authGenerationProvider);
+    final user = ref.read(authProvider).user;
+    final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+    final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
+
     setState(() {
-      _findingProducts = true;
       _generationError = null;
+      _uploadError = null;
     });
     ref
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
-    try {
-      final user = ref.read(authProvider).user;
-      final idToken =
-          await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-      final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
-      final client = ref.read(skinCareAiClientProvider);
-      var region = ref.read(regionSettingsProvider);
-      final detectedCountry = await ref
-          .read(deviceCountryServiceProvider)
-          .detectCountry();
-      if (detectedCountry != null &&
-          (detectedCountry.fromDeviceLocation ||
-              region.countryCode.trim().isEmpty ||
-              region.countryCode == 'ZZ')) {
-        final detectedRegion = RegionSettings.forCountry(
-          userId: uid,
-          countryCode: detectedCountry.countryCode,
-          countryName: detectedCountry.countryName,
-        ).copyWith(createdAt: region.createdAt);
-        region = detectedRegion;
-        try {
-          await ref.read(regionSettingsProvider.notifier).save(detectedRegion);
-        } catch (error) {
-          ref
-              .read(regionSettingsProvider.notifier)
-              .loadSettings(detectedRegion);
-          debugPrint(
-            '[Onboarding7] Detected region could not be persisted; '
-            'using it for this request (${error.runtimeType}).',
+    final run = await _lifecycle.run<bool>(
+      operationType: 'skin-care-find-products',
+      timeoutPolicy: AiOperationTimeouts.skinCare,
+      retry: isRetry,
+      preparingMessage: 'Getting your face photo ready…',
+      isSessionCurrent: () =>
+          mounted &&
+          ref.read(authGenerationProvider) == currentAuthGeneration &&
+          (ref.read(authProvider).user?.uid ??
+                  ref.read(mockOnboardingProvider).draft.uid) ==
+              uid,
+      mapError: (error) => AiGenerationError(
+        category: error is _SkinCareResponseException
+            ? AiGenerationErrorCategory.responseInvalid
+            : AiGenerationErrorCategory.serviceUnavailable,
+        message: error is _SkinCareResponseException
+            ? error.message
+            : onboarding7UnexpectedAiMessage(error),
+        canRetry: true,
+      ),
+      operation: (scope) async {
+        final idToken =
+            await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+        if (!scope.isCurrent) return false;
+        final client = ref.read(skinCareAiClientProvider);
+        var region = ref.read(regionSettingsProvider);
+        final detectedCountry = await ref
+            .read(deviceCountryServiceProvider)
+            .detectCountry();
+        if (detectedCountry != null &&
+            (detectedCountry.fromDeviceLocation ||
+                region.countryCode.trim().isEmpty ||
+                region.countryCode == 'ZZ')) {
+          final detectedRegion = RegionSettings.forCountry(
+            userId: uid,
+            countryCode: detectedCountry.countryCode,
+            countryName: detectedCountry.countryName,
+          ).copyWith(createdAt: region.createdAt);
+          region = detectedRegion;
+          try {
+            await ref.read(regionSettingsProvider.notifier).save(detectedRegion);
+          } catch (error) {
+            ref
+                .read(regionSettingsProvider.notifier)
+                .loadSettings(detectedRegion);
+            debugPrint(
+              '[Onboarding7] Detected region could not be persisted; '
+              'using it for this request (${error.runtimeType}).',
+            );
+          }
+        }
+        scope.transition(
+          AiGenerationPhase.analyzing,
+          message: 'Finding useful products available in ${region.countryName}…',
+        );
+
+        final result = await client.generateRoutine(
+          uid: uid,
+          idToken: idToken,
+          params: {
+            'recommendationOnly': true,
+            'skinType': currentBase.skinCareSkinType,
+            'mainProblem': currentBase.skinCareProblems.isNotEmpty
+                ? currentBase.skinCareProblems.first
+                : 'none',
+            'skinConcerns': currentBase.skinCareProblems,
+            'budget': currentBase.skinCareBudget,
+            'routinePreference': currentBase.skinCarePreference,
+            'desiredApplicationsPerDay': desiredApplicationsPerDay,
+            'facePhotoR2Key': asset.r2Key,
+            'countryCode': region.countryCode,
+            'countryName': region.countryName,
+            'currencyCode': region.currencyCode,
+          },
+        );
+        if (!scope.isCurrent) return false;
+
+        final recommendations = result.recommendedProducts.where(
+          (product) =>
+              product.name.trim().isNotEmpty &&
+              product.brand.trim().isNotEmpty &&
+              product.category.trim().isNotEmpty &&
+              product.estimatedPrice.trim().isNotEmpty &&
+              product.currencyCode.trim().isNotEmpty &&
+              product.reason.trim().isNotEmpty,
+        );
+        final deduped = <SkinCareProductRecommendation>[];
+        final seen = <String>{};
+        for (final product in recommendations) {
+          final key = product.displayName.trim().toLowerCase();
+          if (key.isNotEmpty && seen.add(key)) deduped.add(product);
+          if (deduped.length == 12) break;
+        }
+
+        final recommendationDrafts = deduped
+            .map(
+              (product) => SkinCareProductRecommendationDraft(
+                name: product.name,
+                brand: product.brand,
+                category: product.category,
+                estimatedPrice: product.estimatedPrice,
+                currencyCode: product.currencyCode,
+                reason: product.reason,
+              ),
+            )
+            .toList(growable: false);
+        final missingEssentialCategories =
+            onboarding7MissingEssentialRecommendationCategories(
+              recommendationDrafts,
+            );
+
+        if (result.hasError ||
+            deduped.isEmpty ||
+            missingEssentialCategories.isNotEmpty) {
+          throw _SkinCareResponseException(
+            !result.hasError
+                ? 'AI could not provide a complete branded cleanser, moisturizer, sunscreen, Vitamin C serum, and treatment serum set with local prices. Please try again.'
+                : onboarding7FriendlyAiMessage(
+                    result.errorCode == 'json_payload_too_large'
+                        ? 'json_payload_too_large'
+                        : result.errorMessage,
+                    result.warnings,
+                  ),
           );
         }
-      }
 
-      final result = await client.generateRoutine(
-        uid: uid,
-        idToken: idToken,
-        params: {
-          'recommendationOnly': true,
-          'skinType': currentBase.skinCareSkinType,
-          'mainProblem': currentBase.skinCareProblems.isNotEmpty
-              ? currentBase.skinCareProblems.first
-              : 'none',
-          'skinConcerns': currentBase.skinCareProblems,
-          'budget': currentBase.skinCareBudget,
-          'routinePreference': currentBase.skinCarePreference,
-          'desiredApplicationsPerDay': desiredApplicationsPerDay,
-          'facePhotoR2Key': asset.r2Key,
-          'countryCode': region.countryCode,
-          'countryName': region.countryName,
-          'currencyCode': region.currencyCode,
-        },
-      );
-
-      final recommendations = result.recommendedProducts.where(
-        (product) =>
-            product.name.trim().isNotEmpty &&
-            product.brand.trim().isNotEmpty &&
-            product.category.trim().isNotEmpty &&
-            product.estimatedPrice.trim().isNotEmpty &&
-            product.currencyCode.trim().isNotEmpty &&
-            product.reason.trim().isNotEmpty,
-      );
-      final deduped = <SkinCareProductRecommendation>[];
-      final seen = <String>{};
-      for (final product in recommendations) {
-        final key = product.displayName.trim().toLowerCase();
-        if (key.isNotEmpty && seen.add(key)) deduped.add(product);
-        if (deduped.length == 12) break;
-      }
-
-      final recommendationDrafts = deduped
-          .map(
-            (product) => SkinCareProductRecommendationDraft(
-              name: product.name,
-              brand: product.brand,
-              category: product.category,
-              estimatedPrice: product.estimatedPrice,
-              currencyCode: product.currencyCode,
-              reason: product.reason,
-            ),
-          )
-          .toList(growable: false);
-      final missingEssentialCategories =
-          onboarding7MissingEssentialRecommendationCategories(
-            recommendationDrafts,
+        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+          final hasExistingRoutine = base.blocks.any(
+            (block) => block.section == 'skin_care',
           );
-
-      if (result.hasError ||
-          deduped.isEmpty ||
-          missingEssentialCategories.isNotEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _findingProducts = false;
-          _generationError = !result.hasError
-              ? 'AI could not provide a complete branded cleanser, moisturizer, sunscreen, Vitamin C serum, and treatment serum set with local prices. Please try again.'
-              : onboarding7FriendlyAiMessage(
-                  result.errorCode == 'json_payload_too_large'
-                      ? 'json_payload_too_large'
-                      : result.errorMessage,
-                  result.warnings,
-                );
+          return base.copyWith(
+            skinCareProductRecommendations: recommendationDrafts,
+            skinCareSelectedProductNames: const [],
+            clearSkinCareSuggestedProducts: !hasExistingRoutine,
+            skinCareFacePhotoSkipped: false,
+            skinCareSkipped: false,
+          );
         });
-        return;
-      }
 
-      updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-        final hasExistingRoutine = base.blocks.any(
-          (block) => block.section == 'skin_care',
-        );
-        return base.copyWith(
-          skinCareProductRecommendations: recommendationDrafts,
-          skinCareSelectedProductNames: const [],
-          clearSkinCareSuggestedProducts: !hasExistingRoutine,
-          skinCareFacePhotoSkipped: false,
-          skinCareSkipped: false,
-        );
-      });
+        return true;
+      },
+    );
 
-      if (!mounted) return;
-      setState(() {
-        _findingProducts = false;
-        _showProductSelection = true;
-        _generationError = null;
-      });
-    } catch (error) {
-      debugPrint(
-        '[Onboarding7] Product discovery failed safely '
-        '(${error.runtimeType}).',
-      );
-      if (!mounted) return;
-      setState(() {
-        _findingProducts = false;
-        _generationError = onboarding7UnexpectedAiMessage(error);
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _findingProducts = false);
-        ref
-            .read(mockOnboardingProvider.notifier)
-            .setStepLoading(onboardingSkinCareStepIndex, false);
+    if (mounted) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setStepLoading(onboardingSkinCareStepIndex, false);
+      if (run.isSuccess) {
+        setState(() {
+          _showProductSelection = true;
+          _generationError = null;
+        });
+      } else if (run.error != null) {
+        setState(() {
+          _generationError = run.error!.message;
+        });
       }
     }
   }
 
   Future<void> _generate() async {
-    if (_generating || _findingProducts) return;
+    if (_lifecycle.state.isActive) return;
     final currentBase = ref.read(mockOnboardingProvider).draft.baseTimeline;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(
       currentBase,
@@ -3444,149 +3398,167 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     }
 
     ref.read(mockOnboardingProvider.notifier).clearValidation();
+    final currentAuthGeneration = ref.read(authGenerationProvider);
+    final user = ref.read(authProvider).user;
+    final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
+    final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
+
     setState(() {
-      _generating = true;
       _generationError = null;
+      _uploadError = null;
     });
     ref
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingSkinCareStepIndex, true);
 
-    try {
-      final user = ref.read(authProvider).user;
-      final idToken =
-          await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-      final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
-      final region = ref.read(regionSettingsProvider);
-      final selectedNames = selected
-          .map((product) => product.displayName)
-          .where((name) => name.isNotEmpty)
-          .toList(growable: false);
-      final result = await ref
-          .read(skinCareAiClientProvider)
-          .generateRoutine(
-            uid: uid,
-            idToken: idToken,
-            params: {
-              'productInputSource': 'typed',
-              'typedProductDetails': selected
-                  .map(
-                    (product) => {
-                      'name': product.name,
-                      'brand': product.brand,
-                      'category': product.category,
-                      'source': 'ai_recommended',
-                    },
-                  )
-                  .toList(growable: false),
-              'skinType': currentBase.skinCareSkinType,
-              'mainProblem': currentBase.skinCareProblems.firstOrNull ?? 'none',
-              'skinConcerns': currentBase.skinCareProblems,
-              'budget': currentBase.skinCareBudget,
-              'routinePreference': currentBase.skinCarePreference,
-              'desiredApplicationsPerDay': desiredApplicationsPerDay,
-              'facePhotoR2Key': asset.r2Key,
-              'countryCode': region.countryCode,
-              'countryName': region.countryName,
-              'currencyCode': region.currencyCode,
-            },
-          );
+    final run = await _lifecycle.run<bool>(
+      operationType: 'skin-care-routine',
+      timeoutPolicy: AiOperationTimeouts.skinCare,
+      retry: isRetry,
+      preparingMessage: 'Getting your skin care routine ready…',
+      isSessionCurrent: () =>
+          mounted &&
+          ref.read(authGenerationProvider) == currentAuthGeneration &&
+          (ref.read(authProvider).user?.uid ??
+                  ref.read(mockOnboardingProvider).draft.uid) ==
+              uid,
+      mapError: (error) => AiGenerationError(
+        category: error is _SkinCareResponseException
+            ? AiGenerationErrorCategory.responseInvalid
+            : AiGenerationErrorCategory.serviceUnavailable,
+        message: error is _SkinCareResponseException
+            ? error.message
+            : onboarding7UnexpectedAiMessage(error),
+        canRetry: true,
+      ),
+      operation: (scope) async {
+        final idToken =
+            await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+        if (!scope.isCurrent) return false;
+        final region = ref.read(regionSettingsProvider);
+        final selectedNames = selected
+            .map((product) => product.displayName)
+            .where((name) => name.isNotEmpty)
+            .toList(growable: false);
 
-      if (result.hasError || result.routinePlans.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _generating = false;
-          _generationError = result.routinePlans.isEmpty && !result.hasError
-              ? _onboarding7NoProductsAiEmptyMessage
-              : onboarding7FriendlyAiMessage(
-                  result.errorCode == 'json_payload_too_large'
-                      ? 'json_payload_too_large'
-                      : result.errorMessage,
-                  result.warnings,
-                );
-        });
-        return;
-      }
-      if (result.warnings.any(
-        (warning) =>
-            warning.contains('ai_wrong_daily_slot_count') ||
-            warning.contains('ai_missing_required_slot:') ||
-            warning.contains('ai_extra_daily_slot_count'),
-      )) {
-        if (!mounted) return;
-        setState(() {
-          _generating = false;
-          _generationError = onboarding7FriendlyAiMessage(
-            null,
-            result.warnings,
-          );
-        });
-        return;
-      }
-
-      final partitioned = onboarding7PartitionRoutinePlans(result.routinePlans);
-      final schedule = onboarding7ScheduleSkinCareRoutine(
-        baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
-        routinePlans: partitioned.dailyPlans,
-        desiredApplicationsPerDay: desiredApplicationsPerDay,
-        ownedProductNames: selectedNames,
-        forceEveryDay: true,
-      );
-      if (schedule.hasError || schedule.blocks.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _generating = false;
-          _generationError =
-              schedule.errorMessage ?? _onboarding7NoProductsAiEmptyMessage;
-        });
-        return;
-      }
-
-      final specialCareNotes = onboarding7SpecialCareNotesFromAiResult(
-        suggestedProducts: result.suggestedProducts,
-        weeklyRoutine: result.weeklyRoutine,
-        specialCarePlans: partitioned.specialCarePlans,
-        ownedProductNames: selectedNames,
-      );
-      updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-        final nextBlocks =
-            base.blocks.where((block) => block.section != 'skin_care').toList()
-              ..addAll(schedule.blocks);
-        return base.copyWith(
-          blocks: nextBlocks,
-          skinCareProductNames: selectedNames.join('\n'),
-          skinCareSpecialCareNotes: specialCareNotes,
-          skinCareSuggestedProducts: selectedNames,
-          skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-          skinCareFacePhotoSkipped: false,
-          skinCareSkipped: false,
+        scope.transition(
+          AiGenerationPhase.generating,
+          message: 'Building your skin care routine…',
         );
-      });
 
-      if (!mounted) return;
-      setState(() {
-        _generating = false;
-        _editingExisting = false;
-        _showProductSelection = false;
-        _pendingDesiredApplicationsPerDay = null;
-        _generationError = null;
-      });
-    } catch (error) {
-      debugPrint(
-        '[Onboarding7] Selected-product routine generation failed safely '
-        '(${error.runtimeType}).',
-      );
-      if (!mounted) return;
-      setState(() {
-        _generating = false;
-        _generationError = onboarding7UnexpectedAiMessage(error);
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _generating = false);
-        ref
-            .read(mockOnboardingProvider.notifier)
-            .setStepLoading(onboardingSkinCareStepIndex, false);
+        final result = await ref
+            .read(skinCareAiClientProvider)
+            .generateRoutine(
+              uid: uid,
+              idToken: idToken,
+              params: {
+                'productInputSource': 'typed',
+                'typedProductDetails': selected
+                    .map(
+                      (product) => {
+                        'name': product.name,
+                        'brand': product.brand,
+                        'category': product.category,
+                        'source': 'ai_recommended',
+                      },
+                    )
+                    .toList(growable: false),
+                'skinType': currentBase.skinCareSkinType,
+                'mainProblem':
+                    currentBase.skinCareProblems.firstOrNull ?? 'none',
+                'skinConcerns': currentBase.skinCareProblems,
+                'budget': currentBase.skinCareBudget,
+                'routinePreference': currentBase.skinCarePreference,
+                'desiredApplicationsPerDay': desiredApplicationsPerDay,
+                'facePhotoR2Key': asset.r2Key,
+                'countryCode': region.countryCode,
+                'countryName': region.countryName,
+                'currencyCode': region.currencyCode,
+              },
+            );
+        if (!scope.isCurrent) return false;
+
+        if (result.hasError || result.routinePlans.isEmpty) {
+          throw _SkinCareResponseException(
+            result.routinePlans.isEmpty && !result.hasError
+                ? _onboarding7NoProductsAiEmptyMessage
+                : onboarding7FriendlyAiMessage(
+                    result.errorCode == 'json_payload_too_large'
+                        ? 'json_payload_too_large'
+                        : result.errorMessage,
+                    result.warnings,
+                  ),
+          );
+        }
+        if (result.warnings.any(
+          (warning) =>
+              warning.contains('ai_wrong_daily_slot_count') ||
+              warning.contains('ai_missing_required_slot:') ||
+              warning.contains('ai_extra_daily_slot_count'),
+        )) {
+          throw _SkinCareResponseException(
+            onboarding7FriendlyAiMessage(null, result.warnings),
+          );
+        }
+
+        final partitioned = onboarding7PartitionRoutinePlans(
+          result.routinePlans,
+        );
+        final schedule = onboarding7ScheduleSkinCareRoutine(
+          baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
+          routinePlans: partitioned.dailyPlans,
+          desiredApplicationsPerDay: desiredApplicationsPerDay,
+          ownedProductNames: selectedNames,
+          forceEveryDay: true,
+        );
+        if (schedule.hasError || schedule.blocks.isEmpty) {
+          throw _SkinCareResponseException(
+            schedule.errorMessage ?? _onboarding7NoProductsAiEmptyMessage,
+          );
+        }
+
+        final specialCareNotes = onboarding7SpecialCareNotesFromAiResult(
+          suggestedProducts: result.suggestedProducts,
+          weeklyRoutine: result.weeklyRoutine,
+          specialCarePlans: partitioned.specialCarePlans,
+          ownedProductNames: selectedNames,
+        );
+        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+          final nextBlocks =
+              base.blocks
+                  .where((block) => block.section != 'skin_care')
+                  .toList()
+                ..addAll(schedule.blocks);
+          return base.copyWith(
+            blocks: nextBlocks,
+            skinCareProductNames: selectedNames.join('\n'),
+            skinCareSpecialCareNotes: specialCareNotes,
+            skinCareSuggestedProducts: selectedNames,
+            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+            skinCareFacePhotoSkipped: false,
+            skinCareSkipped: false,
+          );
+        });
+
+        return true;
+      },
+    );
+
+    if (mounted) {
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .setStepLoading(onboardingSkinCareStepIndex, false);
+      if (run.isSuccess) {
+        setState(() {
+          _editingExisting = false;
+          _showProductSelection = false;
+          _pendingDesiredApplicationsPerDay = null;
+          _generationError = null;
+        });
+      } else if (run.error != null) {
+        setState(() {
+          _generationError = run.error!.message;
+        });
       }
     }
   }
@@ -3694,7 +3666,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         uploadState.purpose == UploadedAssetPurpose.skinCare;
     final uploadBusy = uploadApplies && uploadState.isBusy;
     final busy =
-        uploadBusy || _findingProducts || _generating || _removingPhoto;
+        uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final uploadError =
         _uploadError ??
         (uploadApplies && uploadState.status == UploadFlowStatus.failed
@@ -3710,34 +3682,22 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final region = ref.watch(regionSettingsProvider);
     final desiredApplicationsPerDay = _effectiveDesiredApplications(base);
 
-    if (_findingProducts) {
+    if (_lifecycle.state.isActive) {
+      final isFindProducts =
+          _lifecycle.state.operationId?.contains('find-products') ?? false;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           AiThinkingCard(
             title: 'Skin Care AI',
-            detail:
-                'Finding useful products available in ${region.countryName}',
-            accent: OptivusColors.purpleAccent,
-            isActive: true,
-          ),
-          if (message != null) ...[
-            const SizedBox(height: 10),
-            _SkinCareInlineMessage(message: message),
-          ],
-        ],
-      );
-    }
-
-    if (_generating) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AiThinkingCard(
-            title: 'Skin Care AI',
-            detail: 'Building your routine from product names and labels',
-            accent: OptivusColors.roseAccent,
-            isActive: true,
+            detail: isFindProducts
+                ? 'Finding useful products available in ${region.countryName}'
+                : 'Building your routine from product names and labels',
+            accent: isFindProducts
+                ? OptivusColors.purpleAccent
+                : OptivusColors.roseAccent,
+            state: _lifecycle.state,
+            onRetry: isFindProducts ? _findProducts : _generate,
           ),
           if (message != null) ...[
             const SizedBox(height: 10),

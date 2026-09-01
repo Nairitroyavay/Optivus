@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/ai_workers_config.dart';
+import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
@@ -40,8 +41,27 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   String? _uploadError;
   String? _generationError;
   String? _createError;
-  bool _creatingRoutine = false;
+  late final AiGenerationController _createLifecycle;
   bool _editingGeneratedRoutine = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _createLifecycle = AiGenerationController()
+      ..addListener(_onCreateLifecycleChanged);
+  }
+
+  void _onCreateLifecycleChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _createLifecycle
+      ..removeListener(_onCreateLifecycleChanged)
+      ..dispose();
+    super.dispose();
+  }
 
   bool _isCurrentSession(String uid, int authGeneration) {
     final currentUid =
@@ -59,9 +79,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final path = base.eatingSetupPath;
     final eatingBlocks = base.confirmedBlocksForSection('eating');
     final isChoice = base.eatingSetupStep == 0;
-    final restoredEntry = ref.watch(restoredUploadsProvider).forPurpose(
-      UploadedAssetPurpose.eatingMenu,
-    );
+    final restoredEntry = ref
+        .watch(restoredUploadsProvider)
+        .forPurpose(UploadedAssetPurpose.eatingMenu);
     final effectiveAsset = _uploadedAsset ?? restoredEntry?.asset;
 
     if (isChoice) {
@@ -99,7 +119,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
               selectedDay: _selectedDay,
               blocks: generatedBlocks,
               error: _createError,
-              isGenerating: _creatingRoutine,
+              lifecycle: _createLifecycle.state,
               editing: _editingGeneratedRoutine,
               onGenerate: _generateCreatedRoutine,
               onEdit: () {
@@ -159,16 +179,16 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           .read(uploadControllerProvider.notifier)
           .markDeleted(uid: uid, assetId: asset.assetId);
       if (!mounted) return;
-      if (ref.read(uploadControllerProvider).status == UploadFlowStatus.failed) {
+      if (ref.read(uploadControllerProvider).status ==
+          UploadFlowStatus.failed) {
         setState(() {
           _uploadError = "Couldn't remove the photo. Try again.";
         });
         return;
       }
-      ref.read(restoredUploadsProvider.notifier).removePurpose(
-        uid: uid,
-        purpose: UploadedAssetPurpose.eatingMenu,
-      );
+      ref
+          .read(restoredUploadsProvider.notifier)
+          .removePurpose(uid: uid, purpose: UploadedAssetPurpose.eatingMenu);
     }
     setState(() {
       _uploadedAsset = null;
@@ -295,129 +315,125 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   }
 
   Future<void> _generateCreatedRoutine() async {
-    if (_creatingRoutine) return;
-    setState(() {
-      _creatingRoutine = true;
-      _createError = null;
-    });
+    if (_createLifecycle.state.isActive) return;
     ref.read(mockOnboardingProvider.notifier).clearValidation();
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final base = draft.baseTimeline;
+    final bodyContext = onboarding5MealBodyContextFromDraft(draft);
+    if (!bodyContext.hasBodyBasics) {
+      setState(() {
+        _createError =
+            'Complete Body Basics with your height and weight before generating a meal routine.';
+      });
+      return;
+    }
+    final uid = ref.read(authProvider).user?.uid ?? draft.uid;
+    final authGeneration = ref.read(authGenerationProvider);
+    final isRetry = _createLifecycle.state.phase == AiGenerationPhase.error;
+    setState(() => _createError = null);
     ref
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingEatingStepIndex, true);
 
-    try {
-      final draft = ref.read(mockOnboardingProvider).draft;
-      final base = draft.baseTimeline;
-      final bodyContext = onboarding5MealBodyContextFromDraft(draft);
-      debugPrint(
-        '[Onboarding5] GENERATE source=create '
-        'hasBodyBasics=${bodyContext.hasBodyBasics}',
-      );
-      if (!bodyContext.hasBodyBasics) {
-        setState(() {
-          _createError =
-              'Complete Body Basics with your height and weight before generating a meal routine.';
-        });
-        return;
-      }
-      final uid = ref.read(authProvider).user?.uid ?? draft.uid;
-      final authGeneration = ref.read(authGenerationProvider);
-      final idToken =
-          await ref.read(authRepositoryProvider).currentIdToken() ?? '';
-      if (!_isCurrentSession(uid, authGeneration)) return;
-      final nutritionClient = ref.read(nutritionAiClientProvider);
-      final result = await nutritionClient.generateEatingRoutine(
-        uid: uid,
-        idToken: idToken,
-        params: {
-          'bodyGoal': bodyContext.bodyGoal,
-          'eatingMode': base.eatingMode,
-          'foodType': base.foodType,
-          'foodStyleCustomText': base.foodStyleCustomText,
-          'mealsPerDay': base.mealsPerDay,
-          'targetCalories': bodyContext.targetCalories,
-          'proteinTarget': bodyContext.proteinTarget,
-          'estimatedBmr': bodyContext.estimatedBmr,
-          'breakfastMinute': base.breakfastMinute,
-          'lunchMinute': base.lunchMinute,
-          'dinnerMinute': base.dinnerMinute,
-          'snackMinute': base.snackMinute,
-          'extraSnackMinute': base.extraSnackMinute,
-          'mealTimes': bodyContext.mealTimes,
-          'heightCm': bodyContext.heightCm,
-          'weightKg': bodyContext.currentWeightKg,
-          'age': bodyContext.age,
-          'gender': bodyContext.gender,
-          'bmi': bodyContext.bmi,
-          'estimatedMaintenanceCalories':
-              bodyContext.estimatedMaintenanceCalories,
-          'targetMode': bodyContext.targetMode,
-          'lifestyle': bodyContext.lifestyle,
-          'country': bodyContext.country,
-        },
-      );
+    final run = await _createLifecycle.run<List<TimelineBlockDraft>>(
+      operationType: 'nutrition-routine',
+      timeoutPolicy: AiOperationTimeouts.nutrition,
+      retry: isRetry,
+      preparingMessage: 'Getting your meal preferences ready…',
+      isSessionCurrent: () => _isCurrentSession(uid, authGeneration),
+      mapError: (error) => AiGenerationError(
+        category: error is _Onboarding5ResponseException
+            ? AiGenerationErrorCategory.responseInvalid
+            : AiGenerationErrorCategory.serviceUnavailable,
+        message: error is _Onboarding5ResponseException
+            ? error.message
+            : 'AI is temporarily unavailable. Try again.',
+        canRetry: true,
+      ),
+      operation: (scope) async {
+        debugPrint(
+          '[Onboarding5] GENERATE source=create '
+          'hasBodyBasics=${bodyContext.hasBodyBasics}',
+        );
+        final idToken =
+            await ref.read(authRepositoryProvider).currentIdToken() ?? '';
+        if (!scope.isCurrent) throw const _Onboarding5StaleOperation();
+        scope.transition(
+          AiGenerationPhase.generating,
+          message: 'Building your eating plan…',
+        );
+        final nutritionClient = ref.read(nutritionAiClientProvider);
+        final result = await nutritionClient.generateEatingRoutine(
+          uid: uid,
+          idToken: idToken,
+          params: {
+            'bodyGoal': bodyContext.bodyGoal,
+            'eatingMode': base.eatingMode,
+            'foodType': base.foodType,
+            'foodStyleCustomText': base.foodStyleCustomText,
+            'mealsPerDay': base.mealsPerDay,
+            'targetCalories': bodyContext.targetCalories,
+            'proteinTarget': bodyContext.proteinTarget,
+            'estimatedBmr': bodyContext.estimatedBmr,
+            'breakfastMinute': base.breakfastMinute,
+            'lunchMinute': base.lunchMinute,
+            'dinnerMinute': base.dinnerMinute,
+            'snackMinute': base.snackMinute,
+            'extraSnackMinute': base.extraSnackMinute,
+            'mealTimes': bodyContext.mealTimes,
+            'heightCm': bodyContext.heightCm,
+            'weightKg': bodyContext.currentWeightKg,
+            'age': bodyContext.age,
+            'gender': bodyContext.gender,
+            'bmi': bodyContext.bmi,
+            'estimatedMaintenanceCalories':
+                bodyContext.estimatedMaintenanceCalories,
+            'targetMode': bodyContext.targetMode,
+            'lifestyle': bodyContext.lifestyle,
+            'country': bodyContext.country,
+          },
+        );
 
-      if (!_isCurrentSession(uid, authGeneration)) return;
-
-      if (result.id.trim().isEmpty ||
-          result.uid != uid ||
-          result.candidates.isEmpty) {
-        setState(() {
-          _creatingRoutine = false;
-          _createError = onboarding5FriendlyAiMessage(
-            null,
-            result.warnings.isNotEmpty
-                ? result.warnings
-                : ['no_blocks_generated'],
+        if (result.id.trim().isEmpty ||
+            result.uid != uid ||
+            result.candidates.isEmpty) {
+          throw _Onboarding5ResponseException(
+            onboarding5FriendlyAiMessage(
+              null,
+              result.warnings.isNotEmpty
+                  ? result.warnings
+                  : ['no_blocks_generated'],
+            ),
           );
-        });
-        return;
-      }
+        }
 
-      final mapped = mapOnboarding5MealCandidates(
-        result.candidates,
-        now: DateTime.now(),
-        source: onboardingEatingGeneratedSource,
-        baseTimeline: draft.baseTimeline,
-      );
-      final blocks = mapped.blocks;
+        final mapped = mapOnboarding5MealCandidates(
+          result.candidates,
+          now: DateTime.now(),
+          source: onboardingEatingGeneratedSource,
+          baseTimeline: draft.baseTimeline,
+        );
+        final blocks = mapped.blocks;
 
-      if (blocks.isEmpty) {
-        setState(() {
-          _creatingRoutine = false;
-          _createError = mapped.droppedNoDishes > 0
-              ? 'AI did not return specific dishes. Please try again.'
-              : 'Generated routine was invalid. Please try again.';
-        });
-        return;
-      }
-
-      _replaceEatingBlocks(blocks);
-      setState(() {
-        _creatingRoutine = false;
-        _editingGeneratedRoutine = false;
-      });
-    } on MissingConfigException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _creatingRoutine = false;
-        _createError = onboarding5FriendlyAiMessage(e.message, const []);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _creatingRoutine = false;
-        _createError = onboarding5FriendlyAiMessage(null, [
-          'provider_unavailable',
-        ]);
-      });
-    } finally {
-      if (mounted) {
-        setState(() => _creatingRoutine = false);
-        ref
-            .read(mockOnboardingProvider.notifier)
-            .setStepLoading(onboardingEatingStepIndex, false);
-      }
+        if (blocks.isEmpty) {
+          throw _Onboarding5ResponseException(
+            mapped.droppedNoDishes > 0
+                ? 'AI did not return specific dishes. Please try again.'
+                : 'Generated routine was invalid. Please try again.',
+          );
+        }
+        return blocks;
+      },
+    );
+    if (!mounted) return;
+    ref
+        .read(mockOnboardingProvider.notifier)
+        .setStepLoading(onboardingEatingStepIndex, false);
+    if (run.isSuccess) {
+      _replaceEatingBlocks(run.value!);
+      setState(() => _editingGeneratedRoutine = false);
+    } else if (run.error != null) {
+      setState(() => _createError = run.error!.message);
     }
   }
 
@@ -660,17 +676,21 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
               : onGenerate,
         ),
 
-        if (generating) ...[
+        if (generating ||
+            aiState.lifecycle.phase == AiGenerationPhase.error) ...[
           const SizedBox(height: 14),
           AiThinkingCard(
+            state: aiState.lifecycle,
             title: 'AI is reading your meal photo',
             detail: 'Looking for dishes, portions, and meal timing',
             accent: OptivusColors.roseAccent,
-            isActive: generating,
+            onRetry: onGenerate,
           ),
         ],
 
-        if (uploadError != null || generationError != null) ...[
+        if (uploadError != null ||
+            (generationError != null &&
+                aiState.lifecycle.phase != AiGenerationPhase.error)) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: uploadError ?? generationError!),
         ],
@@ -691,7 +711,7 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
   final int selectedDay;
   final List<TimelineBlockDraft> blocks;
   final String? error;
-  final bool isGenerating;
+  final AiGenerationState lifecycle;
   final bool editing;
   final VoidCallback onGenerate;
   final VoidCallback onEdit;
@@ -702,7 +722,7 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
     required this.selectedDay,
     required this.blocks,
     required this.error,
-    required this.isGenerating,
+    required this.lifecycle,
     required this.editing,
     required this.onGenerate,
     required this.onEdit,
@@ -716,6 +736,7 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
     final bodyGoal = onboarding5BodyGoalForBase(base, draft);
     final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
     final generated = blocks.isNotEmpty && !editing;
+    final isGenerating = lifecycle.isActive;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -852,13 +873,15 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
                       isGenerating: isGenerating,
                       onTap: onGenerate,
                     ),
-                    if (isGenerating) ...[
+                    if (isGenerating ||
+                        lifecycle.phase == AiGenerationPhase.error) ...[
                       const SizedBox(height: 14),
                       AiThinkingCard(
+                        state: lifecycle,
                         title: 'AI is creating your weekly meal plan',
                         detail: 'Planning meals around your daily routine',
                         accent: OptivusColors.roseAccent,
-                        isActive: isGenerating,
+                        onRetry: onGenerate,
                       ),
                     ],
                   ],
@@ -866,7 +889,7 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
               ),
             ),
           ),
-        if (error != null) ...[
+        if (error != null && lifecycle.phase != AiGenerationPhase.error) ...[
           const SizedBox(height: 8),
           _EatingInlineMessage(message: error!),
         ],
@@ -1042,9 +1065,9 @@ class _EatingPhotoTarget extends ConsumerWidget {
     final preview = asset == null
         ? null
         : usableUploadedAssetLocalPreviewPath(asset!);
-    final restored = ref.watch(restoredUploadsProvider).forPurpose(
-      UploadedAssetPurpose.eatingMenu,
-    );
+    final restored = ref
+        .watch(restoredUploadsProvider)
+        .forPurpose(UploadedAssetPurpose.eatingMenu);
     final remotePreview = restored?.asset.assetId == asset?.assetId
         ? restored?.previewUri
         : null;
@@ -1074,9 +1097,8 @@ class _EatingPhotoTarget extends ConsumerWidget {
                   ? Image.network(
                       remotePreview.toString(),
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => _fallback(
-                        UploadedAssetPreviewStatus.unavailable,
-                      ),
+                      errorBuilder: (_, _, _) =>
+                          _fallback(UploadedAssetPreviewStatus.unavailable),
                     )
                   : _fallback(previewStatus),
             ),
@@ -1166,16 +1188,11 @@ class _EatingGenerateButton extends StatelessWidget {
                   ]
                 : null,
           ),
-          child: busy
-              ? const Padding(
-                  padding: EdgeInsets.all(15),
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(
-                  Icons.arrow_forward_rounded,
-                  color: enabled ? Colors.white : OptivusColors.textSecondary,
-                  size: 24,
-                ),
+          child: Icon(
+            Icons.arrow_forward_rounded,
+            color: enabled ? Colors.white : OptivusColors.textSecondary,
+            size: 24,
+          ),
         ),
       ),
     );
@@ -1480,17 +1497,7 @@ class _EatingGenerateRoutineButton extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (isGenerating)
-              const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            else
-              const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+            const Icon(Icons.auto_awesome_rounded, color: Colors.white),
             const SizedBox(width: 8),
             const Text(
               'Generate meal routine',
@@ -1505,6 +1512,15 @@ class _EatingGenerateRoutineButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _Onboarding5ResponseException implements Exception {
+  final String message;
+  const _Onboarding5ResponseException(this.message);
+}
+
+class _Onboarding5StaleOperation implements Exception {
+  const _Onboarding5StaleOperation();
 }
 
 class _EatingTimelineSection extends StatelessWidget {
