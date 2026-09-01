@@ -27,6 +27,17 @@ import 'package:optivus/services/completion_terminalization_proof.dart';
 
 typedef Reader = T Function<T>(ProviderListenable<T> provider);
 
+/// Injectable persistence used by non-Firestore environments.
+///
+/// Tests may retain this store while destroying and recreating completion
+/// services to model a cold process restart against the same durable backend.
+/// Production Firebase execution continues to use Firestore exclusively.
+class OnboardingCompletionMemoryStore {
+  final Map<String, OnboardingCompletionJob> jobs = {};
+  final Map<String, String> currentRunIds = {};
+  final Map<String, String> currentRunStatuses = {};
+}
+
 /// Read-only view of the durable `currentRun` pointer and its referenced job.
 ///
 /// Keeping pointer existence separate from [job] lets session reconstruction
@@ -86,9 +97,7 @@ class OnboardingCompletionJobService {
   final bool requirePersistentJobs;
   final bool requireFrontendHydration;
   final bool requireRoutineVerification;
-  final Map<String, OnboardingCompletionJob> _memoryJobs = {};
-  final Map<String, String> _memoryCurrentRunIds = {};
-  final Map<String, String> _memoryCurrentRunStatuses = {};
+  final OnboardingCompletionMemoryStore _memoryStore;
 
   final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
   final Map<String, int> _operationGenerationByOwner = {};
@@ -116,8 +125,10 @@ class OnboardingCompletionJobService {
     this.requirePersistentJobs = false,
     this.requireFrontendHydration = false,
     this.requireRoutineVerification = false,
+    OnboardingCompletionMemoryStore? memoryStore,
     SystemWakeLock? wakeLock,
-  }) : wakeLock = wakeLock ?? DefaultSystemWakeLock();
+  }) : _memoryStore = memoryStore ?? OnboardingCompletionMemoryStore(),
+       wakeLock = wakeLock ?? DefaultSystemWakeLock();
 
   Future<OnboardingCompletionJob> runCompletionJob({
     required String uid,
@@ -804,9 +815,9 @@ class OnboardingCompletionJobService {
         updatedAt: now,
       );
       await profileRepository.saveUserProfile(completedProfile);
-      _memoryJobs['$uid:$expectedRunId'] = completedJob;
-      _memoryCurrentRunIds[uid] = expectedRunId;
-      _memoryCurrentRunStatuses[uid] = 'completed';
+      _memoryStore.jobs['$uid:$expectedRunId'] = completedJob;
+      _memoryStore.currentRunIds[uid] = expectedRunId;
+      _memoryStore.currentRunStatuses[uid] = 'completed';
       return completedJob;
     }
 
@@ -1233,17 +1244,17 @@ class OnboardingCompletionJobService {
         job: legacyJob,
       );
     }
-    final runId = _memoryCurrentRunIds[uid];
+    final runId = _memoryStore.currentRunIds[uid];
     if (runId == null) return const OnboardingCurrentRunSnapshot.none();
     return OnboardingCurrentRunSnapshot(
       hasPointer: true,
       runId: runId,
       ownerUid: uid,
       pointerSchemaVersion: 1,
-      pointerStatus: _memoryCurrentRunStatuses[uid] ?? 'active',
-      sourceFingerprint: _memoryJobs['$uid:$runId']?.sourceFingerprint,
-      draftRevision: _memoryJobs['$uid:$runId']?.draftRevision,
-      job: _memoryJobs['$uid:$runId'],
+      pointerStatus: _memoryStore.currentRunStatuses[uid] ?? 'active',
+      sourceFingerprint: _memoryStore.jobs['$uid:$runId']?.sourceFingerprint,
+      draftRevision: _memoryStore.jobs['$uid:$runId']?.draftRevision,
+      job: _memoryStore.jobs['$uid:$runId'],
     );
   }
 
@@ -1263,7 +1274,7 @@ class OnboardingCompletionJobService {
         'Firebase onboarding completion requires persistent job storage.',
       );
     }
-    return _memoryJobs['$uid:$runId'];
+    return _memoryStore.jobs['$uid:$runId'];
   }
 
   Future<void> _saveJobStatus(
@@ -1294,10 +1305,10 @@ class OnboardingCompletionJobService {
         'Firebase onboarding completion requires persistent job storage.',
       );
     }
-    _memoryJobs['${job.uid}:${job.jobId}'] = job;
+    _memoryStore.jobs['${job.uid}:${job.jobId}'] = job;
     if (activate) {
-      _memoryCurrentRunIds[job.uid] = job.jobId;
-      _memoryCurrentRunStatuses[job.uid] = 'active';
+      _memoryStore.currentRunIds[job.uid] = job.jobId;
+      _memoryStore.currentRunStatuses[job.uid] = 'active';
     }
   }
 
