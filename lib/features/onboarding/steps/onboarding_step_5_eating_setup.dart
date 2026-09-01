@@ -10,8 +10,8 @@ import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
+import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -88,9 +88,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       return Padding(
         padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.only(
-            bottom: OnboardingStepShell.bottomCtaHeight + 38,
-          ),
+          padding: const EdgeInsets.only(bottom: 38),
           child: const _EatingChoiceScreen(),
         ),
       );
@@ -1523,7 +1521,7 @@ class _Onboarding5StaleOperation implements Exception {
   const _Onboarding5StaleOperation();
 }
 
-class _EatingTimelineSection extends StatelessWidget {
+class _EatingTimelineSection extends ConsumerWidget {
   final int selectedDay;
   final List<TimelineBlockDraft> blocks;
   final ValueChanged<int> onDayChanged;
@@ -1537,34 +1535,54 @@ class _EatingTimelineSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final dayBlocks =
-        blocks
-            .where((block) => block.repeatDays.contains(selectedDay))
-            .toList(growable: false)
-          ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
+  Widget build(BuildContext context, WidgetRef ref) {
+    const adapter = MealTimelineAdapter();
+    final entries = [for (final block in blocks) ...adapter.toEntries(block)];
+
+    Future<void> openMealEditor(TimelineBlockDraft block) {
+      return MealTimelineAdapter.showMealEditSheet(
+        context: context,
+        block: block,
+        onSave: (updated) async {
+          updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
+            return base.copyWith(
+              blocks: [
+                for (final item in base.blocks)
+                  if (item.id == block.id) updated else item,
+              ],
+            );
+          });
+          return true;
+        },
+      );
+    }
 
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Set Your Weekly Meal',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 7),
-          OnboardingDayChips(selectedDay: selectedDay, onChanged: onDayChanged),
-          const SizedBox(height: 8),
-          Expanded(
-            child: dayBlocks.isEmpty
-                ? OnboardingTimelineEmptyCard(label: emptyLabel)
-                : OnboardingVerticalTimeline(
-                    blocks: dayBlocks,
-                    blockBuilder: (context, block) =>
-                        _EatingTimelineBlock(block: block),
-                  ),
-          ),
-        ],
+      child: FullScreenTimelineScaffold(
+        key: const ValueKey('onboarding-step5-full-screen-timeline'),
+        entries: entries,
+        selectedDay: selectedDay,
+        onDayChanged: onDayChanged,
+        title: 'Set Your Weekly Meal',
+        emptyDayMessage: emptyLabel,
+        accent: OptivusColors.roseAccent,
+        styleBuilder: adapter.styleForEntry,
+        blockBuilder: (context, positioned) {
+          final block = blocks
+              .where((candidate) => candidate.id == positioned.entry.sourceId)
+              .first;
+          return _EatingTimelineBlock(
+            block: block,
+            onEditRequested: () => openMealEditor(block),
+          );
+        },
+        onEntryTapped: (entry) {
+          final block = blocks
+              .where((candidate) => candidate.id == entry.sourceId)
+              .firstOrNull;
+          if (block == null) return;
+          openMealEditor(block);
+        },
       ),
     );
   }
@@ -1663,10 +1681,15 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
   );
 }
 
+// ignore: unused_element
 class _EatingTimelineBlock extends StatelessWidget {
   final TimelineBlockDraft block;
+  final VoidCallback onEditRequested;
 
-  const _EatingTimelineBlock({required this.block});
+  const _EatingTimelineBlock({
+    required this.block,
+    required this.onEditRequested,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1721,15 +1744,37 @@ class _EatingTimelineBlock extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _mealTitleForDisplay(block),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w900,
-                            color: OptivusColors.ink,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _mealTitleForDisplay(block),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: OptivusColors.ink,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: IconButton(
+                                key: ValueKey(
+                                  'onboarding-step5-edit-${block.id}',
+                                ),
+                                tooltip: 'Edit meal',
+                                padding: EdgeInsets.zero,
+                                onPressed: onEditRequested,
+                                icon: const Icon(
+                                  Icons.more_horiz_rounded,
+                                  size: 19,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 5),
                         Expanded(

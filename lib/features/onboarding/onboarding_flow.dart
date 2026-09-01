@@ -28,6 +28,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
 
 // ── Main Onboarding Flow Wizard ──────────────────────────────────────────────
@@ -298,7 +299,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   // Next step trigger action — with double-tap prevention
-  void _onNextPressed() async {
+  Future<void> _onNextPressed() async {
     if (_isNavigating) return; // Prevent double tap
 
     final readiness = _readStepReadiness(_currentPage);
@@ -895,7 +896,21 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             : null,
         onDotTap: _onDotTapped,
         onIndicatorDraggedTo: _onIndicatorDraggedTo,
-        onNext: _onNextPressed,
+        actions: [
+          OnboardingAction(
+            kind: _currentPage == OnboardingDraft.lastStepIndex
+                ? OnboardingActionKind.enterOptivus
+                : OnboardingActionKind.next,
+            label: ctaLabel,
+            semanticLabel: ctaLabel,
+            onPressed: _onNextPressed,
+            visible: showPrimaryCta,
+            enabled: ctaEnabled,
+            operationState: _isNavigating
+                ? OnboardingActionOperationState.active
+                : OnboardingActionOperationState.idle,
+          ),
+        ],
         onSave: null,
         showSave: showSave,
         isSaving: onboardingState.stepLoading[_currentPage] || _isSaving,

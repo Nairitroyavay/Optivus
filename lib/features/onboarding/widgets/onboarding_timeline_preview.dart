@@ -2,14 +2,11 @@ import 'dart:ui';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:optivus/core/timeline/timeline_visual_layout.dart';
-import 'package:optivus/core/timeline/timeline_visual_models.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
+import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 
 class OnboardingDayChips extends StatelessWidget {
@@ -24,7 +21,9 @@ class OnboardingDayChips extends StatelessWidget {
     this.accent = OptivusColors.roseAccent,
   });
 
+  // ignore: unused_field
   static const _labels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  // ignore: unused_field
   static const _fullDayNames = [
     'Monday',
     'Tuesday',
@@ -37,55 +36,16 @@ class OnboardingDayChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 42,
-      child: Row(
-        children: [
-          for (var index = 0; index < _labels.length; index++)
-            Expanded(
-              child: Semantics(
-                excludeSemantics: true,
-                button: true,
-                selected: selectedDay == index + 1,
-                label: _fullDayNames[index],
-                hint: selectedDay == index + 1
-                    ? 'Currently selected'
-                    : 'Double tap to select ${_fullDayNames[index]} schedule',
-                onTap: () {
-                  onChanged(index + 1);
-                  // ignore: deprecated_member_use
-                  SemanticsService.announce(
-                    '${_fullDayNames[index]} schedule selected',
-                    TextDirection.ltr,
-                  );
-                },
-                child: SizedBox(
-                  height: 42,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      onChanged(index + 1);
-                      // ignore: deprecated_member_use
-                      SemanticsService.announce(
-                        '${_fullDayNames[index]} schedule selected',
-                        TextDirection.ltr,
-                      );
-                    },
-                    child: _OnboardingDayChip(
-                      label: _labels[index],
-                      selected: selectedDay == index + 1,
-                      accent: accent,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+    return TimelineDayChips(
+      selectedDay: selectedDay,
+      onDayChanged: onChanged,
+      accent: accent,
+      padding: EdgeInsets.zero,
     );
   }
 }
 
+// ignore: unused_element
 class _OnboardingDayChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -237,62 +197,64 @@ class OnboardingVerticalTimeline extends StatelessWidget {
     final endMinute = math.min(24 * 60, (((maxEnd + 75) / 60).ceil()) * 60);
     final rangeMinutes = math.max(180, endMinute - startMinute);
     const topPadding = OptivusSpacing.base;
-    const bottomPadding = OnboardingStepShell.bottomCtaHeight + 40;
+    const bottomPadding = 40.0;
     const pxPerMinute = 0.82;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final blockWidth = constraints.maxWidth - 64 - 16;
-
-        final visualItems = <_OnboardingTimelineVisualItem>[];
-        for (final block in blocks) {
-          final requiredHeight = requiredHeightBuilder != null
-              ? requiredHeightBuilder!(context, block, blockWidth)
-              : calculateRequiredBlockHeight(
-                  context: context,
-                  titleRowHeight: 22.0,
-                  items:
-                      stretchItemsBuilder?.call(block) ??
-                      [
-                        ...block.dishes,
-                        ...block.skincareProducts,
-                        ...block.skincareSteps,
-                      ],
-                  timeLabel:
-                      '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                  blockWidth: blockWidth,
-                );
-          visualItems.add(
-            _OnboardingTimelineVisualItem(
-              block: block,
-              minHeight: requiredHeight,
+        final entries = [
+          for (final block in blocks)
+            TimelineEntry(
+              id: block.id,
+              sourceId: block.id,
+              startMinute: block.startMinute,
+              endMinute: block.endMinute,
+              repeatDays: const [1],
+              title: block.title,
+              category: TimelineCategory.other,
+              minHeight: requiredHeightBuilder != null
+                  ? requiredHeightBuilder!(context, block, blockWidth)
+                  : calculateRequiredBlockHeight(
+                      context: context,
+                      titleRowHeight: 22.0,
+                      items:
+                          stretchItemsBuilder?.call(block) ??
+                          [
+                            ...block.dishes,
+                            ...block.skincareProducts,
+                            ...block.skincareSteps,
+                          ],
+                      timeLabel:
+                          '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
+                      blockWidth: blockWidth,
+                    ),
             ),
-          );
-        }
+        ];
 
-        final visualLayout =
-            TimelineVisualLayout.build<_OnboardingTimelineVisualItem>(
-              items: visualItems,
-              pixelsPerMinute: pxPerMinute,
-              timelineWidth: constraints.maxWidth,
-              focusedItemId: null,
-              visibleStartMinute: startMinute,
-              visibleEndMinute: startMinute + rangeMinutes,
-              topPadding: topPadding,
-              leftOffset: 64,
-              rightPadding: 16,
-              maxOverlapLane: 0,
-              overlapMinFrontWidth: 0,
-              overlapMinLabelWidth: 0,
-              overlapMaxLabelWidth: 0,
-            );
-        final scale = visualLayout.scale;
+        final layoutResult = TimelineOverlapEngine.computeLayout(
+          entries: entries,
+          availableWidth: constraints.maxWidth,
+          selectedDay: 1,
+          config: const TimelineGeometryConfig(
+            pixelsPerMinute: pxPerMinute,
+            topPadding: topPadding,
+            bottomPadding: bottomPadding,
+            leftOffset: 64,
+            rightPadding: 16,
+            minInteractiveHeight: 34.0,
+          ),
+          customStartMinute: startMinute,
+          customEndMinute: endMinute,
+        );
+
+        final scale = layoutResult.scale;
         final entryById = {
-          for (final entry in visualLayout.entries) entry.item.id: entry,
+          for (final entry in layoutResult.entries) entry.id: entry,
         };
 
         final timelineHeight = math.max(
-          visualLayout.totalHeight,
+          layoutResult.totalHeight,
           scale.yForMinute(startMinute + rangeMinutes),
         );
 
@@ -378,8 +340,8 @@ class OnboardingVerticalTimeline extends StatelessWidget {
                         if (entryById[block.id] != null)
                           Positioned(
                             top: entryById[block.id]!.top,
-                            left: 64,
-                            right: 16,
+                            left: entryById[block.id]!.left,
+                            width: entryById[block.id]!.width,
                             height: entryById[block.id]!.height,
                             child: Semantics(
                               excludeSemantics: true,
@@ -400,30 +362,6 @@ class OnboardingVerticalTimeline extends StatelessWidget {
       },
     );
   }
-}
-
-class _OnboardingTimelineVisualItem implements TimelineVisualItem {
-  final TimelineBlockDraft block;
-  @override
-  final double minHeight;
-
-  const _OnboardingTimelineVisualItem({
-    required this.block,
-    required this.minHeight,
-  });
-
-  @override
-  String get id => block.id;
-
-  @override
-  int get startMinute => block.startMinute;
-
-  @override
-  int get endMinute => block.endMinute;
-
-  @override
-  int get priority =>
-      block.blockType == TimelineBlockDraft.hardBlockKey ? 90 : 50;
 }
 
 class OnboardingTimelineTick extends StatelessWidget {

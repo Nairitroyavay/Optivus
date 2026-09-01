@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -127,16 +126,6 @@ class OnboardingScrollView extends StatelessWidget {
     final media = MediaQuery.of(context);
     final isLandscape =
         media.orientation == Orientation.landscape || media.size.height < 500;
-    final ctaH = isLandscape ? 56.0 : 76.0;
-    final bottomReserve =
-        ctaH +
-        media.padding.bottom +
-        media.viewInsets.bottom +
-        (isLandscape ? 20.0 : 48.0);
-    final effectivePadding = padding.add(
-      EdgeInsets.only(bottom: bottomReserve),
-    );
-
     return LayoutBuilder(
       builder: (context, constraints) {
         return ScrollConfiguration(
@@ -148,12 +137,12 @@ class OnboardingScrollView extends StatelessWidget {
                   )
                 : const NeverScrollableScrollPhysics(),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: effectivePadding,
+            padding: padding,
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: isLandscape
-                    ? 0.0
-                    : math.max(0.0, constraints.maxHeight - bottomReserve),
+                minHeight: isLandscape || !constraints.maxHeight.isFinite
+                    ? 0
+                    : constraints.maxHeight,
               ),
               child: child,
             ),

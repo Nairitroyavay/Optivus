@@ -111,7 +111,7 @@ void main() {
     expect(find.text('Next Step'), findsNothing);
   });
 
-  testWidgets('1b. Next Step floats above the shared onboarding background', (
+  testWidgets('1b. Next Step reserves space above the shared background', (
     tester,
   ) async {
     useAndroidWidth(tester);
@@ -148,7 +148,7 @@ void main() {
     final ctaRect = tester.getRect(
       find.byKey(const ValueKey('onboarding-cta-visible')),
     );
-    expect(contentRect.bottom, greaterThan(ctaRect.top));
+    expect(contentRect.bottom, lessThanOrEqualTo(ctaRect.top));
   });
 
   testWidgets('2. I have products mode opens immediately', (tester) async {

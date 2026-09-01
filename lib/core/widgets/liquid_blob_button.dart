@@ -229,28 +229,37 @@ class _LiquidBlobButtonState extends State<LiquidBlobButton>
                                       ),
                                     ),
                                   )
-                                : Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (widget.icon != null) ...[
-                                        Icon(
-                                          widget.icon,
-                                          color: OptivusColors.textPrimary,
-                                          size: labelSize + 2,
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                      Text(
-                                        widget.label,
-                                        style: TextStyle(
-                                          color: OptivusColors.textPrimary,
-                                          fontSize: labelSize,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.2,
-                                        ),
+                                : Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (widget.icon != null) ...[
+                                            Icon(
+                                              widget.icon,
+                                              color: OptivusColors.textPrimary,
+                                              size: labelSize + 2,
+                                            ),
+                                            const SizedBox(width: 8),
+                                          ],
+                                          Text(
+                                            widget.label,
+                                            style: TextStyle(
+                                              color: OptivusColors.textPrimary,
+                                              fontSize: labelSize,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: -0.2,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
                                   ),
                           ),
                         ],

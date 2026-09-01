@@ -2,7 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/core/widgets/liquid_blob_button.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_save_button.dart';
 
 class LiquidGlassOnboardingIndicator extends StatefulWidget {
@@ -337,7 +337,6 @@ class _LiquidGlassOnboardingIndicatorState
 
 class OnboardingStepShell extends StatelessWidget {
   static const double headerHeight = 64;
-  static const double bottomCtaHeight = 76;
 
   final int currentPage;
   final double pageOffset;
@@ -347,7 +346,7 @@ class OnboardingStepShell extends StatelessWidget {
   final Widget child;
   final void Function(int) onDotTap;
   final ValueChanged<int> onIndicatorDraggedTo;
-  final VoidCallback onNext;
+  final VoidCallback? onNext;
   final VoidCallback? onSave;
   final bool showSave;
   final bool isSaving;
@@ -358,6 +357,7 @@ class OnboardingStepShell extends StatelessWidget {
   final bool ctaEnabled;
   final bool ctaLoading;
   final Widget? topLeftOverlay;
+  final List<OnboardingAction>? actions;
 
   const OnboardingStepShell({
     super.key,
@@ -369,7 +369,7 @@ class OnboardingStepShell extends StatelessWidget {
     required this.child,
     required this.onDotTap,
     required this.onIndicatorDraggedTo,
-    required this.onNext,
+    this.onNext,
     required this.onSave,
     required this.showSave,
     required this.isSaving,
@@ -380,6 +380,7 @@ class OnboardingStepShell extends StatelessWidget {
     required this.ctaEnabled,
     required this.ctaLoading,
     this.topLeftOverlay,
+    this.actions,
   });
 
   @override
@@ -389,6 +390,23 @@ class OnboardingStepShell extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSmall = media.size.height < 600 || media.size.width < 600;
     final responsiveHeaderH = isSmall ? 50.0 : headerHeight;
+
+    final resolvedActions =
+        actions ??
+        <OnboardingAction>[
+          OnboardingAction(
+            kind: currentPage == 14
+                ? OnboardingActionKind.enterOptivus
+                : OnboardingActionKind.next,
+            label: ctaLabel,
+            onPressed: onNext,
+            visible: showPrimaryCta,
+            enabled: ctaEnabled,
+            operationState: ctaLoading
+                ? OnboardingActionOperationState.active
+                : OnboardingActionOperationState.idle,
+          ),
+        ];
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -406,210 +424,145 @@ class OnboardingStepShell extends StatelessWidget {
             end: Alignment.bottomCenter,
           ),
         ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: SafeArea(
-                top: true,
-                bottom: false,
-                child: Column(
-                  children: [
-                    SizedBox(
-                      height: responsiveHeaderH,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            SizedBox(
-                              width: 40,
-                              child: topLeftOverlay != null
-                                  ? Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: topLeftOverlay!,
-                                    )
-                                  : null,
-                            ),
-                            Expanded(
-                              child: Center(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: LiquidGlassOnboardingIndicator(
-                                    page: pageOffset,
-                                    count: completedSteps.length,
-                                    completedSteps: completedSteps,
-                                    onDotTap: onDotTap,
-                                    onDragTarget: onIndicatorDraggedTo,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: 40,
-                              child: showSave
-                                  ? Align(
-                                      alignment: Alignment.centerRight,
-                                      child: OnboardingSaveButton(
-                                        isSaving: isSaving,
-                                        isSaved: isSaved,
-                                        enabled: saveEnabled,
-                                        onTap: onSave,
-                                      ),
-                                    )
-                                  : const SizedBox.shrink(),
-                            ),
-                          ],
-                        ),
+        child: SafeArea(
+          top: true,
+          bottom: false,
+          child: Column(
+            children: [
+              SizedBox(
+                height: responsiveHeaderH,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      SizedBox(
+                        width: 40,
+                        child: topLeftOverlay != null
+                            ? Align(
+                                alignment: Alignment.centerLeft,
+                                child: topLeftOverlay!,
+                              )
+                            : null,
                       ),
-                    ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      transitionBuilder: (child, animation) => SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, -0.3),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: FadeTransition(opacity: animation, child: child),
-                      ),
-                      child: validationMessage == null
-                          ? const SizedBox.shrink()
-                          : Container(
-                              key: ValueKey(validationMessage),
-                              margin: const EdgeInsets.fromLTRB(24, 0, 24, 10),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 11,
-                              ),
-                              decoration: BoxDecoration(
-                                color: OptivusColors.danger.withValues(
-                                  alpha: 0.10,
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  color: OptivusColors.danger.withValues(
-                                    alpha: 0.65,
-                                  ),
-                                  width: 1.1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.warning_amber_rounded,
-                                    color: OptivusColors.danger,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 9),
-                                  Expanded(
-                                    child: Text(
-                                      validationMessage!,
-                                      style: const TextStyle(
-                                        color: OptivusColors.danger,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                  if (onRetry != null) ...[
-                                    const SizedBox(width: 8),
-                                    TextButton(
-                                      key: const Key('onboarding-sync-retry'),
-                                      onPressed: onRetry,
-                                      child: const Text('Retry'),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          bottom: keyboardOpen
-                              ? MediaQuery.viewInsetsOf(context).bottom
-                              : 0,
-                        ),
-                        child: child,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeOutCubic,
-                child: keyboardOpen
-                    ? const SizedBox.shrink(
-                        key: ValueKey('onboarding-cta-hidden-for-keyboard'),
-                      )
-                    : SafeArea(
-                        key: const ValueKey('onboarding-cta-visible'),
-                        top: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 14),
-                          child: IgnorePointer(
-                            ignoring: !showPrimaryCta,
-                            child: ExcludeSemantics(
-                              excluding: !showPrimaryCta,
-                              child: AnimatedOpacity(
-                                opacity: showPrimaryCta ? 1 : 0,
-                                duration: const Duration(milliseconds: 200),
-                                curve: Curves.easeOutCubic,
-                                child: AnimatedSlide(
-                                  offset: showPrimaryCta
-                                      ? Offset.zero
-                                      : const Offset(0, 0.05),
-                                  duration: const Duration(milliseconds: 200),
-                                  curve: Curves.easeOutCubic,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      LiquidBlobButton(
-                                        label: ctaLabel,
-                                        onPressed: onNext,
-                                        isLoading: ctaLoading,
-                                        enabled: ctaEnabled,
-                                        fullWidth: true,
-                                      ),
-                                      AnimatedSize(
-                                        duration: const Duration(
-                                          milliseconds: 180,
-                                        ),
-                                        curve: Curves.easeOutCubic,
-                                        child: currentPage == 0
-                                            ? const Padding(
-                                                padding: EdgeInsets.only(
-                                                  top: 12,
-                                                ),
-                                                child: Text(
-                                                  'By continuing, you agree to our Terms & Policy',
-                                                  textAlign: TextAlign.center,
-                                                  style: TextStyle(
-                                                    color: Color(0xFF6F737C),
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                      Expanded(
+                        child: Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: LiquidGlassOnboardingIndicator(
+                              page: pageOffset,
+                              count: completedSteps.length,
+                              completedSteps: completedSteps,
+                              onDotTap: onDotTap,
+                              onDragTarget: onIndicatorDraggedTo,
                             ),
                           ),
                         ),
                       ),
+                      SizedBox(
+                        width: 40,
+                        child: showSave
+                            ? Align(
+                                alignment: Alignment.centerRight,
+                                child: OnboardingSaveButton(
+                                  isSaving: isSaving,
+                                  isSaved: isSaved,
+                                  enabled: saveEnabled,
+                                  onTap: onSave,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, animation) => SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0, -0.3),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: FadeTransition(opacity: animation, child: child),
+                ),
+                child: validationMessage == null
+                    ? const SizedBox.shrink()
+                    : Container(
+                        key: ValueKey(validationMessage),
+                        margin: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 11,
+                        ),
+                        decoration: BoxDecoration(
+                          color: OptivusColors.danger.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: OptivusColors.danger.withValues(alpha: 0.65),
+                            width: 1.1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: OptivusColors.danger,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Text(
+                                validationMessage!,
+                                style: const TextStyle(
+                                  color: OptivusColors.danger,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (onRetry != null) ...[
+                              const SizedBox(width: 8),
+                              TextButton(
+                                key: const Key('onboarding-sync-retry'),
+                                onPressed: onRetry,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    bottom: keyboardOpen
+                        ? MediaQuery.viewInsetsOf(context).bottom
+                        : 0,
+                  ),
+                  child: child,
+                ),
+              ),
+              OnboardingActionBar(
+                actions: resolvedActions,
+                reserveHiddenSpace: true,
+                accessory: currentPage == 0 && showPrimaryCta
+                    ? const Padding(
+                        padding: EdgeInsets.only(top: 12),
+                        child: Text(
+                          'By continuing, you agree to our Terms & Policy',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Color(0xFF6F737C),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+            ],
+          ),
         ),
       ),
     );

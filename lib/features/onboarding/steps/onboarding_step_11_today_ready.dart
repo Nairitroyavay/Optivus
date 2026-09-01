@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
+import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
@@ -174,28 +173,7 @@ class OnboardingStep14 extends ConsumerWidget {
             const SizedBox(height: 12),
             SizedBox(
               height: 480,
-              child: OnboardingVerticalTimeline(
-                blocks: bundle.baseTimelineBlocks,
-                blockBuilder: (context, block) => OnboardingGlassCard(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        block.title,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        '${onboardingTimeLabel(block.startMinute)} - ${onboardingTimeLabel(block.endMinute)}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              child: _Step14TimelinePreview(blocks: bundle.baseTimelineBlocks),
             ),
           ],
         ),
@@ -393,45 +371,12 @@ class OnboardingStep14 extends ConsumerWidget {
                   ),
                 ],
                 const SizedBox(height: 14),
-                OnboardingGlassCard(
-                  tint: OptivusColors.aquaAccent.withValues(alpha: 0.08),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Today timeline preview',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      ...bundle.routineItemsForApp
-                          .take(12)
-                          .map(
-                            (item) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                '${_time(item.startMinute)} - ${_time(item.endMinute)}  ${item.title}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: OptivusColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                          ),
-                      if (bundle.routineItemsForApp.length > 12)
-                        Text(
-                          '+${bundle.routineItemsForApp.length - 12} more generated blocks',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: OptivusColors.textSecondary,
-                          ),
-                        ),
-                    ], // end OnboardingGlassCard Column children
-                  ), // end OnboardingGlassCard Column
-                ), // end OnboardingGlassCard
+                SizedBox(
+                  height: 500,
+                  child: _Step14TimelinePreview(
+                    blocks: bundle.baseTimelineBlocks,
+                  ),
+                ),
               ], // end OnboardingScrollView inner Column children
             ), // end OnboardingScrollView inner Column
           ), // end OnboardingScrollView
@@ -497,12 +442,6 @@ class OnboardingStep14 extends ConsumerWidget {
     onJumpToStep?.call(step);
   }
 
-  static String _time(int minute) {
-    final hour = minute ~/ 60;
-    final h = hour % 12 == 0 ? 12 : hour % 12;
-    return '$h:${(minute % 60).toString().padLeft(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}';
-  }
-
   static String _habitFocus(OnboardingDraft draft) {
     final parts = [
       if (draft.goodHabits.isNotEmpty)
@@ -523,6 +462,69 @@ class OnboardingStep14 extends ConsumerWidget {
               : '${part[0].toUpperCase()}${part.substring(1)}',
         )
         .join(' ');
+  }
+}
+
+class _Step14TimelinePreview extends StatefulWidget {
+  final List<TimelineBlockDraft> blocks;
+
+  const _Step14TimelinePreview({required this.blocks});
+
+  @override
+  State<_Step14TimelinePreview> createState() => _Step14TimelinePreviewState();
+}
+
+class _Step14TimelinePreviewState extends State<_Step14TimelinePreview> {
+  int _selectedDay = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = <TimelineEntry>[];
+    for (final block in widget.blocks) {
+      if (block.section == 'fixed' &&
+          (block.crossesMidnight || block.startMinute >= block.endMinute)) {
+        entries.addAll(
+          const FixedTimelineAdapter()
+              .toEntries(block)
+              .map((entry) => entry.copyWith(isEditable: false)),
+        );
+        continue;
+      }
+      final category = switch (block.section) {
+        'classes' => TimelineCategory.classes,
+        'job_work_business' => TimelineCategory.work,
+        'eating' => TimelineCategory.meal,
+        'fixed' => TimelineCategory.fixed,
+        'skin_care' => TimelineCategory.skinCare,
+        _ => TimelineCategory.other,
+      };
+      entries.add(
+        TimelineEntry(
+          id: block.id,
+          sourceId: block.id,
+          startMinute: block.startMinute,
+          endMinute: block.endMinute,
+          repeatDays: block.repeatDays,
+          title: block.title,
+          subtitle: block.location,
+          category: category,
+          isEditable: false,
+        ),
+      );
+    }
+
+    return FullScreenTimelineScaffold(
+      key: const ValueKey('onboarding-step14-shared-preview'),
+      entries: entries,
+      selectedDay: _selectedDay,
+      onDayChanged: (day) => setState(() => _selectedDay = day),
+      title: 'Today timeline preview',
+      subtitle: 'Review only — edit items from their setup step.',
+      mode: TimelineMode.previewReadOnly,
+      accent: OptivusColors.aquaAccent,
+      styleBuilder: (entry) =>
+          TimelineEntryStyle.defaultForCategory(entry.category),
+    );
   }
 }
 

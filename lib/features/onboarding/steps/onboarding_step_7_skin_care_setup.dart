@@ -9,9 +9,8 @@ import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
-import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
+import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -1191,9 +1190,7 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
 
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(
-        bottom: OnboardingStepShell.bottomCtaHeight + 40,
-      ),
+      padding: const EdgeInsets.only(bottom: 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1747,7 +1744,8 @@ class _HasProductsModeScreenState
                   final typedCategory = typed.category.trim().toLowerCase();
                   return _reviewedPhotoDetails.firstWhere(
                     (detected) =>
-                        (detected.displayName.trim().toLowerCase() == typedName ||
+                        (detected.displayName.trim().toLowerCase() ==
+                                typedName ||
                             detected.fallbackLabel.trim().toLowerCase() ==
                                 typedName) &&
                         (typedCategory.isEmpty ||
@@ -1818,12 +1816,12 @@ class _HasProductsModeScreenState
             final errMsg = routinePlans.isEmpty && !result.hasError
                 ? _onboarding7AiEmptyMessage
                 : (didCompactPayloadRetry &&
-                        result.errorCode == 'json_payload_too_large'
-                    ? onboarding7CompactPayloadFinalMessage
-                    : onboarding7FriendlyAiMessage(
-                        result.errorMessage,
-                        result.warnings,
-                      ));
+                          result.errorCode == 'json_payload_too_large'
+                      ? onboarding7CompactPayloadFinalMessage
+                      : onboarding7FriendlyAiMessage(
+                          result.errorMessage,
+                          result.warnings,
+                        ));
             throw _SkinCareResponseException(errMsg);
           }
 
@@ -3236,7 +3234,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           ).copyWith(createdAt: region.createdAt);
           region = detectedRegion;
           try {
-            await ref.read(regionSettingsProvider.notifier).save(detectedRegion);
+            await ref
+                .read(regionSettingsProvider.notifier)
+                .save(detectedRegion);
           } catch (error) {
             ref
                 .read(regionSettingsProvider.notifier)
@@ -3249,7 +3249,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         }
         scope.transition(
           AiGenerationPhase.analyzing,
-          message: 'Finding useful products available in ${region.countryName}…',
+          message:
+              'Finding useful products available in ${region.countryName}…',
         );
 
         final result = await client.generateRoutine(
@@ -3665,8 +3666,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
         uploadState.purpose == UploadedAssetPurpose.skinCare;
     final uploadBusy = uploadApplies && uploadState.isBusy;
-    final busy =
-        uploadBusy || _lifecycle.state.isActive || _removingPhoto;
+    final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final uploadError =
         _uploadError ??
         (uploadApplies && uploadState.status == UploadFlowStatus.failed
@@ -3837,9 +3837,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(
-                bottom: OnboardingStepShell.bottomCtaHeight + 8,
-              ),
+              padding: const EdgeInsets.only(bottom: 8),
               child: OnboardingGlassCard(
                 tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
                 padding: const EdgeInsets.all(12),
@@ -4050,9 +4048,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(
-              bottom: OnboardingStepShell.bottomCtaHeight + 8,
-            ),
+            padding: const EdgeInsets.only(bottom: 8),
             child: OnboardingGlassCard(
               tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
               padding: const EdgeInsets.all(12),
@@ -4849,89 +4845,83 @@ class _SkinCareTimelineSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final dayBlocks =
-        blocks
-            .where((block) => block.repeatDays.contains(selectedDay))
-            .toList(growable: false)
-          ..sort((a, b) => a.startMinute.compareTo(b.startMinute));
-
+    final adapter = SkinTimelineAdapter(accent: accent);
+    final entries = [for (final block in blocks) ...adapter.toEntries(block)];
     return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Your Routine',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                ),
+      child: FullScreenTimelineScaffold(
+        key: const ValueKey('onboarding-step7-full-timeline'),
+        entries: entries,
+        selectedDay: selectedDay,
+        onDayChanged: onDayChanged,
+        title: 'Your Routine',
+        emptyDayMessage: emptyLabel,
+        accent: accent,
+        styleBuilder: adapter.styleForEntry,
+        blockBuilder: (context, positioned) {
+          final block = blocks
+              .where((candidate) => candidate.id == positioned.entry.sourceId)
+              .first;
+          return _SkinCareBlockCard(
+            item: block,
+            baseColor: accent,
+            onEditRequested: () =>
+                _showSkinCareBlockEditSheet(context, ref, block, accent),
+          );
+        },
+        headerBanner: specialCareNotes.isEmpty
+            ? null
+            : Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Your Routine',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey(
+                      'onboarding-step7-special-care-notes-button',
+                    ),
+                    onPressed: () => _showSkinCareSpecialCareNotesSheet(
+                      context,
+                      specialCareNotes,
+                      accent,
+                    ),
+                    icon: Icon(Icons.info_outline_rounded, color: accent),
+                  ),
+                ],
               ),
-              if (specialCareNotes.isNotEmpty)
-                IconButton(
-                  key: const ValueKey(
-                    'onboarding-step7-special-care-notes-button',
-                  ),
-                  onPressed: () => _showSkinCareSpecialCareNotesSheet(
-                    context,
-                    specialCareNotes,
-                    accent,
-                  ),
-                  icon: Icon(
-                    Icons.info_outline_rounded,
-                    color: accent,
-                    size: 22,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  splashRadius: 20,
-                ),
-            ],
-          ),
-          const SizedBox(height: 7),
-          OnboardingDayChips(
-            selectedDay: selectedDay,
-            onChanged: onDayChanged,
+        onEntryTapped: (entry) {
+          final block = blocks
+              .where((candidate) => candidate.id == entry.sourceId)
+              .firstOrNull;
+          if (block == null) return;
+          SkinTimelineAdapter.showSkinEditSheet(
+            context: context,
+            block: block,
             accent: accent,
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: dayBlocks.isEmpty
-                ? OnboardingTimelineEmptyCard(label: emptyLabel)
-                : OnboardingVerticalTimeline(
-                    key: const ValueKey('onboarding-step7-full-timeline'),
-                    blocks: dayBlocks,
-                    accent: accent,
-                    requiredHeightBuilder: (context, block, blockWidth) =>
-                        _calculateRequiredSkinCareBlockHeight(
-                          context: context,
-                          block: block,
-                          timeLabel: TimelineUtils.formatTimeRange(
-                            block.startMinute,
-                            block.endMinute,
-                          ),
-                          blockWidth: blockWidth,
-                        ),
-                    blockBuilder: (ctx, block) {
-                      return _SkinCareBlockCard(
-                        item: block,
-                        baseColor: accent,
-                        onEditRequested: () => _showSkinCareBlockEditSheet(
-                          context,
-                          ref,
-                          block,
-                          accent,
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
+            onSave: (updated) async {
+              updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+                return base.copyWith(
+                  blocks: [
+                    for (final item in base.blocks)
+                      if (item.id == block.id) updated else item,
+                  ],
+                );
+              });
+              return true;
+            },
+          );
+        },
       ),
     );
   }
 }
 
+// ignore: unused_element
 Future<void> _showSkinCareBlockEditSheet(
   BuildContext context,
   WidgetRef ref,
@@ -5388,6 +5378,7 @@ int? _parseClockMinute(String value) {
   return hour * 60 + minute;
 }
 
+// ignore: unused_element
 double _calculateRequiredSkinCareBlockHeight({
   required BuildContext context,
   required TimelineBlockDraft block,
@@ -5488,6 +5479,7 @@ List<String> _skinCareInstructionLines(TimelineBlockDraft block) {
       .toList(growable: false);
 }
 
+// ignore: unused_element
 class _SkinCareBlockCard extends StatelessWidget {
   final TimelineBlockDraft item;
   final Color baseColor;
@@ -5496,6 +5488,7 @@ class _SkinCareBlockCard extends StatelessWidget {
   const _SkinCareBlockCard({
     required this.item,
     required this.baseColor,
+    // ignore: unused_element_parameter
     this.onEditRequested,
   });
 

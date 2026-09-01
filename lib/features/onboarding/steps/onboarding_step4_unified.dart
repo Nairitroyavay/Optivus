@@ -9,6 +9,7 @@ import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -1049,34 +1050,36 @@ class _OnboardingStep4UnifiedState
     List<ClassRoutineBlock> dayItems,
   ) {
     final sorted = [...dayItems]..sort(_compareBlocksByTime);
-    final active = <_VisualTimelineBlock>[];
-    final visualBlocks = <_VisualTimelineBlock>[];
-
-    for (final block in sorted) {
-      active.removeWhere((entry) => !_blocksOverlap(block, entry.block));
-
-      final usedLanes = active.map((entry) => entry.lane).toSet();
-      var lane = 0;
-      while (usedLanes.contains(lane) && lane < _kMaxOverlapLane) {
-        lane++;
-      }
-      if (usedLanes.contains(lane)) {
-        lane = _kMaxOverlapLane;
-      }
-
-      final visual = _VisualTimelineBlock(
-        block: block,
-        lane: lane,
-        order: visualBlocks.length,
-        hasOverlap: dayItems.any(
-          (other) => other.id != block.id && _blocksOverlap(block, other),
+    if (sorted.isEmpty) return const [];
+    final layout = TimelineOverlapEngine.computeLayout(
+      entries: [
+        for (final block in sorted)
+          TimelineEntry(
+            id: block.id,
+            sourceId: block.id,
+            startMinute: block.startMinute,
+            endMinute: block.endMinute,
+            repeatDays: const [1],
+            title: block.subject,
+            category: TimelineCategory.other,
+          ),
+      ],
+      availableWidth: 400,
+      selectedDay: 1,
+      config: const TimelineGeometryConfig(
+        pixelsPerMinute: _kPixelsPerMinute,
+        leftOffset: _kLeftOffset,
+      ),
+    );
+    return [
+      for (var index = 0; index < sorted.length; index++)
+        _VisualTimelineBlock(
+          block: sorted[index],
+          lane: layout.entryMap[sorted[index].id]!.column,
+          order: index,
+          hasOverlap: layout.entryMap[sorted[index].id]!.columnCount > 1,
         ),
-      );
-      active.add(visual);
-      visualBlocks.add(visual);
-    }
-
-    return visualBlocks;
+    ];
   }
 
   bool _visualsOverlap(_VisualTimelineBlock a, _VisualTimelineBlock b) {
@@ -1731,8 +1734,9 @@ class _OnboardingStep4UnifiedState
           message: _aiLoadingTitle,
         );
 
-        final aiController =
-            ref.read(routineImportAiControllerProvider.notifier);
+        final aiController = ref.read(
+          routineImportAiControllerProvider.notifier,
+        );
         final successfulSources = <RoutineImportReviewSource>{};
         final failedSources = <RoutineImportReviewSource>{};
         final failureMessages = <RoutineImportReviewSource, String>{};
@@ -1773,7 +1777,10 @@ class _OnboardingStep4UnifiedState
           final controllerState = ref.read(routineImportAiControllerProvider);
           final warnings =
               result?.warnings ??
-              [controllerState.errorMessage ?? 'No extraction result returned.'];
+              [
+                controllerState.errorMessage ??
+                    'No extraction result returned.',
+              ];
           _debugLogExtractionResult(
             photo: photo,
             result: result,
@@ -1890,6 +1897,39 @@ class _OnboardingStep4UnifiedState
 
   // ---- Edit sheet ----
   Future<void> _showEditDialog(ClassRoutineBlock item) async {
+    final config = _configForBlock(item);
+    Future<bool> save(ClassRoutineBlock updated) async {
+      if (!mounted) return false;
+      final provider = _providerFor(config);
+      ref.read(provider.notifier).state = [
+        for (final block in _currentBlocks(config))
+          if (block.id == item.id) updated else block,
+      ];
+      _markClassJobDirty();
+      return true;
+    }
+
+    if (config.source == RoutineImportReviewSource.classes) {
+      await ClassTimelineAdapter.showClassEditSheet(
+        context: context,
+        block: item,
+        onSave: save,
+        accent: config.accent,
+      );
+    } else {
+      await WorkTimelineAdapter.showWorkEditSheet(
+        context: context,
+        block: item,
+        onSave: save,
+        accent: config.accent,
+      );
+    }
+  }
+
+  // Kept temporarily as a private compatibility reference while downstream
+  // widget tests migrate to the shared sheet.
+  // ignore: unused_element
+  Future<void> _showLegacyEditDialog(ClassRoutineBlock item) async {
     final config = _configForBlock(item);
     final subjectCtrl = TextEditingController(text: item.subject);
     final startTimeCtrl = TextEditingController(text: item.displayStartTime);
@@ -3032,37 +3072,15 @@ class _OnboardingStep4UnifiedState
   //  Day Chips
   // ======================================================================
   Widget _buildDayChips() {
-    return Container(
+    return TimelineDayChips(
+      selectedDay: _day + 1,
+      onDayChanged: (day) => setState(() => _day = day - 1),
+      accent: _accent,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: List.generate(7, (index) {
-            final dayName = [
-              'MON',
-              'TUE',
-              'WED',
-              'THU',
-              'FRI',
-              'SAT',
-              'SUN',
-            ][index];
-            final isSelected = _day == index;
-            return SizedBox(
-              width: 52,
-              height: 46,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _day = index),
-                child: _buildDayChip(dayName, isSelected),
-              ),
-            );
-          }),
-        ),
-      ),
     );
   }
 
+  // ignore: unused_element
   Widget _buildDayChip(String label, bool selected) {
     final size = selected ? 42.0 : 36.0;
     return Padding(
@@ -3147,8 +3165,7 @@ class _OnboardingStep4UnifiedState
   // ======================================================================
   Widget _buildTimelineArea(List<ClassRoutineBlock> allBlocks, bool hasBlocks) {
     // Generating state: show AI reading message
-    if (_isGenerating ||
-        _lifecycle.state.phase == AiGenerationPhase.error) {
+    if (_isGenerating || _lifecycle.state.phase == AiGenerationPhase.error) {
       return SizedBox.expand(
         child: Center(
           child: Padding(
@@ -3319,90 +3336,29 @@ class _OnboardingStep4UnifiedState
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    // Vertical rail
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      left: 48,
-                      width: 8,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _accent.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: _accent.withValues(alpha: 0.40),
-                            width: 1.2,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _accent.withValues(alpha: 0.18),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
+                    TimelineTimeRailBackground(
+                      scale: TimelineScale(
+                        startMinute: range.startMinute,
+                        endMinute: range.endMinute,
+                        pixelsPerMinute: _kPixelsPerMinute,
+                        topPadding: topPadding,
                       ),
+                      boundaryMinutes:
+                          (<int>{
+                              for (final item in dayItems) ...[
+                                item.startMinute,
+                                item.endMinute,
+                              ],
+                            }.where((minute) {
+                              return minute % 60 != 0 &&
+                                  minute > range.startMinute &&
+                                  minute < range.endMinute;
+                            }).toList())
+                            ..sort(),
+                      accent: _accent,
+                      keyPrefix: 'onboarding-step4',
+                      minimumBoundaryLabelSpacing: 18,
                     ),
-
-                    // Minute tick indicators
-                    ..._buildMinuteIndicators(
-                      range: range,
-                      dayItems: dayItems,
-                      topPadding: topPadding,
-                    ),
-
-                    // Hour labels
-                    ...List.generate(range.hourCount + 1, (i) {
-                      final hour = (range.startHour + i) % 24;
-                      final minute = range.startMinute + i * 60;
-                      final ampm = hour < 12 ? 'AM' : 'PM';
-                      final displayHour = hour == 0
-                          ? 12
-                          : (hour > 12 ? hour - 12 : hour);
-                      final label = '$displayHour $ampm';
-                      return Positioned(
-                        top:
-                            _timelineY(
-                              minuteOfDay: minute,
-                              visibleStartMinute: range.startMinute,
-                              topPadding: topPadding,
-                            ) -
-                            10,
-                        left: 0,
-                        width: 56,
-                        height: 20,
-                        child: Stack(
-                          children: [
-                            Positioned(
-                              left: 0,
-                              width: 42,
-                              child: Text(
-                                label,
-                                textAlign: TextAlign.right,
-                                maxLines: 1,
-                                overflow: TextOverflow.clip,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: OptivusColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              left: 48,
-                              top: 9,
-                              width: 4,
-                              height: 1.5,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: _accent.withValues(alpha: 0.35),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
 
                     if (dayItems.isEmpty)
                       Positioned(
@@ -3444,82 +3400,6 @@ class _OnboardingStep4UnifiedState
         ),
       ),
     );
-  }
-
-  // ---- Minute indicators ----
-  List<Widget> _buildMinuteIndicators({
-    required _TimelineRange range,
-    required List<ClassRoutineBlock> dayItems,
-    required double topPadding,
-  }) {
-    final widgets = <Widget>[];
-    final boundaryMinutes =
-        (<int>{
-            for (final item in dayItems) ...[item.startMinute, item.endMinute],
-          }.where((minute) {
-            return minute % 60 != 0 &&
-                minute > range.startMinute &&
-                minute < range.endMinute;
-          }).toList())
-          ..sort();
-
-    var lastLabelY = double.negativeInfinity;
-    for (final minute in boundaryMinutes) {
-      final y = _timelineY(
-        minuteOfDay: minute,
-        visibleStartMinute: range.startMinute,
-        topPadding: topPadding,
-      );
-      final showLabel = y - lastLabelY >= 18;
-      if (showLabel) lastLabelY = y;
-      widgets.addAll([
-        if (showLabel)
-          Positioned(
-            top: y - 8,
-            left: 0,
-            width: 38,
-            height: 16,
-            child: Text(
-              TimelineUtils.formatMinuteShort(minute),
-              textAlign: TextAlign.right,
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: _accent.withValues(alpha: 0.68),
-              ),
-            ),
-          ),
-        Positioned(
-          top: y,
-          left: _kLeftOffset,
-          right: 16,
-          height: 1,
-          child: DecoratedBox(
-            key: ValueKey('onboarding-step4-minute-line-$minute'),
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        ),
-        Positioned(
-          top: y,
-          left: 44,
-          width: 18,
-          height: 1.5,
-          child: DecoratedBox(
-            key: ValueKey('onboarding-step4-minute-tick-$minute'),
-            decoration: BoxDecoration(
-              color: _accent.withValues(alpha: 0.48),
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ),
-        ),
-      ]);
-    }
-
-    return widgets;
   }
 
   List<_BackLabelSegment> _backLabelSegmentsFor(
