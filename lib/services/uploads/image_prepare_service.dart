@@ -63,12 +63,13 @@ class ImagePrepareService {
     }
 
     final sourceBytes = await picked.readAsBytes();
-    final decoded = image_lib.decodeImage(sourceBytes);
+    var decoded = image_lib.decodeImage(sourceBytes);
     if (decoded == null) {
       throw const ImagePreparationException(
         'This image could not be read. Please choose another photo.',
       );
     }
+    decoded = image_lib.bakeOrientation(decoded);
 
     if (_canPreserveSourceBytes(
       bytes: sourceBytes,
