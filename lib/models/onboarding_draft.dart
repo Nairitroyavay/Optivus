@@ -1575,7 +1575,7 @@ class BaseTimelineDraft {
     final exists = blocks.any((item) => item.id == block.id);
     final changed = blocks
         .where((item) => item.id == block.id)
-        .any((item) => item.toMap().toString() != block.toMap().toString());
+        .any((item) => _scheduleSemanticsChanged(item, block));
     return copyWith(
       blocks: exists
           ? [
@@ -1587,6 +1587,25 @@ class BaseTimelineDraft {
           ? _invalidateAcceptancesForBlock(block.id, reason: 'scheduleEdited')
           : conflictAcceptances,
     );
+  }
+
+  static bool _scheduleSemanticsChanged(
+    TimelineBlockDraft previous,
+    TimelineBlockDraft next,
+  ) {
+    if (previous.needsTimeConfirmation != next.needsTimeConfirmation) {
+      return true;
+    }
+    return timelineScheduleDescriptor(
+          previous,
+          ownerUid: 'schedule-comparison-owner',
+          timezoneId: 'schedule-comparison-timezone',
+        ).scheduleFingerprint !=
+        timelineScheduleDescriptor(
+          next,
+          ownerUid: 'schedule-comparison-owner',
+          timezoneId: 'schedule-comparison-timezone',
+        ).scheduleFingerprint;
   }
 
   BaseTimelineDraft deleteBlock(String id) {
