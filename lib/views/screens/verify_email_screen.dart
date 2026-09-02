@@ -1,9 +1,11 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/verification_lifecycle_state.dart';
 
@@ -81,17 +83,20 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
       // The auth router owns this destination. System Back stays here; the
       // explicit account actions below use transactional logout.
       canPop: false,
-      child: Scaffold(
-        body: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [OptivusColors.onboardingTop, Color(0xFFFCF8EE)],
-              stops: [0, 0.58],
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: OptivusTheme.authOverlayStyle,
+        child: Scaffold(
+          backgroundColor: AuthLayout.authBackgroundColor,
+          body: DecoratedBox(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [OptivusColors.onboardingTop, Color(0xFFFCF8EE)],
+                stops: [0, 0.58],
+              ),
             ),
-          ),
-          child: SafeArea(
+            child: SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return SingleChildScrollView(
@@ -191,6 +196,7 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -214,8 +220,8 @@ class _HeroIcon extends StatelessWidget {
           ],
         ),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.90),
-          width: 1.4,
+          color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+          width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
@@ -262,8 +268,8 @@ class _VerificationCard extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.90),
-          width: 1.4,
+          color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+          width: 1.0,
         ),
         boxShadow: [
           BoxShadow(
@@ -624,8 +630,9 @@ class _CheckVerificationButtonState extends State<_CheckVerificationButton>
                     borderRadius: BorderRadius.circular(28),
                     color: Colors.white.withValues(alpha: 0.45),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      width: 1.4,
+                      color:
+                          OptivusColors.borderNeutral.withValues(alpha: 0.50),
+                      width: 1.0,
                     ),
                     boxShadow: [
                       BoxShadow(

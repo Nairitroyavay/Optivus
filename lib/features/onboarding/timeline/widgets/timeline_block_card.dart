@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../core/theme/optivus_colors.dart';
 import '../../../routine/utils/timeline_utils.dart';
@@ -48,7 +47,7 @@ class TimelineBlockCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: Colors.white.withValues(alpha: 0.70),
+            color: Colors.white.withValues(alpha: 0.78),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -58,8 +57,8 @@ class TimelineBlockCard extends StatelessWidget {
               ],
             ),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.90),
-              width: 1.3,
+              color: OptivusColors.borderNeutral.withValues(alpha: 0.45),
+              width: 1.0,
             ),
             boxShadow: [
               BoxShadow(
@@ -71,20 +70,17 @@ class TimelineBlockCard extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(16),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: tiny ? 8 : (isNarrow ? 8 : 12),
-                  vertical: tiny ? 3 : (compact ? 6 : 10),
-                ),
-                child: _buildContent(
-                  context,
-                  tiny,
-                  compact,
-                  isNarrow,
-                  timeLabel,
-                ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: tiny ? 8 : (isNarrow ? 8 : 12),
+                vertical: tiny ? 3 : (compact ? 6 : 10),
+              ),
+              child: _buildContent(
+                context,
+                tiny,
+                compact,
+                isNarrow,
+                timeLabel,
               ),
             ),
           ),
@@ -260,7 +256,8 @@ class TimelineBlockCard extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.8),
+                        color:
+                            OptivusColors.borderNeutral.withValues(alpha: 0.40),
                         width: 0.8,
                       ),
                     ),

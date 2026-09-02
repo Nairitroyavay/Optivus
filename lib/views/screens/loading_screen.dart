@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/core/theme/optivus_motion.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 
@@ -60,43 +63,51 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen>
             ? 'Restoring your setup...'
             : 'Starting Optivus...');
 
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFF6E6B4), // Soft warm golden
-              Color(0xFFFCF8EE), // Light cream
-              Color(0xFFFFFFFF), // Pure white at bottom
-            ],
-            stops: [0.0, 0.45, 1.0],
+    final reducedMotion = OptivusMotion.isReducedMotion(context);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: OptivusTheme.authOverlayStyle,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFCF8EE),
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFFF6E6B4), // Soft warm golden
+                Color(0xFFFCF8EE), // Light cream
+                Color(0xFFFFFFFF), // Pure white at bottom
+              ],
+              stops: [0.0, 0.45, 1.0],
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(),
-              ScaleTransition(scale: _pulse, child: const GlassLogo()),
-              const SizedBox(height: 30),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.35,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF5D6470),
+          child: SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(),
+                reducedMotion
+                    ? const GlassLogo()
+                    : ScaleTransition(scale: _pulse, child: const GlassLogo()),
+                const SizedBox(height: 30),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF5D6470),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 18),
-              _LoadingDots(controller: _controller),
-              const Spacer(),
-            ],
+                const SizedBox(height: 18),
+                _LoadingDots(controller: _controller),
+                const Spacer(),
+              ],
+            ),
           ),
         ),
       ),

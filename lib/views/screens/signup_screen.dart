@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
@@ -13,7 +13,9 @@ import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/core/utils/password_policy.dart';
 import 'package:optivus/core/utils/auth_form_readiness.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_motion.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/core/widgets/auth_text_field.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
@@ -340,7 +342,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final allowAdaptiveScroll =
         media.size.height < 650 || media.textScaler.scale(16) > 19.2;
     final showPasswordGuidance = _passFocus.hasFocus;
-    final showCtaDock = (_ctaRevealed || authLoading) && !keyboardOpen;
 
     return PopScope(
       canPop: !keyboardOpen,
@@ -349,8 +350,10 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           FocusManager.instance.primaryFocus?.unfocus();
         }
       },
-      child: Scaffold(
-        backgroundColor: AuthLayout.authBackgroundColor,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: OptivusTheme.authOverlayStyle,
+        child: Scaffold(
+          backgroundColor: AuthLayout.authBackgroundColor,
         body: Container(
           width: double.infinity,
           height: double.infinity,
@@ -598,25 +601,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           _SuccessBanner(message: _successMsg!),
                         ],
 
-                        const SizedBox(height: 10),
-                      ],
-                    ),
-                  ),
-                ),
-
-                AnimatedContainer(
-                  duration: OptivusMotion.standardDuration,
-                  curve: Curves.easeInOutCubic,
-                  height: showCtaDock ? 74 : 0,
-                  child: AnimatedSwitcher(
-                    duration: OptivusMotion.fastDuration,
-                    child: !showCtaDock
-                        ? const SizedBox.shrink(
-                            key: ValueKey('signup-primary-hidden'),
-                          )
-                        : Padding(
+                        // Primary Action Button (Create Account / Loading)
+                        const SizedBox(height: 14),
+                        if (_ctaRevealed || authLoading)
+                          Padding(
                             key: const ValueKey('signup-primary-visible'),
-                            padding: const EdgeInsets.fromLTRB(24, 4, 24, 10),
+                            padding: EdgeInsets.zero,
                             child: authLoading
                                 ? _LoadingButton(operation: _authOperation)
                                 : AppButton(
@@ -627,7 +617,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                         ? _createAccount
                                         : null,
                                   ),
+                          )
+                        else
+                          const SizedBox.shrink(
+                            key: ValueKey('signup-primary-hidden'),
                           ),
+
+                        const SizedBox(height: 24),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -635,6 +633,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -654,20 +653,18 @@ class _PasswordRulesPanel extends StatelessWidget {
           ? const Key('signup-password-guidance-success')
           : const Key('signup-password-guidance-detailed'),
       borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.60),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isValid
-                  ? _kGreen.withValues(alpha: 0.35)
-                  : Colors.white.withValues(alpha: 0.80),
-              width: 1,
-            ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.60),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isValid
+                ? _kGreen.withValues(alpha: 0.35)
+                : OptivusColors.borderNeutral.withValues(alpha: 0.50),
+            width: 1,
           ),
+        ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -682,15 +679,19 @@ class _PasswordRulesPanel extends StatelessWidget {
                     ),
                     const SizedBox(width: 5),
                   ],
-                  Text(
-                    isValid
-                        ? 'All password requirements met'
-                        : 'Password requirements',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: isValid ? _kGreen : _kSub,
-                      letterSpacing: 0.5,
+                  Expanded(
+                    child: Text(
+                      isValid
+                          ? 'All password requirements met'
+                          : 'Password requirements',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: isValid ? _kGreen : _kSub,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ],
@@ -756,7 +757,6 @@ class _PasswordRulesPanel extends StatelessWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -805,31 +805,28 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: _kRed.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _kRed.withValues(alpha: 0.35), width: 1),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.error_outline_rounded, color: _kRed, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: _kRed,
-                    fontWeight: FontWeight.w600,
-                  ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: _kRed.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _kRed.withValues(alpha: 0.35), width: 1),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: _kRed, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kRed,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -855,68 +852,65 @@ class _AccountExistsBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: _kAmber.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _kAmber.withValues(alpha: 0.38),
-              width: 1,
-            ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _kAmber.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _kAmber.withValues(alpha: 0.38),
+            width: 1,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    color: _kAmber,
-                    size: 19,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: _kInk,
-                        height: 1.35,
-                        fontWeight: FontWeight.w700,
-                      ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  color: _kAmber,
+                  size: 19,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: _kInk,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _InlineAuthAction(
-                    label: 'Log in',
-                    icon: Icons.login_rounded,
-                    onTap: onLogin,
-                  ),
-                  _InlineAuthAction(
-                    label: resetLoading ? 'Sending...' : 'Forgot password',
-                    icon: Icons.lock_reset_rounded,
-                    onTap: resetLoading ? null : onForgotPassword,
-                  ),
-                  _InlineAuthAction(
-                    label: 'Use another email',
-                    icon: Icons.alternate_email_rounded,
-                    onTap: onUseAnotherEmail,
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _InlineAuthAction(
+                  label: 'Log in',
+                  icon: Icons.login_rounded,
+                  onTap: onLogin,
+                ),
+                _InlineAuthAction(
+                  label: resetLoading ? 'Sending...' : 'Forgot password',
+                  icon: Icons.lock_reset_rounded,
+                  onTap: resetLoading ? null : onForgotPassword,
+                ),
+                _InlineAuthAction(
+                  label: 'Use another email',
+                  icon: Icons.alternate_email_rounded,
+                  onTap: onUseAnotherEmail,
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -945,7 +939,10 @@ class _InlineAuthAction extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.55),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.78)),
+            border: Border.all(
+              color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+              width: 1,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -976,38 +973,35 @@ class _SuccessBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: _kGreen.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: _kGreen.withValues(alpha: 0.35),
-              width: 1,
-            ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: _kGreen.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _kGreen.withValues(alpha: 0.35),
+            width: 1,
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.check_circle_outline_rounded,
-                color: _kGreen,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF15803D),
-                    fontWeight: FontWeight.w600,
-                  ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.check_circle_outline_rounded,
+              color: _kGreen,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF15803D),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1029,8 +1023,7 @@ class _LoadingButton extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(33),
-        color: Colors
-            .transparent, // Fix: transparent background eliminates the rectangular grey-blue border visual bug
+        color: Colors.transparent,
         boxShadow: [
           // Soft black shadow (10% opacity)
           BoxShadow(
@@ -1056,8 +1049,8 @@ class _LoadingButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(30),
             color: Colors.white.withValues(alpha: 0.40),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.75),
-              width: 1.5,
+              color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+              width: 1.0,
             ),
           ),
           child: Row(
@@ -1065,9 +1058,14 @@ class _LoadingButton extends StatelessWidget {
             children: [
               WavyLoadingIndicator(size: 30, operation: operation),
               const SizedBox(width: 10),
-              const Text(
-                'Creating account…',
-                style: TextStyle(fontWeight: FontWeight.w800),
+              const Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Creating account…',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
               ),
             ],
           ),

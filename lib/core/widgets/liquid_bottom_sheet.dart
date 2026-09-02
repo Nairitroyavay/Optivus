@@ -29,6 +29,10 @@ Future<T?> showLiquidBottomSheet<T>(
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(28),
               ),
+              border: Border.all(
+                color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+                width: 1.0,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.1),
@@ -46,7 +50,8 @@ Future<T?> showLiquidBottomSheet<T>(
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: OptivusColors.borderSoft,
+                      color:
+                          OptivusColors.borderNeutral.withValues(alpha: 0.60),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),

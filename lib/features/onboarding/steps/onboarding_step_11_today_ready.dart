@@ -1257,65 +1257,76 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
       builder: (context) {
         return Material(
           color: Colors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: OptivusColors.textSecondary.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(2),
+          shape: RoundedRectangleBorder(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            side: BorderSide(
+              color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+              width: 1.0,
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: OptivusColors.borderNeutral.withValues(
+                          alpha: 0.60,
+                        ),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Edit Setup',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 14),
-                _buildSetupOption(
-                  icon: Icons.calendar_today_rounded,
-                  title: 'Schedule & Classes',
-                  step: 4,
-                ),
-                _buildSetupOption(
-                  icon: Icons.restaurant_rounded,
-                  title: 'Meals & Eating Mode',
-                  step: 5,
-                ),
-                _buildSetupOption(
-                  icon: Icons.bedtime_rounded,
-                  title: 'Fixed Routine & Sleep',
-                  step: 6,
-                ),
-                _buildSetupOption(
-                  icon: Icons.face_rounded,
-                  title: 'Skin Care',
-                  step: 7,
-                ),
-                _buildSetupOption(
-                  icon: Icons.track_changes_rounded,
-                  title: 'Habits & Check-ins',
-                  step: 8,
-                ),
-                _buildSetupOption(
-                  icon: Icons.flag_rounded,
-                  title: 'Identity Goals',
-                  step: 10,
-                ),
-                _buildSetupOption(
-                  icon: Icons.notifications_rounded,
-                  title: 'Notifications',
-                  step: 13,
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Edit Setup',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 14),
+                  _buildSetupOption(
+                    icon: Icons.calendar_today_rounded,
+                    title: 'Schedule & Classes',
+                    step: 4,
+                  ),
+                  _buildSetupOption(
+                    icon: Icons.restaurant_rounded,
+                    title: 'Meals & Eating Mode',
+                    step: 5,
+                  ),
+                  _buildSetupOption(
+                    icon: Icons.bedtime_rounded,
+                    title: 'Fixed Routine & Sleep',
+                    step: 6,
+                  ),
+                  _buildSetupOption(
+                    icon: Icons.face_rounded,
+                    title: 'Skin Care',
+                    step: 7,
+                  ),
+                  _buildSetupOption(
+                    icon: Icons.track_changes_rounded,
+                    title: 'Habits & Check-ins',
+                    step: 8,
+                  ),
+                  _buildSetupOption(
+                    icon: Icons.flag_rounded,
+                    title: 'Identity Goals',
+                    step: 10,
+                  ),
+                  _buildSetupOption(
+                    icon: Icons.notifications_rounded,
+                    title: 'Notifications',
+                    step: 13,
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -1396,64 +1407,86 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
           builder: (context, setModalState) {
             return Material(
               color: Colors.white,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: OptivusColors.textSecondary.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(2),
+              shape: RoundedRectangleBorder(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+                side: BorderSide(
+                  color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+                  width: 1.0,
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: OptivusColors.borderNeutral.withValues(
+                              alpha: 0.60,
+                            ),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      group.pairTitle,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Choose where this overlap is intentional',
-                      style: TextStyle(fontSize: 12.5, color: OptivusColors.textSecondary),
-                    ),
-                    const SizedBox(height: 14),
-                    for (final day in group.affectedDays)
-                      CheckboxListTile(
-                        value: selectedDays.contains(day),
-                        title: Text(
-                          Step14ConflictGroup.weekdayFullName(day),
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                      const SizedBox(height: 16),
+                      Text(
+                        group.pairTitle,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
                         ),
-                        onChanged: (checked) {
-                          setModalState(() {
-                            if (checked ?? false) {
-                              selectedDays.add(day);
-                            } else {
-                              selectedDays.remove(day);
-                            }
-                          });
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Choose where this overlap is intentional',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      for (final day in group.affectedDays)
+                        CheckboxListTile(
+                          value: selectedDays.contains(day),
+                          title: Text(
+                            Step14ConflictGroup.weekdayFullName(day),
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          onChanged: (checked) {
+                            setModalState(() {
+                              if (checked ?? false) {
+                                selectedDays.add(day);
+                              } else {
+                                selectedDays.remove(day);
+                              }
+                            });
+                          },
+                        ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _handleKeepBothDays(
+                            group: group,
+                            daysToAccept: selectedDays.toList()..sort(),
+                            rawConflicts: rawConflicts,
+                          );
                         },
+                        child: const Text('Save Choices'),
                       ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _handleKeepBothDays(
-                          group: group,
-                          daysToAccept: selectedDays.toList()..sort(),
-                          rawConflicts: rawConflicts,
-                        );
-                      },
-                      child: const Text('Save Choices'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );

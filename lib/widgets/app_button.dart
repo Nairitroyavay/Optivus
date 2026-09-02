@@ -37,25 +37,37 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker((elapsed) {
-      if (_lastElapsed != null) {
-        final delta = (elapsed - _lastElapsed!).inMicroseconds / 1000000.0;
-        _timeNotifier.value += delta * _timeMultiplier;
-        final targetStrength = _isInteracting ? 1.0 : 0.0;
-        _interactionStrength +=
-            (targetStrength - _interactionStrength) * 8.0 * delta;
-        if (_interactionStrength > 0.01) {
-          _smoothedPointer +=
-              (_pointerPosition - _smoothedPointer) * 12.0 * delta;
-        }
-      }
-      _lastElapsed = elapsed;
-    });
-    _ticker.start();
+    _ticker = createTicker(_onTick);
     _hoverController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 150),
     );
+  }
+
+  void _startTickerIfNeeded() {
+    if (!_ticker.isActive) {
+      _lastElapsed = null;
+      _ticker.start();
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    if (_lastElapsed != null) {
+      final delta = (elapsed - _lastElapsed!).inMicroseconds / 1000000.0;
+      _timeNotifier.value += delta * _timeMultiplier;
+      final targetStrength = _isInteracting ? 1.0 : 0.0;
+      _interactionStrength +=
+          (targetStrength - _interactionStrength) * 8.0 * delta;
+      if (_interactionStrength > 0.01) {
+        _smoothedPointer +=
+            (_pointerPosition - _smoothedPointer) * 12.0 * delta;
+      } else if (!_isInteracting && !_isHandlingTap && !_hoverController.isAnimating) {
+        _ticker.stop();
+        _lastElapsed = null;
+        return;
+      }
+    }
+    _lastElapsed = elapsed;
   }
 
   @override
@@ -68,6 +80,7 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
 
   void _onTapDown(TapDownDetails _) {
     if (widget.enabled && widget.onPressed != null && !_isHandlingTap) {
+      _startTickerIfNeeded();
       _hoverController.forward();
       _timeMultiplier = 4.0;
     }
@@ -77,6 +90,7 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
     if (!widget.enabled || widget.onPressed == null) return;
     if (_isHandlingTap) return;
     _isHandlingTap = true;
+    _startTickerIfNeeded();
     if (_hoverController.status != AnimationStatus.completed) {
       await _hoverController.forward().orCancel;
     }
@@ -98,6 +112,7 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
   }
 
   void _updatePointer(Offset localPosition, double width) {
+    _startTickerIfNeeded();
     final double tankLeft = (width / 2.0) - 200.0;
     const double tankTop = (60.0 / 2.0) - 50.0;
     _pointerPosition = Offset(
@@ -363,13 +378,21 @@ class _AppButtonState extends State<AppButton> with TickerProviderStateMixin {
                                       ),
 
                                       // 4. Label
-                                      Text(
-                                        widget.text,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                          color: Color(0xFF0F111A),
-                                          letterSpacing: 0.5,
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                        ),
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            widget.text,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF0F111A),
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ],

@@ -98,4 +98,33 @@ class OptivusTypography {
     color: OptivusColors.textSecondary,
     letterSpacing: 1.2,
   );
+
+  // ── Shared Semantic Hierarchy Tokens (AH-F022) ───────────────────────────
+  /// Canonical screen title style for onboarding / hero presentations
+  static const TextStyle screenTitle = displayLarge;
+
+  /// Canonical screen subtitle style for onboarding / hero presentations
+  static const TextStyle screenSubtitle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
+    color: OptivusColors.textSecondary,
+    height: 1.4,
+  );
+
+  /// Canonical section heading style
+  static const TextStyle sectionTitle = titleLarge;
+
+  /// Canonical card title style
+  static const TextStyle cardTitle = titleMedium;
+
+  /// Canonical primary body text
+  static const TextStyle body = bodyLarge;
+
+  /// Canonical helper / secondary explanatory text
+  static const TextStyle helper = TextStyle(
+    fontSize: 12.5,
+    fontWeight: FontWeight.w500,
+    color: OptivusColors.textSecondary,
+    height: 1.4,
+  );
 }

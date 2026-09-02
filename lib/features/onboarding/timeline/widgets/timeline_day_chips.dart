@@ -129,8 +129,10 @@ class _DayChipItem extends StatelessWidget {
             color: isSelected ? accent : Colors.white.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? accent : Colors.white.withValues(alpha: 0.65),
-              width: isSelected ? 1.4 : 1.0,
+              color: OptivusColors.borderNeutral.withValues(
+                alpha: isSelected ? 0.75 : 0.45,
+              ),
+              width: isSelected ? 1.2 : 1.0,
             ),
             boxShadow: isSelected
                 ? [

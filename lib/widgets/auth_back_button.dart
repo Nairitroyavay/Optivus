@@ -16,24 +16,32 @@ class AuthBackButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: 'Back',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(13),
-          onTap: onTap,
-          child: Container(
-            width: AuthLayout.backButtonSize,
-            height: AuthLayout.backButtonSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.24),
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.62)),
-            ),
-            child: const Icon(
-              Icons.arrow_back_rounded,
-              size: 18,
-              color: OptivusColors.ink,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Center(
+              child: Container(
+                width: AuthLayout.backButtonSize,
+                height: AuthLayout.backButtonSize,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+                    width: 1.0,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.arrow_back_rounded,
+                  size: 18,
+                  color: OptivusColors.ink,
+                ),
+              ),
             ),
           ),
         ),

@@ -1,9 +1,11 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:optivus/core/errors/diagnostic_codes.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/core/widgets/recoverable_error_views.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_save_button.dart';
@@ -413,10 +415,14 @@ class OnboardingStepShell extends StatelessWidget {
           ),
         ];
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      resizeToAvoidBottomInset: false,
-      body: Container(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: isDark
+          ? OptivusTheme.darkOverlayStyle
+          : OptivusTheme.onboardingOverlayStyle,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: false,
+        body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: isDark
@@ -541,6 +547,7 @@ class OnboardingStepShell extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -2,8 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'optivus_colors.dart';
 
+/// Canonical minimum accessible interactive touch target tokens (AH-F022).
+class OptivusTouchTarget {
+  OptivusTouchTarget._();
+
+  /// Minimum accessible interactive tap target size (Android 48dp standard).
+  static const double minimum = 48.0;
+
+  /// Box constraints enforcing minimum 48x48dp interactive area.
+  static const BoxConstraints minConstraints = BoxConstraints(
+    minWidth: minimum,
+    minHeight: minimum,
+  );
+}
+
+/// Canonical icon sizing tokens across the Optivus design system (AH-F022).
+class OptivusIconSize {
+  OptivusIconSize._();
+
+  static const double small = 16.0;
+  static const double standard = 20.0;
+  static const double medium = 24.0;
+  static const double large = 32.0;
+  static const double hero = 48.0;
+}
+
 class OptivusTheme {
-  static const lightSystemUiOverlayStyle = SystemUiOverlayStyle(
+  /// Canonical overlay style for warm-cream Auth surfaces.
+  static const authOverlayStyle = SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.dark,
     statusBarBrightness: Brightness.light,
@@ -13,6 +39,33 @@ class OptivusTheme {
     systemNavigationBarDividerColor: Colors.transparent,
     systemNavigationBarContrastEnforced: false,
   );
+
+  /// Canonical overlay style for light onboarding & timeline surfaces.
+  static const onboardingOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    statusBarBrightness: Brightness.light,
+    systemStatusBarContrastEnforced: false,
+    systemNavigationBarColor: Color(0xFFFFFFFF),
+    systemNavigationBarIconBrightness: Brightness.dark,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarContrastEnforced: false,
+  );
+
+  /// Canonical overlay style for dark surfaces.
+  static const darkOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    statusBarBrightness: Brightness.dark,
+    systemStatusBarContrastEnforced: false,
+    systemNavigationBarColor: Color(0xFF0F1015),
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarContrastEnforced: false,
+  );
+
+  /// Legacy alias maintained for backwards compatibility.
+  static const lightSystemUiOverlayStyle = authOverlayStyle;
 
   static ThemeData get lightTheme {
     return ThemeData(
@@ -84,13 +137,13 @@ class OptivusTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: OptivusColors.borderSoft, width: 1),
+          side: const BorderSide(color: OptivusColors.borderStandard, width: 1),
         ),
       ),
 
       // Divider Theme
       dividerTheme: const DividerThemeData(
-        color: OptivusColors.borderSoft,
+        color: OptivusColors.borderSubtle,
         thickness: 1,
         space: 1,
       ),

@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
@@ -13,7 +13,9 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/core/utils/auth_form_readiness.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_motion.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/core/widgets/auth_text_field.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 
@@ -46,13 +48,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   bool _obscurePass = true;
   bool _resetLoading = false;
+  bool _ctaRevealed = false;
   Future<void>? _authOperation;
   Future<bool>? _googleOperation;
   String? _errorMsg;
   String? _successMsg;
   String? _emailError;
   String? _passwordError;
-  bool _ctaRevealed = false;
   // final AuthRepository _authRepository = AuthRepository(AuthService());
 
   @override
@@ -81,7 +83,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _handleFormChanged() {
     final emailValid = isBasicEmailFormatValid(_emailCtrl.text);
     final passwordPresent = _passCtrl.text.isNotEmpty;
-    final ready = emailValid && passwordPresent;
+    final ready = isLoginFormReady(
+      email: _emailCtrl.text,
+      password: _passCtrl.text,
+    );
     setState(() {
       if (ready) _ctaRevealed = true;
       if (emailValid) _emailError = null;
@@ -237,232 +242,206 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           FocusManager.instance.primaryFocus?.unfocus();
         }
       },
-      child: Scaffold(
-        backgroundColor: AuthLayout.authBackgroundColor,
-        body: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [_kCream, _kBg],
-              stops: [0.0, 0.55],
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: OptivusTheme.authOverlayStyle,
+        child: Scaffold(
+          backgroundColor: AuthLayout.authBackgroundColor,
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [_kCream, _kBg],
+                stops: [0.0, 0.55],
+              ),
             ),
-          ),
-          child: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    key: const Key('login-form-scroll'),
-                    physics: allowAdaptiveScroll
-                        ? const BouncingScrollPhysics()
-                        : const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AuthLayout.horizontalPadding,
-                    ),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: AuthLayout.backButtonTopInset),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: AuthBackButton(
-                            onTap: () => context.canPop()
-                                ? context.pop()
-                                : context.go('/signup'),
-                          ),
-                        ),
-                        AnimatedContainer(
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          height: keyboardOpen ? 4 : 8,
-                        ),
-
-                        // Logo
-                        AnimatedContainer(
-                          key: const Key('login-logo'),
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          width: keyboardOpen
-                              ? AuthLayout.compactLogoSize
-                              : AuthLayout.standardLogoSize,
-                          height: keyboardOpen
-                              ? AuthLayout.compactLogoSize
-                              : AuthLayout.standardLogoSize,
-                          child: const FittedBox(child: GlassLogo()),
-                        ),
-                        AnimatedContainer(
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          height: keyboardOpen ? 4 : 8,
-                        ),
-
-                        // Welcome back
-                        AnimatedDefaultTextStyle(
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          style: TextStyle(
-                            fontSize: keyboardOpen ? 22 : 26,
-                            fontWeight: FontWeight.w900,
-                            color: _kInk,
-                            letterSpacing: -0.8,
-                          ),
-                          child: const Text('Welcome back.', maxLines: 1),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Sign in to your Optivus account.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.blueGrey.shade600,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        AnimatedContainer(
-                          duration: OptivusMotion.standardDuration,
-                          curve: Curves.easeInOutCubic,
-                          height: keyboardOpen ? 6 : 14,
-                        ),
-
-                        // Form
-                        LiquidGlassPanel(
-                          padding: AuthLayout.formPanelPadding,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Email
-                              _FieldLabel('Email'),
-                              const SizedBox(
-                                height: AuthLayout.labelToFieldGap,
-                              ),
-                              AuthTextField(
-                                controller: _emailCtrl,
-                                focusNode: _emailFocus,
-                                semanticLabel: 'Email',
-                                hint: 'you@example.com',
-                                icon: Icons.email_outlined,
-                                keyboardType: TextInputType.emailAddress,
-                                autofillHints: const [AutofillHints.email],
-                                next: _passFocus,
-                              ),
-                              if (_emailError != null)
-                                _InlineFieldError(message: _emailError!),
-                              const SizedBox(height: AuthLayout.fieldGap),
-
-                              // Password
-                              _FieldLabel('Password'),
-                              const SizedBox(
-                                height: AuthLayout.labelToFieldGap,
-                              ),
-                              AuthTextField(
-                                controller: _passCtrl,
-                                focusNode: _passFocus,
-                                semanticLabel: 'Password',
-                                hint: 'Your password',
-                                icon: Icons.lock_outline,
-                                obscure: _obscurePass,
-                                autofillHints: const [AutofillHints.password],
-                                onSubmit: (_) => _signIn(),
-                                suffix: AuthEyeButton(
-                                  obscure: _obscurePass,
-                                  onToggle: () => setState(
-                                    () => _obscurePass = !_obscurePass,
-                                  ),
-                                ),
-                              ),
-                              if (_passwordError != null)
-                                _InlineFieldError(message: _passwordError!),
-                              const SizedBox(height: 10),
-
-                              // Forgot password
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: GestureDetector(
-                                  onTap: _resetLoading ? null : _forgotPassword,
-                                  child: Text(
-                                    _resetLoading
-                                        ? 'Sending reset email...'
-                                        : 'Forgot Password?',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: _kAmber,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Error/Success messages
-                        if (_errorMsg != null) ...[
-                          const SizedBox(height: 12),
-                          _ErrorBanner(message: _errorMsg!),
-                        ],
-
-                        if (_successMsg != null) ...[
-                          const SizedBox(height: 12),
-                          _SuccessBanner(message: _successMsg!),
-                        ],
-
-                        const SizedBox(height: 14),
-                        _GoogleAuthProviderButton(
-                          loading: _googleOperation != null,
-                          onPressed: authLoading ? null : _signInWithGoogle,
-                        ),
-                        const SizedBox(height: 14),
-                        _AuthRoutePrompt(
-                          prompt: "Don't have an account?",
-                          action: 'Sign Up',
-                          onPressed: () => context.push('/signup'),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ),
-                  ),
+            child: SafeArea(
+              child: SingleChildScrollView(
+                key: const Key('login-form-scroll'),
+                physics: allowAdaptiveScroll
+                    ? const BouncingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AuthLayout.horizontalPadding,
                 ),
-
-                AnimatedContainer(
-                  duration: OptivusMotion.standardDuration,
-                  curve: Curves.easeInOutCubic,
-                  height: _ctaRevealed || authLoading ? 74 : 0,
-                  child: AnimatedSwitcher(
-                    duration: OptivusMotion.fastDuration,
-                    switchInCurve: Curves.easeInOutCubic,
-                    transitionBuilder: (child, animation) => FadeTransition(
-                      opacity: animation,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, 0.05),
-                          end: Offset.zero,
-                        ).animate(animation),
-                        child: child,
+                child: Column(
+                  children: [
+                    const SizedBox(height: AuthLayout.backButtonTopInset),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: AuthBackButton(
+                        onTap: () => context.canPop()
+                            ? context.pop()
+                            : context.go('/signup'),
                       ),
                     ),
-                    child: !_ctaRevealed && !authLoading
-                        ? const SizedBox.shrink(
-                            key: ValueKey('login-primary-hidden'),
-                          )
-                        : Padding(
-                            key: const ValueKey('login-primary-visible'),
-                            padding: const EdgeInsets.fromLTRB(24, 4, 24, 10),
-                            child: authLoading
-                                ? _LoadingButton(
-                                    operation: _authOperation,
-                                    label: 'Signing in…',
-                                  )
-                                : AppButton(
-                                    key: const Key('login-submit'),
-                                    text: 'Sign In',
-                                    enabled: _formReady,
-                                    onPressed: _formReady ? _signIn : null,
-                                  ),
+                    AnimatedContainer(
+                      duration: OptivusMotion.standardDuration,
+                      curve: Curves.easeInOutCubic,
+                      height: keyboardOpen ? 4 : 8,
+                    ),
+
+                    // Logo
+                    AnimatedContainer(
+                      key: const Key('login-logo'),
+                      duration: OptivusMotion.standardDuration,
+                      curve: Curves.easeInOutCubic,
+                      width: keyboardOpen
+                          ? AuthLayout.compactLogoSize
+                          : AuthLayout.standardLogoSize,
+                      height: keyboardOpen
+                          ? AuthLayout.compactLogoSize
+                          : AuthLayout.standardLogoSize,
+                      child: const FittedBox(child: GlassLogo()),
+                    ),
+                    AnimatedContainer(
+                      duration: OptivusMotion.standardDuration,
+                      curve: Curves.easeInOutCubic,
+                      height: keyboardOpen ? 4 : 8,
+                    ),
+
+                    // Welcome back
+                    AnimatedDefaultTextStyle(
+                      duration: OptivusMotion.standardDuration,
+                      curve: Curves.easeInOutCubic,
+                      style: TextStyle(
+                        fontSize: keyboardOpen ? 22 : 26,
+                        fontWeight: FontWeight.w900,
+                        color: _kInk,
+                        letterSpacing: -0.8,
+                      ),
+                      child: const Text('Welcome back.', maxLines: 1),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Sign in to your Optivus account.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.blueGrey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    AnimatedContainer(
+                      duration: OptivusMotion.standardDuration,
+                      curve: Curves.easeInOutCubic,
+                      height: keyboardOpen ? 6 : 14,
+                    ),
+
+                    // Form
+                    LiquidGlassPanel(
+                      padding: AuthLayout.formPanelPadding,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Email
+                          _FieldLabel('Email'),
+                          const SizedBox(
+                            height: AuthLayout.labelToFieldGap,
                           ),
-                  ),
+                          AuthTextField(
+                            controller: _emailCtrl,
+                            focusNode: _emailFocus,
+                            semanticLabel: 'Email',
+                            hint: 'you@example.com',
+                            icon: Icons.email_outlined,
+                            keyboardType: TextInputType.emailAddress,
+                            autofillHints: const [AutofillHints.email],
+                            next: _passFocus,
+                          ),
+                          if (_emailError != null)
+                            _InlineFieldError(message: _emailError!),
+                          const SizedBox(height: AuthLayout.fieldGap),
+
+                          // Password
+                          _FieldLabel('Password'),
+                          const SizedBox(
+                            height: AuthLayout.labelToFieldGap,
+                          ),
+                          AuthTextField(
+                            controller: _passCtrl,
+                            focusNode: _passFocus,
+                            semanticLabel: 'Password',
+                            hint: 'Your password',
+                            icon: Icons.lock_outline,
+                            obscure: _obscurePass,
+                            autofillHints: const [AutofillHints.password],
+                            onSubmit: (_) => _signIn(),
+                            suffix: AuthEyeButton(
+                              obscure: _obscurePass,
+                              onToggle: () => setState(
+                                () => _obscurePass = !_obscurePass,
+                              ),
+                            ),
+                          ),
+                          if (_passwordError != null)
+                            _InlineFieldError(message: _passwordError!),
+                          const SizedBox(height: 10),
+
+                          // Forgot password
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: GestureDetector(
+                              onTap: _resetLoading ? null : _forgotPassword,
+                              child: Text(
+                                _resetLoading
+                                    ? 'Sending reset email...'
+                                    : 'Forgot Password?',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: _kAmber,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Primary Action Button (Sign In / Loading)
+                    if (_ctaRevealed || authLoading) ...[
+                      const SizedBox(height: 14),
+                      authLoading
+                          ? _LoadingButton(
+                              operation: _authOperation,
+                              label: 'Signing in…',
+                            )
+                          : AppButton(
+                              key: const Key('login-submit'),
+                              text: 'Sign In',
+                              enabled: _formReady,
+                              onPressed: _formReady ? _signIn : null,
+                            ),
+                    ],
+
+                    // Error/Success messages
+                    if (_errorMsg != null) ...[
+                      const SizedBox(height: 12),
+                      _ErrorBanner(message: _errorMsg!),
+                    ],
+
+                    if (_successMsg != null) ...[
+                      const SizedBox(height: 12),
+                      _SuccessBanner(message: _successMsg!),
+                    ],
+
+                    const SizedBox(height: 14),
+                    _GoogleAuthProviderButton(
+                      loading: _googleOperation != null,
+                      onPressed: authLoading ? null : _signInWithGoogle,
+                    ),
+                    const SizedBox(height: 14),
+                    _AuthRoutePrompt(
+                      prompt: "Don't have an account?",
+                      action: 'Sign Up',
+                      onPressed: () => context.push('/signup'),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -500,7 +479,7 @@ class _GoogleAuthProviderButton extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.45),
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
                   width: 1,
                 ),
               ),
@@ -644,31 +623,31 @@ class _ErrorBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: _kRed.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _kRed.withValues(alpha: 0.35), width: 1),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: _kRed.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _kRed.withValues(alpha: 0.35),
+            width: 1,
           ),
-          child: Row(
-            children: [
-              Icon(Icons.error_outline_rounded, color: _kRed, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: _kRed,
-                    fontWeight: FontWeight.w600,
-                  ),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: _kRed, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: _kRed,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -683,38 +662,35 @@ class _SuccessBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF22C55E).withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: const Color(0xFF22C55E).withValues(alpha: 0.35),
-              width: 1,
-            ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF22C55E).withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: const Color(0xFF22C55E).withValues(alpha: 0.35),
+            width: 1,
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.check_circle_outline_rounded,
-                color: Color(0xFF22C55E),
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF15803D),
-                    fontWeight: FontWeight.w600,
-                  ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.check_circle_outline_rounded,
+              color: Color(0xFF22C55E),
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF15803D),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -737,8 +713,7 @@ class _LoadingButton extends StatelessWidget {
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(33),
-        color: Colors
-            .transparent, // Fix: transparent background eliminates the rectangular grey-blue border visual bug
+        color: Colors.transparent,
         boxShadow: [
           // Soft black shadow (10% opacity)
           BoxShadow(
@@ -764,8 +739,8 @@ class _LoadingButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(30),
             color: Colors.white.withValues(alpha: 0.40),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.75),
-              width: 1.5,
+              color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+              width: 1.0,
             ),
           ),
           child: Row(
@@ -773,7 +748,15 @@ class _LoadingButton extends StatelessWidget {
             children: [
               WavyLoadingIndicator(size: 30, operation: operation),
               const SizedBox(width: 10),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
             ],
           ),
         ),

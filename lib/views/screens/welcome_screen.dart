@@ -1,6 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/widgets/glass_logo.dart';
 import 'package:optivus/widgets/app_button.dart';
 import 'package:optivus/widgets/animated_bot_avatar.dart';
@@ -10,10 +13,11 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: SizedBox.expand(
-        child: Container(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: OptivusTheme.authOverlayStyle,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFCF8EE),
+        body: Container(
           width: double.infinity,
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -86,10 +90,10 @@ class WelcomeScreen extends StatelessWidget {
                                 ), // Glass background with #F4F9FC tint
                                 borderRadius: BorderRadius.circular(24),
                                 border: Border.all(
-                                  color: Colors.white.withValues(
-                                    alpha: 0.8,
-                                  ), // Shiny edge
-                                  width: 1.5,
+                                  color: OptivusColors.borderNeutral.withValues(
+                                    alpha: 0.50,
+                                  ),
+                                  width: 1.0,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
@@ -216,27 +220,33 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       ),
                       GestureDetector(
+                        key: const Key('welcome-login-link'),
+                        behavior: HitTestBehavior.opaque,
                         onTap: () {
                           context.go('/login');
                         },
-                        child: Container(
-                          padding: const EdgeInsets.only(
-                            bottom: 2,
-                          ), // space for underline
-                          decoration: const BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: Color(0xFFFFD426), // Yellow underline
-                                width: 2.0,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 12,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.only(bottom: 2),
+                            decoration: const BoxDecoration(
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Color(0xFFFFD426),
+                                  width: 2.0,
+                                ),
                               ),
                             ),
-                          ),
-                          child: const Text(
-                            'Log in',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
-                              color: Color(0xFF0F111A),
+                            child: const Text(
+                              'Log in',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14,
+                                color: Color(0xFF0F111A),
+                              ),
                             ),
                           ),
                         ),

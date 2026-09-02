@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/glass_logo.dart';
@@ -43,17 +45,20 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
       (action) => action is ResetSetupSafelyAction,
     );
 
-    return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFF6E6B4), Color(0xFFFCF8EE), Colors.white],
-            stops: [0, .46, 1],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: OptivusTheme.authOverlayStyle,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFCF8EE),
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFF6E6B4), Color(0xFFFCF8EE), Colors.white],
+              stops: [0, .46, 1],
+            ),
           ),
-        ),
-        child: SafeArea(
+          child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 28),
@@ -145,6 +150,7 @@ class OnboardingRecoveryScreen extends ConsumerWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

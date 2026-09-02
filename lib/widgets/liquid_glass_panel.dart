@@ -28,8 +28,8 @@ class LiquidGlassPanel extends StatelessWidget {
               color: OptivusColors.homeCardTint.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.65),
-                width: 1.5,
+                color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+                width: 1.0,
               ),
               gradient: LinearGradient(
                 begin: Alignment.topCenter,

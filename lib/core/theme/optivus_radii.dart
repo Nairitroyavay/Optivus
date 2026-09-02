@@ -14,4 +14,17 @@ class OptivusRadii {
   static const double xxl = 24;
   static const double xxxl = 30;
   static const double pill = 999;
+
+  // ── Semantic Surface Radius Hierarchy (AH-F022) ───────────────────────────
+  /// Large hero cards and top-level glass panels
+  static const double surfaceLarge = 28.0;
+
+  /// Standard card and container corner radius
+  static const double cardStandard = 20.0;
+
+  /// Compact chips, inner tags, and small controls
+  static const double controlCompact = 14.0;
+
+  /// Modal bottom sheet top corners
+  static const double modalSheet = 28.0;
 }

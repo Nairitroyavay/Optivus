@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
-import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
@@ -15,23 +16,116 @@ class AuthChoiceScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authLoading = ref.watch(authProvider).isLoading;
+    final media = MediaQuery.of(context);
+    final isScaled =
+        media.size.height < 650 || media.textScaler.scale(16) > 19.2;
 
-    Future<void> signInWithGoogle() async {
-      try {
-        await ref.read(authProvider.notifier).signInWithGoogle();
-      } catch (error) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
-      }
+    void signInWithGoogle() {
+      ref.read(authProvider.notifier).signInWithGoogle();
     }
 
-    return PopScope(
-      canPop: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: DecoratedBox(
+    final bodyContent = Padding(
+      key: const Key('auth-choice-safe-content'),
+      padding: const EdgeInsets.fromLTRB(
+        AuthLayout.horizontalPadding,
+        AuthLayout.backButtonTopInset,
+        AuthLayout.horizontalPadding,
+        AuthLayout.backButtonBottomInset,
+      ),
+      child: Column(
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AuthBackButton(
+              onTap: () =>
+                  context.canPop() ? context.pop() : context.go('/'),
+            ),
+          ),
+          if (isScaled)
+            const SizedBox(height: 16)
+          else
+            const Spacer(flex: 2),
+          const SizedBox(
+            width: 92,
+            height: 92,
+            child: FittedBox(child: GlassLogo()),
+          ),
+          const SizedBox(height: 22),
+          const Text(
+            'Join the top 1%.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: OptivusColors.ink,
+              fontSize: 34,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Choose how you want to begin.',
+            style: TextStyle(
+              color: OptivusColors.textSecondary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (isScaled)
+            const SizedBox(height: 16)
+          else
+            const Spacer(),
+          LiquidGlassPanel(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _AuthChoiceButton(
+                  key: const Key('auth-choice-create'),
+                  icon: Icons.person_add_alt_1_rounded,
+                  label: 'Create New Account',
+                  onTap: () => context.push('/signup/create'),
+                ),
+                const SizedBox(height: 14),
+                _AuthChoiceButton(
+                  key: const Key('auth-choice-google'),
+                  label: 'Continue with Google',
+                  loading: authLoading,
+                  onTap: authLoading ? null : signInWithGoogle,
+                ),
+              ],
+            ),
+          ),
+          if (isScaled)
+            const SizedBox(height: 16)
+          else
+            const Spacer(flex: 2),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Flexible(
+                child: Text(
+                  'Already have an account?',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: OptivusColors.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 6),
+              TextButton(
+                key: const Key('auth-choice-login'),
+                onPressed: () => context.push('/login'),
+                child: const Text('Log in'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: OptivusTheme.authOverlayStyle,
+      child: Scaffold(
+        backgroundColor: AuthLayout.authBackgroundColor,
+        body: DecoratedBox(
           key: const Key('auth-choice-background'),
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -41,93 +135,12 @@ class AuthChoiceScreen extends ConsumerWidget {
             ),
           ),
           child: SafeArea(
-            child: Padding(
-              key: const Key('auth-choice-safe-content'),
-              padding: const EdgeInsets.fromLTRB(
-                AuthLayout.horizontalPadding,
-                AuthLayout.backButtonTopInset,
-                AuthLayout.horizontalPadding,
-                AuthLayout.backButtonBottomInset,
-              ),
-              child: Column(
-                children: [
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: AuthBackButton(
-                      onTap: () =>
-                          context.canPop() ? context.pop() : context.go('/'),
-                    ),
-                  ),
-                  const Spacer(flex: 2),
-                  const SizedBox(
-                    width: 92,
-                    height: 92,
-                    child: FittedBox(child: GlassLogo()),
-                  ),
-                  const SizedBox(height: 22),
-                  const Text(
-                    'Join the top 1%.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: OptivusColors.ink,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -1,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Choose how you want to begin.',
-                    style: TextStyle(
-                      color: OptivusColors.textSecondary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  LiquidGlassPanel(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        _AuthChoiceButton(
-                          key: const Key('auth-choice-create'),
-                          icon: Icons.person_add_alt_1_rounded,
-                          label: 'Create New Account',
-                          onTap: () => context.push('/signup/create'),
-                        ),
-                        const SizedBox(height: 14),
-                        _AuthChoiceButton(
-                          key: const Key('auth-choice-google'),
-                          label: 'Continue with Google',
-                          loading: authLoading,
-                          onTap: authLoading ? null : signInWithGoogle,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Spacer(flex: 2),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Flexible(
-                        child: Text(
-                          'Already have an account?',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: OptivusColors.textSecondary),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      TextButton(
-                        key: const Key('auth-choice-login'),
-                        onPressed: () => context.push('/login'),
-                        child: const Text('Log in'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            child: isScaled
+                ? SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: bodyContent,
+                  )
+                : bodyContent,
           ),
         ),
       ),
@@ -159,8 +172,8 @@ class _AuthChoiceButton extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.78),
-            width: 1.5,
+            color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+            width: 1.0,
           ),
           boxShadow: [
             BoxShadow(

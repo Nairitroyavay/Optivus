@@ -125,8 +125,11 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
         ),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.96),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: Colors.white, width: 1.5),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(
+            color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+            width: 1.0,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.12),
@@ -136,7 +139,7 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
           ],
         ),
         child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
             child: SafeArea(
@@ -152,8 +155,8 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
                       width: 36,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: OptivusColors.textSecondary.withValues(
-                          alpha: 0.3,
+                        color: OptivusColors.borderNeutral.withValues(
+                          alpha: 0.60,
                         ),
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -177,7 +180,7 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
                           style: TextButton.styleFrom(
                             foregroundColor: OptivusColors.textSecondary,
                             padding: const EdgeInsets.symmetric(horizontal: 10),
-                            minimumSize: const Size(44, 36),
+                            minimumSize: const Size(48, 48),
                           ),
                           child: const Text(
                             'Cancel',
@@ -227,7 +230,7 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
                             foregroundColor: Colors.white,
                             elevation: 0,
                             padding: const EdgeInsets.symmetric(horizontal: 16),
-                            minimumSize: const Size(60, 36),
+                            minimumSize: const Size(64, 48),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
                             ),

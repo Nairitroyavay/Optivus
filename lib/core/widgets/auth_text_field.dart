@@ -1,6 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/utils/focus_utils.dart';
 
 const Color _kAmber = Color(0xFFFFB830);
@@ -77,21 +77,21 @@ class _AuthTextFieldState extends State<AuthTextField> {
         duration: const Duration(milliseconds: 200),
         height: widget.height,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: _focused ? 0.28 : 0.18),
+          color: Colors.white.withValues(alpha: _focused ? 0.32 : 0.20),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(
-            color: _focused
-                ? _kAmber.withValues(alpha: 0.70)
-                : Colors.white.withValues(alpha: 0.85),
-            width: 1.5,
+            color: OptivusColors.borderNeutral.withValues(
+              alpha: _focused ? 0.75 : 0.45,
+            ),
+            width: 1.2,
           ),
           boxShadow: [
             BoxShadow(
               color: _focused
-                  ? _kAmber.withValues(alpha: 0.18)
-                  : Colors.black.withValues(alpha: 0.08),
-              blurRadius: _focused ? 18 : 24,
-              offset: const Offset(0, 8),
+                  ? _kAmber.withValues(alpha: 0.20)
+                  : Colors.black.withValues(alpha: 0.05),
+              blurRadius: _focused ? 16 : 12,
+              offset: const Offset(0, 4),
             ),
             BoxShadow(
               color: Colors.white.withValues(alpha: 0.50),
@@ -103,117 +103,116 @@ class _AuthTextFieldState extends State<AuthTextField> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(28.5),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Top-left specular rim
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(28.5),
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        stops: const [0.0, 0.15, 0.4, 1.0],
-                        colors: [
-                          Colors.white.withValues(alpha: 0.95),
-                          Colors.white.withValues(alpha: 0.40),
-                          Colors.white.withValues(alpha: 0.0),
-                          Colors.black.withValues(alpha: 0.03),
-                        ],
-                      ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Top-left specular rim
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28.5),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      stops: const [0.0, 0.15, 0.4, 1.0],
+                      colors: [
+                        Colors.white.withValues(alpha: 0.95),
+                        Colors.white.withValues(alpha: 0.40),
+                        Colors.white.withValues(alpha: 0.0),
+                        Colors.black.withValues(alpha: 0.03),
+                      ],
                     ),
                   ),
                 ),
-                Center(
-                  child: TextField(
-                    controller: widget.controller,
-                    focusNode: widget.focusNode,
-                    obscureText: widget.obscure,
-                    keyboardType: widget.keyboardType,
-                    autofillHints: widget.autofillHints,
-                    scrollPadding: EdgeInsets.zero,
-                    onTapOutside: dismissPrimaryFocusOnTapOutside,
-                    textInputAction: effectiveInputAction,
-                    textAlignVertical: TextAlignVertical.center,
-                    onSubmitted:
-                        widget.onSubmit ??
-                        (_) {
-                          if (widget.next != null) {
-                            FocusScope.of(context).requestFocus(widget.next);
-                          } else {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                          }
-                        },
-                    style: const TextStyle(
-                      color: _kInk,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      letterSpacing: 0.2,
+              ),
+              Center(
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: widget.focusNode,
+                  obscureText: widget.obscure,
+                  keyboardType: widget.keyboardType,
+                  autofillHints: widget.autofillHints,
+                  scrollPadding: EdgeInsets.zero,
+                  onTapOutside: dismissPrimaryFocusOnTapOutside,
+                  textInputAction: effectiveInputAction,
+                  textAlignVertical: TextAlignVertical.center,
+                  onSubmitted:
+                      widget.onSubmit ??
+                      (_) {
+                        if (widget.next != null) {
+                          FocusScope.of(context).requestFocus(widget.next);
+                        } else {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                        }
+                      },
+                  style: const TextStyle(
+                    color: _kInk,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    letterSpacing: 0.2,
+                  ),
+                  cursorColor: _kAmber,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 8,
                     ),
-                    cursorColor: _kAmber,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 8,
-                      ),
-                      prefixIconConstraints: const BoxConstraints(
-                        minWidth: 48,
-                        minHeight: AuthLayout.standardFieldHeight,
-                      ),
-                      prefixIcon: Padding(
-                        padding: const EdgeInsets.only(left: 7, right: 7),
-                        child: Container(
-                          width: AuthLayout.iconContainerSize,
-                          height: AuthLayout.iconContainerSize,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(11),
-                            color: Colors.white.withValues(alpha: 0.25),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.5),
-                              width: 1,
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: AuthLayout.standardFieldHeight,
+                    ),
+                    prefixIcon: Padding(
+                      padding: const EdgeInsets.only(left: 7, right: 7),
+                      child: Container(
+                        width: AuthLayout.iconContainerSize,
+                        height: AuthLayout.iconContainerSize,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(11),
+                          color: Colors.white.withValues(alpha: 0.25),
+                          border: Border.all(
+                            color: OptivusColors.borderNeutral.withValues(
+                              alpha: 0.35,
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.06),
-                                offset: const Offset(1.5, 1.5),
-                                blurRadius: 4,
-                              ),
-                              BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                offset: const Offset(-1.5, -1.5),
-                                blurRadius: 4,
-                              ),
-                            ],
+                            width: 1,
                           ),
-                          child: Icon(
-                            widget.icon,
-                            color: _focused ? _kAmber : _kInk,
-                            size: 18,
-                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              offset: const Offset(1, 1),
+                              blurRadius: 3,
+                            ),
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              offset: const Offset(-1, -1),
+                              blurRadius: 3,
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          widget.icon,
+                          color: _focused ? _kAmber : _kInk,
+                          size: 18,
                         ),
                       ),
-                      suffixIconConstraints: const BoxConstraints(
-                        minWidth: 44,
-                        minHeight: AuthLayout.standardFieldHeight,
-                      ),
-                      suffixIcon: widget.suffix,
-                      hintText: widget.hint,
-                      hintStyle: TextStyle(
-                        color: _kInk.withValues(alpha: 0.40),
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        letterSpacing: 0.2,
-                      ),
-                      border: InputBorder.none,
                     ),
+                    suffixIconConstraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: AuthLayout.standardFieldHeight,
+                    ),
+                    suffixIcon: widget.suffix,
+                    hintText: widget.hint,
+                    hintStyle: TextStyle(
+                      color: _kInk.withValues(alpha: 0.40),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      letterSpacing: 0.2,
+                    ),
+                    border: InputBorder.none,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -237,20 +236,17 @@ class AuthEyeButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: obscure ? 'Show password' : 'Hide password',
-      child: Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: IconButton(
-          iconSize: 19,
-          splashRadius: 20,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-          icon: Icon(
-            obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-            color: Colors.grey.shade600,
-          ),
-          tooltip: obscure ? 'Show password' : 'Hide password',
-          onPressed: onToggle,
+      child: IconButton(
+        iconSize: 19,
+        splashRadius: 20,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        icon: Icon(
+          obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+          color: Colors.grey.shade600,
         ),
+        tooltip: obscure ? 'Show password' : 'Hide password',
+        onPressed: onToggle,
       ),
     );
   }

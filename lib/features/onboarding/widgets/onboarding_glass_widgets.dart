@@ -30,7 +30,7 @@ class OnboardingGlassCard extends StatelessWidget {
             : Colors.white.withValues(alpha: selected ? 0.15 : 0.05));
     final borderColor = isDark
         ? OptivusColors.darkGlassBorder
-        : Colors.white.withValues(alpha: selected ? 0.95 : 0.65);
+        : OptivusColors.borderNeutral.withValues(alpha: selected ? 0.70 : 0.40);
 
     return Container(
       decoration: BoxDecoration(
@@ -186,7 +186,7 @@ class OnboardingGlassPanel extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.85),
+                color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
                 width: 1.5,
               ),
               gradient: LinearGradient(
@@ -502,9 +502,13 @@ class OnboardingChip extends StatelessWidget {
                     : Colors.white.withValues(alpha: isDark ? 0.08 : 0.15),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
-                  color: selected
-                      ? Colors.white.withValues(alpha: 0.85)
-                      : Colors.white.withValues(alpha: isDark ? 0.2 : 0.4),
+                  color: isDark
+                      ? (selected
+                            ? Colors.white.withValues(alpha: 0.85)
+                            : Colors.white.withValues(alpha: 0.2))
+                      : OptivusColors.borderNeutral.withValues(
+                          alpha: selected ? 0.75 : 0.40,
+                        ),
                   width: selected ? 1.5 : 1.0,
                 ),
                 gradient: selected
@@ -633,9 +637,13 @@ class OnboardingActionPill extends StatelessWidget {
                       : Colors.white.withValues(alpha: isDark ? 0.08 : 0.1),
                   borderRadius: BorderRadius.circular(radius),
                   border: Border.all(
-                    color: selected
-                        ? Colors.white.withValues(alpha: 0.85)
-                        : Colors.white.withValues(alpha: isDark ? 0.2 : 0.4),
+                    color: isDark
+                        ? (selected
+                              ? Colors.white.withValues(alpha: 0.85)
+                              : Colors.white.withValues(alpha: 0.2))
+                        : OptivusColors.borderNeutral.withValues(
+                            alpha: selected ? 0.75 : 0.40,
+                          ),
                     width: selected ? 1.5 : 1.0,
                   ),
                   gradient: LinearGradient(
@@ -808,7 +816,9 @@ class OnboardingIconPill extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
+                border: Border.all(
+                  color: OptivusColors.borderNeutral.withValues(alpha: 0.45),
+                ),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
@@ -889,7 +899,9 @@ class OnboardingDayDroplet extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: Colors.white.withValues(alpha: 0.1),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: selected ? 0.8 : 0.4),
+                  color: OptivusColors.borderNeutral.withValues(
+                    alpha: selected ? 0.70 : 0.40,
+                  ),
                   width: 1.0,
                 ),
                 gradient: RadialGradient(
@@ -988,7 +1000,7 @@ class OnboardingLiquidToggle extends StatelessWidget {
                     ? accent.withValues(alpha: 0.35)
                     : Colors.white.withValues(alpha: 0.15),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.6),
+                  color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
                   width: 1.0,
                 ),
                 gradient: LinearGradient(
@@ -1291,7 +1303,9 @@ class OnboardingUnitToggle extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.45),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
+          border: Border.all(
+            color: OptivusColors.borderNeutral.withValues(alpha: 0.50),
+          ),
           boxShadow: [],
         ),
         child: Stack(
