@@ -787,8 +787,25 @@ class UploadController extends StateNotifier<UploadState> {
   }
 
   String _friendlyUploadError(Object error) {
-    if (error is ImagePreparationException) return error.message;
-    if (error is CloudflareClientException) return error.message;
+    if (error is ImagePreparationException) {
+      final msg = error.message;
+      final lower = msg.toLowerCase();
+      if (lower.contains('raw_') ||
+          lower.contains('secret') ||
+          lower.contains('exception:') ||
+          lower.contains('token') ||
+          lower.contains('{') ||
+          lower.contains('}')) {
+        return 'That image couldn’t be read. Choose another photo.';
+      }
+      return msg;
+    }
+    if (error is CloudflareClientException) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        return 'Please sign in again before uploading a photo.';
+      }
+      return 'We couldn’t upload this photo. Please try again.';
+    }
     return 'Photo upload failed. Please try again.';
   }
 }

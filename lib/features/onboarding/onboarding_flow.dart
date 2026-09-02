@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/core/errors/completion_error_mapper.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
@@ -479,20 +480,25 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           );
       if (job.status != OnboardingJobStatus.completed ||
           job.stage != OnboardingCompletionStage.completed) {
+        final recoverable = CompletionErrorMapper.map(
+          job: job,
+          stage: job.stage,
+        );
         ref
             .read(mockOnboardingProvider.notifier)
-            .setValidationMessage(
-              'Setup is still finishing. Please tap Enter Optivus to resume.',
-            );
+            .setValidationMessage(recoverable.publicMessage);
         return;
       }
-    } catch (_) {
+    } catch (e) {
+      final recoverable = CompletionErrorMapper.map(
+        error: e,
+        isContradiction: e.toString().contains('contradiction') ||
+            e.toString().contains('mismatch') ||
+            e.toString().contains('schema'),
+      );
       ref
           .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(
-            'Could not finish and load your Routine setup. '
-            'Please check your connection and try again.',
-          );
+          .setValidationMessage(recoverable.publicMessage);
       return;
     }
     ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);

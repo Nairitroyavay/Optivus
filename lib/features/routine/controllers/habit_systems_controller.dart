@@ -208,7 +208,10 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
           );
           state = state.copyWith(systems: projectedSystems, loading: false);
         } else {
-          state = state.copyWith(loading: false, error: e.toString());
+          state = state.copyWith(
+            loading: false,
+            error: 'Could not load habit systems. Please try again.',
+          );
         }
       }
     } finally {
@@ -700,7 +703,7 @@ class HabitSystemsNotifier extends StateNotifier<HabitSystemsState> {
             .where((id) => id != operationId)
             .toSet(),
         saving: false,
-        error: e.toString(),
+        error: 'Could not save habit system change. Please try again.',
       );
       return false;
     }

@@ -1,7 +1,10 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:optivus/core/errors/diagnostic_codes.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/widgets/recoverable_error_views.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_save_button.dart';
 
@@ -342,6 +345,7 @@ class OnboardingStepShell extends StatelessWidget {
   final double pageOffset;
   final List<bool> completedSteps;
   final String? validationMessage;
+  final RecoverableError? error;
   final VoidCallback? onRetry;
   final Widget child;
   final void Function(int) onDotTap;
@@ -365,6 +369,7 @@ class OnboardingStepShell extends StatelessWidget {
     required this.pageOffset,
     required this.completedSteps,
     required this.validationMessage,
+    this.error,
     this.onRetry,
     required this.child,
     required this.onDotTap,
@@ -486,51 +491,22 @@ class OnboardingStepShell extends StatelessWidget {
                   ).animate(animation),
                   child: FadeTransition(opacity: animation, child: child),
                 ),
-                child: validationMessage == null
+                child: (error == null && validationMessage == null)
                     ? const SizedBox.shrink()
-                    : Container(
-                        key: ValueKey(validationMessage),
-                        margin: const EdgeInsets.fromLTRB(24, 0, 24, 10),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 11,
-                        ),
-                        decoration: BoxDecoration(
-                          color: OptivusColors.danger.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: OptivusColors.danger.withValues(alpha: 0.65),
-                            width: 1.1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.warning_amber_rounded,
-                              color: OptivusColors.danger,
-                              size: 18,
+                    : RecoverableErrorBanner(
+                        error: error ??
+                            RecoverableError(
+                              category: RecoverableErrorCategory.validation,
+                              publicMessage: validationMessage!,
+                              severity: RecoverableErrorSeverity.error,
+                              isBlocking: true,
+                              retryAction: onRetry != null
+                                  ? RecoverableRetryAction.retry
+                                  : RecoverableRetryAction.none,
+                              retrySafe: onRetry != null,
+                              diagnosticCode: DiagnosticCodes.validationIncompleteStep,
                             ),
-                            const SizedBox(width: 9),
-                            Expanded(
-                              child: Text(
-                                validationMessage!,
-                                style: const TextStyle(
-                                  color: OptivusColors.danger,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            if (onRetry != null) ...[
-                              const SizedBox(width: 8),
-                              TextButton(
-                                key: const Key('onboarding-sync-retry'),
-                                onPressed: onRetry,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ],
-                        ),
+                        onRetry: onRetry,
                       ),
               ),
               Expanded(

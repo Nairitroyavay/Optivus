@@ -93,9 +93,22 @@ class _TimelineEditSheetShellState extends State<TimelineEditSheetShell> {
       }
     } catch (e) {
       if (!mounted) return;
+      final raw =
+          e.toString().replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
+      final isCleanValidation = raw.isNotEmpty &&
+          !raw.toLowerCase().contains('raw_') &&
+          !raw.toLowerCase().contains('secret') &&
+          !raw.toLowerCase().contains('token') &&
+          !raw.contains('{') &&
+          !raw.contains('}') &&
+          !raw.contains('SocketException') &&
+          !raw.contains('HttpException') &&
+          !raw.contains('FirebaseException');
       setState(() {
         _isSaving = false;
-        _errorMessage = e.toString().replaceAll('Exception:', '').trim();
+        _errorMessage = isCleanValidation
+            ? raw
+            : 'Could not save schedule changes. Please try again.';
       });
     }
   }

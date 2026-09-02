@@ -649,11 +649,11 @@ class _RoutineImportReviewScreenState
         _loading = false;
       });
       _maybeAutoRunAi(review);
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _errorMessage = error.toString();
+        _errorMessage = 'Could not load import review. Please try again.';
       });
     }
   }
@@ -760,9 +760,9 @@ class _RoutineImportReviewScreenState
   Future<void> _persistReview(RoutineImportReviewDraft review) async {
     try {
       await ref.read(routineImportReviewRepositoryProvider).saveReview(review);
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
-      setState(() => _errorMessage = error.toString());
+      setState(() => _errorMessage = 'Could not save review changes. Please try again.');
     }
   }
 

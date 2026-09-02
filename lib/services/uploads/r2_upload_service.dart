@@ -112,7 +112,7 @@ class R2UploadService {
       if (e is SkinCarePhotoUploadException) rethrow;
       throw R2UploadHttpResponseException(
         500,
-        'Unexpected upload error: $e',
+        'Photo upload failed. Please try again.',
         e,
       );
     }
@@ -126,7 +126,7 @@ class R2UploadService {
       );
     } catch (e) {
       throw R2UploadMarkCompleteException(
-        'Could not confirm photo upload completion: $e',
+        'Could not confirm photo upload completion. Please try again.',
         e,
       );
     }

@@ -291,7 +291,7 @@ void main() {
 
         final state = container.read(routineNotifierProvider);
         expect(state.loading, isFalse);
-        expect(state.error, contains('network-request-failed'));
+        expect(state.error, isNotNull);
         expect(state.items, isEmpty);
         expect(container.read(mockRoutineProvider), isEmpty);
       },

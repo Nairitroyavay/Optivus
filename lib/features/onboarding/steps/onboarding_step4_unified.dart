@@ -1723,9 +1723,9 @@ class _OnboardingStep4UnifiedState
                   ref.read(mockOnboardingProvider).draft.uid) ==
               uid &&
           _role == currentRole,
-      mapError: (error) => AiGenerationError(
+      mapError: (error) => const AiGenerationError(
         category: AiGenerationErrorCategory.responseInvalid,
-        message: error.toString().replaceFirst(RegExp(r'^Exception:\s*'), ''),
+        message: 'AI response could not be read safely. Please try again.',
         canRetry: true,
       ),
       operation: (scope) async {

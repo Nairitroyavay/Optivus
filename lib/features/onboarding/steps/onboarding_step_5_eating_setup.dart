@@ -2601,7 +2601,13 @@ String onboarding5FriendlyAiMessage(String? error, List<String> warnings) {
       text.contains('provider_invalid_json')) {
     return 'AI response could not be read safely. Please try again.';
   }
-  if (messages.isNotEmpty && !messages.first.startsWith('provider_')) {
+  if (messages.isNotEmpty &&
+      !messages.first.startsWith('provider_') &&
+      !messages.first.toLowerCase().contains('exception') &&
+      !messages.first.toLowerCase().contains('raw_') &&
+      !messages.first.toLowerCase().contains('secret') &&
+      !messages.first.contains('{') &&
+      !messages.first.contains('}')) {
     return messages.first;
   }
   return 'AI could not read this meal routine/menu image. Please upload a clearer image and try again.';
@@ -2666,7 +2672,15 @@ String _friendlyUploadMessage(String? message) {
       lower.contains('content type')) {
     return 'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
   }
-  return value;
+  if (lower.contains('raw_') ||
+      lower.contains('secret') ||
+      lower.contains('exception') ||
+      lower.contains('token') ||
+      lower.contains('{') ||
+      lower.contains('}')) {
+    return 'Photo upload failed. Please try again.';
+  }
+  return 'Photo upload failed. Please try again.';
 }
 
 String _inferMealCategory(String title) {

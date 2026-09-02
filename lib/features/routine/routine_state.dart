@@ -586,14 +586,17 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
                     _loadGeneration == generation) {
                   state = state.copyWith(
                     eventsLoading: false,
-                    eventsError: error.toString(),
+                    eventsError: 'Failed to load history. Please try again.',
                   );
                 }
               },
             );
       } catch (e) {
         if (generation != _loadGeneration || _ownerUid != uid) return;
-        state = state.copyWith(loading: false, error: e.toString());
+        state = state.copyWith(
+          loading: false,
+          error: 'Failed to load routine data. Please try again.',
+        );
         rethrow;
       }
     } finally {
@@ -636,7 +639,7 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
                 _eventsGeneration == eventsGeneration) {
               state = state.copyWith(
                 eventsLoading: false,
-                eventsError: error.toString(),
+                eventsError: 'Failed to load history. Please try again.',
               );
             }
           },
@@ -1707,12 +1710,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             if (candidate.id != id) candidate,
           if (intent.previousRecord != null) intent.previousRecord!,
         ],
-        error: error.toString(),
+        error: 'Could not update routine. Please try again.',
       );
       _recalculateConflicts();
       await _processNextQueuedOccurrence(uid, id);
       final result = RoutineWriteResult.retryRequired(
-        message: error.toString(),
+        message: 'Could not update routine. Please try again.',
         operationId: operationId,
       );
       if (!completer.isCompleted) {
@@ -1792,12 +1795,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             if (candidate.id != id) candidate,
           if (intent.previousRecord != null) intent.previousRecord!,
         ],
-        error: error.toString(),
+        error: 'Could not update routine. Please try again.',
       );
       _recalculateConflicts();
       intent.completer?.complete(
         RoutineWriteResult.retryRequired(
-          message: error.toString(),
+          message: 'Could not update routine. Please try again.',
           operationId: intent.operationId,
         ),
       );
@@ -1913,12 +1916,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           ...state.failedOccurrenceIntentsById,
           id: intent,
         },
-        error: error.toString(),
+        error: 'Could not update routine. Please try again.',
       );
       _recalculateConflicts();
       return RoutineWriteResult.retryRequired(
         operationId: operationId,
-        message: error.toString(),
+        message: 'Could not update routine. Please try again.',
       );
     }
   }
@@ -1977,12 +1980,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
             ...state.failedOccurrenceIntentsById,
             occurrenceId: intent,
           },
-          error: error.toString(),
+          error: 'Could not update routine. Please try again.',
         );
         _recalculateConflicts();
         return RoutineWriteResult.retryRequired(
           operationId: intent.operationId,
-          message: error.toString(),
+          message: 'Could not update routine. Please try again.',
         );
       }
     }
@@ -2033,12 +2036,12 @@ class RoutineNotifier extends StateNotifier<RoutineState> {
           ...state.failedOccurrenceIntentsById,
           occurrenceId: intent,
         },
-        error: error.toString(),
+        error: 'Could not update routine. Please try again.',
       );
       _recalculateConflicts();
       return RoutineWriteResult.retryRequired(
         operationId: intent.operationId,
-        message: error.toString(),
+        message: 'Could not update routine. Please try again.',
       );
     }
   }

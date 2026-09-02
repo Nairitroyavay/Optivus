@@ -431,7 +431,13 @@ String onboarding7FriendlyAiMessage(String? error, List<String> warnings) {
   if (text.contains('unavailable')) {
     return 'AI skin care service is unavailable. Try again later.';
   }
-  if (messages.isNotEmpty && !messages.first.startsWith('provider_')) {
+  if (messages.isNotEmpty &&
+      !messages.first.startsWith('provider_') &&
+      !messages.first.toLowerCase().contains('exception') &&
+      !messages.first.toLowerCase().contains('raw_') &&
+      !messages.first.toLowerCase().contains('secret') &&
+      !messages.first.contains('{') &&
+      !messages.first.contains('}')) {
     return messages.first;
   }
   return 'AI failed to generate a routine. Try adding more details.';
@@ -1002,7 +1008,8 @@ String _friendlySkinCareUploadMessage(String? message) {
       lower.contains('content type')) {
     return 'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
   }
-  return value;
+  // Safe default: never leak raw exception or unmapped technical strings
+  return 'Photo upload failed. Please try again.';
 }
 
 String _skinCareUploadStatusLabel(UploadFlowStatus status) {

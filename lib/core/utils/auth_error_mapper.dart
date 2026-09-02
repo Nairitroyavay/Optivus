@@ -73,7 +73,17 @@ AuthFailureException mapAuthError(Object error) {
   var message = raw;
   if (message.startsWith('Exception: ')) {
     message = message.replaceFirst('Exception: ', '');
-  } else if (message.trim().isEmpty) {
+  }
+  final lower = message.toLowerCase();
+  if (lower.contains('raw_') ||
+      lower.contains('secret') ||
+      lower.contains('firebaseexception') ||
+      lower.contains('platformexception') ||
+      lower.contains('{') ||
+      lower.contains('}')) {
+    message = 'Something went wrong. Please try again.';
+  }
+  if (message.trim().isEmpty) {
     message = 'Something went wrong. Please try again.';
   }
 
@@ -85,7 +95,18 @@ AuthFailureException mapAuthError(Object error) {
 }
 
 String friendlyAuthError(Object error) {
-  return mapAuthError(error).message;
+  final msg = mapAuthError(error).message;
+  final lower = msg.toLowerCase();
+  if (lower.contains('raw_') ||
+      lower.contains('secret') ||
+      lower.contains('firebaseexception') ||
+      lower.contains('platformexception') ||
+      lower.contains('exception:') ||
+      lower.contains('{') ||
+      lower.contains('}')) {
+    return 'Something went wrong. Please try again.';
+  }
+  return msg;
 }
 
 bool isEmailAlreadyInUseError(Object error) {
