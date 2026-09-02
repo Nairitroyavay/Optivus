@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/state/app_state.dart';
@@ -107,7 +108,7 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Padding(
-          padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
+          padding: OptivusSpacing.onboardingHeaderPadding,
           child: OnboardingSectionTitle(
             title: 'Drop Bad Habits',
             subtitle: 'Select the loops Optivus should help you intercept.',
@@ -115,7 +116,7 @@ class _OnboardingStep8State extends ConsumerState<OnboardingStep8> {
         ),
         Expanded(
           child: OnboardingScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            padding: OptivusSpacing.onboardingContentPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

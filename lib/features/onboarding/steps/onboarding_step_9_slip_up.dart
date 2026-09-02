@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/state/app_state.dart';
 
@@ -36,7 +37,7 @@ class OnboardingStep12 extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Padding(
-          padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
+          padding: OptivusSpacing.onboardingHeaderPadding,
           child: OnboardingSectionTitle(
             title: 'Slip-up Handling',
             subtitle: 'Choose the comeback tone when you miss a task or habit.',
@@ -44,7 +45,7 @@ class OnboardingStep12 extends ConsumerWidget {
         ),
         Expanded(
           child: OnboardingScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            padding: OptivusSpacing.onboardingContentPadding,
             userScrollable: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

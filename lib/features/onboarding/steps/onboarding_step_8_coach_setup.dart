@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/widgets/animated_bot_avatar.dart';
@@ -73,7 +74,7 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Padding(
-          padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
+          padding: OptivusSpacing.onboardingHeaderPadding,
           child: OnboardingSectionTitle(
             title: 'Coach Setup',
             subtitle:
@@ -82,7 +83,7 @@ class _OnboardingStep11State extends ConsumerState<OnboardingStep11> {
         ),
         Expanded(
           child: OnboardingScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            padding: OptivusSpacing.onboardingContentPadding,
             userScrollable: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,

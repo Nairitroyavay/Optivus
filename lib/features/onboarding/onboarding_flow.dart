@@ -1288,8 +1288,11 @@ bool onboardingShouldShowTopLeftBackButton({
   if (currentPage == onboardingEatingStepIndex) {
     return baseTimeline.eatingSetupStep > 0;
   }
-  // Skin Care has both page-level and internal navigation. On its choice
-  // screen this returns to Fixed Schedule; inside a path it returns to choice.
-  if (currentPage == onboardingSkinCareStepIndex) return true;
+  // Skin Care has internal navigation: inside a path it returns to choice.
+  // The first screen (choice screen) does not show a back button.
+  if (currentPage == onboardingSkinCareStepIndex) {
+    return baseTimeline.skinCareSetupStep > 0;
+  }
   return false;
 }
+

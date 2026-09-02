@@ -624,8 +624,9 @@ void main() {
           find.byKey(const ValueKey('onboarding-cta-visible')),
         );
         final step = tester.getRect(find.byType(OnboardingStep14));
-        expect(step.bottom, lessThanOrEqualTo(footer.top));
+        expect(step.bottom, equals(footer.bottom));
         expect(tester.takeException(), isNull);
+
       });
     }
 
@@ -820,9 +821,10 @@ void main() {
       );
       final timelineRect = tester.getRect(find.byType(FullScreenTimelineScaffold));
 
-      // The entire timeline scaffold is structurally above the footer
-      expect(timelineRect.bottom, lessThanOrEqualTo(footerRect.top));
+      // The timeline scaffold extends to the bottom behind the floating footer
+      expect(timelineRect.bottom, equals(footerRect.bottom));
       expect(tester.takeException(), isNull);
+
     });
   });
 

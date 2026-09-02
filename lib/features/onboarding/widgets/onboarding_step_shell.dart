@@ -516,32 +516,42 @@ class OnboardingStepShell extends StatelessWidget {
                       ),
               ),
               Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(
-                    bottom: keyboardOpen
-                        ? MediaQuery.viewInsetsOf(context).bottom
-                        : 0,
-                  ),
-                  child: child,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: keyboardOpen
+                            ? MediaQuery.viewInsetsOf(context).bottom
+                            : 0,
+                      ),
+                      child: child,
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: OnboardingActionBar(
+                        actions: resolvedActions,
+                        reserveHiddenSpace: true,
+                        accessory: currentPage == 0 && showPrimaryCta
+                            ? const Padding(
+                                padding: EdgeInsets.only(top: 12),
+                                child: Text(
+                                  'By continuing, you agree to our Terms & Policy',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Color(0xFF6F737C),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              )
+                            : null,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              OnboardingActionBar(
-                actions: resolvedActions,
-                reserveHiddenSpace: true,
-                accessory: currentPage == 0 && showPrimaryCta
-                    ? const Padding(
-                        padding: EdgeInsets.only(top: 12),
-                        child: Text(
-                          'By continuing, you agree to our Terms & Policy',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Color(0xFF6F737C),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      )
-                    : null,
               ),
             ],
           ),
@@ -551,3 +561,5 @@ class OnboardingStepShell extends StatelessWidget {
     );
   }
 }
+
+

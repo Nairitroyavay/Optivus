@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/steps/base_timeline_step.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/managers/base_timeline/screens/routine_import_review_screen.dart';
@@ -381,7 +382,7 @@ class OnboardingStepBody extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             OnboardingSectionTitle(title: title, subtitle: subtitle),
-            const SizedBox(height: 12),
+            const SizedBox(height: OptivusSpacing.onboardingHeaderToContentGap),
             _InternalProgress(accent: accent),
             const SizedBox(height: 14),
             ...children,
@@ -393,12 +394,12 @@ class OnboardingStepBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+          padding: OptivusSpacing.onboardingHeaderPadding,
           child: OnboardingSectionTitle(title: title, subtitle: subtitle),
         ),
         Expanded(
           child: OnboardingScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+            padding: OptivusSpacing.onboardingContentPadding,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

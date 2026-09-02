@@ -16,8 +16,9 @@ class AuthBackButton extends StatelessWidget {
     return Semantics(
       button: true,
       label: 'Back',
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      child: SizedBox(
+        width: 48,
+        height: 48,
         child: Material(
           color: Colors.transparent,
           child: InkWell(

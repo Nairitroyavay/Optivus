@@ -41,4 +41,20 @@ class OptivusSpacing {
 
   /// Bottom padding for scroll content so it doesn't hide behind the tab bar
   static const double contentBottomPadding = 120;
+
+  // ── Onboarding Spacing Tokens ───────────────────────────────────────────────
+  /// Canonical gap between the onboarding progress indicator and standard step header
+  static const double onboardingProgressToHeaderGap = 2.0;
+
+  /// Canonical padding for standard onboarding step headers
+  static const EdgeInsets onboardingHeaderPadding =
+      EdgeInsets.fromLTRB(screenHorizontal, onboardingProgressToHeaderGap, screenHorizontal, 0);
+
+  /// Canonical vertical gap between onboarding step header and first content element
+  static const double onboardingHeaderToContentGap = 26.0;
+
+  /// Canonical content scroll view padding for standard onboarding steps
+  static const EdgeInsets onboardingContentPadding =
+      EdgeInsets.fromLTRB(screenHorizontal, onboardingHeaderToContentGap, screenHorizontal, 32);
 }
+

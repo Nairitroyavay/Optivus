@@ -244,6 +244,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'auth entry screens share identical top-left Back button positioning',
+    (tester) async {
+      await _setRealmeView(tester);
+
+      await tester.pumpWidget(_authScreen(const AuthChoiceScreen()));
+      final choiceBackTopLeft = tester.getTopLeft(find.byType(AuthBackButton));
+      final choiceBackSize = tester.getSize(find.byType(AuthBackButton));
+
+      await tester.pumpWidget(_authScreen(const SignupScreen()));
+      final signupBackTopLeft = tester.getTopLeft(find.byType(AuthBackButton));
+      final signupBackSize = tester.getSize(find.byType(AuthBackButton));
+
+      await tester.pumpWidget(_authScreen(const LoginScreen()));
+      final loginBackTopLeft = tester.getTopLeft(find.byType(AuthBackButton));
+      final loginBackSize = tester.getSize(find.byType(AuthBackButton));
+
+      // Size is exactly 48x48 touch target
+      expect(choiceBackSize, const Size(48, 48));
+      expect(signupBackSize, const Size(48, 48));
+      expect(loginBackSize, const Size(48, 48));
+
+      // Top-left aligned to horizontal padding (24.0) and backButtonTopInset (16.0)
+      expect(choiceBackTopLeft.dx, AuthLayout.horizontalPadding);
+      expect(signupBackTopLeft.dx, AuthLayout.horizontalPadding);
+      expect(loginBackTopLeft.dx, AuthLayout.horizontalPadding);
+
+      expect(choiceBackTopLeft.dy, AuthLayout.backButtonTopInset);
+      expect(signupBackTopLeft.dy, AuthLayout.backButtonTopInset);
+      expect(loginBackTopLeft.dy, AuthLayout.backButtonTopInset);
+    },
+  );
+
   testWidgets('all auth text fields share 50px standard height', (
     tester,
   ) async {

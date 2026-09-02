@@ -111,7 +111,7 @@ void main() {
     expect(find.text('Next Step'), findsNothing);
   });
 
-  testWidgets('1b. Next Step reserves space above the shared background', (
+  testWidgets('1b. Next Step floats above the shared background', (
     tester,
   ) async {
     useAndroidWidth(tester);
@@ -148,8 +148,9 @@ void main() {
     final ctaRect = tester.getRect(
       find.byKey(const ValueKey('onboarding-cta-visible')),
     );
-    expect(contentRect.bottom, lessThanOrEqualTo(ctaRect.top));
+    expect(contentRect.bottom, equals(ctaRect.bottom));
   });
+
 
   testWidgets('2. I have products mode opens immediately', (tester) async {
     await tester.pumpWidget(buildTestWidget());
@@ -5940,7 +5941,7 @@ void main() {
     expect(onboarding7CanContinue(base), isTrue);
   });
 
-  testWidgets('73. Step 7 renders a working visible top back button', (
+  testWidgets('73. Step 7 does not render top back button on choice screen, but renders it inside path', (
     tester,
   ) async {
     useAndroidWidth(tester);
@@ -6016,7 +6017,7 @@ void main() {
         currentPage: onboardingSkinCareStepIndex,
         baseTimeline: const BaseTimelineDraft(skinCareSetupStep: 0),
       ),
-      isTrue,
+      isFalse,
     );
     expect(
       onboardingShouldShowTopLeftBackButton(
@@ -6025,14 +6026,20 @@ void main() {
       ),
       isTrue,
     );
+    expect(find.byKey(const ValueKey('onboarding-step7-back')), findsNothing);
+
+    await tester.tap(find.text('I have products'));
+    await tester.pumpAndSettle();
+
     final backButton = find.byKey(const ValueKey('onboarding-step7-back'));
     expect(backButton, findsOneWidget);
 
     await tester.tap(backButton);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
 
-    expect(find.text('Fixed Schedule'), findsOneWidget);
+    expect(find.text('Skin Care'), findsOneWidget);
+    expect(find.text('I have products'), findsOneWidget);
+    expect(find.byKey(const ValueKey('onboarding-step7-back')), findsNothing);
   });
 
   test('74. Common store category labels satisfy all five essentials', () {

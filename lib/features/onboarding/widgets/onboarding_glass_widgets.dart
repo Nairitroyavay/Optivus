@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
+import 'onboarding_action_bar.dart';
 
 class OnboardingGlassCard extends StatelessWidget {
   final Widget child;
@@ -111,16 +113,18 @@ class OnboardingGlassCard extends StatelessWidget {
 
 class OnboardingScrollView extends StatelessWidget {
   final Widget child;
-  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry? padding;
   final bool userScrollable;
   final ScrollController? controller;
+  final bool includeBottomReserve;
 
   const OnboardingScrollView({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.fromLTRB(24, 12, 24, 32),
+    this.padding,
     this.userScrollable = true,
     this.controller,
+    this.includeBottomReserve = true,
   });
 
   @override
@@ -128,8 +132,33 @@ class OnboardingScrollView extends StatelessWidget {
     final media = MediaQuery.of(context);
     final isLandscape =
         media.orientation == Orientation.landscape || media.size.height < 500;
+    final footerReserve = includeBottomReserve
+        ? OnboardingFooterMetrics.resolve(context).requiredContentInset
+        : 0.0;
+    final basePadding = padding ?? OptivusSpacing.onboardingContentPadding;
+    final effectivePadding = basePadding is EdgeInsets
+        ? EdgeInsets.fromLTRB(
+            basePadding.left,
+            basePadding.top,
+            basePadding.right,
+            basePadding.bottom + footerReserve,
+          )
+        : basePadding;
+
     return LayoutBuilder(
       builder: (context, constraints) {
+        final availableHeight =
+            constraints.maxHeight.isFinite ? constraints.maxHeight : 0.0;
+        final targetMinHeight = availableHeight > 0.0
+            ? math.max(
+                0.0,
+                availableHeight -
+                    (effectivePadding is EdgeInsets
+                        ? effectivePadding.vertical
+                        : footerReserve),
+              )
+            : 0.0;
+
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
           child: SingleChildScrollView(
@@ -140,12 +169,12 @@ class OnboardingScrollView extends StatelessWidget {
                   )
                 : const NeverScrollableScrollPhysics(),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: padding,
+            padding: effectivePadding,
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: isLandscape || !constraints.maxHeight.isFinite
+                minHeight: isLandscape || availableHeight == 0.0
                     ? 0
-                    : constraints.maxHeight,
+                    : targetMinHeight,
               ),
               child: child,
             ),
@@ -155,6 +184,7 @@ class OnboardingScrollView extends StatelessWidget {
     );
   }
 }
+
 
 class OnboardingGlassPanel extends StatelessWidget {
   final Widget child;
