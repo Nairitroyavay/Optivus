@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,6 +102,8 @@ class OnboardingCompletionJobService {
 
   final Map<String, Future<OnboardingCompletionJob>> _inFlight = {};
   final Map<String, int> _operationGenerationByOwner = {};
+  final ValueNotifier<OnboardingCompletionJob?> activeJobNotifier =
+      ValueNotifier<OnboardingCompletionJob?>(null);
 
   void cancelAll() {
     for (final owner in _operationGenerationByOwner.keys.toList()) {
@@ -108,12 +111,16 @@ class OnboardingCompletionJobService {
           (_operationGenerationByOwner[owner] ?? 0) + 1;
     }
     _inFlight.clear();
+    activeJobNotifier.value = null;
   }
 
   void cancelOwner(String uid) {
     _operationGenerationByOwner[uid] =
         (_operationGenerationByOwner[uid] ?? 0) + 1;
     _inFlight.removeWhere((key, _) => key.startsWith('$uid:'));
+    if (activeJobNotifier.value?.uid == uid) {
+      activeJobNotifier.value = null;
+    }
   }
 
   OnboardingCompletionJobService({
@@ -1281,6 +1288,7 @@ class OnboardingCompletionJobService {
     OnboardingCompletionJob job, {
     bool activate = false,
   }) async {
+    activeJobNotifier.value = job;
     if (firestore != null) {
       if (activate) {
         final batch = firestore!.batch();
@@ -1482,4 +1490,9 @@ final onboardingCompletionJobProvider =
       return ref
           .watch(onboardingCompletionJobServiceProvider)
           .loadCurrentJob(uid);
+    });
+
+final activeOnboardingCompletionJobProvider =
+    ChangeNotifierProvider<ValueNotifier<OnboardingCompletionJob?>>((ref) {
+      return ref.watch(onboardingCompletionJobServiceProvider).activeJobNotifier;
     });

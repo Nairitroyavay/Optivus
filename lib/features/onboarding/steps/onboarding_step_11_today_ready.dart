@@ -1,412 +1,836 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
+import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
+import 'package:optivus/features/onboarding/timeline/adapters/fixed_timeline_adapter.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_entry.dart';
+import 'package:optivus/features/onboarding/timeline/models/timeline_style.dart';
+import 'package:optivus/features/onboarding/timeline/widgets/full_screen_timeline_scaffold.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
-import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
+import 'package:optivus/models/onboarding_completion_bundle.dart';
+import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 
-class OnboardingStep14 extends ConsumerWidget {
+/// Step 14 Final Review & Completion Screen.
+class OnboardingStep14 extends ConsumerStatefulWidget {
   final ValueChanged<int>? onJumpToStep;
+  final VoidCallback? onCompletionStarted;
 
-  const OnboardingStep14({super.key, this.onJumpToStep});
+  const OnboardingStep14({
+    super.key,
+    this.onJumpToStep,
+    this.onCompletionStarted,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OnboardingStep14> createState() => OnboardingStep14State();
+}
+
+class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _attentionSectionKey = GlobalKey();
+
+  Step14PresentationMode _presentationMode = Step14PresentationMode.review;
+  String? _expandedGroupId;
+  String? _savingGroupId;
+  bool _showingAllReviewedChoices = false;
+  bool _viewingFullTimeline = false;
+  int _timelineSelectedDay = 1;
+  RecoverableError? _recoverableError;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void focusFirstUnresolvedConflict({String? targetGroupId}) {
+    if (!mounted) return;
+    if (targetGroupId != null) {
+      setState(() => _expandedGroupId = targetGroupId);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final targetContext = _attentionSectionKey.currentContext;
+      if (targetContext != null) {
+        Scrollable.ensureVisible(
+          targetContext,
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeInOutCubic,
+          alignment: 0.1,
+        );
+      }
+    });
+  }
+
+  void startFinishingPresentation() {
+    if (!mounted) return;
+    setState(() {
+      _presentationMode = Step14PresentationMode.finishing;
+      _recoverableError = null;
+    });
+  }
+
+  void setFailureState(RecoverableError error) {
+    if (!mounted) return;
+    setState(() {
+      _presentationMode = Step14PresentationMode.failure;
+      _recoverableError = error;
+    });
+  }
+
+  void setSuccessState() {
+    if (!mounted) return;
+    setState(() {
+      _presentationMode = Step14PresentationMode.success;
+      _recoverableError = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final onboarding = ref.watch(mockOnboardingProvider);
     final draft = onboarding.draft;
     final bundle = OnboardingCompletionService.buildBundle(draft);
-    final blockingConflicts = draft.timelineConflictsRequiringAcceptance();
-    final conflictGroups = _ConflictGroup.from(blockingConflicts);
-    final missing = <_MissingSetup>[
-      if (draft.lifeRole.validate() != null)
-        const _MissingSetup('Role and lifestyle', 2),
-      if (draft.bodyBasics.validate() != null)
-        const _MissingSetup('Body basics', 3),
-      if (draft.baseTimeline.validateClassesAndWorkForRole(
-            draft.lifeRole.lifeRole,
-          ) !=
-          null)
-        const _MissingSetup('Classes & job', 4),
-      if (draft.baseTimeline.validateEatingSetup() != null)
-        const _MissingSetup('Eating setup', 5),
-      if (draft.baseTimeline.validateFixedSchedule() != null)
-        const _MissingSetup('Fixed schedule', 6),
-      if (draft.baseTimeline.validateSkinCareSetup() != null)
-        const _MissingSetup('Skin care', 7),
-      if (!draft.badHabitsNotNow && draft.badHabits.isEmpty)
-        const _MissingSetup('Bad habits', 8),
-      if (!draft.goodHabitsNotNow && draft.goodHabits.isEmpty)
-        const _MissingSetup('Good habits', 9),
-      if (draft.identityGoals.isEmpty)
-        const _MissingSetup('Identity goals', 10),
-      if (draft.coachSetup.validate() != null)
-        const _MissingSetup('Coach setup', 11),
-      if (draft.slipUpHandling == null)
-        const _MissingSetup('Slip-up handling', 12),
-      if (!onboarding.stepCompleted
-          .take(OnboardingDraft.lastStepIndex)
-          .every((done) => done))
-        const _MissingSetup('Unsaved setup steps', 0),
-    ];
 
-    final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape ||
-        MediaQuery.sizeOf(context).height < 500;
+    final rawConflicts = draft.baseTimeline.detectConflicts(
+      ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
+      timezoneId: draft.timezoneId,
+      revision: draft.revision,
+    );
+    final conflictGroups = Step14ConflictGroupProjector.project(
+      occurrences: rawConflicts,
+      draft: draft,
+    );
+    final unresolvedGroups = conflictGroups.where((g) => g.isUnresolved).toList();
+    final acceptedGroups = conflictGroups.where((g) => g.isFullyAccepted).toList();
 
-    if (isLandscape) {
-      return OnboardingScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const OnboardingSectionTitle(
-              title: 'Today Is Ready',
-              subtitle:
-                  'Review the local onboarding setup before entering Optivus.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 14),
-            if (missing.isNotEmpty)
-              OnboardingGlassCard(
-                tint: OptivusColors.warning.withValues(alpha: 0.10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: OptivusColors.warning,
-                        ),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Missing required setup',
-                            style: TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      missing.map((item) => item.label).join('\n'),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: OptivusColors.textSecondary,
-                        height: 1.45,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final item in missing)
-                          ActionChip(
-                            label: Text('Fix ${item.label}'),
-                            onPressed: onJumpToStep == null
-                                ? null
-                                : () => onJumpToStep!(item.step),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            if (missing.isNotEmpty) const SizedBox(height: 16),
-            if (conflictGroups.isNotEmpty) ...[
-              _BlockingConflictList(
-                groups: conflictGroups,
-                onKeepBoth: (group, days) => _keepBoth(ref, group, days),
-                onEdit: (blockId) => _editBlock(draft, blockId),
-              ),
-              const SizedBox(height: 16),
-            ],
-            OnboardingGlassCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Final preview',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 10),
-                  Text('Timeline blocks: ${draft.baseTimeline.blocks.length}'),
-                  Text(
-                    'Eating mode: ${draft.baseTimeline.eatingMode ?? "default"}',
-                  ),
-                  Text(
-                    'Skin care products: ${draft.baseTimeline.skinCareSelectedProductNames.length}',
-                  ),
-                  Text('Identity goals: ${draft.identityGoals.length}'),
-                ],
-              ),
-            ),
-            if (bundle.warnings.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              OnboardingGlassCard(
-                tint: OptivusColors.warning.withValues(alpha: 0.08),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Warnings',
-                      style: TextStyle(
-                        color: OptivusColors.warning,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(bundle.warnings.join('\n')),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            const OnboardingSectionTitle(
-              title: 'Today timeline preview',
-              subtitle: 'Generated blocks for your first day',
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 480,
-              child: _Step14TimelinePreview(blocks: bundle.baseTimelineBlocks),
-            ),
-          ],
-        ),
+    // Default expanded group to first unresolved if not set or invalid
+    if (_expandedGroupId == null && unresolvedGroups.isNotEmpty) {
+      _expandedGroupId = unresolvedGroups.first.stableGroupId;
+    } else if (_expandedGroupId != null &&
+        !unresolvedGroups.any((g) => g.stableGroupId == _expandedGroupId)) {
+      _expandedGroupId = unresolvedGroups.isNotEmpty
+          ? unresolvedGroups.first.stableGroupId
+          : null;
+    }
+
+    final readiness = Step14ReadinessSummary.project(
+      draft: draft,
+      unresolvedConflictGroupCount: unresolvedGroups.length,
+    );
+
+    final previewData = Step14FinalPreviewData.project(
+      draft: draft,
+      bundle: bundle,
+    );
+
+    // Watch active completion job if finishing
+    final activeJobNotifier = ref.watch(activeOnboardingCompletionJobProvider);
+    final activeJob = activeJobNotifier.value;
+
+    // Handle full timeline preview mode
+    if (_viewingFullTimeline) {
+      return _buildFullTimelineView(bundle);
+    }
+
+    // Handle finishing / success / failure modes
+    if (_presentationMode != Step14PresentationMode.review) {
+      return _buildFinishingScaffold(
+        activeJob: activeJob,
+        draft: draft,
+        bundle: bundle,
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
-          child: OnboardingSectionTitle(
-            title: 'Today Is Ready',
-            subtitle:
-                'Review the local onboarding setup before entering Optivus.',
-            textAlign: TextAlign.center,
-          ),
+    // Standard Review Mode
+    return PopScope(
+      canPop: !_viewingFullTimeline,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _viewingFullTimeline) {
+          setState(() => _viewingFullTimeline = false);
+        }
+      },
+      child: OnboardingScrollView(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            _buildHeader(),
+            const SizedBox(height: 18),
+
+            // Section 1: Readiness Card
+            _buildReadinessCard(readiness),
+            const SizedBox(height: 16),
+
+            // Section 2: Needs your attention (only if conflicts exist)
+            if (conflictGroups.isNotEmpty) ...[
+              _buildAttentionSection(
+                unresolvedGroups: unresolvedGroups,
+                acceptedGroups: acceptedGroups,
+                rawConflicts: rawConflicts,
+                draft: draft,
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Section 3: Final Preview
+            _buildFinalPreviewCard(previewData, draft),
+            const SizedBox(height: 24),
+          ],
         ),
-        Expanded(
-          child: OnboardingScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (missing.isNotEmpty)
-                  OnboardingGlassCard(
-                    tint: OptivusColors.warning.withValues(alpha: 0.10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(
-                              Icons.warning_amber_rounded,
-                              color: OptivusColors.warning,
-                            ),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Missing required setup',
-                                style: TextStyle(fontWeight: FontWeight.w900),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          missing.map((item) => item.label).join('\n'),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: OptivusColors.textSecondary,
-                            height: 1.45,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: missing
-                              .map(
-                                (item) => OnboardingChip(
-                                  label: 'Edit ${item.label}',
-                                  selected: false,
-                                  accent: OptivusColors.warning,
-                                  onTap: () => onJumpToStep?.call(item.step),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  OnboardingGlassCard(
-                    tint: OptivusColors.success.withValues(alpha: 0.10),
-                    child: const Row(
-                      children: [
-                        Icon(
-                          Icons.check_circle_rounded,
-                          color: OptivusColors.success,
-                        ),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'Required onboarding setup is complete.',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: OptivusColors.success,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 14),
-                if (conflictGroups.isNotEmpty) ...[
-                  _BlockingConflictList(
-                    groups: conflictGroups,
-                    onKeepBoth: (group, days) => _keepBoth(ref, group, days),
-                    onEdit: (blockId) => _editBlock(draft, blockId),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                OnboardingGlassCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Final preview',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          OnboardingActionPill(
-                            label: 'Edit Setup',
-                            icon: Icons.edit_rounded,
-                            accent: OptivusColors.brandAccent,
-                            compact: true,
-                            onTap: () => onJumpToStep?.call(2),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      _row(
-                        'Your identity goals',
-                        draft.identityGoals.isEmpty
-                            ? 'Not selected'
-                            : draft.identityGoals
-                                  .map((goal) => goal.displayName)
-                                  .join(', '),
-                      ),
-                      _row(
-                        'Today timeline',
-                        '${bundle.routineItemsForApp.length} generated blocks',
-                      ),
-                      _row('Habit focus', _habitFocus(draft)),
-                      _row(
-                        'Coach',
-                        draft.coachSetup.coachName ?? 'Not selected',
-                      ),
-                      _row(
-                        'Coach style',
-                        _displayKey(draft.coachSetup.coachStyle),
-                      ),
-                      _row(
-                        'Slip-up handling',
-                        _displayKey(draft.slipUpHandling),
-                      ),
-                      _row(
-                        'Notifications',
-                        draft.notifications.selectedLabels().isEmpty
-                            ? 'None selected'
-                            : draft.notifications.selectedLabels().join(', '),
-                      ),
-                      if (bundle.duplicateSystemKeysMerged.isNotEmpty)
-                        _row(
-                          'Merged duplicates',
-                          bundle.duplicateSystemKeysMerged
-                              .map(identitySystemTitle)
-                              .join(', '),
-                        ),
-                    ],
-                  ),
-                ),
-                if (bundle.warnings.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  OnboardingGlassCard(
-                    tint: OptivusColors.warning.withValues(alpha: 0.10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Warnings',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          bundle.warnings.join('\n'),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: OptivusColors.textSecondary,
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                SizedBox(
-                  height: 500,
-                  child: _Step14TimelinePreview(
-                    blocks: bundle.baseTimelineBlocks,
-                  ),
-                ),
-              ], // end OnboardingScrollView inner Column children
-            ), // end OnboardingScrollView inner Column
-          ), // end OnboardingScrollView
-        ), // end Expanded
-      ], // end outer Column children
+      ),
     );
   }
 
-  static Widget _row(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: OptivusColors.textSecondary,
+  // ── Header ──────────────────────────────────────────────────────────────────
+  Widget _buildHeader() {
+    return Column(
+      key: const ValueKey('step14-header'),
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                OptivusColors.aquaAccent.withValues(alpha: 0.28),
+                OptivusColors.aquaAccent.withValues(alpha: 0.05),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.65, 1.0],
+            ),
+          ),
+          child: Center(
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.85),
+                boxShadow: [
+                  BoxShadow(
+                    color: OptivusColors.aquaAccent.withValues(alpha: 0.45),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.check_rounded,
+                size: 20,
+                color: OptivusColors.textPrimary,
               ),
             ),
           ),
-          const SizedBox(width: 12),
-          Flexible(
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Your Optivus is ready',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.5,
+            color: OptivusColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'One final review before we build your day.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: OptivusColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Section 1: Readiness Card ───────────────────────────────────────────────
+  Widget _buildReadinessCard(Step14ReadinessSummary readiness) {
+    return OnboardingGlassCard(
+      key: const ValueKey('step14-readiness'),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Readiness',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+              ),
+              if (readiness.everythingReady)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: OptivusColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 13, color: OptivusColors.success),
+                      SizedBox(width: 4),
+                      Text(
+                        'Ready',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: OptivusColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildCheckRow('Profile complete', readiness.profileComplete),
+          const SizedBox(height: 8),
+          _buildCheckRow('Routine generated', readiness.routineGenerated),
+          const SizedBox(height: 8),
+          _buildCheckRow('Habits configured', readiness.habitsConfigured),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Color(0x1A000000)),
+          const SizedBox(height: 12),
+          if (readiness.unresolvedConflictGroupCount > 0)
+            Row(
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: OptivusColors.warning,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${readiness.unresolvedConflictGroupCount} schedule ${readiness.unresolvedConflictGroupCount == 1 ? 'choice needs' : 'choices need'} you',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.warning,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_rounded,
+                  size: 16,
+                  color: OptivusColors.success,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Everything is ready',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.success,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCheckRow(String label, bool satisfied) {
+    return Row(
+      children: [
+        Icon(
+          satisfied ? Icons.check_rounded : Icons.radio_button_unchecked_rounded,
+          size: 15,
+          color: satisfied ? OptivusColors.success : OptivusColors.textSecondary,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: satisfied ? OptivusColors.textPrimary : OptivusColors.textSecondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Section 2: Needs your attention ─────────────────────────────────────────
+  Widget _buildAttentionSection({
+    required List<Step14ConflictGroup> unresolvedGroups,
+    required List<Step14ConflictGroup> acceptedGroups,
+    required List<TimelineConflictDraft> rawConflicts,
+    required OnboardingDraft draft,
+  }) {
+    return Column(
+      key: _attentionSectionKey,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (unresolvedGroups.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Needs your attention',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.2,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: OptivusColors.warning.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${unresolvedGroups.length}',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w900,
+                      color: OptivusColors.warning,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final group in unresolvedGroups) ...[
+            _buildConflictGroupCard(
+              group: group,
+              isExpanded: group.stableGroupId == _expandedGroupId,
+              rawConflicts: rawConflicts,
+              draft: draft,
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+
+        // Accepted/Reviewed Choices Summary
+        if (acceptedGroups.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          _buildAcceptedChoicesSummary(
+            acceptedGroups: acceptedGroups,
+            rawConflicts: rawConflicts,
+            draft: draft,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildConflictGroupCard({
+    required Step14ConflictGroup group,
+    required bool isExpanded,
+    required List<TimelineConflictDraft> rawConflicts,
+    required OnboardingDraft draft,
+  }) {
+    final isSaving = _savingGroupId == group.stableGroupId;
+
+    return Semantics(
+      container: true,
+      label: '${group.leftLabel} and ${group.rightLabel} overlap on ${group.daySummary}. ${group.publicReason}',
+      child: AnimatedContainer(
+        key: ValueKey('step14-conflict-${group.stableGroupId}'),
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeInOutCubic,
+        child: OnboardingGlassCard(
+          padding: const EdgeInsets.all(16),
+          tint: OptivusColors.warning.withValues(alpha: 0.08),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _expandedGroupId = isExpanded ? null : group.stableGroupId;
+                  });
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        group.pairTitle,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: OptivusColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // Affected Day Chips
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final day in group.affectedDays)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: group.acceptedDays.contains(day)
+                            ? OptivusColors.success.withValues(alpha: 0.15)
+                            : OptivusColors.warning.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        Step14ConflictGroup.weekdayShortName(day),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: group.acceptedDays.contains(day)
+                              ? OptivusColors.success
+                              : OptivusColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+
+              if (isExpanded) ...[
+                const SizedBox(height: 10),
+                // Time Range
+                if (group.hasUniformTimeRange && group.sharedTimeRange.isNotEmpty)
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time_rounded, size: 14, color: OptivusColors.textSecondary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          group.sharedTimeRange,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                else if (group.overlapRangesByDay.isNotEmpty) ...[
+                  for (final entry in group.overlapRangesByDay.entries)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        '${Step14ConflictGroup.weekdayShortName(entry.key)} · ${entry.value}',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: OptivusColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 6),
+                Text(
+                  group.publicReason,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: OptivusColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Action Buttons
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton(
+                      onPressed: isSaving ? null : () => _editBlock(draft, group.leftEntryIdentity),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                      ),
+                      child: Text('Edit ${group.leftLabel}'),
+                    ),
+                    OutlinedButton(
+                      onPressed: isSaving ? null : () => _editBlock(draft, group.rightEntryIdentity),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                      ),
+                      child: Text('Edit ${group.rightLabel}'),
+                    ),
+                    if (group.canKeepBoth) ...[
+                      FilledButton.tonal(
+                        key: ValueKey('step14-keep-both-${group.stableGroupId}'),
+                        onPressed: isSaving
+                            ? null
+                            : () => _handleKeepBothDays(
+                                  group: group,
+                                  daysToAccept: group.unresolvedDays,
+                                  rawConflicts: rawConflicts,
+                                ),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                        ),
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Keep both on these days'),
+                      ),
+                      OutlinedButton(
+                        key: ValueKey('step14-review-days-${group.stableGroupId}'),
+                        onPressed: isSaving
+                            ? null
+                            : () => _showReviewDaysSheet(
+                                  group: group,
+                                  rawConflicts: rawConflicts,
+                                ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                        ),
+                        child: const Text('Review days'),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAcceptedChoicesSummary({
+    required List<Step14ConflictGroup> acceptedGroups,
+    required List<TimelineConflictDraft> rawConflicts,
+    required OnboardingDraft draft,
+  }) {
+    if (acceptedGroups.length <= 2 || _showingAllReviewedChoices) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final group in acceptedGroups) ...[
+            OnboardingGlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              tint: OptivusColors.success.withValues(alpha: 0.08),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 16, color: OptivusColors.success),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          group.pairTitle,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: OptivusColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          'Kept together · ${group.daySummary}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _showReviewDaysSheet(
+                      group: group,
+                      rawConflicts: rawConflicts,
+                    ),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: const Text('Change', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+        ],
+      );
+    }
+
+    // Aggregated view for > 2 accepted choices
+    return OnboardingGlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      tint: OptivusColors.success.withValues(alpha: 0.08),
+      child: Row(
+        children: [
+          const Icon(Icons.check_circle_rounded, size: 16, color: OptivusColors.success),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${acceptedGroups.length} schedule choices reviewed',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => setState(() => _showingAllReviewedChoices = true),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: const Text('View reviewed choices', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Section 3: Final Preview Card ───────────────────────────────────────────
+  Widget _buildFinalPreviewCard(
+    Step14FinalPreviewData previewData,
+    OnboardingDraft draft,
+  ) {
+    return OnboardingGlassCard(
+      key: const ValueKey('step14-final-preview'),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Final preview',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: OptivusColors.textPrimary,
+                  ),
+                ),
+              ),
+              OnboardingActionPill(
+                key: const ValueKey('step14-edit-setup'),
+                label: 'Edit setup',
+                icon: Icons.tune_rounded,
+                accent: OptivusColors.brandAccent,
+                compact: true,
+                onTap: _showEditSetupSheet,
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _buildPreviewRow('Goal', previewData.primaryGoal ?? 'Not selected'),
+          _buildPreviewRow(
+            'Schedule',
+            '${previewData.scheduledActivitiesCount} activities scheduled',
+          ),
+          _buildPreviewRow('Habit focus', previewData.habitFocus),
+          _buildPreviewRow(
+            'Coach',
+            '${previewData.coachName} (${previewData.coachStyle})',
+          ),
+          _buildPreviewRow(
+            'Notifications',
+            previewData.notificationsCount > 0
+                ? '${previewData.notificationsCount} selected'
+                : 'None selected',
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0x1A000000)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const ValueKey('step14-view-timeline'),
+              onPressed: () => setState(() => _viewingFullTimeline = true),
+              icon: const Icon(Icons.calendar_month_rounded, size: 16),
+              label: const Text('View full timeline'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 95,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: OptivusColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
             child: Text(
               value,
               textAlign: TextAlign.right,
               style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
                 color: OptivusColors.textPrimary,
               ),
             ),
@@ -416,71 +840,10 @@ class OnboardingStep14 extends ConsumerWidget {
     );
   }
 
-  static void _keepBoth(WidgetRef ref, _ConflictGroup group, List<int> days) {
-    final timezoneId = ref.read(regionSettingsProvider).timezone;
-    ref
-        .read(mockOnboardingProvider.notifier)
-        .updateDraft(
-          (draft) => draft.acceptTimelineConflictGroup(
-            conflict: group.conflicts.first,
-            weekdays: days,
-            timezoneId: timezoneId,
-          ),
-        );
-  }
-
-  void _editBlock(OnboardingDraft draft, String blockId) {
-    final block = draft.baseTimeline.blockById(blockId);
-    if (block == null) return;
-    final step = switch (block.section) {
-      'classes' || 'job_work_business' => 4,
-      'eating' => 5,
-      'fixed' => 6,
-      'skin_care' => 7,
-      _ => 4,
-    };
-    onJumpToStep?.call(step);
-  }
-
-  static String _habitFocus(OnboardingDraft draft) {
-    final parts = [
-      if (draft.goodHabits.isNotEmpty)
-        draft.goodHabits.map((habit) => habit.displayName).join(', '),
-      if (draft.badHabits.isNotEmpty)
-        '${draft.badHabits.length} bad habit check-in${draft.badHabits.length == 1 ? '' : 's'}',
-    ];
-    return parts.isEmpty ? 'Not now' : parts.join(' + ');
-  }
-
-  static String _displayKey(String? key) {
-    if (key == null || key.isEmpty) return 'Not selected';
-    return key
-        .split('_')
-        .map(
-          (part) => part.isEmpty
-              ? part
-              : '${part[0].toUpperCase()}${part.substring(1)}',
-        )
-        .join(' ');
-  }
-}
-
-class _Step14TimelinePreview extends StatefulWidget {
-  final List<TimelineBlockDraft> blocks;
-
-  const _Step14TimelinePreview({required this.blocks});
-
-  @override
-  State<_Step14TimelinePreview> createState() => _Step14TimelinePreviewState();
-}
-
-class _Step14TimelinePreviewState extends State<_Step14TimelinePreview> {
-  int _selectedDay = 1;
-
-  @override
-  Widget build(BuildContext context) {
+  // ── Full Timeline View (AH-F018) ────────────────────────────────────────────
+  Widget _buildFullTimelineView(OnboardingCompletionBundle bundle) {
     final entries = <TimelineEntry>[];
-    for (final block in widget.blocks) {
+    for (final block in bundle.baseTimelineBlocks) {
       if (block.section == 'fixed' &&
           (block.crossesMidnight || block.startMinute >= block.endMinute)) {
         entries.addAll(
@@ -516,245 +879,587 @@ class _Step14TimelinePreviewState extends State<_Step14TimelinePreview> {
     return FullScreenTimelineScaffold(
       key: const ValueKey('onboarding-step14-shared-preview'),
       entries: entries,
-      selectedDay: _selectedDay,
-      onDayChanged: (day) => setState(() => _selectedDay = day),
+      selectedDay: _timelineSelectedDay,
+      onDayChanged: (day) => setState(() => _timelineSelectedDay = day),
       title: 'Today timeline preview',
       subtitle: 'Review only — edit items from their setup step.',
       mode: TimelineMode.previewReadOnly,
       accent: OptivusColors.aquaAccent,
-      styleBuilder: (entry) =>
-          TimelineEntryStyle.defaultForCategory(entry.category),
-    );
-  }
-}
-
-class _BlockingConflictList extends StatelessWidget {
-  final List<_ConflictGroup> groups;
-  final void Function(_ConflictGroup group, List<int> days) onKeepBoth;
-  final ValueChanged<String> onEdit;
-
-  const _BlockingConflictList({
-    required this.groups,
-    required this.onKeepBoth,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return OnboardingGlassCard(
-      tint: OptivusColors.warning.withValues(alpha: 0.10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.compare_arrows_rounded, color: OptivusColors.warning),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Choose how to handle overlaps',
-                  style: TextStyle(fontWeight: FontWeight.w900),
-                ),
-              ),
-            ],
+      styleBuilder: (entry) => TimelineEntryStyle.defaultForCategory(entry.category),
+      bottomAction: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.tonal(
+            onPressed: () => setState(() => _viewingFullTimeline = false),
+            child: const Text('Back to Review'),
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Keeping both preserves both cards in Routine at the times you selected.',
-            style: TextStyle(
-              fontSize: 12,
-              color: OptivusColors.textSecondary,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 12),
-          for (var index = 0; index < groups.length; index++) ...[
-            _BlockingConflictRow(
-              group: groups[index],
-              onKeepBoth: (days) => onKeepBoth(groups[index], days),
-              onEdit: onEdit,
-            ),
-            if (index != groups.length - 1) const Divider(height: 20),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _BlockingConflictRow extends StatelessWidget {
-  final _ConflictGroup group;
-  final ValueChanged<List<int>> onKeepBoth;
-  final ValueChanged<String> onEdit;
-
-  const _BlockingConflictRow({
-    required this.group,
-    required this.onKeepBoth,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final conflict = group.conflicts.first;
-    return Semantics(
-      container: true,
-      label:
-          '${conflict.firstTitle} and ${conflict.secondTitle} overlap ${group.dayLabel}. ${conflict.publicReason}',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${conflict.firstTitle} + ${conflict.secondTitle}',
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Overlap ${group.dayLabel}',
-            style: const TextStyle(
-              fontSize: 11,
-              color: OptivusColors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            conflict.publicReason,
-            style: TextStyle(
-              fontSize: 11,
-              color: conflict.canKeepBoth
-                  ? OptivusColors.textSecondary
-                  : OptivusColors.warning,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton(
-                onPressed: () => onEdit(conflict.firstBlockId),
-                child: Text('Edit ${conflict.firstTitle}'),
-              ),
-              OutlinedButton(
-                onPressed: () => onEdit(conflict.secondBlockId),
-                child: Text('Edit ${conflict.secondTitle}'),
-              ),
-              if (conflict.canKeepBoth)
-                FilledButton.tonal(
-                  key: ValueKey(
-                    'onboarding-final-keep-both-${group.conflicts.first.key}',
-                  ),
-                  onPressed: () => onKeepBoth(group.weekdays),
-                  child: const Text('Keep Both on These Days'),
-                ),
-              OutlinedButton(
-                onPressed: conflict.canKeepBoth
-                    ? () => _reviewDays(context)
-                    : null,
-                child: const Text('Review Days'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _reviewDays(BuildContext context) async {
-    final selected = group.weekdays.toSet();
-    final result = await showDialog<List<int>>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Choose overlap days'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final day in group.weekdays)
-                CheckboxListTile(
-                  value: selected.contains(day),
-                  title: Text(_weekday(day)),
-                  onChanged: (checked) {
-                    setState(() {
-                      if (checked ?? false) {
-                        selected.add(day);
-                      } else {
-                        selected.remove(day);
-                      }
-                    });
-                  },
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: selected.isEmpty
-                  ? null
-                  : () => Navigator.pop(context, selected.toList()..sort()),
-              child: const Text('Keep Both'),
-            ),
-          ],
         ),
       ),
     );
-    if (result != null && result.isNotEmpty) onKeepBoth(result);
   }
 
-  static String _weekday(int day) => switch (day) {
-    1 => 'Monday',
-    2 => 'Tuesday',
-    3 => 'Wednesday',
-    4 => 'Thursday',
-    5 => 'Friday',
-    6 => 'Saturday',
-    7 => 'Sunday',
-    _ => 'the selected day',
-  };
-}
-
-class _ConflictGroup {
-  const _ConflictGroup({required this.key, required this.conflicts});
-
-  final String key;
-  final List<TimelineConflictDraft> conflicts;
-
-  List<int> get weekdays =>
-      (conflicts.map((conflict) => conflict.day).toSet().toList()..sort());
-
-  String get dayLabel {
-    final days = weekdays;
-    if (days.length == 5 && days.join(',') == '1,2,3,4,5') {
-      return 'Monday–Friday';
+  // ── Finishing / Success / Failure Presentation ──────────────────────────────
+  Widget _buildFinishingScaffold({
+    required OnboardingCompletionJob? activeJob,
+    required OnboardingDraft draft,
+    required OnboardingCompletionBundle bundle,
+  }) {
+    if (_presentationMode == Step14PresentationMode.success) {
+      return _buildSuccessView();
     }
-    return days.map(_BlockingConflictRow._weekday).join(', ');
-  }
 
-  static List<_ConflictGroup> from(List<TimelineConflictDraft> conflicts) {
-    final grouped = <String, List<TimelineConflictDraft>>{};
-    for (final conflict in conflicts) {
-      final ids = [conflict.firstBlockId, conflict.secondBlockId]..sort();
-      final key = '${ids[0]}|${ids[1]}|${conflict.conflictType}';
-      grouped.putIfAbsent(key, () => []).add(conflict);
+    if (_presentationMode == Step14PresentationMode.failure &&
+        _recoverableError != null) {
+      return _buildFailureView(activeJob);
     }
-    final result = grouped.entries
-        .map(
-          (entry) => _ConflictGroup(
-            key: entry.key,
-            conflicts: entry.value..sort((a, b) => a.day.compareTo(b.day)),
+
+    // Finishing Progress View
+    final currentStage = activeJob?.stage ?? OnboardingCompletionStage.validateInput;
+    final jobStatus = activeJob?.status ?? OnboardingJobStatus.running;
+    final stageProjections = CompletionStageProjection.projectAll(
+      currentStage: currentStage,
+      jobStatus: jobStatus,
+    );
+
+    return Scaffold(
+      key: const ValueKey('step14-finishing'),
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Subtle Orb Visual
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          OptivusColors.aquaAccent.withValues(alpha: 0.35),
+                          OptivusColors.aquaAccent.withValues(alpha: 0.08),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.90),
+                          boxShadow: [
+                            BoxShadow(
+                              color: OptivusColors.aquaAccent.withValues(alpha: 0.40),
+                              blurRadius: 16,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.sync_rounded,
+                          size: 20,
+                          color: OptivusColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Building your Optivus',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    "We're putting everything in place.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: OptivusColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+
+                  // Stage rows
+                  for (final stage in stageProjections) ...[
+                    _buildStageRow(stage),
+                    const SizedBox(height: 12),
+                  ],
+                ],
+              ),
+            ),
           ),
-        )
-        .toList();
-    result.sort((a, b) => a.key.compareTo(b.key));
-    return result;
+        ),
+      ),
+    );
   }
-}
 
-class _MissingSetup {
-  final String label;
-  final int step;
+  Widget _buildStageRow(CompletionStageProjection stage) {
+    return Row(
+      key: ValueKey('step14-finishing-stage-${stage.stageId.id}'),
+      children: [
+        _buildStageIndicator(stage.status),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            stage.publicLabel,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: stage.status == CompletionStageStatus.active
+                  ? FontWeight.w800
+                  : FontWeight.w600,
+              color: stage.status == CompletionStageStatus.pending
+                  ? OptivusColors.textSecondary.withValues(alpha: 0.5)
+                  : OptivusColors.textPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
-  const _MissingSetup(this.label, this.step);
+  Widget _buildStageIndicator(CompletionStageStatus status) {
+    return switch (status) {
+      CompletionStageStatus.completed => const Icon(
+          Icons.check_circle_rounded,
+          size: 18,
+          color: OptivusColors.success,
+        ),
+      CompletionStageStatus.active => Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: OptivusColors.brandAccent.withValues(alpha: 0.2),
+          ),
+          child: Center(
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: OptivusColors.brandAccent,
+              ),
+            ),
+          ),
+        ),
+      CompletionStageStatus.pending => Container(
+          width: 18,
+          height: 18,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: OptivusColors.textSecondary.withValues(alpha: 0.35),
+              width: 1.5,
+            ),
+          ),
+        ),
+      CompletionStageStatus.failed => const Icon(
+          Icons.error_rounded,
+          size: 18,
+          color: OptivusColors.danger,
+        ),
+    };
+  }
+
+  Widget _buildSuccessView() {
+    return Scaffold(
+      key: const ValueKey('step14-success'),
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OptivusColors.success.withValues(alpha: 0.15),
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  size: 40,
+                  color: OptivusColors.success,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "You're ready",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your Optivus is ready for today.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: OptivusColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFailureView(OnboardingCompletionJob? activeJob) {
+    final error = _recoverableError!;
+    final snapshot = const OnboardingCurrentRunSnapshot.none();
+    final canReturn = canReturnToStep14Review(job: activeJob, currentRunSnapshot: snapshot);
+
+    return Scaffold(
+      key: const ValueKey('step14-failure'),
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 380),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: OptivusColors.warning.withValues(alpha: 0.15),
+                    ),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      size: 32,
+                      color: OptivusColors.warning,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Your setup is safe',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.4,
+                      color: OptivusColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error.publicMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: OptivusColors.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Actions based on RecoverableError
+                  if (error.retrySafe)
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          setState(() {
+                            _presentationMode = Step14PresentationMode.finishing;
+                            _recoverableError = null;
+                          });
+                          widget.onCompletionStarted?.call();
+                        },
+                        child: const Text('Try Again'),
+                      ),
+                    ),
+                  if (error.retryAction == RecoverableRetryAction.reauthenticate) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => ref.read(authProvider.notifier).logout(),
+                        child: const Text('Sign In Again'),
+                      ),
+                    ),
+                  ],
+                  if (error.retryAction == RecoverableRetryAction.restartRecovery) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => context.go('/onboarding/needs-action'),
+                        child: const Text('Recover Setup'),
+                      ),
+                    ),
+                  ],
+                  if (canReturn) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _presentationMode = Step14PresentationMode.review;
+                          _recoverableError = null;
+                        });
+                      },
+                      child: const Text('Back to Review'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Helper Actions ──────────────────────────────────────────────────────────
+  void _editBlock(OnboardingDraft draft, String blockId) {
+    final block = draft.baseTimeline.blockById(blockId);
+    if (block == null) return;
+    final step = switch (block.section) {
+      'classes' || 'job_work_business' => 4,
+      'eating' => 5,
+      'fixed' => 6,
+      'skin_care' => 7,
+      _ => 4,
+    };
+    widget.onJumpToStep?.call(step);
+  }
+
+  void _showEditSetupSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Material(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: OptivusColors.textSecondary.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Edit Setup',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 14),
+                _buildSetupOption(
+                  icon: Icons.calendar_today_rounded,
+                  title: 'Schedule & Classes',
+                  step: 4,
+                ),
+                _buildSetupOption(
+                  icon: Icons.restaurant_rounded,
+                  title: 'Meals & Eating Mode',
+                  step: 5,
+                ),
+                _buildSetupOption(
+                  icon: Icons.bedtime_rounded,
+                  title: 'Fixed Routine & Sleep',
+                  step: 6,
+                ),
+                _buildSetupOption(
+                  icon: Icons.face_rounded,
+                  title: 'Skin Care',
+                  step: 7,
+                ),
+                _buildSetupOption(
+                  icon: Icons.track_changes_rounded,
+                  title: 'Habits & Check-ins',
+                  step: 8,
+                ),
+                _buildSetupOption(
+                  icon: Icons.flag_rounded,
+                  title: 'Identity Goals',
+                  step: 10,
+                ),
+                _buildSetupOption(
+                  icon: Icons.notifications_rounded,
+                  title: 'Notifications',
+                  step: 13,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSetupOption({
+    required IconData icon,
+    required String title,
+    required int step,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: OptivusColors.brandAccent),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+      onTap: () {
+        Navigator.pop(context);
+        widget.onJumpToStep?.call(step);
+      },
+    );
+  }
+
+  void _handleKeepBothDays({
+    required Step14ConflictGroup group,
+    required List<int> daysToAccept,
+    List<TimelineConflictDraft>? rawConflicts,
+  }) {
+    if (_savingGroupId != null) return;
+    setState(() => _savingGroupId = group.stableGroupId);
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final timezoneId = draft.timezoneId.isNotEmpty ? draft.timezoneId : ref.read(regionSettingsProvider).timezone;
+
+    final conflicts = rawConflicts ??
+        draft.baseTimeline.detectConflicts(
+          ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
+          timezoneId: timezoneId,
+          revision: draft.revision,
+        );
+
+    final rawForGroup = conflicts.where((c) {
+      final id1 = c.firstBlockId;
+      final id2 = c.secondBlockId;
+      final leftId = id1.compareTo(id2) <= 0 ? id1 : id2;
+      final rightId = id1.compareTo(id2) <= 0 ? id2 : id1;
+      return '$leftId|$rightId|${c.conflictType}' == group.stableGroupId;
+    }).firstOrNull;
+
+    if (rawForGroup != null) {
+      ref.read(mockOnboardingProvider.notifier).updateDraft(
+        (draft) => draft.acceptTimelineConflictGroup(
+          conflict: rawForGroup,
+          weekdays: daysToAccept,
+          timezoneId: timezoneId,
+        ),
+      );
+    }
+
+    if (mounted) {
+      setState(() => _savingGroupId = null);
+    }
+  }
+
+  void _showReviewDaysSheet({
+    required Step14ConflictGroup group,
+    required List<TimelineConflictDraft> rawConflicts,
+  }) {
+    final selectedDays = group.acceptedDays.toSet();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Material(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: OptivusColors.textSecondary.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      group.pairTitle,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Choose where this overlap is intentional',
+                      style: TextStyle(fontSize: 12.5, color: OptivusColors.textSecondary),
+                    ),
+                    const SizedBox(height: 14),
+                    for (final day in group.affectedDays)
+                      CheckboxListTile(
+                        value: selectedDays.contains(day),
+                        title: Text(
+                          Step14ConflictGroup.weekdayFullName(day),
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                        ),
+                        onChanged: (checked) {
+                          setModalState(() {
+                            if (checked ?? false) {
+                              selectedDays.add(day);
+                            } else {
+                              selectedDays.remove(day);
+                            }
+                          });
+                        },
+                      ),
+                    const SizedBox(height: 16),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _handleKeepBothDays(
+                          group: group,
+                          daysToAccept: selectedDays.toList()..sort(),
+                          rawConflicts: rawConflicts,
+                        );
+                      },
+                      child: const Text('Save Choices'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }

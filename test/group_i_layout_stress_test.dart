@@ -179,7 +179,7 @@ void main() {
             await tester.pump();
             await tester.pump(const Duration(milliseconds: 300));
 
-            expect(find.text('Today Is Ready'), findsOneWidget);
+            expect(find.text('Your Optivus is ready'), findsOneWidget);
 
             // Check that scrollable widget is present and can scroll
             final scrollableFinder = find.byType(SingleChildScrollView);

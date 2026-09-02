@@ -31,6 +31,7 @@ import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_sc
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
+import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
 
 // ── Main Onboarding Flow Wizard ──────────────────────────────────────────────
 class OnboardingFlow extends ConsumerStatefulWidget {
@@ -41,6 +42,8 @@ class OnboardingFlow extends ConsumerStatefulWidget {
 }
 
 class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
+  final GlobalKey<OnboardingStep14State> _step14Key =
+      GlobalKey<OnboardingStep14State>();
   late PageController _pageController;
 
   double _pageOffset = 0.0;
@@ -49,6 +52,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   bool _initialDraftSyncScheduled = false;
   bool _isSaving = false; // Double-tap prevention for Save
   bool _isNavigating = false; // Double-tap prevention for Next
+  bool _isCompleting = false; // Double-tap prevention for Completion
   bool _isHandlingPopGesture = false;
   final Set<int> _stepsWithRevealedPrimaryCta = <int>{};
 
@@ -375,152 +379,177 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   Future<void> _completeOnboarding() async {
-    final onboarding = ref.read(mockOnboardingProvider);
-    for (var step = 0; step <= OnboardingDraft.lastStepIndex; step++) {
-      final error = onboarding.draft.validateStep(
-        step,
-        onboarding.stepCompleted,
-      );
-      if (error != null) {
-        ref.read(mockOnboardingProvider.notifier).setValidationMessage(error);
+    if (_isCompleting || _isNavigating || _isSaving) return;
+    _isCompleting = true;
+    try {
+      final onboarding = ref.read(mockOnboardingProvider);
+      if (onboarding.draft.timelineConflictsRequiringAcceptance().isNotEmpty) {
+        ref.read(mockOnboardingProvider.notifier).setValidationMessage(
+          'Resolve or accept all schedule conflicts before finishing onboarding.',
+        );
         return;
       }
-    }
-
-    final authUser = ref.read(authProvider).user;
-    if (authUser?.needsEmailVerification ?? false) {
-      ref
-          .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(
-            'Please verify your email before finishing onboarding.',
-          );
-      return;
-    }
-
-    final uid = _currentPersistenceUid();
-    if (uid == null) {
-      ref
-          .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(
-            'Please verify your email before finishing onboarding.',
-          );
-      return;
-    }
-
-    late final OnboardingDraft finalDraft;
-    late final OnboardingCompletionBundle bundle;
-    final onboardingRepository = ref.read(onboardingRepositoryProvider);
-    if (isDurablyFinalOnboardingDraft(onboarding.draft)) {
-      finalDraft = onboarding.draft;
-      final storedBundle = await onboardingRepository.fetchCompletionBundle(
-        uid,
-      );
-      if (storedBundle != null) {
-        if (!OnboardingCompletionService.bundleMatchesFinalDraft(
-          uid: uid,
-          draft: finalDraft,
-          bundle: storedBundle,
-        )) {
-          ref
-              .read(mockOnboardingProvider.notifier)
-              .setValidationMessage(
-                'Saved completion state does not match this setup. '
-                'Please try again after it finishes syncing.',
-              );
+      for (var step = 0; step <= OnboardingDraft.lastStepIndex; step++) {
+        final error = onboarding.draft.validateStep(
+          step,
+          onboarding.stepCompleted,
+        );
+        if (error != null) {
+          ref.read(mockOnboardingProvider.notifier).setValidationMessage(error);
           return;
         }
-        bundle = storedBundle;
-      } else {
-        bundle = OnboardingCompletionService.buildBundle(finalDraft);
       }
-    } else {
-      final saveSuccess = await _saveStep(OnboardingDraft.lastStepIndex);
-      if (!saveSuccess) {
+
+      final authUser = ref.read(authProvider).user;
+      if (authUser?.needsEmailVerification ?? false) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(
+              'Please verify your email before finishing onboarding.',
+            );
         return;
       }
 
-      final savedDraft = ref.read(mockOnboardingProvider).draft;
-      final draftForBundle = savedDraft.copyWith(uid: uid);
-      final now = DateTime.now();
-      finalDraft = draftForBundle.copyWith(
-        onboardingCompleted: true,
-        currentStep: OnboardingDraft.lastStepIndex,
-        stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
-        stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
-        stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
-        finalPreview:
-            draftForBundle.finalPreview ?? draftForBundle.buildFinalPreview(),
-        createdAt: draftForBundle.createdAt ?? now,
-        updatedAt: now,
-      );
-      bundle = OnboardingCompletionService.buildBundle(finalDraft);
-    }
-    String? blockingWarning;
-    for (final warning in bundle.warnings) {
-      if (warning.startsWith('Resolve or accept')) {
-        blockingWarning = warning;
-        break;
+      final uid = _currentPersistenceUid();
+      if (uid == null) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(
+              'Please verify your email before finishing onboarding.',
+            );
+        return;
       }
-    }
-    if (blockingWarning != null) {
-      ref
-          .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(blockingWarning);
-      return;
-    }
 
-    try {
-      final job = await ref
-          .read(onboardingCompletionJobServiceProvider)
-          .runCompletionJob(
-            uid: uid,
-            finalDraft: finalDraft,
-            bundle: bundle,
-            reader: ref.read,
-          );
-      if (job.status != OnboardingJobStatus.completed ||
-          job.stage != OnboardingCompletionStage.completed) {
-        final recoverable = CompletionErrorMapper.map(
-          job: job,
-          stage: job.stage,
+      late final OnboardingDraft finalDraft;
+      late final OnboardingCompletionBundle bundle;
+      final onboardingRepository = ref.read(onboardingRepositoryProvider);
+      if (isDurablyFinalOnboardingDraft(onboarding.draft)) {
+        finalDraft = onboarding.draft;
+        final storedBundle = await onboardingRepository.fetchCompletionBundle(
+          uid,
         );
+        if (storedBundle != null) {
+          if (!OnboardingCompletionService.bundleMatchesFinalDraft(
+            uid: uid,
+            draft: finalDraft,
+            bundle: storedBundle,
+          )) {
+            ref
+                .read(mockOnboardingProvider.notifier)
+                .setValidationMessage(
+                  'Saved completion state does not match this setup. '
+                  'Please try again after it finishes syncing.',
+                );
+            return;
+          }
+          bundle = storedBundle;
+        } else {
+          bundle = OnboardingCompletionService.buildBundle(finalDraft);
+        }
+      } else {
+        final saveSuccess = await _saveStep(OnboardingDraft.lastStepIndex);
+        if (!saveSuccess) {
+          return;
+        }
+
+        final savedDraft = ref.read(mockOnboardingProvider).draft;
+        final draftForBundle = savedDraft.copyWith(uid: uid);
+        final now = DateTime.now();
+        finalDraft = draftForBundle.copyWith(
+          onboardingCompleted: true,
+          currentStep: OnboardingDraft.lastStepIndex,
+          stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+          stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
+          stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+          finalPreview:
+              draftForBundle.finalPreview ?? draftForBundle.buildFinalPreview(),
+          createdAt: draftForBundle.createdAt ?? now,
+          updatedAt: now,
+        );
+        bundle = OnboardingCompletionService.buildBundle(finalDraft);
+      }
+      String? blockingWarning;
+      for (final warning in bundle.warnings) {
+        if (warning.startsWith('Resolve or accept')) {
+          blockingWarning = warning;
+          break;
+        }
+      }
+      if (blockingWarning != null) {
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(blockingWarning);
+        return;
+      }
+
+      _step14Key.currentState?.startFinishingPresentation();
+
+      try {
+        final job = await ref
+            .read(onboardingCompletionJobServiceProvider)
+            .runCompletionJob(
+              uid: uid,
+              finalDraft: finalDraft,
+              bundle: bundle,
+              reader: ref.read,
+            );
+        if (job.status == OnboardingJobStatus.retryableFailure ||
+            job.status == OnboardingJobStatus.fatalFailure) {
+          final recoverable = CompletionErrorMapper.map(
+            job: job,
+            stage: job.stage,
+          );
+          _step14Key.currentState?.setFailureState(recoverable);
+          ref
+              .read(mockOnboardingProvider.notifier)
+              .setValidationMessage(recoverable.publicMessage);
+          return;
+        }
+      } catch (e) {
+        final recoverable = CompletionErrorMapper.map(
+          error: e,
+          isContradiction:
+              e.toString().contains('contradiction') ||
+              e.toString().contains('mismatch') ||
+              e.toString().contains('schema'),
+        );
+        _step14Key.currentState?.setFailureState(recoverable);
         ref
             .read(mockOnboardingProvider.notifier)
             .setValidationMessage(recoverable.publicMessage);
         return;
       }
-    } catch (e) {
-      final recoverable = CompletionErrorMapper.map(
-        error: e,
-        isContradiction: e.toString().contains('contradiction') ||
-            e.toString().contains('mismatch') ||
-            e.toString().contains('schema'),
-      );
+
+      ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
+
+      // Initialize the coach tab with a starter session so it doesn't crash empty
       ref
-          .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(recoverable.publicMessage);
-      return;
-    }
-    ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
+          .read(mockCoachProvider.notifier)
+          .createNewSession(
+            'Onboarding Review',
+            CoachSessionType.generalChat,
+            bundle.coachPreferences.name,
+            bundle.coachPreferences.style,
+          );
 
-    // Initialize the coach tab with a starter session so it doesn't crash empty
-    ref
-        .read(mockCoachProvider.notifier)
-        .createNewSession(
-          'Onboarding Review',
-          CoachSessionType.generalChat,
-          bundle.coachPreferences.name,
-          bundle.coachPreferences.style,
-        );
+      _step14Key.currentState?.setSuccessState();
 
-    if (authUser != null) {
-      await ref
-          .read(authProvider.notifier)
-          .acceptCanonicalOnboardingCompletion(authUser);
-    }
+      if (authUser != null) {
+        await ref
+            .read(authProvider.notifier)
+            .acceptCanonicalOnboardingCompletion(authUser);
+      }
 
-    if (mounted && authUser == null) {
-      context.go('/app?tab=0');
+      if (mounted && authUser == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        if (mounted) {
+          context.go('/app?tab=0');
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCompleting = false);
+      }
     }
   }
 
@@ -853,6 +882,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     );
 
     String ctaLabel = 'Next Step';
+    OnboardingActionKind ctaKind = OnboardingActionKind.next;
+    VoidCallback? ctaOnPressed = _onNextPressed;
     bool ctaEnabled =
         !_isNavigating &&
         !_isSaving &&
@@ -860,8 +891,35 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_currentPage == 0) {
       ctaLabel = 'Get Started';
     } else if (_currentPage == OnboardingDraft.lastStepIndex) {
-      ctaLabel = 'Enter Optivus';
-      ctaEnabled = !_isNavigating && !_isSaving;
+      final rawConflicts =
+          onboardingState.draft.baseTimeline.detectConflicts(
+            ownerUid: onboardingState.draft.uid.isEmpty
+                ? 'local-onboarding-owner'
+                : onboardingState.draft.uid,
+            timezoneId: onboardingState.draft.timezoneId,
+            revision: onboardingState.draft.revision,
+          );
+      final conflictGroups = Step14ConflictGroupProjector.project(
+        occurrences: rawConflicts,
+        draft: onboardingState.draft,
+      );
+      final unresolvedGroups =
+          conflictGroups.where((g) => g.isUnresolved).toList();
+
+      if (unresolvedGroups.isNotEmpty) {
+        final count = unresolvedGroups.length;
+        ctaLabel = 'Review $count ${count == 1 ? 'conflict' : 'conflicts'}';
+        ctaKind = OnboardingActionKind.next;
+        ctaEnabled = true;
+        ctaOnPressed = () {
+          _step14Key.currentState?.focusFirstUnresolvedConflict();
+        };
+      } else {
+        ctaLabel = 'Enter Optivus';
+        ctaKind = OnboardingActionKind.enterOptivus;
+        ctaEnabled = !_isNavigating && !_isSaving;
+        ctaOnPressed = _onNextPressed;
+      }
     }
     ctaEnabled = ctaEnabled && readiness.canSubmit;
     if (_currentPage >= 1 && _currentPage <= 13 && readiness.canRevealPrimary) {
@@ -904,12 +962,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         onIndicatorDraggedTo: _onIndicatorDraggedTo,
         actions: [
           OnboardingAction(
-            kind: _currentPage == OnboardingDraft.lastStepIndex
-                ? OnboardingActionKind.enterOptivus
-                : OnboardingActionKind.next,
+            kind: ctaKind,
             label: ctaLabel,
             semanticLabel: ctaLabel,
-            onPressed: _onNextPressed,
+            onPressed: ctaOnPressed,
             visible: showPrimaryCta,
             enabled: ctaEnabled,
             operationState: _isNavigating
@@ -950,7 +1006,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             const OnboardingStep11(),
             const OnboardingStep12(),
             const OnboardingStep13(),
-            OnboardingStep14(onJumpToStep: _onDotTapped),
+            OnboardingStep14(
+              key: _step14Key,
+              onJumpToStep: _onDotTapped,
+              onCompletionStarted: _completeOnboarding,
+            ),
           ],
         ),
       ),

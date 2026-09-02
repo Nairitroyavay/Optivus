@@ -448,23 +448,51 @@ class OnboardingDraft {
   }) {
     final first = baseTimeline.blockById(conflict.firstBlockId);
     final second = baseTimeline.blockById(conflict.secondBlockId);
-    if (first == null || second == null || !conflict.canKeepBoth) return this;
+    if (first == null || second == null) return this;
     final owner = uid.isEmpty ? 'local-onboarding-owner' : uid;
+    final firstDescriptor = timelineScheduleDescriptor(
+      first,
+      ownerUid: owner,
+      timezoneId: timezoneId,
+    );
+    final secondDescriptor = timelineScheduleDescriptor(
+      second,
+      ownerUid: owner,
+      timezoneId: timezoneId,
+    );
+    final decision = ConflictPolicy.classify(
+      firstDescriptor,
+      secondDescriptor,
+    );
+    if (!decision.canKeepBoth) return this;
+
+    final validDays = weekdays.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
+    if (validDays.isEmpty) {
+      final pair = {first.id, second.id};
+      final now = acceptedAt ?? DateTime.now();
+      return copyWith(
+        timezoneId: timezoneId,
+        baseTimeline: baseTimeline.copyWith(
+          conflictAcceptances: [
+            for (final current in baseTimeline.conflictAcceptances)
+              if (current.isActive &&
+                  current.sourceBlockIds.length == pair.length &&
+                  current.sourceBlockIds.containsAll(pair))
+                current.invalidated('revokedInReview', at: now)
+              else
+                current,
+          ],
+        ),
+      );
+    }
+
     final acceptance = ConflictAcceptance.create(
       ownerUid: owner,
-      first: timelineScheduleDescriptor(
-        first,
-        ownerUid: owner,
-        timezoneId: timezoneId,
-      ),
-      second: timelineScheduleDescriptor(
-        second,
-        ownerUid: owner,
-        timezoneId: timezoneId,
-      ),
+      first: firstDescriptor,
+      second: secondDescriptor,
       conflictType: conflict.conflictType,
       scope: ConflictAcceptanceScope.recurringWeekdays,
-      applicableWeekdays: weekdays,
+      applicableWeekdays: validDays,
       timezoneId: timezoneId,
       acceptedFrom: ConflictAcceptanceOrigin.onboarding,
       acceptedAt: acceptedAt,

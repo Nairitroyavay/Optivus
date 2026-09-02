@@ -113,12 +113,14 @@ class OnboardingScrollView extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final bool userScrollable;
+  final ScrollController? controller;
 
   const OnboardingScrollView({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.fromLTRB(24, 12, 24, 32),
     this.userScrollable = true,
+    this.controller,
   });
 
   @override
@@ -131,6 +133,7 @@ class OnboardingScrollView extends StatelessWidget {
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
           child: SingleChildScrollView(
+            controller: controller,
             physics: userScrollable
                 ? const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),

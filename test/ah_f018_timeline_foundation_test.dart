@@ -1490,6 +1490,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      await tester.tap(find.text('View full timeline'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Today timeline preview'), findsOneWidget);
       expect(find.text('Physics Lab'), findsOneWidget);
     });

@@ -958,11 +958,6 @@ void main() {
         startMinute: 8 * 60 + 15,
         endMinute: 8 * 60 + 45,
       );
-      final conflictKey = TimelineConflictDraft.keyFor(
-        classBlock.id,
-        breakfastBlock.id,
-        1,
-      );
       final draft = OnboardingDraft(
         uid: 'overlap-user',
         currentStep: OnboardingDraft.lastStepIndex,
@@ -1000,13 +995,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Choose how to handle overlaps'), findsOneWidget);
-      expect(find.text('Morning Class + Breakfast'), findsOneWidget);
-      expect(find.text('Overlap Monday'), findsOneWidget);
+      expect(find.text('Needs your attention'), findsOneWidget);
+      expect(find.text('Breakfast ↔ Morning Class'), findsOneWidget);
 
-      final keepBoth = find.byKey(
-        ValueKey('onboarding-final-keep-both-$conflictKey'),
-      );
+      final keepBoth = find.text('Keep both on these days');
       await tester.ensureVisible(keepBoth);
       await tester.tap(keepBoth);
       await tester.pumpAndSettle();
@@ -1023,7 +1015,7 @@ void main() {
       );
       expect(acceptedDraft.timelineConflictsRequiringAcceptance(), isEmpty);
       expect(acceptedDraft.buildFinalPreview().blockingWarnings, isEmpty);
-      expect(find.text('Choose how to handle overlaps'), findsNothing);
+      expect(find.text('Needs your attention'), findsNothing);
 
       final completedDraft = acceptedDraft.copyWith(onboardingCompleted: true);
       final bundle = OnboardingCompletionService.buildBundle(completedDraft);

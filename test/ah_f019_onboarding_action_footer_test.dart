@@ -1137,7 +1137,9 @@ void main() {
       final footerRect = tester.getRect(
         find.byKey(const ValueKey('onboarding-cta-visible')),
       );
-      final previewRect = tester.getRect(find.byType(FullScreenTimelineScaffold));
+      final previewRect = tester.getRect(
+        find.byKey(const ValueKey('step14-final-preview')),
+      );
 
       // The preview inside the scrollable terminates above the footer
       expect(previewRect.bottom, lessThanOrEqualTo(footerRect.top));
