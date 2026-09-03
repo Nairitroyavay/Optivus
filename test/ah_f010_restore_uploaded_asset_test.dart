@@ -977,7 +977,7 @@ void main() {
 
         final asset = _validAsset(
           uid: uidA,
-          purpose: UploadedAssetPurpose.skinCare,
+          purpose: UploadedAssetPurpose.skinProducts,
           fileName: 'skin-photo.jpg',
         );
 
@@ -993,6 +993,10 @@ void main() {
           baseTimeline: const BaseTimelineDraft(
             skinCareSetupStep: 1,
             skinCareSetupPath: 'has_products',
+            skinCareProductPhotoAssetId: 'asset-1',
+            skinCareProductPhotoR2Key:
+                'users/user-a/onboarding/skin_products/asset-1.jpg',
+            skinCareProductPhotoStatus: 'uploaded',
           ),
         );
 
@@ -1033,7 +1037,7 @@ void main() {
       final assetA = _validAsset(
         uid: uidA,
         assetId: 'skin-a',
-        purpose: UploadedAssetPurpose.skinCare,
+        purpose: UploadedAssetPurpose.skinProducts,
         fileName: 'skin-a.jpg',
       );
       final repo = FailingSaveUploadedAssetRepository(initialAssets: [assetA]);
@@ -1048,6 +1052,10 @@ void main() {
         baseTimeline: const BaseTimelineDraft(
           skinCareSetupStep: 1,
           skinCareSetupPath: 'has_products',
+          skinCareProductPhotoAssetId: 'skin-a',
+          skinCareProductPhotoR2Key:
+              'users/user-a/onboarding/skin_products/skin-a.jpg',
+          skinCareProductPhotoStatus: 'uploaded',
         ),
       );
       final authRepo = FakeAuthRepo(
@@ -1093,7 +1101,7 @@ void main() {
       expect(find.text('skin-a.jpg'), findsOneWidget);
       expect(
         restoredController.state
-            .forPurpose(UploadedAssetPurpose.skinCare)
+            .forPurpose(UploadedAssetPurpose.skinProducts)
             ?.asset
             .assetId,
         'skin-a',
@@ -1278,18 +1286,25 @@ void main() {
       }
     });
 
-    test('Z: Step 7 required photo recognizes durable restored asset', () {
-      final base = const BaseTimelineDraft(
-        skinCareSetupPath: 'no_products',
-        skinCareProductPhotoAssetId: 'face',
-        skinCareProductPhotoR2Key: 'users/uid-1/onboarding/skin_care/face.jpg',
-        skinCareProductPhotoStatus: 'uploaded',
-      );
+    test(
+      'Z: Step 7 recognizes a durable restored face asset but remains incomplete until routine inputs exist',
+      () {
+        final base = const BaseTimelineDraft(
+          skinCareSetupPath: 'no_products',
+          skinCareFacePhotoAssetId: 'face',
+          skinCareFacePhotoR2Key: 'users/uid-1/onboarding/skin_face/face.jpg',
+          skinCareFacePhotoStatus: 'uploaded',
+        );
 
-      // validateSkinCareSetup succeeds because durable photo reference exists
-      final validationError = base.validateSkinCareSetup();
-      expect(validationError, isNull);
-    });
+        // The durable asset satisfies the photo requirement; the remaining
+        // no-products setup is still required before the step can continue.
+        final validationError = base.validateSkinCareSetup();
+        expect(
+          validationError,
+          'Complete your skin details before finding products.',
+        );
+      },
+    );
 
     test('Step 7 validation rejects nonterminal or incomplete metadata', () {
       for (final status in ['pending', 'uploading', 'failed', 'deleted']) {

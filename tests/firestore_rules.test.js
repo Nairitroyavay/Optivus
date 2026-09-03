@@ -1957,3 +1957,406 @@ describe("Phase 4.6.4 canonical production contracts", () => {
     });
   });
 });
+
+describe("Firestore Rules for upload metadata", () => {
+  function uploadData(uid = "user123", assetId = "asset-001", overrides = {}) {
+    return {
+      assetId,
+      ownerUid: uid,
+      sourceFeature: "onboarding",
+      purpose: "skin_face",
+      fileName: "photo.jpg",
+      contentType: "image/jpeg",
+      sizeBytes: 1048576,
+      r2Key: "uploads/user123/asset-001.jpg",
+      status: "uploaded",
+      createdAt,
+      updatedAt,
+      errorMessage: null,
+      ...overrides,
+    };
+  }
+
+  function uploadRef(db, uid = "user123", assetId = "asset-001") {
+    return db.collection("users").doc(uid).collection("uploads").doc(assetId);
+  }
+
+  // --- Owner create: one test per purpose ---
+
+  it("owner creates skin_face upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db).set(uploadData()));
+  });
+
+  it("owner creates skin_products upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-002").set(
+      uploadData("user123", "asset-002", { purpose: "skin_products", r2Key: "uploads/user123/asset-002.jpg" })
+    ));
+  });
+
+  it("owner creates class_timetable upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-003").set(
+      uploadData("user123", "asset-003", { purpose: "class_timetable", r2Key: "uploads/user123/asset-003.jpg" })
+    ));
+  });
+
+  it("owner creates work_schedule upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-004").set(
+      uploadData("user123", "asset-004", { purpose: "work_schedule", r2Key: "uploads/user123/asset-004.jpg" })
+    ));
+  });
+
+  it("owner creates eating_menu upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-005").set(
+      uploadData("user123", "asset-005", { purpose: "eating_menu", r2Key: "uploads/user123/asset-005.jpg" })
+    ));
+  });
+
+  it("owner creates legacy skin_care upload", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-006").set(
+      uploadData("user123", "asset-006", { purpose: "skin_care", r2Key: "uploads/user123/asset-006.jpg" })
+    ));
+  });
+
+  it("owner creates profile_photo upload with correct constraints", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-007").set(
+      uploadData("user123", "asset-007", {
+        purpose: "profile_photo",
+        contentType: "image/jpeg",
+        sizeBytes: 2097152,
+        r2Key: "uploads/user123/asset-007.jpg",
+      })
+    ));
+  });
+
+  // --- Owner read ---
+
+  it("owner reads own upload", async () => {
+    const adminDb = testEnv.authenticatedContext("user123", { email_verified: true }).firestore();
+    await uploadRef(adminDb).set(uploadData());
+    await testEnv.clearFirestore();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db).get());
+  });
+
+  // --- Owner legitimate update ---
+
+  it("owner updates status to deleted with immutable fields preserved", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    const updatedAt2 = new Date("2026-07-24T01:00:00.000Z");
+    await assertSucceeds(uploadRef(db).set(
+      uploadData("user123", "asset-001", { status: "deleted", updatedAt: updatedAt2, errorMessage: null })
+    ));
+  });
+
+  it("owner updates status to failed with errorMessage", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    const updatedAt2 = new Date("2026-07-24T01:00:00.000Z");
+    await assertSucceeds(uploadRef(db).set(
+      uploadData("user123", "asset-001", { status: "failed", updatedAt: updatedAt2, errorMessage: "Upload timed out" })
+    ));
+  });
+
+  // --- Immutability attacks ---
+
+  it("rejects update changing purpose from skin_face to skin_products", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { purpose: "skin_products" })
+    ));
+  });
+
+  it("rejects update changing ownerUid", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { ownerUid: "attacker" })
+    ));
+  });
+
+  it("rejects update changing assetId", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { assetId: "asset-999" })
+    ));
+  });
+
+  it("rejects update changing createdAt", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { createdAt: new Date("2020-01-01T00:00:00.000Z") })
+    ));
+  });
+
+  it("rejects update changing sourceFeature", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { sourceFeature: "profile" })
+    ));
+  });
+
+  it("rejects update changing r2Key", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { r2Key: "uploads/user123/hijacked.jpg" })
+    ));
+  });
+
+  it("rejects update changing fileName", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { fileName: "different.png" })
+    ));
+  });
+
+  it("rejects update changing contentType", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { contentType: "image/png" })
+    ));
+  });
+
+  it("rejects update changing sizeBytes", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { sizeBytes: 9999999 })
+    ));
+  });
+
+  // --- Cross-user isolation ---
+
+  it("rejects user B reading user A upload", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb("attacker");
+    await assertFails(uploadRef(db, "user123").get());
+  });
+
+  it("rejects user B creating under user A path", async () => {
+    const db = ownerDb("attacker");
+    await assertFails(uploadRef(db, "user123", "asset-attack").set(
+      uploadData("attacker", "asset-attack")
+    ));
+  });
+
+  it("rejects user B updating user A upload", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb("attacker");
+    await assertFails(uploadRef(db, "user123").set(
+      uploadData("user123", "asset-001", { status: "deleted" })
+    ));
+  });
+
+  it("rejects user B deleting user A upload", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb("attacker");
+    await assertFails(uploadRef(db, "user123").delete());
+  });
+
+  // --- Unauthenticated ---
+
+  it("rejects unauthenticated read", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(uploadRef(db).get());
+  });
+
+  it("rejects unauthenticated create", async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(uploadRef(db).set(uploadData()));
+  });
+
+  it("rejects unauthenticated update", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { status: "deleted" })
+    ));
+  });
+
+  it("rejects unauthenticated delete", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(uploadRef(db).delete());
+  });
+
+  // --- Unverified email ---
+
+  it("rejects create with unverified email", async () => {
+    const db = ownerDb("user123", false);
+    await assertFails(uploadRef(db).set(uploadData()));
+  });
+
+  // --- Invalid data ---
+
+  it("rejects invalid purpose", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { purpose: "selfie" })
+    ));
+  });
+
+  it("rejects invalid content type for routine-import purpose", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { contentType: "application/pdf" })
+    ));
+  });
+
+  it("rejects webp content type for profile_photo", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-pp").set(
+      uploadData("user123", "asset-pp", {
+        purpose: "profile_photo",
+        contentType: "image/webp",
+        sizeBytes: 1048576,
+        r2Key: "uploads/user123/asset-pp.webp",
+      })
+    ));
+  });
+
+  it("rejects size exceeding 15 MB for image upload", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { sizeBytes: 15728641 })
+    ));
+  });
+
+  it("rejects size exceeding 5 MB for profile_photo", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-pp2").set(
+      uploadData("user123", "asset-pp2", {
+        purpose: "profile_photo",
+        contentType: "image/jpeg",
+        sizeBytes: 5242881,
+        r2Key: "uploads/user123/asset-pp2.jpg",
+      })
+    ));
+  });
+
+  it("rejects zero sizeBytes", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { sizeBytes: 0 })
+    ));
+  });
+
+  it("rejects forged ownerUid on create", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-forged").set(
+      uploadData("victim-uid", "asset-forged", { r2Key: "uploads/victim/forged.jpg" })
+    ));
+  });
+
+  it("rejects banned localPreviewPath field", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-banned").set({
+      ...uploadData("user123", "asset-banned", { r2Key: "uploads/user123/asset-banned.jpg" }),
+      localPreviewPath: "/tmp/preview.jpg",
+    }));
+  });
+
+  it("rejects delete by owner", async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());
+    });
+    const db = ownerDb();
+    await assertFails(uploadRef(db).delete());
+  });
+
+  it("rejects invalid status value", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { status: "approved" })
+    ));
+  });
+
+  it("rejects assetId not matching document path", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-001").set(
+      uploadData("user123", "mismatched-id")
+    ));
+  });
+
+  it("rejects sourceFeature other than onboarding", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db).set(
+      uploadData("user123", "asset-001", { sourceFeature: "profile" })
+    ));
+  });
+
+  it("accepts webp content type for skin_face", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-webp").set(
+      uploadData("user123", "asset-webp", {
+        contentType: "image/webp",
+        r2Key: "uploads/user123/asset-webp.webp",
+        fileName: "photo.webp",
+      })
+    ));
+  });
+
+  it("accepts png content type for skin_products", async () => {
+    const db = ownerDb();
+    await assertSucceeds(uploadRef(db, "user123", "asset-png").set(
+      uploadData("user123", "asset-png", {
+        purpose: "skin_products",
+        contentType: "image/png",
+        r2Key: "uploads/user123/asset-png.png",
+        fileName: "photo.png",
+      })
+    ));
+  });
+});

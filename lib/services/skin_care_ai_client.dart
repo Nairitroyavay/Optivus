@@ -748,7 +748,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
   WorkerSkinCareAiClient({
     String? baseUrl,
     http.Client? client,
-    this.requestTimeout = const Duration(seconds: 70),
+    this.requestTimeout = const Duration(seconds: 180),
   }) : baseUrl = baseUrl ?? OptivusAiWorkersConfig.skinCareWorkerUrl,
        _client = client ?? http.Client();
 

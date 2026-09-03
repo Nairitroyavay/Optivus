@@ -1042,7 +1042,7 @@ String _skinCareImageContentTypeFromR2Key(String r2Key) {
   return 'image/jpeg';
 }
 
-UploadedAsset? _durableSkinCareAssetFromDraft(OnboardingDraft draft) {
+UploadedAsset? _durableSkinProductsAssetFromDraft(OnboardingDraft draft) {
   final base = draft.baseTimeline;
   final assetId = base.skinCareProductPhotoAssetId?.trim() ?? '';
   final r2Key = base.skinCareProductPhotoR2Key?.trim() ?? '';
@@ -1053,8 +1053,8 @@ UploadedAsset? _durableSkinCareAssetFromDraft(OnboardingDraft draft) {
     assetId: assetId,
     ownerUid: draft.uid,
     sourceFeature: OnboardingDraft.sourceOnboarding,
-    purpose: UploadedAssetPurpose.skinCare,
-    fileName: r2Key.split('/').lastOrNull ?? 'skin-care-photo.jpg',
+    purpose: UploadedAssetPurpose.skinProducts,
+    fileName: r2Key.split('/').lastOrNull ?? 'skin-products-photo.jpg',
     contentType: _skinCareImageContentTypeFromR2Key(r2Key),
     sizeBytes: 0,
     r2Key: r2Key,
@@ -1065,10 +1065,88 @@ UploadedAsset? _durableSkinCareAssetFromDraft(OnboardingDraft draft) {
   return uploadedAssetIsDurablyUploadedForSlot(
         asset: asset,
         uid: draft.uid,
-        purpose: UploadedAssetPurpose.skinCare,
+        purpose: UploadedAssetPurpose.skinProducts,
       )
       ? asset
       : null;
+}
+
+UploadedAsset? _durableSkinFaceAssetFromDraft(OnboardingDraft draft) {
+  final base = draft.baseTimeline;
+  final assetId =
+      (base.skinCareFacePhotoAssetId?.trim().isNotEmpty == true
+              ? base.skinCareFacePhotoAssetId
+              : base.skinCareSetupPath == 'no_products'
+              ? base.skinCareProductPhotoAssetId
+              : null)
+          ?.trim() ??
+      '';
+  final r2Key =
+      (base.skinCareFacePhotoR2Key?.trim().isNotEmpty == true
+              ? base.skinCareFacePhotoR2Key
+              : base.skinCareSetupPath == 'no_products'
+              ? base.skinCareProductPhotoR2Key
+              : null)
+          ?.trim() ??
+      '';
+  final useLegacyProductSlot =
+      base.skinCareFacePhotoAssetId?.trim().isNotEmpty != true &&
+      base.skinCareSetupPath == 'no_products';
+  final status = useLegacyProductSlot
+      ? base.skinCareProductPhotoStatus
+      : base.skinCareFacePhotoStatus;
+  final createdAt =
+      base.skinCareFacePhotoCreatedAt ??
+      (useLegacyProductSlot ? base.skinCareProductPhotoCreatedAt : null) ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+  final updatedAt =
+      base.skinCareFacePhotoUpdatedAt ??
+      (useLegacyProductSlot ? base.skinCareProductPhotoUpdatedAt : null) ??
+      createdAt;
+  if (assetId.isEmpty || r2Key.isEmpty) return null;
+  final asset = UploadedAsset(
+    assetId: assetId,
+    ownerUid: draft.uid,
+    sourceFeature: OnboardingDraft.sourceOnboarding,
+    purpose: UploadedAssetPurpose.skinFace,
+    fileName: r2Key.split('/').lastOrNull ?? 'skin-face-photo.jpg',
+    contentType: _skinCareImageContentTypeFromR2Key(r2Key),
+    sizeBytes: 0,
+    r2Key: r2Key,
+    status: uploadedAssetStatusFromString(status),
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+  );
+  return uploadedAssetIsDurablyUploadedForSlot(
+        asset: asset,
+        uid: draft.uid,
+        purpose: UploadedAssetPurpose.skinFace,
+      )
+      ? asset
+      : null;
+}
+
+UploadedAsset? _restoredSkinAssetForSlot({
+  required RestoredUploadsState restored,
+  required OnboardingDraft draft,
+  required UploadedAssetPurpose purpose,
+}) {
+  final direct = restored.forPurpose(purpose)?.asset;
+  if (direct != null) return direct;
+
+  final legacy = restored.forPurpose(UploadedAssetPurpose.skinCare)?.asset;
+  if (legacy == null) return null;
+  final base = draft.baseTimeline;
+  final expectedId = switch (purpose) {
+    UploadedAssetPurpose.skinProducts => base.skinCareProductPhotoAssetId,
+    UploadedAssetPurpose.skinFace =>
+      base.skinCareFacePhotoAssetId ??
+          (base.skinCareSetupPath == 'no_products'
+              ? base.skinCareProductPhotoAssetId
+              : null),
+    _ => null,
+  };
+  return expectedId?.trim() == legacy.assetId.trim() ? legacy : null;
 }
 
 _ProductInputSource _initialProductInputSource(BaseTimelineDraft base) {
@@ -1165,11 +1243,11 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
       updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
         final isSkip = value == 'skip';
         final switchedPath = base.skinCareSetupPath != value;
-        final clearProductData =
-            isSkip ||
-            (switchedPath && base.skinCareSetupPath == 'has_products');
-        final clearNoProductsData =
-            isSkip || (switchedPath && base.skinCareSetupPath == 'no_products');
+        final migrateLegacyFace =
+            switchedPath &&
+            base.skinCareSetupPath == 'no_products' &&
+            base.skinCareFacePhotoAssetId?.trim().isNotEmpty != true &&
+            base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true;
         final clearGeneratedData = isSkip || switchedPath;
         final blocks = switchedPath || isSkip
             ? base.blocks.where((b) => b.section != 'skin_care').toList()
@@ -1182,15 +1260,31 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
           skinCareSpecialCareNotes: clearGeneratedData
               ? const []
               : base.skinCareSpecialCareNotes,
-          clearSkinCareProductNames: clearProductData,
-          clearSkinCareProductPhoto: clearGeneratedData,
-          clearSkinCareSkinType: clearNoProductsData,
-          clearSkinCareProblems: clearNoProductsData,
-          clearSkinCareBudget: clearNoProductsData,
-          clearSkinCarePreference: clearNoProductsData,
-          clearSkinCareProductRecommendations: clearGeneratedData,
-          clearSkinCareSelectedProductNames: clearGeneratedData,
-          clearSkinCareSuggestedProducts: clearGeneratedData,
+          skinCareFacePhotoAssetId: migrateLegacyFace
+              ? base.skinCareProductPhotoAssetId
+              : null,
+          skinCareFacePhotoR2Key: migrateLegacyFace
+              ? base.skinCareProductPhotoR2Key
+              : null,
+          skinCareFacePhotoStatus: migrateLegacyFace
+              ? base.skinCareProductPhotoStatus
+              : null,
+          skinCareFacePhotoCreatedAt: migrateLegacyFace
+              ? base.skinCareProductPhotoCreatedAt
+              : null,
+          skinCareFacePhotoUpdatedAt: migrateLegacyFace
+              ? base.skinCareProductPhotoUpdatedAt
+              : null,
+          clearSkinCareProductNames: isSkip,
+          clearSkinCareProductPhoto: isSkip || migrateLegacyFace,
+          clearSkinCareFacePhoto: isSkip,
+          clearSkinCareSkinType: isSkip,
+          clearSkinCareProblems: isSkip,
+          clearSkinCareBudget: isSkip,
+          clearSkinCarePreference: isSkip,
+          clearSkinCareProductRecommendations: isSkip,
+          clearSkinCareSelectedProductNames: isSkip,
+          clearSkinCareSuggestedProducts: isSkip,
         );
       });
     }
@@ -1385,6 +1479,7 @@ class _HasProductsModeScreenState
   static const double _setupTileHeight = 184;
 
   late final TextEditingController _controller;
+  late final FocusNode _focusNode;
   UploadedAsset? _uploadedAsset;
   String? _uploadError;
   late final AiGenerationController _lifecycle;
@@ -1396,16 +1491,22 @@ class _HasProductsModeScreenState
   late _ProductInputSource _inputSource;
   int _selectedDay = DateTime.now().weekday;
   final int _sourceEpoch = 0;
+  final _productNamesTargetKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
     _controller = TextEditingController(text: widget.base.skinCareProductNames);
-    _uploadedAsset = ref
-        .read(restoredUploadsProvider)
-        .forPurpose(UploadedAssetPurpose.skinCare)
-        ?.asset;
+    _focusNode = FocusNode();
+    final draft = ref.read(mockOnboardingProvider).draft;
+    _uploadedAsset =
+        _restoredSkinAssetForSlot(
+          restored: ref.read(restoredUploadsProvider),
+          draft: draft,
+          purpose: UploadedAssetPurpose.skinProducts,
+        ) ??
+        _durableSkinProductsAssetFromDraft(draft);
     _inputSource = _uploadedAsset != null
         ? _ProductInputSource.photo
         : _initialProductInputSource(widget.base);
@@ -1423,6 +1524,7 @@ class _HasProductsModeScreenState
     _lifecycle.removeListener(_onLifecycleChanged);
     _lifecycle.dispose();
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -1430,7 +1532,7 @@ class _HasProductsModeScreenState
     if (_inputSource == _ProductInputSource.typed) return;
     final uploadState = ref.read(uploadControllerProvider);
     if (uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare &&
+        uploadState.purpose == UploadedAssetPurpose.skinProducts &&
         uploadState.isBusy) {
       return;
     }
@@ -1450,7 +1552,7 @@ class _HasProductsModeScreenState
           .startUpload(
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
-            purpose: UploadedAssetPurpose.skinCare,
+            purpose: UploadedAssetPurpose.skinProducts,
           );
     } catch (_) {}
     if (!mounted) return;
@@ -1495,17 +1597,18 @@ class _HasProductsModeScreenState
     final uploadState = ref.read(uploadControllerProvider);
     final uploadBusy =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare &&
+        uploadState.purpose == UploadedAssetPurpose.skinProducts &&
         uploadState.isBusy;
     if (uploadBusy || _removingPhoto) return;
     final draft = ref.read(mockOnboardingProvider).draft;
     final asset =
         _uploadedAsset ??
-        ref
-            .read(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset ??
-        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
+        _restoredSkinAssetForSlot(
+          restored: ref.read(restoredUploadsProvider),
+          draft: draft,
+          purpose: UploadedAssetPurpose.skinProducts,
+        ) ??
+        _durableSkinProductsAssetFromDraft(draft);
     if (asset != null && asset.assetId.trim().isNotEmpty) {
       setState(() {
         _removingPhoto = true;
@@ -1532,7 +1635,7 @@ class _HasProductsModeScreenState
           .read(restoredUploadsProvider.notifier)
           .removePurpose(
             uid: draft.uid,
-            purpose: UploadedAssetPurpose.skinCare,
+            purpose: UploadedAssetPurpose.skinProducts,
           );
     }
     final hasTypedProducts = _controller.text.trim().isNotEmpty;
@@ -1562,18 +1665,20 @@ class _HasProductsModeScreenState
     final uploadState = ref.read(uploadControllerProvider);
     final uploadBusy =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare &&
+        uploadState.purpose == UploadedAssetPurpose.skinProducts &&
         uploadState.isBusy;
     if (uploadBusy) return;
 
     final activeSource = _inputSource;
+    final draft = ref.read(mockOnboardingProvider).draft;
     final asset =
         _uploadedAsset ??
-        ref
-            .read(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset ??
-        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
+        _restoredSkinAssetForSlot(
+          restored: ref.read(restoredUploadsProvider),
+          draft: draft,
+          purpose: UploadedAssetPurpose.skinProducts,
+        ) ??
+        _durableSkinProductsAssetFromDraft(draft);
     var typedProductDetails = onboarding7ParseTypedProductDetails(
       _controller.text,
     );
@@ -1937,17 +2042,21 @@ class _HasProductsModeScreenState
   @override
   Widget build(BuildContext context) {
     final generated = widget.blocks.isNotEmpty;
+    final restored = ref.watch(restoredUploadsProvider);
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final restoredAsset = _restoredSkinAssetForSlot(
+      restored: restored,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinProducts,
+    );
     final effectiveAsset =
         _uploadedAsset ??
-        ref
-            .watch(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset ??
-        _durableSkinCareAssetFromDraft(ref.watch(mockOnboardingProvider).draft);
+        restoredAsset ??
+        _durableSkinProductsAssetFromDraft(draft);
     final uploadState = ref.watch(uploadControllerProvider);
     final uploadApplies =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare;
+        uploadState.purpose == UploadedAssetPurpose.skinProducts;
     final uploadBusy = uploadApplies && uploadState.isBusy;
     final uploadError =
         _uploadError ??
@@ -1959,18 +2068,17 @@ class _HasProductsModeScreenState
         _inputSource == _ProductInputSource.photo && _photoProductsReviewed
         ? 'Review detected products before building'
         : _productInputSourceLabel(_inputSource);
-    final textInputEnabled =
-        !busy &&
-        (_inputSource != _ProductInputSource.photo || _photoProductsReviewed);
+    final textInputEnabled = !_lifecycle.state.isActive;
     final photoUploadEnabled =
         !busy && _inputSource != _ProductInputSource.typed;
-    final typedPreviewProducts = textInputEnabled
-        ? onboarding7ParseTypedProductDetails(_controller.text)
-        : const <SkinCareDetectedProduct>[];
+    final typedPreviewProducts = onboarding7ParseTypedProductDetails(
+      _controller.text,
+    );
     final canGenerate =
         !busy &&
         (switch (_inputSource) {
-          _ProductInputSource.none => false,
+          _ProductInputSource.none =>
+            typedPreviewProducts.isNotEmpty || effectiveAsset != null,
           _ProductInputSource.typed => typedPreviewProducts.isNotEmpty,
           _ProductInputSource.photo =>
             effectiveAsset != null &&
@@ -2002,6 +2110,8 @@ class _HasProductsModeScreenState
     final setupCard = _HasProductsSetupCard(
       base: widget.base,
       controller: _controller,
+      focusNode: _focusNode,
+      productNamesTargetKey: _productNamesTargetKey,
       asset: effectiveAsset,
       tileHeight: _setupTileHeight,
       sourceLabel: sourceLabel,
@@ -2099,9 +2209,11 @@ class _HasProductsModeScreenState
     }
 
     if (!generated || _editingExisting) {
-      if (MediaQuery.viewInsetsOf(context).bottom > 0) {
+      if (!_editingExisting && MediaQuery.viewInsetsOf(context).bottom > 0) {
         return _SkinCareProductNamesTarget(
+          key: _productNamesTargetKey,
           controller: _controller,
+          focusNode: _focusNode,
           enabled: textInputEnabled,
           helperText: textHelper,
           productCount: typedPreviewProducts.length,
@@ -2244,6 +2356,8 @@ class _HasProductsSetupCard extends StatelessWidget {
   final int desiredApplicationsPerDay;
   final bool uploadBusy;
   final String? uploadStatusLabel;
+  final FocusNode? focusNode;
+  final Key? productNamesTargetKey;
   final bool busy;
   final bool generating;
   final bool photoEnabled;
@@ -2263,6 +2377,8 @@ class _HasProductsSetupCard extends StatelessWidget {
   const _HasProductsSetupCard({
     required this.base,
     required this.controller,
+    this.focusNode,
+    this.productNamesTargetKey,
     required this.asset,
     required this.tileHeight,
     required this.sourceLabel,
@@ -2289,6 +2405,8 @@ class _HasProductsSetupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final effectiveTileHeight = keyboardOpen ? 120.0 : tileHeight;
     return OnboardingGlassCard(
       key: const ValueKey('onboarding-step7-products-setup-card'),
       tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
@@ -2347,9 +2465,12 @@ class _HasProductsSetupCard extends StatelessWidget {
             builder: (context, constraints) {
               final sideBySide = constraints.maxWidth >= 280;
               final photo = SizedBox(
-                height: tileHeight,
+                height: effectiveTileHeight,
                 child: _SkinCarePhotoTarget(
                   asset: asset,
+                  purpose: UploadedAssetPurpose.skinProducts,
+                  title: 'Add photo',
+                  uploadedTitle: 'Photo uploaded',
                   busy: uploadBusy,
                   busyLabel: uploadStatusLabel,
                   enabled: photoEnabled,
@@ -2359,9 +2480,11 @@ class _HasProductsSetupCard extends StatelessWidget {
                 ),
               );
               final input = SizedBox(
-                height: tileHeight,
+                height: effectiveTileHeight,
                 child: _SkinCareProductNamesTarget(
+                  key: productNamesTargetKey,
                   controller: controller,
+                  focusNode: focusNode,
                   enabled: textInputEnabled,
                   helperText: textHelper,
                   productCount: productCount,
@@ -2370,6 +2493,9 @@ class _HasProductsSetupCard extends StatelessWidget {
               );
 
               if (!sideBySide) {
+                if (keyboardOpen) {
+                  return input;
+                }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [photo, const SizedBox(height: 10), input],
@@ -2377,7 +2503,7 @@ class _HasProductsSetupCard extends StatelessWidget {
               }
 
               return SizedBox(
-                height: tileHeight,
+                height: effectiveTileHeight,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -2389,27 +2515,29 @@ class _HasProductsSetupCard extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 4),
-          _SkinCarePersonalizeSection(
-            skinType: base.skinCareSkinType ?? 'not_sure',
-            concern: base.skinCareProblems.firstOrNull ?? 'none',
-            preference: base.skinCarePreference ?? 'balanced',
-            onSkinTypeChanged: onSkinTypeChanged,
-            onConcernChanged: onConcernChanged,
-            onPreferenceChanged: onPreferenceChanged,
-          ),
-          const SizedBox(height: 4),
-          _SkinCareFrequencySelector(
-            value: desiredApplicationsPerDay,
-            onChanged: onFrequencyChanged,
-          ),
-          const SizedBox(height: 12),
-          _SkinCareGenerateRoutineButton(
-            label: uploadBusy ? 'Please wait...' : generateLabel,
-            busy: generating,
-            onTap: onGenerate,
-            accent: OptivusColors.roseAccent,
-          ),
+          if (!keyboardOpen) ...[
+            const SizedBox(height: 4),
+            _SkinCarePersonalizeSection(
+              skinType: base.skinCareSkinType ?? 'not_sure',
+              concern: base.skinCareProblems.firstOrNull ?? 'none',
+              preference: base.skinCarePreference ?? 'balanced',
+              onSkinTypeChanged: onSkinTypeChanged,
+              onConcernChanged: onConcernChanged,
+              onPreferenceChanged: onPreferenceChanged,
+            ),
+            const SizedBox(height: 4),
+            _SkinCareFrequencySelector(
+              value: desiredApplicationsPerDay,
+              onChanged: onFrequencyChanged,
+            ),
+            const SizedBox(height: 12),
+            _SkinCareGenerateRoutineButton(
+              label: uploadBusy ? 'Please wait...' : generateLabel,
+              busy: generating,
+              onTap: onGenerate,
+              accent: OptivusColors.roseAccent,
+            ),
+          ],
         ],
       ),
     );
@@ -2665,13 +2793,16 @@ String _skinCareOptionLabel(String value) {
 
 class _SkinCareProductNamesTarget extends StatelessWidget {
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final bool enabled;
   final String? helperText;
   final int productCount;
   final ValueChanged<String> onChanged;
 
   const _SkinCareProductNamesTarget({
+    super.key,
     required this.controller,
+    this.focusNode,
     this.enabled = true,
     this.helperText,
     required this.productCount,
@@ -2680,7 +2811,7 @@ class _SkinCareProductNamesTarget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = OnboardingGlassCard(
+    final card = OnboardingGlassCard(
       key: const ValueKey('onboarding-step7-product-names-tile'),
       tint: OptivusColors.roseAccent.withValues(alpha: enabled ? 0.06 : 0.025),
       padding: const EdgeInsets.all(11),
@@ -2733,11 +2864,16 @@ class _SkinCareProductNamesTarget extends StatelessWidget {
             child: TextField(
               key: const ValueKey('onboarding-step7-product-names-field'),
               controller: controller,
+              focusNode: focusNode,
               minLines: null,
               maxLines: null,
               expands: true,
               enabled: enabled,
+              readOnly: false,
+              autofocus: false,
               textAlignVertical: TextAlignVertical.top,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
               onChanged: onChanged,
               style: TextStyle(
                 fontSize: 12.5,
@@ -2800,6 +2936,15 @@ class _SkinCareProductNamesTarget extends StatelessWidget {
           ],
         ],
       ),
+    );
+    final child = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        if (enabled && focusNode != null && !focusNode!.hasFocus) {
+          focusNode!.requestFocus();
+        }
+      },
+      child: card,
     );
     return Opacity(opacity: enabled ? 1 : 0.55, child: child);
   }
@@ -3000,10 +3145,14 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   void initState() {
     super.initState();
     _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
-    _uploadedAsset = ref
-        .read(restoredUploadsProvider)
-        .forPurpose(UploadedAssetPurpose.skinCare)
-        ?.asset;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final restored = ref.read(restoredUploadsProvider);
+    final restoredAsset = _restoredSkinAssetForSlot(
+      restored: restored,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinFace,
+    );
+    _uploadedAsset = restoredAsset ?? _durableSkinFaceAssetFromDraft(draft);
     _showProductSelection =
         widget.base.skinCareProductRecommendations.isNotEmpty;
   }
@@ -3022,7 +3171,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   Future<void> _startUpload() async {
     final uploadState = ref.read(uploadControllerProvider);
     if (uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare &&
+        uploadState.purpose == UploadedAssetPurpose.skinFace &&
         uploadState.isBusy) {
       return;
     }
@@ -3042,7 +3191,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           .startUpload(
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
-            purpose: UploadedAssetPurpose.skinCare,
+            purpose: UploadedAssetPurpose.skinFace,
           );
     } catch (_) {}
 
@@ -3055,11 +3204,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         ref,
         onboardingSkinCareStepIndex,
         (base) => base.copyWith(
-          skinCareProductPhotoAssetId: latestAsset.assetId,
-          skinCareProductPhotoR2Key: latestAsset.r2Key,
-          skinCareProductPhotoStatus: latestAsset.status.wireName,
-          skinCareProductPhotoCreatedAt: latestAsset.createdAt,
-          skinCareProductPhotoUpdatedAt: latestAsset.updatedAt,
+          skinCareFacePhotoAssetId: latestAsset.assetId,
+          skinCareFacePhotoR2Key: latestAsset.r2Key,
+          skinCareFacePhotoStatus: latestAsset.status.wireName,
+          skinCareFacePhotoCreatedAt: latestAsset.createdAt,
+          skinCareFacePhotoUpdatedAt: latestAsset.updatedAt,
           clearSkinCareProductRecommendations: true,
           clearSkinCareSelectedProductNames: true,
           clearSkinCareSuggestedProducts: !base.blocks.any(
@@ -3086,17 +3235,18 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final uploadState = ref.read(uploadControllerProvider);
     final uploadBusy =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare &&
+        uploadState.purpose == UploadedAssetPurpose.skinFace &&
         uploadState.isBusy;
     if (uploadBusy || _removingPhoto) return;
     final draft = ref.read(mockOnboardingProvider).draft;
     final asset =
         _uploadedAsset ??
-        ref
-            .read(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset ??
-        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
+        _restoredSkinAssetForSlot(
+          restored: ref.read(restoredUploadsProvider),
+          draft: draft,
+          purpose: UploadedAssetPurpose.skinFace,
+        ) ??
+        _durableSkinFaceAssetFromDraft(draft);
     if (asset != null && asset.assetId.trim().isNotEmpty) {
       setState(() {
         _removingPhoto = true;
@@ -3123,7 +3273,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           .read(restoredUploadsProvider.notifier)
           .removePurpose(
             uid: draft.uid,
-            purpose: UploadedAssetPurpose.skinCare,
+            purpose: UploadedAssetPurpose.skinFace,
           );
     }
     setState(() {
@@ -3137,7 +3287,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       ref,
       onboardingSkinCareStepIndex,
       (base) => base.copyWith(
-        clearSkinCareProductPhoto: true,
+        clearSkinCareFacePhoto: true,
         clearSkinCareProductRecommendations: true,
         clearSkinCareSelectedProductNames: true,
         clearSkinCareSuggestedProducts: true,
@@ -3151,21 +3301,25 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final uploadState = ref.read(uploadControllerProvider);
     final uploadBusy =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare &&
+        uploadState.purpose == UploadedAssetPurpose.skinFace &&
         uploadState.isBusy;
     if (uploadBusy || _removingPhoto) return;
 
-    final currentBase = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final currentBase = draft.baseTimeline;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(
       currentBase,
     );
+    final restored = ref.read(restoredUploadsProvider);
+    final restoredAsset = _restoredSkinAssetForSlot(
+      restored: restored,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinFace,
+    );
     final asset =
         _uploadedAsset ??
-        ref
-            .read(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset ??
-        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
+        restoredAsset ??
+        _durableSkinFaceAssetFromDraft(draft);
     if (asset == null ||
         asset.r2Key.trim().isEmpty ||
         currentBase.skinCareSkinType == null ||
@@ -3366,7 +3520,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
   Future<void> _generate() async {
     if (_lifecycle.state.isActive) return;
-    final currentBase = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final currentBase = draft.baseTimeline;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(
       currentBase,
     );
@@ -3378,11 +3533,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         .toList(growable: false);
     final asset =
         _uploadedAsset ??
-        ref
-            .read(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset ??
-        _durableSkinCareAssetFromDraft(ref.read(mockOnboardingProvider).draft);
+        _restoredSkinAssetForSlot(
+          restored: ref.read(restoredUploadsProvider),
+          draft: draft,
+          purpose: UploadedAssetPurpose.skinFace,
+        ) ??
+        _durableSkinFaceAssetFromDraft(draft);
     if (selected.isEmpty) {
       setState(() => _generationError = 'Select at least one product.');
       return;
@@ -3460,6 +3616,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
               uid: uid,
               idToken: idToken,
               params: {
+                'sourceFeature': OnboardingDraft.sourceOnboarding,
                 'productInputSource': 'typed',
                 'typedProductDetails': selected
                     .map(
@@ -3604,15 +3761,19 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   }
 
   void _changeDetails() {
+    final hasRoutine = ref
+        .read(mockOnboardingProvider)
+        .draft
+        .baseTimeline
+        .blocks
+        .any((block) => block.section == 'skin_care');
     updateBaseTimelineDraft(
       ref,
       onboardingSkinCareStepIndex,
       (base) => base.copyWith(
         clearSkinCareProductRecommendations: true,
-        clearSkinCareSelectedProductNames: true,
-        clearSkinCareSuggestedProducts: !base.blocks.any(
-          (block) => block.section == 'skin_care',
-        ),
+        clearSkinCareSelectedProductNames: !hasRoutine,
+        clearSkinCareSuggestedProducts: !hasRoutine,
         skinCareSkipped: false,
       ),
     );
@@ -3649,7 +3810,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             ? null
             : normalized,
         clearSkinCareProductRecommendations: true,
-        clearSkinCareSelectedProductNames: true,
+        clearSkinCareSelectedProductNames: !hasExistingRoutine,
         clearSkinCareSuggestedProducts: !hasExistingRoutine,
         skinCareSkipped: false,
       ),
@@ -3661,17 +3822,20 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final generated = widget.blocks.isNotEmpty;
     final draft = ref.watch(mockOnboardingProvider).draft;
     final base = draft.baseTimeline;
+    final restored = ref.watch(restoredUploadsProvider);
+    final restoredAsset = _restoredSkinAssetForSlot(
+      restored: restored,
+      draft: draft,
+      purpose: UploadedAssetPurpose.skinFace,
+    );
     final effectiveAsset =
         _uploadedAsset ??
-        ref
-            .watch(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset ??
-        _durableSkinCareAssetFromDraft(draft);
+        restoredAsset ??
+        _durableSkinFaceAssetFromDraft(draft);
     final uploadState = ref.watch(uploadControllerProvider);
     final uploadApplies =
         uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinCare;
+        uploadState.purpose == UploadedAssetPurpose.skinFace;
     final uploadBusy = uploadApplies && uploadState.isBusy;
     final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final uploadError =
@@ -4090,6 +4254,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                         height: dense ? 88 : 104,
                         child: _SkinCarePhotoTarget(
                           asset: effectiveAsset,
+                          purpose: UploadedAssetPurpose.skinFace,
+                          title: 'Add photo',
+                          uploadedTitle: 'Photo uploaded',
                           busy: uploadBusy || _removingPhoto,
                           busyLabel: _removingPhoto
                               ? 'Removing...'
@@ -4124,19 +4291,22 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                   : () => updateBaseTimelineDraft(
                                       ref,
                                       onboardingSkinCareStepIndex,
-                                      (base) => base.copyWith(
-                                        skinCareSkinType: option.key,
-                                        clearSkinCareProductRecommendations:
-                                            true,
-                                        clearSkinCareSelectedProductNames: true,
-                                        clearSkinCareSuggestedProducts: !base
-                                            .blocks
-                                            .any(
-                                              (block) =>
-                                                  block.section == 'skin_care',
-                                            ),
-                                        skinCareSkipped: false,
-                                      ),
+                                      (base) {
+                                        final hasRoutine = base.blocks.any(
+                                          (block) =>
+                                              block.section == 'skin_care',
+                                        );
+                                        return base.copyWith(
+                                          skinCareSkinType: option.key,
+                                          clearSkinCareProductRecommendations:
+                                              true,
+                                          clearSkinCareSelectedProductNames:
+                                              !hasRoutine,
+                                          clearSkinCareSuggestedProducts:
+                                              !hasRoutine,
+                                          skinCareSkipped: false,
+                                        );
+                                      },
                                     ),
                             ),
                         ],
@@ -4178,21 +4348,22 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                       updateBaseTimelineDraft(
                                         ref,
                                         onboardingSkinCareStepIndex,
-                                        (base) => base.copyWith(
-                                          skinCareProblems: next.toList(),
-                                          clearSkinCareProductRecommendations:
-                                              true,
-                                          clearSkinCareSelectedProductNames:
-                                              true,
-                                          clearSkinCareSuggestedProducts: !base
-                                              .blocks
-                                              .any(
-                                                (block) =>
-                                                    block.section ==
-                                                    'skin_care',
-                                              ),
-                                          skinCareSkipped: false,
-                                        ),
+                                        (base) {
+                                          final hasRoutine = base.blocks.any(
+                                            (block) =>
+                                                block.section == 'skin_care',
+                                          );
+                                          return base.copyWith(
+                                            skinCareProblems: next.toList(),
+                                            clearSkinCareProductRecommendations:
+                                                true,
+                                            clearSkinCareSelectedProductNames:
+                                                !hasRoutine,
+                                            clearSkinCareSuggestedProducts:
+                                                !hasRoutine,
+                                            skinCareSkipped: false,
+                                          );
+                                        },
                                       );
                                     },
                             ),
@@ -4218,19 +4389,22 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                   : () => updateBaseTimelineDraft(
                                       ref,
                                       onboardingSkinCareStepIndex,
-                                      (base) => base.copyWith(
-                                        skinCareBudget: option.key,
-                                        clearSkinCareProductRecommendations:
-                                            true,
-                                        clearSkinCareSelectedProductNames: true,
-                                        clearSkinCareSuggestedProducts: !base
-                                            .blocks
-                                            .any(
-                                              (block) =>
-                                                  block.section == 'skin_care',
-                                            ),
-                                        skinCareSkipped: false,
-                                      ),
+                                      (base) {
+                                        final hasRoutine = base.blocks.any(
+                                          (block) =>
+                                              block.section == 'skin_care',
+                                        );
+                                        return base.copyWith(
+                                          skinCareBudget: option.key,
+                                          clearSkinCareProductRecommendations:
+                                              true,
+                                          clearSkinCareSelectedProductNames:
+                                              !hasRoutine,
+                                          clearSkinCareSuggestedProducts:
+                                              !hasRoutine,
+                                          skinCareSkipped: false,
+                                        );
+                                      },
                                     ),
                             ),
                         ],
@@ -4287,6 +4461,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
 class _SkinCarePhotoTarget extends ConsumerWidget {
   final UploadedAsset? asset;
+  final UploadedAssetPurpose purpose;
+  final String title;
+  final String uploadedTitle;
   final bool busy;
   final String? busyLabel;
   final bool enabled;
@@ -4296,6 +4473,9 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
 
   const _SkinCarePhotoTarget({
     required this.asset,
+    this.purpose = UploadedAssetPurpose.skinProducts,
+    this.title = 'Add photo',
+    this.uploadedTitle = 'Photo uploaded',
     this.busy = false,
     this.busyLabel,
     this.enabled = true,
@@ -4309,9 +4489,13 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
     final preview = asset == null
         ? null
         : usableUploadedAssetLocalPreviewPath(asset!);
-    final restored = ref
-        .watch(restoredUploadsProvider)
-        .forPurpose(UploadedAssetPurpose.skinCare);
+    final restoredUploads = ref.watch(restoredUploadsProvider);
+    final restored =
+        restoredUploads.forPurpose(purpose) ??
+        (purpose == UploadedAssetPurpose.skinProducts ||
+                purpose == UploadedAssetPurpose.skinFace
+            ? restoredUploads.forPurpose(UploadedAssetPurpose.skinCare)
+            : null);
     final remotePreview = restored?.asset.assetId == asset?.assetId
         ? restored?.previewUri
         : null;
@@ -4438,7 +4622,7 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          asset == null ? 'Add photo' : 'Photo uploaded',
+          asset == null ? title : uploadedTitle,
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 11,
@@ -4906,22 +5090,7 @@ class _SkinCareTimelineSection extends ConsumerWidget {
               .where((candidate) => candidate.id == entry.sourceId)
               .firstOrNull;
           if (block == null) return;
-          SkinTimelineAdapter.showSkinEditSheet(
-            context: context,
-            block: block,
-            accent: accent,
-            onSave: (updated) async {
-              updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-                return base.copyWith(
-                  blocks: [
-                    for (final item in base.blocks)
-                      if (item.id == block.id) updated else item,
-                  ],
-                );
-              });
-              return true;
-            },
-          );
+          _showSkinCareBlockEditSheet(context, ref, block, accent);
         },
       ),
     );

@@ -6,6 +6,8 @@ enum UploadedAssetPurpose {
   eatingMenu,
   skinCare,
   profilePhoto,
+  skinFace,
+  skinProducts,
 }
 
 enum UploadedAssetStatus { pending, uploading, uploaded, failed, deleted }
@@ -18,6 +20,8 @@ extension UploadedAssetPurposeWireName on UploadedAssetPurpose {
       UploadedAssetPurpose.eatingMenu => 'eating_menu',
       UploadedAssetPurpose.skinCare => 'skin_care',
       UploadedAssetPurpose.profilePhoto => 'profile_photo',
+      UploadedAssetPurpose.skinFace => 'skin_face',
+      UploadedAssetPurpose.skinProducts => 'skin_products',
     };
   }
 }
@@ -168,6 +172,8 @@ UploadedAssetPurpose uploadedAssetPurposeFromString(String? value) {
   return switch (value) {
     'work_schedule' => UploadedAssetPurpose.workSchedule,
     'eating_menu' => UploadedAssetPurpose.eatingMenu,
+    'skin_face' => UploadedAssetPurpose.skinFace,
+    'skin_products' => UploadedAssetPurpose.skinProducts,
     'skin_care' => UploadedAssetPurpose.skinCare,
     'profile_photo' => UploadedAssetPurpose.profilePhoto,
     _ => UploadedAssetPurpose.classTimetable,

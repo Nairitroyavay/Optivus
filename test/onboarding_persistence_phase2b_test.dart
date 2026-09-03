@@ -144,12 +144,13 @@ void main() {
         uid: 'no-products-user',
         baseTimeline: BaseTimelineDraft(
           skinCareSetupPath: 'no_products',
-          skinCareProductPhotoAssetId: 'face-asset',
-          skinCareProductPhotoR2Key:
-              'users/no-products-user/onboarding/skin_care/face-asset.jpg',
-          skinCareProductPhotoStatus: 'uploaded',
-          skinCareProductPhotoCreatedAt: now,
-          skinCareProductPhotoUpdatedAt: now,
+          skinCareSkipped: true,
+          skinCareFacePhotoAssetId: 'face-asset',
+          skinCareFacePhotoR2Key:
+              'users/no-products-user/onboarding/skin_face/face-asset.jpg',
+          skinCareFacePhotoStatus: 'uploaded',
+          skinCareFacePhotoCreatedAt: now,
+          skinCareFacePhotoUpdatedAt: now,
         ),
       ),
     );

@@ -327,7 +327,11 @@ class Step14ReadinessSummary {
             ) ==
             null &&
         draft.baseTimeline.validateEatingSetup() == null &&
-        draft.baseTimeline.validateFixedSchedule() == null;
+        draft.baseTimeline.validateFixedSchedule() == null &&
+        (draft.baseTimeline.skinCareSetupPath == null &&
+                !draft.baseTimeline.blocks.any((b) => b.section == 'skin_care')
+            ? true
+            : draft.baseTimeline.validateSkinCareSetup() == null);
 
     final habitsOk =
         (draft.goodHabits.isNotEmpty || draft.goodHabitsNotNow) &&

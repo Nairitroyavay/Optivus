@@ -17,7 +17,36 @@ import 'package:optivus/services/habit_system_onboarding_projection.dart';
 import 'package:optivus/services/onboarding_run_identity.dart';
 import 'package:optivus/services/routine_onboarding_event_projector.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
+
+enum Step14InvalidArea { profile, schedule, eating, skinCare, habits, goals }
+
+sealed class Step14BundleBuildResult {
+  const Step14BundleBuildResult();
+}
+
+class Step14BundleBuildSuccess extends Step14BundleBuildResult {
+  final OnboardingCompletionBundle bundle;
+  const Step14BundleBuildSuccess(this.bundle);
+}
+
+class Step14BundleBuildInvalid extends Step14BundleBuildResult {
+  final Step14InvalidArea area;
+  final int returnToStep;
+  final String diagnosticCode;
+
+  const Step14BundleBuildInvalid({
+    required this.area,
+    required this.returnToStep,
+    required this.diagnosticCode,
+  });
+}
+
+class Step14BundleBuildCorrupt extends Step14BundleBuildResult {
+  final RecoverableError error;
+  const Step14BundleBuildCorrupt(this.error);
+}
 
 enum OnboardingRecoveryTier {
   verifiedBundleFound,
@@ -161,6 +190,37 @@ class OnboardingCompletionService {
       tier: OnboardingRecoveryTier.missingSetup,
       failureCode: 'onboarding_draft_missing',
     );
+  }
+
+  static Step14BundleBuildResult projectBundleResult(OnboardingDraft draft) {
+    if (draft.baseTimeline.skinCareSetupPath != null ||
+        draft.baseTimeline.blocks.any((b) => b.section == 'skin_care')) {
+      final skinErr = draft.baseTimeline.validateSkinCareSetup();
+      if (skinErr != null) {
+        return const Step14BundleBuildInvalid(
+          area: Step14InvalidArea.skinCare,
+          returnToStep: 7,
+          diagnosticCode: 'skin_care_incomplete',
+        );
+      }
+    }
+    try {
+      final bundle = buildBundle(draft);
+      return Step14BundleBuildSuccess(bundle);
+    } catch (e) {
+      return Step14BundleBuildCorrupt(
+        RecoverableError(
+          category: RecoverableErrorCategory.recoveryRequired,
+          publicMessage:
+              'We found an issue with your setup data. Let\'s restore your progress.',
+          severity: RecoverableErrorSeverity.warning,
+          isBlocking: true,
+          retryAction: RecoverableRetryAction.returnToStep,
+          retrySafe: true,
+          diagnosticCode: 'bundle_build_failed: $e',
+        ),
+      );
+    }
   }
 
   static OnboardingCompletionBundle buildBundle(OnboardingDraft draft) {
@@ -355,6 +415,26 @@ class OnboardingCompletionService {
           uploadedAssetStatus: base.skinCareProductPhotoStatus,
           createdAt: createdAt,
           updatedAt: updatedAt,
+        ),
+      );
+    }
+    if (base.skinCareFacePhotoAssetId?.trim().isNotEmpty == true ||
+        base.skinCareFacePhotoR2Key?.trim().isNotEmpty == true ||
+        base.skinCareFacePhotoStatus?.trim().isNotEmpty == true) {
+      final fallbackCreatedAt = draft.createdAt ?? DateTime.now();
+      final fallbackUpdatedAt = draft.updatedAt ?? fallbackCreatedAt;
+      addReference(
+        OnboardingUploadedAssetReference(
+          id: base.skinCareFacePhotoAssetId?.trim().isNotEmpty == true
+              ? base.skinCareFacePhotoAssetId!.trim()
+              : 'skin_care_face_photo',
+          section: 'skin_care',
+          mode: 'no_products',
+          uploadedAssetId: base.skinCareFacePhotoAssetId,
+          uploadedAssetR2Key: base.skinCareFacePhotoR2Key,
+          uploadedAssetStatus: base.skinCareFacePhotoStatus,
+          createdAt: base.skinCareFacePhotoCreatedAt ?? fallbackCreatedAt,
+          updatedAt: base.skinCareFacePhotoUpdatedAt ?? fallbackUpdatedAt,
         ),
       );
     }

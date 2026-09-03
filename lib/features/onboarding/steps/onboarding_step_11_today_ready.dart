@@ -98,7 +98,19 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   Widget build(BuildContext context) {
     final onboarding = ref.watch(mockOnboardingProvider);
     final draft = onboarding.draft;
-    final bundle = OnboardingCompletionService.buildBundle(draft);
+    final bundleResult = OnboardingCompletionService.projectBundleResult(draft);
+    final bundle = switch (bundleResult) {
+      Step14BundleBuildSuccess(:final bundle) => bundle,
+      _ => null,
+    };
+    final invalidBundle = switch (bundleResult) {
+      Step14BundleBuildInvalid invalid => invalid,
+      _ => null,
+    };
+    final corruptBundle = switch (bundleResult) {
+      Step14BundleBuildCorrupt corrupt => corrupt,
+      _ => null,
+    };
 
     final rawConflicts = draft.baseTimeline.detectConflicts(
       ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
@@ -109,8 +121,12 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
       occurrences: rawConflicts,
       draft: draft,
     );
-    final unresolvedGroups = conflictGroups.where((g) => g.isUnresolved).toList();
-    final acceptedGroups = conflictGroups.where((g) => g.isFullyAccepted).toList();
+    final unresolvedGroups = conflictGroups
+        .where((g) => g.isUnresolved)
+        .toList();
+    final acceptedGroups = conflictGroups
+        .where((g) => g.isFullyAccepted)
+        .toList();
 
     // Default expanded group to first unresolved if not set or invalid
     if (_expandedGroupId == null && unresolvedGroups.isNotEmpty) {
@@ -122,27 +138,35 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
           : null;
     }
 
-    final readiness = Step14ReadinessSummary.project(
+    final projectedReadiness = Step14ReadinessSummary.project(
       draft: draft,
       unresolvedConflictGroupCount: unresolvedGroups.length,
     );
+    final readiness = corruptBundle == null
+        ? projectedReadiness
+        : Step14ReadinessSummary(
+            profileComplete: projectedReadiness.profileComplete,
+            routineGenerated: false,
+            habitsConfigured: projectedReadiness.habitsConfigured,
+            unresolvedConflictGroupCount:
+                projectedReadiness.unresolvedConflictGroupCount,
+          );
 
-    final previewData = Step14FinalPreviewData.project(
-      draft: draft,
-      bundle: bundle,
-    );
+    final previewData = bundle != null
+        ? Step14FinalPreviewData.project(draft: draft, bundle: bundle)
+        : null;
 
     // Watch active completion job if finishing
     final activeJobNotifier = ref.watch(activeOnboardingCompletionJobProvider);
     final activeJob = activeJobNotifier.value;
 
     // Handle full timeline preview mode
-    if (_viewingFullTimeline) {
+    if (_viewingFullTimeline && bundle != null) {
       return _buildFullTimelineView(bundle);
     }
 
     // Handle finishing / success / failure modes
-    if (_presentationMode != Step14PresentationMode.review) {
+    if (_presentationMode != Step14PresentationMode.review && bundle != null) {
       return _buildFinishingScaffold(
         activeJob: activeJob,
         draft: draft,
@@ -169,8 +193,17 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
             const SizedBox(height: 18),
 
             // Section 1: Readiness Card
-            _buildReadinessCard(readiness),
+            _buildReadinessCard(
+              readiness,
+              invalidBundle: invalidBundle,
+              bundleUnavailable: invalidBundle != null,
+            ),
             const SizedBox(height: 16),
+
+            if (corruptBundle != null) ...[
+              _buildBundleRecoveryCard(corruptBundle.error),
+              const SizedBox(height: 16),
+            ],
 
             // Section 2: Needs your attention (only if conflicts exist)
             if (conflictGroups.isNotEmpty) ...[
@@ -184,8 +217,10 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
             ],
 
             // Section 3: Final Preview
-            _buildFinalPreviewCard(previewData, draft),
-            const SizedBox(height: 24),
+            if (previewData != null) ...[
+              _buildFinalPreviewCard(previewData, draft),
+              const SizedBox(height: 24),
+            ],
           ],
         ),
       ),
@@ -261,7 +296,11 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   }
 
   // ── Section 1: Readiness Card ───────────────────────────────────────────────
-  Widget _buildReadinessCard(Step14ReadinessSummary readiness) {
+  Widget _buildReadinessCard(
+    Step14ReadinessSummary readiness, {
+    Step14BundleBuildInvalid? invalidBundle,
+    required bool bundleUnavailable,
+  }) {
     return OnboardingGlassCard(
       key: const ValueKey('step14-readiness'),
       padding: const EdgeInsets.all(18),
@@ -282,7 +321,10 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
               ),
               if (readiness.everythingReady)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: OptivusColors.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
@@ -290,7 +332,11 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle_rounded, size: 13, color: OptivusColors.success),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 13,
+                        color: OptivusColors.success,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Ready',
@@ -335,7 +381,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                 ),
               ],
             )
-          else
+          else if (!bundleUnavailable)
             Row(
               children: [
                 const Icon(
@@ -356,6 +402,63 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                 ),
               ],
             ),
+          if (invalidBundle != null &&
+              readiness.unresolvedConflictGroupCount == 0) ...[
+            const Row(
+              children: [
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: OptivusColors.warning,
+                ),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Needs your attention',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: OptivusColors.warning,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (invalidBundle?.area == Step14InvalidArea.skinCare) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                key: const ValueKey('step14-review-skin-care'),
+                onPressed: () => widget.onJumpToStep?.call(7),
+                icon: const Icon(Icons.face_rounded, size: 17),
+                label: const Text('Review Skin Care'),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBundleRecoveryCard(RecoverableError error) {
+    return OnboardingGlassCard(
+      key: const ValueKey('step14-bundle-recovery'),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: OptivusColors.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              error.publicMessage,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -365,9 +468,13 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
     return Row(
       children: [
         Icon(
-          satisfied ? Icons.check_rounded : Icons.radio_button_unchecked_rounded,
+          satisfied
+              ? Icons.check_rounded
+              : Icons.radio_button_unchecked_rounded,
           size: 15,
-          color: satisfied ? OptivusColors.success : OptivusColors.textSecondary,
+          color: satisfied
+              ? OptivusColors.success
+              : OptivusColors.textSecondary,
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -376,7 +483,9 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: satisfied ? OptivusColors.textPrimary : OptivusColors.textSecondary,
+              color: satisfied
+                  ? OptivusColors.textPrimary
+                  : OptivusColors.textSecondary,
             ),
           ),
         ),
@@ -412,7 +521,10 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: OptivusColors.warning.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -464,7 +576,8 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
 
     return Semantics(
       container: true,
-      label: '${group.leftLabel} and ${group.rightLabel} overlap on ${group.daySummary}. ${group.publicReason}',
+      label:
+          '${group.leftLabel} and ${group.rightLabel} overlap on ${group.daySummary}. ${group.publicReason}',
       child: AnimatedContainer(
         key: ValueKey('step14-conflict-${group.stableGroupId}'),
         duration: const Duration(milliseconds: 260),
@@ -496,7 +609,9 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                       ),
                     ),
                     Icon(
-                      isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                      isExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
                       color: OptivusColors.textSecondary,
                     ),
                   ],
@@ -511,7 +626,10 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                 children: [
                   for (final day in group.affectedDays)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2.5,
+                      ),
                       decoration: BoxDecoration(
                         color: group.acceptedDays.contains(day)
                             ? OptivusColors.success.withValues(alpha: 0.15)
@@ -535,10 +653,15 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
               if (isExpanded) ...[
                 const SizedBox(height: 10),
                 // Time Range
-                if (group.hasUniformTimeRange && group.sharedTimeRange.isNotEmpty)
+                if (group.hasUniformTimeRange &&
+                    group.sharedTimeRange.isNotEmpty)
                   Row(
                     children: [
-                      const Icon(Icons.access_time_rounded, size: 14, color: OptivusColors.textSecondary),
+                      const Icon(
+                        Icons.access_time_rounded,
+                        size: 14,
+                        color: OptivusColors.textSecondary,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -583,54 +706,88 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                   runSpacing: 8,
                   children: [
                     OutlinedButton(
-                      onPressed: isSaving ? null : () => _editBlock(draft, group.leftEntryIdentity),
+                      onPressed: isSaving
+                          ? null
+                          : () => _editBlock(draft, group.leftEntryIdentity),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       child: Text('Edit ${group.leftLabel}'),
                     ),
                     OutlinedButton(
-                      onPressed: isSaving ? null : () => _editBlock(draft, group.rightEntryIdentity),
+                      onPressed: isSaving
+                          ? null
+                          : () => _editBlock(draft, group.rightEntryIdentity),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       child: Text('Edit ${group.rightLabel}'),
                     ),
                     if (group.canKeepBoth) ...[
                       FilledButton.tonal(
-                        key: ValueKey('step14-keep-both-${group.stableGroupId}'),
+                        key: ValueKey(
+                          'step14-keep-both-${group.stableGroupId}',
+                        ),
                         onPressed: isSaving
                             ? null
                             : () => _handleKeepBothDays(
-                                  group: group,
-                                  daysToAccept: group.unresolvedDays,
-                                  rawConflicts: rawConflicts,
-                                ),
+                                group: group,
+                                daysToAccept: group.unresolvedDays,
+                                rawConflicts: rawConflicts,
+                              ),
                         style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         child: isSaving
                             ? const SizedBox(
                                 width: 14,
                                 height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Keep both on these days'),
                       ),
                       OutlinedButton(
-                        key: ValueKey('step14-review-days-${group.stableGroupId}'),
+                        key: ValueKey(
+                          'step14-review-days-${group.stableGroupId}',
+                        ),
                         onPressed: isSaving
                             ? null
                             : () => _showReviewDaysSheet(
-                                  group: group,
-                                  rawConflicts: rawConflicts,
-                                ),
+                                group: group,
+                                rawConflicts: rawConflicts,
+                              ),
                         style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          textStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                         child: const Text('Review days'),
                       ),
@@ -660,7 +817,11 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
               tint: OptivusColors.success.withValues(alpha: 0.08),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded, size: 16, color: OptivusColors.success),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 16,
+                    color: OptivusColors.success,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -693,7 +854,13 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
-                    child: const Text('Change', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Change',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -710,7 +877,11 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
       tint: OptivusColors.success.withValues(alpha: 0.08),
       child: Row(
         children: [
-          const Icon(Icons.check_circle_rounded, size: 16, color: OptivusColors.success),
+          const Icon(
+            Icons.check_circle_rounded,
+            size: 16,
+            color: OptivusColors.success,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -728,7 +899,10 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.symmetric(horizontal: 8),
             ),
-            child: const Text('View reviewed choices', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            child: const Text(
+              'View reviewed choices',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
           ),
         ],
       ),
@@ -797,7 +971,10 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
               label: const Text('View full timeline'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                textStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
@@ -885,7 +1062,8 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
       subtitle: 'Review only — edit items from their setup step.',
       mode: TimelineMode.previewReadOnly,
       accent: OptivusColors.aquaAccent,
-      styleBuilder: (entry) => TimelineEntryStyle.defaultForCategory(entry.category),
+      styleBuilder: (entry) =>
+          TimelineEntryStyle.defaultForCategory(entry.category),
       bottomAction: Padding(
         padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
         child: SizedBox(
@@ -915,7 +1093,8 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
     }
 
     // Finishing Progress View
-    final currentStage = activeJob?.stage ?? OnboardingCompletionStage.validateInput;
+    final currentStage =
+        activeJob?.stage ?? OnboardingCompletionStage.validateInput;
     final jobStatus = activeJob?.status ?? OnboardingJobStatus.running;
     final stageProjections = CompletionStageProjection.projectAll(
       currentStage: currentStage,
@@ -957,7 +1136,9 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                           color: Colors.white.withValues(alpha: 0.90),
                           boxShadow: [
                             BoxShadow(
-                              color: OptivusColors.aquaAccent.withValues(alpha: 0.40),
+                              color: OptivusColors.aquaAccent.withValues(
+                                alpha: 0.40,
+                              ),
                               blurRadius: 16,
                             ),
                           ],
@@ -1034,44 +1215,44 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   Widget _buildStageIndicator(CompletionStageStatus status) {
     return switch (status) {
       CompletionStageStatus.completed => const Icon(
-          Icons.check_circle_rounded,
-          size: 18,
-          color: OptivusColors.success,
-        ),
+        Icons.check_circle_rounded,
+        size: 18,
+        color: OptivusColors.success,
+      ),
       CompletionStageStatus.active => Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: OptivusColors.brandAccent.withValues(alpha: 0.2),
-          ),
-          child: Center(
-            child: Container(
-              width: 8,
-              height: 8,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: OptivusColors.brandAccent,
-              ),
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: OptivusColors.brandAccent.withValues(alpha: 0.2),
+        ),
+        child: Center(
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: OptivusColors.brandAccent,
             ),
           ),
         ),
+      ),
       CompletionStageStatus.pending => Container(
-          width: 18,
-          height: 18,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: OptivusColors.textSecondary.withValues(alpha: 0.35),
-              width: 1.5,
-            ),
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: OptivusColors.textSecondary.withValues(alpha: 0.35),
+            width: 1.5,
           ),
         ),
+      ),
       CompletionStageStatus.failed => const Icon(
-          Icons.error_rounded,
-          size: 18,
-          color: OptivusColors.danger,
-        ),
+        Icons.error_rounded,
+        size: 18,
+        color: OptivusColors.danger,
+      ),
     };
   }
 
@@ -1128,7 +1309,10 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   Widget _buildFailureView(OnboardingCompletionJob? activeJob) {
     final error = _recoverableError!;
     final snapshot = const OnboardingCurrentRunSnapshot.none();
-    final canReturn = canReturnToStep14Review(job: activeJob, currentRunSnapshot: snapshot);
+    final canReturn = canReturnToStep14Review(
+      job: activeJob,
+      currentRunSnapshot: snapshot,
+    );
 
     return Scaffold(
       key: const ValueKey('step14-failure'),
@@ -1186,7 +1370,8 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                       child: FilledButton(
                         onPressed: () {
                           setState(() {
-                            _presentationMode = Step14PresentationMode.finishing;
+                            _presentationMode =
+                                Step14PresentationMode.finishing;
                             _recoverableError = null;
                           });
                           widget.onCompletionStarted?.call();
@@ -1194,17 +1379,20 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                         child: const Text('Try Again'),
                       ),
                     ),
-                  if (error.retryAction == RecoverableRetryAction.reauthenticate) ...[
+                  if (error.retryAction ==
+                      RecoverableRetryAction.reauthenticate) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: () => ref.read(authProvider.notifier).logout(),
+                        onPressed: () =>
+                            ref.read(authProvider.notifier).logout(),
                         child: const Text('Sign In Again'),
                       ),
                     ),
                   ],
-                  if (error.retryAction == RecoverableRetryAction.restartRecovery) ...[
+                  if (error.retryAction ==
+                      RecoverableRetryAction.restartRecovery) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
@@ -1361,9 +1549,12 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
     if (_savingGroupId != null) return;
     setState(() => _savingGroupId = group.stableGroupId);
     final draft = ref.read(mockOnboardingProvider).draft;
-    final timezoneId = draft.timezoneId.isNotEmpty ? draft.timezoneId : ref.read(regionSettingsProvider).timezone;
+    final timezoneId = draft.timezoneId.isNotEmpty
+        ? draft.timezoneId
+        : ref.read(regionSettingsProvider).timezone;
 
-    final conflicts = rawConflicts ??
+    final conflicts =
+        rawConflicts ??
         draft.baseTimeline.detectConflicts(
           ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
           timezoneId: timezoneId,
@@ -1379,13 +1570,15 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
     }).firstOrNull;
 
     if (rawForGroup != null) {
-      ref.read(mockOnboardingProvider.notifier).updateDraft(
-        (draft) => draft.acceptTimelineConflictGroup(
-          conflict: rawForGroup,
-          weekdays: daysToAccept,
-          timezoneId: timezoneId,
-        ),
-      );
+      ref
+          .read(mockOnboardingProvider.notifier)
+          .updateDraft(
+            (draft) => draft.acceptTimelineConflictGroup(
+              conflict: rawForGroup,
+              weekdays: daysToAccept,
+              timezoneId: timezoneId,
+            ),
+          );
     }
 
     if (mounted) {

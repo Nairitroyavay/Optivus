@@ -371,7 +371,8 @@ class OnboardingDraft {
         if (!completedSteps.take(lastStepIndex).every((done) => done)) {
           return 'Complete and save all previous onboarding steps first.';
         }
-        if (baseTimeline.skinCareSetupPath != null) {
+        if (baseTimeline.skinCareSetupPath != null ||
+            baseTimeline.blocks.any((b) => b.section == 'skin_care')) {
           final skinCareErr = baseTimeline.validateSkinCareSetup();
           if (skinCareErr != null) return skinCareErr;
         }
@@ -460,13 +461,11 @@ class OnboardingDraft {
       ownerUid: owner,
       timezoneId: timezoneId,
     );
-    final decision = ConflictPolicy.classify(
-      firstDescriptor,
-      secondDescriptor,
-    );
+    final decision = ConflictPolicy.classify(firstDescriptor, secondDescriptor);
     if (!decision.canKeepBoth) return this;
 
-    final validDays = weekdays.where((d) => d >= 1 && d <= 7).toSet().toList()..sort();
+    final validDays = weekdays.where((d) => d >= 1 && d <= 7).toSet().toList()
+      ..sort();
     if (validDays.isEmpty) {
       final pair = {first.id, second.id};
       final now = acceptedAt ?? DateTime.now();
@@ -1195,6 +1194,11 @@ class BaseTimelineDraft {
   final String? skinCareProductPhotoStatus;
   final DateTime? skinCareProductPhotoCreatedAt;
   final DateTime? skinCareProductPhotoUpdatedAt;
+  final String? skinCareFacePhotoAssetId;
+  final String? skinCareFacePhotoR2Key;
+  final String? skinCareFacePhotoStatus;
+  final DateTime? skinCareFacePhotoCreatedAt;
+  final DateTime? skinCareFacePhotoUpdatedAt;
   final bool skinCareFacePhotoSkipped;
   final String? skinCareSkinType;
   final List<String> skinCareProblems;
@@ -1245,6 +1249,11 @@ class BaseTimelineDraft {
     this.skinCareProductPhotoStatus,
     this.skinCareProductPhotoCreatedAt,
     this.skinCareProductPhotoUpdatedAt,
+    this.skinCareFacePhotoAssetId,
+    this.skinCareFacePhotoR2Key,
+    this.skinCareFacePhotoStatus,
+    this.skinCareFacePhotoCreatedAt,
+    this.skinCareFacePhotoUpdatedAt,
     this.skinCareFacePhotoSkipped = false,
     this.skinCareSkinType,
     this.skinCareProblems = const [],
@@ -1302,6 +1311,15 @@ class BaseTimelineDraft {
       ),
       skinCareProductPhotoUpdatedAt: _readDateTime(
         map['skinCareProductPhotoUpdatedAt'],
+      ),
+      skinCareFacePhotoAssetId: map['skinCareFacePhotoAssetId'] as String?,
+      skinCareFacePhotoR2Key: map['skinCareFacePhotoR2Key'] as String?,
+      skinCareFacePhotoStatus: map['skinCareFacePhotoStatus'] as String?,
+      skinCareFacePhotoCreatedAt: _readDateTime(
+        map['skinCareFacePhotoCreatedAt'],
+      ),
+      skinCareFacePhotoUpdatedAt: _readDateTime(
+        map['skinCareFacePhotoUpdatedAt'],
       ),
       skinCareFacePhotoSkipped:
           map['skinCareFacePhotoSkipped'] as bool? ?? false,
@@ -1371,6 +1389,11 @@ class BaseTimelineDraft {
         ?.toIso8601String(),
     'skinCareProductPhotoUpdatedAt': skinCareProductPhotoUpdatedAt
         ?.toIso8601String(),
+    'skinCareFacePhotoAssetId': skinCareFacePhotoAssetId,
+    'skinCareFacePhotoR2Key': skinCareFacePhotoR2Key,
+    'skinCareFacePhotoStatus': skinCareFacePhotoStatus,
+    'skinCareFacePhotoCreatedAt': skinCareFacePhotoCreatedAt?.toIso8601String(),
+    'skinCareFacePhotoUpdatedAt': skinCareFacePhotoUpdatedAt?.toIso8601String(),
     'skinCareFacePhotoSkipped': skinCareFacePhotoSkipped,
     'skinCareSkinType': skinCareSkinType,
     'skinCareProblems': skinCareProblems,
@@ -1424,6 +1447,11 @@ class BaseTimelineDraft {
     String? skinCareProductPhotoStatus,
     DateTime? skinCareProductPhotoCreatedAt,
     DateTime? skinCareProductPhotoUpdatedAt,
+    String? skinCareFacePhotoAssetId,
+    String? skinCareFacePhotoR2Key,
+    String? skinCareFacePhotoStatus,
+    DateTime? skinCareFacePhotoCreatedAt,
+    DateTime? skinCareFacePhotoUpdatedAt,
     bool? skinCareFacePhotoSkipped,
     String? skinCareSkinType,
     List<String>? skinCareProblems,
@@ -1445,6 +1473,7 @@ class BaseTimelineDraft {
     bool clearSnackMinute = false,
     bool clearSkinCareProductNames = false,
     bool clearSkinCareProductPhoto = false,
+    bool clearSkinCareFacePhoto = false,
     bool clearSkinCareSkinType = false,
     bool clearSkinCareProblems = false,
     bool clearSkinCareBudget = false,
@@ -1541,6 +1570,23 @@ class BaseTimelineDraft {
           ? null
           : (skinCareProductPhotoUpdatedAt ??
                 this.skinCareProductPhotoUpdatedAt),
+      skinCareFacePhotoAssetId: clearSkinCarePlanning || clearSkinCareFacePhoto
+          ? null
+          : (skinCareFacePhotoAssetId ?? this.skinCareFacePhotoAssetId),
+      skinCareFacePhotoR2Key: clearSkinCarePlanning || clearSkinCareFacePhoto
+          ? null
+          : (skinCareFacePhotoR2Key ?? this.skinCareFacePhotoR2Key),
+      skinCareFacePhotoStatus: clearSkinCarePlanning || clearSkinCareFacePhoto
+          ? null
+          : (skinCareFacePhotoStatus ?? this.skinCareFacePhotoStatus),
+      skinCareFacePhotoCreatedAt:
+          clearSkinCarePlanning || clearSkinCareFacePhoto
+          ? null
+          : (skinCareFacePhotoCreatedAt ?? this.skinCareFacePhotoCreatedAt),
+      skinCareFacePhotoUpdatedAt:
+          clearSkinCarePlanning || clearSkinCareFacePhoto
+          ? null
+          : (skinCareFacePhotoUpdatedAt ?? this.skinCareFacePhotoUpdatedAt),
       skinCareFacePhotoSkipped:
           skinCareFacePhotoSkipped ?? this.skinCareFacePhotoSkipped,
       skinCareSkinType: clearSkinCarePlanning || clearSkinCareSkinType
@@ -2059,25 +2105,52 @@ class BaseTimelineDraft {
 
   String? validateSkinCareSetup() {
     if (skinCareSkipped) return null;
-    if (skinCareSetupPath == 'no_products') {
-      final hasDurableUploadedPhoto =
-          skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
-          skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
-          skinCareProductPhotoStatus == UploadedAssetStatus.uploaded.wireName;
-      if (!hasDurableUploadedPhoto) {
-        return 'Add a face photo to personalize your product recommendations.';
-      }
+    if (skinCareSetupPath == null) {
+      return 'Build skin care routine or skip.';
     }
-    if (skinCareSetupPath == 'has_products' ||
-        (skinCareSetupPath == 'no_products' &&
-            skinCareSuggestedProducts.isNotEmpty)) {
+    if (skinCareSetupPath == 'has_products') {
+      final hasProducts =
+          (skinCareProductNames?.trim().isNotEmpty == true) ||
+          (skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
+              skinCareProductPhotoStatus ==
+                  UploadedAssetStatus.uploaded.wireName) ||
+          blocks.any((b) => b.section == 'skin_care');
+      if (!hasProducts) {
+        return 'Add products or upload a photo to build your routine.';
+      }
       final desired = _normalizeSkinCareDesiredApplicationsPerDay(
         skinCareDesiredApplicationsPerDay,
       );
       final msg = _missingSkinCareRoutineMessage(desired);
-      return msg;
+      if (msg != null) return msg;
+      return null;
     }
     if (skinCareSetupPath == 'no_products') {
+      final hasDurableFacePhoto =
+          (skinCareFacePhotoAssetId?.trim().isNotEmpty == true &&
+              skinCareFacePhotoR2Key?.trim().isNotEmpty == true &&
+              skinCareFacePhotoStatus ==
+                  UploadedAssetStatus.uploaded.wireName) ||
+          (skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
+              skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
+              skinCareProductPhotoStatus ==
+                  UploadedAssetStatus.uploaded.wireName);
+      if (!hasDurableFacePhoto) {
+        return 'Add a face photo to personalize your product recommendations.';
+      }
+      if (skinCareSkinType == null ||
+          skinCareProblems.isEmpty ||
+          skinCareBudget == null) {
+        return 'Complete your skin details before finding products.';
+      }
+      if (skinCareSelectedProductNames.isEmpty) {
+        return 'Find and select products before building your routine.';
+      }
+      final desired = _normalizeSkinCareDesiredApplicationsPerDay(
+        skinCareDesiredApplicationsPerDay,
+      );
+      final msg = _missingSkinCareRoutineMessage(desired);
+      if (msg != null) return msg;
       return null;
     }
     return 'Build skin care routine or skip.';

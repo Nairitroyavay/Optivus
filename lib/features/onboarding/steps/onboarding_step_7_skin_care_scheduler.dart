@@ -688,25 +688,7 @@ String? onboarding7MissingRoutineMessage(
 }
 
 bool onboarding7CanContinue(BaseTimelineDraft base) {
-  if (base.skinCareSkipped) return true;
-  final blocks = base.confirmedBlocksForSection('skin_care');
-  return switch (base.skinCareSetupPath) {
-    'has_products' =>
-      onboarding7MissingRoutineMessage(
-            blocks,
-            base.skinCareDesiredApplicationsPerDay,
-          ) ==
-          null,
-    'no_products' =>
-      base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
-          base.skinCareSuggestedProducts.isNotEmpty &&
-          onboarding7MissingRoutineMessage(
-                blocks,
-                base.skinCareDesiredApplicationsPerDay,
-              ) ==
-              null,
-    _ => false,
-  };
+  return base.validateSkinCareSetup() == null;
 }
 
 @visibleForTesting

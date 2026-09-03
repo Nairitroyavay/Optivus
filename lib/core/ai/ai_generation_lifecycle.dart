@@ -58,13 +58,16 @@ class AiTimeoutPolicy {
 /// socket safety timeout; lifecycle enforcement belongs here.
 abstract final class AiOperationTimeouts {
   static const routineImport = AiTimeoutPolicy(
-    operationTimeout: Duration(seconds: 75),
+    operationTimeout: Duration(seconds: 180),
   );
   static const nutrition = AiTimeoutPolicy(
-    operationTimeout: Duration(seconds: 60),
+    operationTimeout: Duration(seconds: 180),
   );
   static const skinCare = AiTimeoutPolicy(
-    operationTimeout: Duration(seconds: 70),
+    operationTimeout: Duration(seconds: 180),
+  );
+  static const coach = AiTimeoutPolicy(
+    operationTimeout: Duration(seconds: 180),
   );
 }
 

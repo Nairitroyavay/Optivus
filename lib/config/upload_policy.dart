@@ -60,7 +60,9 @@ class UploadImagePolicy {
       UploadedAssetPurpose.classTimetable ||
       UploadedAssetPurpose.workSchedule ||
       UploadedAssetPurpose.eatingMenu ||
-      UploadedAssetPurpose.skinCare => routineAiImport,
+      UploadedAssetPurpose.skinCare ||
+      UploadedAssetPurpose.skinFace ||
+      UploadedAssetPurpose.skinProducts => routineAiImport,
       UploadedAssetPurpose.profilePhoto => normal,
     };
   }

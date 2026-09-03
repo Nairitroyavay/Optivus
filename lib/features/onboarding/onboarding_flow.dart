@@ -27,7 +27,6 @@ import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
-import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
@@ -384,9 +383,11 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     try {
       final onboarding = ref.read(mockOnboardingProvider);
       if (onboarding.draft.timelineConflictsRequiringAcceptance().isNotEmpty) {
-        ref.read(mockOnboardingProvider.notifier).setValidationMessage(
-          'Resolve or accept all schedule conflicts before finishing onboarding.',
-        );
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setValidationMessage(
+              'Resolve or accept all schedule conflicts before finishing onboarding.',
+            );
         return;
       }
       for (var step = 0; step <= OnboardingDraft.lastStepIndex; step++) {
@@ -794,7 +795,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       onboardingEatingStepIndex =>
         uploadState.purpose == UploadedAssetPurpose.eatingMenu,
       onboardingSkinCareStepIndex =>
-        uploadState.purpose == UploadedAssetPurpose.skinCare,
+        uploadState.purpose == UploadedAssetPurpose.skinCare ||
+            uploadState.purpose == UploadedAssetPurpose.skinFace ||
+            uploadState.purpose == UploadedAssetPurpose.skinProducts,
       _ => false,
     };
   }
@@ -891,20 +894,20 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_currentPage == 0) {
       ctaLabel = 'Get Started';
     } else if (_currentPage == OnboardingDraft.lastStepIndex) {
-      final rawConflicts =
-          onboardingState.draft.baseTimeline.detectConflicts(
-            ownerUid: onboardingState.draft.uid.isEmpty
-                ? 'local-onboarding-owner'
-                : onboardingState.draft.uid,
-            timezoneId: onboardingState.draft.timezoneId,
-            revision: onboardingState.draft.revision,
-          );
+      final rawConflicts = onboardingState.draft.baseTimeline.detectConflicts(
+        ownerUid: onboardingState.draft.uid.isEmpty
+            ? 'local-onboarding-owner'
+            : onboardingState.draft.uid,
+        timezoneId: onboardingState.draft.timezoneId,
+        revision: onboardingState.draft.revision,
+      );
       final conflictGroups = Step14ConflictGroupProjector.project(
         occurrences: rawConflicts,
         draft: onboardingState.draft,
       );
-      final unresolvedGroups =
-          conflictGroups.where((g) => g.isUnresolved).toList();
+      final unresolvedGroups = conflictGroups
+          .where((g) => g.isUnresolved)
+          .toList();
 
       if (unresolvedGroups.isNotEmpty) {
         final count = unresolvedGroups.length;
@@ -917,7 +920,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       } else {
         ctaLabel = 'Enter Optivus';
         ctaKind = OnboardingActionKind.enterOptivus;
-        ctaEnabled = !_isNavigating && !_isSaving;
+        final bundleResult = OnboardingCompletionService.projectBundleResult(
+          onboardingState.draft,
+        );
+        ctaEnabled =
+            !_isNavigating &&
+            !_isSaving &&
+            bundleResult is Step14BundleBuildSuccess;
         ctaOnPressed = _onNextPressed;
       }
     }
@@ -1234,29 +1243,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   Future<bool> _nextFixed(OnboardingDraft draft) async => false;
 
   Future<bool> _nextSkinCare(OnboardingDraft draft) async {
-    final base = draft.baseTimeline;
-    if (base.skinCareSkipped) return false;
-
-    if (base.skinCareSetupPath == null) {
-      _setInternalValidation('Choose skin care setup or skip.');
-      return true;
-    }
-
-    final blocks = base.confirmedBlocksForSection('skin_care');
-    if (base.skinCareSetupPath == 'has_products') {
-      final desired = onboarding7NormalizeDesiredApplications(
-        base.skinCareDesiredApplicationsPerDay,
-      );
-      final missingMessage = onboarding7MissingRoutineMessage(blocks, desired);
-      if (missingMessage == null) return false;
-      _setInternalValidation(missingMessage);
-      return true;
-    }
-    if (blocks.isNotEmpty) return false;
-
-    _setInternalValidation(
-      'Generate a routine before moving to the next step.',
-    );
+    final message = draft.baseTimeline.validateSkinCareSetup();
+    if (message == null) return false;
+    _setInternalValidation(message);
     return true;
   }
 
@@ -1295,4 +1284,3 @@ bool onboardingShouldShowTopLeftBackButton({
   }
   return false;
 }
-

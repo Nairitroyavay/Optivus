@@ -309,26 +309,15 @@ void main() {
       expect(controller.state.canRetry, isTrue);
     });
 
-    test(
-        'AE. operation-specific timeout policies are configured with distinct durations',
-        () {
-      // Verifies that different operations have different timeout values
+    test('AE. operation timeout policies are configured for 180 seconds', () {
       expect(AiOperationTimeouts.routineImport.operationTimeout,
-          const Duration(seconds: 75));
+          const Duration(seconds: 180));
       expect(AiOperationTimeouts.nutrition.operationTimeout,
-          const Duration(seconds: 60));
+          const Duration(seconds: 180));
       expect(AiOperationTimeouts.skinCare.operationTimeout,
-          const Duration(seconds: 70));
-
-      // Must have at least two distinct values to prove differentiation
-      final values = {
-        AiOperationTimeouts.routineImport.operationTimeout.inSeconds,
-        AiOperationTimeouts.nutrition.operationTimeout.inSeconds,
-        AiOperationTimeouts.skinCare.operationTimeout.inSeconds,
-      };
-      expect(values.length, greaterThanOrEqualTo(2),
-          reason:
-              'At least two operations must have different timeout policies');
+          const Duration(seconds: 180));
+      expect(AiOperationTimeouts.coach.operationTimeout,
+          const Duration(seconds: 180));
     });
 
     test('J. late result after timeout is ignored (stale success dropped)',

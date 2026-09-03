@@ -3,7 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 const ROUTINE_GENERATE_JSON_MAX_BYTES = 64 * 1024;
 const IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 const GEMINI_RESPONSE_MAX_BYTES = 1024 * 1024;
-const GEMINI_REQUEST_TIMEOUT_MS = 60_000;
+const GEMINI_REQUEST_TIMEOUT_MS = 180_000;
 
 type OwnedSkinCareProduct = {
   name: string;
@@ -138,7 +138,9 @@ function assertOwnedSkinCareObjectKey(uid: string, key: string): void {
   if (normalized.includes("../") || normalized.includes("..\\")) {
     throw new HttpError(403, "forbidden", "Path traversal detected.");
   }
-  const regex = new RegExp(`^users/${uid}/onboarding/skin_care/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic|heif|gif|pdf)$`);
+  const regex = new RegExp(
+    `^users/${uid}/onboarding/(skin_care|skin_face|skin_products)/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic|heif|gif|pdf)$`,
+  );
   if (!regex.test(normalized)) {
     throw new HttpError(403, "forbidden", "Unauthorized R2 key access.");
   }

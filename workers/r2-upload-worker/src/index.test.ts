@@ -169,6 +169,22 @@ describe("R2 Upload Worker request boundary", () => {
     );
   });
 
+  test.each(["skin_face", "skin_products"])(
+    "signing accepts isolated Step 7 purpose %s",
+    async (purpose) => {
+      const response = await worker.fetch(
+        request("/v1/uploads/sign", signBody({ purpose })),
+        makeEnv() as never,
+      );
+      const json = await response.json() as Record<string, unknown>;
+
+      expect(response.status).toBe(200);
+      expect(json.objectKey).toMatch(
+        new RegExp(`^users/uid-1/onboarding/${purpose}/[A-Za-z0-9._-]+\\.jpg$`),
+      );
+    },
+  );
+
   test.each([
     ["invalid content type", { contentType: "application/pdf" }, "invalid_content_type"],
     ["zero size", { sizeBytes: 0 }, "invalid_size"],

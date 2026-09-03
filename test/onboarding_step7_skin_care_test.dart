@@ -22,6 +22,7 @@ import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/upload_state.dart';
 
 void main() {
@@ -251,7 +252,7 @@ void main() {
     var textField = tester.widget<TextField>(
       find.byKey(const ValueKey('onboarding-step7-product-names-field')),
     );
-    expect(textField.enabled, isFalse);
+    expect(textField.enabled, isTrue);
 
     await tester.ensureVisible(find.text('Read product labels'));
     await tester.tap(find.text('Read product labels'));
@@ -310,7 +311,7 @@ void main() {
         uploadController: TestUploadController(
           initialState: const UploadState(
             status: UploadFlowStatus.uploading,
-            purpose: UploadedAssetPurpose.skinCare,
+            purpose: UploadedAssetPurpose.skinProducts,
             sourceFeature: OnboardingDraft.sourceOnboarding,
           ),
         ),
@@ -375,43 +376,46 @@ void main() {
     expect(find.text('Photo uploaded'), findsOneWidget);
   });
 
-  testWidgets('6d. Removing photo re-enables text input', (tester) async {
-    final uploadController = TestUploadController(result: _uploadedAsset());
-    await tester.pumpWidget(
-      buildTestWidget(
-        draft: _hasProductsDraft(uid: 'uid-1'),
-        uploadController: uploadController,
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    '6d. Product names field remains enabled after adding or removing photo',
+    (tester) async {
+      final uploadController = TestUploadController(result: _uploadedAsset());
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _hasProductsDraft(uid: 'uid-1'),
+          uploadController: uploadController,
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Add photo'));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<TextField>(
-            find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-          )
-          .enabled,
-      isFalse,
-    );
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+            )
+            .enabled,
+        isTrue,
+      );
 
-    await tester.tap(
-      find.byKey(const ValueKey('onboarding-step7-remove-photo-button')),
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-remove-photo-button')),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      tester
-          .widget<TextField>(
-            find.byKey(const ValueKey('onboarding-step7-product-names-field')),
-          )
-          .enabled,
-      isTrue,
-    );
-    expect(find.text('Photo uploaded'), findsNothing);
-    expect(uploadController.markDeletedCalls, 1);
-  });
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+            )
+            .enabled,
+        isTrue,
+      );
+      expect(find.text('Photo uploaded'), findsNothing);
+      expect(uploadController.markDeletedCalls, 1);
+    },
+  );
 
   testWidgets('6f. Personalization is persisted and sent to routine AI', (
     tester,
@@ -3944,7 +3948,7 @@ void main() {
         uploadController: TestUploadController(
           initialState: const UploadState(
             status: UploadFlowStatus.uploading,
-            purpose: UploadedAssetPurpose.skinCare,
+            purpose: UploadedAssetPurpose.skinProducts,
             sourceFeature: OnboardingDraft.sourceOnboarding,
           ),
         ),
@@ -3980,7 +3984,7 @@ void main() {
   });
 
   testWidgets(
-    '38. Switching product mode to build-for-me clears product fields',
+    '38. Switching product mode to build-for-me preserves independent product inputs',
     (tester) async {
       await tester.pumpWidget(
         buildTestWidget(draft: _choiceDraftWithProductData()),
@@ -3994,11 +3998,11 @@ void main() {
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSetupPath, 'no_products');
-      expect(base.skinCareProductNames, isNull);
-      expect(base.skinCareProductPhotoAssetId, isNull);
-      expect(base.skinCareProductPhotoR2Key, isNull);
-      expect(base.skinCareProductPhotoCreatedAt, isNull);
-      expect(base.skinCareProductPhotoUpdatedAt, isNull);
+      expect(base.skinCareProductNames, 'Cleanser');
+      expect(base.skinCareProductPhotoAssetId, 'skin-asset');
+      expect(base.skinCareProductPhotoR2Key, isNotNull);
+      expect(base.skinCareProductPhotoCreatedAt, isNotNull);
+      expect(base.skinCareProductPhotoUpdatedAt, isNotNull);
       expect(base.skinCareSpecialCareNotes, isEmpty);
       expect(
         base.blocks.where((block) => block.section == 'skin_care'),
@@ -4731,6 +4735,7 @@ void main() {
       onboarding7CanContinue(
         BaseTimelineDraft(
           skinCareSetupPath: 'has_products',
+          skinCareProductNames: 'Cleanser',
           skinCareDesiredApplicationsPerDay: 2,
           blocks: _skinCareBlocksForEveryDay(2),
         ),
@@ -5424,8 +5429,8 @@ void main() {
       var base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
-      expect(base.skinCareProductPhotoAssetId, asset.assetId);
-      expect(base.skinCareProductPhotoR2Key, asset.r2Key);
+      expect(base.skinCareFacePhotoAssetId, asset.assetId);
+      expect(base.skinCareFacePhotoR2Key, asset.r2Key);
 
       await tester.tap(find.text('Find products'));
       await tester.pumpAndSettle();
@@ -5446,7 +5451,7 @@ void main() {
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
-      expect(base.skinCareProductPhotoR2Key, isNull);
+      expect(base.skinCareFacePhotoR2Key, isNull);
       expect(uploadController.markDeletedCalls, 1);
     },
   );
@@ -5526,11 +5531,15 @@ void main() {
     final base = BaseTimelineDraft(
       skinCareSetupPath: 'no_products',
       skinCareDesiredApplicationsPerDay: 2,
-      skinCareProductPhotoAssetId: 'skin-asset',
-      skinCareProductPhotoR2Key:
+      skinCareSkinType: 'oily',
+      skinCareProblems: const ['pimples'],
+      skinCareBudget: 'medium',
+      skinCareFacePhotoAssetId: 'skin-asset',
+      skinCareFacePhotoR2Key:
           'users/uid-1/onboarding/skin_care/skin-asset.jpg',
-      skinCareProductPhotoStatus: 'uploaded',
+      skinCareFacePhotoStatus: 'uploaded',
       skinCareSuggestedProducts: const ['Minimalist Gentle Cleanser'],
+      skinCareSelectedProductNames: const ['Minimalist Gentle Cleanser'],
       blocks: _skinCareBlocksForEveryDay(1),
     );
 
@@ -6003,8 +6012,18 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          authProvider.overrideWith((ref) => FakeAuthNotifier()),
           mockOnboardingProvider.overrideWith(
             (_) => MockOnboardingNotifier()..loadSeedData(draft),
+          ),
+          skinCareAiClientProvider.overrideWithValue(
+            const FakeSkinCareAiClient(),
+          ),
+          uploadControllerProvider.overrideWith(
+            (ref) => TestUploadController(),
+          ),
+          deviceCountryServiceProvider.overrideWithValue(
+            const TestDeviceCountryService(null),
           ),
         ],
         child: const MaterialApp(home: OnboardingFlow()),
@@ -6029,13 +6048,13 @@ void main() {
     expect(find.byKey(const ValueKey('onboarding-step7-back')), findsNothing);
 
     await tester.tap(find.text('I have products'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
 
     final backButton = find.byKey(const ValueKey('onboarding-step7-back'));
     expect(backButton, findsOneWidget);
 
     await tester.tap(backButton);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('Skin Care'), findsOneWidget);
     expect(find.text('I have products'), findsOneWidget);
@@ -6289,6 +6308,9 @@ OnboardingDraft _hasProductsDraft({
   DateTime? productPhotoUpdatedAt,
   List<String> specialCareNotes = const [],
 }) {
+  final hasSkinBlocks = blocks.any((b) => b.section == 'skin_care');
+  final effectiveProductNames = productNames ??
+      (hasSkinBlocks && productPhotoR2Key == null ? 'Cleanser' : null);
   return OnboardingDraft(
     uid: uid,
     currentStep: 7,
@@ -6296,7 +6318,7 @@ OnboardingDraft _hasProductsDraft({
       skinCareSetupStep: 1,
       skinCareSetupPath: 'has_products',
       skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-      skinCareProductNames: productNames,
+      skinCareProductNames: effectiveProductNames,
       skinCareProductPhotoAssetId: productPhotoAssetId,
       skinCareProductPhotoR2Key: productPhotoR2Key,
       skinCareProductPhotoStatus: productPhotoStatus,
@@ -6325,32 +6347,44 @@ OnboardingDraft _noProductsDraft({
   DateTime? photoCreatedAt,
   DateTime? photoUpdatedAt,
 }) {
+  final hasSkinBlocks = blocks.any((b) => b.section == 'skin_care');
+  final effectiveWithPhoto = withPhoto || hasSkinBlocks;
+  final effectiveSelectedProducts = selectedProducts.isNotEmpty
+      ? selectedProducts
+      : (hasSkinBlocks ? const <String>['Minimalist Gentle Cleanser'] : const <String>[]);
+  final effectiveSuggestedProducts = suggestedProducts.isNotEmpty
+      ? suggestedProducts
+      : (hasSkinBlocks ? const <String>['Minimalist Gentle Cleanser'] : const <String>[]);
   return OnboardingDraft(
     uid: uid,
     currentStep: 7,
     baseTimeline: BaseTimelineDraft(
       skinCareSetupStep: 1,
       skinCareSetupPath: 'no_products',
-      skinCareSkinType: skinType,
-      skinCareProblems: problems,
-      skinCareBudget: budget,
+      skinCareSkinType: skinType ?? (hasSkinBlocks ? 'oily' : null),
+      skinCareProblems: problems.isNotEmpty
+          ? problems
+          : (hasSkinBlocks ? const ['pimples'] : const []),
+      skinCareBudget: budget ?? (hasSkinBlocks ? 'medium' : null),
       skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-      skinCareSuggestedProducts: suggestedProducts,
+      skinCareSuggestedProducts: effectiveSuggestedProducts,
       skinCareProductRecommendations: recommendations,
-      skinCareSelectedProductNames: selectedProducts,
-      skinCareProductPhotoAssetId:
-          photoAssetId ?? (withPhoto ? 'skin-asset' : null),
-      skinCareProductPhotoR2Key:
+      skinCareSelectedProductNames: effectiveSelectedProducts,
+      skinCareFacePhotoAssetId:
+          photoAssetId ?? (effectiveWithPhoto ? 'skin-asset' : null),
+      skinCareFacePhotoR2Key:
           photoR2Key ??
-          (withPhoto
+          (effectiveWithPhoto
               ? 'users/uid-1/onboarding/skin_care/skin-asset.jpg'
               : null),
-      skinCareProductPhotoStatus:
-          photoStatus ?? (withPhoto ? 'uploaded' : null),
-      skinCareProductPhotoCreatedAt:
-          photoCreatedAt ?? (withPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
-      skinCareProductPhotoUpdatedAt:
-          photoUpdatedAt ?? (withPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
+      skinCareFacePhotoStatus:
+          photoStatus ?? (effectiveWithPhoto ? 'uploaded' : null),
+      skinCareFacePhotoCreatedAt:
+          photoCreatedAt ??
+          (effectiveWithPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
+      skinCareFacePhotoUpdatedAt:
+          photoUpdatedAt ??
+          (effectiveWithPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
       blocks: blocks,
     ),
   );
@@ -6678,13 +6712,16 @@ bool _blocksOverlap(TimelineBlockDraft a, TimelineBlockDraft b) {
   return a.startMinute < b.endMinute && a.endMinute > b.startMinute;
 }
 
-UploadedAsset _uploadedAsset({String contentType = 'image/jpeg'}) {
+UploadedAsset _uploadedAsset({
+  String contentType = 'image/jpeg',
+  UploadedAssetPurpose purpose = UploadedAssetPurpose.skinProducts,
+}) {
   final now = DateTime.utc(2026, 6, 15, 10);
   return UploadedAsset(
     assetId: 'skin-asset',
     ownerUid: 'uid-1',
     sourceFeature: OnboardingDraft.sourceOnboarding,
-    purpose: UploadedAssetPurpose.skinCare,
+    purpose: purpose,
     fileName: 'products.jpg',
     contentType: contentType,
     sizeBytes: 1200,
@@ -6815,6 +6852,24 @@ class DummyImageService implements ImagePrepareService {
 }
 
 class DummyR2Client implements R2UploadClient {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class FakeAuthNotifier extends StateNotifier<AuthState>
+    implements AuthNotifier {
+  FakeAuthNotifier()
+    : super(
+        const AuthState(
+          user: AuthUser(
+            uid: 'test-uid',
+            email: 'test@example.com',
+            emailVerified: true,
+          ),
+          status: AuthFlowStatus.signedInOnboardingIncomplete,
+        ),
+      );
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

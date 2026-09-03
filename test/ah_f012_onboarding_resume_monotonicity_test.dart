@@ -190,86 +190,97 @@ void main() {
       expect(validateOnboardingResume(withWork).resumeStep, 5);
     });
 
-    test('not_student_not_working skips class and work schedule requirement', () {
-      final draft = _roleDraft(
-        uid,
-        const LifeRoleDraft(
-          lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
-          exerciseLevel: 'moderate',
-          waterIntake: 'medium',
-          stressLevel: 'medium',
-          sleepQuality: 'good',
-        ),
-        const [],
-      );
+    test(
+      'not_student_not_working skips class and work schedule requirement',
+      () {
+        final draft = _roleDraft(
+          uid,
+          const LifeRoleDraft(
+            lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+            exerciseLevel: 'moderate',
+            waterIntake: 'medium',
+            stressLevel: 'medium',
+            sleepQuality: 'good',
+          ),
+          const [],
+        );
 
-      expect(validateOnboardingResume(draft).resumeStep, 5);
-    });
+        expect(validateOnboardingResume(draft).resumeStep, 5);
+      },
+    );
   });
 
   group('AH-F012 optional vs required step requirement validation', () {
-    test('bad habits optional skip passes but empty without skip stops at Step 8', () {
-      final skipped = _validDraftAt(uid, 9).copyWith(
-        badHabitsNotNow: true,
-        badHabits: const [],
-        incrementRevision: false,
-      );
-      final unselected = _validDraftAt(uid, 9).copyWith(
-        badHabitsNotNow: false,
-        badHabits: const [],
-        incrementRevision: false,
-      );
+    test(
+      'bad habits optional skip passes but empty without skip stops at Step 8',
+      () {
+        final skipped = _validDraftAt(uid, 9).copyWith(
+          badHabitsNotNow: true,
+          badHabits: const [],
+          incrementRevision: false,
+        );
+        final unselected = _validDraftAt(uid, 9).copyWith(
+          badHabitsNotNow: false,
+          badHabits: const [],
+          incrementRevision: false,
+        );
 
-      expect(validateOnboardingResume(skipped).resumeStep, 9);
-      expect(validateOnboardingResume(unselected).resumeStep, 8);
-    });
+        expect(validateOnboardingResume(skipped).resumeStep, 9);
+        expect(validateOnboardingResume(unselected).resumeStep, 8);
+      },
+    );
 
-    test('good habits optional skip passes but empty without skip stops at Step 9', () {
-      final skipped = _validDraftAt(uid, 10).copyWith(
-        goodHabitsNotNow: true,
-        goodHabits: const [],
-        incrementRevision: false,
-      );
-      final unselected = _validDraftAt(uid, 10).copyWith(
-        goodHabitsNotNow: false,
-        goodHabits: const [],
-        incrementRevision: false,
-      );
+    test(
+      'good habits optional skip passes but empty without skip stops at Step 9',
+      () {
+        final skipped = _validDraftAt(uid, 10).copyWith(
+          goodHabitsNotNow: true,
+          goodHabits: const [],
+          incrementRevision: false,
+        );
+        final unselected = _validDraftAt(uid, 10).copyWith(
+          goodHabitsNotNow: false,
+          goodHabits: const [],
+          incrementRevision: false,
+        );
 
-      expect(validateOnboardingResume(skipped).resumeStep, 10);
-      expect(validateOnboardingResume(unselected).resumeStep, 9);
-    });
+        expect(validateOnboardingResume(skipped).resumeStep, 10);
+        expect(validateOnboardingResume(unselected).resumeStep, 9);
+      },
+    );
 
     test('empty identity goals stops at Step 10', () {
-      final draft = _validDraftAt(uid, 11).copyWith(
-        identityGoals: const [],
-        incrementRevision: false,
-      );
+      final draft = _validDraftAt(
+        uid,
+        11,
+      ).copyWith(identityGoals: const [], incrementRevision: false);
 
       expect(validateOnboardingResume(draft).resumeStep, 10);
     });
 
     test('incomplete coach setup stops at Step 11', () {
-      final draft = _validDraftAt(uid, 12).copyWith(
-        coachSetup: const CoachSetupDraft(),
-        incrementRevision: false,
-      );
+      final draft = _validDraftAt(
+        uid,
+        12,
+      ).copyWith(coachSetup: const CoachSetupDraft(), incrementRevision: false);
 
       expect(validateOnboardingResume(draft).resumeStep, 11);
     });
 
     test('missing slip up handling stops at Step 12', () {
-      final draft = _validDraftAt(uid, 13).copyWith(
-        clearSlipUpHandling: true,
-        incrementRevision: false,
-      );
+      final draft = _validDraftAt(
+        uid,
+        13,
+      ).copyWith(clearSlipUpHandling: true, incrementRevision: false);
 
       expect(validateOnboardingResume(draft).resumeStep, 12);
     });
 
     test('unconfirmed notifications preferences stops at Step 13', () {
       final draft = _validDraftAt(uid, 14).copyWith(
-        notifications: const NotificationSetupDraft(preferencesConfirmed: false),
+        notifications: const NotificationSetupDraft(
+          preferencesConfirmed: false,
+        ),
         incrementRevision: false,
       );
 
@@ -316,20 +327,20 @@ void main() {
       expect(validateOnboardingResume(draft).resumeStep, 4);
     });
 
-    test('durable uploaded skin asset passes with no local path', () {
+    test('durable uploaded face asset without a routine remains at Step 7', () {
       final base = _validBaseTimeline().copyWith(
         skinCareSkipped: false,
         skinCareSetupPath: 'no_products',
-        skinCareProductPhotoAssetId: 'asset-1',
-        skinCareProductPhotoR2Key: 'users/$uid/skin/asset-1.jpg',
-        skinCareProductPhotoStatus: UploadedAssetStatus.uploaded.wireName,
+        skinCareFacePhotoAssetId: 'asset-1',
+        skinCareFacePhotoR2Key: 'users/$uid/onboarding/skin_face/asset-1.jpg',
+        skinCareFacePhotoStatus: UploadedAssetStatus.uploaded.wireName,
       );
       final draft = _validDraftAt(
         uid,
         8,
       ).copyWith(baseTimeline: base, incrementRevision: false);
 
-      expect(validateOnboardingResume(draft).resumeStep, 8);
+      expect(validateOnboardingResume(draft).resumeStep, 7);
     });
 
     test('local-only unuploaded image cannot satisfy server validation', () {
@@ -466,32 +477,35 @@ void main() {
       expect(result, isA<ReconstructionCompleted>());
     });
 
-    test('same-UID refresh maintains stable session destination without side effects', () {
-      final draft = _validDraftAt(uid, 7, currentStep: 3).copyWith(
-        baseTimeline: _validBaseTimeline().copyWith(
-          skinCareSkipped: false,
-          clearSkinCarePlanning: true,
-        ),
-        incrementRevision: false,
-      );
-      final profile = _profile(uid);
+    test(
+      'same-UID refresh maintains stable session destination without side effects',
+      () {
+        final draft = _validDraftAt(uid, 7, currentStep: 3).copyWith(
+          baseTimeline: _validBaseTimeline().copyWith(
+            skinCareSkipped: false,
+            clearSkinCarePlanning: true,
+          ),
+          incrementRevision: false,
+        );
+        final profile = _profile(uid);
 
-      final firstDest = resolveOnboardingSessionDestination(
-        ownerUid: uid,
-        profile: profile,
-        draft: draft,
-      );
-      final secondDest = resolveOnboardingSessionDestination(
-        ownerUid: uid,
-        profile: profile,
-        draft: draft,
-      );
+        final firstDest = resolveOnboardingSessionDestination(
+          ownerUid: uid,
+          profile: profile,
+          draft: draft,
+        );
+        final secondDest = resolveOnboardingSessionDestination(
+          ownerUid: uid,
+          profile: profile,
+          draft: draft,
+        );
 
-      expect(firstDest.kind, SessionDestinationKind.resumeOnboarding);
-      expect(firstDest.resumeStep, 7);
-      expect(secondDest.kind, SessionDestinationKind.resumeOnboarding);
-      expect(secondDest.resumeStep, 7);
-    });
+        expect(firstDest.kind, SessionDestinationKind.resumeOnboarding);
+        expect(firstDest.resumeStep, 7);
+        expect(secondDest.kind, SessionDestinationKind.resumeOnboarding);
+        expect(secondDest.resumeStep, 7);
+      },
+    );
   });
 }
 

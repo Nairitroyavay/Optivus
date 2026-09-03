@@ -340,7 +340,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("product recommendations are branded, priced, and location-aware", async () => {
-    const key = "users/uid-1/onboarding/skin_care/face.jpg";
+    const key = "users/uid-1/onboarding/skin_face/face.jpg";
     const calls: FetchCall[] = [];
     const products = completeIndianRecommendationProducts();
     stubGemini(JSON.stringify({
@@ -501,7 +501,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("missing metadata with .jpg key is accepted", async () => {
-    const key = "users/uid-1/onboarding/skin_care/products.jpg";
+    const key = "users/uid-1/onboarding/skin_products/products.jpg";
     stubGemini(JSON.stringify({
       products: [{ name: "UV Aqua Gel", category: "sunscreen" }],
       warnings: [],

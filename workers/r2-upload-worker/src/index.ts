@@ -39,6 +39,8 @@ const routineImportPurposes = new Set([
   "work_schedule",
   "eating_menu",
   "skin_care",
+  "skin_face",
+  "skin_products",
 ]);
 
 const approvedPurposes = new Set([
