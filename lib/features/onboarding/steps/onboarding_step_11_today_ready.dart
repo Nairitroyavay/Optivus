@@ -424,7 +424,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
                 ),
               ],
             ),
-            if (invalidBundle?.area == Step14InvalidArea.skinCare) ...[
+            if (invalidBundle.area == Step14InvalidArea.skinCare) ...[
               const SizedBox(height: 8),
               TextButton.icon(
                 key: const ValueKey('step14-review-skin-care'),

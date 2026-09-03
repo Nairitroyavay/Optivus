@@ -687,8 +687,8 @@ String? onboarding7MissingRoutineMessage(
   return null;
 }
 
-bool onboarding7CanContinue(BaseTimelineDraft base) {
-  return base.validateSkinCareSetup() == null;
+bool onboarding7CanContinue(BaseTimelineDraft base, String uid) {
+  return base.validateSkinCareSetup(uid) == null;
 }
 
 @visibleForTesting

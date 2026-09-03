@@ -648,6 +648,13 @@ class UploadController extends StateNotifier<UploadState> {
         errorMessage: message,
       );
       return null;
+    } finally {
+      if (_operationGeneration == operationGeneration && state.isBusy) {
+        state = state.copyWith(
+          status: UploadFlowStatus.failed,
+          errorMessage: 'Upload interrupted or incomplete.'
+        );
+      }
     }
   }
 
@@ -754,6 +761,13 @@ class UploadController extends StateNotifier<UploadState> {
         status: UploadFlowStatus.failed,
         errorMessage: _friendlyUploadError(error),
       );
+    } finally {
+      if (_operationGeneration == operationGeneration && state.isBusy) {
+        state = state.copyWith(
+          status: UploadFlowStatus.failed,
+          errorMessage: 'Delete interrupted or incomplete.'
+        );
+      }
     }
   }
 

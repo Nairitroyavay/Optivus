@@ -39,16 +39,18 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     required R2UploadClient r2UploadClient,
     required UploadPermissionService permissionService,
     RestoredUploadsController? restoredController,
-  })  : _shellConfig = shellConfig,
-        _assetRepository = assetRepository,
-        _authRepository = authRepository,
-        _imagePrepareService = imagePrepareService,
-        _r2UploadClient = r2UploadClient,
-        _permissionService = permissionService,
-        _restoredController = restoredController,
-        super(_initialStateFromConfig(shellConfig));
+  }) : _shellConfig = shellConfig,
+       _assetRepository = assetRepository,
+       _authRepository = authRepository,
+       _imagePrepareService = imagePrepareService,
+       _r2UploadClient = r2UploadClient,
+       _permissionService = permissionService,
+       _restoredController = restoredController,
+       super(_initialStateFromConfig(shellConfig));
 
-  static UploadInteractionMap _initialStateFromConfig(UploadShellConfig config) {
+  static UploadInteractionMap _initialStateFromConfig(
+    UploadShellConfig config,
+  ) {
     final map = <String, UploadSlotRuntimeState>{};
     for (final slot in config.slots) {
       map[slot.key] = UploadSlotRuntimeState(
@@ -80,7 +82,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       if (current == null) continue;
 
       final restored = restoredState.forPurpose(slot.purpose);
-      final hasMatchingRestored = restored != null &&
+      final hasMatchingRestored =
+          restored != null &&
           restored.asset.ownerUid == normalizedUid &&
           uploadedAssetIsDurablyUploadedForSlot(
             asset: restored.asset,
@@ -91,7 +94,9 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       // If there is an active in-flight transient attempt for this slot, preserve attempt state
       if (current.isBusy) {
         if (current.isHydrating != restoredState.isHydrating) {
-          next[slot.key] = current.copyWith(isHydrating: restoredState.isHydrating);
+          next[slot.key] = current.copyWith(
+            isHydrating: restoredState.isHydrating,
+          );
           changed = true;
         }
         continue;
@@ -100,7 +105,9 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       if (hasMatchingRestored) {
         final updated = current.copyWith(
           isHydrating: restoredState.isHydrating,
-          phase: current.phase == UploadInteractionPhase.failed && current.attemptError != null
+          phase:
+              current.phase == UploadInteractionPhase.failed &&
+                  current.attemptError != null
               ? UploadInteractionPhase.failed
               : UploadInteractionPhase.restored,
           durableAsset: restored.asset,
@@ -112,7 +119,9 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
           changed = true;
         }
       } else {
-        if (!restoredState.isHydrating && current.durableAsset != null && current.phase == UploadInteractionPhase.restored) {
+        if (!restoredState.isHydrating &&
+            current.durableAsset != null &&
+            current.phase == UploadInteractionPhase.restored) {
           next[slot.key] = current.copyWith(
             isHydrating: false,
             phase: UploadInteractionPhase.empty,
@@ -122,7 +131,9 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
           );
           changed = true;
         } else if (current.isHydrating != restoredState.isHydrating) {
-          next[slot.key] = current.copyWith(isHydrating: restoredState.isHydrating);
+          next[slot.key] = current.copyWith(
+            isHydrating: restoredState.isHydrating,
+          );
           changed = true;
         }
       }
@@ -176,13 +187,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     final slotGeneration = _nextSlotGeneration(slotKey);
     _activeUid = uid;
 
-    _setSlotState(
-      slotKey,
-      (s) => s.copyWith(
-        isBusy: true,
-        clearAttemptError: true,
-      ),
-    );
+    _setSlotState(slotKey, (s) => s.copyWith(phase: UploadInteractionPhase.preparing, clearAttemptError: true));
 
     try {
       // Permission check (Invariant 9 & 18)
@@ -198,7 +203,6 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
                 source,
                 isPermanent: true,
               ),
-              isBusy: false,
             ),
           );
           return null;
@@ -213,7 +217,6 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
               source,
               isPermanent: mapped == UploadPermissionStatus.permanentlyDenied,
             ),
-            isBusy: false,
           ),
         );
         return null;
@@ -224,10 +227,18 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       try {
         picked = await _imagePrepareService.pickImageFile(source: source);
       } catch (pickerError) {
-        if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+        if (!_isCurrentOperation(
+          slotKey,
+          uid,
+          sessionGeneration,
+          slotGeneration,
+        )) {
           return null;
         }
-        final mapped = _permissionService.mapPickerException(pickerError, source);
+        final mapped = _permissionService.mapPickerException(
+          pickerError,
+          source,
+        );
         _setSlotState(
           slotKey,
           (s) => s.copyWith(
@@ -236,13 +247,17 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
               source,
               isPermanent: mapped == UploadPermissionStatus.permanentlyDenied,
             ),
-            isBusy: false,
           ),
         );
         return null;
       }
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
 
@@ -251,11 +266,10 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         _setSlotState(
           slotKey,
           (s) => s.copyWith(
-            isBusy: false,
             phase: s.hasDurableAsset
                 ? (s.previewStatus == UploadedAssetPreviewStatus.available
-                    ? UploadInteractionPhase.uploaded
-                    : UploadInteractionPhase.restored)
+                      ? UploadInteractionPhase.uploaded
+                      : UploadInteractionPhase.restored)
                 : UploadInteractionPhase.empty,
             clearAttemptError: true,
           ),
@@ -325,17 +339,10 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         sourceFeature: sourceFeature,
       );
     }
-    return chooseFromGallery(
-      slotKey,
-      uid: uid,
-      sourceFeature: sourceFeature,
-    );
+    return chooseFromGallery(slotKey, uid: uid, sourceFeature: sourceFeature);
   }
 
-  Future<bool> remove(
-    String slotKey, {
-    required String uid,
-  }) async {
+  Future<bool> remove(String slotKey, {required String uid}) async {
     final current = state[slotKey];
     if (current == null) return false;
     if (!current.hasDurableAsset) {
@@ -351,15 +358,17 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     final slotGeneration = _nextSlotGeneration(slotKey);
     final asset = current.durableAsset!;
 
-    _setSlotState(
-      slotKey,
-      (s) => s.copyWith(isBusy: true, clearAttemptError: true),
-    );
+    _setSlotState(slotKey, (s) => s.copyWith(phase: UploadInteractionPhase.preparing, clearAttemptError: true));
 
     try {
       if (asset.r2Key.trim().isNotEmpty) {
         final idToken = await _authRepository.currentIdToken();
-        if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+        if (!_isCurrentOperation(
+          slotKey,
+          uid,
+          sessionGeneration,
+          slotGeneration,
+        )) {
           return false;
         }
         if (idToken != null && idToken.trim().isNotEmpty) {
@@ -374,17 +383,24 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         }
       }
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return false;
       }
 
       // Invariant 6 & 21: Durable removal authority
-      await _assetRepository.markDeleted(
-        uid: uid,
-        assetId: asset.assetId,
-      );
+      await _assetRepository.markDeleted(uid: uid, assetId: asset.assetId);
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return false;
       }
 
@@ -394,7 +410,6 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         slotKey,
         (s) => s.copyWith(
           phase: UploadInteractionPhase.empty,
-          isBusy: false,
           clearDurableAsset: true,
           clearTransientFile: true,
           clearPreparedImage: true,
@@ -405,14 +420,21 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       );
       return true;
     } catch (error) {
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return false;
       }
       // Invariant 24: Failed remove keeps durable asset authoritative
       _setSlotState(
         slotKey,
         (s) => s.copyWith(
-          isBusy: false,
+          phase: s.previewStatus == UploadedAssetPreviewStatus.available
+              ? UploadInteractionPhase.uploaded
+              : UploadInteractionPhase.restored,
           attemptError: "Couldn't remove the photo. Try again.",
         ),
       );
@@ -431,8 +453,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         clearPreparedImage: true,
         phase: s.hasDurableAsset
             ? (s.previewStatus == UploadedAssetPreviewStatus.available
-                ? UploadInteractionPhase.uploaded
-                : UploadInteractionPhase.restored)
+                  ? UploadInteractionPhase.uploaded
+                  : UploadInteractionPhase.restored)
             : UploadInteractionPhase.empty,
       ),
     );
@@ -460,7 +482,6 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       (s) => s.copyWith(
         phase: UploadInteractionPhase.preparing,
         transientFile: pickedFile,
-        isBusy: true,
         clearAttemptError: true,
       ),
     );
@@ -478,7 +499,12 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         purpose: purpose,
       );
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
 
@@ -486,7 +512,6 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         _setSlotState(
           slotKey,
           (s) => s.copyWith(
-            isBusy: false,
             phase: s.hasDurableAsset
                 ? UploadInteractionPhase.uploaded
                 : UploadInteractionPhase.empty,
@@ -505,7 +530,12 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       );
 
       uploadIdToken = await _authRepository.currentIdToken();
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
       if (uploadIdToken == null || uploadIdToken.trim().isEmpty) {
@@ -536,7 +566,12 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         idToken: uploadIdToken,
       );
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
 
@@ -547,7 +582,12 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         bytes: prepared.bytes,
       );
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
 
@@ -559,7 +599,12 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         idToken: uploadIdToken,
       );
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
       uploadCompleted = true;
@@ -585,7 +630,12 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       await _assetRepository.saveAsset(asset);
       savingMetadata = false;
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
 
@@ -599,7 +649,6 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
           phase: UploadInteractionPhase.uploaded,
           durableAsset: asset,
           previewStatus: UploadedAssetPreviewStatus.available,
-          isBusy: false,
           clearAttemptError: true,
           clearTransientFile: true,
           clearPreparedImage: true,
@@ -608,7 +657,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
 
       return asset;
     } catch (error) {
-      final metadataSaveFailedAfterR2 = savingMetadata &&
+      final metadataSaveFailedAfterR2 =
+          savingMetadata &&
           uploadCompleted &&
           signedUpload != null &&
           !signedUpload.uploadUrl.startsWith('r2://fake-r2/') &&
@@ -624,7 +674,12 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         } catch (_) {}
       }
 
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) {
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
         return null;
       }
 
@@ -638,7 +693,6 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         (s) => s.copyWith(
           phase: UploadInteractionPhase.failed,
           attemptError: friendlyMsg,
-          isBusy: false,
         ),
       );
       return null;

@@ -1,0 +1,90 @@
+  if (key.endsWith('.png')) return 'image/png';
+  if (key.endsWith('.webp')) return 'image/webp';
+  if (key.endsWith('.heic')) return 'image/heic';
+  if (key.endsWith('.heif')) return 'image/heif';
+  if (key.endsWith('.gif')) return 'image/gif';
+  if (key.endsWith('.pdf')) return 'application/pdf';
+  return 'image/jpeg';
+}
+
+@visibleForTesting
+UploadedAsset? durableSkinProductsAssetFromDraft(OnboardingDraft draft) {
+  final base = draft.baseTimeline;
+  if (base.skinCareSetupPath != "has_products") return null;
+  final assetId = base.skinCareProductPhotoAssetId?.trim() ?? '';
+  final r2Key = base.skinCareProductPhotoR2Key?.trim() ?? '';
+  final createdAt =
+      base.skinCareProductPhotoCreatedAt ??
+      DateTime.fromMillisecondsSinceEpoch(0);
+  final asset = UploadedAsset(
+    assetId: assetId,
+    ownerUid: draft.uid,
+    sourceFeature: OnboardingDraft.sourceOnboarding,
+    purpose: UploadedAssetPurpose.skinProducts,
+    fileName: r2Key.split('/').lastOrNull ?? 'skin-products-photo.jpg',
+    contentType: _skinCareImageContentTypeFromR2Key(r2Key),
+    sizeBytes: 0,
+    r2Key: r2Key,
+    status: uploadedAssetStatusFromString(base.skinCareProductPhotoStatus),
+    createdAt: createdAt,
+    updatedAt: base.skinCareProductPhotoUpdatedAt ?? createdAt,
+  );
+  return isUsableSkinUpload(
+        asset: asset,
+        uid: draft.uid,
+        expectedPurpose: UploadedAssetPurpose.skinProducts,
+      )
+      ? asset
+      : null;
+}
+
+@visibleForTesting
+UploadedAsset? durableSkinFaceAssetFromDraft(OnboardingDraft draft) {
+  final base = draft.baseTimeline;
+  if (base.skinCareSetupPath != "no_products") return null;
+  var assetId = base.skinCareFacePhotoAssetId?.trim() ?? "";
+  var r2Key = base.skinCareFacePhotoR2Key?.trim() ?? "";
+  var status = base.skinCareFacePhotoStatus;
+  var createdAt = base.skinCareFacePhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+  var updatedAt = base.skinCareFacePhotoUpdatedAt ?? createdAt;
+
+  // Legacy migration for draft: if face photo is empty but product photo has data, use product photo
+  if (assetId.isEmpty && (base.skinCareProductPhotoAssetId?.trim() ?? "").isNotEmpty) {
+    assetId = base.skinCareProductPhotoAssetId!.trim();
+    r2Key = base.skinCareProductPhotoR2Key?.trim() ?? "";
+    status = base.skinCareProductPhotoStatus;
+    createdAt = base.skinCareProductPhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    updatedAt = base.skinCareProductPhotoUpdatedAt ?? createdAt;
+  }
+  
+  if (status != "uploaded") return null;
+  if (!r2Key.startsWith('users/${draft.uid}/')) return null;
+  if (assetId.isEmpty || r2Key.isEmpty) return null;
+  final asset = UploadedAsset(
+    assetId: assetId,
+    ownerUid: draft.uid,
+    sourceFeature: OnboardingDraft.sourceOnboarding,
+    purpose: UploadedAssetPurpose.skinFace,
+    fileName: r2Key.split('/').lastOrNull ?? 'skin-face-photo.jpg',
+    contentType: _skinCareImageContentTypeFromR2Key(r2Key),
+    sizeBytes: 0,
+    r2Key: r2Key,
+    status: uploadedAssetStatusFromString(status),
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+  );
+  return isUsableSkinUpload(
+        asset: asset,
+        uid: draft.uid,
+        expectedPurpose: UploadedAssetPurpose.skinFace,
+      )
+      ? asset
+      : null;
+}
+
+UploadedAsset? _restoredSkinAssetForSlot({
+  required RestoredUploadsState restored,
+  required OnboardingDraft draft,
+  required UploadedAssetPurpose purpose,
+}) {
+  final direct = restored.forPurpose(purpose)?.asset;

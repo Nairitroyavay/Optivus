@@ -384,6 +384,7 @@ void main() {
       draft = draft.copyWith(
         baseTimeline: BaseTimelineDraft(
           skinCareSetupPath: 'has_products',
+          skinCareProductNames: 'some product',
           skinCareDesiredApplicationsPerDay: 2,
           blocks: [
             TimelineBlockDraft(

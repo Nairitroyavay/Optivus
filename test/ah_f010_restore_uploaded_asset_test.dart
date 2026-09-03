@@ -1298,7 +1298,7 @@ void main() {
 
         // The durable asset satisfies the photo requirement; the remaining
         // no-products setup is still required before the step can continue.
-        final validationError = base.validateSkinCareSetup();
+        final validationError = base.validateSkinCareSetup('test_uid');
         expect(
           validationError,
           'Complete your skin details before finding products.',
@@ -1315,7 +1315,7 @@ void main() {
               'users/uid-1/onboarding/skin_care/face.jpg',
           skinCareProductPhotoStatus: status,
         );
-        expect(base.validateSkinCareSetup(), isNotNull, reason: status);
+        expect(base.validateSkinCareSetup('test_uid'), isNotNull, reason: status);
       }
       expect(
         const BaseTimelineDraft(
@@ -1323,7 +1323,7 @@ void main() {
           skinCareProductPhotoR2Key:
               'users/uid-1/onboarding/skin_care/face.jpg',
           skinCareProductPhotoStatus: 'uploaded',
-        ).validateSkinCareSetup(),
+        ).validateSkinCareSetup('test_uid'),
         isNotNull,
       );
     });

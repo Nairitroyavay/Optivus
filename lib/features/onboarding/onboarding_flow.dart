@@ -1243,7 +1243,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   Future<bool> _nextFixed(OnboardingDraft draft) async => false;
 
   Future<bool> _nextSkinCare(OnboardingDraft draft) async {
-    final message = draft.baseTimeline.validateSkinCareSetup();
+    final message = draft.baseTimeline.validateSkinCareSetup(draft.uid);
     if (message == null) return false;
     _setInternalValidation(message);
     return true;

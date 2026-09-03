@@ -331,7 +331,7 @@ class Step14ReadinessSummary {
         (draft.baseTimeline.skinCareSetupPath == null &&
                 !draft.baseTimeline.blocks.any((b) => b.section == 'skin_care')
             ? true
-            : draft.baseTimeline.validateSkinCareSetup() == null);
+            : draft.baseTimeline.validateSkinCareSetup(draft.uid) == null);
 
     final habitsOk =
         (draft.goodHabits.isNotEmpty || draft.goodHabitsNotNow) &&

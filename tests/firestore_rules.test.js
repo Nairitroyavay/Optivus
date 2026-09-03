@@ -2016,9 +2016,9 @@ describe("Firestore Rules for upload metadata", () => {
     ));
   });
 
-  it("owner creates legacy skin_care upload", async () => {
+  it("rejects owner creates legacy skin_care upload", async () => {
     const db = ownerDb();
-    await assertSucceeds(uploadRef(db, "user123", "asset-006").set(
+    await assertFails(uploadRef(db, "user123", "asset-006").set(
       uploadData("user123", "asset-006", { purpose: "skin_care", r2Key: "uploads/user123/asset-006.jpg" })
     ));
   });

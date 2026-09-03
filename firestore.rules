@@ -21,8 +21,7 @@ service cloud.firestore {
     function isRoutineImportPurpose(purpose) {
       return purpose == "class_timetable"
         || purpose == "work_schedule"
-        || purpose == "eating_menu"
-        || purpose == "skin_care";
+        || purpose == "eating_menu";
     }
 
     function isSkinCareUploadPurpose(purpose) {

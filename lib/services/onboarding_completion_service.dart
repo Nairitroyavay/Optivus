@@ -195,7 +195,7 @@ class OnboardingCompletionService {
   static Step14BundleBuildResult projectBundleResult(OnboardingDraft draft) {
     if (draft.baseTimeline.skinCareSetupPath != null ||
         draft.baseTimeline.blocks.any((b) => b.section == 'skin_care')) {
-      final skinErr = draft.baseTimeline.validateSkinCareSetup();
+      final skinErr = draft.baseTimeline.validateSkinCareSetup(draft.uid);
       if (skinErr != null) {
         return const Step14BundleBuildInvalid(
           area: Step14InvalidArea.skinCare,
@@ -232,7 +232,7 @@ class OnboardingCompletionService {
     final mergedTimeline = draft.baseTimeline.copyWith(blocks: baseItems);
 
     if (draft.baseTimeline.skinCareSetupPath != null) {
-      final skinCareErr = mergedTimeline.validateSkinCareSetup();
+      final skinCareErr = mergedTimeline.validateSkinCareSetup(draft.uid);
       if (skinCareErr != null) {
         throw StateError(skinCareErr);
       }
@@ -391,9 +391,7 @@ class OnboardingCompletionService {
     }
 
     final base = draft.baseTimeline;
-    if (base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true ||
-        base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true ||
-        base.skinCareProductPhotoStatus?.trim().isNotEmpty == true) {
+    if (base.skinCareSetupPath == "has_products" && (base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true || base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true || base.skinCareProductPhotoStatus?.trim().isNotEmpty == true)) {
       final fallbackCreatedAt = draft.createdAt ?? DateTime.now();
       final fallbackUpdatedAt = draft.updatedAt ?? fallbackCreatedAt;
 
@@ -403,13 +401,9 @@ class OnboardingCompletionService {
         OnboardingUploadedAssetReference(
           id: base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true
               ? base.skinCareProductPhotoAssetId!.trim()
-              : base.skinCareSetupPath == 'no_products'
-              ? 'skin_care_face_photo'
               : 'skin_care_product_photo',
           section: 'skin_care',
-          mode: base.skinCareSetupPath == 'no_products'
-              ? 'no_products'
-              : 'has_products',
+          mode: 'has_products',
           uploadedAssetId: base.skinCareProductPhotoAssetId,
           uploadedAssetR2Key: base.skinCareProductPhotoR2Key,
           uploadedAssetStatus: base.skinCareProductPhotoStatus,
@@ -418,9 +412,7 @@ class OnboardingCompletionService {
         ),
       );
     }
-    if (base.skinCareFacePhotoAssetId?.trim().isNotEmpty == true ||
-        base.skinCareFacePhotoR2Key?.trim().isNotEmpty == true ||
-        base.skinCareFacePhotoStatus?.trim().isNotEmpty == true) {
+    if (base.skinCareSetupPath == "no_products" && (base.skinCareFacePhotoAssetId?.trim().isNotEmpty == true || base.skinCareFacePhotoR2Key?.trim().isNotEmpty == true || base.skinCareFacePhotoStatus?.trim().isNotEmpty == true)) {
       final fallbackCreatedAt = draft.createdAt ?? DateTime.now();
       final fallbackUpdatedAt = draft.updatedAt ?? fallbackCreatedAt;
       addReference(

@@ -133,13 +133,15 @@ async function readSmallJson(
   return parsed as Record<string, unknown>;
 }
 
-function assertOwnedSkinCareObjectKey(uid: string, key: string): void {
+function assertOwnedSkinCareObjectKey(uid: string, key: string, allowedPurposes: string[]): void {
   const normalized = key.replace(/\\/g, "/");
   if (normalized.includes("../") || normalized.includes("..\\")) {
     throw new HttpError(403, "forbidden", "Path traversal detected.");
   }
+  
+  const purposePattern = allowedPurposes.join("|");
   const regex = new RegExp(
-    `^users/${uid}/onboarding/(skin_care|skin_face|skin_products)/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic|heif|gif|pdf)$`,
+    `^users/${uid}/onboarding/(${purposePattern})/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic|heif|gif|pdf)$`,
   );
   if (!regex.test(normalized)) {
     throw new HttpError(403, "forbidden", "Unauthorized R2 key access.");
@@ -1575,7 +1577,7 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
   
   for (const photoKey of body.productPhotos) {
     if (typeof photoKey !== "string") continue;
-    assertOwnedSkinCareObjectKey(user.uid, photoKey);
+    assertOwnedSkinCareObjectKey(user.uid, photoKey, ["skin_products", "skin_care"]);
     const object = await env.UPLOAD_BUCKET.get(photoKey);
     if (!object) {
       throw new HttpError(404, "r2_image_missing", `Could not find uploaded image: ${photoKey}`);
@@ -1649,7 +1651,7 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
   
   if (body.facePhotoR2Key && typeof body.facePhotoR2Key === "string") {
     try {
-      assertOwnedSkinCareObjectKey(user.uid, body.facePhotoR2Key);
+      assertOwnedSkinCareObjectKey(user.uid, body.facePhotoR2Key, ["skin_face", "skin_care"]);
       const object = await env.UPLOAD_BUCKET.get(body.facePhotoR2Key);
       if (object) {
         const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType, body.facePhotoR2Key);

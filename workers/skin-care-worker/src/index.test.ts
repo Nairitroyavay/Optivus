@@ -307,7 +307,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("unsupported image content type returns unsupported_content_type", async () => {
-    const key = "users/uid-1/onboarding/skin_care/products.gif";
+    const key = "users/uid-1/onboarding/skin_products/products.gif";
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/products/analyze", {
         productPhotos: [key],
@@ -391,7 +391,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("incomplete recommendations are repaired and common categories are canonicalized", async () => {
-    const key = "users/uid-1/onboarding/skin_care/face.jpg";
+    const key = "users/uid-1/onboarding/skin_face/face.jpg";
     const calls: FetchCall[] = [];
     const repairProducts = completeIndianRecommendationProducts().slice(1);
     repairProducts[1] = {
@@ -458,7 +458,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("incomplete product recommendations are removed before returning", async () => {
-    const key = "users/uid-1/onboarding/skin_care/face.jpg";
+    const key = "users/uid-1/onboarding/skin_face/face.jpg";
     stubGemini(JSON.stringify({
       routinePlans: [],
       recommendedProducts: [
@@ -520,7 +520,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("product analysis invalid JSON returns provider_invalid_json", async () => {
-    const key = "users/uid-1/onboarding/skin_care/products.jpg";
+    const key = "users/uid-1/onboarding/skin_products/products.jpg";
     stubGemini("not-json");
 
     const response = await worker.fetch(
@@ -536,7 +536,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("product analysis image above 15MB returns image_payload_too_large", async () => {
-    const key = "users/uid-1/onboarding/skin_care/products.jpg";
+    const key = "users/uid-1/onboarding/skin_products/products.jpg";
 
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/products/analyze", {
@@ -555,7 +555,7 @@ describe("Skin-care Worker", () => {
   test("invalid R2 key is rejected", async () => {
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/products/analyze", {
-        productPhotos: ["users/other/onboarding/skin_care/products.jpg"],
+        productPhotos: ["users/other/onboarding/skin_products/products.jpg"],
       }),
       makeEnv() as any,
     );
@@ -566,7 +566,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("missing Gemini key returns internal error", async () => {
-    const key = "users/uid-1/onboarding/skin_care/products.jpg";
+    const key = "users/uid-1/onboarding/skin_products/products.jpg";
     const env = makeEnv({ [key]: { contentType: "image/jpeg" } }) as any;
     delete env.GEMINI_API_KEY;
 

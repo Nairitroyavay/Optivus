@@ -4738,7 +4738,7 @@ void main() {
           skinCareProductNames: 'Cleanser',
           skinCareDesiredApplicationsPerDay: 2,
           blocks: _skinCareBlocksForEveryDay(2),
-        ),
+        ), 'test_uid',
       ),
       isTrue,
     );
@@ -4747,7 +4747,7 @@ void main() {
         const BaseTimelineDraft(
           skinCareSetupPath: 'has_products',
           skinCareDesiredApplicationsPerDay: 2,
-        ),
+        ), 'test_uid',
       ),
       isFalse,
     );
@@ -4756,7 +4756,7 @@ void main() {
         const BaseTimelineDraft(
           skinCareSetupPath: 'skip',
           skinCareSkipped: true,
-        ),
+        ), 'test_uid',
       ),
       isTrue,
     );
@@ -5310,7 +5310,7 @@ void main() {
         find.byKey(const ValueKey('onboarding-step7-selected-products-close')),
       );
       await tester.pumpAndSettle();
-      expect(onboarding7CanContinue(base), isTrue);
+      expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
     },
   );
 
@@ -5512,7 +5512,7 @@ void main() {
       expect(editingBase.skinCareSelectedProductNames, [
         'Saved starter product',
       ]);
-      expect(onboarding7CanContinue(editingBase), isTrue);
+      expect(onboarding7CanContinue(editingBase, 'test_uid'), isTrue);
 
       await tester.tap(
         find.byKey(
@@ -5543,8 +5543,8 @@ void main() {
       blocks: _skinCareBlocksForEveryDay(1),
     );
 
-    expect(onboarding7CanContinue(base), isFalse);
-    expect(base.validateSkinCareSetup(), contains('1 of 2'));
+    expect(onboarding7CanContinue(base, 'test_uid'), isFalse);
+    expect(base.validateSkinCareSetup('test_uid'), contains('1 of 2'));
   });
 
   test('64. Product options and selections survive draft serialization', () {
@@ -5678,7 +5678,7 @@ void main() {
       var base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSuggestedProducts, hasLength(3));
       expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
-      expect(onboarding7CanContinue(base), isTrue);
+      expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
 
       await tester.tap(
         find.byKey(
@@ -5691,7 +5691,7 @@ void main() {
         find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
         findsOneWidget,
       );
-      expect(onboarding7CanContinue(base), isTrue);
+      expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
     },
   );
 
@@ -5939,7 +5939,7 @@ void main() {
 
     var base = container.read(mockOnboardingProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
-    expect(onboarding7CanContinue(base), isTrue);
+    expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
 
     await tester.tap(
       find.byKey(const ValueKey('onboarding-step7-no-products-cancel-rebuild')),
@@ -5947,7 +5947,7 @@ void main() {
     await tester.pumpAndSettle();
     base = container.read(mockOnboardingProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
-    expect(onboarding7CanContinue(base), isTrue);
+    expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
   });
 
   testWidgets('73. Step 7 does not render top back button on choice screen, but renders it inside path', (

@@ -1189,7 +1189,7 @@ class SkinCareWorkerPayloadValidator {
     'sensitive',
     'not_sure',
   };
-  static const Set<String> validBudgets = {'budget', 'medium', 'luxury'};
+  static const Set<String> validBudgets = {'low', 'medium', 'high'};
   static const Set<String> validPreferences = {
     'simple',
     'balanced',

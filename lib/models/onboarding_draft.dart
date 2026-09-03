@@ -346,7 +346,7 @@ class OnboardingDraft {
       case 6:
         return baseTimeline.validateFixedSchedule();
       case 7:
-        return baseTimeline.validateSkinCareSetup();
+        return baseTimeline.validateSkinCareSetup(uid);
       case 8:
         return badHabitsNotNow || badHabits.isNotEmpty
             ? null
@@ -373,7 +373,7 @@ class OnboardingDraft {
         }
         if (baseTimeline.skinCareSetupPath != null ||
             baseTimeline.blocks.any((b) => b.section == 'skin_care')) {
-          final skinCareErr = baseTimeline.validateSkinCareSetup();
+          final skinCareErr = baseTimeline.validateSkinCareSetup(uid);
           if (skinCareErr != null) return skinCareErr;
         }
         if (baseTimeline.eatingSetupPath != null ||
@@ -2103,56 +2103,89 @@ class BaseTimelineDraft {
     return null;
   }
 
-  String? validateSkinCareSetup() {
-    if (skinCareSkipped) return null;
+  String? validateSkinCareSetup(String uid) {
+    if (skinCareSkipped || skinCareSetupPath == 'skip') return null;
     if (skinCareSetupPath == null) {
       return 'Build skin care routine or skip.';
     }
+    
+    final desired = _normalizeSkinCareDesiredApplicationsPerDay(skinCareDesiredApplicationsPerDay);
+    
     if (skinCareSetupPath == 'has_products') {
-      final hasProducts =
-          (skinCareProductNames?.trim().isNotEmpty == true) ||
-          (skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
-              skinCareProductPhotoStatus ==
-                  UploadedAssetStatus.uploaded.wireName) ||
-          blocks.any((b) => b.section == 'skin_care');
-      if (!hasProducts) {
+      final hasTyped = skinCareProductNames?.trim().isNotEmpty == true;
+      final productAsset = skinCareProductPhotoAssetId?.trim().isNotEmpty == true && skinCareProductPhotoR2Key?.trim().isNotEmpty == true
+          ? UploadedAsset(
+              assetId: skinCareProductPhotoAssetId!,
+              ownerUid: uid,
+              sourceFeature: OnboardingDraft.sourceOnboarding,
+              purpose: UploadedAssetPurpose.skinProducts,
+              fileName: skinCareProductPhotoR2Key!.split('/').lastOrNull ?? '',
+              contentType: 'image/jpeg',
+              sizeBytes: 0,
+              r2Key: skinCareProductPhotoR2Key!,
+              status: uploadedAssetStatusFromString(skinCareProductPhotoStatus),
+              createdAt: skinCareProductPhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+              updatedAt: skinCareProductPhotoUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+            )
+          : null;
+      
+      final hasPhoto = isUsableSkinUpload(
+        asset: productAsset,
+        uid: uid,
+        expectedPurpose: UploadedAssetPurpose.skinProducts,
+      );
+      
+      if (!hasTyped && !hasPhoto) {
         return 'Add products or upload a photo to build your routine.';
       }
-      final desired = _normalizeSkinCareDesiredApplicationsPerDay(
-        skinCareDesiredApplicationsPerDay,
-      );
+      
       final msg = _missingSkinCareRoutineMessage(desired);
       if (msg != null) return msg;
+      
       return null;
     }
+    
     if (skinCareSetupPath == 'no_products') {
-      final hasDurableFacePhoto =
-          (skinCareFacePhotoAssetId?.trim().isNotEmpty == true &&
-              skinCareFacePhotoR2Key?.trim().isNotEmpty == true &&
-              skinCareFacePhotoStatus ==
-                  UploadedAssetStatus.uploaded.wireName) ||
-          (skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
-              skinCareProductPhotoR2Key?.trim().isNotEmpty == true &&
-              skinCareProductPhotoStatus ==
-                  UploadedAssetStatus.uploaded.wireName);
-      if (!hasDurableFacePhoto) {
+      final faceAsset = skinCareFacePhotoAssetId?.trim().isNotEmpty == true && skinCareFacePhotoR2Key?.trim().isNotEmpty == true
+          ? UploadedAsset(
+              assetId: skinCareFacePhotoAssetId!,
+              ownerUid: uid,
+              sourceFeature: OnboardingDraft.sourceOnboarding,
+              purpose: UploadedAssetPurpose.skinFace,
+              fileName: skinCareFacePhotoR2Key!.split('/').lastOrNull ?? '',
+              contentType: 'image/jpeg',
+              sizeBytes: 0,
+              r2Key: skinCareFacePhotoR2Key!,
+              status: uploadedAssetStatusFromString(skinCareFacePhotoStatus),
+              createdAt: skinCareFacePhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+              updatedAt: skinCareFacePhotoUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+            )
+          : null;
+          
+      final hasPhoto = isUsableSkinUpload(
+        asset: faceAsset,
+        uid: uid,
+        expectedPurpose: UploadedAssetPurpose.skinFace,
+      );
+      
+      if (!hasPhoto) {
         return 'Add a face photo to personalize your product recommendations.';
       }
-      if (skinCareSkinType == null ||
-          skinCareProblems.isEmpty ||
-          skinCareBudget == null) {
+      
+      if (skinCareSkinType == null || skinCareProblems.isEmpty || skinCareBudget == null) {
         return 'Complete your skin details before finding products.';
       }
+      
       if (skinCareSelectedProductNames.isEmpty) {
         return 'Find and select products before building your routine.';
       }
-      final desired = _normalizeSkinCareDesiredApplicationsPerDay(
-        skinCareDesiredApplicationsPerDay,
-      );
+      
       final msg = _missingSkinCareRoutineMessage(desired);
       if (msg != null) return msg;
+      
       return null;
     }
+    
     return 'Build skin care routine or skip.';
   }
 

@@ -90,7 +90,6 @@ class UploadSlotRuntimeState {
   final PreparedUploadImage? preparedImage;
   final String? attemptError;
   final int operationGeneration;
-  final bool isBusy;
 
   const UploadSlotRuntimeState({
     required this.slotKey,
@@ -104,10 +103,18 @@ class UploadSlotRuntimeState {
     this.preparedImage,
     this.attemptError,
     this.operationGeneration = 0,
-    this.isBusy = false,
   });
 
   bool get hasDurableAsset => durableAsset != null;
+
+  bool get isBusy {
+    return switch (phase) {
+      UploadInteractionPhase.preparing ||
+      UploadInteractionPhase.uploading ||
+      UploadInteractionPhase.processing => true,
+      _ => false,
+    };
+  }
 
   /// True ONLY when hydration is complete, no durable asset exists, and slot is empty.
   /// Strictly impossible when [isHydrating] is true.
@@ -132,7 +139,6 @@ class UploadSlotRuntimeState {
     PreparedUploadImage? preparedImage,
     String? attemptError,
     int? operationGeneration,
-    bool? isBusy,
     bool clearDurableAsset = false,
     bool clearTransientFile = false,
     bool clearPreparedImage = false,
@@ -157,7 +163,6 @@ class UploadSlotRuntimeState {
           : (preparedImage ?? this.preparedImage),
       attemptError: clearAttemptError ? null : (attemptError ?? this.attemptError),
       operationGeneration: operationGeneration ?? this.operationGeneration,
-      isBusy: isBusy ?? this.isBusy,
     );
   }
 }

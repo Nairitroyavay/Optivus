@@ -7,7 +7,8 @@ UploadedAssetPurpose? onboardingUploadPurposeForBaseTimelineSection(
     'Classes' => UploadedAssetPurpose.classTimetable,
     'Job / Work / Business' => UploadedAssetPurpose.workSchedule,
     'Eating' => UploadedAssetPurpose.eatingMenu,
-    'Skin Care' => UploadedAssetPurpose.skinCare,
+    // 'Skin Care' is explicitly handled in step 7 and uses multiple purposes (skin_face/skin_products)
+    'Skin Care' => null,
     _ => null,
   };
 }

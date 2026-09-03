@@ -38,7 +38,6 @@ const routineImportPurposes = new Set([
   "class_timetable",
   "work_schedule",
   "eating_menu",
-  "skin_care",
   "skin_face",
   "skin_products",
 ]);

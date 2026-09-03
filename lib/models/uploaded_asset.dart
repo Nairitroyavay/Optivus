@@ -197,3 +197,18 @@ DateTime? _dateTimeFromValue(Object? value) {
   if (value is String) return DateTime.tryParse(value);
   return null;
 }
+
+bool isUsableSkinUpload({
+  required UploadedAsset? asset,
+  required String uid,
+  required UploadedAssetPurpose expectedPurpose,
+}) {
+  return asset != null &&
+      asset.status == UploadedAssetStatus.uploaded &&
+      asset.ownerUid == uid &&
+      asset.purpose == expectedPurpose &&
+      asset.sourceFeature == 'onboarding' &&
+      asset.assetId.trim().isNotEmpty &&
+      asset.r2Key.trim().isNotEmpty &&
+      asset.r2Key.startsWith('users/$uid/');
+}

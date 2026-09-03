@@ -64,7 +64,7 @@ function request(
 
 function signBody(overrides: Record<string, unknown> = {}) {
   return {
-    purpose: "skin_care",
+    purpose: "skin_face",
     sourceFeature: "onboarding",
     contentType: "image/jpeg",
     sizeBytes: 128,
@@ -162,7 +162,7 @@ describe("R2 Upload Worker request boundary", () => {
 
     expect(response.status).toBe(200);
     expect(json.objectKey).toMatch(
-      /^users\/uid-1\/onboarding\/skin_care\/[A-Za-z0-9._-]+\.jpg$/,
+      /^users\/uid-1\/onboarding\/skin_face\/[A-Za-z0-9._-]+\.jpg$/,
     );
     expect(json.uploadUrl).toBe(
       "https://signed-upload.example.test/object",
@@ -211,7 +211,7 @@ describe("R2 Upload Worker request boundary", () => {
       request("/v1/uploads/complete", {
         assetId: "asset-1",
         objectKey:
-          "users/uid-1/onboarding/skin_care/asset-1.jpg",
+          "users/uid-1/onboarding/skin_face/asset-1.jpg",
         sizeBytes: 128,
       }),
       env as never,
@@ -221,7 +221,7 @@ describe("R2 Upload Worker request boundary", () => {
     expect(response.status).toBe(200);
     expect(json.ok).toBe(true);
     expect(env.UPLOAD_BUCKET.head).toHaveBeenCalledWith(
-      "users/uid-1/onboarding/skin_care/asset-1.jpg",
+      "users/uid-1/onboarding/skin_face/asset-1.jpg",
     );
   });
 
@@ -233,7 +233,7 @@ describe("R2 Upload Worker request boundary", () => {
         request(path, {
           assetId: "asset-1",
           objectKey:
-            "users/uid-2/onboarding/skin_care/asset-1.jpg",
+            "users/uid-2/onboarding/skin_face/asset-1.jpg",
           sizeBytes: 128,
         }),
         env as never,
@@ -250,7 +250,7 @@ describe("R2 Upload Worker request boundary", () => {
   test("delete removes only an owned object key", async () => {
     const env = makeEnv();
     const objectKey =
-      "users/uid-1/onboarding/skin_care/asset-1.jpg";
+      "users/uid-1/onboarding/skin_face/asset-1.jpg";
     const response = await worker.fetch(
       request("/v1/uploads/delete", { objectKey }),
       env as never,
