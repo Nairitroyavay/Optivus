@@ -34,6 +34,8 @@ void main() {
     UploadedAsset? classAsset,
     UploadedAsset? workAsset,
     UploadedAsset? eatingAsset,
+    UploadedAsset? skinProductsAsset,
+    UploadedAsset? skinFaceAsset,
     String? errorMessage,
   }) {
     return RestoredUploadsState(
@@ -51,6 +53,14 @@ void main() {
         if (eatingAsset != null)
           UploadedAssetPurpose.eatingMenu: RestoredUploadedAsset(
             asset: eatingAsset,
+          ),
+        if (skinProductsAsset != null)
+          UploadedAssetPurpose.skinProducts: RestoredUploadedAsset(
+            asset: skinProductsAsset,
+          ),
+        if (skinFaceAsset != null)
+          UploadedAssetPurpose.skinFace: RestoredUploadedAsset(
+            asset: skinFaceAsset,
           ),
       },
     );
@@ -1078,6 +1088,130 @@ void main() {
       expect(result.changed, isTrue);
       expect(result.reconciledDraft.baseTimeline.pendingFutureImports, isEmpty);
       expect(result.reconciledDraft.baseTimeline.blocks, isEmpty);
+    });
+
+    test(
+      'matching restored Step 7 product upload preserves generated state',
+      () {
+        final productA = createAsset(
+          id: 'skin_product_A',
+          purpose: UploadedAssetPurpose.skinProducts,
+        );
+        final draft = OnboardingDraft(
+          uid: uid,
+          currentStep: 10,
+          baseTimeline: BaseTimelineDraft(
+            skinCareSetupPath: 'has_products',
+            skinCareProductPhotoAssetId: productA.assetId,
+            skinCareProductPhotoR2Key: productA.r2Key,
+            skinCareProductPhotoStatus: 'uploaded',
+            skinCareRoutineFingerprint: 'routine-fingerprint',
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'skin-1',
+                section: 'skin_care',
+                title: 'Skin care',
+                startMinute: 480,
+                endMinute: 490,
+                repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                blockType: TimelineBlockDraft.softBlockKey,
+              ),
+            ],
+          ),
+        );
+
+        final result = OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: uid,
+          draft: draft,
+          restoredUploads: createRestoredUploads(skinProductsAsset: productA),
+        );
+
+        expect(result.changed, isFalse);
+        expect(result.reconciledDraft, same(draft));
+      },
+    );
+
+    test('mismatched restored Step 7 face upload reopens and invalidates', () {
+      final faceA = createAsset(
+        id: 'skin_face_A',
+        purpose: UploadedAssetPurpose.skinFace,
+      );
+      final faceB = createAsset(
+        id: 'skin_face_B',
+        purpose: UploadedAssetPurpose.skinFace,
+      );
+      final completed = List<bool>.filled(OnboardingDraft.stepCount, true);
+      final draft = OnboardingDraft(
+        uid: uid,
+        currentStep: 14,
+        stepCompleted: completed,
+        baseTimeline: BaseTimelineDraft(
+          skinCareSetupPath: 'no_products',
+          skinCareFacePhotoAssetId: faceA.assetId,
+          skinCareFacePhotoR2Key: faceA.r2Key,
+          skinCareFacePhotoStatus: 'uploaded',
+          skinCareProductRecommendations: const [
+            SkinCareProductRecommendationDraft(name: 'Cleanser'),
+          ],
+          skinCareSelectedProductNames: const ['Cleanser'],
+          skinCareRecommendationFingerprint: 'recommendation-fingerprint',
+          skinCareRoutineFingerprint: 'routine-fingerprint',
+          blocks: const [
+            TimelineBlockDraft(
+              id: 'skin-1',
+              section: 'skin_care',
+              title: 'Skin care',
+              startMinute: 480,
+              endMinute: 490,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.softBlockKey,
+            ),
+          ],
+        ),
+      );
+
+      final result = OnboardingUploadSourceReconciler.reconcile(
+        ownerUid: uid,
+        draft: draft,
+        restoredUploads: createRestoredUploads(skinFaceAsset: faceB),
+      );
+
+      expect(result.changed, isTrue);
+      expect(result.earliestAffectedStep, 7);
+      expect(result.reasonCodes, contains('step7_face_source_stale'));
+      expect(result.reconciledDraft.currentStep, 7);
+      expect(result.reconciledDraft.stepCompleted[7], isFalse);
+      expect(result.reconciledDraft.stepCompleted[14], isFalse);
+      expect(
+        result.reconciledDraft.baseTimeline.skinCareFacePhotoAssetId,
+        faceB.assetId,
+      );
+      expect(
+        result.reconciledDraft.baseTimeline.skinCareFacePhotoR2Key,
+        faceB.r2Key,
+      );
+      expect(
+        result.reconciledDraft.baseTimeline.skinCareProductRecommendations,
+        isEmpty,
+      );
+      expect(
+        result.reconciledDraft.baseTimeline.skinCareSelectedProductNames,
+        isEmpty,
+      );
+      expect(
+        result.reconciledDraft.baseTimeline.skinCareRecommendationFingerprint,
+        isNull,
+      );
+      expect(
+        result.reconciledDraft.baseTimeline.skinCareRoutineFingerprint,
+        isNull,
+      );
+      expect(
+        result.reconciledDraft.baseTimeline.blocks.where(
+          (block) => block.section == 'skin_care',
+        ),
+        isEmpty,
+      );
     });
   });
 }

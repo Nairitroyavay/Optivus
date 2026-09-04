@@ -5,6 +5,7 @@ import 'package:optivus/models/upload_source_identity.dart';
 import 'package:crypto/crypto.dart';
 import 'package:optivus/features/routine/domain/conflict_policy.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 
 class OnboardingDraft {
@@ -1233,6 +1234,11 @@ class BaseTimelineDraft {
   final List<SkinCareProductRecommendationDraft> skinCareProductRecommendations;
   final List<String> skinCareSelectedProductNames;
   final List<String> skinCareSuggestedProducts;
+  final List<SkinCareDetectedProduct> skinCareReviewedProducts;
+  final String? skinCareRecommendationFingerprint;
+  final String? skinCareRoutineFingerprint;
+  final String? skinCareRecommendationCountryCode;
+  final String? skinCareRecommendationCurrencyCode;
 
   const BaseTimelineDraft({
     this.blocks = const [],
@@ -1289,6 +1295,11 @@ class BaseTimelineDraft {
     this.skinCareProductRecommendations = const [],
     this.skinCareSelectedProductNames = const [],
     this.skinCareSuggestedProducts = const [],
+    this.skinCareReviewedProducts = const [],
+    this.skinCareRecommendationFingerprint,
+    this.skinCareRoutineFingerprint,
+    this.skinCareRecommendationCountryCode,
+    this.skinCareRecommendationCurrencyCode,
   });
 
   factory BaseTimelineDraft.fromMap(Map<String, dynamic> map) {
@@ -1377,6 +1388,17 @@ class BaseTimelineDraft {
       skinCareSuggestedProducts: _readStringList(
         map['skinCareSuggestedProducts'],
       ),
+      skinCareRecommendationCountryCode:
+          map['skinCareRecommendationCountryCode'] as String?,
+      skinCareRecommendationCurrencyCode:
+          map['skinCareRecommendationCurrencyCode'] as String?,
+      skinCareReviewedProducts: _readList(
+        map['skinCareReviewedProducts'],
+        SkinCareDetectedProduct.fromMap,
+      ),
+      skinCareRecommendationFingerprint:
+          map['skinCareRecommendationFingerprint'] as String?,
+      skinCareRoutineFingerprint: map['skinCareRoutineFingerprint'] as String?,
     );
   }
 
@@ -1438,6 +1460,13 @@ class BaseTimelineDraft {
         .toList(),
     'skinCareSelectedProductNames': skinCareSelectedProductNames,
     'skinCareSuggestedProducts': skinCareSuggestedProducts,
+    'skinCareReviewedProducts': skinCareReviewedProducts
+        .map((product) => product.toMap())
+        .toList(),
+    'skinCareRecommendationFingerprint': skinCareRecommendationFingerprint,
+    'skinCareRoutineFingerprint': skinCareRoutineFingerprint,
+    'skinCareRecommendationCountryCode': skinCareRecommendationCountryCode,
+    'skinCareRecommendationCurrencyCode': skinCareRecommendationCurrencyCode,
     'classLogicalAssetId': classLogicalAssetId,
     'classLogicalAssetR2Key': classLogicalAssetR2Key,
     'workLogicalAssetId': workLogicalAssetId,
@@ -1495,6 +1524,11 @@ class BaseTimelineDraft {
     List<SkinCareProductRecommendationDraft>? skinCareProductRecommendations,
     List<String>? skinCareSelectedProductNames,
     List<String>? skinCareSuggestedProducts,
+    String? skinCareRecommendationCountryCode,
+    String? skinCareRecommendationCurrencyCode,
+    List<SkinCareDetectedProduct>? skinCareReviewedProducts,
+    String? skinCareRecommendationFingerprint,
+    String? skinCareRoutineFingerprint,
     String? classLogicalAssetId,
     String? classLogicalAssetR2Key,
     String? workLogicalAssetId,
@@ -1515,6 +1549,10 @@ class BaseTimelineDraft {
     bool clearSkinCareProductRecommendations = false,
     bool clearSkinCareSelectedProductNames = false,
     bool clearSkinCareSuggestedProducts = false,
+    bool clearSkinCareRecommendationRegion = false,
+    bool clearSkinCareReviewedProducts = false,
+    bool clearSkinCareRecommendationFingerprint = false,
+    bool clearSkinCareRoutineFingerprint = false,
     bool clearSkinCarePlanning = false,
     bool clearClassData = false,
     bool clearWorkData = false,
@@ -1676,6 +1714,29 @@ class BaseTimelineDraft {
           clearSkinCarePlanning || clearSkinCareSuggestedProducts
           ? const []
           : (skinCareSuggestedProducts ?? this.skinCareSuggestedProducts),
+      skinCareRecommendationCountryCode:
+          clearSkinCarePlanning || clearSkinCareRecommendationRegion
+          ? null
+          : (skinCareRecommendationCountryCode ??
+                this.skinCareRecommendationCountryCode),
+      skinCareRecommendationCurrencyCode:
+          clearSkinCarePlanning || clearSkinCareRecommendationRegion
+          ? null
+          : (skinCareRecommendationCurrencyCode ??
+                this.skinCareRecommendationCurrencyCode),
+      skinCareReviewedProducts:
+          clearSkinCarePlanning || clearSkinCareReviewedProducts
+          ? const []
+          : (skinCareReviewedProducts ?? this.skinCareReviewedProducts),
+      skinCareRecommendationFingerprint:
+          clearSkinCarePlanning || clearSkinCareRecommendationFingerprint
+          ? null
+          : (skinCareRecommendationFingerprint ??
+                this.skinCareRecommendationFingerprint),
+      skinCareRoutineFingerprint:
+          clearSkinCarePlanning || clearSkinCareRoutineFingerprint
+          ? null
+          : (skinCareRoutineFingerprint ?? this.skinCareRoutineFingerprint),
       classLogicalAssetId: clearClassData || clearClassLogicalAsset
           ? null
           : (classLogicalAssetId ?? this.classLogicalAssetId),
@@ -2219,6 +2280,91 @@ class BaseTimelineDraft {
     return null;
   }
 
+  String computeSkinCareRecommendationFingerprint({
+    String? countryCode,
+    String? currencyCode,
+  }) {
+    if (skinCareSetupPath != 'no_products') return '';
+    final normalizedProblems = _normalizedSkinCareFingerprintList(
+      skinCareProblems,
+    );
+    final canonicalMap = <String, dynamic>{
+      'mode': 'no_products',
+      'faceAssetId': skinCareFacePhotoAssetId?.trim() ?? '',
+      'faceR2Key': skinCareFacePhotoR2Key?.trim() ?? '',
+      'skinType': _normalizedSkinCareFingerprintText(skinCareSkinType),
+      'problems': normalizedProblems,
+      'budget': _normalizedSkinCareFingerprintText(skinCareBudget),
+      'preference': _normalizedSkinCareFingerprintText(skinCarePreference),
+      'desiredApplicationsPerDay': skinCareDesiredApplicationsPerDay,
+      'countryCode': (countryCode ?? skinCareRecommendationCountryCode ?? '')
+          .trim()
+          .toUpperCase(),
+      'currencyCode': (currencyCode ?? skinCareRecommendationCurrencyCode ?? '')
+          .trim()
+          .toUpperCase(),
+    };
+    final jsonStr = jsonEncode(canonicalMap);
+    return sha256.convert(utf8.encode(jsonStr)).toString();
+  }
+
+  String computeSkinCareRoutineFingerprint({
+    String? countryCode,
+    String? currencyCode,
+  }) {
+    if (skinCareSetupPath == 'has_products') {
+      final canonicalProducts = skinCareReviewedProducts.isNotEmpty
+          ? (skinCareReviewedProducts.map((p) => p.toMap()).toList()
+              ..sort((a, b) => jsonEncode(a).compareTo(jsonEncode(b))))
+          : _normalizedSkinCareFingerprintList(
+              (skinCareProductNames ?? '').split(RegExp(r'[\n;,]+')),
+            );
+      final normalizedProblems = _normalizedSkinCareFingerprintList(
+        skinCareProblems,
+      );
+      final canonicalMap = <String, dynamic>{
+        'mode': 'has_products',
+        'products': canonicalProducts,
+        'productPhotoAssetId': skinCareProductPhotoAssetId?.trim() ?? '',
+        'productPhotoR2Key': skinCareProductPhotoR2Key?.trim() ?? '',
+        'skinType': _normalizedSkinCareFingerprintText(skinCareSkinType),
+        'problems': normalizedProblems,
+        'budget': _normalizedSkinCareFingerprintText(skinCareBudget),
+        'preference': _normalizedSkinCareFingerprintText(skinCarePreference),
+        'desiredApplicationsPerDay': skinCareDesiredApplicationsPerDay,
+      };
+      final jsonStr = jsonEncode(canonicalMap);
+      return sha256.convert(utf8.encode(jsonStr)).toString();
+    }
+    if (skinCareSetupPath == 'no_products') {
+      final recFingerprint =
+          skinCareRecommendationFingerprint ??
+          computeSkinCareRecommendationFingerprint(
+            countryCode: countryCode,
+            currencyCode: currencyCode,
+          );
+      final normalizedSelected = _normalizedSkinCareFingerprintList(
+        skinCareSelectedProductNames,
+      );
+      final normalizedProblems = _normalizedSkinCareFingerprintList(
+        skinCareProblems,
+      );
+      final canonicalMap = <String, dynamic>{
+        'mode': 'no_products',
+        'recFingerprint': recFingerprint,
+        'selectedProducts': normalizedSelected,
+        'desiredApplicationsPerDay': skinCareDesiredApplicationsPerDay,
+        'skinType': _normalizedSkinCareFingerprintText(skinCareSkinType),
+        'problems': normalizedProblems,
+        'budget': _normalizedSkinCareFingerprintText(skinCareBudget),
+        'preference': _normalizedSkinCareFingerprintText(skinCarePreference),
+      };
+      final jsonStr = jsonEncode(canonicalMap);
+      return sha256.convert(utf8.encode(jsonStr)).toString();
+    }
+    return '';
+  }
+
   String? validateSkinCareSetup(String uid) {
     if (skinCareSkipped || skinCareSetupPath == 'skip') return null;
     if (skinCareSetupPath == null) {
@@ -2231,41 +2377,22 @@ class BaseTimelineDraft {
 
     if (skinCareSetupPath == 'has_products') {
       final hasTyped = skinCareProductNames?.trim().isNotEmpty == true;
-      final effectiveUid =
-          (skinCareProductPhotoR2Key?.startsWith('users/') == true &&
-              skinCareProductPhotoR2Key!.split('/').length > 1)
-          ? skinCareProductPhotoR2Key!.split('/')[1]
-          : uid;
-      final productAsset =
-          skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
-              skinCareProductPhotoR2Key?.trim().isNotEmpty == true
-          ? UploadedAsset(
-              assetId: skinCareProductPhotoAssetId!,
-              ownerUid: effectiveUid,
-              sourceFeature: OnboardingDraft.sourceOnboarding,
-              purpose: UploadedAssetPurpose.skinProducts,
-              fileName: skinCareProductPhotoR2Key!.split('/').lastOrNull ?? '',
-              contentType: 'image/jpeg',
-              sizeBytes: 0,
-              r2Key: skinCareProductPhotoR2Key!,
-              status: uploadedAssetStatusFromString(skinCareProductPhotoStatus),
-              createdAt:
-                  skinCareProductPhotoCreatedAt ??
-                  DateTime.fromMillisecondsSinceEpoch(0),
-              updatedAt:
-                  skinCareProductPhotoUpdatedAt ??
-                  DateTime.fromMillisecondsSinceEpoch(0),
-            )
-          : null;
-
-      final hasPhoto = isUsableSkinUpload(
-        asset: productAsset,
-        uid: effectiveUid,
-        expectedPurpose: UploadedAssetPurpose.skinProducts,
+      final hasPhoto = _skinUploadFieldsAreCurrent(
+        uid: uid,
+        purpose: UploadedAssetPurpose.skinProducts,
+        assetId: skinCareProductPhotoAssetId,
+        r2Key: skinCareProductPhotoR2Key,
+        status: skinCareProductPhotoStatus,
       );
 
       if (!hasTyped && !hasPhoto) {
         return 'Add products or upload a photo to build your routine.';
+      }
+
+      final expectedFingerprint = computeSkinCareRoutineFingerprint();
+      if (skinCareRoutineFingerprint != expectedFingerprint ||
+          !_skinCareBlocksMatchFingerprint(expectedFingerprint)) {
+        return 'Your inputs have changed. Build routine again to update.';
       }
 
       final msg = _missingSkinCareRoutineMessage(desired);
@@ -2275,37 +2402,12 @@ class BaseTimelineDraft {
     }
 
     if (skinCareSetupPath == 'no_products') {
-      final effectiveUid =
-          (skinCareFacePhotoR2Key?.startsWith('users/') == true &&
-              skinCareFacePhotoR2Key!.split('/').length > 1)
-          ? skinCareFacePhotoR2Key!.split('/')[1]
-          : uid;
-      final faceAsset =
-          skinCareFacePhotoAssetId?.trim().isNotEmpty == true &&
-              skinCareFacePhotoR2Key?.trim().isNotEmpty == true
-          ? UploadedAsset(
-              assetId: skinCareFacePhotoAssetId!,
-              ownerUid: effectiveUid,
-              sourceFeature: OnboardingDraft.sourceOnboarding,
-              purpose: UploadedAssetPurpose.skinFace,
-              fileName: skinCareFacePhotoR2Key!.split('/').lastOrNull ?? '',
-              contentType: 'image/jpeg',
-              sizeBytes: 0,
-              r2Key: skinCareFacePhotoR2Key!,
-              status: uploadedAssetStatusFromString(skinCareFacePhotoStatus),
-              createdAt:
-                  skinCareFacePhotoCreatedAt ??
-                  DateTime.fromMillisecondsSinceEpoch(0),
-              updatedAt:
-                  skinCareFacePhotoUpdatedAt ??
-                  DateTime.fromMillisecondsSinceEpoch(0),
-            )
-          : null;
-
-      final hasPhoto = isUsableSkinUpload(
-        asset: faceAsset,
-        uid: effectiveUid,
-        expectedPurpose: UploadedAssetPurpose.skinFace,
+      final hasPhoto = _skinUploadFieldsAreCurrent(
+        uid: uid,
+        purpose: UploadedAssetPurpose.skinFace,
+        assetId: skinCareFacePhotoAssetId,
+        r2Key: skinCareFacePhotoR2Key,
+        status: skinCareFacePhotoStatus,
       );
 
       if (!hasPhoto) {
@@ -2322,6 +2424,17 @@ class BaseTimelineDraft {
         return 'Find and select products before building your routine.';
       }
 
+      final expectedRecFingerprint = computeSkinCareRecommendationFingerprint();
+      if (skinCareRecommendationFingerprint != expectedRecFingerprint) {
+        return 'Skin details changed. Find products again to update recommendations.';
+      }
+
+      final expectedRoutineFingerprint = computeSkinCareRoutineFingerprint();
+      if (skinCareRoutineFingerprint != expectedRoutineFingerprint ||
+          !_skinCareBlocksMatchFingerprint(expectedRoutineFingerprint)) {
+        return 'Selected products or frequency changed. Build routine again to update.';
+      }
+
       final msg = _missingSkinCareRoutineMessage(desired);
       if (msg != null) return msg;
 
@@ -2329,6 +2442,42 @@ class BaseTimelineDraft {
     }
 
     return 'Build skin care routine or skip.';
+  }
+
+  bool _skinUploadFieldsAreCurrent({
+    required String uid,
+    required UploadedAssetPurpose purpose,
+    required String? assetId,
+    required String? r2Key,
+    required String? status,
+  }) {
+    final id = assetId?.trim() ?? '';
+    final key = r2Key?.trim() ?? '';
+    final parsedStatus = uploadedAssetStatusFromString(status);
+    return uploadedAssetFieldsAreDurablyUploadedForSlot(
+          assetId: id,
+          ownerUid: uid,
+          sourceFeature: OnboardingDraft.sourceOnboarding,
+          purpose: purpose,
+          r2Key: key,
+          status: parsedStatus,
+          uid: uid,
+          expectedPurpose: purpose,
+        ) ||
+        legacySkinCareUploadHasOwnedExactIdentity(
+          assetId: id,
+          ownerUid: uid,
+          r2Key: key,
+          status: parsedStatus,
+          uid: uid,
+        );
+  }
+
+  bool _skinCareBlocksMatchFingerprint(String fingerprint) {
+    final token = 'skin-care-generation:$fingerprint';
+    final generated = blocks.where((block) => block.section == 'skin_care');
+    return generated.isNotEmpty &&
+        generated.every((block) => block.provenanceSourceIds.contains(token));
   }
 
   String? validateForRole(String? lifeRole) {
@@ -3646,4 +3795,18 @@ String _fingerprintDraftMap(Map<String, dynamic> map) {
     ..remove('createdAt')
     ..remove('updatedAt');
   return sha256.convert(utf8.encode(jsonEncode(identity))).toString();
+}
+
+String _normalizedSkinCareFingerprintText(String? value) {
+  return (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+}
+
+List<String> _normalizedSkinCareFingerprintList(Iterable<String> values) {
+  final normalized = values
+      .map(_normalizedSkinCareFingerprintText)
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .toList();
+  normalized.sort();
+  return normalized;
 }

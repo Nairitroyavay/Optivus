@@ -137,7 +137,7 @@ void main() {
     );
   });
 
-  test('no-products face photo is persisted as a face-photo reference', () {
+  test('skipped no-products setup projects no Step 7 upload reference', () {
     final now = DateTime.utc(2026, 7, 22, 8);
     final bundle = OnboardingCompletionService.buildBundle(
       OnboardingDraft(
@@ -151,15 +151,26 @@ void main() {
           skinCareFacePhotoStatus: 'uploaded',
           skinCareFacePhotoCreatedAt: now,
           skinCareFacePhotoUpdatedAt: now,
+          blocks: const [
+            TimelineBlockDraft(
+              id: 'stale-skipped-skin-care',
+              section: 'skin_care',
+              title: 'Stale skin care',
+              startMinute: 480,
+              endMinute: 490,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.softBlockKey,
+            ),
+          ],
         ),
       ),
     );
 
-    final reference = bundle.uploadedAssetReferences.single;
-    expect(reference.id, 'face-asset');
-    expect(reference.section, 'skin_care');
-    expect(reference.mode, 'no_products');
-    expect(reference.uploadedAssetR2Key, contains('face-asset.jpg'));
+    expect(bundle.uploadedAssetReferences, isEmpty);
+    expect(
+      bundle.baseTimelineBlocks.where((block) => block.section == 'skin_care'),
+      isEmpty,
+    );
   });
 
   test('FakeOnboardingRepository saves and fetches draft', () async {
@@ -405,83 +416,96 @@ void main() {
 
 OnboardingDraft _draftWithUploadReferences() {
   final now = DateTime.utc(2026, 6, 2, 8);
+  final base = BaseTimelineDraft(
+    skinCareSetupPath: 'has_products',
+    skinCareSkinType: 'oily',
+    skinCareBudget: 'low',
+    skinCareProblems: const ['acne'],
+    skinCareSelectedProductNames: const ['cleanser'],
+    skinCareDesiredApplicationsPerDay: 2,
+    blocks: const [
+      TimelineBlockDraft(
+        id: 'sk1',
+        section: 'skin_care',
+        title: 'Morning Routine',
+        startMinute: 480,
+        endMinute: 495,
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        skincareSteps: ['Cleanser'],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+      TimelineBlockDraft(
+        id: 'sk2',
+        section: 'skin_care',
+        title: 'Night Routine',
+        startMinute: 1320,
+        endMinute: 1335,
+        repeatDays: [1, 2, 3, 4, 5, 6, 7],
+        skincareSteps: ['Moisturizer'],
+        blockType: TimelineBlockDraft.hardBlockKey,
+      ),
+    ],
+    skinCareProductPhotoAssetId: 'skin-asset',
+    skinCareProductPhotoR2Key:
+        'users/phase2b-user/onboarding/skin_care/skin-asset.jpg',
+    skinCareProductPhotoStatus: 'uploaded',
+    skinCareProductPhotoCreatedAt: now,
+    skinCareProductPhotoUpdatedAt: DateTime.utc(2026, 6, 2, 8, 30),
+    pendingFutureImports: [
+      PendingFutureImportDraft(
+        id: 'classes_photo',
+        section: 'Classes',
+        mode: 'Photo Upload',
+        createdAt: now,
+        uploadedAssetId: 'class-asset',
+        uploadedAssetR2Key:
+            'users/phase2b-user/onboarding/class_timetable/class-asset.jpg',
+        uploadedAssetStatus: 'uploaded',
+      ),
+      PendingFutureImportDraft(
+        id: 'eating_photo',
+        section: 'Eating',
+        mode: 'Photo Upload',
+        createdAt: now,
+        uploadedAssetId: 'menu-asset',
+        uploadedAssetR2Key:
+            'users/phase2b-user/onboarding/eating_menu/menu-asset.jpg',
+        uploadedAssetStatus: 'uploaded',
+      ),
+      PendingFutureImportDraft(
+        id: 'skin_photo',
+        section: 'Skin Care',
+        mode: 'Photo Upload',
+        createdAt: now,
+        uploadedAssetId: 'skin-asset',
+        uploadedAssetR2Key:
+            'users/phase2b-user/onboarding/skin_care/skin-asset.jpg',
+        uploadedAssetStatus: 'uploaded',
+      ),
+      PendingFutureImportDraft(
+        id: 'manual_text',
+        section: 'Classes',
+        mode: 'Pasted Text',
+        createdAt: now,
+        pastedText: 'Monday 9 AM class',
+      ),
+    ],
+  );
+  final fingerprint = base.computeSkinCareRoutineFingerprint();
   return OnboardingDraft(
     uid: 'phase2b-user',
     currentStep: 4,
-    baseTimeline: BaseTimelineDraft(
-      skinCareSetupPath: 'has_products',
-      skinCareSkinType: 'oily',
-      skinCareBudget: 'low',
-      skinCareProblems: const ['acne'],
-      skinCareSelectedProductNames: const ['cleanser'],
-      skinCareDesiredApplicationsPerDay: 2,
-      blocks: const [
-        TimelineBlockDraft(
-          id: 'sk1',
-          section: 'skin_care',
-          title: 'Morning Routine',
-          startMinute: 480,
-          endMinute: 495,
-          repeatDays: [1, 2, 3, 4, 5, 6, 7],
-          skincareSteps: ['Cleanser'],
-          blockType: TimelineBlockDraft.hardBlockKey,
-        ),
-        TimelineBlockDraft(
-          id: 'sk2',
-          section: 'skin_care',
-          title: 'Night Routine',
-          startMinute: 1320,
-          endMinute: 1335,
-          repeatDays: [1, 2, 3, 4, 5, 6, 7],
-          skincareSteps: ['Moisturizer'],
-          blockType: TimelineBlockDraft.hardBlockKey,
-        ),
-      ],
-      skinCareProductPhotoAssetId: 'skin-asset',
-      skinCareProductPhotoR2Key:
-          'users/phase2b-user/onboarding/skin_care/skin-asset.jpg',
-      skinCareProductPhotoStatus: 'uploaded',
-      skinCareProductPhotoCreatedAt: now,
-      skinCareProductPhotoUpdatedAt: DateTime.utc(2026, 6, 2, 8, 30),
-      pendingFutureImports: [
-        PendingFutureImportDraft(
-          id: 'classes_photo',
-          section: 'Classes',
-          mode: 'Photo Upload',
-          createdAt: now,
-          uploadedAssetId: 'class-asset',
-          uploadedAssetR2Key:
-              'users/phase2b-user/onboarding/class_timetable/class-asset.jpg',
-          uploadedAssetStatus: 'uploaded',
-        ),
-        PendingFutureImportDraft(
-          id: 'eating_photo',
-          section: 'Eating',
-          mode: 'Photo Upload',
-          createdAt: now,
-          uploadedAssetId: 'menu-asset',
-          uploadedAssetR2Key:
-              'users/phase2b-user/onboarding/eating_menu/menu-asset.jpg',
-          uploadedAssetStatus: 'uploaded',
-        ),
-        PendingFutureImportDraft(
-          id: 'skin_photo',
-          section: 'Skin Care',
-          mode: 'Photo Upload',
-          createdAt: now,
-          uploadedAssetId: 'skin-asset',
-          uploadedAssetR2Key:
-              'users/phase2b-user/onboarding/skin_care/skin-asset.jpg',
-          uploadedAssetStatus: 'uploaded',
-        ),
-        PendingFutureImportDraft(
-          id: 'manual_text',
-          section: 'Classes',
-          mode: 'Pasted Text',
-          createdAt: now,
-          pastedText: 'Monday 9 AM class',
-        ),
-      ],
+    baseTimeline: base.copyWith(
+      skinCareRoutineFingerprint: fingerprint,
+      blocks: base.blocks
+          .map(
+            (block) => block.section == 'skin_care'
+                ? block.copyWith(
+                    provenanceSourceIds: ['skin-care-generation:$fingerprint'],
+                  )
+                : block,
+          )
+          .toList(growable: false),
     ),
   );
 }

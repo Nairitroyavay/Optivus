@@ -247,10 +247,10 @@ describe("R2 Upload Worker request boundary", () => {
     },
   );
 
-  test("delete removes only an owned object key", async () => {
+  test("delete removes only an owned object key, including legacy skin_care key", async () => {
     const env = makeEnv();
     const objectKey =
-      "users/uid-1/onboarding/skin_face/asset-1.jpg";
+      "users/uid-1/onboarding/skin_care/asset-legacy.jpg";
     const response = await worker.fetch(
       request("/v1/uploads/delete", { objectKey }),
       env as never,
@@ -258,6 +258,47 @@ describe("R2 Upload Worker request boundary", () => {
 
     expect(response.status).toBe(200);
     expect(env.UPLOAD_BUCKET.delete).toHaveBeenCalledWith(objectKey);
+  });
+
+  test("signing rejects legacy skin_care purpose", async () => {
+    const response = await worker.fetch(
+      request("/v1/uploads/sign", signBody({ purpose: "skin_care" })),
+      makeEnv() as never,
+    );
+    const json = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe("invalid_purpose");
+  });
+
+  test("complete rejects a legacy skin_care object key", async () => {
+    const env = makeEnv();
+    const response = await worker.fetch(
+      request("/v1/uploads/complete", {
+        assetId: "asset-legacy",
+        objectKey: "users/uid-1/onboarding/skin_care/asset-legacy.jpg",
+        sizeBytes: 128,
+      }),
+      env as never,
+    );
+    const json = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe("invalid_object_key");
+    expect(env.UPLOAD_BUCKET.head).not.toHaveBeenCalled();
+  });
+
+  test("legacy skin_care delete cannot cross users", async () => {
+    const env = makeEnv();
+    const response = await worker.fetch(
+      request("/v1/uploads/delete", {
+        objectKey: "users/uid-2/onboarding/skin_care/asset-legacy.jpg",
+      }),
+      env as never,
+    );
+
+    expect(response.status).toBe(400);
+    expect(env.UPLOAD_BUCKET.delete).not.toHaveBeenCalled();
   });
 
   test("malformed JSON and oversized bodies fail safely", async () => {

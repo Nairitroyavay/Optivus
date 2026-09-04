@@ -1515,7 +1515,8 @@ void main() {
         final base = const BaseTimelineDraft(
           skinCareSetupPath: 'no_products',
           skinCareFacePhotoAssetId: 'face',
-          skinCareFacePhotoR2Key: 'users/uid-1/onboarding/skin_face/face.jpg',
+          skinCareFacePhotoR2Key:
+              'users/test_uid/onboarding/skin_face/face.jpg',
           skinCareFacePhotoStatus: 'uploaded',
         );
 

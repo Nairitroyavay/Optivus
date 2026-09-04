@@ -11,6 +11,8 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
+import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
@@ -20,6 +22,7 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/auth_generation.dart';
 import 'package:optivus/state/region_settings_provider.dart';
 import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
@@ -38,6 +41,33 @@ const String _onboarding7AiFewerRoutinesMessage =
     'AI returned fewer routines than requested. Try again or choose fewer times per day.';
 const String _onboarding7PhotoUnreadableMessage =
     'AI could not read your products. Upload a clearer photo or use typed product names.';
+
+enum _SkinPhotoSource { camera, gallery }
+
+Future<_SkinPhotoSource?> _showSkinPhotoSourceSheet(BuildContext context) {
+  return showModalBottomSheet<_SkinPhotoSource>(
+    context: context,
+    useSafeArea: true,
+    builder: (context) => SafeArea(
+      child: Wrap(
+        children: [
+          ListTile(
+            key: const ValueKey('onboarding-step7-take-photo'),
+            leading: const Icon(Icons.camera_alt_rounded),
+            title: const Text('Take photo'),
+            onTap: () => Navigator.pop(context, _SkinPhotoSource.camera),
+          ),
+          ListTile(
+            key: const ValueKey('onboarding-step7-choose-gallery'),
+            leading: const Icon(Icons.photo_library_rounded),
+            title: const Text('Choose from gallery'),
+            onTap: () => Navigator.pop(context, _SkinPhotoSource.gallery),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 class _SkinCareResponseException implements Exception {
   final String message;
@@ -1012,14 +1042,12 @@ String _friendlySkinCareUploadMessage(String? message) {
   return 'Photo upload failed. Please try again.';
 }
 
-String _skinCareUploadStatusLabel(UploadFlowStatus status) {
-  return switch (status) {
-    UploadFlowStatus.picking => 'Picking...',
-    UploadFlowStatus.preparing => 'Preparing...',
-    UploadFlowStatus.signing => 'Preparing...',
-    UploadFlowStatus.uploading => 'Uploading...',
-    UploadFlowStatus.savingMetadata => 'Saving...',
-    _ => 'Uploading...',
+String _skinCareInteractionStatusLabel(UploadInteractionPhase phase) {
+  return switch (phase) {
+    UploadInteractionPhase.preparing => 'Preparing photo...',
+    UploadInteractionPhase.uploading => 'Uploading photo...',
+    UploadInteractionPhase.processing => 'Saving photo...',
+    _ => 'Uploading photo...',
   };
 }
 
@@ -1051,6 +1079,9 @@ UploadedAsset? durableSkinProductsAssetFromDraft(OnboardingDraft draft) {
   final createdAt =
       base.skinCareProductPhotoCreatedAt ??
       DateTime.fromMillisecondsSinceEpoch(0);
+  final assetStatus = uploadedAssetStatusFromString(
+    base.skinCareProductPhotoStatus,
+  );
   final asset = UploadedAsset(
     assetId: assetId,
     ownerUid: draft.uid,
@@ -1060,17 +1091,25 @@ UploadedAsset? durableSkinProductsAssetFromDraft(OnboardingDraft draft) {
     contentType: _skinCareImageContentTypeFromR2Key(r2Key),
     sizeBytes: 0,
     r2Key: r2Key,
-    status: uploadedAssetStatusFromString(base.skinCareProductPhotoStatus),
+    status: assetStatus,
     createdAt: createdAt,
     updatedAt: base.skinCareProductPhotoUpdatedAt ?? createdAt,
   );
-  return isUsableSkinUpload(
+  if (isUsableSkinUpload(
         asset: asset,
         uid: draft.uid,
         expectedPurpose: UploadedAssetPurpose.skinProducts,
-      )
-      ? asset
-      : null;
+      ) ||
+      legacySkinCareUploadHasOwnedExactIdentity(
+        assetId: assetId,
+        ownerUid: draft.uid,
+        r2Key: r2Key,
+        status: assetStatus,
+        uid: draft.uid,
+      )) {
+    return asset;
+  }
+  return null;
 }
 
 @visibleForTesting
@@ -1079,23 +1118,28 @@ UploadedAsset? durableSkinFaceAssetFromDraft(OnboardingDraft draft) {
   if (base.skinCareSetupPath != "no_products") return null;
   var assetId = base.skinCareFacePhotoAssetId?.trim() ?? "";
   var r2Key = base.skinCareFacePhotoR2Key?.trim() ?? "";
-  var status = base.skinCareFacePhotoStatus;
-  var createdAt = base.skinCareFacePhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+  var statusStr = base.skinCareFacePhotoStatus;
+  var createdAt =
+      base.skinCareFacePhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
   var updatedAt = base.skinCareFacePhotoUpdatedAt ?? createdAt;
 
   // Legacy migration for draft: if face photo is empty but product photo has data AND it is a legacy skin_care upload, use product photo
-  if (assetId.isEmpty && (base.skinCareProductPhotoAssetId?.trim() ?? "").isNotEmpty) {
+  if (assetId.isEmpty &&
+      (base.skinCareProductPhotoAssetId?.trim() ?? "").isNotEmpty) {
     final legacyR2Key = base.skinCareProductPhotoR2Key?.trim() ?? "";
     if (legacyR2Key.contains('/skin_care/')) {
       assetId = base.skinCareProductPhotoAssetId!.trim();
       r2Key = legacyR2Key;
-      status = base.skinCareProductPhotoStatus;
-      createdAt = base.skinCareProductPhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      statusStr = base.skinCareProductPhotoStatus;
+      createdAt =
+          base.skinCareProductPhotoCreatedAt ??
+          DateTime.fromMillisecondsSinceEpoch(0);
       updatedAt = base.skinCareProductPhotoUpdatedAt ?? createdAt;
     }
   }
-  
-  if (status != "uploaded") return null;
+
+  final status = uploadedAssetStatusFromString(statusStr);
+  if (status != UploadedAssetStatus.uploaded) return null;
   if (!r2Key.startsWith('users/${draft.uid}/')) return null;
   if (assetId.isEmpty || r2Key.isEmpty) return null;
   final asset = UploadedAsset(
@@ -1107,17 +1151,25 @@ UploadedAsset? durableSkinFaceAssetFromDraft(OnboardingDraft draft) {
     contentType: _skinCareImageContentTypeFromR2Key(r2Key),
     sizeBytes: 0,
     r2Key: r2Key,
-    status: uploadedAssetStatusFromString(status),
+    status: status,
     createdAt: createdAt,
     updatedAt: updatedAt,
   );
-  return isUsableSkinUpload(
+  if (isUsableSkinUpload(
         asset: asset,
         uid: draft.uid,
         expectedPurpose: UploadedAssetPurpose.skinFace,
-      )
-      ? asset
-      : null;
+      ) ||
+      legacySkinCareUploadHasOwnedExactIdentity(
+        assetId: assetId,
+        ownerUid: draft.uid,
+        r2Key: r2Key,
+        status: status,
+        uid: draft.uid,
+      )) {
+    return asset;
+  }
+  return null;
 }
 
 UploadedAsset? _restoredSkinAssetForSlot({
@@ -1137,13 +1189,14 @@ UploadedAsset? _restoredSkinAssetForSlot({
     if (base.skinCareProductPhotoAssetId?.trim() == legacy.assetId.trim()) {
       return legacy;
     }
-  } else if (path == 'no_products' && purpose == UploadedAssetPurpose.skinFace) {
+  } else if (path == 'no_products' &&
+      purpose == UploadedAssetPurpose.skinFace) {
     if (base.skinCareFacePhotoAssetId?.trim() == legacy.assetId.trim() ||
         base.skinCareProductPhotoAssetId?.trim() == legacy.assetId.trim()) {
       return legacy;
     }
   }
-  
+
   return null;
 }
 
@@ -1236,17 +1289,90 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void select(String value) {
+    Future<void> select(String value) async {
       ref.read(mockOnboardingProvider.notifier).clearValidation();
+      if (value == 'skip') {
+        final draft = ref.read(mockOnboardingProvider).draft;
+        final uid = ref.read(authProvider).user?.uid ?? draft.uid;
+        final restored = ref.read(restoredUploadsProvider);
+        if (uid.trim().isEmpty ||
+            restored.isHydrating ||
+            restored.errorMessage != null) {
+          ref
+              .read(mockOnboardingProvider.notifier)
+              .setValidationMessage(
+                'Reconnect before skipping so your private photos can be removed safely.',
+              );
+          return;
+        }
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingSkinCareStepIndex, true);
+        final controller = ref.read(
+          onboardingUploadInteractionProvider.notifier,
+        );
+        var cleanupSucceeded = true;
+        for (final slot in const [
+          onboardingSkinProductsUploadSlot,
+          onboardingSkinFaceUploadSlot,
+        ]) {
+          final slotState = ref.read(onboardingUploadInteractionProvider)[slot];
+          if (slotState?.hasDurableAsset == true) {
+            cleanupSucceeded =
+                await controller.remove(slot, uid: uid) && cleanupSucceeded;
+          }
+        }
+        final legacy = restored
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset;
+        if (legacy != null) {
+          try {
+            await ref
+                .read(uploadedAssetRepositoryProvider)
+                .markDeleted(uid: uid, assetId: legacy.assetId);
+            ref
+                .read(restoredUploadsProvider.notifier)
+                .removePurpose(
+                  uid: uid,
+                  purpose: UploadedAssetPurpose.skinCare,
+                );
+            try {
+              final token = await ref
+                  .read(authRepositoryProvider)
+                  .currentIdToken();
+              if (token != null && token.trim().isNotEmpty) {
+                await ref
+                    .read(r2UploadClientProvider)
+                    .deleteUpload(objectKey: legacy.r2Key, idToken: token);
+              }
+            } catch (error) {
+              // Metadata is already terminal; byte cleanup is retryable.
+            }
+          } catch (error) {
+            cleanupSucceeded = false;
+          }
+        }
+        ref
+            .read(mockOnboardingProvider.notifier)
+            .setStepLoading(onboardingSkinCareStepIndex, false);
+        if (!cleanupSucceeded) {
+          ref
+              .read(mockOnboardingProvider.notifier)
+              .setValidationMessage(
+                'Your photo could not be removed yet. Try again before skipping.',
+              );
+          return;
+        }
+      }
       updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
         final isSkip = value == 'skip';
         final switchedPath = base.skinCareSetupPath != value;
         final legacyR2Key = base.skinCareProductPhotoR2Key?.trim() ?? '';
         final migrateLegacyFace =
-            switchedPath &&
+            value == 'no_products' &&
             base.skinCareSetupPath == 'no_products' &&
-            base.skinCareFacePhotoAssetId?.trim().isNotEmpty != true &&
-            base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
+            (base.skinCareFacePhotoAssetId?.trim().isEmpty ?? true) &&
+            (base.skinCareProductPhotoAssetId?.trim().isNotEmpty ?? false) &&
             legacyR2Key.contains('/skin_care/');
         final clearGeneratedData = isSkip || switchedPath;
         final blocks = switchedPath || isSkip
@@ -1285,6 +1411,9 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
           clearSkinCareProductRecommendations: isSkip,
           clearSkinCareSelectedProductNames: isSkip,
           clearSkinCareSuggestedProducts: isSkip,
+          clearSkinCareReviewedProducts: isSkip,
+          clearSkinCareRecommendationFingerprint: isSkip || switchedPath,
+          clearSkinCareRoutineFingerprint: isSkip || switchedPath,
         );
       });
     }
@@ -1490,7 +1619,6 @@ class _HasProductsModeScreenState
   String? _generationError;
   late _ProductInputSource _inputSource;
   int _selectedDay = DateTime.now().weekday;
-  final int _sourceEpoch = 0;
   final _productNamesTargetKey = GlobalKey();
 
   @override
@@ -1530,11 +1658,17 @@ class _HasProductsModeScreenState
 
   Future<void> _startUpload() async {
     if (_inputSource == _ProductInputSource.typed) return;
-    final uploadState = ref.read(uploadControllerProvider);
-    if (uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinProducts &&
-        uploadState.isBusy) {
-      return;
+    final initialUploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinProductsUploadSlot];
+    if (initialUploadState?.isBusy == true) return;
+    final retrying =
+        initialUploadState?.phase == UploadInteractionPhase.failed &&
+        initialUploadState?.transientFile != null;
+    var source = retrying ? null : await _showSkinPhotoSourceSheet(context);
+    if (!mounted) return;
+    if (!retrying && source == null) {
+      source = _SkinPhotoSource.gallery;
     }
     setState(() {
       _uploadError = null;
@@ -1542,22 +1676,32 @@ class _HasProductsModeScreenState
     });
     ref.read(mockOnboardingProvider.notifier).clearValidation();
 
-    UploadedAsset? asset;
-    try {
-      final uid =
-          ref.read(authProvider).user?.uid ??
-          ref.read(mockOnboardingProvider).draft.uid;
-      asset = await ref
-          .read(uploadControllerProvider.notifier)
-          .startUpload(
+    final uid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    final controller = ref.read(onboardingUploadInteractionProvider.notifier);
+    final asset = retrying
+        ? await controller.retry(
+            onboardingSkinProductsUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
-            purpose: UploadedAssetPurpose.skinProducts,
+          )
+        : source == _SkinPhotoSource.camera
+        ? await controller.takePhoto(
+            onboardingSkinProductsUploadSlot,
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
+          )
+        : await controller.chooseFromGallery(
+            onboardingSkinProductsUploadSlot,
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
           );
-    } catch (_) {}
     if (!mounted) return;
 
-    final latestUploadState = ref.read(uploadControllerProvider);
+    final latestUploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinProductsUploadSlot];
     final latestAsset = asset;
     if (latestAsset != null) {
       updateBaseTimelineDraft(
@@ -1583,8 +1727,8 @@ class _HasProductsModeScreenState
           _inputSource == _ProductInputSource.photo) {
         _inputSource = _ProductInputSource.none;
       }
-      _uploadError = latestUploadState.status == UploadFlowStatus.failed
-          ? _friendlySkinCareUploadMessage(latestUploadState.errorMessage)
+      _uploadError = latestUploadState?.phase == UploadInteractionPhase.failed
+          ? _friendlySkinCareUploadMessage(latestUploadState?.attemptError)
           : null;
       _generationError = null;
     });
@@ -1594,11 +1738,10 @@ class _HasProductsModeScreenState
   }
 
   Future<void> _removeUploadedAsset() async {
-    final uploadState = ref.read(uploadControllerProvider);
-    final uploadBusy =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinProducts &&
-        uploadState.isBusy;
+    final uploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinProductsUploadSlot];
+    final uploadBusy = uploadState?.isBusy == true;
     if (uploadBusy || _removingPhoto) return;
     final draft = ref.read(mockOnboardingProvider).draft;
     final asset =
@@ -1615,28 +1758,23 @@ class _HasProductsModeScreenState
         _uploadError = null;
         _generationError = null;
       });
-      await ref
-          .read(uploadControllerProvider.notifier)
-          .markDeleted(
+      final removed = await ref
+          .read(onboardingUploadInteractionProvider.notifier)
+          .remove(
+            onboardingSkinProductsUploadSlot,
             uid: asset.ownerUid.trim().isNotEmpty ? asset.ownerUid : draft.uid,
-            assetId: asset.assetId.trim(),
           );
       if (!mounted) return;
-      final latest = ref.read(uploadControllerProvider);
-      if (latest.status == UploadFlowStatus.failed) {
+      final latest = ref.read(
+        onboardingUploadInteractionProvider,
+      )[onboardingSkinProductsUploadSlot];
+      if (!removed) {
         setState(() {
           _removingPhoto = false;
-          _uploadError = _friendlySkinCareUploadMessage(latest.errorMessage);
+          _uploadError = _friendlySkinCareUploadMessage(latest?.attemptError);
         });
         return;
       }
-      ref.read(uploadControllerProvider.notifier).clear();
-      ref
-          .read(restoredUploadsProvider.notifier)
-          .removePurpose(
-            uid: draft.uid,
-            purpose: UploadedAssetPurpose.skinProducts,
-          );
     }
     final hasTypedProducts = _controller.text.trim().isNotEmpty;
     setState(() {
@@ -1662,11 +1800,10 @@ class _HasProductsModeScreenState
 
   Future<void> _generate() async {
     if (_lifecycle.state.isActive) return;
-    final uploadState = ref.read(uploadControllerProvider);
-    final uploadBusy =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinProducts &&
-        uploadState.isBusy;
+    final uploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinProductsUploadSlot];
+    final uploadBusy = uploadState?.isBusy == true;
     if (uploadBusy) return;
 
     final activeSource = _inputSource;
@@ -1725,8 +1862,9 @@ class _HasProductsModeScreenState
     }
 
     final currentAuthGeneration = ref.read(authGenerationProvider);
-    final currentSourceEpoch = _sourceEpoch;
     final currentSource = activeSource;
+    final currentAssetId = asset?.assetId;
+    final currentAssetKey = asset?.r2Key;
     final user = ref.read(authProvider).user;
     final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
 
@@ -1755,7 +1893,20 @@ class _HasProductsModeScreenState
           (ref.read(authProvider).user?.uid ??
                   ref.read(mockOnboardingProvider).draft.uid) ==
               uid &&
-          _sourceEpoch == currentSourceEpoch &&
+          (currentSource != _ProductInputSource.photo ||
+              (() {
+                final live =
+                    ref
+                        .read(
+                          onboardingUploadInteractionProvider,
+                        )[onboardingSkinProductsUploadSlot]
+                        ?.durableAsset ??
+                    durableSkinProductsAssetFromDraft(
+                      ref.read(mockOnboardingProvider).draft,
+                    );
+                return live?.assetId == currentAssetId &&
+                    live?.r2Key == currentAssetKey;
+              })()) &&
           _inputSource == currentSource,
       mapError: (error) => AiGenerationError(
         category: error is _SkinCareResponseException
@@ -2005,15 +2156,38 @@ class _HasProductsModeScreenState
           }
 
           updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-            final List<TimelineBlockDraft> nextBlocks =
-                base.blocks.where((b) => b.section != 'skin_care').toList()
-                  ..addAll(schedule.blocks);
-            return base.copyWith(
-              blocks: nextBlocks,
+            final draftForFingerprint = base.copyWith(
               skinCareProductNames: _controller.text,
               skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+              skinCareReviewedProducts: ownedProductDetails,
               skinCareSkipped: false,
               skinCareSpecialCareNotes: specialCareNotesForResult,
+            );
+            final routineFingerprint = draftForFingerprint
+                .computeSkinCareRoutineFingerprint();
+            final taggedBlocks = schedule.blocks.map((block) {
+              final prov = List<String>.from(block.provenanceSourceIds);
+              final token = 'skin-care-generation:$routineFingerprint';
+              if (!prov.contains(token)) prov.add(token);
+              if (_uploadedAsset != null) {
+                if (_uploadedAsset!.assetId.isNotEmpty &&
+                    !prov.contains(_uploadedAsset!.assetId)) {
+                  prov.add(_uploadedAsset!.assetId);
+                }
+                if (_uploadedAsset!.r2Key.isNotEmpty &&
+                    !prov.contains(_uploadedAsset!.r2Key)) {
+                  prov.add(_uploadedAsset!.r2Key);
+                }
+              }
+              return block.copyWith(provenanceSourceIds: prov);
+            }).toList();
+
+            final List<TimelineBlockDraft> nextBlocks =
+                base.blocks.where((b) => b.section != 'skin_care').toList()
+                  ..addAll(taggedBlocks);
+            return draftForFingerprint.copyWith(
+              blocks: nextBlocks,
+              skinCareRoutineFingerprint: routineFingerprint,
             );
           });
 
@@ -2049,19 +2223,20 @@ class _HasProductsModeScreenState
       draft: draft,
       purpose: UploadedAssetPurpose.skinProducts,
     );
+    final uploadState = ref.watch(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinProductsUploadSlot];
+    final slotAsset = uploadState?.durableAsset;
     final effectiveAsset =
         _uploadedAsset ??
+        slotAsset ??
         restoredAsset ??
         durableSkinProductsAssetFromDraft(draft);
-    final uploadState = ref.watch(uploadControllerProvider);
-    final uploadApplies =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinProducts;
-    final uploadBusy = uploadApplies && uploadState.isBusy;
+    final uploadBusy = uploadState?.isBusy == true;
     final uploadError =
         _uploadError ??
-        (uploadApplies && uploadState.status == UploadFlowStatus.failed
-            ? _friendlySkinCareUploadMessage(uploadState.errorMessage)
+        (uploadState?.phase == UploadInteractionPhase.failed
+            ? _friendlySkinCareUploadMessage(uploadState?.attemptError)
             : null);
     final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final sourceLabel =
@@ -2121,8 +2296,9 @@ class _HasProductsModeScreenState
       uploadStatusLabel: _removingPhoto
           ? 'Removing photo...'
           : uploadBusy
-          ? _skinCareUploadStatusLabel(uploadState.status)
+          ? _skinCareInteractionStatusLabel(uploadState!.phase)
           : null,
+      localPreviewPath: uploadState?.usablePreviewPath,
       busy: busy,
       generating: _lifecycle.state.isActive,
       photoEnabled: photoUploadEnabled,
@@ -2356,6 +2532,7 @@ class _HasProductsSetupCard extends StatelessWidget {
   final int desiredApplicationsPerDay;
   final bool uploadBusy;
   final String? uploadStatusLabel;
+  final String? localPreviewPath;
   final FocusNode? focusNode;
   final Key? productNamesTargetKey;
   final bool busy;
@@ -2386,6 +2563,7 @@ class _HasProductsSetupCard extends StatelessWidget {
     required this.desiredApplicationsPerDay,
     required this.uploadBusy,
     required this.uploadStatusLabel,
+    required this.localPreviewPath,
     required this.busy,
     required this.generating,
     required this.photoEnabled,
@@ -2468,6 +2646,7 @@ class _HasProductsSetupCard extends StatelessWidget {
                 height: effectiveTileHeight,
                 child: _SkinCarePhotoTarget(
                   asset: asset,
+                  localPreviewPath: localPreviewPath,
                   purpose: UploadedAssetPurpose.skinProducts,
                   title: 'Add photo',
                   uploadedTitle: 'Photo uploaded',
@@ -3169,11 +3348,17 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   }
 
   Future<void> _startUpload() async {
-    final uploadState = ref.read(uploadControllerProvider);
-    if (uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinFace &&
-        uploadState.isBusy) {
-      return;
+    final initialUploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinFaceUploadSlot];
+    if (initialUploadState?.isBusy == true) return;
+    final retrying =
+        initialUploadState?.phase == UploadInteractionPhase.failed &&
+        initialUploadState?.transientFile != null;
+    var source = retrying ? null : await _showSkinPhotoSourceSheet(context);
+    if (!mounted) return;
+    if (!retrying && source == null) {
+      source = _SkinPhotoSource.gallery;
     }
     setState(() {
       _uploadError = null;
@@ -3181,23 +3366,33 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     });
     ref.read(mockOnboardingProvider.notifier).clearValidation();
 
-    UploadedAsset? asset;
-    try {
-      final uid =
-          ref.read(authProvider).user?.uid ??
-          ref.read(mockOnboardingProvider).draft.uid;
-      asset = await ref
-          .read(uploadControllerProvider.notifier)
-          .startUpload(
+    final uid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    final controller = ref.read(onboardingUploadInteractionProvider.notifier);
+    final asset = retrying
+        ? await controller.retry(
+            onboardingSkinFaceUploadSlot,
             uid: uid,
             sourceFeature: OnboardingDraft.sourceOnboarding,
-            purpose: UploadedAssetPurpose.skinFace,
+          )
+        : source == _SkinPhotoSource.camera
+        ? await controller.takePhoto(
+            onboardingSkinFaceUploadSlot,
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
+          )
+        : await controller.chooseFromGallery(
+            onboardingSkinFaceUploadSlot,
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
           );
-    } catch (_) {}
 
     if (!mounted) return;
 
-    final latestUploadState = ref.read(uploadControllerProvider);
+    final latestUploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinFaceUploadSlot];
     final latestAsset = asset;
     if (latestAsset != null) {
       updateBaseTimelineDraft(
@@ -3222,8 +3417,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       if (latestAsset != null) {
         _uploadedAsset = latestAsset;
       }
-      _uploadError = latestUploadState.status == UploadFlowStatus.failed
-          ? _friendlySkinCareUploadMessage(latestUploadState.errorMessage)
+      _uploadError = latestUploadState?.phase == UploadInteractionPhase.failed
+          ? _friendlySkinCareUploadMessage(latestUploadState?.attemptError)
           : null;
     });
     if (latestAsset != null) {
@@ -3232,11 +3427,10 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   }
 
   Future<void> _removeUploadedAsset() async {
-    final uploadState = ref.read(uploadControllerProvider);
-    final uploadBusy =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinFace &&
-        uploadState.isBusy;
+    final uploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinFaceUploadSlot];
+    final uploadBusy = uploadState?.isBusy == true;
     if (uploadBusy || _removingPhoto) return;
     final draft = ref.read(mockOnboardingProvider).draft;
     final asset =
@@ -3253,28 +3447,23 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         _uploadError = null;
         _generationError = null;
       });
-      await ref
-          .read(uploadControllerProvider.notifier)
-          .markDeleted(
+      final removed = await ref
+          .read(onboardingUploadInteractionProvider.notifier)
+          .remove(
+            onboardingSkinFaceUploadSlot,
             uid: asset.ownerUid.trim().isNotEmpty ? asset.ownerUid : draft.uid,
-            assetId: asset.assetId.trim(),
           );
       if (!mounted) return;
-      final latest = ref.read(uploadControllerProvider);
-      if (latest.status == UploadFlowStatus.failed) {
+      final latest = ref.read(
+        onboardingUploadInteractionProvider,
+      )[onboardingSkinFaceUploadSlot];
+      if (!removed) {
         setState(() {
           _removingPhoto = false;
-          _uploadError = _friendlySkinCareUploadMessage(latest.errorMessage);
+          _uploadError = _friendlySkinCareUploadMessage(latest?.attemptError);
         });
         return;
       }
-      ref.read(uploadControllerProvider.notifier).clear();
-      ref
-          .read(restoredUploadsProvider.notifier)
-          .removePurpose(
-            uid: draft.uid,
-            purpose: UploadedAssetPurpose.skinFace,
-          );
     }
     setState(() {
       _uploadedAsset = null;
@@ -3298,11 +3487,10 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
   Future<void> _findProducts() async {
     if (_lifecycle.state.isActive) return;
-    final uploadState = ref.read(uploadControllerProvider);
-    final uploadBusy =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinFace &&
-        uploadState.isBusy;
+    final uploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinFaceUploadSlot];
+    final uploadBusy = uploadState?.isBusy == true;
     if (uploadBusy || _removingPhoto) return;
 
     final draft = ref.read(mockOnboardingProvider).draft;
@@ -3317,9 +3505,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       purpose: UploadedAssetPurpose.skinFace,
     );
     final asset =
-        _uploadedAsset ??
-        restoredAsset ??
-        durableSkinFaceAssetFromDraft(draft);
+        _uploadedAsset ?? restoredAsset ?? durableSkinFaceAssetFromDraft(draft);
     if (asset == null ||
         asset.r2Key.trim().isEmpty ||
         currentBase.skinCareSkinType == null ||
@@ -3343,6 +3529,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
     ref.read(mockOnboardingProvider.notifier).clearValidation();
     final currentAuthGeneration = ref.read(authGenerationProvider);
+    final currentAssetId = asset.assetId;
+    final currentAssetKey = asset.r2Key;
     final user = ref.read(authProvider).user;
     final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
@@ -3365,7 +3553,20 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
                   ref.read(mockOnboardingProvider).draft.uid) ==
-              uid,
+              uid &&
+          (() {
+            final live =
+                ref
+                    .read(
+                      onboardingUploadInteractionProvider,
+                    )[onboardingSkinFaceUploadSlot]
+                    ?.durableAsset ??
+                durableSkinFaceAssetFromDraft(
+                  ref.read(mockOnboardingProvider).draft,
+                );
+            return live?.assetId == currentAssetId &&
+                live?.r2Key == currentAssetKey;
+          })(),
       mapError: (error) => AiGenerationError(
         category: error is _SkinCareResponseException
             ? AiGenerationErrorCategory.responseInvalid
@@ -3488,12 +3689,19 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           final hasExistingRoutine = base.blocks.any(
             (block) => block.section == 'skin_care',
           );
-          return base.copyWith(
+          final draftForFingerprint = base.copyWith(
             skinCareProductRecommendations: recommendationDrafts,
             skinCareSelectedProductNames: const [],
+            skinCareRecommendationCountryCode: region.countryCode,
+            skinCareRecommendationCurrencyCode: region.currencyCode,
             clearSkinCareSuggestedProducts: !hasExistingRoutine,
             skinCareFacePhotoSkipped: false,
             skinCareSkipped: false,
+          );
+          final recFingerprint = draftForFingerprint
+              .computeSkinCareRecommendationFingerprint();
+          return draftForFingerprint.copyWith(
+            skinCareRecommendationFingerprint: recFingerprint,
           );
         });
 
@@ -3563,6 +3771,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
     ref.read(mockOnboardingProvider.notifier).clearValidation();
     final currentAuthGeneration = ref.read(authGenerationProvider);
+    final currentAssetId = asset.assetId;
+    final currentAssetKey = asset.r2Key;
     final user = ref.read(authProvider).user;
     final uid = user?.uid ?? ref.read(mockOnboardingProvider).draft.uid;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
@@ -3585,7 +3795,20 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           ref.read(authGenerationProvider) == currentAuthGeneration &&
           (ref.read(authProvider).user?.uid ??
                   ref.read(mockOnboardingProvider).draft.uid) ==
-              uid,
+              uid &&
+          (() {
+            final live =
+                ref
+                    .read(
+                      onboardingUploadInteractionProvider,
+                    )[onboardingSkinFaceUploadSlot]
+                    ?.durableAsset ??
+                durableSkinFaceAssetFromDraft(
+                  ref.read(mockOnboardingProvider).draft,
+                );
+            return live?.assetId == currentAssetId &&
+                live?.r2Key == currentAssetKey;
+          })(),
       mapError: (error) => AiGenerationError(
         category: error is _SkinCareResponseException
             ? AiGenerationErrorCategory.responseInvalid
@@ -3689,19 +3912,37 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           ownedProductNames: selectedNames,
         );
         updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
-          final nextBlocks =
-              base.blocks
-                  .where((block) => block.section != 'skin_care')
-                  .toList()
-                ..addAll(schedule.blocks);
-          return base.copyWith(
-            blocks: nextBlocks,
+          final draftForFingerprint = base.copyWith(
             skinCareProductNames: selectedNames.join('\n'),
             skinCareSpecialCareNotes: specialCareNotes,
             skinCareSuggestedProducts: selectedNames,
             skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
             skinCareFacePhotoSkipped: false,
             skinCareSkipped: false,
+          );
+          final routineFingerprint = draftForFingerprint
+              .computeSkinCareRoutineFingerprint();
+          final taggedBlocks = schedule.blocks.map((block) {
+            final prov = List<String>.from(block.provenanceSourceIds);
+            final token = 'skin-care-generation:$routineFingerprint';
+            if (!prov.contains(token)) prov.add(token);
+            if (asset.assetId.isNotEmpty && !prov.contains(asset.assetId)) {
+              prov.add(asset.assetId);
+            }
+            if (asset.r2Key.isNotEmpty && !prov.contains(asset.r2Key)) {
+              prov.add(asset.r2Key);
+            }
+            return block.copyWith(provenanceSourceIds: prov);
+          }).toList();
+
+          final nextBlocks =
+              base.blocks
+                  .where((block) => block.section != 'skin_care')
+                  .toList()
+                ..addAll(taggedBlocks);
+          return draftForFingerprint.copyWith(
+            blocks: nextBlocks,
+            skinCareRoutineFingerprint: routineFingerprint,
           );
         });
 
@@ -3809,6 +4050,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         skinCareDesiredApplicationsPerDay: hasExistingRoutine
             ? null
             : normalized,
+        clearSkinCareRoutineFingerprint: hasExistingRoutine,
         clearSkinCareProductRecommendations: true,
         clearSkinCareSelectedProductNames: !hasExistingRoutine,
         clearSkinCareSuggestedProducts: !hasExistingRoutine,
@@ -3828,20 +4070,21 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       draft: draft,
       purpose: UploadedAssetPurpose.skinFace,
     );
+    final uploadState = ref.watch(
+      onboardingUploadInteractionProvider,
+    )[onboardingSkinFaceUploadSlot];
+    final slotAsset = uploadState?.durableAsset;
     final effectiveAsset =
         _uploadedAsset ??
+        slotAsset ??
         restoredAsset ??
         durableSkinFaceAssetFromDraft(draft);
-    final uploadState = ref.watch(uploadControllerProvider);
-    final uploadApplies =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.skinFace;
-    final uploadBusy = uploadApplies && uploadState.isBusy;
+    final uploadBusy = uploadState?.isBusy == true;
     final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final uploadError =
         _uploadError ??
-        (uploadApplies && uploadState.status == UploadFlowStatus.failed
-            ? _friendlySkinCareUploadMessage(uploadState.errorMessage)
+        (uploadState?.phase == UploadInteractionPhase.failed
+            ? _friendlySkinCareUploadMessage(uploadState?.attemptError)
             : null);
     final inputsComplete =
         effectiveAsset != null &&
@@ -4261,8 +4504,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           busyLabel: _removingPhoto
                               ? 'Removing...'
                               : uploadBusy
-                              ? _skinCareUploadStatusLabel(uploadState.status)
+                              ? _skinCareInteractionStatusLabel(
+                                  uploadState!.phase,
+                                )
                               : null,
+                          localPreviewPath: uploadState?.usablePreviewPath,
                           helperText: effectiveAsset == null
                               ? 'Face photo required'
                               : null,
@@ -4461,6 +4707,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
 
 class _SkinCarePhotoTarget extends ConsumerWidget {
   final UploadedAsset? asset;
+  final String? localPreviewPath;
   final UploadedAssetPurpose purpose;
   final String title;
   final String uploadedTitle;
@@ -4473,6 +4720,7 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
 
   const _SkinCarePhotoTarget({
     required this.asset,
+    this.localPreviewPath,
     this.purpose = UploadedAssetPurpose.skinProducts,
     this.title = 'Add photo',
     this.uploadedTitle = 'Photo uploaded',
@@ -4486,9 +4734,9 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final preview = asset == null
-        ? null
-        : usableUploadedAssetLocalPreviewPath(asset!);
+    final preview =
+        localPreviewPath ??
+        (asset == null ? null : usableUploadedAssetLocalPreviewPath(asset!));
     final restoredUploads = ref.watch(restoredUploadsProvider);
     final restored =
         restoredUploads.forPurpose(purpose) ??
@@ -4520,28 +4768,26 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
           child: Stack(
             children: [
               Positioned.fill(
-                child: busy
-                    ? const SizedBox.shrink()
-                    : ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: preview != null
-                            ? Image.file(
-                                File(preview),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) =>
-                                    _fallback(previewStatus, fileName),
-                              )
-                            : remotePreview != null
-                            ? Image.network(
-                                remotePreview.toString(),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, _, _) => _fallback(
-                                  UploadedAssetPreviewStatus.unavailable,
-                                  fileName,
-                                ),
-                              )
-                            : _fallback(previewStatus, fileName),
-                      ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: preview != null
+                      ? Image.file(
+                          File(preview),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) =>
+                              _fallback(previewStatus, fileName),
+                        )
+                      : remotePreview != null
+                      ? Image.network(
+                          remotePreview.toString(),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => _fallback(
+                            UploadedAssetPreviewStatus.unavailable,
+                            fileName,
+                          ),
+                        )
+                      : _fallback(previewStatus, fileName),
+                ),
               ),
               if (busy)
                 Positioned.fill(

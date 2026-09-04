@@ -185,7 +185,7 @@ async function handleDeleteUpload(request: Request, env: Env): Promise<Response>
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
   const objectKey = readString(body, "objectKey");
-  assertOwnedObjectKey(user.uid, objectKey);
+  assertOwnedObjectKey(user.uid, objectKey, true);
 
   await requiredUploadBucket(env).delete(objectKey);
 
@@ -243,7 +243,11 @@ function buildObjectKey(
   return `users/${safeUid}/onboarding/${safePurpose}/${safeAssetId}.${extension}`;
 }
 
-function assertOwnedObjectKey(uid: string, objectKey: string): ObjectKeyInfo {
+function assertOwnedObjectKey(
+  uid: string,
+  objectKey: string,
+  allowLegacyDelete = false,
+): ObjectKeyInfo {
   const safeUid = safeSegment(uid, "uid");
   if (
     objectKey.includes("..") ||
@@ -254,12 +258,16 @@ function assertOwnedObjectKey(uid: string, objectKey: string): ObjectKeyInfo {
   }
 
   const parts = objectKey.split("/");
+  const validPurpose =
+    approvedPurposes.has(parts[3]) ||
+    (allowLegacyDelete && parts[3] === "skin_care");
+
   if (
     parts.length !== 5 ||
     parts[0] !== "users" ||
     parts[1] !== safeUid ||
     parts[2] !== "onboarding" ||
-    !approvedPurposes.has(parts[3])
+    !validPurpose
   ) {
     throw new HttpError(400, "invalid_object_key", "Object key is not allowed.");
   }
@@ -389,6 +397,7 @@ function isSafeExtensionForPurpose(purpose: string, extension: string): boolean 
     return false;
   }
   if (purpose === "profile_photo") return extension !== "webp";
+  if (purpose === "skin_care") return true;
   return routineImportPurposes.has(purpose);
 }
 

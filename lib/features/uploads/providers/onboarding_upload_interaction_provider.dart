@@ -11,6 +11,8 @@ import 'package:optivus/state/upload_state.dart';
 const onboardingClassUploadSlot = 'class';
 const onboardingWorkUploadSlot = 'work';
 const onboardingEatingUploadSlot = 'eating';
+const onboardingSkinProductsUploadSlot = 'skin-products';
+const onboardingSkinFaceUploadSlot = 'skin-face';
 
 const onboardingUploadShellConfig = UploadShellConfig(
   title: 'Onboarding photos',
@@ -35,6 +37,20 @@ const onboardingUploadShellConfig = UploadShellConfig(
       title: 'Menu',
       icon: Icons.restaurant_menu_rounded,
       purpose: UploadedAssetPurpose.eatingMenu,
+    ),
+    UploadSlotConfig(
+      key: onboardingSkinProductsUploadSlot,
+      label: 'Products',
+      title: 'Skin-care products',
+      icon: Icons.spa_rounded,
+      purpose: UploadedAssetPurpose.skinProducts,
+    ),
+    UploadSlotConfig(
+      key: onboardingSkinFaceUploadSlot,
+      label: 'Face',
+      title: 'Face photo',
+      icon: Icons.face_retouching_natural_rounded,
+      purpose: UploadedAssetPurpose.skinFace,
     ),
   ],
 );

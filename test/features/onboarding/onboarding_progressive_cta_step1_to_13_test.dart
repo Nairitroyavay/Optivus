@@ -296,31 +296,30 @@ void main() {
       expect(r.canRevealPrimary, isFalse);
 
       // Valid confirmed eating blocks -> complete
-      draft = draft.copyWith(
-        baseTimeline: BaseTimelineDraft(
-          eatingSetupPath: 'create',
-          blocks: [
-            TimelineBlockDraft(
-              id: 'm1',
-              section: 'eating',
-              title: 'Breakfast',
-              startMinute: 8 * 60,
-              endMinute: 8 * 60 + 30,
-              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-            TimelineBlockDraft(
-              id: 'm2',
-              section: 'eating',
-              title: 'Lunch',
-              startMinute: 13 * 60,
-              endMinute: 13 * 60 + 30,
-              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-          ],
-        ),
+      final eatingBase = BaseTimelineDraft(
+        eatingSetupPath: 'create',
+        blocks: [
+          TimelineBlockDraft(
+            id: 'm1',
+            section: 'eating',
+            title: 'Breakfast',
+            startMinute: 8 * 60,
+            endMinute: 8 * 60 + 30,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'm2',
+            section: 'eating',
+            title: 'Lunch',
+            startMinute: 13 * 60,
+            endMinute: 13 * 60 + 30,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ],
       );
+      draft = draft.copyWith(baseTimeline: eatingBase);
       r = evaluateOnboardingStepReadiness(
         draft: draft,
         step: 5,
@@ -381,33 +380,47 @@ void main() {
       expect(r.definition.skipAllowed, isTrue);
 
       // Has products mode with confirmed skin_care routine -> complete
+      final skinCareBase = BaseTimelineDraft(
+        skinCareSetupPath: 'has_products',
+        skinCareProductNames: 'some product',
+        skinCareDesiredApplicationsPerDay: 2,
+        blocks: [
+          TimelineBlockDraft(
+            id: 'sk1',
+            section: 'skin_care',
+            title: 'Morning Routine',
+            startMinute: 8 * 60 + 30,
+            endMinute: 8 * 60 + 45,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            skincareSteps: const ['Cleanser'],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+          TimelineBlockDraft(
+            id: 'sk2',
+            section: 'skin_care',
+            title: 'Night Routine',
+            startMinute: 22 * 60,
+            endMinute: 22 * 60 + 15,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            skincareSteps: const ['Moisturizer'],
+            blockType: TimelineBlockDraft.hardBlockKey,
+          ),
+        ],
+      );
+      final skinCareFingerprint = skinCareBase
+          .computeSkinCareRoutineFingerprint();
       draft = draft.copyWith(
-        baseTimeline: BaseTimelineDraft(
-          skinCareSetupPath: 'has_products',
-          skinCareProductNames: 'some product',
-          skinCareDesiredApplicationsPerDay: 2,
-          blocks: [
-            TimelineBlockDraft(
-              id: 'sk1',
-              section: 'skin_care',
-              title: 'Morning Routine',
-              startMinute: 8 * 60 + 30,
-              endMinute: 8 * 60 + 45,
-              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-              skincareSteps: const ['Cleanser'],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-            TimelineBlockDraft(
-              id: 'sk2',
-              section: 'skin_care',
-              title: 'Night Routine',
-              startMinute: 22 * 60,
-              endMinute: 22 * 60 + 15,
-              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-              skincareSteps: const ['Moisturizer'],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-          ],
+        baseTimeline: skinCareBase.copyWith(
+          skinCareRoutineFingerprint: skinCareFingerprint,
+          blocks: skinCareBase.blocks
+              .map(
+                (block) => block.copyWith(
+                  provenanceSourceIds: [
+                    'skin-care-generation:$skinCareFingerprint',
+                  ],
+                ),
+              )
+              .toList(growable: false),
         ),
       );
       r = evaluateOnboardingStepReadiness(

@@ -2063,6 +2063,44 @@ describe("Firestore Rules for upload metadata", () => {
     ));
   });
 
+  it("allows the owner to terminalize an exact legacy skin_care upload", async () => {
+    const legacy = uploadData("user123", "legacy-skin-001", {
+      purpose: "skin_care",
+      r2Key: "users/user123/onboarding/skin_care/legacy-skin-001.jpg",
+    });
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await uploadRef(context.firestore(), "user123", "legacy-skin-001").set(legacy);
+    });
+    const updatedAt2 = new Date("2026-07-24T01:00:00.000Z");
+    await assertSucceeds(
+      uploadRef(ownerDb(), "user123", "legacy-skin-001").set({
+        ...legacy,
+        status: "deleted",
+        updatedAt: updatedAt2,
+      })
+    );
+  });
+
+  it("rejects cross-user terminalization of a legacy skin_care upload", async () => {
+    const legacy = uploadData("user123", "legacy-skin-002", {
+      purpose: "skin_care",
+      r2Key: "users/user123/onboarding/skin_care/legacy-skin-002.jpg",
+    });
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await uploadRef(context.firestore(), "user123", "legacy-skin-002").set(legacy);
+    });
+    const attackerDb = testEnv
+      .authenticatedContext("attacker", { email_verified: true })
+      .firestore();
+    await assertFails(
+      uploadRef(attackerDb, "user123", "legacy-skin-002").set({
+        ...legacy,
+        status: "deleted",
+        updatedAt: new Date("2026-07-24T01:00:00.000Z"),
+      })
+    );
+  });
+
   it("owner updates status to failed with errorMessage", async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await context.firestore().collection("users").doc("user123").collection("uploads").doc("asset-001").set(uploadData());

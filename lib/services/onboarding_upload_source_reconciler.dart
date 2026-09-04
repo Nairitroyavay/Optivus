@@ -111,7 +111,7 @@ class OnboardingUploadSourceReconciler {
       currentBaseTimeline.pendingFutureImports,
     );
 
-    final hasPhotoBackedStep4Or5State =
+    final hasPhotoBackedStep4Or5Or7State =
         (classesRequired &&
             (currentBlocks.any(
                   (b) => b.section == 'classes' && b.source == 'ai_import',
@@ -134,11 +134,20 @@ class OnboardingUploadSourceReconciler {
             (currentBlocks.any(
                   (b) => b.section == 'eating' && b.source == 'ai_import',
                 ) ||
-                currentBaseTimeline.latestImportForSection('Eating') != null));
+                currentBaseTimeline.latestImportForSection('Eating') !=
+                    null)) ||
+        (currentBaseTimeline.skinCareSetupPath == 'has_products' &&
+            currentBaseTimeline.skinCareProductPhotoAssetId
+                    ?.trim()
+                    .isNotEmpty ==
+                true) ||
+        (currentBaseTimeline.skinCareSetupPath == 'no_products' &&
+            currentBaseTimeline.skinCareFacePhotoAssetId?.trim().isNotEmpty ==
+                true);
 
     if (restoredUploads.errorMessage != null &&
         restoredUploads.errorMessage!.trim().isNotEmpty &&
-        hasPhotoBackedStep4Or5State) {
+        hasPhotoBackedStep4Or5Or7State) {
       return OnboardingUploadSourceReconciliationResult(
         reconciledDraft: draft,
         changed: false,
@@ -347,7 +356,84 @@ class OnboardingUploadSourceReconciler {
       }
     }
 
-    if (!step4Affected && !step5Affected) {
+    // -------------------------------------------------------------------------
+    // STEP 7 RECONCILIATION: Skin Care Setup
+    // -------------------------------------------------------------------------
+    var step7Affected = false;
+    final currentSkinProductsAsset = getValidDurableAsset(
+      UploadedAssetPurpose.skinProducts,
+    );
+    final currentSkinFaceAsset = getValidDurableAsset(
+      UploadedAssetPurpose.skinFace,
+    );
+
+    if (currentBaseTimeline.skinCareSetupPath == 'has_products') {
+      final productAssetId = currentBaseTimeline.skinCareProductPhotoAssetId;
+      final productR2Key = currentBaseTimeline.skinCareProductPhotoR2Key;
+      final hasPhotoUsed =
+          productAssetId?.trim().isNotEmpty == true ||
+          productR2Key?.trim().isNotEmpty == true;
+
+      if (hasPhotoUsed) {
+        final matchesRestored =
+            currentSkinProductsAsset != null &&
+            uploadedSourceIdentityMatches(
+              assetId: productAssetId,
+              r2Key: productR2Key,
+              asset: currentSkinProductsAsset,
+            );
+        if (!matchesRestored) {
+          step7Affected = true;
+          reasonCodes.add('step7_product_source_stale');
+          currentBlocks.removeWhere((b) => b.section == 'skin_care');
+          currentBaseTimeline = currentBaseTimeline.copyWith(
+            skinCareProductPhotoAssetId: currentSkinProductsAsset?.assetId,
+            skinCareProductPhotoR2Key: currentSkinProductsAsset?.r2Key,
+            skinCareProductPhotoStatus:
+                currentSkinProductsAsset?.status.wireName,
+            skinCareProductPhotoCreatedAt: currentSkinProductsAsset?.createdAt,
+            skinCareProductPhotoUpdatedAt: currentSkinProductsAsset?.updatedAt,
+            clearSkinCareProductPhoto: currentSkinProductsAsset == null,
+            clearSkinCareRoutineFingerprint: true,
+          );
+        }
+      }
+    } else if (currentBaseTimeline.skinCareSetupPath == 'no_products') {
+      final faceAssetId = currentBaseTimeline.skinCareFacePhotoAssetId;
+      final faceR2Key = currentBaseTimeline.skinCareFacePhotoR2Key;
+      final hasFacePhotoUsed =
+          faceAssetId?.trim().isNotEmpty == true ||
+          faceR2Key?.trim().isNotEmpty == true;
+
+      if (hasFacePhotoUsed) {
+        final matchesRestored =
+            currentSkinFaceAsset != null &&
+            uploadedSourceIdentityMatches(
+              assetId: faceAssetId,
+              r2Key: faceR2Key,
+              asset: currentSkinFaceAsset,
+            );
+        if (!matchesRestored) {
+          step7Affected = true;
+          reasonCodes.add('step7_face_source_stale');
+          currentBlocks.removeWhere((b) => b.section == 'skin_care');
+          currentBaseTimeline = currentBaseTimeline.copyWith(
+            skinCareFacePhotoAssetId: currentSkinFaceAsset?.assetId,
+            skinCareFacePhotoR2Key: currentSkinFaceAsset?.r2Key,
+            skinCareFacePhotoStatus: currentSkinFaceAsset?.status.wireName,
+            skinCareFacePhotoCreatedAt: currentSkinFaceAsset?.createdAt,
+            skinCareFacePhotoUpdatedAt: currentSkinFaceAsset?.updatedAt,
+            clearSkinCareFacePhoto: currentSkinFaceAsset == null,
+            clearSkinCareRecommendationFingerprint: true,
+            clearSkinCareRoutineFingerprint: true,
+            clearSkinCareProductRecommendations: true,
+            clearSkinCareSelectedProductNames: true,
+          );
+        }
+      }
+    }
+
+    if (!step4Affected && !step5Affected && !step7Affected) {
       return OnboardingUploadSourceReconciliationResult(
         reconciledDraft: draft,
         changed: false,
@@ -378,8 +464,14 @@ class OnboardingUploadSourceReconciler {
       earliestAffectedStep = min(earliestAffectedStep ?? 5, 5);
     }
 
+    if (step7Affected) {
+      stepCompleted[7] = false;
+      stepDirty[7] = true;
+      earliestAffectedStep = min(earliestAffectedStep ?? 7, 7);
+    }
+
     // Downstream Step 14 (final preview/bundle) requires revalidation.
-    if (step4Affected || step5Affected) {
+    if (step4Affected || step5Affected || step7Affected) {
       stepCompleted[14] = false;
       stepDirty[14] = true;
     }

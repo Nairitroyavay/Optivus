@@ -29,12 +29,16 @@ bool uploadedAssetIsDurablyUploadedForSlot({
   required String uid,
   required UploadedAssetPurpose purpose,
 }) {
-  return uploadedAssetHasLegitimateIdentityForSlot(
-        asset: asset,
-        uid: uid,
-        purpose: purpose,
-      ) &&
-      asset.status == UploadedAssetStatus.uploaded;
+  return uploadedAssetFieldsAreDurablyUploadedForSlot(
+    assetId: asset.assetId,
+    ownerUid: asset.ownerUid,
+    sourceFeature: asset.sourceFeature,
+    purpose: asset.purpose,
+    r2Key: asset.r2Key,
+    status: asset.status,
+    uid: uid,
+    expectedPurpose: purpose,
+  );
 }
 
 bool uploadedAssetHasLegitimateIdentityForSlot({
@@ -117,12 +121,7 @@ bool _uploadedAssetR2IdentityMatches(UploadedAsset asset) {
       parts[2] != asset.sourceFeature) {
     return false;
   }
-  final allowedPurposes = switch (asset.purpose) {
-    UploadedAssetPurpose.skinFace => const {'skin_face', 'skin_care'},
-    UploadedAssetPurpose.skinProducts => const {'skin_products', 'skin_care'},
-    _ => {asset.purpose.wireName},
-  };
-  if (!allowedPurposes.contains(parts[3])) {
+  if (parts[3] != asset.purpose.wireName) {
     return false;
   }
   final fileName = parts[4];

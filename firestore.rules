@@ -941,38 +941,64 @@ service cloud.firestore {
         && validUploadPurpose(request.resource.data.purpose)
         && validUploadStatus(request.resource.data.status);
 
+      function isLegacySkinCareDelete() {
+        return validUploadKeys(request.resource.data)
+          && resource.data.purpose == "skin_care"
+          && request.resource.data.purpose == "skin_care"
+          && resource.data.ownerUid == request.auth.uid
+          && resource.data.assetId == assetId
+          && resource.data.sourceFeature == "onboarding"
+          && resource.data.r2Key.matches(
+            "^users/" + request.auth.uid + "/onboarding/skin_care/" + assetId + "\\.(jpg|jpeg|png|webp)$"
+          )
+          && resource.data.status == "uploaded"
+          && request.resource.data.status == "deleted"
+          && request.resource.data.updatedAt is timestamp
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["status", "updatedAt", "errorMessage"])
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          && request.resource.data.assetId == resource.data.assetId
+          && request.resource.data.sourceFeature == resource.data.sourceFeature
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.r2Key == resource.data.r2Key
+          && request.resource.data.fileName == resource.data.fileName
+          && request.resource.data.contentType == resource.data.contentType
+          && request.resource.data.sizeBytes == resource.data.sizeBytes;
+      }
+
       allow update: if verifiedOwner(uid)
-        && validUploadKeys(request.resource.data)
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.assetId == assetId
-        && request.resource.data.sizeBytes is int
-        && isValidUploadSize(
-          request.resource.data.purpose,
-          request.resource.data.sizeBytes
-        )
-        && validUploadContentType(
-          request.resource.data.purpose,
-          request.resource.data.contentType
-        )
-        && request.resource.data.sourceFeature == "onboarding"
-        && validUploadObjectIdentity(request.resource.data)
-        && request.resource.data.fileName is string
-        && request.resource.data.createdAt is timestamp
-        && request.resource.data.updatedAt is timestamp
-        && validUploadPurpose(request.resource.data.purpose)
-        && validUploadStatus(request.resource.data.status)
-        && validUploadStatusTransition(resource.data.status, request.resource.data.status)
-        // Immutable identity fields
-        && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.assetId == resource.data.assetId
-        && request.resource.data.purpose == resource.data.purpose
-        && request.resource.data.sourceFeature == resource.data.sourceFeature
-        && request.resource.data.createdAt == resource.data.createdAt
-        // Immutable uploaded-object identity
-        && request.resource.data.r2Key == resource.data.r2Key
-        && request.resource.data.fileName == resource.data.fileName
-        && request.resource.data.contentType == resource.data.contentType
-        && request.resource.data.sizeBytes == resource.data.sizeBytes;
+        && (isLegacySkinCareDelete()
+          || (validUploadKeys(request.resource.data)
+            && request.resource.data.ownerUid == request.auth.uid
+            && request.resource.data.assetId == assetId
+            && request.resource.data.sizeBytes is int
+            && isValidUploadSize(
+              request.resource.data.purpose,
+              request.resource.data.sizeBytes
+            )
+            && validUploadContentType(
+              request.resource.data.purpose,
+              request.resource.data.contentType
+            )
+            && request.resource.data.sourceFeature == "onboarding"
+            && validUploadObjectIdentity(request.resource.data)
+            && request.resource.data.fileName is string
+            && request.resource.data.createdAt is timestamp
+            && request.resource.data.updatedAt is timestamp
+            && validUploadPurpose(request.resource.data.purpose)
+            && validUploadStatus(request.resource.data.status)
+            && validUploadStatusTransition(resource.data.status, request.resource.data.status)
+            // Immutable identity fields
+            && request.resource.data.ownerUid == resource.data.ownerUid
+            && request.resource.data.assetId == resource.data.assetId
+            && request.resource.data.purpose == resource.data.purpose
+            && request.resource.data.sourceFeature == resource.data.sourceFeature
+            && request.resource.data.createdAt == resource.data.createdAt
+            // Immutable uploaded-object identity
+            && request.resource.data.r2Key == resource.data.r2Key
+            && request.resource.data.fileName == resource.data.fileName
+            && request.resource.data.contentType == resource.data.contentType
+            && request.resource.data.sizeBytes == resource.data.sizeBytes));
 
       allow delete: if false;
     }

@@ -10,6 +10,7 @@ import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/routine_repository.dart';
@@ -224,9 +225,16 @@ class OnboardingCompletionService {
   }
 
   static OnboardingCompletionBundle buildBundle(OnboardingDraft draft) {
+    final skinCareIsSkipped =
+        draft.baseTimeline.skinCareSkipped ||
+        draft.baseTimeline.skinCareSetupPath == 'skip';
     final baseItems = mergeOverlappingEatingBlocks(
       draft.baseTimeline.blocks
-          .where((block) => !block.needsTimeConfirmation)
+          .where(
+            (block) =>
+                !block.needsTimeConfirmation &&
+                !(skinCareIsSkipped && block.section == 'skin_care'),
+          )
           .toList(),
     );
     final mergedTimeline = draft.baseTimeline.copyWith(blocks: baseItems);
@@ -391,7 +399,42 @@ class OnboardingCompletionService {
     }
 
     final base = draft.baseTimeline;
-    if (base.skinCareSetupPath == "has_products" && (base.skinCareProductPhotoAssetId?.trim().isNotEmpty == true || base.skinCareProductPhotoR2Key?.trim().isNotEmpty == true || base.skinCareProductPhotoStatus?.trim().isNotEmpty == true)) {
+    bool currentSkinUpload({
+      required UploadedAssetPurpose purpose,
+      required String? assetId,
+      required String? r2Key,
+      required String? status,
+    }) {
+      final id = assetId?.trim() ?? '';
+      final key = r2Key?.trim() ?? '';
+      final parsedStatus = uploadedAssetStatusFromString(status);
+      return uploadedAssetFieldsAreDurablyUploadedForSlot(
+            assetId: id,
+            ownerUid: draft.uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
+            purpose: purpose,
+            r2Key: key,
+            status: parsedStatus,
+            uid: draft.uid,
+            expectedPurpose: purpose,
+          ) ||
+          legacySkinCareUploadHasOwnedExactIdentity(
+            assetId: id,
+            ownerUid: draft.uid,
+            r2Key: key,
+            status: parsedStatus,
+            uid: draft.uid,
+          );
+    }
+
+    if (!base.skinCareSkipped &&
+        base.skinCareSetupPath == 'has_products' &&
+        currentSkinUpload(
+          purpose: UploadedAssetPurpose.skinProducts,
+          assetId: base.skinCareProductPhotoAssetId,
+          r2Key: base.skinCareProductPhotoR2Key,
+          status: base.skinCareProductPhotoStatus,
+        )) {
       final fallbackCreatedAt = draft.createdAt ?? DateTime.now();
       final fallbackUpdatedAt = draft.updatedAt ?? fallbackCreatedAt;
 
@@ -412,7 +455,14 @@ class OnboardingCompletionService {
         ),
       );
     }
-    if (base.skinCareSetupPath == "no_products" && (base.skinCareFacePhotoAssetId?.trim().isNotEmpty == true || base.skinCareFacePhotoR2Key?.trim().isNotEmpty == true || base.skinCareFacePhotoStatus?.trim().isNotEmpty == true)) {
+    if (!base.skinCareSkipped &&
+        base.skinCareSetupPath == 'no_products' &&
+        currentSkinUpload(
+          purpose: UploadedAssetPurpose.skinFace,
+          assetId: base.skinCareFacePhotoAssetId,
+          r2Key: base.skinCareFacePhotoR2Key,
+          status: base.skinCareFacePhotoStatus,
+        )) {
       final fallbackCreatedAt = draft.createdAt ?? DateTime.now();
       final fallbackUpdatedAt = draft.updatedAt ?? fallbackCreatedAt;
       addReference(

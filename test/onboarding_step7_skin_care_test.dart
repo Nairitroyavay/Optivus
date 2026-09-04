@@ -21,6 +21,11 @@ import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
 import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/services/skin_care_ai_client.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:optivus/features/uploads/controllers/upload_interaction_controller.dart';
+import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/features/uploads/services/upload_permission_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/upload_state.dart';
@@ -30,9 +35,17 @@ void main() {
     OnboardingDraft draft = const OnboardingDraft(currentStep: 7),
     SkinCareAiClient? client,
     TestUploadController? uploadController,
+    TestUploadInteractionController? interactionController,
     DeviceCountry? detectedCountry,
     bool overrideSkinCareClient = true,
   }) {
+    final effectiveInteraction =
+        interactionController ??
+        TestUploadInteractionController(
+          result: uploadController?.result,
+          initialLegacyState: uploadController?.state,
+          legacyProbe: uploadController,
+        );
     return ProviderScope(
       overrides: [
         mockOnboardingProvider.overrideWith((ref) {
@@ -46,6 +59,9 @@ void main() {
           ),
         uploadControllerProvider.overrideWith(
           (ref) => uploadController ?? TestUploadController(),
+        ),
+        onboardingUploadInteractionProvider.overrideWith(
+          (ref) => effectiveInteraction,
         ),
         deviceCountryServiceProvider.overrideWithValue(
           TestDeviceCountryService(detectedCountry),
@@ -64,18 +80,39 @@ void main() {
 
   Future<void> tapBuildRoutine(WidgetTester tester) async {
     await tester.pump();
-    final readLabels = find.text('Read product labels');
-    if (readLabels.evaluate().isNotEmpty) {
-      await tester.ensureVisible(readLabels);
+    final btn = find.byKey(const ValueKey('onboarding-step7-generate-button'));
+    if (btn.evaluate().isNotEmpty) {
+      final needsPhotoReview = find
+          .text('Read product labels')
+          .evaluate()
+          .isNotEmpty;
+      await tester.ensureVisible(btn);
       await tester.pump();
-      await tester.tap(readLabels);
+      await tester.tap(btn);
       await tester.pumpAndSettle();
+      if (needsPhotoReview) {
+        final btn2 = find.byKey(
+          const ValueKey('onboarding-step7-generate-button'),
+        );
+        await tester.ensureVisible(btn2);
+        await tester.pump();
+        await tester.tap(btn2);
+        await tester.pumpAndSettle();
+      }
     }
-    final build = find.text('Build skin routine');
-    if (build.evaluate().isEmpty) return;
-    await tester.ensureVisible(build);
-    await tester.pump();
-    await tester.tap(build);
+  }
+
+  Future<void> chooseSkinPhotoFromGallery(WidgetTester tester) async {
+    await tester.tap(find.text('Add photo'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('onboarding-step7-take-photo')),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
+    );
+    await tester.pumpAndSettle();
   }
 
   testWidgets('1. Global CTA hides while keyboard is open', (tester) async {
@@ -151,7 +188,6 @@ void main() {
     );
     expect(contentRect.bottom, equals(ctaRect.bottom));
   });
-
 
   testWidgets('2. I have products mode opens immediately', (tester) async {
     await tester.pumpWidget(buildTestWidget());
@@ -235,8 +271,7 @@ void main() {
         )
         .height;
 
-    await tester.tap(find.text('Add photo'));
-    await tester.pumpAndSettle();
+    await chooseSkinPhotoFromGallery(tester);
     expect(find.text('Photo uploaded'), findsOneWidget);
     expect(find.text('Using product photo'), findsOneWidget);
     expect(find.text('Read product labels'), findsOneWidget);
@@ -320,7 +355,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(CircularProgressIndicator), findsWidgets);
-    expect(find.text('Uploading...'), findsOneWidget);
+    expect(find.text('Uploading photo...'), findsOneWidget);
   });
 
   testWidgets('6b. Typing product names disables photo upload', (tester) async {
@@ -370,8 +405,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Using typed product names'), findsNothing);
-    await tester.tap(find.text('Add photo'));
-    await tester.pumpAndSettle();
+    await chooseSkinPhotoFromGallery(tester);
     expect(uploadController.startUploadCalls, 1);
     expect(find.text('Photo uploaded'), findsOneWidget);
   });
@@ -388,12 +422,13 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
+      await chooseSkinPhotoFromGallery(tester);
       expect(
         tester
             .widget<TextField>(
-              find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+              find.byKey(
+                const ValueKey('onboarding-step7-product-names-field'),
+              ),
             )
             .enabled,
         isTrue,
@@ -407,7 +442,9 @@ void main() {
       expect(
         tester
             .widget<TextField>(
-              find.byKey(const ValueKey('onboarding-step7-product-names-field')),
+              find.byKey(
+                const ValueKey('onboarding-step7-product-names-field'),
+              ),
             )
             .enabled,
         isTrue,
@@ -2935,11 +2972,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
-      );
+      await chooseSkinPhotoFromGallery(tester);
+      final freq3 = find.byKey(const ValueKey('onboarding-step7-frequency-3'));
+      await tester.ensureVisible(freq3);
+      await tester.tap(freq3);
       await tapBuildRoutine(tester);
       await tester.pumpAndSettle();
 
@@ -3029,11 +3065,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-frequency-4')),
-      );
+      await chooseSkinPhotoFromGallery(tester);
+      final freq4 = find.byKey(const ValueKey('onboarding-step7-frequency-4'));
+      await tester.ensureVisible(freq4);
+      await tester.tap(freq4);
       await tapBuildRoutine(tester);
       await tester.pumpAndSettle();
 
@@ -3105,11 +3140,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('onboarding-step7-frequency-3')),
-      );
+      await chooseSkinPhotoFromGallery(tester);
+      final freq3 = find.byKey(const ValueKey('onboarding-step7-frequency-3'));
+      await tester.ensureVisible(freq3);
+      await tester.tap(freq3);
       await tapBuildRoutine(tester);
       await tester.pumpAndSettle();
 
@@ -3642,8 +3676,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
+      await chooseSkinPhotoFromGallery(tester);
       final firstContainer = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       );
@@ -3733,16 +3766,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Photo uploaded'), findsOneWidget);
-      expect(find.text('restored-products.heic'), findsOneWidget);
-      await tapBuildRoutine(tester);
-      await tester.pumpAndSettle();
-      expect(
-        find.text(
-          'This photo format is not supported. Please upload JPEG, PNG, or WEBP.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Photo uploaded'), findsNothing);
+      expect(find.text('restored-products.heic'), findsNothing);
+      expect(find.text('Add photo'), findsOneWidget);
     },
   );
 
@@ -3926,8 +3952,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Add photo'));
-    await tester.pumpAndSettle();
+    await chooseSkinPhotoFromGallery(tester);
     await tapBuildRoutine(tester);
     await tester.pumpAndSettle();
 
@@ -4186,8 +4211,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
+      await chooseSkinPhotoFromGallery(tester);
 
       await tapBuildRoutine(tester);
       await tester.pumpAndSettle();
@@ -4203,7 +4227,7 @@ void main() {
       expect((firstProducts.first as Map)['brand'], '');
       expect((secondProducts.first as Map).containsKey('brand'), isFalse);
       expect((firstProducts.first as Map)['keyIngredients'], hasLength(7));
-      expect((secondProducts.first as Map)['keyIngredients'], hasLength(5));
+      expect((secondProducts.first as Map)['keyIngredients'], hasLength(4));
       expect(
         ((secondProducts.first as Map)['usageHint'] as String).length,
         lessThanOrEqualTo(100),
@@ -4247,8 +4271,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
+      await chooseSkinPhotoFromGallery(tester);
 
       await tapBuildRoutine(tester);
       await tester.pumpAndSettle();
@@ -4731,23 +4754,19 @@ void main() {
   });
 
   test('55b. Step completion requires a valid routine or explicit skip', () {
-    expect(
-      onboarding7CanContinue(
-        BaseTimelineDraft(
-          skinCareSetupPath: 'has_products',
-          skinCareProductNames: 'Cleanser',
-          skinCareDesiredApplicationsPerDay: 2,
-          blocks: _skinCareBlocksForEveryDay(2),
-        ), 'test_uid',
-      ),
-      isTrue,
-    );
+    final validRoutine = _hasProductsDraft(
+      uid: 'test_uid',
+      productNames: 'Cleanser',
+      blocks: _skinCareBlocksForEveryDay(2),
+    ).baseTimeline;
+    expect(onboarding7CanContinue(validRoutine, 'test_uid'), isTrue);
     expect(
       onboarding7CanContinue(
         const BaseTimelineDraft(
           skinCareSetupPath: 'has_products',
           skinCareDesiredApplicationsPerDay: 2,
-        ), 'test_uid',
+        ),
+        'test_uid',
       ),
       isFalse,
     );
@@ -4756,7 +4775,8 @@ void main() {
         const BaseTimelineDraft(
           skinCareSetupPath: 'skip',
           skinCareSkipped: true,
-        ), 'test_uid',
+        ),
+        'test_uid',
       ),
       isTrue,
     );
@@ -5187,8 +5207,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(generateGesture().onTap, isNull);
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
+      await chooseSkinPhotoFromGallery(tester);
       expect(generateGesture().onTap, isNotNull);
       expect(find.text('Find products'), findsOneWidget);
     },
@@ -5310,7 +5329,7 @@ void main() {
         find.byKey(const ValueKey('onboarding-step7-selected-products-close')),
       );
       await tester.pumpAndSettle();
-      expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
+      expect(onboarding7CanContinue(base, 'uid-1'), isTrue);
     },
   );
 
@@ -5424,8 +5443,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Add photo'));
-      await tester.pumpAndSettle();
+      await chooseSkinPhotoFromGallery(tester);
       var base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
@@ -5512,7 +5530,7 @@ void main() {
       expect(editingBase.skinCareSelectedProductNames, [
         'Saved starter product',
       ]);
-      expect(onboarding7CanContinue(editingBase, 'test_uid'), isTrue);
+      expect(onboarding7CanContinue(editingBase, 'uid-1'), isTrue);
 
       await tester.tap(
         find.byKey(
@@ -5528,23 +5546,19 @@ void main() {
   );
 
   test('63. No-products validation rejects incomplete daily coverage', () {
-    final base = BaseTimelineDraft(
-      skinCareSetupPath: 'no_products',
-      skinCareDesiredApplicationsPerDay: 2,
-      skinCareSkinType: 'oily',
-      skinCareProblems: const ['pimples'],
-      skinCareBudget: 'medium',
-      skinCareFacePhotoAssetId: 'skin-asset',
-      skinCareFacePhotoR2Key:
-          'users/uid-1/onboarding/skin_care/skin-asset.jpg',
-      skinCareFacePhotoStatus: 'uploaded',
-      skinCareSuggestedProducts: const ['Minimalist Gentle Cleanser'],
-      skinCareSelectedProductNames: const ['Minimalist Gentle Cleanser'],
+    final base = _noProductsDraft(
+      skinType: 'oily',
+      problems: const ['pimples'],
+      budget: 'medium',
+      desiredApplicationsPerDay: 2,
+      suggestedProducts: const ['Minimalist Gentle Cleanser'],
+      selectedProducts: const ['Minimalist Gentle Cleanser'],
+      withPhoto: true,
       blocks: _skinCareBlocksForEveryDay(1),
-    );
+    ).baseTimeline;
 
-    expect(onboarding7CanContinue(base, 'test_uid'), isFalse);
-    expect(base.validateSkinCareSetup('test_uid'), contains('1 of 2'));
+    expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
+    expect(base.validateSkinCareSetup('uid-1'), contains('1 of 2'));
   });
 
   test('64. Product options and selections survive draft serialization', () {
@@ -5678,7 +5692,7 @@ void main() {
       var base = container.read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSuggestedProducts, hasLength(3));
       expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
-      expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
+      expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
 
       await tester.tap(
         find.byKey(
@@ -5691,7 +5705,7 @@ void main() {
         find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
         findsOneWidget,
       );
-      expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
+      expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
     },
   );
 
@@ -5772,7 +5786,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tapBuildRoutine(tester);
+    final buildButton = find.byKey(
+      const ValueKey('onboarding-step7-generate-button'),
+    );
+    await tester.ensureVisible(buildButton);
+    await tester.tap(buildButton);
     await tester.pump();
 
     expect(find.textContaining('Skin Care AI'), findsOneWidget);
@@ -5939,7 +5957,7 @@ void main() {
 
     var base = container.read(mockOnboardingProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
-    expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
+    expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
 
     await tester.tap(
       find.byKey(const ValueKey('onboarding-step7-no-products-cancel-rebuild')),
@@ -5947,119 +5965,120 @@ void main() {
     await tester.pumpAndSettle();
     base = container.read(mockOnboardingProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
-    expect(onboarding7CanContinue(base, 'test_uid'), isTrue);
+    expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
   });
 
-  testWidgets('73. Step 7 does not render top back button on choice screen, but renders it inside path', (
-    tester,
-  ) async {
-    useAndroidWidth(tester);
-    final draft = OnboardingDraft(
-      currentStep: onboardingSkinCareStepIndex,
-      welcomeSaved: true,
-      patiencePledgeAccepted: true,
-      stepCompleted: List<bool>.generate(
-        OnboardingDraft.stepCount,
-        (index) => index < onboardingSkinCareStepIndex,
-      ),
-      lifeRole: const LifeRoleDraft(
-        lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
-        exerciseLevel: 'moderate',
-        waterIntake: 'medium',
-        stressLevel: 'medium',
-        sleepQuality: 'good',
-      ),
-      bodyBasics: const BodyBasicsDraft(
-        ageRange: '25-34',
-        heightCm: 175,
-        weightKg: 70,
-        gender: 'other',
-      ),
-      baseTimeline: const BaseTimelineDraft(
-        eatingSetupPath: 'create',
-        blocks: [
-          TimelineBlockDraft(
-            id: BaseTimelineDraft.fixedSleepId,
-            section: 'fixed',
-            title: 'Sleep',
-            startMinute: 1380,
-            endMinute: 420,
-            repeatDays: [1, 2, 3, 4, 5, 6, 7],
-            blockType: TimelineBlockDraft.hardBlockKey,
-            crossesMidnight: true,
-          ),
-          TimelineBlockDraft(
-            id: BaseTimelineDraft.fixedBathId,
-            section: 'fixed',
-            title: 'Bath',
-            startMinute: 430,
-            endMinute: 460,
-            repeatDays: [1, 2, 3, 4, 5, 6, 7],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'meal',
-            section: 'eating',
-            title: 'Lunch',
-            startMinute: 720,
-            endMinute: 750,
-            repeatDays: [1, 2, 3, 4, 5, 6, 7],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      ),
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          authProvider.overrideWith((ref) => FakeAuthNotifier()),
-          mockOnboardingProvider.overrideWith(
-            (_) => MockOnboardingNotifier()..loadSeedData(draft),
-          ),
-          skinCareAiClientProvider.overrideWithValue(
-            const FakeSkinCareAiClient(),
-          ),
-          uploadControllerProvider.overrideWith(
-            (ref) => TestUploadController(),
-          ),
-          deviceCountryServiceProvider.overrideWithValue(
-            const TestDeviceCountryService(null),
-          ),
-        ],
-        child: const MaterialApp(home: OnboardingFlow()),
-      ),
-    );
-    await tester.pump();
+  testWidgets(
+    '73. Step 7 does not render top back button on choice screen, but renders it inside path',
+    (tester) async {
+      useAndroidWidth(tester);
+      final draft = OnboardingDraft(
+        currentStep: onboardingSkinCareStepIndex,
+        welcomeSaved: true,
+        patiencePledgeAccepted: true,
+        stepCompleted: List<bool>.generate(
+          OnboardingDraft.stepCount,
+          (index) => index < onboardingSkinCareStepIndex,
+        ),
+        lifeRole: const LifeRoleDraft(
+          lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+          exerciseLevel: 'moderate',
+          waterIntake: 'medium',
+          stressLevel: 'medium',
+          sleepQuality: 'good',
+        ),
+        bodyBasics: const BodyBasicsDraft(
+          ageRange: '25-34',
+          heightCm: 175,
+          weightKg: 70,
+          gender: 'other',
+        ),
+        baseTimeline: const BaseTimelineDraft(
+          eatingSetupPath: 'create',
+          blocks: [
+            TimelineBlockDraft(
+              id: BaseTimelineDraft.fixedSleepId,
+              section: 'fixed',
+              title: 'Sleep',
+              startMinute: 1380,
+              endMinute: 420,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              crossesMidnight: true,
+            ),
+            TimelineBlockDraft(
+              id: BaseTimelineDraft.fixedBathId,
+              section: 'fixed',
+              title: 'Bath',
+              startMinute: 430,
+              endMinute: 460,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 'meal',
+              section: 'eating',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 750,
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith((ref) => FakeAuthNotifier()),
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            skinCareAiClientProvider.overrideWithValue(
+              const FakeSkinCareAiClient(),
+            ),
+            uploadControllerProvider.overrideWith(
+              (ref) => TestUploadController(),
+            ),
+            deviceCountryServiceProvider.overrideWithValue(
+              const TestDeviceCountryService(null),
+            ),
+          ],
+          child: const MaterialApp(home: OnboardingFlow()),
+        ),
+      );
+      await tester.pump();
 
-    expect(
-      onboardingShouldShowTopLeftBackButton(
-        currentPage: onboardingSkinCareStepIndex,
-        baseTimeline: const BaseTimelineDraft(skinCareSetupStep: 0),
-      ),
-      isFalse,
-    );
-    expect(
-      onboardingShouldShowTopLeftBackButton(
-        currentPage: onboardingSkinCareStepIndex,
-        baseTimeline: const BaseTimelineDraft(skinCareSetupStep: 1),
-      ),
-      isTrue,
-    );
-    expect(find.byKey(const ValueKey('onboarding-step7-back')), findsNothing);
+      expect(
+        onboardingShouldShowTopLeftBackButton(
+          currentPage: onboardingSkinCareStepIndex,
+          baseTimeline: const BaseTimelineDraft(skinCareSetupStep: 0),
+        ),
+        isFalse,
+      );
+      expect(
+        onboardingShouldShowTopLeftBackButton(
+          currentPage: onboardingSkinCareStepIndex,
+          baseTimeline: const BaseTimelineDraft(skinCareSetupStep: 1),
+        ),
+        isTrue,
+      );
+      expect(find.byKey(const ValueKey('onboarding-step7-back')), findsNothing);
 
-    await tester.tap(find.text('I have products'));
-    await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.text('I have products'));
+      await tester.pump(const Duration(seconds: 1));
 
-    final backButton = find.byKey(const ValueKey('onboarding-step7-back'));
-    expect(backButton, findsOneWidget);
+      final backButton = find.byKey(const ValueKey('onboarding-step7-back'));
+      expect(backButton, findsOneWidget);
 
-    await tester.tap(backButton);
-    await tester.pump(const Duration(seconds: 1));
+      await tester.tap(backButton);
+      await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('Skin Care'), findsOneWidget);
-    expect(find.text('I have products'), findsOneWidget);
-    expect(find.byKey(const ValueKey('onboarding-step7-back')), findsNothing);
-  });
+      expect(find.text('Skin Care'), findsOneWidget);
+      expect(find.text('I have products'), findsOneWidget);
+      expect(find.byKey(const ValueKey('onboarding-step7-back')), findsNothing);
+    },
+  );
 
   test('74. Common store category labels satisfy all five essentials', () {
     const recommendations = [
@@ -6309,23 +6328,29 @@ OnboardingDraft _hasProductsDraft({
   List<String> specialCareNotes = const [],
 }) {
   final hasSkinBlocks = blocks.any((b) => b.section == 'skin_care');
-  final effectiveProductNames = productNames ??
+  final effectiveProductNames =
+      productNames ??
       (hasSkinBlocks && productPhotoR2Key == null ? 'Cleanser' : null);
+  final draftBase = BaseTimelineDraft(
+    skinCareSetupStep: 1,
+    skinCareSetupPath: 'has_products',
+    skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+    skinCareProductNames: effectiveProductNames,
+    skinCareProductPhotoAssetId: productPhotoAssetId,
+    skinCareProductPhotoR2Key: productPhotoR2Key,
+    skinCareProductPhotoStatus: productPhotoStatus,
+    skinCareProductPhotoCreatedAt: productPhotoCreatedAt,
+    skinCareProductPhotoUpdatedAt: productPhotoUpdatedAt,
+    skinCareSpecialCareNotes: specialCareNotes,
+    blocks: blocks,
+  );
+  final fingerprint = draftBase.computeSkinCareRoutineFingerprint();
   return OnboardingDraft(
     uid: uid,
     currentStep: 7,
-    baseTimeline: BaseTimelineDraft(
-      skinCareSetupStep: 1,
-      skinCareSetupPath: 'has_products',
-      skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-      skinCareProductNames: effectiveProductNames,
-      skinCareProductPhotoAssetId: productPhotoAssetId,
-      skinCareProductPhotoR2Key: productPhotoR2Key,
-      skinCareProductPhotoStatus: productPhotoStatus,
-      skinCareProductPhotoCreatedAt: productPhotoCreatedAt,
-      skinCareProductPhotoUpdatedAt: productPhotoUpdatedAt,
-      skinCareSpecialCareNotes: specialCareNotes,
-      blocks: blocks,
+    baseTimeline: draftBase.copyWith(
+      skinCareRoutineFingerprint: fingerprint,
+      blocks: _tagSkinCareBlocks(blocks, fingerprint),
     ),
   );
 }
@@ -6351,43 +6376,75 @@ OnboardingDraft _noProductsDraft({
   final effectiveWithPhoto = withPhoto || hasSkinBlocks;
   final effectiveSelectedProducts = selectedProducts.isNotEmpty
       ? selectedProducts
-      : (hasSkinBlocks ? const <String>['Minimalist Gentle Cleanser'] : const <String>[]);
+      : (hasSkinBlocks
+            ? const <String>['Minimalist Gentle Cleanser']
+            : const <String>[]);
   final effectiveSuggestedProducts = suggestedProducts.isNotEmpty
       ? suggestedProducts
-      : (hasSkinBlocks ? const <String>['Minimalist Gentle Cleanser'] : const <String>[]);
+      : (hasSkinBlocks
+            ? const <String>['Minimalist Gentle Cleanser']
+            : const <String>[]);
+  final draftBase = BaseTimelineDraft(
+    skinCareSetupStep: 1,
+    skinCareSetupPath: 'no_products',
+    skinCareSkinType: skinType ?? (hasSkinBlocks ? 'oily' : null),
+    skinCareProblems: problems.isNotEmpty
+        ? problems
+        : (hasSkinBlocks ? const ['pimples'] : const []),
+    skinCareBudget: budget ?? (hasSkinBlocks ? 'medium' : null),
+    skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+    skinCareSuggestedProducts: effectiveSuggestedProducts,
+    skinCareProductRecommendations: recommendations,
+    skinCareSelectedProductNames: effectiveSelectedProducts,
+    skinCareFacePhotoAssetId:
+        photoAssetId ?? (effectiveWithPhoto ? 'skin-asset' : null),
+    skinCareFacePhotoR2Key:
+        photoR2Key ??
+        (effectiveWithPhoto
+            ? 'users/$uid/onboarding/skin_care/skin-asset.jpg'
+            : null),
+    skinCareFacePhotoStatus:
+        photoStatus ?? (effectiveWithPhoto ? 'uploaded' : null),
+    skinCareFacePhotoCreatedAt:
+        photoCreatedAt ??
+        (effectiveWithPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
+    skinCareFacePhotoUpdatedAt:
+        photoUpdatedAt ??
+        (effectiveWithPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
+    blocks: blocks,
+  );
+  final recFingerprint = draftBase.computeSkinCareRecommendationFingerprint();
+  final draftWithRec = draftBase.copyWith(
+    skinCareRecommendationFingerprint: recFingerprint,
+  );
+  final routineFingerprint = draftWithRec.computeSkinCareRoutineFingerprint();
   return OnboardingDraft(
     uid: uid,
     currentStep: 7,
-    baseTimeline: BaseTimelineDraft(
-      skinCareSetupStep: 1,
-      skinCareSetupPath: 'no_products',
-      skinCareSkinType: skinType ?? (hasSkinBlocks ? 'oily' : null),
-      skinCareProblems: problems.isNotEmpty
-          ? problems
-          : (hasSkinBlocks ? const ['pimples'] : const []),
-      skinCareBudget: budget ?? (hasSkinBlocks ? 'medium' : null),
-      skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
-      skinCareSuggestedProducts: effectiveSuggestedProducts,
-      skinCareProductRecommendations: recommendations,
-      skinCareSelectedProductNames: effectiveSelectedProducts,
-      skinCareFacePhotoAssetId:
-          photoAssetId ?? (effectiveWithPhoto ? 'skin-asset' : null),
-      skinCareFacePhotoR2Key:
-          photoR2Key ??
-          (effectiveWithPhoto
-              ? 'users/uid-1/onboarding/skin_care/skin-asset.jpg'
-              : null),
-      skinCareFacePhotoStatus:
-          photoStatus ?? (effectiveWithPhoto ? 'uploaded' : null),
-      skinCareFacePhotoCreatedAt:
-          photoCreatedAt ??
-          (effectiveWithPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
-      skinCareFacePhotoUpdatedAt:
-          photoUpdatedAt ??
-          (effectiveWithPhoto ? DateTime.utc(2026, 6, 15, 10) : null),
-      blocks: blocks,
+    baseTimeline: draftWithRec.copyWith(
+      skinCareRoutineFingerprint: routineFingerprint,
+      blocks: _tagSkinCareBlocks(blocks, routineFingerprint),
     ),
   );
+}
+
+List<TimelineBlockDraft> _tagSkinCareBlocks(
+  List<TimelineBlockDraft> blocks,
+  String fingerprint,
+) {
+  final token = 'skin-care-generation:$fingerprint';
+  return blocks
+      .map(
+        (block) => block.section == 'skin_care'
+            ? block.copyWith(
+                provenanceSourceIds: {
+                  ...block.provenanceSourceIds,
+                  token,
+                }.toList(),
+              )
+            : block,
+      )
+      .toList(growable: false);
 }
 
 SkinCareAiRoutineResult _productRecommendationResult() {
@@ -6789,6 +6846,123 @@ class TestDeviceCountryService implements DeviceCountryService {
 
   @override
   Future<DeviceCountry?> detectCountry() async => result;
+}
+
+class TestUploadInteractionController extends UploadInteractionController {
+  final UploadedAsset? result;
+  final UploadState? initialLegacyState;
+  final TestUploadController? legacyProbe;
+  int startUploadCalls = 0;
+  int markDeletedCalls = 0;
+
+  TestUploadInteractionController({
+    this.result,
+    this.initialLegacyState,
+    this.legacyProbe,
+  }) : super(
+         shellConfig: onboardingUploadShellConfig,
+         assetRepository: DummyAssetRepo(),
+         authRepository: DummyAuthRepo(),
+         imagePrepareService: DummyImageService(),
+         r2UploadClient: DummyR2Client(),
+         permissionService: const DefaultUploadPermissionService(),
+       ) {
+    if (initialLegacyState?.status == UploadFlowStatus.uploading) {
+      final purpose =
+          initialLegacyState!.purpose ?? UploadedAssetPurpose.skinProducts;
+      final slotKey = purpose == UploadedAssetPurpose.skinFace
+          ? onboardingSkinFaceUploadSlot
+          : onboardingSkinProductsUploadSlot;
+      state = Map.unmodifiable({
+        ...state,
+        slotKey: UploadSlotRuntimeState(
+          slotKey: slotKey,
+          purpose: purpose,
+          phase: UploadInteractionPhase.uploading,
+        ),
+      });
+    }
+  }
+
+  @override
+  Future<UploadedAsset?> pickAndUpload(
+    String slotKey, {
+    required ImageSource source,
+    required String uid,
+    required String sourceFeature,
+  }) async {
+    startUploadCalls += 1;
+    legacyProbe?.startUploadCalls += 1;
+    if (result == null) return null;
+    final purpose = slotKey == onboardingSkinProductsUploadSlot
+        ? UploadedAssetPurpose.skinProducts
+        : UploadedAssetPurpose.skinFace;
+    final asset = result!.copyWith(purpose: purpose, ownerUid: uid);
+    state = Map.unmodifiable({
+      ...state,
+      slotKey: UploadSlotRuntimeState(
+        slotKey: slotKey,
+        purpose: purpose,
+        phase: UploadInteractionPhase.uploaded,
+        durableAsset: asset,
+      ),
+    });
+    return asset;
+  }
+
+  @override
+  Future<UploadedAsset?> takePhoto(
+    String slotKey, {
+    required String uid,
+    required String sourceFeature,
+  }) => pickAndUpload(
+    slotKey,
+    source: ImageSource.camera,
+    uid: uid,
+    sourceFeature: sourceFeature,
+  );
+
+  @override
+  Future<UploadedAsset?> chooseFromGallery(
+    String slotKey, {
+    required String uid,
+    required String sourceFeature,
+  }) => pickAndUpload(
+    slotKey,
+    source: ImageSource.gallery,
+    uid: uid,
+    sourceFeature: sourceFeature,
+  );
+
+  @override
+  Future<UploadedAsset?> retry(
+    String slotKey, {
+    required String uid,
+    required String sourceFeature,
+  }) => pickAndUpload(
+    slotKey,
+    source: ImageSource.gallery,
+    uid: uid,
+    sourceFeature: sourceFeature,
+  );
+
+  @override
+  Future<bool> remove(String slotKey, {required String uid}) async {
+    markDeletedCalls += 1;
+    legacyProbe?.markDeletedCalls += 1;
+    final purpose = slotKey == onboardingSkinProductsUploadSlot
+        ? UploadedAssetPurpose.skinProducts
+        : UploadedAssetPurpose.skinFace;
+    state = Map.unmodifiable({
+      ...state,
+      slotKey: UploadSlotRuntimeState(
+        slotKey: slotKey,
+        purpose: purpose,
+        phase: UploadInteractionPhase.empty,
+      ),
+    });
+    return true;
+  }
 }
 
 class TestUploadController extends UploadController {

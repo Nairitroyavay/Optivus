@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as image_lib;
@@ -63,20 +64,23 @@ class ImagePrepareService {
     }
 
     final sourceBytes = await picked.readAsBytes();
-    var decoded = image_lib.decodeImage(sourceBytes);
-    if (decoded == null) {
+    final transformed = await Isolate.run(
+      () => _transformImageBytes(
+        sourceBytes,
+        policy.maxBytes,
+        policy.maxLongestSide,
+        policy.minLongestSideAfterResize,
+        policy.initialJpegQuality,
+        policy.minJpegQuality,
+        policy.canPreserveContentType(contentType),
+      ),
+    );
+    if (transformed.status == _ImageTransformStatus.unreadable) {
       throw const ImagePreparationException(
         'This image could not be read. Please choose another photo.',
       );
     }
-    decoded = image_lib.bakeOrientation(decoded);
-
-    if (_canPreserveSourceBytes(
-      bytes: sourceBytes,
-      decoded: decoded,
-      contentType: contentType,
-      policy: policy,
-    )) {
+    if (transformed.status == _ImageTransformStatus.preserved) {
       return PreparedUploadImage(
         fileName: _fileNameForContentType(picked.name, contentType),
         contentType: contentType,
@@ -86,7 +90,7 @@ class ImagePrepareService {
       );
     }
 
-    final output = _compressToJpegUnderLimit(decoded, policy);
+    final output = transformed.bytes;
     if (output == null) {
       throw ImagePreparationException(policy.tooLargeMessage);
     }
@@ -99,58 +103,81 @@ class ImagePrepareService {
       localPreviewPath: picked.path.trim().isEmpty ? null : picked.path,
     );
   }
+}
 
-  bool _canPreserveSourceBytes({
-    required Uint8List bytes,
-    required image_lib.Image decoded,
-    required String contentType,
-    required UploadImagePolicy policy,
-  }) {
-    return bytes.length <= policy.maxBytes &&
-        _longestSide(decoded) <= policy.maxLongestSide &&
-        policy.canPreserveContentType(contentType);
+enum _ImageTransformStatus { preserved, transformed, unreadable, tooLarge }
+
+class _ImageTransformResult {
+  final _ImageTransformStatus status;
+  final Uint8List? bytes;
+
+  const _ImageTransformResult(this.status, [this.bytes]);
+}
+
+/// Pure image work. This function receives only isolate-sendable byte/config
+/// values and never touches ImagePicker/XFile or platform APIs.
+_ImageTransformResult _transformImageBytes(
+  Uint8List sourceBytes,
+  int maxBytes,
+  int maxLongestSide,
+  int minLongestSideAfterResize,
+  int initialJpegQuality,
+  int minJpegQuality,
+  bool canPreserveContentType,
+) {
+  var decoded = image_lib.decodeImage(sourceBytes);
+  if (decoded == null) {
+    return const _ImageTransformResult(_ImageTransformStatus.unreadable);
+  }
+  decoded = image_lib.bakeOrientation(decoded);
+  if (sourceBytes.length <= maxBytes &&
+      _longestSide(decoded) <= maxLongestSide &&
+      canPreserveContentType) {
+    return const _ImageTransformResult(_ImageTransformStatus.preserved);
   }
 
-  Uint8List? _compressToJpegUnderLimit(
-    image_lib.Image source,
-    UploadImagePolicy policy,
-  ) {
-    var targetLongestSide = _longestSide(
-      source,
-    ).clamp(1, policy.maxLongestSide).toInt();
-    while (targetLongestSide >= policy.minLongestSideAfterResize) {
-      final resized = _resizeIfNeeded(source, targetLongestSide);
-      final qualityStep = policy.initialJpegQuality > 95 ? 3 : 5;
-      for (
-        var quality = policy.initialJpegQuality;
-        quality >= policy.minJpegQuality;
-        quality -= qualityStep
-      ) {
-        final candidate = Uint8List.fromList(
-          image_lib.encodeJpg(resized, quality: quality),
+  var targetLongestSide = _longestSide(
+    decoded,
+  ).clamp(1, maxLongestSide).toInt();
+  while (targetLongestSide >= minLongestSideAfterResize) {
+    final resized = _resizeIfNeeded(decoded, targetLongestSide);
+    final qualityStep = initialJpegQuality > 95 ? 3 : 5;
+    for (
+      var quality = initialJpegQuality;
+      quality >= minJpegQuality;
+      quality -= qualityStep
+    ) {
+      final candidate = Uint8List.fromList(
+        image_lib.encodeJpg(resized, quality: quality),
+      );
+      if (candidate.length <= maxBytes) {
+        return _ImageTransformResult(
+          _ImageTransformStatus.transformed,
+          candidate,
         );
-        if (candidate.length <= policy.maxBytes) return candidate;
       }
-      final nextLongestSide = (targetLongestSide * 0.9).floor();
-      if (nextLongestSide == targetLongestSide) break;
-      targetLongestSide = nextLongestSide;
     }
-    return null;
+    final nextLongestSide = (targetLongestSide * 0.9).floor();
+    if (nextLongestSide == targetLongestSide) break;
+    targetLongestSide = nextLongestSide;
   }
+  return const _ImageTransformResult(_ImageTransformStatus.tooLarge);
+}
 
-  image_lib.Image _resizeIfNeeded(image_lib.Image source, int maxLongestSide) {
-    final longestSide = _longestSide(source);
-    if (longestSide <= maxLongestSide) return source;
-    if (source.width >= source.height) {
-      return image_lib.copyResize(source, width: maxLongestSide);
-    }
-    return image_lib.copyResize(source, height: maxLongestSide);
+image_lib.Image _resizeIfNeeded(image_lib.Image source, int maxLongestSide) {
+  final longestSide = _longestSide(source);
+  if (longestSide <= maxLongestSide) return source;
+  if (source.width >= source.height) {
+    return image_lib.copyResize(source, width: maxLongestSide);
   }
+  return image_lib.copyResize(source, height: maxLongestSide);
+}
 
-  int _longestSide(image_lib.Image source) {
-    return source.width > source.height ? source.width : source.height;
-  }
+int _longestSide(image_lib.Image source) {
+  return source.width > source.height ? source.width : source.height;
+}
 
+extension on ImagePrepareService {
   String _inputContentType(XFile file) {
     final mime = file.mimeType?.toLowerCase().trim();
     if (mime == 'image/jpeg' ||

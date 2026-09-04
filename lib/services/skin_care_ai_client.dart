@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
 import 'package:optivus/config/backend_config.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
+
+export 'package:optivus/models/skin_care_product_draft.dart';
 
 final skinCareAiClientProvider = Provider<SkinCareAiClient>((ref) {
   if (OptivusAiWorkersConfig.useWorker &&
@@ -40,154 +43,6 @@ class SkinCareAiProductResult {
 
   factory SkinCareAiProductResult.error(String msg) {
     return SkinCareAiProductResult(products: [], errorMessage: msg);
-  }
-}
-
-class SkinCareDetectedProduct {
-  final String name;
-  final String brand;
-  final String category;
-  final String source;
-  final List<String> keyIngredients;
-  final List<String> possibleActives;
-  final String usageHint;
-  final String warningIfAny;
-  final String confidence;
-
-  const SkinCareDetectedProduct({
-    this.name = '',
-    this.brand = '',
-    this.category = '',
-    this.source = '',
-    this.keyIngredients = const [],
-    this.possibleActives = const [],
-    this.usageHint = '',
-    this.warningIfAny = '',
-    this.confidence = '',
-  });
-
-  factory SkinCareDetectedProduct.fromValue(dynamic value) {
-    if (value is String) {
-      return SkinCareDetectedProduct(name: value.trim());
-    }
-    if (value is! Map) return const SkinCareDetectedProduct();
-    return SkinCareDetectedProduct.fromMap(Map<String, dynamic>.from(value));
-  }
-
-  factory SkinCareDetectedProduct.fromMap(Map<String, dynamic> map) {
-    return SkinCareDetectedProduct(
-      name: _stringValue(map['name']).trim(),
-      brand: _stringValue(map['brand']).trim(),
-      category: _stringValue(map['category']).trim(),
-      source: _stringValue(map['source']).trim(),
-      keyIngredients: _stringListFromValue(
-        map['keyIngredients'] ?? map['ingredients'],
-      ),
-      possibleActives: _stringListFromValue(
-        map['possibleActives'] ?? map['actives'],
-      ),
-      usageHint: _stringValue(map['usageHint'] ?? map['usage']).trim(),
-      warningIfAny: _stringValue(
-        map['warningIfAny'] ?? map['warning'] ?? map['warnings'],
-      ).trim(),
-      confidence: _stringValue(map['confidence']).trim(),
-    );
-  }
-
-  bool get hasMeaningfulData =>
-      name.isNotEmpty ||
-      brand.isNotEmpty ||
-      category.isNotEmpty ||
-      source.isNotEmpty ||
-      keyIngredients.isNotEmpty ||
-      possibleActives.isNotEmpty ||
-      usageHint.isNotEmpty ||
-      warningIfAny.isNotEmpty;
-
-  String get displayName {
-    final cleanName = name.trim();
-    final cleanBrand = brand.trim();
-    if (cleanName.isEmpty) return cleanBrand;
-    if (cleanBrand.isEmpty ||
-        cleanName.toLowerCase().contains(cleanBrand.toLowerCase())) {
-      return cleanName;
-    }
-    return '$cleanBrand $cleanName';
-  }
-
-  String get fallbackLabel {
-    final display = displayName.trim();
-    if (display.isNotEmpty) return display;
-    final categoryValue = category.trim().toLowerCase();
-    if (categoryValue == 'sunscreen' || _metadataLooksLikeSunscreen(this)) {
-      return 'Sunscreen';
-    }
-    if (categoryValue == 'cleanser' || _metadataLooksLikeCleanser(this)) {
-      return 'Cleanser';
-    }
-    if (categoryValue == 'moisturizer' ||
-        categoryValue == 'moisturiser' ||
-        _metadataLooksLikeMoisturizer(this)) {
-      return 'Moisturizer';
-    }
-    return hasMeaningfulData ? 'Skin-care product' : '';
-  }
-
-  List<String> get searchableFields => [
-    displayName,
-    fallbackLabel,
-    name,
-    brand,
-    category,
-    ...keyIngredients,
-    ...possibleActives,
-  ];
-
-  Map<String, dynamic> toMap() => {
-    'name': name,
-    'brand': brand,
-    'category': category,
-    if (source.isNotEmpty) 'source': source,
-    'keyIngredients': keyIngredients,
-    'possibleActives': possibleActives,
-    'usageHint': usageHint,
-    'warningIfAny': warningIfAny,
-    'confidence': confidence,
-  };
-
-  Map<String, dynamic> toCompactRoutinePayload() {
-    final map = <String, dynamic>{};
-    if (name.isNotEmpty) map['name'] = _truncate(name, 50);
-    if (brand.isNotEmpty) map['brand'] = _truncate(brand, 50);
-    if (category.isNotEmpty) map['category'] = _truncate(category, 30);
-    if (source.isNotEmpty) map['source'] = _truncate(source, 20);
-
-    if (keyIngredients.isNotEmpty) {
-      map['keyIngredients'] = keyIngredients
-          .take(5)
-          .map((e) => _truncate(e, 30))
-          .toList(growable: false);
-    }
-    if (possibleActives.isNotEmpty) {
-      map['possibleActives'] = possibleActives
-          .take(5)
-          .map((e) => _truncate(e, 30))
-          .toList(growable: false);
-    }
-    if (usageHint.isNotEmpty) {
-      map['usageHint'] = _truncate(usageHint, 100);
-    }
-    if (warningIfAny.isNotEmpty) {
-      map['warningIfAny'] = _truncate(warningIfAny, 100);
-    }
-    if (confidence.isNotEmpty) map['confidence'] = confidence;
-
-    return map;
-  }
-
-  static String _truncate(String value, int maxLength) {
-    if (value.length <= maxLength) return value;
-    return '${value.substring(0, maxLength - 3)}...';
   }
 }
 
@@ -1115,56 +970,6 @@ List<String> _dedupeStrings(Iterable<String> values) {
   }
   return result;
 }
-
-bool _metadataLooksLikeSunscreen(SkinCareDetectedProduct product) {
-  return _rawProductFields(product).any((value) {
-    final lower = value.toLowerCase();
-    return lower.contains('sunscreen') ||
-        lower.contains('spf') ||
-        lower.contains('sun cream') ||
-        lower.contains('suncream') ||
-        lower.contains('sunblock') ||
-        lower.contains('uv') ||
-        lower.contains('pa++++') ||
-        lower.contains('uv filter') ||
-        lower.contains('uv-filter');
-  });
-}
-
-bool _metadataLooksLikeCleanser(SkinCareDetectedProduct product) {
-  return _rawProductFields(product).any((value) {
-    final lower = value.toLowerCase();
-    return lower.contains('cleanser') ||
-        lower.contains('face wash') ||
-        lower.contains('cleansing gel') ||
-        lower.contains('cleansing foam') ||
-        lower.contains('micellar') ||
-        lower.contains('cleanse');
-  });
-}
-
-bool _metadataLooksLikeMoisturizer(SkinCareDetectedProduct product) {
-  return _rawProductFields(product).any((value) {
-    final lower = value.toLowerCase();
-    return lower.contains('moistur') ||
-        lower.contains('cream') ||
-        lower.contains('lotion') ||
-        lower.contains('barrier repair') ||
-        lower.contains('gel cream');
-  });
-}
-
-List<String> _rawProductFields(SkinCareDetectedProduct product) => [
-  product.displayName,
-  product.name,
-  product.brand,
-  product.category,
-  ...product.keyIngredients,
-  ...product.possibleActives,
-  product.usageHint,
-  product.warningIfAny,
-  product.confidence,
-];
 
 class SkinCarePayloadValidationResult {
   final bool isValid;

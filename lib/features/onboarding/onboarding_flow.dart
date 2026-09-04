@@ -12,7 +12,6 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/onboarding_state.dart';
-import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
@@ -21,7 +20,6 @@ import 'package:optivus/services/onboarding_completion_service.dart';
 import 'package:optivus/services/onboarding_resume_validator.dart';
 import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
-import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/features/uploads/controllers/upload_interaction_controller.dart';
 import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
@@ -792,7 +790,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   bool _uploadBusyForStep({
     required int step,
     required UploadInteractionMap uploadMap,
-    required UploadState legacyUploadState,
     required OnboardingDraft draft,
   }) {
     if (step == onboardingClassJobStepIndex) {
@@ -815,12 +812,13 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       return uploadMap[onboardingEatingUploadSlot]?.isBusy == true;
     }
     if (step == onboardingSkinCareStepIndex) {
-      return legacyUploadState.sourceFeature ==
-              OnboardingDraft.sourceOnboarding &&
-          legacyUploadState.isBusy &&
-          (legacyUploadState.purpose == UploadedAssetPurpose.skinCare ||
-              legacyUploadState.purpose == UploadedAssetPurpose.skinFace ||
-              legacyUploadState.purpose == UploadedAssetPurpose.skinProducts);
+      return switch (draft.baseTimeline.skinCareSetupPath) {
+        'has_products' =>
+          uploadMap[onboardingSkinProductsUploadSlot]?.isBusy == true,
+        'no_products' =>
+          uploadMap[onboardingSkinFaceUploadSlot]?.isBusy == true,
+        _ => false,
+      };
     }
     return false;
   }
@@ -830,7 +828,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     required OnboardingState onboardingState,
     required RoutineImportAiState aiState,
     required UploadInteractionMap uploadMap,
-    required UploadState legacyUploadState,
     required List<ClassRoutineBlock> classBlocks,
     required List<ClassRoutineBlock> workBlocks,
   }) {
@@ -844,7 +841,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         !_uploadBusyForStep(
           step: step,
           uploadMap: uploadMap,
-          legacyUploadState: legacyUploadState,
           draft: onboardingState.draft,
         );
     final classJobReviewReady =
@@ -872,7 +868,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       onboardingState: onboardingState,
       aiState: ref.read(routineImportAiControllerProvider),
       uploadMap: ref.read(onboardingUploadInteractionProvider),
-      legacyUploadState: ref.read(uploadControllerProvider),
       classBlocks: step == onboardingClassJobStepIndex
           ? ref.read(onboardingClassTimelineProvider)
           : const <ClassRoutineBlock>[],
@@ -899,7 +894,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final bool showSave = false; // Globally hidden for onboarding.
     final aiState = ref.watch(routineImportAiControllerProvider);
     final uploadMap = ref.watch(onboardingUploadInteractionProvider);
-    final legacyUploadState = ref.watch(uploadControllerProvider);
     final classBlocks = _currentPage == onboardingClassJobStepIndex
         ? ref.watch(onboardingClassTimelineProvider)
         : const <ClassRoutineBlock>[];
@@ -911,7 +905,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       onboardingState: onboardingState,
       aiState: aiState,
       uploadMap: uploadMap,
-      legacyUploadState: legacyUploadState,
       classBlocks: classBlocks,
       workBlocks: workBlocks,
     );

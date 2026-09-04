@@ -204,11 +204,80 @@ bool isUsableSkinUpload({
   required UploadedAssetPurpose expectedPurpose,
 }) {
   return asset != null &&
-      asset.status == UploadedAssetStatus.uploaded &&
-      asset.ownerUid == uid &&
-      asset.purpose == expectedPurpose &&
-      asset.sourceFeature == 'onboarding' &&
-      asset.assetId.trim().isNotEmpty &&
-      asset.r2Key.trim().isNotEmpty &&
-      (!asset.r2Key.startsWith('users/') || asset.r2Key.startsWith('users/$uid/'));
+      uploadedAssetFieldsAreDurablyUploadedForSlot(
+        assetId: asset.assetId,
+        ownerUid: asset.ownerUid,
+        sourceFeature: asset.sourceFeature,
+        purpose: asset.purpose,
+        r2Key: asset.r2Key,
+        status: asset.status,
+        uid: uid,
+        expectedPurpose: expectedPurpose,
+      );
+}
+
+bool uploadedAssetFieldsAreDurablyUploadedForSlot({
+  required String assetId,
+  required String ownerUid,
+  required String sourceFeature,
+  required UploadedAssetPurpose purpose,
+  required String r2Key,
+  required UploadedAssetStatus status,
+  required String uid,
+  required UploadedAssetPurpose expectedPurpose,
+}) {
+  final normalizedAssetId = assetId.trim();
+  final normalizedUid = uid.trim();
+  final key = r2Key.trim();
+  if (status != UploadedAssetStatus.uploaded ||
+      normalizedUid.isEmpty ||
+      ownerUid != normalizedUid ||
+      sourceFeature != 'onboarding' ||
+      purpose != expectedPurpose ||
+      normalizedAssetId.isEmpty ||
+      key.contains('..') ||
+      key.contains(r'\') ||
+      key.contains('//')) {
+    return false;
+  }
+  final parts = key.split('/');
+  if (parts.length != 5 ||
+      parts[0] != 'users' ||
+      parts[1] != normalizedUid ||
+      parts[2] != 'onboarding' ||
+      parts[3] != expectedPurpose.wireName) {
+    return false;
+  }
+  final fileName = parts[4];
+  final dot = fileName.lastIndexOf('.');
+  if (dot <= 0 || fileName.substring(0, dot) != normalizedAssetId) {
+    return false;
+  }
+  return const {
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+  }.contains(fileName.substring(dot + 1).toLowerCase());
+}
+
+/// Explicit read/delete-only compatibility check for pre-slot skin_care data.
+bool legacySkinCareUploadHasOwnedExactIdentity({
+  required String assetId,
+  required String ownerUid,
+  required String r2Key,
+  required UploadedAssetStatus status,
+  required String uid,
+}) {
+  if (status != UploadedAssetStatus.uploaded || ownerUid != uid) return false;
+  final parts = r2Key.split('/');
+  final name = parts.isEmpty ? '' : parts.last;
+  final dot = name.lastIndexOf('.');
+  final extension = dot > 0 ? name.substring(dot + 1).toLowerCase() : '';
+  return uid.trim().isNotEmpty &&
+      assetId.trim().isNotEmpty &&
+      dot > 0 &&
+      name.substring(0, dot) == assetId.trim() &&
+      const {'jpg', 'jpeg', 'png', 'webp'}.contains(extension) &&
+      r2Key == 'users/$uid/onboarding/skin_care/$name';
 }
