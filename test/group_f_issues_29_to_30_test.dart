@@ -124,6 +124,18 @@ void main() {
         final base = BaseTimelineDraft(
           eatingSetupPath: 'has_routine',
           eatingSetupStep: 1,
+          pendingFutureImports: [
+            PendingFutureImportDraft(
+              id: 'e_import',
+              section: 'Eating',
+              mode: 'Photo AI',
+              createdAt: DateTime.now(),
+              uploadedAssetId: 'menu_123',
+              uploadedAssetR2Key:
+                  'users/uid/onboarding/eating_menu/menu_123.jpg',
+              uploadedAssetStatus: 'uploaded',
+            ),
+          ],
           blocks: [
             TimelineBlockDraft(
               id: 'm1',
@@ -135,6 +147,8 @@ void main() {
               blockType: TimelineBlockDraft.hardBlockKey,
               mealCategory: 'breakfast',
               dishes: ['Eggs'],
+              source: 'ai_import',
+              provenanceSourceIds: const ['menu_123'],
             ),
             TimelineBlockDraft(
               id: 'm2',
@@ -146,6 +160,8 @@ void main() {
               blockType: TimelineBlockDraft.hardBlockKey,
               mealCategory: 'snack',
               dishes: ['Nuts'],
+              source: 'ai_import',
+              provenanceSourceIds: const ['menu_123'],
             ),
           ],
         );
@@ -256,7 +272,7 @@ void main() {
           uid: 'user_issue_30',
           onboardingCompleted: true,
           baseTimeline: BaseTimelineDraft(
-            eatingSetupPath: 'has_routine',
+            eatingSetupPath: 'create',
             eatingSetupStep: 1,
             blocks: [
               TimelineBlockDraft(

@@ -875,6 +875,8 @@ void main() {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
       baseTimeline: BaseTimelineDraft(
+        classLogicalAssetId: 'test_asset_id',
+        workLogicalAssetId: 'test_asset_id',
         blocks: [
           _timelineBlock(
             id: 'data-structures',
@@ -1547,7 +1549,11 @@ void main() {
         weightKg: 70,
         gender: 'other',
       ),
-      baseTimeline: const BaseTimelineDraft(skinCareSkipped: true),
+      baseTimeline: const BaseTimelineDraft(
+        classLogicalAssetId: 'test_asset_id',
+        workLogicalAssetId: 'test_asset_id',
+        skinCareSkipped: true,
+      ),
     );
 
     await tester.pumpWidget(
@@ -2015,6 +2021,18 @@ void main() {
       baseTimeline: BaseTimelineDraft(
         eatingSetupPath: onboardingEatingPathHasRoutine,
         eatingSetupStep: 1,
+        pendingFutureImports: [
+          PendingFutureImportDraft(
+            id: 'e1',
+            section: 'Eating',
+            mode: 'Photo AI',
+            createdAt: DateTime.now(),
+            uploadedAssetId: 'test_asset_id',
+            uploadedAssetR2Key:
+                'users/uid/onboarding/eating_menu/test_asset_id.jpg',
+            uploadedAssetStatus: 'uploaded',
+          ),
+        ],
         blocks: [
           _timelineBlock(
             id: 'ai-breakfast',
@@ -2022,7 +2040,10 @@ void main() {
             title: 'Breakfast',
             startMinute: 8 * 60,
             endMinute: 8 * 60 + 30,
-          ).copyWith(source: onboardingEatingAiImportSource),
+          ).copyWith(
+            source: onboardingEatingAiImportSource,
+            provenanceSourceIds: const ['test_asset_id'],
+          ),
         ],
       ),
     );
@@ -2469,6 +2490,7 @@ TimelineBlockDraft _timelineBlock({
     repeatDays: const [1],
     blockType: TimelineBlockDraft.hardBlockKey,
     source: 'ai_import',
+    provenanceSourceIds: const ['test_asset_id'],
   );
 }
 

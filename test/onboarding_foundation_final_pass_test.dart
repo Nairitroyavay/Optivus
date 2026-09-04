@@ -7,7 +7,12 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
+import 'package:optivus/services/onboarding_upload_source_reconciler.dart';
+import 'package:optivus/services/session_destination_resolver.dart';
+import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/state/upload_state.dart';
 
@@ -403,6 +408,869 @@ void main() {
       },
     );
   });
+
+  group(
+    'Onboarding Foundation Final Pass - Fail-Closed Domain Validation (Step 4 & Step 5)',
+    () {
+      const assetClassA = 'class_A';
+      const assetClassB = 'class_B';
+      const assetWorkA = 'work_A';
+      const assetWorkB = 'work_B';
+      const assetMenuA = 'menu_A';
+      const assetMenuB = 'menu_B';
+
+      test(
+        '16. required Class AI blocks with valid current logical source but empty provenance -> FAILS',
+        () {
+          final base = BaseTimelineDraft(
+            classLogicalAssetId: assetClassA,
+            classLogicalAssetR2Key:
+                'users/uid/onboarding/class_timetable/$assetClassA.jpg',
+            blocks: [
+              TimelineBlockDraft(
+                id: 'c1',
+                section: 'classes',
+                title: 'Math',
+                startMinute: 540,
+                endMinute: 600,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: const [], // Empty provenance
+              ),
+            ],
+          );
+
+          final error = base.validateClassesAndWorkForRole(
+            LifeRoleDraft.studentKey,
+          );
+          expect(error, contains('generated from a previous photo'));
+        },
+      );
+
+      test('17. required Work AI blocks with empty provenance -> FAILS', () {
+        final base = BaseTimelineDraft(
+          workLogicalAssetId: assetWorkA,
+          workLogicalAssetR2Key:
+              'users/uid/onboarding/work_schedule/$assetWorkA.jpg',
+          blocks: [
+            TimelineBlockDraft(
+              id: 'w1',
+              section: 'job_work_business',
+              title: 'Shift',
+              startMinute: 540,
+              endMinute: 1000,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [],
+            ),
+          ],
+        );
+
+        final error = base.validateClassesAndWorkForRole(
+          LifeRoleDraft.workingKey,
+        );
+        expect(error, contains('generated from a previous photo'));
+      });
+
+      test('18. correct Class provenance -> PASSES', () {
+        final base = BaseTimelineDraft(
+          classLogicalAssetId: assetClassA,
+          classLogicalAssetR2Key:
+              'users/uid/onboarding/class_timetable/$assetClassA.jpg',
+          blocks: [
+            TimelineBlockDraft(
+              id: 'c1',
+              section: 'classes',
+              title: 'Math',
+              startMinute: 540,
+              endMinute: 600,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetClassA],
+            ),
+          ],
+        );
+
+        final error = base.validateClassesAndWorkForRole(
+          LifeRoleDraft.studentKey,
+        );
+        expect(error, isNull);
+      });
+
+      test('19. correct Work provenance -> PASSES', () {
+        final base = BaseTimelineDraft(
+          workLogicalAssetId: assetWorkA,
+          workLogicalAssetR2Key:
+              'users/uid/onboarding/work_schedule/$assetWorkA.jpg',
+          blocks: [
+            TimelineBlockDraft(
+              id: 'w1',
+              section: 'job_work_business',
+              title: 'Shift',
+              startMinute: 540,
+              endMinute: 1000,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetWorkA],
+            ),
+          ],
+        );
+
+        final error = base.validateClassesAndWorkForRole(
+          LifeRoleDraft.workingKey,
+        );
+        expect(error, isNull);
+      });
+
+      test('20. wrong Class provenance -> FAILS', () {
+        final base = BaseTimelineDraft(
+          classLogicalAssetId: assetClassB,
+          classLogicalAssetR2Key:
+              'users/uid/onboarding/class_timetable/$assetClassB.jpg',
+          blocks: [
+            TimelineBlockDraft(
+              id: 'c1',
+              section: 'classes',
+              title: 'Math',
+              startMinute: 540,
+              endMinute: 600,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetClassA], // Has A, expects B
+            ),
+          ],
+        );
+
+        final error = base.validateClassesAndWorkForRole(
+          LifeRoleDraft.studentKey,
+        );
+        expect(error, contains('generated from a previous photo'));
+      });
+
+      test('21. wrong Work provenance -> FAILS', () {
+        final base = BaseTimelineDraft(
+          workLogicalAssetId: assetWorkB,
+          workLogicalAssetR2Key:
+              'users/uid/onboarding/work_schedule/$assetWorkB.jpg',
+          blocks: [
+            TimelineBlockDraft(
+              id: 'w1',
+              section: 'job_work_business',
+              title: 'Shift',
+              startMinute: 540,
+              endMinute: 1000,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetWorkA],
+            ),
+          ],
+        );
+
+        final error = base.validateClassesAndWorkForRole(
+          LifeRoleDraft.workingKey,
+        );
+        expect(error, contains('generated from a previous photo'));
+      });
+
+      test('22. studentWorking one valid / one stale -> FAILS', () {
+        final base = BaseTimelineDraft(
+          classLogicalAssetId: assetClassA,
+          classLogicalAssetR2Key:
+              'users/uid/onboarding/class_timetable/$assetClassA.jpg',
+          workLogicalAssetId: assetWorkB,
+          workLogicalAssetR2Key:
+              'users/uid/onboarding/work_schedule/$assetWorkB.jpg',
+          blocks: [
+            TimelineBlockDraft(
+              id: 'c1',
+              section: 'classes',
+              title: 'Math',
+              startMinute: 540,
+              endMinute: 600,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetClassA], // Valid Class
+            ),
+            TimelineBlockDraft(
+              id: 'w1',
+              section: 'job_work_business',
+              title: 'Shift',
+              startMinute: 720,
+              endMinute: 1000,
+              repeatDays: const [2],
+              blockType: TimelineBlockDraft.hardBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [
+                assetWorkA,
+              ], // Stale Work provenance (expects B)
+            ),
+          ],
+        );
+
+        final error = base.validateClassesAndWorkForRole(
+          LifeRoleDraft.studentWorkingKey,
+        );
+        expect(
+          error,
+          contains('work timeline was generated from a previous photo'),
+        );
+      });
+
+      test(
+        '23. legitimate persisted Class/Work swap with correct provenance -> PASSES',
+        () {
+          final base = BaseTimelineDraft(
+            classLogicalAssetId: assetWorkA, // Swapped to work asset
+            classLogicalAssetR2Key:
+                'users/uid/onboarding/work_schedule/$assetWorkA.jpg',
+            workLogicalAssetId: assetClassA, // Swapped to class asset
+            workLogicalAssetR2Key:
+                'users/uid/onboarding/class_timetable/$assetClassA.jpg',
+            blocks: [
+              TimelineBlockDraft(
+                id: 'c1',
+                section: 'classes',
+                title: 'Class',
+                startMinute: 540,
+                endMinute: 600,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: const [assetWorkA],
+              ),
+              TimelineBlockDraft(
+                id: 'w1',
+                section: 'job_work_business',
+                title: 'Work',
+                startMinute: 720,
+                endMinute: 1000,
+                repeatDays: const [2],
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: const [assetClassA],
+              ),
+            ],
+          );
+
+          final error = base.validateClassesAndWorkForRole(
+            LifeRoleDraft.studentWorkingKey,
+          );
+          expect(error, isNull);
+        },
+      );
+
+      test(
+        '24. has_routine + confirmed Eating blocks + NO PendingFutureImportDraft -> FAILS',
+        () {
+          final base = BaseTimelineDraft(
+            eatingSetupPath: 'has_routine',
+            pendingFutureImports: const [], // Missing import
+            blocks: [
+              TimelineBlockDraft(
+                id: 'm1',
+                section: 'eating',
+                title: 'Lunch',
+                startMinute: 720,
+                endMinute: 780,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.softBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: const [assetMenuA],
+              ),
+            ],
+          );
+
+          final error = base.validateEatingSetup();
+          expect(error, contains('generated from a previous menu'));
+        },
+      );
+
+      test('25. has_routine + import but missing uploadedAssetId -> FAILS', () {
+        final base = BaseTimelineDraft(
+          eatingSetupPath: 'has_routine',
+          pendingFutureImports: [
+            PendingFutureImportDraft(
+              id: 'e1',
+              section: 'Eating',
+              mode: 'Photo AI',
+              createdAt: DateTime.now(),
+              uploadedAssetId: null, // Missing asset ID
+              uploadedAssetR2Key: 'users/uid/onboarding/eating_menu/menu.jpg',
+            ),
+          ],
+          blocks: [
+            TimelineBlockDraft(
+              id: 'm1',
+              section: 'eating',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 780,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.softBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetMenuA],
+            ),
+          ],
+        );
+
+        final error = base.validateEatingSetup();
+        expect(error, contains('generated from a previous menu'));
+      });
+
+      test(
+        '26. has_routine + import but missing uploadedAssetR2Key -> FAILS',
+        () {
+          final base = BaseTimelineDraft(
+            eatingSetupPath: 'has_routine',
+            pendingFutureImports: [
+              PendingFutureImportDraft(
+                id: 'e1',
+                section: 'Eating',
+                mode: 'Photo AI',
+                createdAt: DateTime.now(),
+                uploadedAssetId: assetMenuA,
+                uploadedAssetR2Key: null, // Missing R2 key
+              ),
+            ],
+            blocks: [
+              TimelineBlockDraft(
+                id: 'm1',
+                section: 'eating',
+                title: 'Lunch',
+                startMinute: 720,
+                endMinute: 780,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.softBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: const [assetMenuA],
+              ),
+            ],
+          );
+
+          final error = base.validateEatingSetup();
+          expect(error, contains('generated from a previous menu'));
+        },
+      );
+
+      test('27. has_routine + AI block provenance empty -> FAILS', () {
+        final base = BaseTimelineDraft(
+          eatingSetupPath: 'has_routine',
+          pendingFutureImports: [
+            PendingFutureImportDraft(
+              id: 'e1',
+              section: 'Eating',
+              mode: 'Photo AI',
+              createdAt: DateTime.now(),
+              uploadedAssetId: assetMenuA,
+              uploadedAssetR2Key:
+                  'users/uid/onboarding/eating_menu/$assetMenuA.jpg',
+            ),
+          ],
+          blocks: [
+            TimelineBlockDraft(
+              id: 'm1',
+              section: 'eating',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 780,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.softBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [], // Empty provenance
+            ),
+          ],
+        );
+
+        final error = base.validateEatingSetup();
+        expect(error, contains('generated from a previous menu'));
+      });
+
+      test('28. has_routine + import A + block provenance B -> FAILS', () {
+        final base = BaseTimelineDraft(
+          eatingSetupPath: 'has_routine',
+          pendingFutureImports: [
+            PendingFutureImportDraft(
+              id: 'e1',
+              section: 'Eating',
+              mode: 'Photo AI',
+              createdAt: DateTime.now(),
+              uploadedAssetId: assetMenuA,
+              uploadedAssetR2Key:
+                  'users/uid/onboarding/eating_menu/$assetMenuA.jpg',
+            ),
+          ],
+          blocks: [
+            TimelineBlockDraft(
+              id: 'm1',
+              section: 'eating',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 780,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.softBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetMenuB], // Has B, expects A
+            ),
+          ],
+        );
+
+        final error = base.validateEatingSetup();
+        expect(error, contains('generated from a previous menu'));
+      });
+
+      test('29. has_routine + import A + block provenance A -> PASSES', () {
+        final base = BaseTimelineDraft(
+          eatingSetupPath: 'has_routine',
+          pendingFutureImports: [
+            PendingFutureImportDraft(
+              id: 'e1',
+              section: 'Eating',
+              mode: 'Photo AI',
+              createdAt: DateTime.now(),
+              uploadedAssetId: assetMenuA,
+              uploadedAssetR2Key:
+                  'users/uid/onboarding/eating_menu/$assetMenuA.jpg',
+              uploadedAssetStatus: 'uploaded',
+            ),
+          ],
+          blocks: [
+            TimelineBlockDraft(
+              id: 'm1',
+              section: 'eating',
+              title: 'Lunch',
+              startMinute: 720,
+              endMinute: 780,
+              repeatDays: const [1],
+              blockType: TimelineBlockDraft.softBlockKey,
+              source: 'ai_import',
+              provenanceSourceIds: const [assetMenuA],
+            ),
+          ],
+        );
+
+        final error = base.validateEatingSetup();
+        expect(error, isNull);
+      });
+
+      test(
+        '30. create path + valid generated Eating blocks + no upload provenance -> PASSES',
+        () {
+          final base = BaseTimelineDraft(
+            eatingSetupPath: 'create',
+            blocks: [
+              TimelineBlockDraft(
+                id: 'm1',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 480,
+                endMinute: 510,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.softBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds:
+                    const [], // Photo provenance not required for Create path
+              ),
+            ],
+          );
+
+          final error = base.validateEatingSetup();
+          expect(error, isNull);
+        },
+      );
+    },
+  );
+
+  group(
+    'Onboarding Foundation Final Pass - Auth / Reconstruction Integration & Crash Window',
+    () {
+      const ownerUid = 'user_crash_test';
+
+      UploadedAsset makeAsset(String id, UploadedAssetPurpose purpose) {
+        final p = purpose.wireName;
+        return UploadedAsset(
+          assetId: id,
+          ownerUid: ownerUid,
+          sourceFeature: OnboardingDraft.sourceOnboarding,
+          purpose: purpose,
+          fileName: '$id.jpg',
+          contentType: 'image/jpeg',
+          sizeBytes: 2048,
+          r2Key: 'users/$ownerUid/onboarding/$p/$id.jpg',
+          status: UploadedAssetStatus.uploaded,
+          createdAt: DateTime(2026, 1, 1),
+          updatedAt: DateTime(2026, 1, 1),
+        );
+      }
+
+      test(
+        '31 & 32. ReconstructionIncomplete with stale photo source resumes at affected step',
+        () {
+          final classA = makeAsset(
+            'class_A',
+            UploadedAssetPurpose.classTimetable,
+          );
+          final classB = makeAsset(
+            'class_B',
+            UploadedAssetPurpose.classTimetable,
+          );
+
+          final draft = OnboardingDraft(
+            uid: ownerUid,
+            currentStep: 8,
+            patiencePledgeAccepted: true,
+            bodyBasics: const BodyBasicsDraft(
+              ageRange: '25-34',
+              gender: 'male',
+              heightCm: 175,
+              weightKg: 70,
+            ),
+            stepCompleted: const [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+            ],
+            lifeRole: const LifeRoleDraft(
+              lifeRole: LifeRoleDraft.studentKey,
+              exerciseLevel: 'light',
+              waterIntake: '2_liters',
+              stressLevel: 'moderate',
+              sleepQuality: 'good',
+            ),
+            baseTimeline: BaseTimelineDraft(
+              classLogicalAssetId: classA.assetId,
+              classLogicalAssetR2Key: classA.r2Key,
+              blocks: [
+                TimelineBlockDraft(
+                  id: 'c1',
+                  section: 'classes',
+                  title: 'Physics',
+                  startMinute: 540,
+                  endMinute: 600,
+                  repeatDays: const [1],
+                  blockType: TimelineBlockDraft.hardBlockKey,
+                  source: 'ai_import',
+                  provenanceSourceIds: [classA.assetId, classA.r2Key],
+                ),
+              ],
+            ),
+          );
+
+          final restoredWithB = RestoredUploadsState(
+            uid: ownerUid,
+            assetsByPurpose: {
+              UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
+                asset: classB,
+              ),
+            },
+          );
+
+          final recon = OnboardingUploadSourceReconciler.reconcile(
+            ownerUid: ownerUid,
+            draft: draft,
+            restoredUploads: restoredWithB,
+          );
+
+          final effectiveStep = validateOnboardingResume(
+            recon.reconciledDraft,
+          ).resumeStep;
+          expect(effectiveStep, equals(4));
+
+          final dest = resolveReconstructionDestination(
+            ReconstructionIncomplete(
+              ownerUid: ownerUid,
+              profile: UserProfile.empty(uid: ownerUid),
+              step: effectiveStep,
+              draft: recon.reconciledDraft,
+            ),
+          );
+
+          expect(dest.kind, equals(SessionDestinationKind.resumeOnboarding));
+          expect(dest.resumeStep, equals(4));
+        },
+      );
+
+      test(
+        '33 & 34. ReconstructionIncomplete with matching photo source preserves destination',
+        () {
+          final classA = makeAsset(
+            'class_A',
+            UploadedAssetPurpose.classTimetable,
+          );
+
+          final draft = OnboardingDraft(
+            uid: ownerUid,
+            currentStep: 8,
+            patiencePledgeAccepted: true,
+            bodyBasics: const BodyBasicsDraft(
+              ageRange: '25-34',
+              gender: 'male',
+              heightCm: 175,
+              weightKg: 70,
+            ),
+            stepCompleted: const [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+            ],
+            lifeRole: const LifeRoleDraft(
+              lifeRole: LifeRoleDraft.studentKey,
+              exerciseLevel: 'light',
+              waterIntake: '2_liters',
+              stressLevel: 'moderate',
+              sleepQuality: 'good',
+            ),
+            baseTimeline: BaseTimelineDraft(
+              classLogicalAssetId: classA.assetId,
+              classLogicalAssetR2Key: classA.r2Key,
+              eatingSetupPath: 'create',
+              skinCareSkipped: true,
+              blocks: [
+                TimelineBlockDraft(
+                  id: 'c1',
+                  section: 'classes',
+                  title: 'Physics',
+                  startMinute: 540,
+                  endMinute: 600,
+                  repeatDays: const [1],
+                  blockType: TimelineBlockDraft.hardBlockKey,
+                  source: 'ai_import',
+                  provenanceSourceIds: [classA.assetId, classA.r2Key],
+                ),
+                TimelineBlockDraft(
+                  id: 'm1',
+                  section: 'eating',
+                  title: 'Lunch',
+                  startMinute: 720,
+                  endMinute: 780,
+                  repeatDays: const [1],
+                  blockType: TimelineBlockDraft.softBlockKey,
+                  source: 'ai_import',
+                ),
+                BaseTimelineDraft.defaultSleepBlock(),
+                BaseTimelineDraft.defaultBathBlock(),
+              ],
+            ),
+          );
+
+          final restoredWithA = RestoredUploadsState(
+            uid: ownerUid,
+            assetsByPurpose: {
+              UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
+                asset: classA,
+              ),
+            },
+          );
+
+          final recon = OnboardingUploadSourceReconciler.reconcile(
+            ownerUid: ownerUid,
+            draft: draft,
+            restoredUploads: restoredWithA,
+          );
+
+          final effectiveStep = validateOnboardingResume(
+            recon.reconciledDraft,
+          ).resumeStep;
+          expect(effectiveStep, equals(8));
+        },
+      );
+
+      test('36. upload hydration failure is non-destructive', () {
+        final draft = OnboardingDraft(
+          uid: ownerUid,
+          currentStep: 6,
+          lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+          baseTimeline: const BaseTimelineDraft(classLogicalAssetId: 'asset_A'),
+        );
+
+        final restoredError = const RestoredUploadsState(
+          uid: ownerUid,
+          errorMessage: 'Network error',
+        );
+
+        final result = OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: ownerUid,
+          draft: draft,
+          restoredUploads: restoredError,
+        );
+
+        expect(result.integrityFailure, isTrue);
+        // Draft must NOT be mutated or wiped
+        expect(result.reconciledDraft, equals(draft));
+      });
+
+      test(
+        'MANDATORY RELEASE-BLOCKER CRASH WINDOW TEST (Step 5 Menu Replacement Crash)',
+        () {
+          final menuA = makeAsset('menu_A', UploadedAssetPurpose.eatingMenu);
+          final menuB = makeAsset('menu_B', UploadedAssetPurpose.eatingMenu);
+
+          // Saved draft state before app crash: Menu A
+          final draftBeforeCrash = OnboardingDraft(
+            uid: ownerUid,
+            currentStep: 8,
+            patiencePledgeAccepted: true,
+            bodyBasics: const BodyBasicsDraft(
+              ageRange: '25-34',
+              gender: 'male',
+              heightCm: 175,
+              weightKg: 70,
+            ),
+            stepCompleted: const [
+              true,
+              true,
+              true,
+              true,
+              true,
+              true, // Step 5 completed
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+            ],
+            lifeRole: const LifeRoleDraft(
+              lifeRole: LifeRoleDraft.notStudentNotWorkingKey,
+              exerciseLevel: 'light',
+              waterIntake: '2_liters',
+              stressLevel: 'moderate',
+              sleepQuality: 'good',
+            ),
+            baseTimeline: BaseTimelineDraft(
+              eatingSetupPath: 'has_routine',
+              pendingFutureImports: [
+                PendingFutureImportDraft(
+                  id: 'e1',
+                  section: 'Eating',
+                  mode: 'Photo AI',
+                  createdAt: DateTime.now(),
+                  uploadedAssetId: menuA.assetId,
+                  uploadedAssetR2Key: menuA.r2Key,
+                ),
+              ],
+              blocks: [
+                TimelineBlockDraft(
+                  id: 'm1',
+                  section: 'eating',
+                  title: 'Lunch derived from Menu A',
+                  startMinute: 720,
+                  endMinute: 780,
+                  repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+                  blockType: TimelineBlockDraft.softBlockKey,
+                  source: 'ai_import',
+                  provenanceSourceIds: [menuA.assetId, menuA.r2Key],
+                ),
+              ],
+            ),
+          );
+
+          // Restored durable uploads after crash: Menu B is current
+          final restoredAfterCrash = RestoredUploadsState(
+            uid: ownerUid,
+            assetsByPurpose: {
+              UploadedAssetPurpose.eatingMenu: RestoredUploadedAsset(
+                asset: menuB,
+              ),
+            },
+          );
+
+          // Reconcile reconstructed draft against restored uploads
+          final reconciliation = OnboardingUploadSourceReconciler.reconcile(
+            ownerUid: ownerUid,
+            draft: draftBeforeCrash,
+            restoredUploads: restoredAfterCrash,
+          );
+
+          expect(reconciliation.changed, isTrue);
+          expect(reconciliation.earliestAffectedStep, equals(5));
+
+          final reconciledDraft = reconciliation.reconciledDraft;
+
+          // Assertions:
+          // 1. Menu B remains current durable upload
+          expect(
+            restoredAfterCrash
+                .forPurpose(UploadedAssetPurpose.eatingMenu)
+                ?.asset
+                .assetId,
+            equals(menuB.assetId),
+          );
+
+          // 2. Old Menu A AI blocks are NOT authoritative (removed)
+          expect(
+            reconciledDraft.baseTimeline.blocks.any(
+              (b) => b.section == 'eating',
+            ),
+            isFalse,
+          );
+
+          // 3. Stale Pending import A replaced by Menu B
+          final currentImport = reconciledDraft.baseTimeline
+              .latestImportForSection('Eating');
+          expect(currentImport, isNotNull);
+          expect(currentImport!.uploadedAssetId, equals(menuB.assetId));
+
+          // 4. Step 5 no longer completed, marked dirty
+          expect(reconciledDraft.stepCompleted[5], isFalse);
+          expect(reconciledDraft.stepDirty[5], isTrue);
+
+          // 5. Destination reopens Step 5
+          final effectiveStep = validateOnboardingResume(
+            reconciledDraft,
+          ).resumeStep;
+          expect(effectiveStep, equals(5));
+
+          final dest = resolveReconstructionDestination(
+            ReconstructionIncomplete(
+              ownerUid: ownerUid,
+              profile: UserProfile.empty(uid: ownerUid),
+              step: effectiveStep,
+              draft: reconciledDraft,
+            ),
+          );
+          expect(dest.kind, equals(SessionDestinationKind.resumeOnboarding));
+          expect(dest.resumeStep, equals(5));
+
+          // 6. No provenance is fabricated for B
+          expect(reconciledDraft.baseTimeline.blocks, isEmpty);
+        },
+      );
+    },
+  );
 }
 
 class TestAuthRepository implements AuthRepository {

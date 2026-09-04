@@ -2042,18 +2042,21 @@ class BaseTimelineDraft {
       if (!_hasConfirmedSection('classes')) {
         return 'Generate your class timeline first.';
       }
-      if (classLogicalAssetId != null &&
-          classLogicalAssetId!.trim().isNotEmpty) {
-        final classAiBlocks = blocks.where(
-          (b) => b.section == 'classes' && b.source == 'ai_import',
-        );
+      final classAiBlocks = blocks.where(
+        (b) => b.section == 'classes' && b.source == 'ai_import',
+      );
+      if (classAiBlocks.isNotEmpty) {
+        if (classLogicalAssetId == null ||
+            classLogicalAssetId!.trim().isEmpty) {
+          return 'Your class timeline was generated from a previous photo. Please regenerate.';
+        }
         for (final block in classAiBlocks) {
-          if (block.provenanceSourceIds.isNotEmpty &&
-              !block.provenanceSourceIds.contains(classLogicalAssetId) &&
-              (classLogicalAssetR2Key == null ||
-                  !block.provenanceSourceIds.contains(
-                    classLogicalAssetR2Key,
-                  ))) {
+          if (block.provenanceSourceIds.isEmpty ||
+              (!block.provenanceSourceIds.contains(classLogicalAssetId) &&
+                  (classLogicalAssetR2Key == null ||
+                      !block.provenanceSourceIds.contains(
+                        classLogicalAssetR2Key,
+                      )))) {
             return 'Your class timeline was generated from a previous photo. Please regenerate.';
           }
         }
@@ -2066,15 +2069,20 @@ class BaseTimelineDraft {
         }
         return 'Generate your work timeline first.';
       }
-      if (workLogicalAssetId != null && workLogicalAssetId!.trim().isNotEmpty) {
-        final workAiBlocks = blocks.where(
-          (b) => b.section == 'job_work_business' && b.source == 'ai_import',
-        );
+      final workAiBlocks = blocks.where(
+        (b) => b.section == 'job_work_business' && b.source == 'ai_import',
+      );
+      if (workAiBlocks.isNotEmpty) {
+        if (workLogicalAssetId == null || workLogicalAssetId!.trim().isEmpty) {
+          return 'Your work timeline was generated from a previous photo. Please regenerate.';
+        }
         for (final block in workAiBlocks) {
-          if (block.provenanceSourceIds.isNotEmpty &&
-              !block.provenanceSourceIds.contains(workLogicalAssetId) &&
-              (workLogicalAssetR2Key == null ||
-                  !block.provenanceSourceIds.contains(workLogicalAssetR2Key))) {
+          if (block.provenanceSourceIds.isEmpty ||
+              (!block.provenanceSourceIds.contains(workLogicalAssetId) &&
+                  (workLogicalAssetR2Key == null ||
+                      !block.provenanceSourceIds.contains(
+                        workLogicalAssetR2Key,
+                      )))) {
             return 'Your work timeline was generated from a previous photo. Please regenerate.';
           }
         }
@@ -2113,23 +2121,31 @@ class BaseTimelineDraft {
 
   String? validateEatingSetup() {
     if (_hasConfirmedSection('eating')) {
-      final eatingImport = latestImportForSection('Eating');
-      if (eatingImport != null &&
-          eatingImport.hasUploadedAssetReference &&
-          eatingImport.uploadedAssetId != null &&
-          eatingImport.uploadedAssetId!.trim().isNotEmpty) {
+      if (eatingSetupPath == 'has_routine') {
+        final eatingImport = latestImportForSection('Eating');
+        if (eatingImport == null ||
+            !eatingImport.hasUploadedAssetReference ||
+            eatingImport.uploadedAssetId == null ||
+            eatingImport.uploadedAssetId!.trim().isEmpty ||
+            eatingImport.uploadedAssetR2Key == null ||
+            eatingImport.uploadedAssetR2Key!.trim().isEmpty) {
+          return 'Your meal routine was generated from a previous menu. Generate your meal routine first.';
+        }
         final eatingAiBlocks = blocks.where(
           (b) => b.section == 'eating' && b.source == 'ai_import',
         );
+        if (eatingAiBlocks.isEmpty) {
+          return 'Your meal routine was generated from a previous menu. Generate your meal routine first.';
+        }
         for (final block in eatingAiBlocks) {
-          if (block.provenanceSourceIds.isNotEmpty &&
-              !block.provenanceSourceIds.contains(
-                eatingImport.uploadedAssetId,
-              ) &&
-              (eatingImport.uploadedAssetR2Key == null ||
-                  !block.provenanceSourceIds.contains(
-                    eatingImport.uploadedAssetR2Key,
-                  ))) {
+          if (block.provenanceSourceIds.isEmpty ||
+              (!block.provenanceSourceIds.contains(
+                    eatingImport.uploadedAssetId,
+                  ) &&
+                  (eatingImport.uploadedAssetR2Key == null ||
+                      !block.provenanceSourceIds.contains(
+                        eatingImport.uploadedAssetR2Key,
+                      )))) {
             return 'Your meal routine was generated from a previous menu. Generate your meal routine first.';
           }
         }
@@ -2216,9 +2232,9 @@ class BaseTimelineDraft {
       final hasTyped = skinCareProductNames?.trim().isNotEmpty == true;
       final effectiveUid =
           (skinCareProductPhotoR2Key?.startsWith('users/') == true &&
-                  skinCareProductPhotoR2Key!.split('/').length > 1)
-              ? skinCareProductPhotoR2Key!.split('/')[1]
-              : uid;
+              skinCareProductPhotoR2Key!.split('/').length > 1)
+          ? skinCareProductPhotoR2Key!.split('/')[1]
+          : uid;
       final productAsset =
           skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
               skinCareProductPhotoR2Key?.trim().isNotEmpty == true
@@ -2260,9 +2276,9 @@ class BaseTimelineDraft {
     if (skinCareSetupPath == 'no_products') {
       final effectiveUid =
           (skinCareFacePhotoR2Key?.startsWith('users/') == true &&
-                  skinCareFacePhotoR2Key!.split('/').length > 1)
-              ? skinCareFacePhotoR2Key!.split('/')[1]
-              : uid;
+              skinCareFacePhotoR2Key!.split('/').length > 1)
+          ? skinCareFacePhotoR2Key!.split('/')[1]
+          : uid;
       final faceAsset =
           skinCareFacePhotoAssetId?.trim().isNotEmpty == true &&
               skinCareFacePhotoR2Key?.trim().isNotEmpty == true

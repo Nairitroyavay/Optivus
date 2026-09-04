@@ -74,7 +74,8 @@ void main() {
       findsNothing,
     );
 
-    await tester.tap(fields.at(2));
+    await tester.ensureVisible(fields.at(2));
+    await tester.tap(fields.at(2), warnIfMissed: false);
     await tester.enterText(fields.at(2), 'Validpass1!');
     await tester.pump(const Duration(milliseconds: 300));
     expect(

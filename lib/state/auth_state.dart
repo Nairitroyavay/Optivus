@@ -41,6 +41,8 @@ import 'package:optivus/services/onboarding_account_migration_service.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/state/auth_generation.dart';
+import 'package:optivus/services/onboarding_resume_validator.dart';
+import 'package:optivus/services/onboarding_upload_source_reconciler.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 
@@ -1068,9 +1070,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return;
       }
 
+      await assetHydration;
+      if (!_isCurrentRestore(restoreGeneration) ||
+          state.user?.uid != user.uid) {
+        return;
+      }
+
+      final restoredUploads = _ref.read(restoredUploadsProvider);
+      ReconstructionResult effectiveResult = result;
+
       // Nothing user-visible is hydrated until the complete durable snapshot
-      // has been decoded and classified.
+      // has been decoded, classified, and reconciled against restored assets.
       _ref.read(mockUserProfileProvider.notifier).loadSeedData(result.profile);
+
       switch (result) {
         case ReconstructionFresh():
           final now = DateTime.now();
@@ -1085,32 +1097,103 @@ class AuthNotifier extends StateNotifier<AuthState> {
                   updatedAt: now,
                 ),
               );
-        case ReconstructionIncomplete(:final step, :final draft):
-          _ref
-              .read(mockOnboardingProvider.notifier)
-              .loadSeedData(
-                draft.copyWith(
-                  currentStep: step,
-                  stepLoading: List<bool>.filled(
-                    OnboardingDraft.stepCount,
-                    false,
-                  ),
-                  incrementRevision: false,
-                ),
+
+        case ReconstructionIncomplete(
+          :final draft,
+          :final ownerUid,
+          :final profile,
+        ):
+          final reconciliation = OnboardingUploadSourceReconciler.reconcile(
+            ownerUid: user.uid,
+            draft: draft,
+            restoredUploads: restoredUploads,
+          );
+          if (reconciliation.integrityFailure) {
+            if (restoredUploads.errorMessage != null &&
+                restoredUploads.errorMessage!.trim().isNotEmpty) {
+              state = state.copyWith(
+                user: user,
+                status: AuthFlowStatus.reconnectRequired,
+                errorMessage: 'Uploaded photos could not be restored yet.',
+                onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+                recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+                startupReasonCode: 'restored_uploads_failed',
+                clearStartupDestination: true,
+                clearReconstructionResult: true,
               );
-        case ReconstructionFinishing(:final draft):
-          _ref
-              .read(mockOnboardingProvider.notifier)
-              .loadSeedData(
-                draft.copyWith(
-                  currentStep: OnboardingDraft.lastStepIndex,
-                  stepLoading: List<bool>.filled(
-                    OnboardingDraft.stepCount,
-                    false,
-                  ),
-                  incrementRevision: false,
-                ),
+              return;
+            }
+            return;
+          }
+          final reconciledDraft = reconciliation.reconciledDraft;
+          final effectiveStep = validateOnboardingResume(
+            reconciledDraft,
+          ).resumeStep;
+          final finalDraft = reconciledDraft.copyWith(
+            currentStep: effectiveStep,
+            stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+            incrementRevision: false,
+          );
+          _ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
+          effectiveResult = ReconstructionIncomplete(
+            ownerUid: ownerUid,
+            profile: profile,
+            step: effectiveStep,
+            draft: finalDraft,
+          );
+
+        case ReconstructionFinishing(
+          :final draft,
+          :final ownerUid,
+          :final profile,
+        ):
+          final reconciliation = OnboardingUploadSourceReconciler.reconcile(
+            ownerUid: user.uid,
+            draft: draft,
+            restoredUploads: restoredUploads,
+          );
+          if (reconciliation.integrityFailure) {
+            if (restoredUploads.errorMessage != null &&
+                restoredUploads.errorMessage!.trim().isNotEmpty) {
+              state = state.copyWith(
+                user: user,
+                status: AuthFlowStatus.reconnectRequired,
+                errorMessage: 'Uploaded photos could not be restored yet.',
+                onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+                recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+                startupReasonCode: 'restored_uploads_failed',
+                clearStartupDestination: true,
+                clearReconstructionResult: true,
               );
+              return;
+            }
+            return;
+          }
+          if (reconciliation.changed) {
+            effectiveResult = ReconstructionRecovery(
+              ownerUid: ownerUid,
+              profile: profile,
+              reason: ReconstructionRecoveryReason.durableStateConflict,
+              diagnostics: const {
+                'code': 'finishing_draft_upload_source_mismatch',
+              },
+            );
+            _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+          } else {
+            _ref
+                .read(mockOnboardingProvider.notifier)
+                .loadSeedData(
+                  draft.copyWith(
+                    currentStep: OnboardingDraft.lastStepIndex,
+                    stepLoading: List<bool>.filled(
+                      OnboardingDraft.stepCount,
+                      false,
+                    ),
+                    incrementRevision: false,
+                  ),
+                );
+          }
+
         case ReconstructionCompleted(:final draft, :final completionBundle):
           _ref
               .read(mockOnboardingProvider.notifier)
@@ -1155,20 +1238,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
               state.user?.uid != user.uid) {
             return;
           }
+
         case ReconstructionRecovery():
           _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
       }
-      await assetHydration;
-      if (!_isCurrentRestore(restoreGeneration) ||
-          state.user?.uid != user.uid) {
-        return;
-      }
+
       _ref.read(homeDashboardProvider.notifier).setOwnerUid(user.uid);
       _ref.read(fitnessCenterProvider.notifier).setOwnerUid(user.uid);
       _applySessionDestination(
         user,
-        resolveReconstructionDestination(result),
-        reconstructionResult: result,
+        resolveReconstructionDestination(effectiveResult),
+        reconstructionResult: effectiveResult,
       );
       if (result case ReconstructionRecovery(
         :final reason,
