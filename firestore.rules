@@ -67,6 +67,14 @@ service cloud.firestore {
         || status == "deleted";
     }
 
+    function validUploadStatusTransition(oldStatus, newStatus) {
+      return oldStatus == newStatus
+        || (oldStatus == "pending" && (newStatus == "uploading" || newStatus == "uploaded" || newStatus == "failed" || newStatus == "deleted"))
+        || (oldStatus == "uploading" && (newStatus == "uploaded" || newStatus == "failed" || newStatus == "deleted"))
+        || (oldStatus == "uploaded" && (newStatus == "failed" || newStatus == "deleted"))
+        || (oldStatus == "failed" && (newStatus == "uploading" || newStatus == "uploaded" || newStatus == "deleted"));
+    }
+
     function validUploadObjectIdentity(data) {
       return data.r2Key is string
         && data.r2Key.matches(
@@ -953,6 +961,7 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp
         && validUploadPurpose(request.resource.data.purpose)
         && validUploadStatus(request.resource.data.status)
+        && validUploadStatusTransition(resource.data.status, request.resource.data.status)
         // Immutable identity fields
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.assetId == resource.data.assetId

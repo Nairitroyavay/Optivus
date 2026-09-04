@@ -937,15 +937,38 @@ class _OnboardingStep4UnifiedState
 
   void _restorePhotosFromDurableState() {
     final restored = ref.read(restoredUploadsProvider);
-    final uid = ref.read(mockOnboardingProvider).draft.uid;
+    final draft = ref.read(mockOnboardingProvider).draft;
+    final base = draft.baseTimeline;
+    final uid = draft.uid;
     if (restored.uid != uid) return;
     for (final target in _uploadTargets) {
-      final entry = restored.forPurpose(target.purpose);
+      final String? logicalAssetId =
+          target.source == RoutineImportReviewSource.classes
+          ? base.classLogicalAssetId
+          : base.workLogicalAssetId;
+      final String? logicalAssetR2Key =
+          target.source == RoutineImportReviewSource.classes
+          ? base.classLogicalAssetR2Key
+          : base.workLogicalAssetR2Key;
+
+      RestoredUploadedAsset? entry;
+      if (logicalAssetId != null && logicalAssetId.trim().isNotEmpty) {
+        entry = restored.assetsByPurpose.values
+            .where((e) => e.asset.assetId == logicalAssetId.trim())
+            .firstOrNull;
+      } else if (logicalAssetR2Key != null &&
+          logicalAssetR2Key.trim().isNotEmpty) {
+        entry = restored.assetsByPurpose.values
+            .where((e) => e.asset.r2Key == logicalAssetR2Key.trim())
+            .firstOrNull;
+      }
+      entry ??= restored.forPurpose(target.purpose);
+
       if (entry == null ||
           !uploadedAssetIsDurablyUploadedForSlot(
             asset: entry.asset,
             uid: uid,
-            purpose: target.purpose,
+            purpose: entry.asset.purpose,
           )) {
         continue;
       }
@@ -953,7 +976,7 @@ class _OnboardingStep4UnifiedState
         asset: entry.asset,
         label: target.thumbnailLabel,
         source: target.source,
-        purpose: target.purpose,
+        purpose: entry.asset.purpose,
       );
       final index = _photos.indexWhere((item) => item.source == target.source);
       if (index < 0) {
@@ -963,6 +986,25 @@ class _OnboardingStep4UnifiedState
       }
     }
     _photos.sort(_comparePhotoSlots);
+    _syncLogicalAssetsToDraft();
+  }
+
+  void _syncLogicalAssetsToDraft() {
+    final classPhoto = _photoForSource(RoutineImportReviewSource.classes);
+    final workPhoto = _photoForSource(RoutineImportReviewSource.work);
+    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+      final base = draft.baseTimeline;
+      return draft.copyWith(
+        baseTimeline: base.copyWith(
+          classLogicalAssetId: classPhoto?.asset.assetId,
+          classLogicalAssetR2Key: classPhoto?.asset.r2Key,
+          workLogicalAssetId: workPhoto?.asset.assetId,
+          workLogicalAssetR2Key: workPhoto?.asset.r2Key,
+          clearClassLogicalAsset: classPhoto == null,
+          clearWorkLogicalAsset: workPhoto == null,
+        ),
+      );
+    });
   }
 
   // ---- Helpers ----
@@ -1328,6 +1370,7 @@ class _OnboardingStep4UnifiedState
       _generationError = null;
       _timelineError = null;
     });
+    _syncLogicalAssetsToDraft();
     if (previousAssetId == asset.assetId) {
       return;
     }
@@ -1368,6 +1411,7 @@ class _OnboardingStep4UnifiedState
       _generationError = null;
       _timelineError = null;
     });
+    _syncLogicalAssetsToDraft();
 
     // Clear generated blocks for the removed section
     if (removed.source == RoutineImportReviewSource.classes) {
@@ -1428,6 +1472,7 @@ class _OnboardingStep4UnifiedState
       _generationError = null;
       _timelineError = null;
     });
+    _syncLogicalAssetsToDraft();
     ref.read(onboardingClassTimelineProvider.notifier).state = const [];
     ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
     _markClassJobDirty();

@@ -210,5 +210,5 @@ bool isUsableSkinUpload({
       asset.sourceFeature == 'onboarding' &&
       asset.assetId.trim().isNotEmpty &&
       asset.r2Key.trim().isNotEmpty &&
-      asset.r2Key.startsWith('users/$uid/');
+      (!asset.r2Key.startsWith('users/') || asset.r2Key.startsWith('users/$uid/'));
 }

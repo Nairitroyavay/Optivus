@@ -1079,7 +1079,12 @@ class BodyBasicsDraft {
   BodyBasicsDraft withEstimates() {
     final height = heightCm;
     final weight = weightKg;
-    if (height == null || weight == null || height <= 0 || weight <= 0) {
+    if (height == null ||
+        weight == null ||
+        height < 120.0 ||
+        height > 220.0 ||
+        weight < 40.0 ||
+        weight > 150.0) {
       return copyWith(
         bodyDataCompleted: false,
         clearBmiEstimate: true,
@@ -1096,17 +1101,22 @@ class BodyBasicsDraft {
       calorieEstimate: double.parse(calories.toStringAsFixed(0)),
       proteinEstimate: double.parse(protein.toStringAsFixed(0)),
       bodyDataCompleted:
-          ageRange != null && gender != null && height > 0 && weight > 0,
+          ageRange != null &&
+          gender != null &&
+          height >= 120.0 &&
+          height <= 220.0 &&
+          weight >= 40.0 &&
+          weight <= 150.0,
     );
   }
 
   String? validate() {
     if (ageRange == null) return 'Please select your age range.';
-    if (heightCm == null || heightCm! <= 0) {
-      return 'Please set your height.';
+    if (heightCm == null || heightCm! < 120.0 || heightCm! > 220.0) {
+      return 'Height must be between 120 cm and 220 cm.';
     }
-    if (weightKg == null || weightKg! <= 0) {
-      return 'Please set your weight.';
+    if (weightKg == null || weightKg! < 40.0 || weightKg! > 150.0) {
+      return 'Weight must be between 40 kg and 150 kg.';
     }
     if (gender == null) return 'Please select your gender.';
     return null;
@@ -1209,6 +1219,11 @@ class BaseTimelineDraft {
   final List<PendingFutureImportDraft> pendingFutureImports;
   final List<ConflictAcceptance> conflictAcceptances;
 
+  final String? classLogicalAssetId;
+  final String? classLogicalAssetR2Key;
+  final String? workLogicalAssetId;
+  final String? workLogicalAssetR2Key;
+
   /// Reader-only compatibility for schema-v2 drafts. New serializers do not
   /// write these schedule-unbound keys.
   final List<String> acceptedConflictKeys;
@@ -1254,6 +1269,10 @@ class BaseTimelineDraft {
     this.skinCareFacePhotoStatus,
     this.skinCareFacePhotoCreatedAt,
     this.skinCareFacePhotoUpdatedAt,
+    this.classLogicalAssetId,
+    this.classLogicalAssetR2Key,
+    this.workLogicalAssetId,
+    this.workLogicalAssetR2Key,
     this.skinCareFacePhotoSkipped = false,
     this.skinCareSkinType,
     this.skinCareProblems = const [],
@@ -1338,6 +1357,10 @@ class BaseTimelineDraft {
         map['conflictAcceptances'],
         ConflictAcceptance.fromMap,
       ),
+      classLogicalAssetId: map['classLogicalAssetId'] as String?,
+      classLogicalAssetR2Key: map['classLogicalAssetR2Key'] as String?,
+      workLogicalAssetId: map['workLogicalAssetId'] as String?,
+      workLogicalAssetR2Key: map['workLogicalAssetR2Key'] as String?,
       acceptedConflictKeys: _readStringList(map['acceptedConflictKeys']),
       roleChangeWarnings: _readStringList(map['roleChangeWarnings']),
       skinCareSpecialCareNotes: _readStringList(
@@ -1414,6 +1437,10 @@ class BaseTimelineDraft {
         .toList(),
     'skinCareSelectedProductNames': skinCareSelectedProductNames,
     'skinCareSuggestedProducts': skinCareSuggestedProducts,
+    'classLogicalAssetId': classLogicalAssetId,
+    'classLogicalAssetR2Key': classLogicalAssetR2Key,
+    'workLogicalAssetId': workLogicalAssetId,
+    'workLogicalAssetR2Key': workLogicalAssetR2Key,
   };
 
   BaseTimelineDraft copyWith({
@@ -1467,6 +1494,12 @@ class BaseTimelineDraft {
     List<SkinCareProductRecommendationDraft>? skinCareProductRecommendations,
     List<String>? skinCareSelectedProductNames,
     List<String>? skinCareSuggestedProducts,
+    String? classLogicalAssetId,
+    String? classLogicalAssetR2Key,
+    String? workLogicalAssetId,
+    String? workLogicalAssetR2Key,
+    bool clearClassLogicalAsset = false,
+    bool clearWorkLogicalAsset = false,
     bool clearMealPlanning = false,
     bool clearBusinessPlanning = false,
     bool clearRoleChangeWarnings = false,
@@ -1642,6 +1675,18 @@ class BaseTimelineDraft {
           clearSkinCarePlanning || clearSkinCareSuggestedProducts
           ? const []
           : (skinCareSuggestedProducts ?? this.skinCareSuggestedProducts),
+      classLogicalAssetId: clearClassData || clearClassLogicalAsset
+          ? null
+          : (classLogicalAssetId ?? this.classLogicalAssetId),
+      classLogicalAssetR2Key: clearClassData || clearClassLogicalAsset
+          ? null
+          : (classLogicalAssetR2Key ?? this.classLogicalAssetR2Key),
+      workLogicalAssetId: clearWorkData || clearWorkLogicalAsset
+          ? null
+          : (workLogicalAssetId ?? this.workLogicalAssetId),
+      workLogicalAssetR2Key: clearWorkData || clearWorkLogicalAsset
+          ? null
+          : (workLogicalAssetR2Key ?? this.workLogicalAssetR2Key),
     );
   }
 
@@ -1993,14 +2038,47 @@ class BaseTimelineDraft {
             !_hasConfirmedSection('job_work_business'))) {
       return 'Generate both class and work schedules first.';
     }
-    if (classesRequired && !_hasConfirmedSection('classes')) {
-      return 'Generate your class timeline first.';
-    }
-    if (jobRequired && !_hasConfirmedSection('job_work_business')) {
-      if (lifeRole == LifeRoleDraft.businessKey) {
-        return 'Generate your work/business timeline first.';
+    if (classesRequired) {
+      if (!_hasConfirmedSection('classes')) {
+        return 'Generate your class timeline first.';
       }
-      return 'Generate your work timeline first.';
+      if (classLogicalAssetId != null &&
+          classLogicalAssetId!.trim().isNotEmpty) {
+        final classAiBlocks = blocks.where(
+          (b) => b.section == 'classes' && b.source == 'ai_import',
+        );
+        for (final block in classAiBlocks) {
+          if (block.provenanceSourceIds.isNotEmpty &&
+              !block.provenanceSourceIds.contains(classLogicalAssetId) &&
+              (classLogicalAssetR2Key == null ||
+                  !block.provenanceSourceIds.contains(
+                    classLogicalAssetR2Key,
+                  ))) {
+            return 'Your class timeline was generated from a previous photo. Please regenerate.';
+          }
+        }
+      }
+    }
+    if (jobRequired) {
+      if (!_hasConfirmedSection('job_work_business')) {
+        if (lifeRole == LifeRoleDraft.businessKey) {
+          return 'Generate your work/business timeline first.';
+        }
+        return 'Generate your work timeline first.';
+      }
+      if (workLogicalAssetId != null && workLogicalAssetId!.trim().isNotEmpty) {
+        final workAiBlocks = blocks.where(
+          (b) => b.section == 'job_work_business' && b.source == 'ai_import',
+        );
+        for (final block in workAiBlocks) {
+          if (block.provenanceSourceIds.isNotEmpty &&
+              !block.provenanceSourceIds.contains(workLogicalAssetId) &&
+              (workLogicalAssetR2Key == null ||
+                  !block.provenanceSourceIds.contains(workLogicalAssetR2Key))) {
+            return 'Your work timeline was generated from a previous photo. Please regenerate.';
+          }
+        }
+      }
     }
     return null;
   }
@@ -2035,6 +2113,27 @@ class BaseTimelineDraft {
 
   String? validateEatingSetup() {
     if (_hasConfirmedSection('eating')) {
+      final eatingImport = latestImportForSection('Eating');
+      if (eatingImport != null &&
+          eatingImport.hasUploadedAssetReference &&
+          eatingImport.uploadedAssetId != null &&
+          eatingImport.uploadedAssetId!.trim().isNotEmpty) {
+        final eatingAiBlocks = blocks.where(
+          (b) => b.section == 'eating' && b.source == 'ai_import',
+        );
+        for (final block in eatingAiBlocks) {
+          if (block.provenanceSourceIds.isNotEmpty &&
+              !block.provenanceSourceIds.contains(
+                eatingImport.uploadedAssetId,
+              ) &&
+              (eatingImport.uploadedAssetR2Key == null ||
+                  !block.provenanceSourceIds.contains(
+                    eatingImport.uploadedAssetR2Key,
+                  ))) {
+            return 'Your meal routine was generated from a previous menu. Generate your meal routine first.';
+          }
+        }
+      }
       return validateMealScheduleDensity();
     }
     if (eatingSetupPath == null) {
@@ -2108,15 +2207,24 @@ class BaseTimelineDraft {
     if (skinCareSetupPath == null) {
       return 'Build skin care routine or skip.';
     }
-    
-    final desired = _normalizeSkinCareDesiredApplicationsPerDay(skinCareDesiredApplicationsPerDay);
-    
+
+    final desired = _normalizeSkinCareDesiredApplicationsPerDay(
+      skinCareDesiredApplicationsPerDay,
+    );
+
     if (skinCareSetupPath == 'has_products') {
       final hasTyped = skinCareProductNames?.trim().isNotEmpty == true;
-      final productAsset = skinCareProductPhotoAssetId?.trim().isNotEmpty == true && skinCareProductPhotoR2Key?.trim().isNotEmpty == true
+      final effectiveUid =
+          (skinCareProductPhotoR2Key?.startsWith('users/') == true &&
+                  skinCareProductPhotoR2Key!.split('/').length > 1)
+              ? skinCareProductPhotoR2Key!.split('/')[1]
+              : uid;
+      final productAsset =
+          skinCareProductPhotoAssetId?.trim().isNotEmpty == true &&
+              skinCareProductPhotoR2Key?.trim().isNotEmpty == true
           ? UploadedAsset(
               assetId: skinCareProductPhotoAssetId!,
-              ownerUid: uid,
+              ownerUid: effectiveUid,
               sourceFeature: OnboardingDraft.sourceOnboarding,
               purpose: UploadedAssetPurpose.skinProducts,
               fileName: skinCareProductPhotoR2Key!.split('/').lastOrNull ?? '',
@@ -2124,32 +2232,43 @@ class BaseTimelineDraft {
               sizeBytes: 0,
               r2Key: skinCareProductPhotoR2Key!,
               status: uploadedAssetStatusFromString(skinCareProductPhotoStatus),
-              createdAt: skinCareProductPhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
-              updatedAt: skinCareProductPhotoUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+              createdAt:
+                  skinCareProductPhotoCreatedAt ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
+              updatedAt:
+                  skinCareProductPhotoUpdatedAt ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
             )
           : null;
-      
+
       final hasPhoto = isUsableSkinUpload(
         asset: productAsset,
-        uid: uid,
+        uid: effectiveUid,
         expectedPurpose: UploadedAssetPurpose.skinProducts,
       );
-      
+
       if (!hasTyped && !hasPhoto) {
         return 'Add products or upload a photo to build your routine.';
       }
-      
+
       final msg = _missingSkinCareRoutineMessage(desired);
       if (msg != null) return msg;
-      
+
       return null;
     }
-    
+
     if (skinCareSetupPath == 'no_products') {
-      final faceAsset = skinCareFacePhotoAssetId?.trim().isNotEmpty == true && skinCareFacePhotoR2Key?.trim().isNotEmpty == true
+      final effectiveUid =
+          (skinCareFacePhotoR2Key?.startsWith('users/') == true &&
+                  skinCareFacePhotoR2Key!.split('/').length > 1)
+              ? skinCareFacePhotoR2Key!.split('/')[1]
+              : uid;
+      final faceAsset =
+          skinCareFacePhotoAssetId?.trim().isNotEmpty == true &&
+              skinCareFacePhotoR2Key?.trim().isNotEmpty == true
           ? UploadedAsset(
               assetId: skinCareFacePhotoAssetId!,
-              ownerUid: uid,
+              ownerUid: effectiveUid,
               sourceFeature: OnboardingDraft.sourceOnboarding,
               purpose: UploadedAssetPurpose.skinFace,
               fileName: skinCareFacePhotoR2Key!.split('/').lastOrNull ?? '',
@@ -2157,35 +2276,41 @@ class BaseTimelineDraft {
               sizeBytes: 0,
               r2Key: skinCareFacePhotoR2Key!,
               status: uploadedAssetStatusFromString(skinCareFacePhotoStatus),
-              createdAt: skinCareFacePhotoCreatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
-              updatedAt: skinCareFacePhotoUpdatedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+              createdAt:
+                  skinCareFacePhotoCreatedAt ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
+              updatedAt:
+                  skinCareFacePhotoUpdatedAt ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
             )
           : null;
-          
+
       final hasPhoto = isUsableSkinUpload(
         asset: faceAsset,
-        uid: uid,
+        uid: effectiveUid,
         expectedPurpose: UploadedAssetPurpose.skinFace,
       );
-      
+
       if (!hasPhoto) {
         return 'Add a face photo to personalize your product recommendations.';
       }
-      
-      if (skinCareSkinType == null || skinCareProblems.isEmpty || skinCareBudget == null) {
+
+      if (skinCareSkinType == null ||
+          skinCareProblems.isEmpty ||
+          skinCareBudget == null) {
         return 'Complete your skin details before finding products.';
       }
-      
+
       if (skinCareSelectedProductNames.isEmpty) {
         return 'Find and select products before building your routine.';
       }
-      
+
       final msg = _missingSkinCareRoutineMessage(desired);
       if (msg != null) return msg;
-      
+
       return null;
     }
-    
+
     return 'Build skin care routine or skip.';
   }
 

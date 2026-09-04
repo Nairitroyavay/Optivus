@@ -23,6 +23,8 @@ import 'package:optivus/views/screens/loading_screen.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
 import 'package:optivus/state/upload_state.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
+import 'package:optivus/features/uploads/controllers/upload_interaction_controller.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
@@ -775,38 +777,60 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final classesReady = _timelineBlocksFromLocalSchedule(
       classBlocks,
       'classes',
+      draft.baseTimeline.classLogicalAssetId,
+      draft.baseTimeline.classLogicalAssetR2Key,
     ).isNotEmpty;
     final workReady = _timelineBlocksFromLocalSchedule(
       workBlocks,
       'job_work_business',
+      draft.baseTimeline.workLogicalAssetId,
+      draft.baseTimeline.workLogicalAssetR2Key,
     ).isNotEmpty;
     return (!classesRequired || classesReady) && (!workRequired || workReady);
   }
 
-  bool _uploadBusyForStep(int step, UploadState uploadState) {
-    if (uploadState.sourceFeature != OnboardingDraft.sourceOnboarding ||
-        !uploadState.isBusy) {
-      return false;
+  bool _uploadBusyForStep({
+    required int step,
+    required UploadInteractionMap uploadMap,
+    required UploadState legacyUploadState,
+    required OnboardingDraft draft,
+  }) {
+    if (step == onboardingClassJobStepIndex) {
+      final role = draft.lifeRole.lifeRole;
+      final classesRequired =
+          role == LifeRoleDraft.studentKey ||
+          role == LifeRoleDraft.studentWorkingKey;
+      final workRequired =
+          role == LifeRoleDraft.workingKey ||
+          role == LifeRoleDraft.studentWorkingKey ||
+          role == LifeRoleDraft.businessKey;
+      final classBusy =
+          classesRequired &&
+          uploadMap[onboardingClassUploadSlot]?.isBusy == true;
+      final workBusy =
+          workRequired && uploadMap[onboardingWorkUploadSlot]?.isBusy == true;
+      return classBusy || workBusy;
     }
-    return switch (step) {
-      onboardingClassJobStepIndex =>
-        uploadState.purpose == UploadedAssetPurpose.classTimetable ||
-            uploadState.purpose == UploadedAssetPurpose.workSchedule,
-      onboardingEatingStepIndex =>
-        uploadState.purpose == UploadedAssetPurpose.eatingMenu,
-      onboardingSkinCareStepIndex =>
-        uploadState.purpose == UploadedAssetPurpose.skinCare ||
-            uploadState.purpose == UploadedAssetPurpose.skinFace ||
-            uploadState.purpose == UploadedAssetPurpose.skinProducts,
-      _ => false,
-    };
+    if (step == onboardingEatingStepIndex) {
+      return uploadMap[onboardingEatingUploadSlot]?.isBusy == true;
+    }
+    if (step == onboardingSkinCareStepIndex) {
+      return legacyUploadState.sourceFeature ==
+              OnboardingDraft.sourceOnboarding &&
+          legacyUploadState.isBusy &&
+          (legacyUploadState.purpose == UploadedAssetPurpose.skinCare ||
+              legacyUploadState.purpose == UploadedAssetPurpose.skinFace ||
+              legacyUploadState.purpose == UploadedAssetPurpose.skinProducts);
+    }
+    return false;
   }
 
   OnboardingStepReadiness _evaluateReadiness({
     required int step,
     required OnboardingState onboardingState,
     required RoutineImportAiState aiState,
-    required UploadState uploadState,
+    required UploadInteractionMap uploadMap,
+    required UploadState legacyUploadState,
     required List<ClassRoutineBlock> classBlocks,
     required List<ClassRoutineBlock> workBlocks,
   }) {
@@ -817,7 +841,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final asyncIdle =
         !onboardingState.stepLoading[step] &&
         !aiBusy &&
-        !_uploadBusyForStep(step, uploadState);
+        !_uploadBusyForStep(
+          step: step,
+          uploadMap: uploadMap,
+          legacyUploadState: legacyUploadState,
+          draft: onboardingState.draft,
+        );
     final classJobReviewReady =
         step == onboardingClassJobStepIndex && onboardingState.stepDirty[step]
         ? _classJobReviewReady(onboardingState.draft, classBlocks, workBlocks)
@@ -842,7 +871,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       step: step,
       onboardingState: onboardingState,
       aiState: ref.read(routineImportAiControllerProvider),
-      uploadState: ref.read(uploadControllerProvider),
+      uploadMap: ref.read(onboardingUploadInteractionProvider),
+      legacyUploadState: ref.read(uploadControllerProvider),
       classBlocks: step == onboardingClassJobStepIndex
           ? ref.read(onboardingClassTimelineProvider)
           : const <ClassRoutineBlock>[],
@@ -868,7 +898,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         onboardingState.stepSaveStatus[_currentPage] == SaveSyncStatus.synced;
     final bool showSave = false; // Globally hidden for onboarding.
     final aiState = ref.watch(routineImportAiControllerProvider);
-    final uploadState = ref.watch(uploadControllerProvider);
+    final uploadMap = ref.watch(onboardingUploadInteractionProvider);
+    final legacyUploadState = ref.watch(uploadControllerProvider);
     final classBlocks = _currentPage == onboardingClassJobStepIndex
         ? ref.watch(onboardingClassTimelineProvider)
         : const <ClassRoutineBlock>[];
@@ -879,7 +910,8 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       step: _currentPage,
       onboardingState: onboardingState,
       aiState: aiState,
-      uploadState: uploadState,
+      uploadMap: uploadMap,
+      legacyUploadState: legacyUploadState,
       classBlocks: classBlocks,
       workBlocks: workBlocks,
     );
@@ -1074,8 +1106,16 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   List<TimelineBlockDraft> _timelineBlocksFromLocalSchedule(
     List<ClassRoutineBlock> localBlocks,
-    String section,
-  ) {
+    String section, [
+    String? provenanceAssetId,
+    String? provenanceR2Key,
+  ]) {
+    final provenance = <String>[
+      if (provenanceAssetId != null && provenanceAssetId.trim().isNotEmpty)
+        provenanceAssetId.trim(),
+      if (provenanceR2Key != null && provenanceR2Key.trim().isNotEmpty)
+        provenanceR2Key.trim(),
+    ];
     return localBlocks
         .where((block) => block.subject.trim().isNotEmpty)
         .where((block) => block.startMinute < block.endMinute)
@@ -1093,6 +1133,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               location: block.room.trim().isEmpty ? null : block.room.trim(),
               blockType: TimelineBlockDraft.hardBlockKey,
               source: 'ai_import',
+              provenanceSourceIds: provenance,
             ),
           ];
         })
@@ -1103,17 +1144,26 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     return days.where((day) => day >= 1 && day <= 7).toSet().toList()..sort();
   }
 
-  bool _classJobActionBusy(OnboardingDraft _, {required bool watch}) {
+  bool _classJobActionBusy(OnboardingDraft draft, {required bool watch}) {
     final aiState = watch
         ? ref.watch(routineImportAiControllerProvider)
         : ref.read(routineImportAiControllerProvider);
-    final uploadState = watch
-        ? ref.watch(uploadControllerProvider)
-        : ref.read(uploadControllerProvider);
-    final uploadApplies =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.isBusy;
-    return aiState.isExtracting || uploadApplies;
+    final uploadMap = watch
+        ? ref.watch(onboardingUploadInteractionProvider)
+        : ref.read(onboardingUploadInteractionProvider);
+    final role = draft.lifeRole.lifeRole;
+    final classesRequired =
+        role == LifeRoleDraft.studentKey ||
+        role == LifeRoleDraft.studentWorkingKey;
+    final workRequired =
+        role == LifeRoleDraft.workingKey ||
+        role == LifeRoleDraft.studentWorkingKey ||
+        role == LifeRoleDraft.businessKey;
+    final classBusy =
+        classesRequired && uploadMap[onboardingClassUploadSlot]?.isBusy == true;
+    final workBusy =
+        workRequired && uploadMap[onboardingWorkUploadSlot]?.isBusy == true;
+    return aiState.isExtracting || classBusy || workBusy;
   }
 
   Future<bool> _nextClassesJob(OnboardingDraft draft) async {
@@ -1138,10 +1188,14 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     final visibleClassBlocks = _timelineBlocksFromLocalSchedule(
       localClassBlocks,
       'classes',
+      draft.baseTimeline.classLogicalAssetId,
+      draft.baseTimeline.classLogicalAssetR2Key,
     );
     final visibleWorkBlocks = _timelineBlocksFromLocalSchedule(
       localWorkBlocks,
       'job_work_business',
+      draft.baseTimeline.workLogicalAssetId,
+      draft.baseTimeline.workLogicalAssetR2Key,
     );
     final hasClassBlocks = visibleClassBlocks.isNotEmpty;
     final hasWorkBlocks = visibleWorkBlocks.isNotEmpty;

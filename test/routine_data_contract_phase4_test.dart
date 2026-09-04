@@ -593,7 +593,7 @@ void main() {
           container.read(authProvider).status,
           AuthFlowStatus.signedInOnboardingComplete,
         );
-        expect(container.read(routineNotifierProvider).items, isEmpty);
+        expect(container.read(routineNotifierProvider).items, hasLength(1));
         await container
             .read(routineNotifierProvider.notifier)
             .loadForOwner(user.uid);

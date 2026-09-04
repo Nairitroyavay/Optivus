@@ -72,6 +72,9 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       resetForSignedOut();
       return;
     }
+    if (_activeUid != null && _activeUid != normalizedUid) {
+      resetForSignedOut();
+    }
     _activeUid = normalizedUid;
 
     final next = Map<String, UploadSlotRuntimeState>.from(state);
@@ -657,6 +660,8 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         return null;
       }
 
+      final previousDurableAsset = state[slotKey]?.durableAsset;
+
       // Register with durable restored controller (Invariant 1)
       _restoredController?.registerUploaded(asset);
 
@@ -672,6 +677,15 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
           clearPreparedImage: true,
         ),
       );
+
+      if (previousDurableAsset != null &&
+          previousDurableAsset.assetId != asset.assetId) {
+        _cleanSupersededAsset(
+          uid: uid,
+          superseded: previousDurableAsset,
+          idToken: uploadIdToken,
+        );
+      }
 
       return asset;
     } catch (error) {
@@ -745,6 +759,31 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         (_slotGenerations[slotKey] ?? 0) == slotGeneration &&
         _authRepository.currentUser?.uid == uid &&
         _activeUid == uid;
+  }
+
+  void _cleanSupersededAsset({
+    required String uid,
+    required UploadedAsset superseded,
+    required String? idToken,
+  }) {
+    unawaited(() async {
+      try {
+        await _assetRepository.markDeleted(
+          uid: uid,
+          assetId: superseded.assetId,
+        );
+        if (superseded.r2Key.trim().isNotEmpty &&
+            idToken != null &&
+            idToken.trim().isNotEmpty) {
+          await _r2UploadClient.deleteUpload(
+            objectKey: superseded.r2Key,
+            idToken: idToken,
+          );
+        }
+      } catch (_) {
+        // Best effort
+      }
+    }());
   }
 
   String _friendlyErrorMessage(Object error) {

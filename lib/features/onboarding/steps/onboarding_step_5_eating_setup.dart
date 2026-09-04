@@ -335,7 +335,17 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     }
 
     if (!sourceIsCurrent()) return;
-    _replaceEatingBlocks(blocks);
+    final blocksWithProvenance = blocks
+        .map(
+          (b) => b.copyWith(
+            provenanceSourceIds: [
+              if (asset.assetId.trim().isNotEmpty) asset.assetId.trim(),
+              if (asset.r2Key.trim().isNotEmpty) asset.r2Key.trim(),
+            ],
+          ),
+        )
+        .toList();
+    _replaceEatingBlocks(blocksWithProvenance, sourceAsset: asset);
     setState(() => _generationError = null);
   }
 
@@ -462,7 +472,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     }
   }
 
-  void _replaceEatingBlocks(List<TimelineBlockDraft> eatingBlocks) {
+  void _replaceEatingBlocks(
+    List<TimelineBlockDraft> eatingBlocks, {
+    UploadedAsset? sourceAsset,
+  }) {
     updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
       final nextBlocks =
           base.blocks
@@ -471,7 +484,26 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
             ..addAll(eatingBlocks);
       final nextPending = base.pendingFutureImports
           .where((entry) => entry.section != onboardingSectionEating)
-          .toList(growable: false);
+          .toList(growable: true);
+
+      if (sourceAsset != null) {
+        final now = DateTime.now();
+        nextPending.add(
+          PendingFutureImportDraft(
+            id: onboardingImportId(onboardingSectionEating, 'photo_ai'),
+            section: onboardingSectionEating,
+            mode: 'Photo AI',
+            createdAt: now,
+            updatedAt: now,
+            status: PendingFutureImportDraft.appliedStatus,
+            uploadedAssetId: sourceAsset.assetId,
+            uploadedAssetR2Key: sourceAsset.r2Key,
+            uploadedAssetStatus: sourceAsset.status.wireName,
+            parsedBlocks: eatingBlocks,
+          ),
+        );
+      }
+
       return base.copyWith(
         eatingSetupPath: base.eatingSetupPath ?? onboardingEatingPathCreate,
         blocks: nextBlocks,
