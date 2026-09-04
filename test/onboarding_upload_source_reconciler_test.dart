@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/upload_source_identity.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/onboarding_upload_source_reconciler.dart';
 import 'package:optivus/state/upload_state.dart';
@@ -702,12 +703,23 @@ void main() {
           isFalse,
         );
 
-        // Pending import updated to Menu B
+        // No applied import is fabricated before Menu B is analyzed.
         final importB = reconciled.baseTimeline.latestImportForSection(
           'Eating',
         );
-        expect(importB, isNotNull);
-        expect(importB!.uploadedAssetId, equals(menuB.assetId));
+        expect(importB, isNull);
+        expect(reconciled.baseTimeline.eatingSetupPath, 'has_routine');
+        expect(reconciled.stepCompleted[14], isFalse);
+        expect(reconciled.stepDirty[14], isTrue);
+        expect(reconciled.baseTimeline.validateEatingSetup(), isNotNull);
+
+        final second = OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: uid,
+          draft: reconciled,
+          restoredUploads: restored,
+        );
+        expect(second.changed, isFalse);
+        expect(second.reconciledDraft, reconciled);
       },
     );
 
@@ -893,6 +905,179 @@ void main() {
       expect(result.integrityFailure, isTrue);
       expect(result.reasonCodes, contains('restored_uploads_error'));
       expect(result.reconciledDraft, equals(draft));
+    });
+
+    test('exact source helper requires both identifiers for every purpose', () {
+      for (final purpose in [
+        UploadedAssetPurpose.classTimetable,
+        UploadedAssetPurpose.workSchedule,
+        UploadedAssetPurpose.eatingMenu,
+      ]) {
+        final asset = createAsset(
+          id: '${purpose.wireName}_A',
+          purpose: purpose,
+        );
+        expect(
+          uploadedSourceIdentityMatches(
+            assetId: asset.assetId,
+            r2Key: asset.r2Key,
+            asset: asset,
+          ),
+          isTrue,
+        );
+        expect(
+          uploadedSourceIdentityMatches(
+            assetId: asset.assetId,
+            r2Key: 'users/$uid/onboarding/${purpose.wireName}/wrong.jpg',
+            asset: asset,
+          ),
+          isFalse,
+        );
+        expect(
+          uploadedSourceIdentityMatches(
+            assetId: 'wrong',
+            r2Key: asset.r2Key,
+            asset: asset,
+          ),
+          isFalse,
+        );
+        expect(
+          provenanceContainsExactUploadIdentity(
+            [asset.assetId],
+            asset.assetId,
+            asset.r2Key,
+          ),
+          isFalse,
+        );
+        expect(
+          provenanceContainsExactUploadIdentity(
+            [asset.r2Key],
+            asset.assetId,
+            asset.r2Key,
+          ),
+          isFalse,
+        );
+        expect(
+          provenanceContainsExactUploadIdentity(
+            [asset.assetId, asset.r2Key],
+            asset.assetId,
+            asset.r2Key,
+          ),
+          isTrue,
+        );
+      }
+    });
+
+    test('corrupt Class ID/key pair is stale even when ID matches', () {
+      final classA = createAsset(
+        id: 'class_A',
+        purpose: UploadedAssetPurpose.classTimetable,
+      );
+      final result = OnboardingUploadSourceReconciler.reconcile(
+        ownerUid: uid,
+        draft: OnboardingDraft(
+          uid: uid,
+          lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+          baseTimeline: BaseTimelineDraft(
+            classLogicalAssetId: classA.assetId,
+            classLogicalAssetR2Key:
+                'users/$uid/onboarding/class_timetable/wrong.jpg',
+            blocks: [
+              TimelineBlockDraft(
+                id: 'c1',
+                section: 'classes',
+                title: 'Class',
+                startMinute: 540,
+                endMinute: 600,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: [classA.assetId, classA.r2Key],
+              ),
+            ],
+          ),
+        ),
+        restoredUploads: createRestoredUploads(classAsset: classA),
+      );
+      expect(result.changed, isTrue);
+      expect(result.reasonCodes, contains('step4_class_source_stale'));
+    });
+
+    test('Work block with only one provenance token is stale', () {
+      final workA = createAsset(
+        id: 'work_A',
+        purpose: UploadedAssetPurpose.workSchedule,
+      );
+      final result = OnboardingUploadSourceReconciler.reconcile(
+        ownerUid: uid,
+        draft: OnboardingDraft(
+          uid: uid,
+          lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.workingKey),
+          baseTimeline: BaseTimelineDraft(
+            workLogicalAssetId: workA.assetId,
+            workLogicalAssetR2Key: workA.r2Key,
+            blocks: [
+              TimelineBlockDraft(
+                id: 'w1',
+                section: 'job_work_business',
+                title: 'Work',
+                startMinute: 540,
+                endMinute: 600,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: [workA.assetId],
+              ),
+            ],
+          ),
+        ),
+        restoredUploads: createRestoredUploads(workAsset: workA),
+      );
+      expect(result.changed, isTrue);
+      expect(result.reasonCodes, contains('step4_work_source_stale'));
+    });
+
+    test('Eating import with matching key but wrong ID is removed', () {
+      final menuA = createAsset(
+        id: 'menu_A',
+        purpose: UploadedAssetPurpose.eatingMenu,
+      );
+      final result = OnboardingUploadSourceReconciler.reconcile(
+        ownerUid: uid,
+        draft: OnboardingDraft(
+          uid: uid,
+          baseTimeline: BaseTimelineDraft(
+            eatingSetupPath: 'has_routine',
+            pendingFutureImports: [
+              PendingFutureImportDraft(
+                id: 'e1',
+                section: 'Eating',
+                mode: 'Photo AI',
+                createdAt: DateTime.utc(2026),
+                uploadedAssetId: 'wrong',
+                uploadedAssetR2Key: menuA.r2Key,
+              ),
+            ],
+            blocks: [
+              TimelineBlockDraft(
+                id: 'm1',
+                section: 'eating',
+                title: 'Meal',
+                startMinute: 720,
+                endMinute: 780,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.softBlockKey,
+                source: 'ai_import',
+                provenanceSourceIds: [menuA.assetId, menuA.r2Key],
+              ),
+            ],
+          ),
+        ),
+        restoredUploads: createRestoredUploads(eatingAsset: menuA),
+      );
+      expect(result.changed, isTrue);
+      expect(result.reconciledDraft.baseTimeline.pendingFutureImports, isEmpty);
+      expect(result.reconciledDraft.baseTimeline.blocks, isEmpty);
     });
   });
 }

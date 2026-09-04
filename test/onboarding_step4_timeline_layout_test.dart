@@ -876,7 +876,9 @@ void main() {
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
       baseTimeline: BaseTimelineDraft(
         classLogicalAssetId: 'test_asset_id',
+        classLogicalAssetR2Key: 'test_r2_key',
         workLogicalAssetId: 'test_asset_id',
+        workLogicalAssetR2Key: 'test_r2_key',
         blocks: [
           _timelineBlock(
             id: 'data-structures',
@@ -1551,7 +1553,9 @@ void main() {
       ),
       baseTimeline: const BaseTimelineDraft(
         classLogicalAssetId: 'test_asset_id',
+        classLogicalAssetR2Key: 'test_r2_key',
         workLogicalAssetId: 'test_asset_id',
+        workLogicalAssetR2Key: 'test_r2_key',
         skinCareSkipped: true,
       ),
     );
@@ -2042,7 +2046,10 @@ void main() {
             endMinute: 8 * 60 + 30,
           ).copyWith(
             source: onboardingEatingAiImportSource,
-            provenanceSourceIds: const ['test_asset_id'],
+            provenanceSourceIds: const [
+              'test_asset_id',
+              'users/uid/onboarding/eating_menu/test_asset_id.jpg',
+            ],
           ),
         ],
       ),
@@ -2490,7 +2497,7 @@ TimelineBlockDraft _timelineBlock({
     repeatDays: const [1],
     blockType: TimelineBlockDraft.hardBlockKey,
     source: 'ai_import',
-    provenanceSourceIds: const ['test_asset_id'],
+    provenanceSourceIds: const ['test_asset_id', 'test_r2_key'],
   );
 }
 

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:optivus/models/upload_source_identity.dart';
 import 'package:crypto/crypto.dart';
 import 'package:optivus/features/routine/domain/conflict_policy.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
@@ -2047,16 +2048,17 @@ class BaseTimelineDraft {
       );
       if (classAiBlocks.isNotEmpty) {
         if (classLogicalAssetId == null ||
-            classLogicalAssetId!.trim().isEmpty) {
+            classLogicalAssetId!.trim().isEmpty ||
+            classLogicalAssetR2Key == null ||
+            classLogicalAssetR2Key!.trim().isEmpty) {
           return 'Your class timeline was generated from a previous photo. Please regenerate.';
         }
         for (final block in classAiBlocks) {
-          if (block.provenanceSourceIds.isEmpty ||
-              (!block.provenanceSourceIds.contains(classLogicalAssetId) &&
-                  (classLogicalAssetR2Key == null ||
-                      !block.provenanceSourceIds.contains(
-                        classLogicalAssetR2Key,
-                      )))) {
+          if (!provenanceContainsExactUploadIdentity(
+            block.provenanceSourceIds,
+            classLogicalAssetId,
+            classLogicalAssetR2Key,
+          )) {
             return 'Your class timeline was generated from a previous photo. Please regenerate.';
           }
         }
@@ -2073,16 +2075,18 @@ class BaseTimelineDraft {
         (b) => b.section == 'job_work_business' && b.source == 'ai_import',
       );
       if (workAiBlocks.isNotEmpty) {
-        if (workLogicalAssetId == null || workLogicalAssetId!.trim().isEmpty) {
+        if (workLogicalAssetId == null ||
+            workLogicalAssetId!.trim().isEmpty ||
+            workLogicalAssetR2Key == null ||
+            workLogicalAssetR2Key!.trim().isEmpty) {
           return 'Your work timeline was generated from a previous photo. Please regenerate.';
         }
         for (final block in workAiBlocks) {
-          if (block.provenanceSourceIds.isEmpty ||
-              (!block.provenanceSourceIds.contains(workLogicalAssetId) &&
-                  (workLogicalAssetR2Key == null ||
-                      !block.provenanceSourceIds.contains(
-                        workLogicalAssetR2Key,
-                      )))) {
+          if (!provenanceContainsExactUploadIdentity(
+            block.provenanceSourceIds,
+            workLogicalAssetId,
+            workLogicalAssetR2Key,
+          )) {
             return 'Your work timeline was generated from a previous photo. Please regenerate.';
           }
         }
@@ -2138,14 +2142,11 @@ class BaseTimelineDraft {
           return 'Your meal routine was generated from a previous menu. Generate your meal routine first.';
         }
         for (final block in eatingAiBlocks) {
-          if (block.provenanceSourceIds.isEmpty ||
-              (!block.provenanceSourceIds.contains(
-                    eatingImport.uploadedAssetId,
-                  ) &&
-                  (eatingImport.uploadedAssetR2Key == null ||
-                      !block.provenanceSourceIds.contains(
-                        eatingImport.uploadedAssetR2Key,
-                      )))) {
+          if (!provenanceContainsExactUploadIdentity(
+            block.provenanceSourceIds,
+            eatingImport.uploadedAssetId,
+            eatingImport.uploadedAssetR2Key,
+          )) {
             return 'Your meal routine was generated from a previous menu. Generate your meal routine first.';
           }
         }

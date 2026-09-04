@@ -356,6 +356,229 @@ void main() {
       },
     );
 
+    test(
+      'new B survives later superseded A delete on fresh hydration',
+      () async {
+        final t1 = DateTime.utc(2026, 9, 1, 9);
+        final t2 = DateTime.utc(2026, 9, 1, 10);
+        final t3 = DateTime.utc(2026, 9, 1, 10, 0, 1);
+        final repo = FakeUploadedAssetRepository([
+          // Firestore updatedAt-desc order: deleted A is returned before B.
+          _validAsset(
+            uid: uidA,
+            assetId: 'class-a',
+            purpose: UploadedAssetPurpose.classTimetable,
+            status: UploadedAssetStatus.deleted,
+            createdAt: t1,
+            updatedAt: t3,
+          ),
+          _validAsset(
+            uid: uidA,
+            assetId: 'class-b',
+            purpose: UploadedAssetPurpose.classTimetable,
+            createdAt: t2,
+            updatedAt: t2,
+          ),
+        ]);
+
+        final controller = RestoredUploadsController(
+          assetRepository: repo,
+          previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+        );
+        await controller.hydrate(uid: uidA);
+
+        expect(
+          controller.state
+              .forPurpose(UploadedAssetPurpose.classTimetable)
+              ?.asset
+              .assetId,
+          'class-b',
+        );
+      },
+    );
+
+    test('new B wins when superseded A cleanup failed', () async {
+      final t1 = DateTime.utc(2026, 9, 1, 9);
+      final t2 = DateTime.utc(2026, 9, 1, 10);
+      final controller = RestoredUploadsController(
+        assetRepository: FakeUploadedAssetRepository([
+          _validAsset(
+            uid: uidA,
+            assetId: 'class-a',
+            purpose: UploadedAssetPurpose.classTimetable,
+            createdAt: t1,
+            updatedAt: t1,
+          ),
+          _validAsset(
+            uid: uidA,
+            assetId: 'class-b',
+            purpose: UploadedAssetPurpose.classTimetable,
+            createdAt: t2,
+            updatedAt: t2,
+          ),
+        ]),
+        previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+      );
+      await controller.hydrate(uid: uidA);
+      expect(
+        controller.state
+            .forPurpose(UploadedAssetPurpose.classTimetable)
+            ?.asset
+            .assetId,
+        'class-b',
+      );
+    });
+
+    test('explicit delete of current B prevents A resurrection', () async {
+      final t1 = DateTime.utc(2026, 9, 1, 9);
+      final t2 = DateTime.utc(2026, 9, 1, 10);
+      final t3 = DateTime.utc(2026, 9, 1, 11);
+      final controller = RestoredUploadsController(
+        assetRepository: FakeUploadedAssetRepository([
+          _validAsset(
+            uid: uidA,
+            assetId: 'class-b',
+            purpose: UploadedAssetPurpose.classTimetable,
+            status: UploadedAssetStatus.deleted,
+            createdAt: t2,
+            updatedAt: t3,
+          ),
+          _validAsset(
+            uid: uidA,
+            assetId: 'class-a',
+            purpose: UploadedAssetPurpose.classTimetable,
+            createdAt: t1,
+            updatedAt: t1,
+          ),
+        ]),
+        previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+      );
+      await controller.hydrate(uid: uidA);
+      expect(
+        controller.state.forPurpose(UploadedAssetPurpose.classTimetable),
+        isNull,
+      );
+    });
+
+    for (final status in [
+      UploadedAssetStatus.failed,
+      UploadedAssetStatus.pending,
+      UploadedAssetStatus.uploading,
+    ]) {
+      test('newer ${status.name} attempt preserves older upload', () async {
+        final t1 = DateTime.utc(2026, 9, 1, 9);
+        final t2 = DateTime.utc(2026, 9, 1, 10);
+        final controller = RestoredUploadsController(
+          assetRepository: FakeUploadedAssetRepository([
+            _validAsset(
+              uid: uidA,
+              assetId: 'class-attempt',
+              purpose: UploadedAssetPurpose.classTimetable,
+              status: status,
+              createdAt: t2,
+              updatedAt: t2,
+            ),
+            _validAsset(
+              uid: uidA,
+              assetId: 'class-a',
+              purpose: UploadedAssetPurpose.classTimetable,
+              createdAt: t1,
+              updatedAt: t1,
+            ),
+          ]),
+          previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+        );
+        await controller.hydrate(uid: uidA);
+        expect(
+          controller.state
+              .forPurpose(UploadedAssetPurpose.classTimetable)
+              ?.asset
+              .assetId,
+          'class-a',
+        );
+      });
+    }
+
+    test('later upload restores after an older deleted generation', () async {
+      final t1 = DateTime.utc(2026, 9, 1, 9);
+      final t2 = DateTime.utc(2026, 9, 1, 10);
+      final controller = RestoredUploadsController(
+        assetRepository: FakeUploadedAssetRepository([
+          _validAsset(
+            uid: uidA,
+            assetId: 'menu-a',
+            purpose: UploadedAssetPurpose.eatingMenu,
+            status: UploadedAssetStatus.deleted,
+            createdAt: t1,
+            updatedAt: t2,
+          ),
+          _validAsset(
+            uid: uidA,
+            assetId: 'menu-b',
+            purpose: UploadedAssetPurpose.eatingMenu,
+            createdAt: t2.add(const Duration(minutes: 1)),
+          ),
+        ]),
+        previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+      );
+      await controller.hydrate(uid: uidA);
+      expect(
+        controller.state
+            .forPurpose(UploadedAssetPurpose.eatingMenu)
+            ?.asset
+            .assetId,
+        'menu-b',
+      );
+    });
+
+    test(
+      'generation resolution is independent across shared purposes',
+      () async {
+        final t1 = DateTime.utc(2026, 9, 1, 9);
+        final t2 = DateTime.utc(2026, 9, 1, 10);
+        final controller = RestoredUploadsController(
+          assetRepository: FakeUploadedAssetRepository([
+            _validAsset(
+              uid: uidA,
+              assetId: 'class-a',
+              purpose: UploadedAssetPurpose.classTimetable,
+              status: UploadedAssetStatus.deleted,
+              createdAt: t1,
+              updatedAt: t2.add(const Duration(seconds: 1)),
+            ),
+            _validAsset(
+              uid: uidA,
+              assetId: 'class-b',
+              purpose: UploadedAssetPurpose.classTimetable,
+              createdAt: t2,
+            ),
+            _validAsset(
+              uid: uidA,
+              assetId: 'work-w',
+              purpose: UploadedAssetPurpose.workSchedule,
+              createdAt: t1,
+            ),
+          ]),
+          previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+        );
+        await controller.hydrate(uid: uidA);
+        expect(
+          controller.state
+              .forPurpose(UploadedAssetPurpose.classTimetable)
+              ?.asset
+              .assetId,
+          'class-b',
+        );
+        expect(
+          controller.state
+              .forPurpose(UploadedAssetPurpose.workSchedule)
+              ?.asset
+              .assetId,
+          'work-w',
+        );
+      },
+    );
+
     test('Remote identity must match owner, purpose, and asset ID', () {
       final wrongOwnerKey = _validAsset(
         uid: uidA,
@@ -1315,7 +1538,11 @@ void main() {
               'users/uid-1/onboarding/skin_care/face.jpg',
           skinCareProductPhotoStatus: status,
         );
-        expect(base.validateSkinCareSetup('test_uid'), isNotNull, reason: status);
+        expect(
+          base.validateSkinCareSetup('test_uid'),
+          isNotNull,
+          reason: status,
+        );
       }
       expect(
         const BaseTimelineDraft(
@@ -1338,6 +1565,7 @@ UploadedAsset _validAsset({
   String? fileName,
   String? r2Key,
   DateTime? updatedAt,
+  DateTime? createdAt,
   UploadedAssetStatus status = UploadedAssetStatus.uploaded,
 }) {
   final now = DateTime.utc(2026, 8, 30, 12, 0);
@@ -1352,7 +1580,7 @@ UploadedAsset _validAsset({
     r2Key: r2Key ?? 'users/$uid/onboarding/${purpose.wireName}/$assetId.jpg',
     localPreviewPath: localPreviewPath,
     status: status,
-    createdAt: now,
+    createdAt: createdAt ?? now,
     updatedAt: updatedAt ?? now,
   );
 }

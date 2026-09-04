@@ -15,6 +15,7 @@ import 'package:optivus/features/routine/utils/timeline_utils.dart';
 import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
 import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/upload_source_identity.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/app_state.dart';
@@ -951,18 +952,22 @@ class _OnboardingStep4UnifiedState
           ? base.classLogicalAssetR2Key
           : base.workLogicalAssetR2Key;
 
+      final hasLogicalAssetId = logicalAssetId?.trim().isNotEmpty == true;
+      final hasLogicalR2Key = logicalAssetR2Key?.trim().isNotEmpty == true;
       RestoredUploadedAsset? entry;
-      if (logicalAssetId != null && logicalAssetId.trim().isNotEmpty) {
+      if (hasLogicalAssetId && hasLogicalR2Key) {
         entry = restored.assetsByPurpose.values
-            .where((e) => e.asset.assetId == logicalAssetId.trim())
+            .where(
+              (e) => uploadedSourceIdentityMatches(
+                assetId: logicalAssetId,
+                r2Key: logicalAssetR2Key,
+                asset: e.asset,
+              ),
+            )
             .firstOrNull;
-      } else if (logicalAssetR2Key != null &&
-          logicalAssetR2Key.trim().isNotEmpty) {
-        entry = restored.assetsByPurpose.values
-            .where((e) => e.asset.r2Key == logicalAssetR2Key.trim())
-            .firstOrNull;
+      } else if (!hasLogicalAssetId && !hasLogicalR2Key) {
+        entry = restored.forPurpose(target.purpose);
       }
-      entry ??= restored.forPurpose(target.purpose);
 
       if (entry == null ||
           !uploadedAssetIsDurablyUploadedForSlot(

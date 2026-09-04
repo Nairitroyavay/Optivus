@@ -29,8 +29,10 @@ import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
 import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/features/routine/routine_state.dart';
+import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
+import 'package:optivus/state/upload_state.dart';
 
 void main() {
   const uid = 'ah-f007-owner';
@@ -660,6 +662,93 @@ void main() {
     });
 
     test(
+      'upload owner integrity mismatch reaches controlled recovery',
+      () async {
+        const user = AuthUser(uid: uid, emailVerified: true);
+        final auth = _StreamAuthRepository();
+        final draft = _validDraftAtStep(uid, 5).copyWith(
+          lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+          baseTimeline: const BaseTimelineDraft(classLogicalAssetId: 'class-a'),
+          incrementRevision: false,
+        );
+        final container = _authContainer(
+          auth,
+          _SnapshotSource(
+            ServerReconstructionSnapshot(
+              profile: _profile(uid),
+              draft: draft,
+              completionBundle: null,
+              currentRun: const OnboardingCurrentRunSnapshot.none(),
+            ),
+          ),
+          restoredUploadsController: _FixedRestoredUploadsController(
+            const RestoredUploadsState(uid: 'different-owner'),
+          ),
+        );
+        addTearDown(container.dispose);
+        addTearDown(auth.dispose);
+
+        auth.emit(user);
+        await pumpEventQueue(times: 20);
+
+        final state = container.read(authProvider);
+        expect(state.status, AuthFlowStatus.needsAction);
+        expect(
+          state.sessionDestination.kind,
+          SessionDestinationKind.needsAction,
+        );
+        expect(state.reconstructionResult, isA<ReconstructionRecovery>());
+        expect(
+          (state.reconstructionResult as ReconstructionRecovery).reason,
+          ReconstructionRecoveryReason.ownerMismatch,
+        );
+        expect(state.recoveryActions, contains(isA<ResetSetupSafelyAction>()));
+        expect(state.errorMessage, isNotEmpty);
+      },
+    );
+
+    test('upload hydration error reaches reconnect actions', () async {
+      const user = AuthUser(uid: uid, emailVerified: true);
+      final auth = _StreamAuthRepository();
+      final draft = _validDraftAtStep(uid, 5).copyWith(
+        lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
+        baseTimeline: const BaseTimelineDraft(classLogicalAssetId: 'class-a'),
+        incrementRevision: false,
+      );
+      final container = _authContainer(
+        auth,
+        _SnapshotSource(
+          ServerReconstructionSnapshot(
+            profile: _profile(uid),
+            draft: draft,
+            completionBundle: null,
+            currentRun: const OnboardingCurrentRunSnapshot.none(),
+          ),
+        ),
+        restoredUploadsController: _FixedRestoredUploadsController(
+          const RestoredUploadsState(
+            uid: uid,
+            errorMessage: 'metadata unavailable',
+          ),
+        ),
+      );
+      addTearDown(container.dispose);
+      addTearDown(auth.dispose);
+
+      auth.emit(user);
+      await pumpEventQueue(times: 20);
+
+      final state = container.read(authProvider);
+      expect(state.status, AuthFlowStatus.reconnectRequired);
+      expect(state.recoveryActions, contains(isA<RetryNetworkAction>()));
+      expect(state.recoveryActions, contains(isA<SignOutAction>()));
+      expect(
+        state.recoveryActions,
+        isNot(contains(isA<ResetSetupSafelyAction>())),
+      );
+    });
+
+    test(
       'Y/Z same UID refresh and repeated unresolved event launch one read',
       () async {
         const user = AuthUser(uid: uid, emailVerified: true);
@@ -1140,6 +1229,7 @@ ProviderContainer _authContainer(
   ServerReconstructionSource source, {
   RoutineRepository? routineRepository,
   HabitSystemsRepository? habitSystemsRepository,
+  RestoredUploadsController? restoredUploadsController,
 }) {
   return ProviderContainer(
     overrides: [
@@ -1155,6 +1245,10 @@ ProviderContainer _authContainer(
       uploadedAssetRepositoryProvider.overrideWithValue(
         FakeUploadedAssetRepository(),
       ),
+      if (restoredUploadsController != null)
+        restoredUploadsProvider.overrideWith(
+          (ref) => restoredUploadsController,
+        ),
       routineRepositoryProvider.overrideWithValue(
         routineRepository ?? FakeRoutineRepository(),
       ),
@@ -1175,6 +1269,21 @@ ProviderContainer _authContainer(
       ),
     ],
   )..read(authProvider);
+}
+
+class _FixedRestoredUploadsController extends RestoredUploadsController {
+  final RestoredUploadsState fixedState;
+
+  _FixedRestoredUploadsController(this.fixedState)
+    : super(
+        assetRepository: FakeUploadedAssetRepository(),
+        previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+      );
+
+  @override
+  Future<void> hydrate({required String uid, bool force = false}) async {
+    state = fixedState;
+  }
 }
 
 class _ControllableSource implements ServerReconstructionSource {

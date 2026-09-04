@@ -29,13 +29,80 @@ bool uploadedAssetIsDurablyUploadedForSlot({
   required String uid,
   required UploadedAssetPurpose purpose,
 }) {
+  return uploadedAssetHasLegitimateIdentityForSlot(
+        asset: asset,
+        uid: uid,
+        purpose: purpose,
+      ) &&
+      asset.status == UploadedAssetStatus.uploaded;
+}
+
+bool uploadedAssetHasLegitimateIdentityForSlot({
+  required UploadedAsset asset,
+  required String uid,
+  required UploadedAssetPurpose purpose,
+}) {
   return asset.ownerUid == uid &&
       asset.purpose == purpose &&
       asset.sourceFeature == OnboardingDraft.sourceOnboarding &&
       asset.assetId.trim().isNotEmpty &&
       asset.r2Key.trim().isNotEmpty &&
-      _uploadedAssetR2IdentityMatches(asset) &&
-      asset.status == UploadedAssetStatus.uploaded;
+      _uploadedAssetR2IdentityMatches(asset);
+}
+
+/// Resolves one purpose by immutable upload-generation chronology.
+///
+/// [UploadedAsset.createdAt] orders generations; [UploadedAsset.updatedAt]
+/// only breaks ties because lifecycle mutations (including delete) change it.
+UploadedAsset? resolveCurrentDurableUploadedAssetForPurpose({
+  required String uid,
+  required String sourceFeature,
+  required UploadedAssetPurpose purpose,
+  required Iterable<UploadedAsset> candidates,
+}) {
+  final generations =
+      candidates
+          .where(
+            (asset) =>
+                asset.ownerUid == uid &&
+                asset.sourceFeature == sourceFeature &&
+                asset.purpose == purpose &&
+                uploadedAssetHasLegitimateIdentityForSlot(
+                  asset: asset,
+                  uid: uid,
+                  purpose: purpose,
+                ),
+          )
+          .toList()
+        ..sort((a, b) {
+          final createdOrder = b.createdAt.compareTo(a.createdAt);
+          if (createdOrder != 0) return createdOrder;
+          final updatedOrder = b.updatedAt.compareTo(a.updatedAt);
+          if (updatedOrder != 0) return updatedOrder;
+          return b.assetId.compareTo(a.assetId);
+        });
+
+  for (final asset in generations) {
+    switch (asset.status) {
+      case UploadedAssetStatus.uploaded:
+        if (uploadedAssetIsDurablyUploadedForSlot(
+          asset: asset,
+          uid: uid,
+          purpose: purpose,
+        )) {
+          return asset;
+        }
+        continue;
+      case UploadedAssetStatus.deleted:
+        // Deleted terminalizes this generation and prevents older resurrection.
+        return null;
+      case UploadedAssetStatus.pending:
+      case UploadedAssetStatus.uploading:
+      case UploadedAssetStatus.failed:
+        continue;
+    }
+  }
+  return null;
 }
 
 bool _uploadedAssetR2IdentityMatches(UploadedAsset asset) {
@@ -192,27 +259,23 @@ class RestoredUploadsController extends StateNotifier<RestoredUploadsState> {
           sourceFeature: OnboardingDraft.sourceOnboarding,
           limit: 100,
         ),
-      ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      ];
       if (sessionGeneration != _sessionGeneration ||
           state.uid != normalizedUid) {
         return;
       }
 
       final byPurpose = <UploadedAssetPurpose, RestoredUploadedAsset>{};
-      final removedPurposes = <UploadedAssetPurpose>{};
-      for (final asset in candidates) {
-        if (asset.ownerUid != normalizedUid ||
-            asset.sourceFeature != OnboardingDraft.sourceOnboarding ||
-            removedPurposes.contains(asset.purpose) ||
-            byPurpose.containsKey(asset.purpose)) {
-          continue;
+      for (final purpose in UploadedAssetPurpose.values) {
+        final asset = resolveCurrentDurableUploadedAssetForPurpose(
+          uid: normalizedUid,
+          sourceFeature: OnboardingDraft.sourceOnboarding,
+          purpose: purpose,
+          candidates: candidates,
+        );
+        if (asset != null) {
+          byPurpose[purpose] = RestoredUploadedAsset(asset: asset);
         }
-        if (asset.status == UploadedAssetStatus.deleted) {
-          removedPurposes.add(asset.purpose);
-          continue;
-        }
-        if (!_isValidUploadedAsset(asset, normalizedUid)) continue;
-        byPurpose[asset.purpose] = RestoredUploadedAsset(asset: asset);
       }
       state = RestoredUploadsState(
         uid: normalizedUid,
@@ -652,7 +715,7 @@ class UploadController extends StateNotifier<UploadState> {
       if (_operationGeneration == operationGeneration && state.isBusy) {
         state = state.copyWith(
           status: UploadFlowStatus.failed,
-          errorMessage: 'Upload interrupted or incomplete.'
+          errorMessage: 'Upload interrupted or incomplete.',
         );
       }
     }
@@ -765,7 +828,7 @@ class UploadController extends StateNotifier<UploadState> {
       if (_operationGeneration == operationGeneration && state.isBusy) {
         state = state.copyWith(
           status: UploadFlowStatus.failed,
-          errorMessage: 'Delete interrupted or incomplete.'
+          errorMessage: 'Delete interrupted or incomplete.',
         );
       }
     }

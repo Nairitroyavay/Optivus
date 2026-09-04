@@ -148,7 +148,10 @@ void main() {
               mealCategory: 'breakfast',
               dishes: ['Eggs'],
               source: 'ai_import',
-              provenanceSourceIds: const ['menu_123'],
+              provenanceSourceIds: const [
+                'menu_123',
+                'users/uid/onboarding/eating_menu/menu_123.jpg',
+              ],
             ),
             TimelineBlockDraft(
               id: 'm2',
@@ -161,7 +164,10 @@ void main() {
               mealCategory: 'snack',
               dishes: ['Nuts'],
               source: 'ai_import',
-              provenanceSourceIds: const ['menu_123'],
+              provenanceSourceIds: const [
+                'menu_123',
+                'users/uid/onboarding/eating_menu/menu_123.jpg',
+              ],
             ),
           ],
         );

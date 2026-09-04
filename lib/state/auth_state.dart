@@ -1109,8 +1109,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             restoredUploads: restoredUploads,
           );
           if (reconciliation.integrityFailure) {
-            if (restoredUploads.errorMessage != null &&
-                restoredUploads.errorMessage!.trim().isNotEmpty) {
+            if (_isUploadHydrationFailure(reconciliation, restoredUploads)) {
               state = state.copyWith(
                 user: user,
                 status: AuthFlowStatus.reconnectRequired,
@@ -1123,24 +1122,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
               );
               return;
             }
-            return;
+            effectiveResult = _uploadIntegrityRecovery(
+              ownerUid: ownerUid,
+              profile: profile,
+              reasonCodes: reconciliation.reasonCodes,
+            );
+            _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+          } else {
+            final reconciledDraft = reconciliation.reconciledDraft;
+            final effectiveStep = validateOnboardingResume(
+              reconciledDraft,
+            ).resumeStep;
+            final finalDraft = reconciledDraft.copyWith(
+              currentStep: effectiveStep,
+              stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+              incrementRevision: false,
+            );
+            _ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
+            effectiveResult = ReconstructionIncomplete(
+              ownerUid: ownerUid,
+              profile: profile,
+              step: effectiveStep,
+              draft: finalDraft,
+            );
           }
-          final reconciledDraft = reconciliation.reconciledDraft;
-          final effectiveStep = validateOnboardingResume(
-            reconciledDraft,
-          ).resumeStep;
-          final finalDraft = reconciledDraft.copyWith(
-            currentStep: effectiveStep,
-            stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
-            incrementRevision: false,
-          );
-          _ref.read(mockOnboardingProvider.notifier).loadSeedData(finalDraft);
-          effectiveResult = ReconstructionIncomplete(
-            ownerUid: ownerUid,
-            profile: profile,
-            step: effectiveStep,
-            draft: finalDraft,
-          );
 
         case ReconstructionFinishing(
           :final draft,
@@ -1153,8 +1158,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
             restoredUploads: restoredUploads,
           );
           if (reconciliation.integrityFailure) {
-            if (restoredUploads.errorMessage != null &&
-                restoredUploads.errorMessage!.trim().isNotEmpty) {
+            if (_isUploadHydrationFailure(reconciliation, restoredUploads)) {
               state = state.copyWith(
                 user: user,
                 status: AuthFlowStatus.reconnectRequired,
@@ -1167,9 +1171,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
               );
               return;
             }
-            return;
-          }
-          if (reconciliation.changed) {
+            effectiveResult = ReconstructionRecovery(
+              ownerUid: ownerUid,
+              profile: profile,
+              reason: _uploadIntegrityRecoveryReason(
+                reconciliation.reasonCodes,
+              ),
+              diagnostics: {
+                'code':
+                    reconciliation.reasonCodes.firstOrNull ??
+                    'upload_source_integrity_failure',
+              },
+            );
+            _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
+          } else if (reconciliation.changed) {
             effectiveResult = ReconstructionRecovery(
               ownerUid: ownerUid,
               profile: profile,
@@ -1250,7 +1265,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         resolveReconstructionDestination(effectiveResult),
         reconstructionResult: effectiveResult,
       );
-      if (result case ReconstructionRecovery(
+      if (effectiveResult case ReconstructionRecovery(
         :final reason,
         :final diagnostics,
       )) {
@@ -1283,6 +1298,42 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   bool _isCurrentRestore(int restoreGeneration) {
     return mounted && restoreGeneration == _backendRestoreGeneration;
+  }
+
+  bool _isUploadHydrationFailure(
+    OnboardingUploadSourceReconciliationResult reconciliation,
+    RestoredUploadsState restoredUploads,
+  ) {
+    return reconciliation.reasonCodes.contains('restored_uploads_error') ||
+        restoredUploads.errorMessage?.trim().isNotEmpty == true;
+  }
+
+  ReconstructionRecoveryReason _uploadIntegrityRecoveryReason(
+    List<String> reasonCodes,
+  ) {
+    return reasonCodes.any(
+          (code) =>
+              code == 'empty_owner_uid' ||
+              code == 'draft_owner_mismatch' ||
+              code == 'restored_uploads_owner_mismatch',
+        )
+        ? ReconstructionRecoveryReason.ownerMismatch
+        : ReconstructionRecoveryReason.durableStateConflict;
+  }
+
+  ReconstructionRecovery _uploadIntegrityRecovery({
+    required String ownerUid,
+    required UserProfile profile,
+    required List<String> reasonCodes,
+  }) {
+    return ReconstructionRecovery(
+      ownerUid: ownerUid,
+      profile: profile,
+      reason: _uploadIntegrityRecoveryReason(reasonCodes),
+      diagnostics: {
+        'code': reasonCodes.firstOrNull ?? 'upload_source_integrity_failure',
+      },
+    );
   }
 
   bool _isCurrentAuthOperation(int operation) {

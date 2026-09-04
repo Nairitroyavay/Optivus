@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/upload_source_identity.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/state/upload_state.dart';
 
@@ -153,26 +154,32 @@ class OnboardingUploadSourceReconciler {
       final classLogicalId = currentBaseTimeline.classLogicalAssetId;
       final classLogicalKey = currentBaseTimeline.classLogicalAssetR2Key;
 
-      final isMatchingClassSlot =
-          currentClassAsset != null &&
-          ((classLogicalId != null &&
-                  classLogicalId == currentClassAsset.assetId) ||
-              (classLogicalKey != null &&
-                  classLogicalKey == currentClassAsset.r2Key));
-
-      final isMatchingWorkSlotSwapped =
-          currentWorkAsset != null &&
-          ((classLogicalId != null &&
-                  classLogicalId == currentWorkAsset.assetId) ||
-              (classLogicalKey != null &&
-                  classLogicalKey == currentWorkAsset.r2Key));
-
-      final isClassLogicalSourceCurrent =
-          isMatchingClassSlot || isMatchingWorkSlotSwapped;
-
       final hasClassAiBlocks = currentBlocks.any(
         (b) => b.section == 'classes' && b.source == 'ai_import',
       );
+      final matchingClassAsset = [currentClassAsset, currentWorkAsset]
+          .whereType<UploadedAsset>()
+          .where(
+            (asset) => uploadedSourceIdentityMatches(
+              assetId: classLogicalId,
+              r2Key: classLogicalKey,
+              asset: asset,
+            ),
+          )
+          .firstOrNull;
+      final classBlocksMatch =
+          !hasClassAiBlocks ||
+          currentBlocks
+              .where((b) => b.section == 'classes' && b.source == 'ai_import')
+              .every(
+                (block) => provenanceContainsExactUploadIdentity(
+                  block.provenanceSourceIds,
+                  matchingClassAsset?.assetId,
+                  matchingClassAsset?.r2Key,
+                ),
+              );
+      final isClassLogicalSourceCurrent =
+          matchingClassAsset != null && classBlocksMatch;
 
       if (!isClassLogicalSourceCurrent &&
           (hasClassAiBlocks ||
@@ -215,26 +222,35 @@ class OnboardingUploadSourceReconciler {
       final workLogicalId = currentBaseTimeline.workLogicalAssetId;
       final workLogicalKey = currentBaseTimeline.workLogicalAssetR2Key;
 
-      final isMatchingWorkSlot =
-          currentWorkAsset != null &&
-          ((workLogicalId != null &&
-                  workLogicalId == currentWorkAsset.assetId) ||
-              (workLogicalKey != null &&
-                  workLogicalKey == currentWorkAsset.r2Key));
-
-      final isMatchingClassSlotSwapped =
-          currentClassAsset != null &&
-          ((workLogicalId != null &&
-                  workLogicalId == currentClassAsset.assetId) ||
-              (workLogicalKey != null &&
-                  workLogicalKey == currentClassAsset.r2Key));
-
-      final isWorkLogicalSourceCurrent =
-          isMatchingWorkSlot || isMatchingClassSlotSwapped;
-
       final hasWorkAiBlocks = currentBlocks.any(
         (b) => b.section == 'job_work_business' && b.source == 'ai_import',
       );
+      final matchingWorkAsset = [currentWorkAsset, currentClassAsset]
+          .whereType<UploadedAsset>()
+          .where(
+            (asset) => uploadedSourceIdentityMatches(
+              assetId: workLogicalId,
+              r2Key: workLogicalKey,
+              asset: asset,
+            ),
+          )
+          .firstOrNull;
+      final workBlocksMatch =
+          !hasWorkAiBlocks ||
+          currentBlocks
+              .where(
+                (b) =>
+                    b.section == 'job_work_business' && b.source == 'ai_import',
+              )
+              .every(
+                (block) => provenanceContainsExactUploadIdentity(
+                  block.provenanceSourceIds,
+                  matchingWorkAsset?.assetId,
+                  matchingWorkAsset?.r2Key,
+                ),
+              );
+      final isWorkLogicalSourceCurrent =
+          matchingWorkAsset != null && workBlocksMatch;
 
       if (!isWorkLogicalSourceCurrent &&
           (hasWorkAiBlocks ||
@@ -287,8 +303,11 @@ class OnboardingUploadSourceReconciler {
       final importMatchesCurrentAsset =
           hasCurrentEatingAsset &&
           eatingImport != null &&
-          (eatingImport.uploadedAssetId == currentEatingAsset.assetId ||
-              eatingImport.uploadedAssetR2Key == currentEatingAsset.r2Key);
+          uploadedSourceIdentityMatches(
+            assetId: eatingImport.uploadedAssetId,
+            r2Key: eatingImport.uploadedAssetR2Key,
+            asset: currentEatingAsset,
+          );
 
       bool allEatingBlocksMatchCurrentAsset = true;
       if (eatingAiBlocks.isNotEmpty) {
@@ -297,9 +316,11 @@ class OnboardingUploadSourceReconciler {
         } else {
           for (final block in eatingAiBlocks) {
             final provenance = block.provenanceSourceIds;
-            if (provenance.isEmpty ||
-                (!provenance.contains(currentEatingAsset.assetId) &&
-                    !provenance.contains(currentEatingAsset.r2Key))) {
+            if (!provenanceContainsExactUploadIdentity(
+              provenance,
+              currentEatingAsset.assetId,
+              currentEatingAsset.r2Key,
+            )) {
               allEatingBlocksMatchCurrentAsset = false;
               break;
             }
@@ -321,20 +342,8 @@ class OnboardingUploadSourceReconciler {
 
         currentImports.removeWhere((entry) => entry.section == 'Eating');
 
-        if (hasCurrentEatingAsset) {
-          currentImports.add(
-            PendingFutureImportDraft(
-              id: 'eating_photo_ai',
-              section: 'Eating',
-              mode: 'Photo AI',
-              createdAt: DateTime.now(),
-              uploadedAssetId: currentEatingAsset.assetId,
-              uploadedAssetR2Key: currentEatingAsset.r2Key,
-              uploadedAssetStatus: 'uploaded',
-              status: PendingFutureImportDraft.appliedStatus,
-            ),
-          );
-        }
+        // The durable upload is tracked by RestoredUploadsState. A photo import
+        // is only created after AI extraction actually succeeds for that asset.
       }
     }
 

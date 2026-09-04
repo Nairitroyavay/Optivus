@@ -176,6 +176,8 @@ void main() {
 
     test('Step 4 class provenance validation accepts matching asset B', () {
       const assetB = 'asset_class_B';
+      const assetBKey =
+          'users/uid/onboarding/class_timetable/asset_class_B.jpg';
 
       final blockFromB = TimelineBlockDraft(
         id: 'c1',
@@ -186,7 +188,7 @@ void main() {
         repeatDays: const [1, 3, 5],
         blockType: TimelineBlockDraft.hardBlockKey,
         source: 'ai_import',
-        provenanceSourceIds: const [assetB],
+        provenanceSourceIds: const [assetB, assetBKey],
       );
 
       final draftWithAssetB = OnboardingDraft(
@@ -194,6 +196,7 @@ void main() {
         baseTimeline: BaseTimelineDraft(
           blocks: [blockFromB],
           classLogicalAssetId: assetB,
+          classLogicalAssetR2Key: assetBKey,
         ),
       );
 
@@ -206,6 +209,8 @@ void main() {
     test('Step 4 Class replacement preserves valid Work data', () {
       const classA = 'class_A';
       const workW = 'work_W';
+      const classAKey = 'users/uid/onboarding/class_timetable/class_A.jpg';
+      const workWKey = 'users/uid/onboarding/work_schedule/work_W.jpg';
 
       final classBlockA = TimelineBlockDraft(
         id: 'c1',
@@ -216,7 +221,7 @@ void main() {
         repeatDays: const [1],
         blockType: TimelineBlockDraft.hardBlockKey,
         source: 'ai_import',
-        provenanceSourceIds: const [classA],
+        provenanceSourceIds: const [classA, classAKey],
       );
 
       final workBlockW = TimelineBlockDraft(
@@ -228,7 +233,7 @@ void main() {
         repeatDays: const [2],
         blockType: TimelineBlockDraft.hardBlockKey,
         source: 'ai_import',
-        provenanceSourceIds: const [workW],
+        provenanceSourceIds: const [workW, workWKey],
       );
 
       const role = LifeRoleDraft.studentWorkingKey;
@@ -238,7 +243,9 @@ void main() {
         baseTimeline: BaseTimelineDraft(
           blocks: [classBlockA, workBlockW],
           classLogicalAssetId: classA,
+          classLogicalAssetR2Key: classAKey,
           workLogicalAssetId: workW,
+          workLogicalAssetR2Key: workWKey,
         ),
       );
 
@@ -252,6 +259,8 @@ void main() {
       final draftAfterClassReplace = draftBefore.copyWith(
         baseTimeline: draftBefore.baseTimeline.copyWith(
           classLogicalAssetId: classB,
+          classLogicalAssetR2Key:
+              'users/uid/onboarding/class_timetable/$classB.jpg',
           // Work logical asset remains workW
         ),
       );
@@ -418,6 +427,9 @@ void main() {
       const assetWorkB = 'work_B';
       const assetMenuA = 'menu_A';
       const assetMenuB = 'menu_B';
+      const classAKey = 'users/uid/onboarding/class_timetable/class_A.jpg';
+      const workAKey = 'users/uid/onboarding/work_schedule/work_A.jpg';
+      const menuAKey = 'users/uid/onboarding/eating_menu/menu_A.jpg';
 
       test(
         '16. required Class AI blocks with valid current logical source but empty provenance -> FAILS',
@@ -489,7 +501,7 @@ void main() {
               repeatDays: const [1],
               blockType: TimelineBlockDraft.hardBlockKey,
               source: 'ai_import',
-              provenanceSourceIds: const [assetClassA],
+              provenanceSourceIds: const [assetClassA, classAKey],
             ),
           ],
         );
@@ -515,7 +527,7 @@ void main() {
               repeatDays: const [1],
               blockType: TimelineBlockDraft.hardBlockKey,
               source: 'ai_import',
-              provenanceSourceIds: const [assetWorkA],
+              provenanceSourceIds: const [assetWorkA, workAKey],
             ),
           ],
         );
@@ -596,7 +608,7 @@ void main() {
               repeatDays: const [1],
               blockType: TimelineBlockDraft.hardBlockKey,
               source: 'ai_import',
-              provenanceSourceIds: const [assetClassA], // Valid Class
+              provenanceSourceIds: const [assetClassA, classAKey],
             ),
             TimelineBlockDraft(
               id: 'w1',
@@ -643,7 +655,7 @@ void main() {
                 repeatDays: const [1],
                 blockType: TimelineBlockDraft.hardBlockKey,
                 source: 'ai_import',
-                provenanceSourceIds: const [assetWorkA],
+                provenanceSourceIds: const [assetWorkA, workAKey],
               ),
               TimelineBlockDraft(
                 id: 'w1',
@@ -654,7 +666,7 @@ void main() {
                 repeatDays: const [2],
                 blockType: TimelineBlockDraft.hardBlockKey,
                 source: 'ai_import',
-                provenanceSourceIds: const [assetClassA],
+                provenanceSourceIds: const [assetClassA, classAKey],
               ),
             ],
           );
@@ -715,7 +727,7 @@ void main() {
               repeatDays: const [1],
               blockType: TimelineBlockDraft.softBlockKey,
               source: 'ai_import',
-              provenanceSourceIds: const [assetMenuA],
+              provenanceSourceIds: const [assetMenuA, menuAKey],
             ),
           ],
         );
@@ -850,7 +862,7 @@ void main() {
               repeatDays: const [1],
               blockType: TimelineBlockDraft.softBlockKey,
               source: 'ai_import',
-              provenanceSourceIds: const [assetMenuA],
+              provenanceSourceIds: const [assetMenuA, menuAKey],
             ),
           ],
         );
@@ -1238,11 +1250,10 @@ void main() {
             isFalse,
           );
 
-          // 3. Stale Pending import A replaced by Menu B
+          // 3. No import is fabricated for Menu B before AI runs.
           final currentImport = reconciledDraft.baseTimeline
               .latestImportForSection('Eating');
-          expect(currentImport, isNotNull);
-          expect(currentImport!.uploadedAssetId, equals(menuB.assetId));
+          expect(currentImport, isNull);
 
           // 4. Step 5 no longer completed, marked dirty
           expect(reconciledDraft.stepCompleted[5], isFalse);
