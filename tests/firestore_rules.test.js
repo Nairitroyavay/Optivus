@@ -1960,7 +1960,7 @@ describe("Phase 4.6.4 canonical production contracts", () => {
 
 describe("Firestore Rules for upload metadata", () => {
   function uploadData(uid = "user123", assetId = "asset-001", overrides = {}) {
-    return {
+    const data = {
       assetId,
       ownerUid: uid,
       sourceFeature: "onboarding",
@@ -1968,13 +1968,16 @@ describe("Firestore Rules for upload metadata", () => {
       fileName: "photo.jpg",
       contentType: "image/jpeg",
       sizeBytes: 1048576,
-      r2Key: "uploads/user123/asset-001.jpg",
       status: "uploaded",
       createdAt,
       updatedAt,
       errorMessage: null,
       ...overrides,
     };
+    if (!("r2Key" in overrides)) {
+      data.r2Key = `users/${uid}/${data.sourceFeature}/${data.purpose}/${assetId}.jpg`;
+    }
+    return data;
   }
 
   function uploadRef(db, uid = "user123", assetId = "asset-001") {
@@ -1991,28 +1994,28 @@ describe("Firestore Rules for upload metadata", () => {
   it("owner creates skin_products upload", async () => {
     const db = ownerDb();
     await assertSucceeds(uploadRef(db, "user123", "asset-002").set(
-      uploadData("user123", "asset-002", { purpose: "skin_products", r2Key: "uploads/user123/asset-002.jpg" })
+      uploadData("user123", "asset-002", { purpose: "skin_products" })
     ));
   });
 
   it("owner creates class_timetable upload", async () => {
     const db = ownerDb();
     await assertSucceeds(uploadRef(db, "user123", "asset-003").set(
-      uploadData("user123", "asset-003", { purpose: "class_timetable", r2Key: "uploads/user123/asset-003.jpg" })
+      uploadData("user123", "asset-003", { purpose: "class_timetable" })
     ));
   });
 
   it("owner creates work_schedule upload", async () => {
     const db = ownerDb();
     await assertSucceeds(uploadRef(db, "user123", "asset-004").set(
-      uploadData("user123", "asset-004", { purpose: "work_schedule", r2Key: "uploads/user123/asset-004.jpg" })
+      uploadData("user123", "asset-004", { purpose: "work_schedule" })
     ));
   });
 
   it("owner creates eating_menu upload", async () => {
     const db = ownerDb();
     await assertSucceeds(uploadRef(db, "user123", "asset-005").set(
-      uploadData("user123", "asset-005", { purpose: "eating_menu", r2Key: "uploads/user123/asset-005.jpg" })
+      uploadData("user123", "asset-005", { purpose: "eating_menu" })
     ));
   });
 
@@ -2030,7 +2033,6 @@ describe("Firestore Rules for upload metadata", () => {
         purpose: "profile_photo",
         contentType: "image/jpeg",
         sizeBytes: 2097152,
-        r2Key: "uploads/user123/asset-007.jpg",
       })
     ));
   });
@@ -2342,7 +2344,7 @@ describe("Firestore Rules for upload metadata", () => {
     await assertSucceeds(uploadRef(db, "user123", "asset-webp").set(
       uploadData("user123", "asset-webp", {
         contentType: "image/webp",
-        r2Key: "uploads/user123/asset-webp.webp",
+        r2Key: "users/user123/onboarding/skin_face/asset-webp.webp",
         fileName: "photo.webp",
       })
     ));
@@ -2354,8 +2356,60 @@ describe("Firestore Rules for upload metadata", () => {
       uploadData("user123", "asset-png", {
         purpose: "skin_products",
         contentType: "image/png",
-        r2Key: "uploads/user123/asset-png.png",
+        r2Key: "users/user123/onboarding/skin_products/asset-png.png",
         fileName: "photo.png",
+      })
+    ));
+  });
+
+  it("rejects r2Key containing another UID", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-uid").set(
+      uploadData("user123", "asset-uid", {
+        purpose: "class_timetable",
+        r2Key: "users/other/onboarding/class_timetable/asset-uid.jpg",
+      })
+    ));
+  });
+
+  it("rejects r2Key containing another purpose", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-purpose").set(
+      uploadData("user123", "asset-purpose", {
+        purpose: "eating_menu",
+        r2Key: "users/user123/onboarding/work_schedule/asset-purpose.jpg",
+      })
+    ));
+  });
+
+  it("rejects r2Key containing another assetId", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-real").set(
+      uploadData("user123", "asset-real", {
+        r2Key: "users/user123/onboarding/skin_face/asset-fake.jpg",
+      })
+    ));
+  });
+
+  it("rejects traversal and unexpected upload namespaces", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-traversal").set(
+      uploadData("user123", "asset-traversal", {
+        r2Key: "users/user123/onboarding/class_timetable/../asset-traversal.jpg",
+      })
+    ));
+    await assertFails(uploadRef(db, "user123", "asset-namespace").set(
+      uploadData("user123", "asset-namespace", {
+        r2Key: "uploads/user123/onboarding/skin_face/asset-namespace.jpg",
+      })
+    ));
+  });
+
+  it("rejects an unsupported object extension", async () => {
+    const db = ownerDb();
+    await assertFails(uploadRef(db, "user123", "asset-gif").set(
+      uploadData("user123", "asset-gif", {
+        r2Key: "users/user123/onboarding/skin_face/asset-gif.gif",
       })
     ));
   });

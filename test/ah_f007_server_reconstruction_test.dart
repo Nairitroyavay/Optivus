@@ -9,16 +9,26 @@ import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/routine_item.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/repositories/routine_history_repository.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
+import 'package:optivus/repositories/habit_systems_repository.dart';
+import 'package:optivus/repositories/fake_habit_systems_repository.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_resume_validator.dart';
+import 'package:optivus/services/habit_system_onboarding_projection.dart';
+import 'package:optivus/services/routine_onboarding_projection.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
+import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
+import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 
@@ -351,6 +361,113 @@ void main() {
           resolveReconstructionDestination(result).kind,
           SessionDestinationKind.home,
         );
+      },
+    );
+
+    test(
+      'completed cold reconstruction restores routine and habit state before Home',
+      () async {
+        final draft = _finalDraft(uid);
+        final sourceRoutine = RoutineItem(
+          id: 'reading-source',
+          title: 'Read',
+          startMinute: 420,
+          endMinute: 435,
+          blockType: RoutineBlockType.flexibleTask,
+          category: RoutineCategory.habit,
+          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+        );
+        final baseBundle = _bundle(uid, draft);
+        final bundleMap = baseBundle.toMap()
+          ..['routineItemsForApp'] = [sourceRoutine.toMap()]
+          ..['goodHabitTemplates'] = [
+            const GoodHabitTemplateBundle(
+              id: 'reading-habit',
+              systemKey: 'read',
+              title: 'Read',
+              durationMinutes: 15,
+              frequency: 'daily',
+              bestTime: 'morning',
+              priority: 'good_to_do',
+              repeatDays: [1, 2, 3, 4, 5, 6, 7],
+            ).toMap(),
+          ]
+          ..['sourceFingerprint'] = draft.effectiveSourceFingerprint;
+        final bundle = OnboardingCompletionBundle.fromMap(bundleMap);
+        final routineProjection = RoutineOnboardingProjection.build(bundle);
+        final expectedSystems = HabitSystemOnboardingProjection.build(
+          bundle,
+          routineProjection.items,
+        );
+        final routineRepository = FakeRoutineRepository();
+        await routineRepository.createRoutineItemsIfMissing(
+          uid,
+          routineProjection.items,
+        );
+        final habitRepository = FakeHabitSystemsRepository();
+        for (final system in expectedSystems) {
+          await habitRepository.createSystem(
+            system: system,
+            operationId: 'seed-${system.systemId}',
+          );
+        }
+
+        final snapshot = ServerReconstructionSnapshot(
+          profile: _profile(
+            uid,
+            inputCompleted: true,
+            projectionStatus: 'completed',
+          ),
+          draft: draft,
+          completionBundle: bundle,
+          currentRun: _run(
+            _job(uid, draft, status: OnboardingJobStatus.completed),
+          ),
+        );
+        final auth = _StreamAuthRepository();
+        final container = _authContainer(
+          auth,
+          _SnapshotSource(snapshot),
+          routineRepository: routineRepository,
+          habitSystemsRepository: habitRepository,
+        );
+        addTearDown(container.dispose);
+        addTearDown(auth.dispose);
+        var frontendReadyWhenHomePublished = false;
+        final subscription = container.listen<AuthState>(authProvider, (
+          _,
+          next,
+        ) {
+          if (next.sessionDestination.kind == SessionDestinationKind.home) {
+            final routineIds = container
+                .read(routineNotifierProvider)
+                .items
+                .map((item) => item.id)
+                .toSet();
+            final systemIds = container
+                .read(habitSystemsNotifierProvider)
+                .systems
+                .map((system) => system.systemId)
+                .toSet();
+            frontendReadyWhenHomePublished =
+                routineIds.containsAll(
+                  routineProjection.items.map((item) => item.id),
+                ) &&
+                systemIds.containsAll(
+                  expectedSystems.map((system) => system.systemId),
+                );
+          }
+        });
+        addTearDown(subscription.close);
+
+        auth.emit(const AuthUser(uid: uid, emailVerified: true));
+        await pumpEventQueue(times: 30);
+
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInOnboardingComplete,
+        );
+        expect(frontendReadyWhenHomePublished, isTrue);
       },
     );
 
@@ -1020,8 +1137,10 @@ class _ThrowingSource implements ServerReconstructionSource {
 
 ProviderContainer _authContainer(
   _StreamAuthRepository auth,
-  ServerReconstructionSource source,
-) {
+  ServerReconstructionSource source, {
+  RoutineRepository? routineRepository,
+  HabitSystemsRepository? habitSystemsRepository,
+}) {
   return ProviderContainer(
     overrides: [
       optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
@@ -1035,6 +1154,21 @@ ProviderContainer _authContainer(
       ),
       uploadedAssetRepositoryProvider.overrideWithValue(
         FakeUploadedAssetRepository(),
+      ),
+      routineRepositoryProvider.overrideWithValue(
+        routineRepository ?? FakeRoutineRepository(),
+      ),
+      routineHistoryRepositoryProvider.overrideWithValue(
+        FakeRoutineHistoryRepository(),
+      ),
+      routineTransactionRepositoryProvider.overrideWith((ref) {
+        return FakeRoutineTransactionRepository(
+          routineRepository: ref.read(routineRepositoryProvider),
+          historyRepository: ref.read(routineHistoryRepositoryProvider),
+        );
+      }),
+      habitSystemsRepositoryProvider.overrideWithValue(
+        habitSystemsRepository ?? FakeHabitSystemsRepository(),
       ),
       serverReconstructorProvider.overrideWithValue(
         ServerReconstructor(source: source),

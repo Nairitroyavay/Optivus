@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/features/profile/providers/profile_settings_provider.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 import 'package:optivus/features/routine/controllers/habit_systems_controller.dart';
 import 'package:optivus/features/routine/routine_state.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -1110,7 +1111,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
                   incrementRevision: false,
                 ),
               );
-        case ReconstructionCompleted(:final draft):
+        case ReconstructionCompleted(:final draft, :final completionBundle):
           _ref
               .read(mockOnboardingProvider.notifier)
               .loadSeedData(
@@ -1122,6 +1123,38 @@ class AuthNotifier extends StateNotifier<AuthState> {
                   incrementRevision: false,
                 ),
               );
+          if (!_isCurrentRestore(restoreGeneration) ||
+              state.user?.uid != user.uid ||
+              completionBundle.uid != user.uid) {
+            return;
+          }
+          try {
+            await const OnboardingFrontendHydrationService()
+                .restoreVerifiedFrontendState(
+                  read: _ref.read,
+                  bundle: completionBundle,
+                );
+          } catch (_) {
+            if (!_isCurrentRestore(restoreGeneration) ||
+                state.user?.uid != user.uid) {
+              return;
+            }
+            state = state.copyWith(
+              user: user,
+              status: AuthFlowStatus.reconnectRequired,
+              errorMessage: "We couldn't restore your completed setup yet.",
+              onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+              recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+              startupReasonCode: 'completed_frontend_restore_failed',
+              clearStartupDestination: true,
+              clearReconstructionResult: true,
+            );
+            return;
+          }
+          if (!_isCurrentRestore(restoreGeneration) ||
+              state.user?.uid != user.uid) {
+            return;
+          }
         case ReconstructionRecovery():
           _ref.read(mockOnboardingProvider.notifier).reset(user.uid);
       }
@@ -1338,6 +1371,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(trackerSettingsProvider.notifier).resetForSignedOut();
     _ref.read(routineImportAiControllerProvider.notifier).resetForSignedOut();
     _ref.read(uploadControllerProvider.notifier).resetForSignedOut();
+    _ref.invalidate(onboardingUploadInteractionProvider);
     _ref.read(restoredUploadsProvider.notifier).resetForSignedOut();
     _ref.read(aiRoutineSuggestionsEnabledProvider.notifier).state = true;
     _ref.read(conflictResolverEnabledProvider.notifier).state = true;

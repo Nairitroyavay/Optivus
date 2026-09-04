@@ -12,6 +12,8 @@ import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpe
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_timeline_preview.dart';
 import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
+import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -37,7 +39,6 @@ class OnboardingStep5 extends ConsumerStatefulWidget {
 
 class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   int _selectedDay = 1;
-  UploadedAsset? _uploadedAsset;
   String? _uploadError;
   String? _generationError;
   String? _createError;
@@ -79,10 +80,12 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final path = base.eatingSetupPath;
     final eatingBlocks = base.confirmedBlocksForSection('eating');
     final isChoice = base.eatingSetupStep == 0;
-    final restoredEntry = ref
-        .watch(restoredUploadsProvider)
-        .forPurpose(UploadedAssetPurpose.eatingMenu);
-    final effectiveAsset = _uploadedAsset ?? restoredEntry?.asset;
+    final uploadRuntime = ref.watch(
+      onboardingUploadInteractionProvider.select(
+        (slots) => slots[onboardingEatingUploadSlot]!,
+      ),
+    );
+    final effectiveAsset = uploadRuntime.durableAsset;
 
     if (isChoice) {
       return Padding(
@@ -103,11 +106,14 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       child: path == onboardingEatingPathHasRoutine
           ? _EatingUploadTimelineScreen(
               asset: effectiveAsset,
+              previewPath: uploadRuntime.usablePreviewPath,
+              uploadRuntime: uploadRuntime,
               uploadError: _uploadError,
               generationError: _generationError,
               selectedDay: _selectedDay,
               blocks: eatingBlocks,
               onUpload: _startUpload,
+              onChangePhoto: () => _startUpload(selectNewFile: true),
               onRemove: _removeUploadedRoutine,
               onGenerate: _runAiExtraction,
               onDayChanged: (day) => setState(() => _selectedDay = day),
@@ -128,7 +134,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     );
   }
 
-  Future<void> _startUpload() async {
+  Future<void> _startUpload({bool selectNewFile = false}) async {
     setState(() {
       _uploadError = null;
       _generationError = null;
@@ -139,26 +145,40 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         ref.read(authProvider).user?.uid ??
         ref.read(mockOnboardingProvider).draft.uid;
     final authGeneration = ref.read(authGenerationProvider);
-    final asset = await ref
-        .read(uploadControllerProvider.notifier)
-        .startUpload(
-          uid: uid,
-          purpose: UploadedAssetPurpose.eatingMenu,
-          sourceFeature: OnboardingDraft.sourceOnboarding,
-        );
+    final previousAssetId = ref
+        .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
+        ?.durableAsset
+        ?.assetId;
+    final controller = ref.read(onboardingUploadInteractionProvider.notifier);
+    final before = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingEatingUploadSlot]!;
+    final asset =
+        !selectNewFile &&
+            before.phase == UploadInteractionPhase.failed &&
+            before.transientFile != null
+        ? await controller.retry(
+            onboardingEatingUploadSlot,
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
+          )
+        : await controller.chooseFromGallery(
+            onboardingEatingUploadSlot,
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
+          );
     if (!_isCurrentSession(uid, authGeneration)) return;
 
-    final uploadState = ref.read(uploadControllerProvider);
+    final uploadState = ref.read(
+      onboardingUploadInteractionProvider,
+    )[onboardingEatingUploadSlot]!;
     setState(() {
-      if (asset != null) {
-        _uploadedAsset = asset;
-      }
-      _uploadError = uploadState.status == UploadFlowStatus.failed
-          ? _friendlyUploadMessage(uploadState.errorMessage)
+      _uploadError = uploadState.phase == UploadInteractionPhase.failed
+          ? _friendlyUploadMessage(uploadState.attemptError)
           : null;
     });
-    if (asset != null) {
-      ref.read(restoredUploadsProvider.notifier).registerUploaded(asset);
+    if (asset != null && asset.assetId != previousAssetId) {
+      _replaceEatingBlocks(const []);
     }
   }
 
@@ -166,30 +186,22 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final uid =
         ref.read(authProvider).user?.uid ??
         ref.read(mockOnboardingProvider).draft.uid;
-    final asset =
-        _uploadedAsset ??
-        ref
-            .read(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.eatingMenu)
-            ?.asset;
+    final asset = ref
+        .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
+        ?.durableAsset;
     if (asset != null) {
-      await ref
-          .read(uploadControllerProvider.notifier)
-          .markDeleted(uid: uid, assetId: asset.assetId);
+      final removed = await ref
+          .read(onboardingUploadInteractionProvider.notifier)
+          .remove(onboardingEatingUploadSlot, uid: uid);
       if (!mounted) return;
-      if (ref.read(uploadControllerProvider).status ==
-          UploadFlowStatus.failed) {
+      if (!removed) {
         setState(() {
           _uploadError = "Couldn't remove the photo. Try again.";
         });
         return;
       }
-      ref
-          .read(restoredUploadsProvider.notifier)
-          .removePurpose(uid: uid, purpose: UploadedAssetPurpose.eatingMenu);
     }
     setState(() {
-      _uploadedAsset = null;
       _uploadError = null;
       _generationError = null;
     });
@@ -203,16 +215,22 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         '[Onboarding5] AI mode: ${OptivusAiWorkersConfig.mode.name.toUpperCase()}',
       );
     }
-    final asset =
-        _uploadedAsset ??
-        ref
-            .read(restoredUploadsProvider)
-            .forPurpose(UploadedAssetPurpose.eatingMenu)
-            ?.asset;
+    final uid =
+        ref.read(authProvider).user?.uid ??
+        ref.read(mockOnboardingProvider).draft.uid;
+    final authGeneration = ref.read(authGenerationProvider);
+    final asset = ref
+        .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
+        ?.durableAsset;
     setState(() => _generationError = null);
     ref.read(mockOnboardingProvider.notifier).clearValidation();
 
-    if (asset == null) {
+    if (asset == null ||
+        !uploadedAssetIsDurablyUploadedForSlot(
+          asset: asset,
+          uid: uid,
+          purpose: UploadedAssetPurpose.eatingMenu,
+        )) {
       setState(
         () => _generationError = 'Upload your routine/menu photo first.',
       );
@@ -239,10 +257,18 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       'contentTypePresent=${asset.contentType.trim().isNotEmpty}',
     );
 
+    final capturedAssetId = asset.assetId;
+    final capturedR2Key = asset.r2Key;
+    bool sourceIsCurrent() {
+      final current = ref
+          .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
+          ?.durableAsset;
+      return _isCurrentSession(uid, authGeneration) &&
+          current?.assetId == capturedAssetId &&
+          current?.r2Key == capturedR2Key;
+    }
+
     final now = DateTime.now();
-    final uid =
-        ref.read(authProvider).user?.uid ??
-        ref.read(mockOnboardingProvider).draft.uid;
     final review = RoutineImportReviewDraft(
       id: onboardingImportId(onboardingSectionEating, 'photo_ai'),
       uid: uid,
@@ -263,7 +289,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final result = await ref
         .read(routineImportAiControllerProvider.notifier)
         .runExtraction(review);
-    if (!mounted) return;
+    if (!sourceIsCurrent()) return;
 
     final aiState = ref.read(routineImportAiControllerProvider);
     debugPrint(
@@ -308,6 +334,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       return;
     }
 
+    if (!sourceIsCurrent()) return;
     _replaceEatingBlocks(blocks);
     setState(() => _generationError = null);
   }
@@ -631,22 +658,28 @@ class _EatingPathCard extends StatelessWidget {
 
 class _EatingUploadTimelineScreen extends ConsumerWidget {
   final UploadedAsset? asset;
+  final String? previewPath;
+  final UploadSlotRuntimeState uploadRuntime;
   final String? uploadError;
   final String? generationError;
   final int selectedDay;
   final List<TimelineBlockDraft> blocks;
   final VoidCallback onUpload;
+  final VoidCallback onChangePhoto;
   final VoidCallback onRemove;
   final VoidCallback onGenerate;
   final ValueChanged<int> onDayChanged;
 
   const _EatingUploadTimelineScreen({
     required this.asset,
+    required this.previewPath,
+    required this.uploadRuntime,
     required this.uploadError,
     required this.generationError,
     required this.selectedDay,
     required this.blocks,
     required this.onUpload,
+    required this.onChangePhoto,
     required this.onRemove,
     required this.onGenerate,
     required this.onDayChanged,
@@ -654,20 +687,19 @@ class _EatingUploadTimelineScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final uploadState = ref.watch(uploadControllerProvider);
     final aiState = ref.watch(routineImportAiControllerProvider);
-    final uploadBusy =
-        uploadState.sourceFeature == OnboardingDraft.sourceOnboarding &&
-        uploadState.purpose == UploadedAssetPurpose.eatingMenu &&
-        uploadState.isBusy;
+    final uploadBusy = uploadRuntime.isBusy;
     final generating = aiState.isExtracting;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _EatingUploadCard(
           asset: asset,
+          previewPath: previewPath,
           busy: uploadBusy || generating,
+          failed: uploadRuntime.phase == UploadInteractionPhase.failed,
           onUpload: onUpload,
+          onChangePhoto: onChangePhoto,
           onRemove: onRemove,
           onGenerate: asset == null || uploadBusy || generating
               ? null
@@ -907,15 +939,21 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
 
 class _EatingUploadCard extends StatelessWidget {
   final UploadedAsset? asset;
+  final String? previewPath;
   final bool busy;
+  final bool failed;
   final VoidCallback onUpload;
+  final VoidCallback onChangePhoto;
   final VoidCallback onRemove;
   final VoidCallback? onGenerate;
 
   const _EatingUploadCard({
     required this.asset,
+    required this.previewPath,
     required this.busy,
+    required this.failed,
     required this.onUpload,
+    required this.onChangePhoto,
     required this.onRemove,
     required this.onGenerate,
   });
@@ -950,13 +988,36 @@ class _EatingUploadCard extends StatelessWidget {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: busy ? null : onUpload,
-                  child: _EatingPhotoTarget(asset: asset, onRemove: onRemove),
+                  child: _EatingPhotoTarget(
+                    asset: asset,
+                    previewPath: previewPath,
+                    onRemove: onRemove,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
               _EatingGenerateButton(onTap: onGenerate, busy: busy),
             ],
           ),
+          if (failed && !busy) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                TextButton.icon(
+                  key: const Key('onboarding-step5-retry-upload'),
+                  onPressed: onUpload,
+                  icon: const Icon(Icons.refresh_rounded, size: 15),
+                  label: const Text('Retry'),
+                ),
+                TextButton.icon(
+                  key: const Key('onboarding-step5-change-photo'),
+                  onPressed: onChangePhoto,
+                  icon: const Icon(Icons.edit_rounded, size: 15),
+                  label: const Text('Change photo'),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1054,15 +1115,18 @@ class _EatingGeneratedSummaryRow extends StatelessWidget {
 
 class _EatingPhotoTarget extends ConsumerWidget {
   final UploadedAsset? asset;
+  final String? previewPath;
   final VoidCallback onRemove;
 
-  const _EatingPhotoTarget({required this.asset, required this.onRemove});
+  const _EatingPhotoTarget({
+    required this.asset,
+    required this.previewPath,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final preview = asset == null
-        ? null
-        : usableUploadedAssetLocalPreviewPath(asset!);
+    final preview = previewPath;
     final restored = ref
         .watch(restoredUploadsProvider)
         .forPurpose(UploadedAssetPurpose.eatingMenu);

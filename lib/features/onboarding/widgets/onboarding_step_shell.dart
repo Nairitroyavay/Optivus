@@ -562,4 +562,3 @@ class OnboardingStepShell extends StatelessWidget {
   }
 }
 
-

@@ -4,6 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step4_unified.dart';
 import 'package:optivus/features/onboarding/widgets/ai_thinking_card.dart';
+import 'package:optivus/features/uploads/controllers/upload_interaction_controller.dart';
+import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/features/uploads/services/upload_permission_service.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -13,8 +17,8 @@ import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
 import 'package:optivus/repositories/uploaded_asset_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/state/app_state.dart';
+import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
-import 'package:optivus/state/upload_state.dart';
 
 void main() {
   group('Onboarding Step 4 AI Flow Logic', () {
@@ -141,8 +145,10 @@ void main() {
       tester,
     ) async {
       final draft = OnboardingDraft(
+        uid: 'test-user',
         lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
       );
+      final authRepository = DummyAuthRepo();
 
       await tester.pumpWidget(
         ProviderScope(
@@ -150,10 +156,11 @@ void main() {
             mockOnboardingProvider.overrideWith(
               (ref) => MockOnboardingNotifier()..loadSeedData(draft),
             ),
-            uploadControllerProvider.overrideWith(
-              (ref) => MockUploadController(
+            authRepositoryProvider.overrideWithValue(authRepository),
+            onboardingUploadInteractionProvider.overrideWith(
+              (ref) => MockUploadInteractionController(
                 assetRepository: DummyAssetRepo(),
-                authRepository: DummyAuthRepo(),
+                authRepository: authRepository,
                 imagePrepareService: DummyImageService(),
                 r2UploadClient: DummyR2Client(),
               ),
@@ -218,24 +225,31 @@ class FakeDelayedRoutineImportAiClient implements RoutineImportAiClient {
   }
 }
 
-class MockUploadController extends UploadController {
-  MockUploadController({
+class MockUploadInteractionController extends UploadInteractionController {
+  MockUploadInteractionController({
     required super.assetRepository,
     required super.authRepository,
     required super.imagePrepareService,
     required super.r2UploadClient,
-  });
+  }) : super(
+         shellConfig: onboardingUploadShellConfig,
+         permissionService: const DefaultUploadPermissionService(),
+       );
 
   @override
-  Future<UploadedAsset?> startUpload({
+  Future<UploadedAsset?> chooseFromGallery(
+    String slotKey, {
     required String uid,
-    required UploadedAssetPurpose purpose,
     required String sourceFeature,
   }) async {
-    return UploadedAsset(
-      assetId: 'test_asset_${purpose.name}',
+    final purpose = slotKey == onboardingClassUploadSlot
+        ? UploadedAssetPurpose.classTimetable
+        : UploadedAssetPurpose.workSchedule;
+    final assetId = 'test_asset_${purpose.name}';
+    final asset = UploadedAsset(
+      assetId: assetId,
       ownerUid: uid,
-      r2Key: 'test/key.jpg',
+      r2Key: 'users/$uid/onboarding/${purpose.wireName}/$assetId.jpg',
       fileName: 'photo.jpg',
       purpose: purpose,
       sourceFeature: sourceFeature,
@@ -245,6 +259,14 @@ class MockUploadController extends UploadController {
       updatedAt: DateTime.now(),
       status: UploadedAssetStatus.uploaded,
     );
+    final next = Map<String, UploadSlotRuntimeState>.from(state);
+    final current = state[slotKey]!;
+    next[slotKey] = current.copyWith(
+      phase: UploadInteractionPhase.uploaded,
+      durableAsset: asset,
+    );
+    state = Map.unmodifiable(next);
+    return asset;
   }
 }
 
@@ -254,6 +276,21 @@ class DummyAssetRepo implements UploadedAssetRepository {
 }
 
 class DummyAuthRepo implements AuthRepository {
+  static const user = AuthUser(
+    uid: 'test-user',
+    email: 'test@optivus.dev',
+    emailVerified: true,
+  );
+
+  @override
+  AuthUser? get currentUser => user;
+
+  @override
+  Stream<AuthUser?> get authStateChanges => const Stream.empty();
+
+  @override
+  Future<String?> currentIdToken({bool forceRefresh = false}) async => 'token';
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

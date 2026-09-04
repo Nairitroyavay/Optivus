@@ -17,6 +17,11 @@ import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
+import 'package:optivus/repositories/routine_repository.dart';
+import 'package:optivus/repositories/routine_history_repository.dart';
+import 'package:optivus/repositories/routine_transaction_repository.dart';
+import 'package:optivus/repositories/habit_systems_repository.dart';
+import 'package:optivus/repositories/fake_habit_systems_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/server_reconstructor.dart';
 import 'package:optivus/services/session_destination_resolver.dart';
@@ -44,15 +49,18 @@ void main() {
       expect(redirect, '/loading');
     });
 
-    test('B. signed out route allows unauthenticated users without loading', () {
-      final redirect = optivusAuthRedirect(
-        authState: const AuthState(status: AuthFlowStatus.loading),
-        userProfile: UserProfile.empty(uid: ''),
-        uri: Uri.parse('/login'),
-      );
+    test(
+      'B. signed out route allows unauthenticated users without loading',
+      () {
+        final redirect = optivusAuthRedirect(
+          authState: const AuthState(status: AuthFlowStatus.loading),
+          userProfile: UserProfile.empty(uid: ''),
+          uri: Uri.parse('/login'),
+        );
 
-      expect(redirect, isNull);
-    });
+        expect(redirect, isNull);
+      },
+    );
 
     test('S. authoritative recovery overrides an authenticated URI', () {
       final redirect = optivusAuthRedirect(
@@ -232,154 +240,195 @@ void main() {
       expect(find.byType(LoadingScreen), findsNothing);
     });
 
-    testWidgets('O. logout resets navigation and exits the authenticated route', (
-      tester,
-    ) async {
-      final harness = await _pumpEstablishedRouter(tester, establishedUser);
-      await harness.go(tester, '/app?tab=4');
-      expect(harness.container.read(appNavigationProvider), 4);
+    testWidgets(
+      'O. logout resets navigation and exits the authenticated route',
+      (tester) async {
+        final harness = await _pumpEstablishedRouter(tester, establishedUser);
+        await harness.go(tester, '/app?tab=4');
+        expect(harness.container.read(appNavigationProvider), 4);
 
-      harness.container.read(appNavigationProvider.notifier).resetForSignedOut();
-      await harness.auth.logout();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        harness.container
+            .read(appNavigationProvider.notifier)
+            .resetForSignedOut();
+        await harness.auth.logout();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      expect(harness.uri, Uri.parse('/'));
-      expect(harness.container.read(appNavigationProvider), 0);
-    });
+        expect(harness.uri, Uri.parse('/'));
+        expect(harness.container.read(appNavigationProvider), 0);
+      },
+    );
 
-    testWidgets('Q. account switch does not preserve the previous account URI', (
-      tester,
-    ) async {
-      final harness = await _pumpEstablishedRouter(tester, establishedUser);
-      await harness.go(tester, '/app?tab=4');
+    testWidgets(
+      'Q. account switch does not preserve the previous account URI',
+      (tester) async {
+        final harness = await _pumpEstablishedRouter(tester, establishedUser);
+        await harness.go(tester, '/app?tab=4');
 
-      final accountB = const AuthUser(uid: 'account-b', emailVerified: true);
-      harness.auth.beginIdentitySwitch(accountB);
-      harness.container.read(appNavigationProvider.notifier).resetForSignedOut();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(harness.uri, Uri.parse('/loading'));
+        final accountB = const AuthUser(uid: 'account-b', emailVerified: true);
+        harness.auth.beginIdentitySwitch(accountB);
+        harness.container
+            .read(appNavigationProvider.notifier)
+            .resetForSignedOut();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(harness.uri, Uri.parse('/loading'));
 
-      harness.auth.completeIdentitySwitch(accountB);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
+        harness.auth.completeIdentitySwitch(accountB);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
 
-      expect(harness.uri, Uri.parse('/app?tab=0'));
-      expect(harness.container.read(appNavigationProvider), 0);
-    });
+        expect(harness.uri, Uri.parse('/app?tab=0'));
+        expect(harness.container.read(appNavigationProvider), 0);
+      },
+    );
 
-    testWidgets('T. background / resume simulation preserves active route and tab', (
-      tester,
-    ) async {
-      final harness = await _pumpEstablishedRouter(tester, establishedUser);
-      await harness.go(tester, '/app?tab=3');
-      expect(harness.uri, Uri.parse('/app?tab=3'));
-      expect(harness.container.read(appNavigationProvider), 3);
+    testWidgets(
+      'T. background / resume simulation preserves active route and tab',
+      (tester) async {
+        final harness = await _pumpEstablishedRouter(tester, establishedUser);
+        await harness.go(tester, '/app?tab=3');
+        expect(harness.uri, Uri.parse('/app?tab=3'));
+        expect(harness.container.read(appNavigationProvider), 3);
 
-      // Simulate app paused / resumed lifecycle with background token update
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pump();
+        // Simulate app paused / resumed lifecycle with background token update
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        await tester.pump();
 
-      harness.auth.refreshSameUid(
-        const AuthUser(
-          uid: 'established-a',
-          email: 'before@example.com',
-          displayName: 'Before (token refreshed in bg)',
-          emailVerified: true,
-        ),
-      );
-
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-
-      expect(harness.uri, Uri.parse('/app?tab=3'));
-      expect(harness.container.read(appNavigationProvider), 3);
-      expect(find.byType(LoadingScreen), findsNothing);
-      expect(find.byType(AppShell), findsOneWidget);
-    });
-
-    testWidgets('U. repeated refresh stress test causes no route churn or loops', (
-      tester,
-    ) async {
-      final harness = await _pumpEstablishedRouter(tester, establishedUser);
-      await harness.go(tester, '/app?tab=2');
-      final recordedLocations = <Uri>[];
-      void onLocationChanged() => recordedLocations.add(harness.uri);
-
-      harness.router.routerDelegate.addListener(onLocationChanged);
-      addTearDown(
-        () => harness.router.routerDelegate.removeListener(onLocationChanged),
-      );
-
-      // Emit 50 rapid same-UID events
-      for (var i = 0; i < 50; i++) {
         harness.auth.refreshSameUid(
-          AuthUser(
+          const AuthUser(
             uid: 'established-a',
-            email: 'user$i@example.com',
-            displayName: 'Burst Refresh #$i',
+            email: 'before@example.com',
+            displayName: 'Before (token refreshed in bg)',
             emailVerified: true,
           ),
         );
-      }
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
 
-      expect(harness.uri, Uri.parse('/app?tab=2'));
-      expect(harness.container.read(appNavigationProvider), 2);
-      expect(recordedLocations.where((uri) => uri.path == '/loading'), isEmpty);
-      expect(
-        recordedLocations.where(
-          (uri) => uri.path == '/app' && uri.queryParameters['tab'] != '2',
-        ),
-        isEmpty,
-      );
-    });
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(harness.uri, Uri.parse('/app?tab=3'));
+        expect(harness.container.read(appNavigationProvider), 3);
+        expect(find.byType(LoadingScreen), findsNothing);
+        expect(find.byType(AppShell), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'U. repeated refresh stress test causes no route churn or loops',
+      (tester) async {
+        final harness = await _pumpEstablishedRouter(tester, establishedUser);
+        await harness.go(tester, '/app?tab=2');
+        final recordedLocations = <Uri>[];
+        void onLocationChanged() => recordedLocations.add(harness.uri);
+
+        harness.router.routerDelegate.addListener(onLocationChanged);
+        addTearDown(
+          () => harness.router.routerDelegate.removeListener(onLocationChanged),
+        );
+
+        // Emit 50 rapid same-UID events
+        for (var i = 0; i < 50; i++) {
+          harness.auth.refreshSameUid(
+            AuthUser(
+              uid: 'established-a',
+              email: 'user$i@example.com',
+              displayName: 'Burst Refresh #$i',
+              emailVerified: true,
+            ),
+          );
+        }
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(harness.uri, Uri.parse('/app?tab=2'));
+        expect(harness.container.read(appNavigationProvider), 2);
+        expect(
+          recordedLocations.where((uri) => uri.path == '/loading'),
+          isEmpty,
+        );
+        expect(
+          recordedLocations.where(
+            (uri) => uri.path == '/app' && uri.queryParameters['tab'] != '2',
+          ),
+          isEmpty,
+        );
+      },
+    );
   });
 
   group('AH-F008 Real AuthNotifier & Server Reconstruction Integration', () {
-    test('B, C, N. Cold start / reinstall runs AH-F007 server reconstruction', () async {
-      final authRepo = _StreamableAuthRepository();
-      final reconstructor = _CountingServerReconstructor(
-        result: _completedResult('uid-reconstruct'),
-      );
-      final profileRepo = _StubProfileRepository();
-      final onboardingRepo = _StubOnboardingRepository();
-      final completionService = _StubOnboardingCompletionJobService();
+    test(
+      'B, C, N. Cold start / reinstall runs AH-F007 server reconstruction',
+      () async {
+        final authRepo = _StreamableAuthRepository();
+        final reconstructor = _CountingServerReconstructor(
+          result: _completedResult('uid-reconstruct'),
+        );
+        final profileRepo = _StubProfileRepository();
+        final onboardingRepo = _StubOnboardingRepository();
+        final completionService = _StubOnboardingCompletionJobService();
 
-      final container = ProviderContainer(
-        overrides: [
-          optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
-          authRepositoryProvider.overrideWithValue(authRepo),
-          serverReconstructorProvider.overrideWithValue(reconstructor),
-          profileRepositoryProvider.overrideWithValue(profileRepo),
-          onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
-          onboardingCompletionJobServiceProvider.overrideWithValue(completionService),
-        ],
-      );
-      addTearDown(container.dispose);
-      addTearDown(authRepo.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.firebase,
+            ),
+            authRepositoryProvider.overrideWithValue(authRepo),
+            serverReconstructorProvider.overrideWithValue(reconstructor),
+            profileRepositoryProvider.overrideWithValue(profileRepo),
+            onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
+            onboardingCompletionJobServiceProvider.overrideWithValue(
+              completionService,
+            ),
+            routineRepositoryProvider.overrideWithValue(
+              FakeRoutineRepository(),
+            ),
+            habitSystemsRepositoryProvider.overrideWithValue(
+              FakeHabitSystemsRepository(),
+            ),
+            routineHistoryRepositoryProvider.overrideWithValue(
+              FakeRoutineHistoryRepository(),
+            ),
+            routineTransactionRepositoryProvider.overrideWith(
+              (ref) => FakeRoutineTransactionRepository(
+                routineRepository: ref.read(routineRepositoryProvider),
+                historyRepository: ref.read(routineHistoryRepositoryProvider),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        addTearDown(authRepo.dispose);
 
-      // Listen to authProvider to activate notifier
-      container.listen(authProvider, (_, _) {});
+        // Listen to authProvider to activate notifier
+        container.listen(authProvider, (_, _) {});
 
-      // Fresh cold authenticated user emitted
-      authRepo.emit(
-        const AuthUser(
-          uid: 'uid-reconstruct',
-          email: 'cold@example.com',
-          emailVerified: true,
-        ),
-      );
-      await pumpEventQueue(times: 20);
+        // Fresh cold authenticated user emitted
+        authRepo.emit(
+          const AuthUser(
+            uid: 'uid-reconstruct',
+            email: 'cold@example.com',
+            emailVerified: true,
+          ),
+        );
+        await pumpEventQueue(times: 20);
 
-      // Reconstruction was called exactly once for cold start
-      expect(reconstructor.reconstructCallCount, 1);
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInOnboardingComplete);
-      expect(container.read(authProvider).sessionDestination.kind, SessionDestinationKind.home);
-    });
+        // Reconstruction was called exactly once for cold start
+        expect(reconstructor.reconstructCallCount, 1);
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInOnboardingComplete,
+        );
+        expect(
+          container.read(authProvider).sessionDestination.kind,
+          SessionDestinationKind.home,
+        );
+      },
+    );
 
     test('E, V. Same-UID refresh does NOT call server reconstructor', () async {
       final authRepo = _StreamableAuthRepository();
@@ -392,12 +441,29 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-          optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
+          optivusBackendModeProvider.overrideWithValue(
+            OptivusBackendMode.firebase,
+          ),
           authRepositoryProvider.overrideWithValue(authRepo),
           serverReconstructorProvider.overrideWithValue(reconstructor),
           profileRepositoryProvider.overrideWithValue(profileRepo),
           onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
-          onboardingCompletionJobServiceProvider.overrideWithValue(completionService),
+          onboardingCompletionJobServiceProvider.overrideWithValue(
+            completionService,
+          ),
+          routineRepositoryProvider.overrideWithValue(FakeRoutineRepository()),
+          habitSystemsRepositoryProvider.overrideWithValue(
+            FakeHabitSystemsRepository(),
+          ),
+          routineHistoryRepositoryProvider.overrideWithValue(
+            FakeRoutineHistoryRepository(),
+          ),
+          routineTransactionRepositoryProvider.overrideWith(
+            (ref) => FakeRoutineTransactionRepository(
+              routineRepository: ref.read(routineRepositoryProvider),
+              historyRepository: ref.read(routineHistoryRepositoryProvider),
+            ),
+          ),
         ],
       );
       addTearDown(container.dispose);
@@ -429,114 +495,179 @@ void main() {
 
       // Reconstruction must NOT run again on same-UID refresh
       expect(reconstructor.reconstructCallCount, 1);
-      expect(container.read(authProvider).user?.email, 'token-refreshed@example.com');
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInOnboardingComplete);
+      expect(
+        container.read(authProvider).user?.email,
+        'token-refreshed@example.com',
+      );
+      expect(
+        container.read(authProvider).status,
+        AuthFlowStatus.signedInOnboardingComplete,
+      );
     });
 
-    test('R. Email verification transition triggers authoritative reconstruction', () async {
-      final authRepo = _StreamableAuthRepository();
-      final reconstructor = _CountingServerReconstructor(
-        result: _completedResult('uid-verify'),
-      );
-      final profileRepo = _StubProfileRepository();
-      final onboardingRepo = _StubOnboardingRepository();
-      final completionService = _StubOnboardingCompletionJobService();
+    test(
+      'R. Email verification transition triggers authoritative reconstruction',
+      () async {
+        final authRepo = _StreamableAuthRepository();
+        final reconstructor = _CountingServerReconstructor(
+          result: _completedResult('uid-verify'),
+        );
+        final profileRepo = _StubProfileRepository();
+        final onboardingRepo = _StubOnboardingRepository();
+        final completionService = _StubOnboardingCompletionJobService();
 
-      final container = ProviderContainer(
-        overrides: [
-          optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
-          authRepositoryProvider.overrideWithValue(authRepo),
-          serverReconstructorProvider.overrideWithValue(reconstructor),
-          profileRepositoryProvider.overrideWithValue(profileRepo),
-          onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
-          onboardingCompletionJobServiceProvider.overrideWithValue(completionService),
-        ],
-      );
-      addTearDown(container.dispose);
-      addTearDown(authRepo.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.firebase,
+            ),
+            authRepositoryProvider.overrideWithValue(authRepo),
+            serverReconstructorProvider.overrideWithValue(reconstructor),
+            profileRepositoryProvider.overrideWithValue(profileRepo),
+            onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
+            onboardingCompletionJobServiceProvider.overrideWithValue(
+              completionService,
+            ),
+            routineRepositoryProvider.overrideWithValue(
+              FakeRoutineRepository(),
+            ),
+            habitSystemsRepositoryProvider.overrideWithValue(
+              FakeHabitSystemsRepository(),
+            ),
+            routineHistoryRepositoryProvider.overrideWithValue(
+              FakeRoutineHistoryRepository(),
+            ),
+            routineTransactionRepositoryProvider.overrideWith(
+              (ref) => FakeRoutineTransactionRepository(
+                routineRepository: ref.read(routineRepositoryProvider),
+                historyRepository: ref.read(routineHistoryRepositoryProvider),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        addTearDown(authRepo.dispose);
 
-      container.listen(authProvider, (_, _) {});
+        container.listen(authProvider, (_, _) {});
 
-      // Step 1: Unverified password user signs in
-      authRepo.emit(
-        const AuthUser(
-          uid: 'uid-verify',
-          email: 'unverified@example.com',
-          emailVerified: false,
-          providerIds: {'password'},
-        ),
-      );
-      await pumpEventQueue(times: 20);
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInEmailUnverified);
-      expect(container.read(authProvider).sessionDestination.kind, SessionDestinationKind.verifyEmail);
-      expect(reconstructor.reconstructCallCount, 0);
+        // Step 1: Unverified password user signs in
+        authRepo.emit(
+          const AuthUser(
+            uid: 'uid-verify',
+            email: 'unverified@example.com',
+            emailVerified: false,
+            providerIds: {'password'},
+          ),
+        );
+        await pumpEventQueue(times: 20);
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInEmailUnverified,
+        );
+        expect(
+          container.read(authProvider).sessionDestination.kind,
+          SessionDestinationKind.verifyEmail,
+        );
+        expect(reconstructor.reconstructCallCount, 0);
 
-      // Step 2: Firebase reloads and emailVerified becomes true
-      authRepo.emit(
-        const AuthUser(
-          uid: 'uid-verify',
-          email: 'unverified@example.com',
-          emailVerified: true,
-          providerIds: {'password'},
-        ),
-      );
-      await pumpEventQueue(times: 20);
+        // Step 2: Firebase reloads and emailVerified becomes true
+        authRepo.emit(
+          const AuthUser(
+            uid: 'uid-verify',
+            email: 'unverified@example.com',
+            emailVerified: true,
+            providerIds: {'password'},
+          ),
+        );
+        await pumpEventQueue(times: 20);
 
-      // Reconstruction MUST run because email verification requirement changed
-      expect(reconstructor.reconstructCallCount, 1);
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInOnboardingComplete);
-      expect(container.read(authProvider).sessionDestination.kind, SessionDestinationKind.home);
-    });
+        // Reconstruction MUST run because email verification requirement changed
+        expect(reconstructor.reconstructCallCount, 1);
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInOnboardingComplete,
+        );
+        expect(
+          container.read(authProvider).sessionDestination.kind,
+          SessionDestinationKind.home,
+        );
+      },
+    );
 
-    test('P. Failed logout preserves authenticated state, reconstruction, and route', () async {
-      final authRepo = _StreamableAuthRepository()..signOutShouldFail = true;
-      final reconstructor = _CountingServerReconstructor(
-        result: _completedResult('uid-logout-fail'),
-      );
-      final profileRepo = _StubProfileRepository();
-      final onboardingRepo = _StubOnboardingRepository();
-      final completionService = _StubOnboardingCompletionJobService();
+    test(
+      'P. Failed logout preserves authenticated state, reconstruction, and route',
+      () async {
+        final authRepo = _StreamableAuthRepository()..signOutShouldFail = true;
+        final reconstructor = _CountingServerReconstructor(
+          result: _completedResult('uid-logout-fail'),
+        );
+        final profileRepo = _StubProfileRepository();
+        final onboardingRepo = _StubOnboardingRepository();
+        final completionService = _StubOnboardingCompletionJobService();
 
-      final container = ProviderContainer(
-        overrides: [
-          optivusBackendModeProvider.overrideWithValue(OptivusBackendMode.firebase),
-          authRepositoryProvider.overrideWithValue(authRepo),
-          serverReconstructorProvider.overrideWithValue(reconstructor),
-          profileRepositoryProvider.overrideWithValue(profileRepo),
-          onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
-          onboardingCompletionJobServiceProvider.overrideWithValue(completionService),
-        ],
-      );
-      addTearDown(container.dispose);
-      addTearDown(authRepo.dispose);
+        final container = ProviderContainer(
+          overrides: [
+            optivusBackendModeProvider.overrideWithValue(
+              OptivusBackendMode.firebase,
+            ),
+            authRepositoryProvider.overrideWithValue(authRepo),
+            serverReconstructorProvider.overrideWithValue(reconstructor),
+            profileRepositoryProvider.overrideWithValue(profileRepo),
+            onboardingRepositoryProvider.overrideWithValue(onboardingRepo),
+            onboardingCompletionJobServiceProvider.overrideWithValue(
+              completionService,
+            ),
+            routineRepositoryProvider.overrideWithValue(
+              FakeRoutineRepository(),
+            ),
+            habitSystemsRepositoryProvider.overrideWithValue(
+              FakeHabitSystemsRepository(),
+            ),
+            routineHistoryRepositoryProvider.overrideWithValue(
+              FakeRoutineHistoryRepository(),
+            ),
+            routineTransactionRepositoryProvider.overrideWith(
+              (ref) => FakeRoutineTransactionRepository(
+                routineRepository: ref.read(routineRepositoryProvider),
+                historyRepository: ref.read(routineHistoryRepositoryProvider),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        addTearDown(authRepo.dispose);
 
-      container.listen(authProvider, (_, _) {});
+        container.listen(authProvider, (_, _) {});
 
-      authRepo.emit(
-        const AuthUser(
-          uid: 'uid-logout-fail',
-          email: 'stay@example.com',
-          emailVerified: true,
-        ),
-      );
-      await pumpEventQueue(times: 20);
-      expect(container.read(authProvider).status, AuthFlowStatus.signedInOnboardingComplete);
+        authRepo.emit(
+          const AuthUser(
+            uid: 'uid-logout-fail',
+            email: 'stay@example.com',
+            emailVerified: true,
+          ),
+        );
+        await pumpEventQueue(times: 20);
+        expect(
+          container.read(authProvider).status,
+          AuthFlowStatus.signedInOnboardingComplete,
+        );
 
-      container.read(appNavigationProvider.notifier).goToTracker();
-      expect(container.read(appNavigationProvider), 2);
+        container.read(appNavigationProvider.notifier).goToTracker();
+        expect(container.read(appNavigationProvider), 2);
 
-      await expectLater(
-        container.read(authProvider.notifier).logout(),
-        throwsA(isA<AuthFailureException>()),
-      );
+        await expectLater(
+          container.read(authProvider.notifier).logout(),
+          throwsA(isA<AuthFailureException>()),
+        );
 
-      final state = container.read(authProvider);
-      expect(state.user?.uid, 'uid-logout-fail');
-      expect(state.status, AuthFlowStatus.signedInOnboardingComplete);
-      expect(state.sessionDestination.kind, SessionDestinationKind.home);
-      expect(state.errorMessage, contains('still signed in'));
-      expect(container.read(appNavigationProvider), 2);
-    });
+        final state = container.read(authProvider);
+        expect(state.user?.uid, 'uid-logout-fail');
+        expect(state.status, AuthFlowStatus.signedInOnboardingComplete);
+        expect(state.sessionDestination.kind, SessionDestinationKind.home);
+        expect(state.errorMessage, contains('still signed in'));
+        expect(container.read(appNavigationProvider), 2);
+      },
+    );
   });
 }
 
@@ -763,10 +894,19 @@ class _StreamableAuthRepository implements AuthRepository {
     String email,
     String password, {
     String? name,
-  }) async => AuthUser(uid: _current?.uid ?? 'linked-user', email: email, displayName: name);
+  }) async =>
+      AuthUser(
+        uid: _current?.uid ?? 'linked-user',
+        email: email,
+        displayName: name,
+      );
 
   @override
-  Future<AuthUser> signUp(String email, String password, {String? name}) async =>
+  Future<AuthUser> signUp(
+    String email,
+    String password, {
+    String? name,
+  }) async =>
       AuthUser(uid: 'signed-up', email: email, displayName: name);
 
   @override
@@ -811,11 +951,11 @@ class _StubProfileRepository extends FakeProfileRepository {
 
 class _StubOnboardingRepository extends FakeOnboardingRepository {}
 
-class _StubOnboardingCompletionJobService extends OnboardingCompletionJobService {
+class _StubOnboardingCompletionJobService
+    extends OnboardingCompletionJobService {
   _StubOnboardingCompletionJobService()
       : super(
           onboardingRepository: FakeOnboardingRepository(),
           profileRepository: FakeProfileRepository(),
         );
 }
-

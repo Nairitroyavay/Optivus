@@ -67,6 +67,14 @@ service cloud.firestore {
         || status == "deleted";
     }
 
+    function validUploadObjectIdentity(data) {
+      return data.r2Key is string
+        && data.r2Key.matches(
+          "^users/" + data.ownerUid + "/" + data.sourceFeature + "/" +
+          data.purpose + "/" + data.assetId + "\\.(jpg|jpeg|png|webp)$"
+        );
+    }
+
     function validUploadKeys(data) {
       return data.keys().hasOnly([
         "assetId",
@@ -918,7 +926,7 @@ service cloud.firestore {
           request.resource.data.contentType
         )
         && request.resource.data.sourceFeature == "onboarding"
-        && request.resource.data.r2Key is string
+        && validUploadObjectIdentity(request.resource.data)
         && request.resource.data.fileName is string
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp
@@ -939,7 +947,7 @@ service cloud.firestore {
           request.resource.data.contentType
         )
         && request.resource.data.sourceFeature == "onboarding"
-        && request.resource.data.r2Key is string
+        && validUploadObjectIdentity(request.resource.data)
         && request.resource.data.fileName is string
         && request.resource.data.createdAt is timestamp
         && request.resource.data.updatedAt is timestamp

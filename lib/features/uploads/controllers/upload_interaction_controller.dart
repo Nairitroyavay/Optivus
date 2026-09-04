@@ -187,7 +187,13 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     final slotGeneration = _nextSlotGeneration(slotKey);
     _activeUid = uid;
 
-    _setSlotState(slotKey, (s) => s.copyWith(phase: UploadInteractionPhase.preparing, clearAttemptError: true));
+    _setSlotState(
+      slotKey,
+      (s) => s.copyWith(
+        phase: UploadInteractionPhase.preparing,
+        clearAttemptError: true,
+      ),
+    );
 
     try {
       // Permission check (Invariant 9 & 18)
@@ -301,6 +307,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
   }) async {
     final current = state[slotKey];
     if (current == null) return null;
+    if (_slotLocks[slotKey] == true || current.isBusy) return null;
     _slotLocks[slotKey] = true;
 
     final sessionGeneration = _sessionGeneration;
@@ -331,6 +338,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
   }) async {
     final current = state[slotKey];
     if (current == null) return null;
+    if (_slotLocks[slotKey] == true || current.isBusy) return null;
     if (current.transientFile != null) {
       return uploadPreselectedFile(
         slotKey,
@@ -358,41 +366,18 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     final slotGeneration = _nextSlotGeneration(slotKey);
     final asset = current.durableAsset!;
 
-    _setSlotState(slotKey, (s) => s.copyWith(phase: UploadInteractionPhase.preparing, clearAttemptError: true));
+    _setSlotState(
+      slotKey,
+      (s) => s.copyWith(
+        phase: UploadInteractionPhase.preparing,
+        clearAttemptError: true,
+      ),
+    );
 
     try {
-      if (asset.r2Key.trim().isNotEmpty) {
-        final idToken = await _authRepository.currentIdToken();
-        if (!_isCurrentOperation(
-          slotKey,
-          uid,
-          sessionGeneration,
-          slotGeneration,
-        )) {
-          return false;
-        }
-        if (idToken != null && idToken.trim().isNotEmpty) {
-          try {
-            await _r2UploadClient.deleteUpload(
-              objectKey: asset.r2Key,
-              idToken: idToken,
-            );
-          } catch (_) {
-            // Durable deletion remains authoritative; repository deletion handles cleanup
-          }
-        }
-      }
-
-      if (!_isCurrentOperation(
-        slotKey,
-        uid,
-        sessionGeneration,
-        slotGeneration,
-      )) {
-        return false;
-      }
-
-      // Invariant 6 & 21: Durable removal authority
+      // Durable metadata is terminalized first. Firestore can therefore never
+      // point at an object that this client already deleted when metadata
+      // mutation fails.
       await _assetRepository.markDeleted(uid: uid, assetId: asset.assetId);
 
       if (!_isCurrentOperation(
@@ -405,6 +390,37 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       }
 
       _restoredController?.removePurpose(uid: uid, purpose: current.purpose);
+
+      // Byte cleanup is best-effort after metadata is authoritative.
+      if (asset.r2Key.trim().isNotEmpty) {
+        try {
+          final idToken = await _authRepository.currentIdToken();
+          if (_isCurrentOperation(
+                slotKey,
+                uid,
+                sessionGeneration,
+                slotGeneration,
+              ) &&
+              idToken != null &&
+              idToken.trim().isNotEmpty) {
+            await _r2UploadClient.deleteUpload(
+              objectKey: asset.r2Key,
+              idToken: idToken,
+            );
+          }
+        } catch (_) {
+          // A deleted metadata record is truthful; orphan cleanup can retry.
+        }
+      }
+
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
+        return false;
+      }
 
       _setSlotState(
         slotKey,
@@ -440,7 +456,9 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       );
       return false;
     } finally {
-      _slotLocks[slotKey] = false;
+      if ((_slotGenerations[slotKey] ?? 0) == slotGeneration) {
+        _slotLocks[slotKey] = false;
+      }
     }
   }
 

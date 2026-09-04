@@ -16,15 +16,9 @@ enum UploadInteractionPhase {
   restored,
 }
 
-enum UploadRequirementMode {
-  required,
-  optional,
-}
+enum UploadRequirementMode { required, optional }
 
-enum UploadInputMode {
-  imageOnly,
-  imageAndNames,
-}
+enum UploadInputMode { imageOnly, imageAndNames }
 
 class UploadSlotConfig {
   final String key;
@@ -123,9 +117,12 @@ class UploadSlotRuntimeState {
 
   UploadedAsset? get effectiveAsset => durableAsset;
 
-  String? get usablePreviewPath => durableAsset != null
-      ? usableUploadedAssetLocalPreviewPath(durableAsset!)
-      : (preparedImage?.localPreviewPath ?? transientFile?.path);
+  String? get usablePreviewPath =>
+      preparedImage?.localPreviewPath ??
+      transientFile?.path ??
+      (durableAsset == null
+          ? null
+          : usableUploadedAssetLocalPreviewPath(durableAsset!));
 
   UploadSlotRuntimeState copyWith({
     String? slotKey,
@@ -150,7 +147,9 @@ class UploadSlotRuntimeState {
       purpose: purpose ?? this.purpose,
       isHydrating: isHydrating ?? this.isHydrating,
       phase: phase ?? this.phase,
-      durableAsset: clearDurableAsset ? null : (durableAsset ?? this.durableAsset),
+      durableAsset: clearDurableAsset
+          ? null
+          : (durableAsset ?? this.durableAsset),
       previewStatus: previewStatus ?? this.previewStatus,
       remotePreviewUri: clearRemotePreviewUri
           ? null
@@ -161,7 +160,9 @@ class UploadSlotRuntimeState {
       preparedImage: clearPreparedImage
           ? null
           : (preparedImage ?? this.preparedImage),
-      attemptError: clearAttemptError ? null : (attemptError ?? this.attemptError),
+      attemptError: clearAttemptError
+          ? null
+          : (attemptError ?? this.attemptError),
       operationGeneration: operationGeneration ?? this.operationGeneration,
     );
   }

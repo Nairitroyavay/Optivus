@@ -290,6 +290,44 @@ void main() {
       expect(find.byType(AuthChoiceScreen), findsOneWidget);
     });
 
+    testWidgets(
+      'Auth Choice awaits Google failure, clears loading, and shows friendly error',
+      (tester) async {
+        final auth = _ControlledAuthRepository(
+          () async => throw const AuthFailureException(
+            reason: AuthFailureReason.networkFailure,
+            message: 'Network error. Check your connection and retry.',
+          ),
+        );
+        addTearDown(auth.dispose);
+        late ProviderContainer container;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              optivusBackendModeProvider.overrideWithValue(
+                OptivusBackendMode.fake,
+              ),
+              authRepositoryProvider.overrideWithValue(auth),
+            ],
+            child: Builder(
+              builder: (context) {
+                container = ProviderScope.containerOf(context);
+                return const MaterialApp(home: AuthChoiceScreen());
+              },
+            ),
+          ),
+        );
+
+        await tester.tap(find.byKey(const Key('auth-choice-google')));
+        await tester.pumpAndSettle();
+
+        expect(auth.googleCalls, 1);
+        expect(container.read(authProvider).isLoading, isFalse);
+        expect(find.textContaining('connection'), findsOneWidget);
+        expect(find.byType(AuthChoiceScreen), findsOneWidget);
+      },
+    );
+
     testWidgets('Login Google button invokes the same notifier action', (
       tester,
     ) async {

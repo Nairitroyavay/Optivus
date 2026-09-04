@@ -57,4 +57,3 @@ class OptivusSpacing {
   static const EdgeInsets onboardingContentPadding =
       EdgeInsets.fromLTRB(screenHorizontal, onboardingHeaderToContentGap, screenHorizontal, 32);
 }
-

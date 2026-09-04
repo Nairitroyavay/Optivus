@@ -12,6 +12,8 @@ import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timelin
 import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
+import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -723,7 +725,6 @@ class _OnboardingStep4UnifiedState
   static const _kOverlapMinFrontWidth = 152.0;
   static const _kMaxOverlapLane = 2;
   final List<_PhotoSlot> _photos = [];
-  bool _isUploading = false;
   late final AiGenerationController _lifecycle;
   String? _generationError;
   String? _timelineError;
@@ -733,6 +734,20 @@ class _OnboardingStep4UnifiedState
   String? _frontBlockId;
 
   bool get _isGenerating => _lifecycle.state.isActive;
+  bool get _isUploading =>
+      _uploadTargets.any((target) => _runtimeForTarget(target).isBusy);
+
+  String _slotKeyForTarget(_UploadTarget target) => _slotKeyForPurpose(
+    _photoForSource(target.source)?.purpose ?? target.purpose,
+  );
+
+  String _slotKeyForPurpose(UploadedAssetPurpose purpose) =>
+      purpose == UploadedAssetPurpose.classTimetable
+      ? onboardingClassUploadSlot
+      : onboardingWorkUploadSlot;
+
+  UploadSlotRuntimeState _runtimeForTarget(_UploadTarget target) =>
+      ref.read(onboardingUploadInteractionProvider)[_slotKeyForTarget(target)]!;
 
   // ---- Role helpers ----
   String? get _role => ref.read(mockOnboardingProvider).draft.lifeRole.lifeRole;
@@ -1242,11 +1257,16 @@ class _OnboardingStep4UnifiedState
   Future<void> _pickAndUpload(
     _UploadTarget target, {
     bool replacing = false,
+    bool selectNewFile = false,
   }) async {
-    if (_isUploading || _isGenerating) return;
+    final runtime = _runtimeForTarget(target);
+    if (runtime.isBusy || _isGenerating) return;
     final previousIndex = _photos.indexWhere(
       (photo) => photo.source == target.source,
     );
+    final previousAssetId = previousIndex < 0
+        ? null
+        : _photos[previousIndex].asset.assetId;
     if ((!replacing && previousIndex >= 0) ||
         (!replacing && _photos.length >= _maxPhotos) ||
         (!replacing && _hasAllPhotos)) {
@@ -1255,7 +1275,6 @@ class _OnboardingStep4UnifiedState
     }
 
     setState(() {
-      _isUploading = true;
       _generationError = null;
       _timelineError = null;
     });
@@ -1264,36 +1283,41 @@ class _OnboardingStep4UnifiedState
     final draft = ref.read(mockOnboardingProvider).draft;
     final uid = ref.read(authProvider).user?.uid ?? draft.uid;
 
-    final asset = await ref
-        .read(uploadControllerProvider.notifier)
-        .startUpload(
-          uid: uid,
-          purpose: target.purpose,
-          sourceFeature: OnboardingDraft.sourceOnboarding,
-        );
+    final controller = ref.read(onboardingUploadInteractionProvider.notifier);
+    final asset =
+        !selectNewFile &&
+            runtime.phase == UploadInteractionPhase.failed &&
+            runtime.transientFile != null
+        ? await controller.retry(
+            _slotKeyForTarget(target),
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
+          )
+        : await controller.chooseFromGallery(
+            _slotKeyForTarget(target),
+            uid: uid,
+            sourceFeature: OnboardingDraft.sourceOnboarding,
+          );
 
     if (!mounted) return;
-    final uploadState = ref.read(uploadControllerProvider);
-    setState(() => _isUploading = false);
+    final uploadState = _runtimeForTarget(target);
 
     if (asset == null) {
-      if (uploadState.status == UploadFlowStatus.failed) {
+      if (uploadState.phase == UploadInteractionPhase.failed) {
         setState(() {
           _generationError =
-              uploadState.errorMessage ?? 'Photo upload failed. Try again.';
+              uploadState.attemptError ?? 'Photo upload failed. Try again.';
         });
       }
       return;
     }
-
-    ref.read(restoredUploadsProvider.notifier).registerUploaded(asset);
 
     setState(() {
       final replacement = _PhotoSlot(
         asset: asset,
         label: target.thumbnailLabel,
         source: target.source,
-        purpose: target.purpose,
+        purpose: asset.purpose,
       );
       if (previousIndex >= 0) {
         _photos[previousIndex] = replacement;
@@ -1304,38 +1328,42 @@ class _OnboardingStep4UnifiedState
       _generationError = null;
       _timelineError = null;
     });
+    if (previousAssetId == asset.assetId) {
+      return;
+    }
+    if (target.source == RoutineImportReviewSource.classes) {
+      ref.read(onboardingClassTimelineProvider.notifier).state = const [];
+    } else {
+      ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
+    }
     _markClassJobDirty();
   }
 
   Future<void> _removePhotoForSource(RoutineImportReviewSource source) async {
-    if (_isUploading || _isGenerating) return;
     final index = _photos.indexWhere((photo) => photo.source == source);
     if (index < 0) return;
     final removed = _photos[index];
+    final runtime = ref.read(
+      onboardingUploadInteractionProvider,
+    )[_slotKeyForPurpose(removed.purpose)]!;
+    if (runtime.isBusy || _isGenerating) return;
     setState(() {
-      _isUploading = true;
       _generationError = null;
     });
-    await ref
-        .read(uploadControllerProvider.notifier)
-        .markDeleted(
+    final deleted = await ref
+        .read(onboardingUploadInteractionProvider.notifier)
+        .remove(
+          _slotKeyForPurpose(removed.purpose),
           uid: removed.asset.ownerUid,
-          assetId: removed.asset.assetId,
         );
     if (!mounted) return;
-    final deletionState = ref.read(uploadControllerProvider);
-    if (deletionState.status == UploadFlowStatus.failed) {
+    if (!deleted) {
       setState(() {
-        _isUploading = false;
         _generationError = "Couldn't remove the photo. Try again.";
       });
       return;
     }
-    ref
-        .read(restoredUploadsProvider.notifier)
-        .removePurpose(uid: removed.asset.ownerUid, purpose: removed.purpose);
     setState(() {
-      _isUploading = false;
       _photos.removeAt(index);
       _generationError = null;
       _timelineError = null;
@@ -1388,8 +1416,14 @@ class _OnboardingStep4UnifiedState
     final classPhoto = _photos[classIndex];
     final workPhoto = _photos[workIndex];
     setState(() {
-      _photos[classIndex] = classPhoto.copyWith(asset: workPhoto.asset);
-      _photos[workIndex] = workPhoto.copyWith(asset: classPhoto.asset);
+      _photos[classIndex] = classPhoto.copyWith(
+        asset: workPhoto.asset,
+        purpose: workPhoto.asset.purpose,
+      );
+      _photos[workIndex] = workPhoto.copyWith(
+        asset: classPhoto.asset,
+        purpose: classPhoto.asset.purpose,
+      );
       _photos.sort(_comparePhotoSlots);
       _generationError = null;
       _timelineError = null;
@@ -1704,6 +1738,15 @@ class _OnboardingStep4UnifiedState
     final currentRole = _role;
     final isRetry = _lifecycle.state.phase == AiGenerationPhase.error;
     final photosToProcess = [..._photos]..sort(_comparePhotoSlots);
+    final sourceSnapshot = {
+      for (final photo in photosToProcess)
+        photo.source: (photo.asset.assetId, photo.asset.r2Key),
+    };
+    bool sourcesAreCurrent() => sourceSnapshot.entries.every((entry) {
+      final current = _photoForSource(entry.key);
+      return current?.asset.assetId == entry.value.$1 &&
+          current?.asset.r2Key == entry.value.$2;
+    });
     _debugLogAiMode();
 
     setState(() {
@@ -1722,7 +1765,8 @@ class _OnboardingStep4UnifiedState
           (ref.read(authProvider).user?.uid ??
                   ref.read(mockOnboardingProvider).draft.uid) ==
               uid &&
-          _role == currentRole,
+          _role == currentRole &&
+          sourcesAreCurrent(),
       mapError: (error) => const AiGenerationError(
         category: AiGenerationErrorCategory.responseInvalid,
         message: 'AI response could not be read safely. Please try again.',
@@ -1750,7 +1794,11 @@ class _OnboardingStep4UnifiedState
           }
           _debugLogExtractionStart(photo);
 
-          if (photo.asset.r2Key.trim().isEmpty) {
+          if (!uploadedAssetIsDurablyUploadedForSlot(
+            asset: photo.asset,
+            uid: uid,
+            purpose: photo.purpose,
+          )) {
             failedSources.add(photo.source);
             failureMessages[photo.source] =
                 'Upload incomplete. Please upload again.';
@@ -1772,7 +1820,7 @@ class _OnboardingStep4UnifiedState
           );
 
           final result = await aiController.runExtraction(reviewDraft);
-          if (!scope.isCurrent) return false;
+          if (!scope.isCurrent || !sourcesAreCurrent()) return false;
 
           final controllerState = ref.read(routineImportAiControllerProvider);
           final warnings =
@@ -2399,6 +2447,7 @@ class _OnboardingStep4UnifiedState
     );
 
     final draft = ref.watch(mockOnboardingProvider).draft;
+    ref.watch(onboardingUploadInteractionProvider);
     // Watch providers so we re-build when blocks change
     final classBlocks = ref.watch(onboardingClassTimelineProvider);
     final workBlocks = ref.watch(onboardingWorkTimelineProvider);
@@ -2727,6 +2776,7 @@ class _OnboardingStep4UnifiedState
 
   Widget _buildUploadTarget(_UploadTarget target) {
     final photo = _photoForSource(target.source);
+    final runtime = _runtimeForTarget(target);
     final width = _needsBothPhotos ? 72.0 : 102.0;
     return SizedBox(
       key: ValueKey('onboarding-step4-upload-target-${target.source.name}'),
@@ -2748,7 +2798,9 @@ class _OnboardingStep4UnifiedState
           ),
           const SizedBox(height: 4),
           photo == null
-              ? _buildEmptyUploadTarget(target)
+              ? runtime.usablePreviewPath == null
+                    ? _buildEmptyUploadTarget(target)
+                    : _buildTransientPhotoThumbnail(target, runtime)
               : _buildPhotoThumbnail(photo, target),
         ],
       ),
@@ -2756,7 +2808,12 @@ class _OnboardingStep4UnifiedState
   }
 
   Widget _buildPhotoThumbnail(_PhotoSlot photo, _UploadTarget target) {
-    final previewPath = usableUploadedAssetLocalPreviewPath(photo.asset);
+    final runtime = ref.read(
+      onboardingUploadInteractionProvider,
+    )[_slotKeyForPurpose(photo.purpose)]!;
+    final previewPath =
+        runtime.usablePreviewPath ??
+        usableUploadedAssetLocalPreviewPath(photo.asset);
     final restored = ref
         .watch(restoredUploadsProvider)
         .forPurpose(photo.purpose);
@@ -2793,7 +2850,7 @@ class _OnboardingStep4UnifiedState
             ),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: _isUploading || _isGenerating
+              onTap: runtime.isBusy || _isGenerating
                   ? null
                   : () => _pickAndUpload(target, replacing: true),
               child: ClipRRect(
@@ -2841,7 +2898,7 @@ class _OnboardingStep4UnifiedState
             ),
           ),
           // X close button
-          if (!_isUploading && !_isGenerating)
+          if (!runtime.isBusy && !_isGenerating)
             Positioned(
               top: -5,
               right: -3,
@@ -2873,6 +2930,32 @@ class _OnboardingStep4UnifiedState
                     size: 13,
                     color: OptivusColors.textSecondary,
                   ),
+                ),
+              ),
+            ),
+          if (runtime.phase == UploadInteractionPhase.failed &&
+              !runtime.isBusy &&
+              !_isGenerating)
+            Positioned(
+              top: -5,
+              left: -3,
+              width: 22,
+              height: 22,
+              child: IconButton(
+                key: ValueKey(
+                  'onboarding-step4-change-photo-${target.source.name}',
+                ),
+                padding: EdgeInsets.zero,
+                tooltip: 'Change photo',
+                onPressed: () => _pickAndUpload(
+                  target,
+                  replacing: true,
+                  selectNewFile: true,
+                ),
+                icon: const Icon(
+                  Icons.edit_rounded,
+                  size: 13,
+                  color: OptivusColors.textPrimary,
                 ),
               ),
             ),
@@ -2912,7 +2995,7 @@ class _OnboardingStep4UnifiedState
   }
 
   Widget _buildEmptyUploadTarget(_UploadTarget target) {
-    final disabled = _isUploading || _isGenerating;
+    final disabled = _runtimeForTarget(target).isBusy || _isGenerating;
     return SizedBox(
       width: 54,
       height: 50,
@@ -2950,6 +3033,60 @@ class _OnboardingStep4UnifiedState
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTransientPhotoThumbnail(
+    _UploadTarget target,
+    UploadSlotRuntimeState runtime,
+  ) {
+    return SizedBox(
+      key: ValueKey('onboarding-step4-transient-${target.source.name}'),
+      width: 56,
+      height: 59,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: runtime.isBusy || _isGenerating
+                ? null
+                : () => _pickAndUpload(target),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(
+                File(runtime.usablePreviewPath!),
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => _uploadedPreviewFallback(
+                  UploadedAssetPreviewStatus.loading,
+                ),
+              ),
+            ),
+          ),
+          if (runtime.phase == UploadInteractionPhase.failed &&
+              !runtime.isBusy &&
+              !_isGenerating)
+            Positioned(
+              top: -5,
+              right: -3,
+              width: 22,
+              height: 22,
+              child: IconButton(
+                key: ValueKey(
+                  'onboarding-step4-change-photo-${target.source.name}',
+                ),
+                padding: EdgeInsets.zero,
+                tooltip: 'Change photo',
+                onPressed: () => _pickAndUpload(target, selectNewFile: true),
+                icon: const Icon(
+                  Icons.edit_rounded,
+                  size: 13,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

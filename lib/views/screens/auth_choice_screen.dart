@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_theme.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
+import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/widgets/auth_back_button.dart';
 import 'package:optivus/widgets/glass_logo.dart';
@@ -20,8 +21,15 @@ class AuthChoiceScreen extends ConsumerWidget {
     final isScaled =
         media.size.height < 650 || media.textScaler.scale(16) > 19.2;
 
-    void signInWithGoogle() {
-      ref.read(authProvider.notifier).signInWithGoogle();
+    Future<void> signInWithGoogle() async {
+      try {
+        await ref.read(authProvider.notifier).signInWithGoogle();
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(friendlyAuthError(error))));
+      }
     }
 
     final bodyContent = Padding(
@@ -37,14 +45,10 @@ class AuthChoiceScreen extends ConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: AuthBackButton(
-              onTap: () =>
-                  context.canPop() ? context.pop() : context.go('/'),
+              onTap: () => context.canPop() ? context.pop() : context.go('/'),
             ),
           ),
-          if (isScaled)
-            const SizedBox(height: 16)
-          else
-            const Spacer(flex: 2),
+          if (isScaled) const SizedBox(height: 16) else const Spacer(flex: 2),
           const SizedBox(
             width: 92,
             height: 92,
@@ -70,10 +74,7 @@ class AuthChoiceScreen extends ConsumerWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
-          if (isScaled)
-            const SizedBox(height: 16)
-          else
-            const Spacer(),
+          if (isScaled) const SizedBox(height: 16) else const Spacer(),
           LiquidGlassPanel(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -94,10 +95,7 @@ class AuthChoiceScreen extends ConsumerWidget {
               ],
             ),
           ),
-          if (isScaled)
-            const SizedBox(height: 16)
-          else
-            const Spacer(flex: 2),
+          if (isScaled) const SizedBox(height: 16) else const Spacer(flex: 2),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
