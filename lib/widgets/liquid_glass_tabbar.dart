@@ -137,13 +137,16 @@ class _LiquidGlassTabBarState extends State<LiquidGlassTabBar>
 
   @override
   Widget build(BuildContext context) {
+    final bottomViewPadding = MediaQuery.viewPaddingOf(context).bottom;
+    final bottomGap = bottomViewPadding + 10;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, bottomGap),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(36),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
+            key: const ValueKey('liquid-glass-tabbar-frame'),
             height: 72,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.28),

@@ -52,6 +52,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   bool _isNavigating = false; // Double-tap prevention for Next
   bool _isCompleting = false; // Double-tap prevention for Completion
   bool _isHandlingPopGesture = false;
+  bool _step14FullTimelinePreviewOpen = false;
   final Set<int> _stepsWithRevealedPrimaryCta = <int>{};
 
   @override
@@ -746,6 +747,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   bool _handleInternalBackIfNeeded() {
+    if (_currentPage == OnboardingDraft.lastStepIndex) {
+      final closed = _step14Key.currentState?.closeFullTimelinePreviewIfOpen();
+      if (closed == true) return true;
+    }
     final draft = ref.read(mockOnboardingProvider).draft;
     return switch (_currentPage) {
       onboardingClassJobStepIndex => _backClassesJob(draft),
@@ -761,6 +766,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   void _onIndicatorDraggedTo(int index) => _navigateToIndicatorStep(index);
 
   bool _showTopLeftOverlay(OnboardingDraft draft) {
+    if (_currentPage == OnboardingDraft.lastStepIndex &&
+        _step14FullTimelinePreviewOpen) {
+      return true;
+    }
     return onboardingShouldShowTopLeftBackButton(
       currentPage: _currentPage,
       baseTimeline: draft.baseTimeline,
@@ -1101,6 +1110,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
               key: _step14Key,
               onJumpToStep: _onDotTapped,
               onCompletionStarted: _onEnterOptivusPressed,
+              onFullTimelinePreviewChanged: (isOpen) {
+                if (_step14FullTimelinePreviewOpen == isOpen) return;
+                setState(() => _step14FullTimelinePreviewOpen = isOpen);
+              },
             ),
           ],
         ),

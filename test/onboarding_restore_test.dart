@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/app/optivus_app.dart';
 import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/features/onboarding/onboarding_flow.dart';
+import 'package:optivus/models/coach_models.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/routine_projection_receipt.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
@@ -22,6 +24,7 @@ import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/views/screens/app_shell.dart';
 
 void main() {
   test(
@@ -125,6 +128,69 @@ void main() {
       expect(find.text('Welcome to\nOptivus'), findsOneWidget);
       expect(find.text('Restoring your setup...'), findsNothing);
       expect(onboardingRepository.draft, isNull);
+    },
+  );
+
+  testWidgets(
+    'completed account never publishes restoringOnboarding while final reconstruction is pending',
+    (tester) async {
+      const user = AuthUser(
+        uid: 'completed-delayed-user',
+        email: 'completed-delayed@example.com',
+        emailVerified: true,
+      );
+      final completedDraft = _completedDraftFor(user.uid);
+      final authRepository = _ControllableAuthRepository();
+      final profileRepository = await _profileRepositoryFor(
+        user,
+        onboardingCompleted: true,
+      );
+      final draftCompleter = Completer<OnboardingDraft?>();
+      final onboardingRepository = _ControlledOnboardingRepository(
+        draftCompleter: draftCompleter,
+        completionBundle: _completionBundleFor(user.uid, completedDraft),
+      );
+      final statuses = <AuthFlowStatus>[];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: _firebaseOverrides(
+            authRepository: authRepository,
+            profileRepository: profileRepository,
+            onboardingRepository: onboardingRepository,
+          ),
+          child: const OptivusApp(),
+        ),
+      );
+      addTearDown(authRepository.dispose);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OptivusApp)),
+      );
+      final subscription = container.listen<AuthState>(
+        authProvider,
+        (_, next) => statuses.add(next.status),
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
+
+      authRepository.emit(user);
+      for (var i = 0; i < 8; i++) {
+        await tester.pump();
+      }
+
+      expect(find.text('Starting Optivus...'), findsOneWidget);
+      expect(find.text('Restoring your setup...'), findsNothing);
+      expect(statuses, isNot(contains(AuthFlowStatus.restoringOnboarding)));
+
+      draftCompleter.complete(completedDraft);
+      for (var i = 0; i < 20; i++) {
+        await tester.pump();
+      }
+
+      expect(find.byType(AppShell), findsOneWidget);
+      expect(find.text('Restoring your setup...'), findsNothing);
+      expect(statuses, isNot(contains(AuthFlowStatus.restoringOnboarding)));
     },
   );
 
@@ -455,6 +521,46 @@ OnboardingDraft _draftFor(String uid, {required int currentStep}) {
   );
 }
 
+OnboardingDraft _completedDraftFor(String uid) {
+  final draft = _draftFor(uid, currentStep: OnboardingDraft.lastStepIndex);
+  return draft.copyWith(
+    currentStep: OnboardingDraft.lastStepIndex,
+    stepCompleted: List<bool>.filled(OnboardingDraft.stepCount, true),
+    stepDirty: List<bool>.filled(OnboardingDraft.stepCount, false),
+    stepLoading: List<bool>.filled(OnboardingDraft.stepCount, false),
+    onboardingCompleted: true,
+    finalPreview: draft.buildFinalPreview(),
+    incrementRevision: false,
+  );
+}
+
+OnboardingCompletionBundle _completionBundleFor(
+  String uid,
+  OnboardingDraft draft,
+) {
+  return OnboardingCompletionBundle(
+    uid: uid,
+    runId: 'run-completed-startup',
+    createdAt: DateTime.utc(2026, 6, 5, 10),
+    updatedAt: DateTime.utc(2026, 6, 5, 10),
+    userProfilePatch: const {},
+    baseTimelineBlocks: const [],
+    finalTimelineItems: const [],
+    routineItemsForApp: const [],
+    goodHabitTemplates: const [],
+    badHabitCheckIns: const [],
+    identityGoalSystems: const [],
+    notificationPreferences: NotificationPreferences(),
+    coachPreferences: CoachPreferences(),
+    moneyGoal: null,
+    uploadedAssetReferences: const [],
+    warnings: const [],
+    duplicateSystemKeysMerged: const [],
+    sourceFingerprint: draft.effectiveSourceFingerprint,
+    draftRevision: draft.revision,
+  );
+}
+
 class _ControllableAuthRepository implements AuthRepository {
   @override
   Future<AuthUser?> signInWithGoogle() async => null;
@@ -537,11 +643,13 @@ class _ControlledOnboardingRepository implements OnboardingRepository {
   }
 
   final Completer<OnboardingDraft?>? draftCompleter;
+  final OnboardingCompletionBundle? completionBundle;
   OnboardingDraft? draft;
   int draftFailures;
 
   _ControlledOnboardingRepository({
     this.draftCompleter,
+    this.completionBundle,
     this.draft,
     this.draftFailures = 0,
   });
@@ -561,7 +669,7 @@ class _ControlledOnboardingRepository implements OnboardingRepository {
 
   @override
   Future<OnboardingCompletionBundle?> fetchCompletionBundle(String uid) async {
-    return null;
+    return completionBundle?.uid == uid ? completionBundle : null;
   }
 
   @override

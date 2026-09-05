@@ -2711,6 +2711,13 @@ class _OnboardingStep4UnifiedState
       key: const ValueKey('onboarding-step4-review-screen'),
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            alignment: Alignment.topCenter,
+            fit: StackFit.expand,
+            children: <Widget>[...previousChildren, ?currentChild],
+          );
+        },
         child: reviewBody,
       ),
     );

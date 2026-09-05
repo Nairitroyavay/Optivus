@@ -1050,11 +1050,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
               if (!_isCurrentRestore(restoreGeneration)) return;
               final suggestsResume =
                   profile != null &&
-                  (profile.onboardingStep > 0 ||
-                      profile.onboardingInputCompleted ||
-                      (profile.onboardingProjectionStatus.isNotEmpty &&
-                          profile.onboardingProjectionStatus != 'none' &&
-                          profile.onboardingProjectionStatus != 'pending'));
+                  profileHasUnfinishedOnboardingResumeHint(profile);
               if (suggestsResume) {
                 state = state.copyWith(
                   user: user,
@@ -1589,6 +1585,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _ref.read(mockNotificationPreferencesProvider.notifier).resetForSignedOut();
     _ref.read(mockPermissionProvider.notifier).resetForSignedOut();
   }
+}
+
+@visibleForTesting
+bool profileHasUnfinishedOnboardingResumeHint(UserProfile profile) {
+  if (profile.onboardingCompleted || profile.onboardingInputCompleted) {
+    return false;
+  }
+  final projectionStatus = profile.onboardingProjectionStatus.trim();
+  final projectionIsPreCompletion =
+      projectionStatus.isEmpty ||
+      projectionStatus == 'none' ||
+      projectionStatus == 'pending';
+  return profile.onboardingStep > 0 || !projectionIsPreCompletion;
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {

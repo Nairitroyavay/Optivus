@@ -22,11 +22,13 @@ import 'package:optivus/state/region_settings_provider.dart';
 class OnboardingStep14 extends ConsumerStatefulWidget {
   final ValueChanged<int>? onJumpToStep;
   final VoidCallback? onCompletionStarted;
+  final ValueChanged<bool>? onFullTimelinePreviewChanged;
 
   const OnboardingStep14({
     super.key,
     this.onJumpToStep,
     this.onCompletionStarted,
+    this.onFullTimelinePreviewChanged,
   });
 
   @override
@@ -51,6 +53,25 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
     super.dispose();
   }
 
+  bool get isFullTimelinePreviewOpen => _viewingFullTimeline;
+
+  void _setFullTimelinePreviewOpen(bool isOpen) {
+    if (_viewingFullTimeline == isOpen) return;
+    setState(() => _viewingFullTimeline = isOpen);
+    widget.onFullTimelinePreviewChanged?.call(isOpen);
+  }
+
+  void closeFullTimelinePreview() {
+    if (!mounted) return;
+    _setFullTimelinePreviewOpen(false);
+  }
+
+  bool closeFullTimelinePreviewIfOpen() {
+    if (!_viewingFullTimeline) return false;
+    closeFullTimelinePreview();
+    return true;
+  }
+
   void focusFirstUnresolvedConflict({String? targetGroupId}) {
     if (!mounted) return;
     if (targetGroupId != null) {
@@ -72,6 +93,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
 
   void startFinishingPresentation() {
     if (!mounted) return;
+    closeFullTimelinePreview();
     setState(() {
       _presentationMode = Step14PresentationMode.finishing;
       _recoverableError = null;
@@ -80,6 +102,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
 
   void setFailureState(RecoverableError error) {
     if (!mounted) return;
+    closeFullTimelinePreview();
     setState(() {
       _presentationMode = Step14PresentationMode.failure;
       _recoverableError = error;
@@ -88,6 +111,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
 
   void setSuccessState() {
     if (!mounted) return;
+    closeFullTimelinePreview();
     setState(() {
       _presentationMode = Step14PresentationMode.success;
       _recoverableError = null;
@@ -162,7 +186,13 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
 
     // Handle full timeline preview mode
     if (_viewingFullTimeline && bundle != null) {
-      return _buildFullTimelineView(bundle);
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) closeFullTimelinePreview();
+        },
+        child: _buildFullTimelineView(bundle),
+      );
     }
 
     // Handle finishing / success / failure modes
@@ -966,7 +996,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
             width: double.infinity,
             child: OutlinedButton.icon(
               key: const ValueKey('step14-view-timeline'),
-              onPressed: () => setState(() => _viewingFullTimeline = true),
+              onPressed: () => _setFullTimelinePreviewOpen(true),
               icon: const Icon(Icons.calendar_month_rounded, size: 16),
               label: const Text('View full timeline'),
               style: OutlinedButton.styleFrom(
@@ -1064,16 +1094,6 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
       accent: OptivusColors.aquaAccent,
       styleBuilder: (entry) =>
           TimelineEntryStyle.defaultForCategory(entry.category),
-      bottomAction: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-        child: SizedBox(
-          width: double.infinity,
-          child: FilledButton.tonal(
-            onPressed: () => setState(() => _viewingFullTimeline = false),
-            child: const Text('Back to Review'),
-          ),
-        ),
-      ),
     );
   }
 

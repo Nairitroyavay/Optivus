@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/core/errors/completion_error_mapper.dart';
 import 'package:optivus/core/errors/recoverable_error.dart';
 import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/recovery/screens/onboarding_startup_status_screens.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -1123,24 +1125,94 @@ void main() {
 
     testWidgets('Z & AA: View full timeline opens AH-F018 scaffold and Back returns to review context', (tester) async {
       final draft = buildReadyDraft();
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
+      final step14Key = GlobalKey<OnboardingStep14State>();
+      var fullPreviewOpen = false;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+          ],
+          child: MaterialApp(
+            home: StatefulBuilder(
+              builder: (context, setHostState) {
+                return MediaQuery(
+                  data: const MediaQueryData(size: Size(393, 873)),
+                  child: OnboardingStepShell(
+                    currentPage: OnboardingDraft.lastStepIndex,
+                    pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
+                    completedSteps: draft.stepCompleted,
+                    validationMessage: null,
+                    onDotTap: (_) {},
+                    onIndicatorDraggedTo: (_) {},
+                    onSave: null,
+                    showSave: false,
+                    isSaving: false,
+                    isSaved: false,
+                    saveEnabled: false,
+                    ctaLabel: 'Enter Optivus',
+                    showPrimaryCta: false,
+                    ctaEnabled: false,
+                    ctaLoading: false,
+                    topLeftOverlay: fullPreviewOpen
+                        ? OnboardingStageBackButton(
+                            key: const Key('onboarding-step14-back'),
+                            onTap: () => step14Key.currentState
+                                ?.closeFullTimelinePreviewIfOpen(),
+                          )
+                        : null,
+                    child: OnboardingStep14(
+                      key: step14Key,
+                      onFullTimelinePreviewChanged: (isOpen) {
+                        setHostState(() => fullPreviewOpen = isOpen);
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       await tester.ensureVisible(find.byKey(const ValueKey('step14-view-timeline')));
       await tester.tap(find.byKey(const ValueKey('step14-view-timeline')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       // Full timeline scaffold is mounted in previewReadOnly mode
       expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsOneWidget);
       expect(find.text('Today timeline preview'), findsOneWidget);
       expect(find.text('Physics Lab'), findsOneWidget);
+      expect(find.text('Back to Review'), findsNothing);
+      expect(find.byKey(const Key('onboarding-step14-back')), findsOneWidget);
 
-      // Back to Review button dismisses scaffold
-      await tester.tap(find.text('Back to Review'));
-      await tester.pumpAndSettle();
+      // Top-left shell back closes only the nested full preview.
+      await tester.tap(find.byKey(const Key('onboarding-step14-back')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byKey(const ValueKey('step14-final-preview')), findsOneWidget);
       expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsNothing);
+      expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(const ValueKey('step14-view-timeline')));
+      await tester.tap(find.byKey(const ValueKey('step14-view-timeline')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byKey(const ValueKey('step14-final-preview')), findsOneWidget);
+      expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsNothing);
+      expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
     });
 
     testWidgets('AB: Edit setup opens modal bottom sheet with setup steps', (tester) async {

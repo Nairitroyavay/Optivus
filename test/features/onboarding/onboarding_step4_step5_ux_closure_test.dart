@@ -126,8 +126,134 @@ bool _isPrimaryCtaVisible(WidgetTester tester) {
   return lastOpacity.opacity > 0.0;
 }
 
+Future<void> _pumpAndroidSized(
+  WidgetTester tester,
+  Widget child, {
+  Size size = const Size(393, 873),
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+  await tester.pumpWidget(child);
+  await _settle(tester, 500);
+}
+
+void _expectScreenStartsInTopContentRegion(
+  WidgetTester tester,
+  ValueKey<String> key,
+) {
+  final rect = tester.getRect(find.byKey(key));
+  expect(
+    rect.top,
+    lessThan(80),
+    reason:
+        'Short onboarding switcher children should start at the top of the '
+        'body instead of being vertically centered.',
+  );
+}
+
 void main() {
   group('Onboarding Step 4 & Step 5 UX Closure Contract', () {
+    testWidgets('Step 4 AI screen is top-aligned inside switcher body', (
+      tester,
+    ) async {
+      final draft = _buildDraftForStep(
+        targetStep: onboardingClassJobStepIndex,
+        baseTimeline: const BaseTimelineDraft(classJobSetupStep: 1),
+      );
+
+      await _pumpAndroidSized(
+        tester,
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            routineImportAiControllerProvider.overrideWith(
+              (ref) => _MockExtractingRoutineImportAiController(
+                ref,
+                _FakeDelayedRoutineImportAiClient(),
+              ),
+            ),
+            onboardingClassTimelineProvider.overrideWith((_) => []),
+            onboardingWorkTimelineProvider.overrideWith((_) => []),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: OnboardingStep4Unified()),
+          ),
+        ),
+      );
+
+      const screenKey = ValueKey('onboarding-step4-ai-screen');
+      expect(find.byKey(screenKey), findsOneWidget);
+      _expectScreenStartsInTopContentRegion(tester, screenKey);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Step 5 choice screen is top-aligned inside switcher body', (
+      tester,
+    ) async {
+      final draft = _buildDraftForStep(
+        targetStep: onboardingEatingStepIndex,
+        baseTimeline: const BaseTimelineDraft(eatingSetupStep: 0),
+      );
+
+      await _pumpAndroidSized(
+        tester,
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: OnboardingStep5())),
+        ),
+      );
+
+      const screenKey = ValueKey('onboarding-step5-choice-screen');
+      expect(find.byKey(screenKey), findsOneWidget);
+      _expectScreenStartsInTopContentRegion(tester, screenKey);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Step 5 AI screen is top-aligned inside switcher body', (
+      tester,
+    ) async {
+      final draft = _buildDraftForStep(
+        targetStep: onboardingEatingStepIndex,
+        baseTimeline: const BaseTimelineDraft(
+          eatingSetupPath: onboardingEatingPathHasRoutine,
+          eatingSetupStep: 2,
+        ),
+      );
+
+      await _pumpAndroidSized(
+        tester,
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+            routineImportAiControllerProvider.overrideWith(
+              (ref) => _MockExtractingRoutineImportAiController(
+                ref,
+                _FakeDelayedRoutineImportAiClient(),
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: OnboardingStep5())),
+        ),
+      );
+
+      const screenKey = ValueKey('onboarding-step5-ai-screen');
+      expect(find.byKey(screenKey), findsOneWidget);
+      _expectScreenStartsInTopContentRegion(tester, screenKey);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       'Step 4: Setup mode renders header + upload card, hides timeline & primary CTA',
       (tester) async {

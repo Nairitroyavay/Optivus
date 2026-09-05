@@ -336,6 +336,13 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       duration: const Duration(milliseconds: 220),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          alignment: Alignment.topCenter,
+          fit: StackFit.expand,
+          children: <Widget>[...previousChildren, ?currentChild],
+        );
+      },
       child: body,
     );
   }
