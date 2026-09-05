@@ -193,7 +193,22 @@ void main() {
             skinCareBudget: 'low',
             skinCareSkinType: 'oily',
             skinCareProblems: ['acne'],
-            skinCareSelectedProductNames: ['cleanser'],
+            skinCareSelectedProductNames: [
+              'Test cleanser',
+              'Test moisturizer',
+              'Test sunscreen',
+            ],
+            skinCareProductRecommendations: [
+              for (final category in ['cleanser', 'moisturizer', 'sunscreen'])
+                SkinCareProductRecommendationDraft(
+                  name: category,
+                  brand: 'Test',
+                  category: category,
+                  estimatedPrice: '100',
+                  currencyCode: 'INR',
+                  reason: 'Daily care',
+                ),
+            ],
             skinCareDesiredApplicationsPerDay: 2,
             blocks: [
               TimelineBlockDraft(

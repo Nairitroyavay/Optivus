@@ -2397,6 +2397,13 @@ class BaseTimelineDraft {
     return '';
   }
 
+  /// A saved routine is current only when the same completion checks pass.
+  bool isSkinCareRoutineCurrent(String uid) =>
+      !skinCareSkipped &&
+      skinCareSetupPath != 'skip' &&
+      blocks.any((block) => block.section == 'skin_care') &&
+      validateSkinCareSetup(uid) == null;
+
   String? validateSkinCareSetup(String uid) {
     if (skinCareSkipped || skinCareSetupPath == 'skip') return null;
     if (skinCareSetupPath == null) {
@@ -2416,6 +2423,13 @@ class BaseTimelineDraft {
         r2Key: skinCareProductPhotoR2Key,
         status: skinCareProductPhotoStatus,
       );
+
+      final hasPhotoReference =
+          skinCareProductPhotoAssetId?.trim().isNotEmpty == true ||
+          skinCareProductPhotoR2Key?.trim().isNotEmpty == true;
+      if (hasPhotoReference && !hasPhoto) {
+        return 'Your product photo is no longer current. Review your products again.';
+      }
 
       if (!hasTyped && !hasPhoto) {
         return 'Add products or upload a photo to build your routine.';
@@ -2467,8 +2481,9 @@ class BaseTimelineDraft {
             product.category.trim().isEmpty ||
             product.estimatedPrice.trim().isEmpty ||
             product.currencyCode.trim().isEmpty ||
-            product.reason.trim().isEmpty)
+            product.reason.trim().isEmpty) {
           continue;
+        }
         recommendations[product.selectionKey] = product;
       }
       final categories = <String>{};
@@ -2485,8 +2500,9 @@ class BaseTimelineDraft {
         }
       }
       for (final category in const ['cleanser', 'moisturizer', 'sunscreen']) {
-        if (!categories.contains(category))
+        if (!categories.contains(category)) {
           return 'Select a $category before building your routine.';
+        }
       }
 
       final expectedRecFingerprint = computeSkinCareRecommendationFingerprint();

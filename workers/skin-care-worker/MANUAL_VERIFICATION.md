@@ -1,14 +1,20 @@
 # Manual Verification
 
-Skin-care Worker image validation:
+Use authenticated requests and owned, exact object identities.
 
-1. Store an owned R2 object under `users/<uid>/onboarding/skin_care/<asset>.heic`
-   with `httpMetadata.contentType` set to `image/heic`.
-2. POST `/v1/skin-care/products/analyze` with that object key in
-   `productPhotos`.
-3. Expect HTTP `415` with JSON:
-   `{"error":"unsupported_content_type","message":"This photo format is not supported. Please upload JPEG, PNG, or WEBP."}`.
-4. Repeat with `/v1/skin-care/routine/generate` using the same key as
-   `facePhotoR2Key`; expect the same `415` JSON error.
-5. Repeat both paths with `image/jpeg`, `image/png`, and `image/webp` objects
-   under 15 MB; they should pass validation and continue to the AI provider.
+1. Upload one JPEG, PNG, or WEBP product photo at
+   `users/<uid>/onboarding/skin_products/<assetId>.<ext>` and POST its key as
+   the single `productPhotos` entry to `/v1/skin-care/products/analyze`.
+2. Use an owned `skin_face` object for the face-photo recommendation request.
+   The final selected-product routine request must omit `facePhotoR2Key`.
+3. Verify JPEG/PNG/WEBP objects within the configured size limit proceed to AI.
+   Oversized objects must fail before their bytes are loaded into memory.
+4. Verify unsupported content types are rejected, including HEIC. Modern uploads
+   do not accept HEIC or the legacy `skin_care` path.
+5. Verify another UID, a mismatched asset ID, extra path segments, and multiple
+   product photos are rejected.
+
+Legacy `users/<uid>/onboarding/skin_care/<assetId>.<ext>` references have explicit
+read/delete-only migration compatibility. They are not modern upload targets.
+A matching legacy reference can satisfy only the established active Step 7 slot;
+a current modern upload takes priority.

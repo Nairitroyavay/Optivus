@@ -69,9 +69,27 @@ Future<_SkinPhotoSource?> _showSkinPhotoSourceSheet(BuildContext context) {
   );
 }
 
+AiGenerationErrorCategory onboarding7AiErrorCategory(String? code) {
+  return switch (code) {
+    'provider_timeout' || 'timeout' => AiGenerationErrorCategory.timeout,
+    'provider_quota_exceeded' ||
+    'provider_rate_limited' ||
+    'rate_limit_exceeded' => AiGenerationErrorCategory.rateLimited,
+    'network_unavailable' ||
+    'provider_unavailable' ||
+    'provider_high_demand' => AiGenerationErrorCategory.serviceUnavailable,
+    'unauthorized' ||
+    'session_expired' => AiGenerationErrorCategory.unauthorized,
+    _ => AiGenerationErrorCategory.responseInvalid,
+  };
+}
+
 class _SkinCareResponseException implements Exception {
   final String message;
-  const _SkinCareResponseException(this.message);
+  final String? errorCode;
+  const _SkinCareResponseException(this.message, {this.errorCode});
+  AiGenerationErrorCategory get category =>
+      onboarding7AiErrorCategory(errorCode);
   @override
   String toString() => message;
 }
@@ -816,7 +834,7 @@ List<SkinCareProductRecommendation> onboarding7NormalizeRecommendations(
         product.reason.trim().isEmpty) {
       continue;
     }
-    final key = product.displayName.trim().toLowerCase();
+    final key = normalizeSkinCareSelectionKey(product.displayName);
     if (key.isNotEmpty && seen.add(key)) valid.add(product);
   }
 
@@ -883,7 +901,7 @@ List<String> onboarding7MissingEssentialRecommendationCategories(
   Iterable<String>? selectedProductNames,
 }) {
   final selectedKeys = selectedProductNames
-      ?.map((name) => name.trim().toLowerCase())
+      ?.map((name) => normalizeSkinCareSelectionKey(name))
       .where((name) => name.isNotEmpty)
       .toSet();
   final categories = <String>{};
@@ -1418,29 +1436,50 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
         }
         final repository = ref.read(uploadedAssetRepositoryProvider);
         final cleanupAssets = <String, UploadedAsset>{};
-        final legacy = restored.forPurpose(UploadedAssetPurpose.skinCare)?.asset;
+        final legacy = restored
+            .forPurpose(UploadedAssetPurpose.skinCare)
+            ?.asset;
         if (legacy != null) cleanupAssets[legacy.assetId] = legacy;
         try {
-          for (final asset in await repository.fetchRecentAssets(uid: uid, sourceFeature: 'onboarding', limit: 100)) {
+          for (final asset in await repository.fetchRecentAssets(
+            uid: uid,
+            sourceFeature: 'onboarding',
+            limit: 100,
+          )) {
             if (asset.errorMessage == 'private_cleanup_pending' &&
-                const [UploadedAssetPurpose.skinCare, UploadedAssetPurpose.skinFace, UploadedAssetPurpose.skinProducts].contains(asset.purpose)) {
+                const [
+                  UploadedAssetPurpose.skinCare,
+                  UploadedAssetPurpose.skinFace,
+                  UploadedAssetPurpose.skinProducts,
+                ].contains(asset.purpose)) {
               cleanupAssets[asset.assetId] = asset;
             }
           }
           for (final asset in cleanupAssets.values) {
-            await repository.saveAsset(asset.copyWith(
-              status: UploadedAssetStatus.deleted,
-              updatedAt: DateTime.now(),
-              errorMessage: 'private_cleanup_pending',
-            ));
-            final token = await ref.read(authRepositoryProvider).currentIdToken();
-            if (token == null || token.trim().isEmpty ||
-                (ref.read(authProvider).user?.uid ?? ref.read(mockOnboardingProvider).draft.uid) != uid) {
+            await repository.saveAsset(
+              asset.copyWith(
+                status: UploadedAssetStatus.deleted,
+                updatedAt: DateTime.now(),
+                errorMessage: 'private_cleanup_pending',
+              ),
+            );
+            final token = await ref
+                .read(authRepositoryProvider)
+                .currentIdToken();
+            if (token == null ||
+                token.trim().isEmpty ||
+                (ref.read(authProvider).user?.uid ??
+                        ref.read(mockOnboardingProvider).draft.uid) !=
+                    uid) {
               throw StateError('Private cleanup requires the same account');
             }
-            await ref.read(r2UploadClientProvider).deleteUpload(objectKey: asset.r2Key, idToken: token);
+            await ref
+                .read(r2UploadClientProvider)
+                .deleteUpload(objectKey: asset.r2Key, idToken: token);
             await repository.markDeleted(uid: uid, assetId: asset.assetId);
-            ref.read(restoredUploadsProvider.notifier).removePurpose(uid: uid, purpose: asset.purpose);
+            ref
+                .read(restoredUploadsProvider.notifier)
+                .removePurpose(uid: uid, purpose: asset.purpose);
           }
         } catch (_) {
           cleanupSucceeded = false;
@@ -1762,7 +1801,7 @@ class _HasProductsModeScreenState
     var source = retrying ? null : await _showSkinPhotoSourceSheet(context);
     if (!mounted) return;
     if (!retrying && source == null) {
-      source = _SkinPhotoSource.gallery;
+      return;
     }
     setState(() {
       _uploadError = null;
@@ -1875,29 +1914,37 @@ class _HasProductsModeScreenState
           _removingPhoto = false;
           _uploadError = _friendlySkinCareUploadMessage(latest?.attemptError);
         });
+        if (latest?.durableAsset == null) {
+          setState(() {
+            _uploadedAsset = null;
+            _reviewedPhotoDetails = const [];
+            _photoProductsReviewed = false;
+            _inputSource = _controller.text.trim().isEmpty
+                ? _ProductInputSource.none
+                : _ProductInputSource.typed;
+          });
+          updateBaseTimelineDraft(
+            ref,
+            onboardingSkinCareStepIndex,
+            (base) => base.copyWith(
+              clearSkinCareProductPhoto: true,
+              clearSkinCareReviewedProducts: true,
+              clearSkinCareRoutineFingerprint: true,
+              clearSkinCareSuggestedProducts: true,
+              skinCareSpecialCareNotes: const [],
+              blocks: base.blocks
+                  .where((block) => block.section != 'skin_care')
+                  .toList(),
+            ),
+          );
+        }
         return;
       }
     }
     final hasTypedProducts = _controller.text.trim().isNotEmpty;
-    final manuallyReviewed =
-        onboarding7ReconcileReviewedProducts(
-              _controller.text,
-              _reviewedPhotoDetails,
-            )
-            .map(
-              (product) => SkinCareDetectedProduct(
-                name: product.name,
-                brand: product.brand,
-                category: product.category,
-                source: 'user_reviewed',
-                keyIngredients: product.keyIngredients,
-                possibleActives: product.possibleActives,
-                usageHint: product.usageHint,
-                warningIfAny: product.warningIfAny,
-                confidence: product.confidence,
-              ),
-            )
-            .toList(growable: false);
+    final manuallyReviewed = onboarding7ParseTypedProductDetails(
+      _controller.text,
+    );
     setState(() {
       _uploadedAsset = null;
       _removingPhoto = false;
@@ -1915,6 +1962,12 @@ class _HasProductsModeScreenState
       (base) => base.copyWith(
         clearSkinCareProductPhoto: true,
         skinCareReviewedProducts: manuallyReviewed,
+        clearSkinCareRoutineFingerprint: true,
+        clearSkinCareSuggestedProducts: true,
+        skinCareSpecialCareNotes: const [],
+        blocks: base.blocks
+            .where((block) => block.section != 'skin_care')
+            .toList(),
         skinCareSkipped: false,
       ),
     );
@@ -2032,7 +2085,7 @@ class _HasProductsModeScreenState
           _inputSource == currentSource,
       mapError: (error) => AiGenerationError(
         category: error is _SkinCareResponseException
-            ? AiGenerationErrorCategory.responseInvalid
+            ? error.category
             : AiGenerationErrorCategory.serviceUnavailable,
         message: error is _SkinCareResponseException
             ? error.message
@@ -2074,6 +2127,7 @@ class _HasProductsModeScreenState
                 analysis.errorMessage,
                 analysis.warnings,
               ),
+              errorCode: analysis.errorCode,
             );
           }
           final photoProductDetails = analysis.detectedProducts;
@@ -2179,7 +2233,10 @@ class _HasProductsModeScreenState
                           result.errorMessage,
                           result.warnings,
                         ));
-            throw _SkinCareResponseException(errMsg);
+            throw _SkinCareResponseException(
+              errMsg,
+              errorCode: result.errorCode,
+            );
           }
 
           final partitioned = onboarding7PartitionRoutinePlans(routinePlans);
@@ -2329,7 +2386,8 @@ class _HasProductsModeScreenState
     final uploadBusy = uploadState?.isBusy == true;
     final uploadError =
         _uploadError ??
-        (uploadState?.phase == UploadInteractionPhase.failed
+        ((uploadState?.phase == UploadInteractionPhase.failed ||
+                uploadState?.cleanupPending == true)
             ? _friendlySkinCareUploadMessage(uploadState?.attemptError)
             : null);
     final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
@@ -2484,6 +2542,22 @@ class _HasProductsModeScreenState
             state: _lifecycle.state,
             onRetry: _generate,
           ),
+          if (uploadState?.cleanupPending == true)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final resolved = await ref
+                          .read(onboardingUploadInteractionProvider.notifier)
+                          .remove(uploadState!.slotKey, uid: draft.uid);
+                      if (mounted && resolved) {
+                        setState(() {
+                          _uploadError = null;
+                        });
+                      }
+                    },
+              child: const Text('Retry private cleanup'),
+            ),
           if (message != null) ...[
             const SizedBox(height: 10),
             _SkinCareInlineMessage(message: message),
@@ -2523,12 +2597,28 @@ class _HasProductsModeScreenState
                         _generationError = null;
                       }),
                 icon: const Icon(Icons.close_rounded, size: 18),
-                label: const Text('Cancel edit'),
+                label: const Text('Close editor'),
               ),
             ),
             const SizedBox(height: 4),
           ],
           setupCard,
+          if (uploadState?.cleanupPending == true)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final resolved = await ref
+                          .read(onboardingUploadInteractionProvider.notifier)
+                          .remove(uploadState!.slotKey, uid: draft.uid);
+                      if (mounted && resolved) {
+                        setState(() {
+                          _uploadError = null;
+                        });
+                      }
+                    },
+              child: const Text('Retry private cleanup'),
+            ),
           if (message != null) ...[
             const SizedBox(height: 10),
             _SkinCareInlineMessage(message: message),
@@ -2578,9 +2668,13 @@ class _HasProductsModeScreenState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text(
-                                'Routine built',
-                                style: TextStyle(
+                              Text(
+                                draft.baseTimeline.isSkinCareRoutineCurrent(
+                                      draft.uid,
+                                    )
+                                    ? 'Routine built'
+                                    : 'Changes not applied yet',
+                                style: const TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w900,
                                   color: OptivusColors.textPrimary,
@@ -3470,7 +3564,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     var source = retrying ? null : await _showSkinPhotoSourceSheet(context);
     if (!mounted) return;
     if (!retrying && source == null) {
-      source = _SkinPhotoSource.gallery;
+      return;
     }
     setState(() {
       _uploadError = null;
@@ -3574,6 +3668,27 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           _removingPhoto = false;
           _uploadError = _friendlySkinCareUploadMessage(latest?.attemptError);
         });
+        if (latest?.durableAsset == null) {
+          setState(() {
+            _uploadedAsset = null;
+          });
+          updateBaseTimelineDraft(
+            ref,
+            onboardingSkinCareStepIndex,
+            (base) => base.copyWith(
+              clearSkinCareFacePhoto: true,
+              clearSkinCareProductRecommendations: true,
+              clearSkinCareSelectedProductNames: true,
+              clearSkinCareRecommendationFingerprint: true,
+              clearSkinCareRoutineFingerprint: true,
+              clearSkinCareSuggestedProducts: true,
+              skinCareSpecialCareNotes: const [],
+              blocks: base.blocks
+                  .where((block) => block.section != 'skin_care')
+                  .toList(),
+            ),
+          );
+        }
         return;
       }
     }
@@ -3592,6 +3707,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         clearSkinCareProductRecommendations: true,
         clearSkinCareSelectedProductNames: true,
         clearSkinCareSuggestedProducts: true,
+        clearSkinCareRecommendationFingerprint: true,
+        clearSkinCareRoutineFingerprint: true,
+        skinCareSpecialCareNotes: const [],
+        blocks: base.blocks
+            .where((block) => block.section != 'skin_care')
+            .toList(),
         skinCareSkipped: false,
       ),
     );
@@ -3681,7 +3802,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           })(),
       mapError: (error) => AiGenerationError(
         category: error is _SkinCareResponseException
-            ? AiGenerationErrorCategory.responseInvalid
+            ? error.category
             : AiGenerationErrorCategory.serviceUnavailable,
         message: error is _SkinCareResponseException
             ? error.message
@@ -3771,6 +3892,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                         : result.errorMessage,
                     result.warnings,
                   ),
+            errorCode: result.errorCode,
           );
         }
 
@@ -3823,7 +3945,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       currentBase,
     );
     final selectedKeys = currentBase.skinCareSelectedProductNames
-        .map((name) => name.trim().toLowerCase())
+        .map((name) => normalizeSkinCareSelectionKey(name))
         .toSet();
     final selected = currentBase.skinCareProductRecommendations
         .where((product) => selectedKeys.contains(product.selectionKey))
@@ -3900,7 +4022,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           })(),
       mapError: (error) => AiGenerationError(
         category: error is _SkinCareResponseException
-            ? AiGenerationErrorCategory.responseInvalid
+            ? error.category
             : AiGenerationErrorCategory.serviceUnavailable,
         message: error is _SkinCareResponseException
             ? error.message
@@ -3964,6 +4086,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                         : result.errorMessage,
                     result.warnings,
                   ),
+            errorCode: result.errorCode,
           );
         }
         if (result.warnings.any(
@@ -4061,7 +4184,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
     final next = [...base.skinCareSelectedProductNames];
     final index = next.indexWhere(
-      (name) => name.trim().toLowerCase() == product.selectionKey,
+      (name) => normalizeSkinCareSelectionKey(name) == product.selectionKey,
     );
     if (index >= 0) {
       next.removeAt(index);
@@ -4072,7 +4195,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           recommendation.selectionKey: recommendation,
       };
       next.removeWhere((name) {
-        final selectedProduct = productsByKey[name.trim().toLowerCase()];
+        final selectedProduct =
+            productsByKey[normalizeSkinCareSelectionKey(name)];
         return selectedProduct != null &&
             _onboarding7ProductSelectionGroup(selectedProduct) == group;
       });
@@ -4171,7 +4295,8 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     final busy = uploadBusy || _lifecycle.state.isActive || _removingPhoto;
     final uploadError =
         _uploadError ??
-        (uploadState?.phase == UploadInteractionPhase.failed
+        ((uploadState?.phase == UploadInteractionPhase.failed ||
+                uploadState?.cleanupPending == true)
             ? _friendlySkinCareUploadMessage(uploadState?.attemptError)
             : null);
     final inputsComplete =
@@ -4208,6 +4333,22 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             state: _lifecycle.state,
             onRetry: isFindProducts ? _findProducts : _generate,
           ),
+          if (uploadState?.cleanupPending == true)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final resolved = await ref
+                          .read(onboardingUploadInteractionProvider.notifier)
+                          .remove(uploadState!.slotKey, uid: draft.uid);
+                      if (mounted && resolved) {
+                        setState(() {
+                          _uploadError = null;
+                        });
+                      }
+                    },
+              child: const Text('Retry private cleanup'),
+            ),
           if (message != null) ...[
             const SizedBox(height: 10),
             _SkinCareInlineMessage(message: message),
@@ -4224,76 +4365,92 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             tint: OptivusColors.purpleAccent.withValues(alpha: 0.12),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             radius: 20,
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.auto_awesome_rounded,
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: OptivusColors.purpleAccent,
+                      size: 19,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        base.isSkinCareRoutineCurrent(draft.uid)
+                            ? 'Routine built'
+                            : 'Changes not applied yet',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (base.skinCareSuggestedProducts.isNotEmpty) ...[
+                      const SizedBox(width: 2),
+                      IconButton(
+                        key: const ValueKey(
+                          'onboarding-step7-selected-products-button',
+                        ),
+                        tooltip: 'Selected products',
+                        onPressed: () => _showSkinCareSelectedProductsSheet(
+                          context,
+                          products: base.skinCareSuggestedProducts,
+                          recommendations: base.skinCareProductRecommendations,
+                          accent: OptivusColors.purpleAccent,
+                        ),
+                        icon: const Icon(Icons.info_outline_rounded, size: 18),
                         color: OptivusColors.purpleAccent,
-                        size: 19,
-                      ),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: Text(
-                          'Routine built',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w900,
-                            color: OptivusColors.textPrimary,
-                          ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 28,
+                          height: 28,
                         ),
+                        splashRadius: 15,
                       ),
-                      if (base.skinCareSuggestedProducts.isNotEmpty) ...[
-                        const SizedBox(width: 2),
-                        IconButton(
-                          key: const ValueKey(
-                            'onboarding-step7-selected-products-button',
-                          ),
-                          tooltip: 'Selected products',
-                          onPressed: () => _showSkinCareSelectedProductsSheet(
-                            context,
-                            products: base.skinCareSuggestedProducts,
-                            recommendations:
-                                base.skinCareProductRecommendations,
-                            accent: OptivusColors.purpleAccent,
-                          ),
-                          icon: const Icon(
-                            Icons.info_outline_rounded,
-                            size: 18,
-                          ),
-                          color: OptivusColors.purpleAccent,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints.tightFor(
-                            width: 28,
-                            height: 28,
-                          ),
-                          splashRadius: 15,
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                OnboardingActionPill(
-                  label: 'Rebuild / Edit',
-                  icon: Icons.edit_rounded,
-                  accent: OptivusColors.purpleAccent,
-                  compact: true,
-                  onTap: () => setState(() {
-                    _editingExisting = true;
-                    _pendingDesiredApplicationsPerDay = null;
-                    _showProductSelection =
-                        base.skinCareProductRecommendations.isNotEmpty;
-                    _generationError = null;
-                  }),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OnboardingActionPill(
+                    label: 'Rebuild / Edit',
+                    icon: Icons.edit_rounded,
+                    accent: OptivusColors.purpleAccent,
+                    compact: true,
+                    onTap: () => setState(() {
+                      _editingExisting = true;
+                      _pendingDesiredApplicationsPerDay = null;
+                      _showProductSelection =
+                          base.skinCareProductRecommendations.isNotEmpty;
+                      _generationError = null;
+                    }),
+                  ),
                 ),
               ],
             ),
           ),
+          if (uploadState?.cleanupPending == true)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      final resolved = await ref
+                          .read(onboardingUploadInteractionProvider.notifier)
+                          .remove(uploadState!.slotKey, uid: draft.uid);
+                      if (mounted && resolved) {
+                        setState(() {
+                          _uploadError = null;
+                        });
+                      }
+                    },
+              child: const Text('Retry private cleanup'),
+            ),
           if (message != null) ...[
             const SizedBox(height: 10),
             _SkinCareInlineMessage(message: message),
@@ -4314,7 +4471,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
     if (_showProductSelection &&
         base.skinCareProductRecommendations.isNotEmpty) {
       final selectedKeys = base.skinCareSelectedProductNames
-          .map((name) => name.trim().toLowerCase())
+          .map((name) => normalizeSkinCareSelectionKey(name))
           .toSet();
       final missingEssentialSelections =
           onboarding7MissingEssentialRecommendationCategories(
@@ -4327,23 +4484,32 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_editingExisting)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                key: const ValueKey(
-                  'onboarding-step7-no-products-cancel-rebuild',
-                ),
-                onPressed: () => setState(() {
-                  _editingExisting = false;
-                  _pendingDesiredApplicationsPerDay = null;
-                  _showProductSelection = false;
-                  _generationError = null;
-                }),
-                icon: const Icon(Icons.close_rounded, size: 18),
-                label: const Text('Cancel edit'),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 0,
+            children: [
+              TextButton(
+                onPressed: busy ? null : _changeDetails,
+                child: const Text('Change details'),
               ),
-            ),
+              if (_editingExisting)
+                TextButton.icon(
+                  key: const ValueKey(
+                    'onboarding-step7-no-products-cancel-rebuild',
+                  ),
+                  onPressed: () => setState(() {
+                    _editingExisting = false;
+                    _pendingDesiredApplicationsPerDay = null;
+                    _showProductSelection = false;
+                    _generationError = null;
+                  }),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('Close editor'),
+                ),
+            ],
+          ),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -4351,31 +4517,32 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                 tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
                 padding: const EdgeInsets.all(12),
                 radius: 18,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Choose products available in $recommendationCountryName',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: OptivusColors.textPrimary,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Choose products available in $recommendationCountryName',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: OptivusColors.textPrimary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'AI matched these to your skin and ${base.skinCareBudget} budget. Select products for $desiredApplicationsPerDay times per day.',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        height: 1.35,
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textSecondary,
+                      const SizedBox(height: 4),
+                      Text(
+                        'AI matched these to your skin and ${base.skinCareBudget} budget. Select products for $desiredApplicationsPerDay times per day.',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          height: 1.35,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.textSecondary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: ListView.separated(
-                        physics: const AlwaysScrollableScrollPhysics(),
+                      const SizedBox(height: 10),
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
                         itemCount: base.skinCareProductRecommendations.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
@@ -4485,47 +4652,72 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           );
                         },
                       ),
-                    ),
-                    if (message != null) ...[
-                      const SizedBox(height: 8),
-                      _SkinCareInlineMessage(message: message),
-                    ],
-                    if (message == null && selectionMessage.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        selectionMessage,
-                        key: const ValueKey(
-                          'onboarding-step7-essential-selection-message',
-                        ),
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          height: 1.3,
-                          fontWeight: FontWeight.w700,
-                          color: OptivusColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
+                      if (uploadState?.cleanupPending == true)
                         TextButton(
-                          onPressed: busy ? null : _changeDetails,
-                          child: const Text('Change details'),
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  final resolved = await ref
+                                      .read(
+                                        onboardingUploadInteractionProvider
+                                            .notifier,
+                                      )
+                                      .remove(
+                                        uploadState!.slotKey,
+                                        uid: draft.uid,
+                                      );
+                                  if (mounted && resolved) {
+                                    setState(() {
+                                      _uploadError = null;
+                                    });
+                                  }
+                                },
+                          child: const Text('Retry private cleanup'),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _SkinCareGenerateRoutineButton(
+                      if (message != null) ...[
+                        const SizedBox(height: 8),
+                        _SkinCareInlineMessage(message: message),
+                      ],
+                      if (message == null && selectionMessage.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          selectionMessage,
+                          key: const ValueKey(
+                            'onboarding-step7-essential-selection-message',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            height: 1.3,
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final tightActions =
+                              constraints.maxWidth < 360 ||
+                              MediaQuery.textScalerOf(context).scale(14) > 18;
+                          final buildButton = _SkinCareGenerateRoutineButton(
                             label: 'Build skin routine',
                             busy: busy,
                             accent: OptivusColors.purpleAccent,
                             onTap: !busy && missingEssentialSelections.isEmpty
                                 ? _generate
                                 : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          );
+                          if (tightActions) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [buildButton],
+                            );
+                          }
+                          return Row(children: [Expanded(child: buildButton)]);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -4558,7 +4750,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           _generationError = null;
                         }),
                   icon: const Icon(Icons.close_rounded, size: 18),
-                  label: const Text('Cancel edit'),
+                  label: const Text('Close editor'),
                 ),
               ),
             ],
@@ -4597,7 +4789,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                       ),
                       SizedBox(height: dense ? 6 : 8),
                       SizedBox(
-                        height: dense ? 88 : 104,
+                        height:
+                            112 *
+                            math.max(
+                              1.0,
+                              MediaQuery.textScalerOf(context).scale(14) / 14,
+                            ),
                         child: _SkinCarePhotoTarget(
                           asset: effectiveAsset,
                           purpose: UploadedAssetPurpose.skinFace,
@@ -4784,6 +4981,28 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           ),
                         ),
                       ],
+                      if (uploadState?.cleanupPending == true)
+                        TextButton(
+                          onPressed: busy
+                              ? null
+                              : () async {
+                                  final resolved = await ref
+                                      .read(
+                                        onboardingUploadInteractionProvider
+                                            .notifier,
+                                      )
+                                      .remove(
+                                        uploadState!.slotKey,
+                                        uid: draft.uid,
+                                      );
+                                  if (mounted && resolved) {
+                                    setState(() {
+                                      _uploadError = null;
+                                    });
+                                  }
+                                },
+                          child: const Text('Retry private cleanup'),
+                        ),
                       if (message != null) ...[
                         const SizedBox(height: 6),
                         _SkinCareInlineMessage(message: message, compact: true),
@@ -5202,7 +5421,9 @@ void _showSkinCareSelectedProductsSheet(
                 itemBuilder: (context, index) {
                   final productName = products[index];
                   final recommendation =
-                      recommendationsByKey[productName.trim().toLowerCase()];
+                      recommendationsByKey[normalizeSkinCareSelectionKey(
+                        productName,
+                      )];
                   final category = recommendation == null
                       ? ''
                       : onboarding7RecommendationCategory(recommendation);

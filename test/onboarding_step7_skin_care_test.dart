@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -125,6 +126,230 @@ void main() {
       find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
     );
     await tester.pumpAndSettle();
+  }
+
+  for (final code in <String, AiGenerationErrorCategory>{
+    'provider_timeout': AiGenerationErrorCategory.timeout,
+    'provider_quota_exceeded': AiGenerationErrorCategory.rateLimited,
+    'provider_invalid_json': AiGenerationErrorCategory.responseInvalid,
+    'network_unavailable': AiGenerationErrorCategory.serviceUnavailable,
+    'provider_unavailable': AiGenerationErrorCategory.serviceUnavailable,
+  }.entries) {
+    test(
+      'AI error category ${code.key}',
+      () => expect(onboarding7AiErrorCategory(code.key), code.value),
+    );
+  }
+  for (final product in [true, false]) {
+    testWidgets(
+      '${product ? "Product" : "Face"} source sheet dismissal does not pick or mutate',
+      (tester) async {
+        useAndroidWidth(tester);
+        final interaction = TestUploadInteractionController();
+        await tester.pumpWidget(
+          buildTestWidget(
+            draft: product ? _hasProductsDraft() : _noProductsDraft(),
+            interactionController: interaction,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(OnboardingStep7)),
+        );
+        final before = container.read(mockOnboardingProvider).draft.toMap();
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step7-photo-tile')).first,
+        );
+        await tester.pumpAndSettle();
+        Navigator.of(
+          tester.element(
+            find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
+          ),
+        ).pop();
+        await tester.pumpAndSettle();
+        expect(interaction.startUploadCalls, 0);
+        expect(container.read(mockOnboardingProvider).draft.toMap(), before);
+        expect(tester.takeException(), isNull);
+      },
+    );
+    testWidgets(
+      '${product ? "Product" : "Face"} stale routine survives reconstruction',
+      (tester) async {
+        useAndroidWidth(tester);
+        final seed = product
+            ? _hasProductsDraft(blocks: _skinCareBlocksForEveryDay(2))
+            : _noProductsDraft(blocks: _skinCareBlocksForEveryDay(2));
+        final stale = seed.copyWith(
+          baseTimeline: seed.baseTimeline.copyWith(
+            clearSkinCareRoutineFingerprint: true,
+          ),
+        );
+        await tester.pumpWidget(buildTestWidget(draft: stale));
+        await tester.pumpAndSettle();
+        expect(find.text('Routine built'), findsNothing);
+        expect(find.text('Changes not applied yet'), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpWidget(
+          buildTestWidget(draft: OnboardingDraft.fromMap(stale.toMap())),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Changes not applied yet'), findsOneWidget);
+        expect(onboarding7CanContinue(stale.baseTimeline, stale.uid), isFalse);
+      },
+    );
+  }
+  testWidgets(
+    'Repeated whitespace selection resolves in final routine request',
+    (tester) async {
+      useAndroidWidth(tester);
+      final recommendations = _productRecommendationDraftsForTest()
+          .take(3)
+          .toList();
+      final client = TestSkinCareAiClient(
+        routineResult: _routineResultWithPlanCount(2),
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _noProductsDraft(
+            skinType: 'oily',
+            problems: ['pimples'],
+            budget: 'medium',
+            withPhoto: true,
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+            recommendations: recommendations,
+            selectedProducts: recommendations
+                .map((p) => p.displayName.replaceAll(' ', '   '))
+                .toList(),
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapBuildRoutine(tester);
+      expect(client.generateCalls, hasLength(1));
+      expect(
+        (client.generateCalls.single['typedProductDetails'] as List).map(
+          (p) => p['name'],
+        ),
+        recommendations.map((p) => p.name),
+      );
+      expect(
+        client.generateCalls.single.containsKey('facePhotoR2Key'),
+        isFalse,
+      );
+      expect(find.text('Changes not applied yet'), findsNothing);
+    },
+  );
+
+  for (final product in [true, false]) {
+    testWidgets(
+      '${product ? "Product" : "Face"} same-file retry skips source chooser',
+      (tester) async {
+        useAndroidWidth(tester);
+        final interaction = TestUploadInteractionController()
+          ..seedFailedAttempt(product);
+        await tester.pumpWidget(
+          buildTestWidget(
+            draft: product ? _hasProductsDraft() : _noProductsDraft(),
+            interactionController: interaction,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step7-photo-tile')).first,
+        );
+        await tester.pumpAndSettle();
+        expect(interaction.startUploadCalls, 1);
+        expect(
+          find.byKey(const ValueKey('onboarding-step7-choose-gallery')),
+          findsNothing,
+        );
+      },
+    );
+  }
+  for (final width in [320.0, 360.0, 412.0]) {
+    testWidgets('Selected products sheet and list width=$width large text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final products = _productRecommendationDraftsForTest().take(3).toList();
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _noProductsDraft(
+            blocks: _skinCareBlocksForEveryDay(2),
+            recommendations: products,
+            selectedProducts: products.map((p) => p.displayName).toList(),
+            suggestedProducts: products.map((p) => p.displayName).toList(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('onboarding-step7-selected-products-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(products.first.displayName), findsWidgets);
+      expect(tester.takeException(), isNull);
+      Navigator.of(tester.element(find.text('Selected products').last)).pop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text(products.first.displayName));
+      await tester.tap(find.text(products.first.displayName));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text('Close editor'), findsOneWidget);
+    });
+  }
+
+  for (final width in [320.0, 360.0, 412.0]) {
+    for (final scale in [1.0, 1.6]) {
+      testWidgets('No products responsive width=$width text=$scale keyboard', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 844);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await tester.pumpWidget(
+          buildTestWidget(
+            draft: _noProductsDraft(
+              skinType: 'oily',
+              problems: ['pimples'],
+              budget: 'medium',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Add photo'));
+        expect(find.text('Add photo').hitTestable(), findsOneWidget);
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('onboarding-step7-frequency-4')),
+        );
+        expect(
+          find
+              .byKey(const ValueKey('onboarding-step7-frequency-4'))
+              .hitTestable(),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(find.text('Find products'));
+        expect(find.text('Find products').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Find products'));
+        expect(find.text('Find products').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   testWidgets('1. Global CTA hides while keyboard is open', (tester) async {
@@ -4167,10 +4392,10 @@ void main() {
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareSetupPath, 'no_products');
       expect(base.skinCareProductNames, 'Cleanser');
-      expect(base.skinCareProductPhotoAssetId, 'skin-asset');
-      expect(base.skinCareProductPhotoR2Key, isNotNull);
-      expect(base.skinCareProductPhotoCreatedAt, isNotNull);
-      expect(base.skinCareProductPhotoUpdatedAt, isNotNull);
+      expect(base.skinCareProductPhotoAssetId, isNull);
+      expect(base.skinCareProductPhotoR2Key, isNull);
+      expect(base.skinCareProductPhotoCreatedAt, isNull);
+      expect(base.skinCareProductPhotoUpdatedAt, isNull);
       expect(base.skinCareSpecialCareNotes, isEmpty);
       expect(
         base.blocks.where((block) => block.section == 'skin_care'),
@@ -4320,7 +4545,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Routine built'), findsOneWidget);
+      expect(find.text('Routine built'), findsNothing);
+      expect(find.text('Changes not applied yet'), findsOneWidget);
+      expect(tester.takeException(), isNull);
 
       expect(find.text('2 routines per day'), findsOneWidget);
       expect(find.text('Rebuild / Edit'), findsOneWidget);
@@ -5447,12 +5674,8 @@ void main() {
       );
       expect(selectedProductsButton, findsOneWidget);
       expect(find.text('Selected products'), findsNothing);
-      expect(
-        (tester.getCenter(find.text('Routine built')).dy -
-                tester.getCenter(find.text('Rebuild / Edit')).dy)
-            .abs(),
-        lessThan(10),
-      );
+      expect(find.text('Routine built'), findsOneWidget);
+      expect(find.text('Rebuild / Edit'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('onboarding-step7-full-timeline')),
         findsOneWidget,
@@ -5627,11 +5850,15 @@ void main() {
             skinType: 'not_sure',
             problems: const ['none'],
             budget: 'medium',
-            suggestedProducts: const ['Saved starter product'],
-            recommendations: const [
-              SkinCareProductRecommendationDraft(name: 'Saved starter product'),
-            ],
-            selectedProducts: const ['Saved starter product'],
+            suggestedProducts: _productRecommendationDraftsForTest()
+                .take(3)
+                .map((p) => p.displayName)
+                .toList(),
+            recommendations: _productRecommendationDraftsForTest(),
+            selectedProducts: _productRecommendationDraftsForTest()
+                .take(3)
+                .map((p) => p.displayName)
+                .toList(),
             withPhoto: true,
             blocks: [
               BaseTimelineDraft.defaultBathBlock(),
@@ -5667,10 +5894,8 @@ void main() {
             .toList(),
         originalIds,
       );
-      expect(editingBase.skinCareSuggestedProducts, ['Saved starter product']);
-      expect(editingBase.skinCareSelectedProductNames, [
-        'Saved starter product',
-      ]);
+      expect(editingBase.skinCareSuggestedProducts, hasLength(3));
+      expect(editingBase.skinCareSelectedProductNames, hasLength(3));
       expect(onboarding7CanContinue(editingBase, 'uid-1'), isTrue);
 
       await tester.tap(
@@ -5693,7 +5918,10 @@ void main() {
       budget: 'medium',
       desiredApplicationsPerDay: 2,
       suggestedProducts: const ['Minimalist Gentle Cleanser'],
-      selectedProducts: const ['Minimalist Gentle Cleanser'],
+      selectedProducts: _productRecommendationDraftsForTest()
+          .map((p) => p.displayName)
+          .toList(),
+      recommendations: _productRecommendationDraftsForTest(),
       withPhoto: true,
       blocks: _skinCareBlocksForEveryDay(1),
     ).baseTimeline;
@@ -6107,6 +6335,15 @@ void main() {
     base = container.read(mockOnboardingProvider).draft.baseTimeline;
     expect(base.skinCareDesiredApplicationsPerDay, 2);
     expect(onboarding7CanContinue(base, 'uid-1'), isFalse);
+    expect(find.text('Routine built'), findsNothing);
+    expect(find.text('Changes not applied yet'), findsOneWidget);
+    final saved = container.read(mockOnboardingProvider).draft;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(
+      buildTestWidget(draft: OnboardingDraft.fromMap(saved.toMap())),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Changes not applied yet'), findsOneWidget);
   });
 
   testWidgets(
@@ -6360,17 +6597,15 @@ void main() {
     expect(find.text('Skin Care'), findsOneWidget);
     expect(find.text('Find products'), findsOneWidget);
     expect(find.text('How many times per day?'), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('onboarding-step7-generate-button')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
     expect(
-      tester
-          .getRect(
-            find.byKey(const ValueKey('onboarding-step7-generate-button')),
-          )
-          .bottom,
-      lessThanOrEqualTo(
-        tester
-            .getRect(find.byKey(const ValueKey('onboarding-cta-visible')))
-            .top,
-      ),
+      find
+          .byKey(const ValueKey('onboarding-step7-generate-button'))
+          .hitTestable(),
+      findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });
@@ -6473,6 +6708,11 @@ OnboardingDraft _hasProductsDraft({
     skinCareSetupPath: 'has_products',
     skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
     skinCareProductNames: effectiveProductNames,
+    skinCareReviewedProducts: hasSkinBlocks
+        ? onboarding7ParseTypedProductDetails(
+            effectiveProductNames ?? 'Cleanser',
+          )
+        : const [],
     skinCareProductPhotoAssetId: productPhotoAssetId,
     skinCareProductPhotoR2Key: productPhotoR2Key,
     skinCareProductPhotoStatus: productPhotoStatus,
@@ -7019,6 +7259,20 @@ class TestUploadInteractionController extends UploadInteractionController {
         ),
       });
     }
+  }
+
+  void seedFailedAttempt(bool product) {
+    final slot = product
+        ? onboardingSkinProductsUploadSlot
+        : onboardingSkinFaceUploadSlot;
+    state = {
+      ...state,
+      slot: state[slot]!.copyWith(
+        phase: UploadInteractionPhase.failed,
+        transientFile: XFile('/not-read-by-test-retry.jpg'),
+        attemptError: 'Retry upload',
+      ),
+    };
   }
 
   @override

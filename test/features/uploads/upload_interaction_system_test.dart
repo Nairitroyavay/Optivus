@@ -118,7 +118,9 @@ void main() {
           assetId: 'asset-a',
           purpose: UploadedAssetPurpose.classTimetable,
         );
-        final repo = FailingDeleteUploadedAssetRepository([initialAsset]);
+        final repo = FailingSaveUploadedAssetRepository(
+          initialAssets: [initialAsset],
+        );
         final uploadClient = RecordingR2UploadClient();
         final authRepo = FakeAuthRepo(
           currentUser: const AuthUser(
@@ -1275,68 +1277,156 @@ void main() {
     );
 
     // -------------------------------------------------------------------------
-    // 24. Remove failure -> durable asset remains authoritative
+    // 24. Terminal metadata write failure keeps uploaded authority
     // -------------------------------------------------------------------------
-    test('24. Remove failure -> durable asset remains authoritative', () async {
-      final assetA = _validAsset(
-        uid: uidA,
-        assetId: 'asset-a',
-        purpose: UploadedAssetPurpose.classTimetable,
-      );
-      final repo = FailingDeleteUploadedAssetRepository([assetA]);
-      final uploadClient = RecordingR2UploadClient();
-      final authRepo = FakeAuthRepo(
-        currentUser: const AuthUser(
+    test(
+      '24. Terminal metadata write failure keeps uploaded authority',
+      () async {
+        final assetA = _validAsset(
           uid: uidA,
-          email: 'a@optivus.dev',
-          emailVerified: true,
-        ),
-      );
-
-      final config = UploadShellConfig(
-        title: 'Class timetable',
-        slots: const [
-          UploadSlotConfig(
-            key: 'class',
-            label: 'Class',
-            title: 'Class timetable',
-            icon: Icons.school_rounded,
-            purpose: UploadedAssetPurpose.classTimetable,
+          assetId: 'asset-a',
+          purpose: UploadedAssetPurpose.classTimetable,
+        );
+        final repo = FailingSaveUploadedAssetRepository(
+          initialAssets: [assetA],
+        );
+        final uploadClient = RecordingR2UploadClient();
+        final authRepo = FakeAuthRepo(
+          currentUser: const AuthUser(
+            uid: uidA,
+            email: 'a@optivus.dev',
+            emailVerified: true,
           ),
-        ],
-      );
+        );
 
-      final controller = UploadInteractionController(
-        shellConfig: config,
-        assetRepository: repo,
-        authRepository: authRepo,
-        imagePrepareService: FakeImagePrepareService(),
-        r2UploadClient: uploadClient,
-        permissionService: const DefaultUploadPermissionService(),
-      );
-
-      controller.syncWithDurableState(
-        RestoredUploadsState(
-          uid: uidA,
-          assetsByPurpose: {
-            UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
-              asset: assetA,
+        final config = UploadShellConfig(
+          title: 'Class timetable',
+          slots: const [
+            UploadSlotConfig(
+              key: 'class',
+              label: 'Class',
+              title: 'Class timetable',
+              icon: Icons.school_rounded,
+              purpose: UploadedAssetPurpose.classTimetable,
             ),
-          },
-        ),
-        uid: uidA,
-      );
+          ],
+        );
 
-      final success = await controller.remove('class', uid: uidA);
-      expect(success, isFalse);
-      expect(controller.state['class']?.durableAsset?.assetId, 'asset-a');
-      expect(controller.state['class']?.hasDurableAsset, isTrue);
-      expect(
-        uploadClient.deletedObjectKeys,
-        isEmpty,
-        reason: 'R2 must not be deleted before metadata is authoritative',
+        final controller = UploadInteractionController(
+          shellConfig: config,
+          assetRepository: repo,
+          authRepository: authRepo,
+          imagePrepareService: FakeImagePrepareService(),
+          r2UploadClient: uploadClient,
+          permissionService: const DefaultUploadPermissionService(),
+        );
+
+        controller.syncWithDurableState(
+          RestoredUploadsState(
+            uid: uidA,
+            assetsByPurpose: {
+              UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
+                asset: assetA,
+              ),
+            },
+          ),
+          uid: uidA,
+        );
+
+        final success = await controller.remove('class', uid: uidA);
+        expect(success, isFalse);
+        expect(controller.state['class']?.durableAsset?.assetId, 'asset-a');
+        expect(controller.state['class']?.hasDurableAsset, isTrue);
+        expect(
+          uploadClient.deletedObjectKeys,
+          isEmpty,
+          reason: 'R2 must not be deleted before metadata is authoritative',
+        );
+      },
+    );
+
+    for (final failBytes in [true, false]) {
+      test(
+        'terminalized remove ${failBytes ? "R2" : "final marker"} failure drops authority; restart retry',
+        () async {
+          final a = _validAsset(
+            uid: uidA,
+            assetId: 'A',
+            purpose: UploadedAssetPurpose.classTimetable,
+          );
+          final repo = CleanupFailingRepository([a])..failFinal = !failBytes;
+          final client = CleanupFailingR2Client()..failDelete = failBytes;
+          final auth = FakeAuthRepo(
+            currentUser: const AuthUser(uid: uidA, emailVerified: true),
+          );
+          UploadInteractionController make() => UploadInteractionController(
+            shellConfig: const UploadShellConfig(
+              title: 'Class',
+              slots: [
+                UploadSlotConfig(
+                  key: 'class',
+                  label: 'Class',
+                  title: 'Class',
+                  icon: Icons.school,
+                  purpose: UploadedAssetPurpose.classTimetable,
+                ),
+              ],
+            ),
+            assetRepository: repo,
+            authRepository: auth,
+            imagePrepareService: FakeImagePrepareService(),
+            r2UploadClient: client,
+            permissionService: const DefaultUploadPermissionService(),
+          );
+          final controller = make();
+          controller.syncWithDurableState(
+            RestoredUploadsState(
+              uid: uidA,
+              assetsByPurpose: {
+                UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
+                  asset: a,
+                ),
+              },
+            ),
+            uid: uidA,
+          );
+          expect(await controller.remove('class', uid: uidA), isFalse);
+          expect(controller.state['class']!.durableAsset, isNull);
+          expect(controller.state['class']!.cleanupPending, isTrue);
+          expect(
+            controller.state['class']!.attemptError,
+            contains('cleanup is pending'),
+          );
+          final pending = await repo.fetchAsset(uid: uidA, assetId: a.assetId);
+          expect(pending!.r2Key, a.r2Key);
+          expect(pending.status, UploadedAssetStatus.deleted);
+          expect(pending.errorMessage, 'private_cleanup_pending');
+          expect(
+            uploadedAssetIsDurablyUploadedForSlot(
+              asset: pending,
+              uid: uidA,
+              purpose: UploadedAssetPurpose.classTimetable,
+            ),
+            isFalse,
+          );
+          controller.dispose();
+          // Reconstruct solely from persistent repository data, with no current photo.
+          final restarted = make();
+          restarted.syncWithDurableState(
+            const RestoredUploadsState(uid: uidA),
+            uid: uidA,
+          );
+          repo.failFinal = false;
+          client.failDelete = false;
+          expect(await restarted.remove('class', uid: uidA), isTrue);
+          expect(restarted.state['class']!.durableAsset, isNull);
+          expect(restarted.state['class']!.cleanupPending, isFalse);
+          expect(client.deletedObjectKeys.last, a.r2Key);
+          expect(await repo.fetchAsset(uid: uidA, assetId: a.assetId), isNull);
+          restarted.dispose();
+        },
       );
-    });
+    }
 
     test(
       '24b. account switch during byte cleanup cannot clear the new owner slot',
@@ -1949,5 +2039,30 @@ class ControlledPreviewResolver implements UploadedAssetPreviewResolver {
     final future = resolverMap[asset.assetId];
     if (future != null) return future;
     return null;
+  }
+}
+
+class CleanupFailingRepository extends FakeUploadedAssetRepository {
+  CleanupFailingRepository(super.initial);
+  bool failFinal = false;
+  @override
+  Future<void> markDeleted({
+    required String uid,
+    required String assetId,
+  }) async {
+    if (failFinal) throw StateError('final marker failed');
+    await super.markDeleted(uid: uid, assetId: assetId);
+  }
+}
+
+class CleanupFailingR2Client extends RecordingR2UploadClient {
+  bool failDelete = false;
+  @override
+  Future<void> deleteUpload({
+    required String objectKey,
+    required String idToken,
+  }) async {
+    if (failDelete) throw StateError('R2 unavailable');
+    await super.deleteUpload(objectKey: objectKey, idToken: idToken);
   }
 }

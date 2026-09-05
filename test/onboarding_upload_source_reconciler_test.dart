@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/upload_source_identity.dart';
 import 'package:optivus/models/uploaded_asset.dart';
@@ -64,6 +65,259 @@ void main() {
           ),
       },
     );
+  }
+
+  for (final path in ['has_products', 'no_products']) {
+    final purpose = path == 'has_products'
+        ? UploadedAssetPurpose.skinProducts
+        : UploadedAssetPurpose.skinFace;
+    for (final first in [true, false]) {
+      test(
+        '$path ${first ? "first upload" : "replacement"} crash clears derived state and is idempotent',
+        () {
+          final a = createAsset(id: 'A', purpose: purpose);
+          final b = createAsset(id: 'B', purpose: purpose);
+          final product = path == 'has_products';
+          final draft = OnboardingDraft(
+            uid: uid,
+            currentStep: 14,
+            stepCompleted: List.filled(OnboardingDraft.stepCount, true),
+            baseTimeline: BaseTimelineDraft(
+              skinCareSetupPath: path,
+              skinCareProductNames: 'Editable text',
+              skinCareProductPhotoAssetId: !first && product ? a.assetId : null,
+              skinCareProductPhotoR2Key: !first && product ? a.r2Key : null,
+              skinCareFacePhotoAssetId: !first && !product ? a.assetId : null,
+              skinCareFacePhotoR2Key: !first && !product ? a.r2Key : null,
+              skinCareReviewedProducts: product
+                  ? const [
+                      SkinCareDetectedProduct(
+                        name: 'A',
+                        source: 'photo',
+                        keyIngredients: ['ingredient A'],
+                        possibleActives: ['active A'],
+                        warningIfAny: 'warning A',
+                      ),
+                    ]
+                  : const [],
+              skinCareSpecialCareNotes: const ['A notes'],
+              skinCareSuggestedProducts: const ['A'],
+              skinCareProductRecommendations: const [
+                SkinCareProductRecommendationDraft(name: 'A'),
+              ],
+              skinCareSelectedProductNames: const ['A'],
+              skinCareRoutineFingerprint: 'A',
+              skinCareRecommendationFingerprint: 'A',
+              blocks: const [
+                TimelineBlockDraft(
+                  id: 'A',
+                  section: 'skin_care',
+                  title: 'A',
+                  startMinute: 480,
+                  endMinute: 490,
+                  repeatDays: [1],
+                  blockType: TimelineBlockDraft.softBlockKey,
+                ),
+              ],
+            ),
+          );
+          final restored = createRestoredUploads(
+            skinProductsAsset: product ? b : null,
+            skinFaceAsset: product ? null : b,
+          );
+          final result = OnboardingUploadSourceReconciler.reconcile(
+            ownerUid: uid,
+            draft: draft,
+            restoredUploads: restored,
+          );
+          final base = result.reconciledDraft.baseTimeline;
+          expect(
+            product
+                ? base.skinCareProductPhotoAssetId
+                : base.skinCareFacePhotoAssetId,
+            'B',
+          );
+          expect(
+            product
+                ? base.skinCareProductPhotoR2Key
+                : base.skinCareFacePhotoR2Key,
+            b.r2Key,
+          );
+          expect(
+            product
+                ? base.skinCareProductPhotoCreatedAt
+                : base.skinCareFacePhotoCreatedAt,
+            b.createdAt,
+          );
+          expect(base.skinCareReviewedProducts, isEmpty);
+          expect(base.skinCareSpecialCareNotes, isEmpty);
+          expect(base.skinCareSuggestedProducts, isEmpty);
+          expect(base.skinCareRoutineFingerprint, isNull);
+          expect(base.blocks, isEmpty);
+          expect(base.skinCareProductNames, 'Editable text');
+          expect(result.reconciledDraft.stepCompleted[7], isFalse);
+          expect(result.reconciledDraft.stepDirty[7], isTrue);
+          if (!product) {
+            expect(base.skinCareProductRecommendations, isEmpty);
+            expect(base.skinCareSelectedProductNames, isEmpty);
+            expect(base.skinCareRecommendationFingerprint, isNull);
+          }
+          expect(
+            OnboardingUploadSourceReconciler.reconcile(
+              ownerUid: uid,
+              draft: result.reconciledDraft,
+              restoredUploads: restored,
+            ).changed,
+            isFalse,
+          );
+        },
+      );
+    }
+    for (final modern in [false, true]) {
+      test('$path matching legacy survives; modern priority=$modern', () {
+        final legacy = createAsset(
+          id: 'legacy',
+          purpose: UploadedAssetPurpose.skinCare,
+        );
+        final b = createAsset(id: 'B', purpose: purpose);
+        final product = path == 'has_products';
+        final draft = OnboardingDraft(
+          uid: uid,
+          baseTimeline: BaseTimelineDraft(
+            skinCareSetupPath: path,
+            skinCareProductPhotoAssetId: product ? legacy.assetId : null,
+            skinCareProductPhotoR2Key: product ? legacy.r2Key : null,
+            skinCareFacePhotoAssetId: product ? null : legacy.assetId,
+            skinCareFacePhotoR2Key: product ? null : legacy.r2Key,
+          ),
+        );
+        final restored = RestoredUploadsState(
+          uid: uid,
+          assetsByPurpose: {
+            UploadedAssetPurpose.skinCare: RestoredUploadedAsset(asset: legacy),
+            if (modern) purpose: RestoredUploadedAsset(asset: b),
+          },
+        );
+        final result = OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: uid,
+          draft: draft,
+          restoredUploads: restored,
+        );
+        expect(result.changed, modern);
+        final base = result.reconciledDraft.baseTimeline;
+        expect(
+          product
+              ? base.skinCareProductPhotoAssetId
+              : base.skinCareFacePhotoAssetId,
+          modern ? 'B' : 'legacy',
+        );
+        expect(
+          product
+              ? base.skinCareFacePhotoAssetId
+              : base.skinCareProductPhotoAssetId,
+          isNull,
+        );
+        expect(
+          OnboardingUploadSourceReconciler.reconcile(
+            ownerUid: uid,
+            draft: result.reconciledDraft,
+            restoredUploads: restored,
+          ).changed,
+          isFalse,
+        );
+      });
+    }
+    test('$path matching modern source is unchanged', () {
+      final a = createAsset(id: 'A', purpose: purpose);
+      final product = path == 'has_products';
+      final draft = OnboardingDraft(
+        uid: uid,
+        baseTimeline: BaseTimelineDraft(
+          skinCareSetupPath: path,
+          skinCareProductPhotoAssetId: product ? a.assetId : null,
+          skinCareProductPhotoR2Key: product ? a.r2Key : null,
+          skinCareFacePhotoAssetId: product ? null : a.assetId,
+          skinCareFacePhotoR2Key: product ? null : a.r2Key,
+        ),
+      );
+      expect(
+        OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: uid,
+          draft: draft,
+          restoredUploads: RestoredUploadsState(
+            uid: uid,
+            assetsByPurpose: {purpose: RestoredUploadedAsset(asset: a)},
+          ),
+        ).changed,
+        isFalse,
+      );
+    });
+  }
+  for (final corruption in ['owner', 'key', 'id']) {
+    test('legacy wrong $corruption is rejected', () {
+      final a = createAsset(id: 'A', purpose: UploadedAssetPurpose.skinCare);
+      final bad = a.copyWith(
+        ownerUid: corruption == 'owner' ? 'other' : uid,
+        r2Key: corruption == 'key'
+            ? 'users/$uid/onboarding/skin_care/wrong.jpg'
+            : a.r2Key,
+        assetId: corruption == 'id' ? 'wrong' : a.assetId,
+      );
+      final result = OnboardingUploadSourceReconciler.reconcile(
+        ownerUid: uid,
+        draft: OnboardingDraft(
+          uid: uid,
+          baseTimeline: BaseTimelineDraft(
+            skinCareSetupPath: 'has_products',
+            skinCareProductPhotoAssetId: a.assetId,
+            skinCareProductPhotoR2Key: a.r2Key,
+          ),
+        ),
+        restoredUploads: RestoredUploadsState(
+          uid: uid,
+          assetsByPurpose: {
+            UploadedAssetPurpose.skinCare: RestoredUploadedAsset(asset: bad),
+          },
+        ),
+      );
+      expect(
+        result.reconciledDraft.baseTimeline.skinCareProductPhotoAssetId,
+        isNull,
+      );
+    });
+  }
+  for (final status in [
+    null,
+    UploadedAssetStatus.deleted,
+    UploadedAssetStatus.pending,
+    UploadedAssetStatus.failed,
+  ]) {
+    test('typed-only routine ignores non-current upload $status', () {
+      final a = createAsset(
+        id: 'A',
+        purpose: UploadedAssetPurpose.skinProducts,
+      );
+      final draft = OnboardingDraft(
+        uid: uid,
+        baseTimeline: const BaseTimelineDraft(
+          skinCareSetupPath: 'has_products',
+          skinCareProductNames: 'Typed cleanser',
+          skinCareRoutineFingerprint: 'typed',
+        ),
+      );
+      expect(
+        OnboardingUploadSourceReconciler.reconcile(
+          ownerUid: uid,
+          draft: draft,
+          restoredUploads: createRestoredUploads(
+            skinProductsAsset: status == null
+                ? null
+                : a.copyWith(status: status),
+          ),
+        ).changed,
+        isFalse,
+      );
+    });
   }
 
   group('OnboardingUploadSourceReconciler - Pure Unit Tests', () {

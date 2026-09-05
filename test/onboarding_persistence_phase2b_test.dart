@@ -7,6 +7,7 @@ import 'package:optivus/models/notification_preferences.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_item.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/models/user_profile.dart';
 import 'package:optivus/repositories/app_preferences_repository.dart';
 import 'package:optivus/repositories/auth_repository.dart';
@@ -421,7 +422,11 @@ OnboardingDraft _draftWithUploadReferences() {
     skinCareSkinType: 'oily',
     skinCareBudget: 'low',
     skinCareProblems: const ['acne'],
-    skinCareSelectedProductNames: const ['cleanser'],
+    skinCareProductNames: 'Cleanser\nMoisturizer',
+    skinCareReviewedProducts: const [
+      SkinCareDetectedProduct(name: 'Cleanser', category: 'cleanser'),
+      SkinCareDetectedProduct(name: 'Moisturizer', category: 'moisturizer'),
+    ],
     skinCareDesiredApplicationsPerDay: 2,
     blocks: const [
       TimelineBlockDraft(

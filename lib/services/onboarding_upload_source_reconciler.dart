@@ -360,12 +360,42 @@ class OnboardingUploadSourceReconciler {
     // STEP 7 RECONCILIATION: Skin Care Setup
     // -------------------------------------------------------------------------
     var step7Affected = false;
-    final currentSkinProductsAsset = getValidDurableAsset(
+    var currentSkinProductsAsset = getValidDurableAsset(
       UploadedAssetPurpose.skinProducts,
     );
-    final currentSkinFaceAsset = getValidDurableAsset(
+    var currentSkinFaceAsset = getValidDurableAsset(
       UploadedAssetPurpose.skinFace,
     );
+
+    // Legacy objects only satisfy an established, exactly matching active slot.
+    // Modern generations always win; a legacy object is never adopted anew.
+    final legacy = restoredUploads
+        .forPurpose(UploadedAssetPurpose.skinCare)
+        ?.asset;
+    if (legacy != null &&
+        legacySkinCareUploadHasOwnedExactIdentity(
+          assetId: legacy.assetId,
+          ownerUid: legacy.ownerUid,
+          r2Key: legacy.r2Key,
+          status: legacy.status,
+          uid: ownerUid,
+        )) {
+      if (currentBaseTimeline.skinCareSetupPath == 'has_products' &&
+          uploadedSourceIdentityMatches(
+            assetId: currentBaseTimeline.skinCareProductPhotoAssetId,
+            r2Key: currentBaseTimeline.skinCareProductPhotoR2Key,
+            asset: legacy,
+          )) {
+        currentSkinProductsAsset ??= legacy;
+      } else if (currentBaseTimeline.skinCareSetupPath == 'no_products' &&
+          uploadedSourceIdentityMatches(
+            assetId: currentBaseTimeline.skinCareFacePhotoAssetId,
+            r2Key: currentBaseTimeline.skinCareFacePhotoR2Key,
+            asset: legacy,
+          )) {
+        currentSkinFaceAsset ??= legacy;
+      }
+    }
 
     if (currentBaseTimeline.skinCareSetupPath == 'has_products') {
       final productAssetId = currentBaseTimeline.skinCareProductPhotoAssetId;
@@ -374,7 +404,7 @@ class OnboardingUploadSourceReconciler {
           productAssetId?.trim().isNotEmpty == true ||
           productR2Key?.trim().isNotEmpty == true;
 
-      if (hasPhotoUsed) {
+      if (hasPhotoUsed || currentSkinProductsAsset != null) {
         final matchesRestored =
             currentSkinProductsAsset != null &&
             uploadedSourceIdentityMatches(
@@ -394,6 +424,9 @@ class OnboardingUploadSourceReconciler {
             skinCareProductPhotoCreatedAt: currentSkinProductsAsset?.createdAt,
             skinCareProductPhotoUpdatedAt: currentSkinProductsAsset?.updatedAt,
             clearSkinCareProductPhoto: currentSkinProductsAsset == null,
+            clearSkinCareReviewedProducts: true,
+            clearSkinCareSuggestedProducts: true,
+            skinCareSpecialCareNotes: const [],
             clearSkinCareRoutineFingerprint: true,
           );
         }
@@ -405,7 +438,7 @@ class OnboardingUploadSourceReconciler {
           faceAssetId?.trim().isNotEmpty == true ||
           faceR2Key?.trim().isNotEmpty == true;
 
-      if (hasFacePhotoUsed) {
+      if (hasFacePhotoUsed || currentSkinFaceAsset != null) {
         final matchesRestored =
             currentSkinFaceAsset != null &&
             uploadedSourceIdentityMatches(
@@ -424,6 +457,8 @@ class OnboardingUploadSourceReconciler {
             skinCareFacePhotoCreatedAt: currentSkinFaceAsset?.createdAt,
             skinCareFacePhotoUpdatedAt: currentSkinFaceAsset?.updatedAt,
             clearSkinCareFacePhoto: currentSkinFaceAsset == null,
+            clearSkinCareSuggestedProducts: true,
+            skinCareSpecialCareNotes: const [],
             clearSkinCareRecommendationFingerprint: true,
             clearSkinCareRoutineFingerprint: true,
             clearSkinCareProductRecommendations: true,

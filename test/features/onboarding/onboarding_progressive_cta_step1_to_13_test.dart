@@ -5,6 +5,7 @@ import 'package:optivus/features/onboarding/onboarding_flow.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
 import 'package:optivus/features/recovery/models/onboarding_recovery_models.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/repositories/auth_repository.dart';
 import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/state/app_state.dart';
@@ -382,7 +383,11 @@ void main() {
       // Has products mode with confirmed skin_care routine -> complete
       final skinCareBase = BaseTimelineDraft(
         skinCareSetupPath: 'has_products',
-        skinCareProductNames: 'some product',
+        skinCareProductNames: 'Cleanser\nMoisturizer',
+        skinCareReviewedProducts: const [
+          SkinCareDetectedProduct(name: 'Cleanser', category: 'cleanser'),
+          SkinCareDetectedProduct(name: 'Moisturizer', category: 'moisturizer'),
+        ],
         skinCareDesiredApplicationsPerDay: 2,
         blocks: [
           TimelineBlockDraft(

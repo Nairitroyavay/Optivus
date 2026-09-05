@@ -84,6 +84,7 @@ class UploadSlotRuntimeState {
   final PreparedUploadImage? preparedImage;
   final String? attemptError;
   final int operationGeneration;
+  final bool cleanupPending;
 
   const UploadSlotRuntimeState({
     required this.slotKey,
@@ -97,6 +98,7 @@ class UploadSlotRuntimeState {
     this.preparedImage,
     this.attemptError,
     this.operationGeneration = 0,
+    this.cleanupPending = false,
   });
 
   bool get hasDurableAsset => durableAsset != null;
@@ -136,6 +138,7 @@ class UploadSlotRuntimeState {
     PreparedUploadImage? preparedImage,
     String? attemptError,
     int? operationGeneration,
+    bool? cleanupPending,
     bool clearDurableAsset = false,
     bool clearTransientFile = false,
     bool clearPreparedImage = false,
@@ -143,6 +146,7 @@ class UploadSlotRuntimeState {
     bool clearRemotePreviewUri = false,
   }) {
     return UploadSlotRuntimeState(
+      cleanupPending: cleanupPending ?? this.cleanupPending,
       slotKey: slotKey ?? this.slotKey,
       purpose: purpose ?? this.purpose,
       isHydrating: isHydrating ?? this.isHydrating,

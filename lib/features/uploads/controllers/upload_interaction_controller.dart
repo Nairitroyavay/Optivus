@@ -342,6 +342,10 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     final current = state[slotKey];
     if (current == null) return null;
     if (_slotLocks[slotKey] == true || current.isBusy) return null;
+    if (current.cleanupPending) {
+      await remove(slotKey, uid: uid);
+      return null;
+    }
     if (current.transientFile != null) {
       return uploadPreselectedFile(
         slotKey,
@@ -355,28 +359,19 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
 
   Future<bool> remove(String slotKey, {required String uid}) async {
     final current = state[slotKey];
-    if (current == null) return false;
-    UploadedAsset? removalAsset = current.durableAsset;
-    if (removalAsset == null) {
-      final pending = await _assetRepository.fetchRecentAssets(
-        uid: uid, purpose: current.purpose, limit: 100,
-      );
-      removalAsset = pending.where((asset) =>
-        asset.status == UploadedAssetStatus.deleted &&
-        asset.errorMessage == 'private_cleanup_pending').firstOrNull;
-      if (removalAsset == null) {
-        dismissAttemptError(slotKey);
-        return true;
-      }
+    if (current == null) {
+      return false;
     }
-
-    // Invariant 25: Rapid remove lock
-    if (_slotLocks[slotKey] == true || current.isBusy) return false;
+    if (_slotLocks[slotKey] == true ||
+        current.isBusy ||
+        _activeUid != uid ||
+        _authRepository.currentUser?.uid != uid) {
+      return false;
+    }
     _slotLocks[slotKey] = true;
-
     final sessionGeneration = _sessionGeneration;
     final slotGeneration = _nextSlotGeneration(slotKey);
-    final asset = removalAsset;
+    var terminalized = false;
 
     _setSlotState(
       slotKey,
@@ -387,14 +382,50 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
     );
 
     try {
+      UploadedAsset? asset = current.durableAsset;
+      if (asset == null) {
+        final pending = await _assetRepository.fetchRecentAssets(
+          uid: uid,
+          purpose: current.purpose,
+          limit: 100,
+        );
+        if (!_isCurrentOperation(
+          slotKey,
+          uid,
+          sessionGeneration,
+          slotGeneration,
+        )) {
+          return false;
+        }
+        asset = pending
+            .where(
+              (asset) =>
+                  asset.ownerUid == uid &&
+                  asset.purpose == current.purpose &&
+                  asset.status == UploadedAssetStatus.deleted &&
+                  asset.errorMessage == 'private_cleanup_pending',
+            )
+            .firstOrNull;
+        if (asset == null) {
+          _setSlotState(
+            slotKey,
+            (s) => s.copyWith(phase: UploadInteractionPhase.empty),
+          );
+          return true;
+        }
+      }
+      if (asset.ownerUid != uid) throw StateError('Upload owner changed');
+      terminalized = asset.status == UploadedAssetStatus.deleted;
       // Durable metadata is terminalized first. Firestore can therefore never
       // point at an object that this client already deleted when metadata
       // mutation fails.
-      await _assetRepository.saveAsset(asset.copyWith(
-        status: UploadedAssetStatus.deleted,
-        updatedAt: DateTime.now(),
-        errorMessage: 'private_cleanup_pending',
-      ));
+      await _assetRepository.saveAsset(
+        asset.copyWith(
+          status: UploadedAssetStatus.deleted,
+          updatedAt: DateTime.now(),
+          errorMessage: 'private_cleanup_pending',
+        ),
+      );
 
       if (!_isCurrentOperation(
         slotKey,
@@ -405,18 +436,47 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         return false;
       }
 
+      terminalized = true;
+      _setSlotState(
+        slotKey,
+        (s) => s.copyWith(
+          cleanupPending: true,
+          clearDurableAsset: true,
+          clearTransientFile: true,
+          clearPreparedImage: true,
+          clearRemotePreviewUri: true,
+          previewStatus: UploadedAssetPreviewStatus.unavailable,
+        ),
+      );
       _restoredController?.removePurpose(uid: uid, purpose: current.purpose);
 
       // Keep a durable exact key until explicit privacy cleanup succeeds.
       if (asset.r2Key.trim().isNotEmpty) {
         final idToken = await _authRepository.currentIdToken();
-        if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) return false;
+        if (!_isCurrentOperation(
+          slotKey,
+          uid,
+          sessionGeneration,
+          slotGeneration,
+        )) {
+          return false;
+        }
         if (idToken == null || idToken.trim().isEmpty) {
           throw StateError('Private cleanup requires authentication');
         }
-        await _r2UploadClient.deleteUpload(objectKey: asset.r2Key, idToken: idToken);
+        await _r2UploadClient.deleteUpload(
+          objectKey: asset.r2Key,
+          idToken: idToken,
+        );
       }
-      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) return false;
+      if (!_isCurrentOperation(
+        slotKey,
+        uid,
+        sessionGeneration,
+        slotGeneration,
+      )) {
+        return false;
+      }
       await _assetRepository.markDeleted(uid: uid, assetId: asset.assetId);
 
       if (!_isCurrentOperation(
@@ -432,6 +492,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
         slotKey,
         (s) => s.copyWith(
           phase: UploadInteractionPhase.empty,
+          cleanupPending: false,
           clearDurableAsset: true,
           clearTransientFile: true,
           clearPreparedImage: true,
@@ -450,14 +511,21 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       )) {
         return false;
       }
-      // Invariant 24: Failed remove keeps durable asset authoritative
+      // Only a failure before terminalization preserves uploaded authority.
       _setSlotState(
         slotKey,
         (s) => s.copyWith(
-          phase: s.previewStatus == UploadedAssetPreviewStatus.available
+          phase: terminalized
+              ? UploadInteractionPhase.empty
+              : s.previewStatus == UploadedAssetPreviewStatus.available
               ? UploadInteractionPhase.uploaded
               : UploadInteractionPhase.restored,
-          attemptError: "Couldn't remove the photo. Try again.",
+          cleanupPending: terminalized,
+          clearDurableAsset: terminalized,
+          clearRemotePreviewUri: terminalized,
+          attemptError: terminalized
+              ? 'Photo removed. Private cleanup is pending. Try removing again.'
+              : "Couldn't remove the photo. Try again.",
         ),
       );
       return false;
