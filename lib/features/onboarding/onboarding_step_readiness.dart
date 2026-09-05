@@ -32,10 +32,16 @@ class OnboardingStepRuntimeState {
   /// remains authoritative (for example, on a clean durable resume).
   final bool? classJobReviewReady;
 
+  /// Step 5 requires the review stage (stage 2) to be active with confirmed
+  /// meal routine blocks before Next Step is revealed. Null means the draft
+  /// validation remains authoritative.
+  final bool? eatingReviewReady;
+
   const OnboardingStepRuntimeState({
     this.asyncIdle = true,
     this.saveIdle = true,
     this.classJobReviewReady,
+    this.eatingReviewReady,
   });
 }
 
@@ -208,6 +214,15 @@ OnboardingStepReadiness evaluateOnboardingStepReadiness({
     }
   }
 
+  if (step == 5 && effectiveRuntime.eatingReviewReady != null) {
+    validationPassed = effectiveRuntime.eatingReviewReady!;
+    if (!validationPassed) {
+      validationMessage =
+          draftValidationMessage ??
+          'Generate and review your weekly meal routine.';
+    }
+  }
+
   final reviewCompleted = switch (step) {
     4 || 5 || 7 => validationPassed,
     _ => true,
@@ -231,6 +246,9 @@ bool shouldShowOnboardingPrimaryCta({
   required bool revealedDuringInteraction,
 }) {
   if (step < 1 || step > 13) return true;
+  if (step == 4 || step == 5) {
+    return readiness.canRevealPrimary;
+  }
   return readiness.canRevealPrimary || revealedDuringInteraction;
 }
 

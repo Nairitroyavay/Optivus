@@ -702,9 +702,40 @@ String onboarding4SourceFailureMessage({
 }
 
 // ---------------------------------------------------------------------------
-//  OnboardingStep4Unified — the single-screen Classes & Job widget
-// ---------------------------------------------------------------------------
-// Removed unused _OverlapRenderMode
+class _Step4Header extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _Step4Header({required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 26,
+            height: 1.05,
+            fontWeight: FontWeight.w900,
+            color: OptivusColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.35,
+            fontWeight: FontWeight.w700,
+            color: OptivusColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class OnboardingStep4Unified extends ConsumerStatefulWidget {
   const OnboardingStep4Unified({super.key});
@@ -774,6 +805,51 @@ class _OnboardingStep4UnifiedState
       _uploadTargets.every((target) => _photoForSource(target.source) != null);
 
   bool get _canTapGenerate => _hasAllPhotos && !_isUploading && !_isGenerating;
+
+  String get _step4HeaderTitle {
+    if (_needsBothPhotos) return 'Classes & Work';
+    if (_classesRequired) return 'Classes';
+    if (_role == LifeRoleDraft.businessKey) return 'Work & Business';
+    return 'Work';
+  }
+
+  String get _step4HeaderSubtitle {
+    return 'Add your schedule and let AI build your week.';
+  }
+
+  bool get _hasValidReviewBlocks {
+    final classBlocks = ref.read(onboardingClassTimelineProvider);
+    final workBlocks = ref.read(onboardingWorkTimelineProvider);
+    final classesReady = classBlocks.isNotEmpty;
+    final workReady = workBlocks.isNotEmpty;
+    if (_classesRequired && _workRequired) {
+      return classesReady || workReady;
+    }
+    if (_classesRequired) return classesReady;
+    if (_workRequired) return workReady;
+    return false;
+  }
+
+  Widget _buildViewCurrentScheduleButton() {
+    return Center(
+      child: TextButton.icon(
+        key: const ValueKey('onboarding-step4-view-current-schedule'),
+        onPressed: () {
+          ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+            return draft.copyWith(
+              baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 1),
+            );
+          });
+        },
+        icon: Icon(Icons.calendar_today_rounded, size: 16, color: _accent),
+        label: const Text(
+          'View current schedule',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+        ),
+        style: TextButton.styleFrom(foregroundColor: _accent),
+      ),
+    );
+  }
 
   // ---- Upload text config ----
   String get _uploadTitle {
@@ -934,6 +1010,28 @@ class _OnboardingStep4UnifiedState
       }
     }
     _restorePhotosFromDurableState();
+    final hasConfirmed = _hasConfirmedScheduleForRole(base);
+    final hasLocalBlocks = _hasValidReviewBlocks;
+    final isGenerating =
+        ref.read(routineImportAiControllerProvider).isExtracting ||
+        _lifecycle.state.isActive;
+    if (base.classJobSetupStep > 0 &&
+        !hasConfirmed &&
+        !hasLocalBlocks &&
+        !isGenerating) {
+      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        return draft.copyWith(
+          baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 0),
+        );
+      });
+    } else if (base.classJobSetupStep == 0 &&
+        (hasConfirmed || hasLocalBlocks)) {
+      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        return draft.copyWith(
+          baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 1),
+        );
+      });
+    }
   }
 
   void _restorePhotosFromDurableState() {
@@ -1778,6 +1876,11 @@ class _OnboardingStep4UnifiedState
     }
 
     ref.read(mockOnboardingProvider.notifier).clearValidation();
+    ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+      return draft.copyWith(
+        baseTimeline: draft.baseTimeline.copyWith(classJobSetupStep: 1),
+      );
+    });
     ref
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingClassJobStepIndex, true);
@@ -2509,55 +2612,147 @@ class _OnboardingStep4UnifiedState
       draft.baseTimeline,
     );
     _clearIrrelevantProvidersForRole();
+    if (draft.baseTimeline.classJobSetupStep == 0 &&
+        _lifecycle.state.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _lifecycle.state.isActive) {
+          _lifecycle.cancel();
+        }
+      });
+    }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ── Upload card ──
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-          child: hasConfirmedSchedule
-              ? _buildSavedScheduleCard()
-              : _buildUploadCard(),
+    final isReviewMode =
+        draft.baseTimeline.classJobSetupStep > 0 ||
+        (!_didInitFromDraft && (hasBlocks || hasConfirmedSchedule));
+
+    if (!isReviewMode) {
+      return KeyedSubtree(
+        key: const ValueKey('onboarding-step4-setup-screen'),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Step4Header(
+                title: _step4HeaderTitle,
+                subtitle: _step4HeaderSubtitle,
+              ),
+              const SizedBox(height: 18),
+              _buildUploadCard(),
+              if (_hasValidReviewBlocks) ...[
+                const SizedBox(height: 14),
+                _buildViewCurrentScheduleButton(),
+              ],
+            ],
+          ),
         ),
+      );
+    }
 
-        const SizedBox(height: 10),
+    final routineAi = ref.watch(routineImportAiControllerProvider);
+    final isAiActive = _isGenerating || routineAi.isExtracting;
+    final effectiveAiState = _isGenerating
+        ? _lifecycle.state
+        : routineAi.lifecycle;
 
-        // ── Schedule header ──
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            'Set Your Weekly Schedule',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              color: _accent,
-              letterSpacing: 1.5,
+    final showAiThinking =
+        isAiActive ||
+        (effectiveAiState.phase == AiGenerationPhase.error && !hasBlocks);
+
+    Widget reviewBody;
+    if (showAiThinking) {
+      reviewBody = SingleChildScrollView(
+        key: const ValueKey('onboarding-step4-ai-screen'),
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Step4Header(
+              title: _step4HeaderTitle,
+              subtitle: 'Creating your weekly schedule with AI.',
+            ),
+            const SizedBox(height: 18),
+            AiThinkingCard(
+              state: effectiveAiState,
+              title: _aiLoadingTitle,
+              detail: _aiLoadingDetail,
+              accent: _accent,
+              onRetry: _runGeneration,
+            ),
+          ],
+        ),
+      );
+    } else {
+      reviewBody = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
+            child: _Step4Header(
+              title: _step4HeaderTitle,
+              subtitle: 'Review your weekly schedule.',
             ),
           ),
-        ),
-
-        const SizedBox(height: 4),
-
-        // ── Day chips ──
-        _buildDayChips(),
-
-        // ── Timeline ──
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final height =
-                  constraints.maxHeight.isFinite && constraints.maxHeight > 0
-                  ? constraints.maxHeight
-                  : _kMinTimelineAreaHeight;
-              return SizedBox(
-                height: height,
-                child: _buildTimelineArea(allBlocks, hasBlocks),
-              );
-            },
+          if (hasConfirmedSchedule)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: _buildSavedScheduleCard(),
+            )
+          else if (_generationError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: OptivusColors.warning,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _generationError!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: OptivusColors.warning,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _runGeneration,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 6),
+          _buildDayChips(),
+          const SizedBox(height: 4),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final height =
+                    constraints.maxHeight.isFinite && constraints.maxHeight > 0
+                    ? constraints.maxHeight
+                    : _kMinTimelineAreaHeight;
+                return SizedBox(
+                  height: height,
+                  child: _buildTimelineArea(allBlocks, hasBlocks),
+                );
+              },
+            ),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    return KeyedSubtree(
+      key: const ValueKey('onboarding-step4-review-screen'),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: reviewBody,
+      ),
     );
   }
 
@@ -3065,21 +3260,24 @@ class _OnboardingStep4UnifiedState
                 width: 1.3,
               ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(target.icon, color: _accent, size: 18),
-                const SizedBox(height: 1),
-                Text(
-                  'Upload',
-                  style: TextStyle(
-                    fontSize: 8,
-                    fontWeight: FontWeight.w800,
-                    color: _accent,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(target.icon, color: _accent, size: 18),
+                  const SizedBox(height: 1),
+                  Text(
+                    'Upload',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      color: _accent,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

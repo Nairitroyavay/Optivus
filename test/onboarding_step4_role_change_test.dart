@@ -49,8 +49,8 @@ void main() {
       // Verify it shows Math
       expect(find.text('Math'), findsOneWidget);
 
-      // Verify it asks for class timetable photo
-      expect(find.text('Upload your class timetable'), findsOneWidget);
+      // Verify it shows Math in review mode (upload card is hidden)
+      expect(find.text('Upload your class timetable'), findsNothing);
 
       // 2. Change role to Working
       draft = draft.copyWith(

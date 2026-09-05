@@ -92,11 +92,7 @@ Widget _wrapStep(Widget stepWidget, {OnboardingDraft? draft}) {
         (ref) => ValueNotifier<OnboardingCompletionJob?>(null),
       ),
     ],
-    child: MaterialApp(
-      home: Scaffold(
-        body: stepWidget,
-      ),
-    ),
+    child: MaterialApp(home: Scaffold(body: stepWidget)),
   );
 }
 
@@ -164,26 +160,27 @@ void main() {
   });
 
   group('A. Progress Indicator remains above Header', () {
-    testWidgets('LiquidGlassOnboardingIndicator sits vertically above OnboardingSectionTitle', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_wrapFlow(currentStep: 2));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+    testWidgets(
+      'LiquidGlassOnboardingIndicator sits vertically above OnboardingSectionTitle',
+      (tester) async {
+        await tester.pumpWidget(_wrapFlow(currentStep: 2));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      final indicatorFinder = find.byType(LiquidGlassOnboardingIndicator);
-      final titleFinder = find.byType(OnboardingSectionTitle);
+        final indicatorFinder = find.byType(LiquidGlassOnboardingIndicator);
+        final titleFinder = find.byType(OnboardingSectionTitle);
 
-      expect(indicatorFinder, findsOneWidget);
-      expect(titleFinder, findsOneWidget);
+        expect(indicatorFinder, findsOneWidget);
+        expect(titleFinder, findsOneWidget);
 
-      final indicatorBottom = tester.getBottomLeft(indicatorFinder).dy;
-      final titleTop = tester.getTopLeft(titleFinder).dy;
+        final indicatorBottom = tester.getBottomLeft(indicatorFinder).dy;
+        final titleTop = tester.getTopLeft(titleFinder).dy;
 
-      expect(titleTop, greaterThan(indicatorBottom));
-      // Top spacing between indicator bar and title is compact and normalized
-      expect(titleTop - indicatorBottom, greaterThan(0));
-    });
+        expect(titleTop, greaterThan(indicatorBottom));
+        // Top spacing between indicator bar and title is compact and normalized
+        expect(titleTop - indicatorBottom, greaterThan(0));
+      },
+    );
   });
 
   group('B. Title + Subtitle Move as One Group', () {
@@ -196,7 +193,8 @@ void main() {
             padding: OptivusSpacing.onboardingHeaderPadding,
             child: OnboardingSectionTitle(
               title: 'Currently Who Are You?',
-              subtitle: 'This unlocks the right class, work, and lifestyle setup blocks.',
+              subtitle:
+                  'This unlocks the right class, work, and lifestyle setup blocks.',
             ),
           ),
         ),
@@ -258,32 +256,35 @@ void main() {
         // Content ScrollView padding is OptivusSpacing.onboardingContentPadding
         final scrollViewFinder = find.byType(OnboardingScrollView);
         expect(scrollViewFinder, findsOneWidget);
-        final scrollView = tester.widget<OnboardingScrollView>(scrollViewFinder);
+        final scrollView = tester.widget<OnboardingScrollView>(
+          scrollViewFinder,
+        );
         expect(scrollView.padding, OptivusSpacing.onboardingContentPadding);
       });
     }
 
-    testWidgets('Step 2 subtitle-to-content gap provides at least 26px breathing room', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_wrapStep(const OnboardingStep2()));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+    testWidgets(
+      'Step 2 subtitle-to-content gap provides at least 26px breathing room',
+      (tester) async {
+        await tester.pumpWidget(_wrapStep(const OnboardingStep2()));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      final subtitleFinder = find.text(
-        'This unlocks the right class, work, and lifestyle setup blocks.',
-      );
-      final firstCardFinder = find.text('Student / School / College');
+        final subtitleFinder = find.text(
+          'This unlocks the right class, work, and lifestyle setup blocks.',
+        );
+        final firstCardFinder = find.text('Student / School / College');
 
-      expect(subtitleFinder, findsOneWidget);
-      expect(firstCardFinder, findsOneWidget);
+        expect(subtitleFinder, findsOneWidget);
+        expect(firstCardFinder, findsOneWidget);
 
-      final subtitleBottom = tester.getBottomLeft(subtitleFinder).dy;
-      final firstCardTop = tester.getTopLeft(firstCardFinder).dy;
+        final subtitleBottom = tester.getBottomLeft(subtitleFinder).dy;
+        final firstCardTop = tester.getTopLeft(firstCardFinder).dy;
 
-      // The gap between subtitle and first content widget includes the 26px padding
-      expect(firstCardTop - subtitleBottom, greaterThanOrEqualTo(26.0));
-    });
+        // The gap between subtitle and first content widget includes the 26px padding
+        expect(firstCardTop - subtitleBottom, greaterThanOrEqualTo(26.0));
+      },
+    );
   });
 
   group('E. Multi-Line Subtitles Do Not Overlap First Content Widget', () {
@@ -337,19 +338,22 @@ void main() {
   });
 
   group('F. Text Scale 1.6 Does Not Overflow', () {
-    testWidgets('Step 2 with text scale 1.6 renders without layout exceptions or overflow', (
-      tester,
-    ) async {
-      tester.view.platformDispatcher.textScaleFactorTestValue = 1.6;
-      addTearDown(() => tester.view.platformDispatcher.clearTextScaleFactorTestValue());
+    testWidgets(
+      'Step 2 with text scale 1.6 renders without layout exceptions or overflow',
+      (tester) async {
+        tester.view.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(
+          () => tester.view.platformDispatcher.clearTextScaleFactorTestValue(),
+        );
 
-      await tester.pumpWidget(_wrapFlow(currentStep: 2));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.pumpWidget(_wrapFlow(currentStep: 2));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(tester.takeException(), isNull);
-      expect(find.byType(OnboardingSectionTitle), findsOneWidget);
-    });
+        expect(tester.takeException(), isNull);
+        expect(find.byType(OnboardingSectionTitle), findsOneWidget);
+      },
+    );
   });
 
   group('G-J. Responsive Viewport Verifications', () {
@@ -361,9 +365,7 @@ void main() {
     };
 
     for (final entry in viewports.entries) {
-      testWidgets('Step 2 renders correctly on ${entry.key}', (
-        tester,
-      ) async {
+      testWidgets('Step 2 renders correctly on ${entry.key}', (tester) async {
         tester.view.physicalSize = entry.value;
         tester.view.devicePixelRatio = 1.0;
         addTearDown(() {
@@ -409,7 +411,9 @@ void main() {
       expect(find.byType(OnboardingSectionTitle), findsNothing);
     });
 
-    testWidgets('Step 1 (Patience) maintains full pledge card layout', (tester) async {
+    testWidgets('Step 1 (Patience) maintains full pledge card layout', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrapStep(const OnboardingStep1()));
       await tester.pumpAndSettle();
 
@@ -424,11 +428,13 @@ void main() {
       const studentDraft = OnboardingDraft(
         lifeRole: LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
       );
-      await tester.pumpWidget(_wrapStep(const OnboardingStep4(), draft: studentDraft));
+      await tester.pumpWidget(
+        _wrapStep(const OnboardingStep4(), draft: studentDraft),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Set Your Weekly Schedule'), findsOneWidget);
+      expect(find.text('Classes'), findsWidgets);
       expect(find.byType(OnboardingSectionTitle), findsNothing);
     });
 
@@ -444,7 +450,9 @@ void main() {
       expect(find.byType(OnboardingSectionTitle), findsNothing);
     });
 
-    testWidgets('Step 14 (Today Ready) maintains final review layout', (tester) async {
+    testWidgets('Step 14 (Today Ready) maintains final review layout', (
+      tester,
+    ) async {
       final draft = OnboardingDraft(
         uid: 'test-user',
         currentStep: 14,
@@ -506,7 +514,9 @@ void main() {
         ),
         stepCompleted: [for (int i = 0; i < 15; i++) i < 14],
       );
-      await tester.pumpWidget(_wrapStep(const OnboardingStep14(), draft: draft));
+      await tester.pumpWidget(
+        _wrapStep(const OnboardingStep14(), draft: draft),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 

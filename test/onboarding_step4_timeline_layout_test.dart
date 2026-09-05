@@ -134,12 +134,12 @@ void main() {
         endMinute: 18 * 60 + 15,
       );
 
-      await tester.tap(find.text('TUE'));
+      await tester.tap(find.byKey(const ValueKey('timeline-day-chip-2')));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('No fixed blocks on this day.'), findsOneWidget);
 
-      await tester.tap(find.text('MON'));
+      await tester.tap(find.byKey(const ValueKey('timeline-day-chip-1')));
       await tester.pumpAndSettle();
       final jobBlock = find.byKey(
         const ValueKey('onboarding-step4-block-part-time-job'),
@@ -393,9 +393,8 @@ void main() {
       expect(find.text('Upload your class and work timetable'), findsOneWidget);
       expect(find.text('Class timetable'), findsOneWidget);
       expect(find.text('Work schedule'), findsOneWidget);
-      expect(find.text('Set Your Weekly Schedule'), findsOneWidget);
-      expect(find.text('MON'), findsOneWidget);
-      expect(find.text('SUN'), findsOneWidget);
+      expect(find.text('Set Your Weekly Schedule'), findsNothing);
+      expect(find.byKey(const ValueKey('timeline-day-chip-1')), findsNothing);
       final classTarget = find.byKey(
         const ValueKey('onboarding-step4-upload-target-classes'),
       );
@@ -419,7 +418,7 @@ void main() {
             .height,
         lessThan(180),
       );
-      expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.schedule_rounded), findsNothing);
       expect(
         find.text('Add both photos, then generate your timeline.'),
         findsOneWidget,
@@ -518,10 +517,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Upload your work schedule'), findsOneWidget);
     expect(find.text('Office Work'), findsOneWidget);
     expect(find.text('Stale Class'), findsNothing);
     expect(find.text('Class timetable'), findsNothing);
+    expect(find.text('Upload your work schedule'), findsNothing);
   });
 
   testWidgets('reopened saved schedule shows generated card and timeline', (
@@ -1749,18 +1748,15 @@ void main() {
     expect(find.byKey(const ValueKey('onboarding-step5-back')), findsOneWidget);
     expect(find.text('Upload your routine/menu'), findsOneWidget);
     expect(find.text('Add your weekly meal timetable photo.'), findsOneWidget);
-    expect(find.text('Set Your Weekly Meal'), findsOneWidget);
-    expect(find.text('MON'), findsOneWidget);
-    expect(find.text('SUN'), findsOneWidget);
+    expect(find.text('Set Your Weekly Meal'), findsNothing);
+    expect(find.text('MON'), findsNothing);
+    expect(find.text('SUN'), findsNothing);
     expect(
       find.byKey(const ValueKey('onboarding-step5-timeline-scroll')),
       findsNothing,
     );
     expect(find.byType(OnboardingScrollView), findsNothing);
-    expect(
-      find.text('Generate your weekly meal routine first.'),
-      findsOneWidget,
-    );
+    expect(find.text('Generate your weekly meal routine first.'), findsNothing);
     expect(find.text('Open review'), findsNothing);
     expect(find.text('Review AI draft'), findsNothing);
     expect(find.text('Eating summary'), findsNothing);
@@ -1943,10 +1939,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Create your meal intelligence'), findsNothing);
     expect(
-      find.textContaining('Maintain · India · Veg · 4 meals'),
+      find.byKey(const ValueKey('onboarding-step5-review-screen')),
       findsOneWidget,
     );
-    expect(find.text('Edit'), findsOneWidget);
+    expect(
+      find.text('Review your meal times and dishes for the week.'),
+      findsOneWidget,
+    );
     expect(find.text('Set Your Weekly Meal'), findsOneWidget);
     expect(find.text('Breakfast'), findsOneWidget);
     expect(find.text('Oatmeal'), findsOneWidget);

@@ -43,17 +43,49 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   String? _generationError;
   String? _createError;
   late final AiGenerationController _createLifecycle;
-  bool _editingGeneratedRoutine = false;
+  bool _didInitFromDraft = false;
 
   @override
   void initState() {
     super.initState();
     _createLifecycle = AiGenerationController()
       ..addListener(_onCreateLifecycleChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(_initFromDraft);
+    });
   }
 
   void _onCreateLifecycleChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _initFromDraft() {
+    if (_didInitFromDraft) return;
+    _didInitFromDraft = true;
+
+    final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
+    final eatingBlocks = base.confirmedBlocksForSection('eating');
+    final isGenerating =
+        ref.read(routineImportAiControllerProvider).isExtracting ||
+        _createLifecycle.state.isActive;
+
+    if (base.eatingSetupStep == 2 && eatingBlocks.isEmpty && !isGenerating) {
+      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        final fallbackStep = draft.baseTimeline.eatingSetupPath != null ? 1 : 0;
+        return draft.copyWith(
+          baseTimeline: draft.baseTimeline.copyWith(
+            eatingSetupStep: fallbackStep,
+          ),
+        );
+      });
+    } else if (base.eatingSetupStep <= 1 && eatingBlocks.isNotEmpty) {
+      ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+        return draft.copyWith(
+          baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 2),
+        );
+      });
+    }
   }
 
   @override
@@ -73,13 +105,40 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         ref.read(authGenerationProvider) == authGeneration;
   }
 
+  Widget _buildViewCurrentRoutineButton() {
+    return Center(
+      child: TextButton.icon(
+        key: const ValueKey('onboarding-step5-view-current-routine'),
+        onPressed: () {
+          ref.read(mockOnboardingProvider.notifier).updateDraft((draft) {
+            return draft.copyWith(
+              baseTimeline: draft.baseTimeline.copyWith(eatingSetupStep: 2),
+            );
+          });
+        },
+        icon: const Icon(
+          Icons.restaurant_menu_rounded,
+          size: 16,
+          color: OptivusColors.roseAccent,
+        ),
+        label: const Text(
+          'View current meal routine',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: OptivusColors.roseAccent,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final base = draft.baseTimeline;
     final path = base.eatingSetupPath;
     final eatingBlocks = base.confirmedBlocksForSection('eating');
-    final isChoice = base.eatingSetupStep == 0;
     final uploadRuntime = ref.watch(
       onboardingUploadInteractionProvider.select(
         (slots) => slots[onboardingEatingUploadSlot]!,
@@ -87,50 +146,180 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     );
     final effectiveAsset = uploadRuntime.durableAsset;
 
-    if (isChoice) {
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 38),
-          child: const _EatingChoiceScreen(),
-        ),
-      );
+    final aiState = ref.watch(routineImportAiControllerProvider);
+    final createActive =
+        _createLifecycle.state.isActive && base.eatingSetupStep >= 2;
+    final isGenerating = aiState.isExtracting || createActive;
+    final hasConfirmedBlocks = eatingBlocks.isNotEmpty;
+
+    if (base.eatingSetupStep < 2 && _createLifecycle.state.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _createLifecycle.state.isActive) {
+          _createLifecycle.cancel();
+        }
+      });
     }
 
-    final generatedBlocks = eatingBlocks
-        .where((block) => block.source == onboardingEatingGeneratedSource)
-        .toList(growable: false);
+    final isReviewMode =
+        base.eatingSetupStep >= 2 ||
+        isGenerating ||
+        (!_didInitFromDraft && hasConfirmedBlocks);
+    final isChoice =
+        !isReviewMode && (base.eatingSetupStep == 0 || path == null);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-      child: path == onboardingEatingPathHasRoutine
-          ? _EatingUploadTimelineScreen(
-              asset: effectiveAsset,
-              previewPath: uploadRuntime.usablePreviewPath,
-              uploadRuntime: uploadRuntime,
-              uploadError: _uploadError,
-              generationError: _generationError,
-              selectedDay: _selectedDay,
-              blocks: eatingBlocks,
-              onUpload: _startUpload,
-              onChangePhoto: () => _startUpload(selectNewFile: true),
-              onRemove: _removeUploadedRoutine,
-              onGenerate: _runAiExtraction,
-              onDayChanged: (day) => setState(() => _selectedDay = day),
-            )
-          : _EatingCreateTimelineScreen(
-              base: base,
-              selectedDay: _selectedDay,
-              blocks: generatedBlocks,
-              error: _createError,
-              lifecycle: _createLifecycle.state,
-              editing: _editingGeneratedRoutine,
-              onGenerate: _generateCreatedRoutine,
-              onEdit: () {
-                setState(() => _editingGeneratedRoutine = true);
-              },
-              onDayChanged: (day) => setState(() => _selectedDay = day),
-            ),
+    final Widget body;
+
+    if (isChoice) {
+      body = KeyedSubtree(
+        key: const ValueKey('onboarding-step5-choice-screen'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 38),
+            child: const _EatingChoiceScreen(),
+          ),
+        ),
+      );
+    } else if (!isReviewMode) {
+      body = KeyedSubtree(
+        key: const ValueKey('onboarding-step5-setup-screen'),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 38),
+            child: path == onboardingEatingPathHasRoutine
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _EatingHeader(
+                        title: 'Eating Setup',
+                        subtitle:
+                            'Upload your routine/menu photo to extract meals.',
+                      ),
+                      const SizedBox(height: 18),
+                      _EatingUploadCard(
+                        asset: effectiveAsset,
+                        previewPath: uploadRuntime.usablePreviewPath,
+                        busy: uploadRuntime.isBusy || isGenerating,
+                        failed:
+                            uploadRuntime.phase ==
+                            UploadInteractionPhase.failed,
+                        onUpload: _startUpload,
+                        onChangePhoto: () => _startUpload(selectNewFile: true),
+                        onRemove: _removeUploadedRoutine,
+                        onGenerate:
+                            effectiveAsset == null ||
+                                uploadRuntime.isBusy ||
+                                isGenerating
+                            ? null
+                            : _runAiExtraction,
+                      ),
+                      if (_uploadError != null || _generationError != null) ...[
+                        const SizedBox(height: 8),
+                        _EatingInlineMessage(
+                          message: _uploadError ?? _generationError!,
+                        ),
+                      ],
+                      if (hasConfirmedBlocks) ...[
+                        const SizedBox(height: 14),
+                        _buildViewCurrentRoutineButton(),
+                      ],
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _EatingHeader(
+                        title: 'Eating Setup',
+                        subtitle:
+                            'Set your meal preferences and generate a routine.',
+                      ),
+                      const SizedBox(height: 18),
+                      _EatingCreatePreferencesCard(
+                        base: base,
+                        isGenerating: isGenerating,
+                        onGenerate: _generateCreatedRoutine,
+                      ),
+                      if (_createError != null) ...[
+                        const SizedBox(height: 8),
+                        _EatingInlineMessage(message: _createError!),
+                      ],
+                      if (hasConfirmedBlocks) ...[
+                        const SizedBox(height: 14),
+                        _buildViewCurrentRoutineButton(),
+                      ],
+                    ],
+                  ),
+          ),
+        ),
+      );
+    } else {
+      final showAiThinking =
+          isGenerating ||
+          (path == onboardingEatingPathHasRoutine
+              ? (aiState.lifecycle.phase == AiGenerationPhase.error &&
+                    !hasConfirmedBlocks)
+              : (_createLifecycle.state.phase == AiGenerationPhase.error &&
+                    !hasConfirmedBlocks));
+
+      if (showAiThinking) {
+        body = SingleChildScrollView(
+          key: const ValueKey('onboarding-step5-ai-screen'),
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _EatingHeader(
+                title: 'Eating Setup',
+                subtitle: 'AI is generating your weekly meal routine…',
+              ),
+              const SizedBox(height: 18),
+              AiThinkingCard(
+                state: path == onboardingEatingPathHasRoutine
+                    ? aiState.lifecycle
+                    : _createLifecycle.state,
+                title: path == onboardingEatingPathHasRoutine
+                    ? 'AI is reading your meal photo'
+                    : 'AI is creating your weekly meal plan',
+                detail: path == onboardingEatingPathHasRoutine
+                    ? 'Looking for dishes, portions, and meal timing'
+                    : 'Planning meals around your daily routine',
+                accent: OptivusColors.roseAccent,
+                onRetry: path == onboardingEatingPathHasRoutine
+                    ? _runAiExtraction
+                    : _generateCreatedRoutine,
+              ),
+              if (path == onboardingEatingPathHasRoutine &&
+                  _generationError != null) ...[
+                const SizedBox(height: 8),
+                _EatingInlineMessage(message: _generationError!),
+              ],
+              if (path == onboardingEatingPathCreate &&
+                  _createError != null) ...[
+                const SizedBox(height: 8),
+                _EatingInlineMessage(message: _createError!),
+              ],
+            ],
+          ),
+        );
+      } else {
+        body = KeyedSubtree(
+          key: const ValueKey('onboarding-step5-review-screen'),
+          child: _EatingTimelineSection(
+            selectedDay: _selectedDay,
+            blocks: eatingBlocks,
+            onDayChanged: (day) => setState(() => _selectedDay = day),
+            emptyLabel: 'Generate your weekly meal routine first.',
+          ),
+        );
+      }
+    }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: body,
     );
   }
 
@@ -250,6 +439,10 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       return;
     }
 
+    updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
+      return base.copyWith(eatingSetupStep: 2);
+    });
+
     debugPrint(
       '[Onboarding5] START source=eating purpose=eatingMenu '
       'assetIdPresent=${asset.assetId.trim().isNotEmpty} '
@@ -366,6 +559,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     final authGeneration = ref.read(authGenerationProvider);
     final isRetry = _createLifecycle.state.phase == AiGenerationPhase.error;
     setState(() => _createError = null);
+    updateBaseTimelineDraft(ref, onboardingEatingStepIndex, (base) {
+      return base.copyWith(eatingSetupStep: 2);
+    });
     ref
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingEatingStepIndex, true);
@@ -466,7 +662,6 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         .setStepLoading(onboardingEatingStepIndex, false);
     if (run.isSuccess) {
       _replaceEatingBlocks(run.value!);
-      setState(() => _editingGeneratedRoutine = false);
     } else if (run.error != null) {
       setState(() => _createError = run.error!.message);
     }
@@ -508,7 +703,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         eatingSetupPath: base.eatingSetupPath ?? onboardingEatingPathCreate,
         blocks: nextBlocks,
         pendingFutureImports: nextPending,
-        eatingSetupStep: 1,
+        eatingSetupStep: eatingBlocks.isEmpty ? 1 : 2,
       );
     });
   }
@@ -587,27 +782,30 @@ class _EatingChoiceScreen extends ConsumerWidget {
   }
 }
 
-class _EatingChoiceHeader extends StatelessWidget {
-  const _EatingChoiceHeader();
+class _EatingHeader extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _EatingHeader({required this.title, required this.subtitle});
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Eating Setup',
-          style: TextStyle(
+          title,
+          style: const TextStyle(
             fontSize: 26,
             height: 1.05,
             fontWeight: FontWeight.w900,
             color: OptivusColors.textPrimary,
           ),
         ),
-        SizedBox(height: 7),
+        const SizedBox(height: 7),
         Text(
-          'Build your weekly meal routine in a simple way.',
-          style: TextStyle(
+          subtitle,
+          style: const TextStyle(
             fontSize: 13,
             height: 1.35,
             fontWeight: FontWeight.w700,
@@ -615,6 +813,18 @@ class _EatingChoiceHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _EatingChoiceHeader extends StatelessWidget {
+  const _EatingChoiceHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _EatingHeader(
+      title: 'Eating Setup',
+      subtitle: 'Build your weekly meal routine in a simple way.',
     );
   }
 }
@@ -688,107 +898,15 @@ class _EatingPathCard extends StatelessWidget {
   }
 }
 
-class _EatingUploadTimelineScreen extends ConsumerWidget {
-  final UploadedAsset? asset;
-  final String? previewPath;
-  final UploadSlotRuntimeState uploadRuntime;
-  final String? uploadError;
-  final String? generationError;
-  final int selectedDay;
-  final List<TimelineBlockDraft> blocks;
-  final VoidCallback onUpload;
-  final VoidCallback onChangePhoto;
-  final VoidCallback onRemove;
-  final VoidCallback onGenerate;
-  final ValueChanged<int> onDayChanged;
-
-  const _EatingUploadTimelineScreen({
-    required this.asset,
-    required this.previewPath,
-    required this.uploadRuntime,
-    required this.uploadError,
-    required this.generationError,
-    required this.selectedDay,
-    required this.blocks,
-    required this.onUpload,
-    required this.onChangePhoto,
-    required this.onRemove,
-    required this.onGenerate,
-    required this.onDayChanged,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final aiState = ref.watch(routineImportAiControllerProvider);
-    final uploadBusy = uploadRuntime.isBusy;
-    final generating = aiState.isExtracting;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _EatingUploadCard(
-          asset: asset,
-          previewPath: previewPath,
-          busy: uploadBusy || generating,
-          failed: uploadRuntime.phase == UploadInteractionPhase.failed,
-          onUpload: onUpload,
-          onChangePhoto: onChangePhoto,
-          onRemove: onRemove,
-          onGenerate: asset == null || uploadBusy || generating
-              ? null
-              : onGenerate,
-        ),
-
-        if (generating ||
-            aiState.lifecycle.phase == AiGenerationPhase.error) ...[
-          const SizedBox(height: 14),
-          AiThinkingCard(
-            state: aiState.lifecycle,
-            title: 'AI is reading your meal photo',
-            detail: 'Looking for dishes, portions, and meal timing',
-            accent: OptivusColors.roseAccent,
-            onRetry: onGenerate,
-          ),
-        ],
-
-        if (uploadError != null ||
-            (generationError != null &&
-                aiState.lifecycle.phase != AiGenerationPhase.error)) ...[
-          const SizedBox(height: 8),
-          _EatingInlineMessage(message: uploadError ?? generationError!),
-        ],
-        const SizedBox(height: 14),
-        _EatingTimelineSection(
-          selectedDay: selectedDay,
-          blocks: blocks,
-          onDayChanged: onDayChanged,
-          emptyLabel: 'Generate your weekly meal routine first.',
-        ),
-      ],
-    );
-  }
-}
-
-class _EatingCreateTimelineScreen extends ConsumerWidget {
+class _EatingCreatePreferencesCard extends ConsumerWidget {
   final BaseTimelineDraft base;
-  final int selectedDay;
-  final List<TimelineBlockDraft> blocks;
-  final String? error;
-  final AiGenerationState lifecycle;
-  final bool editing;
+  final bool isGenerating;
   final VoidCallback onGenerate;
-  final VoidCallback onEdit;
-  final ValueChanged<int> onDayChanged;
 
-  const _EatingCreateTimelineScreen({
+  const _EatingCreatePreferencesCard({
     required this.base,
-    required this.selectedDay,
-    required this.blocks,
-    required this.error,
-    required this.lifecycle,
-    required this.editing,
+    required this.isGenerating,
     required this.onGenerate,
-    required this.onEdit,
-    required this.onDayChanged,
   });
 
   @override
@@ -797,174 +915,121 @@ class _EatingCreateTimelineScreen extends ConsumerWidget {
     final bodyContext = onboarding5MealBodyContextFromDraft(draft);
     final bodyGoal = onboarding5BodyGoalForBase(base, draft);
     final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
-    final generated = blocks.isNotEmpty && !editing;
-    final isGenerating = lifecycle.isActive;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (generated)
-          _EatingGeneratedSummaryRow(
-            bodyGoal: bodyGoal,
-            style: base.eatingMode ?? 'india',
-            eatingType: base.foodType ?? 'mixed',
-            mealsPerDay: mealsPerDay,
-            targetCalories: bodyContext.targetCalories,
-            onEdit: onEdit,
-          )
-        else
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: OnboardingGlassCard(
-                tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
-                padding: const EdgeInsets.all(12),
-                radius: 20,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Create your meal intelligence',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    const Text(
-                      'Optivus will build a weekly meal timeline using your body goal, calorie need, food culture, and usual meal times.',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        height: 1.25,
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _EatingBodyContextLine(
-                      hasBodyBasics: bodyContext.hasBodyBasics,
-                    ),
-                    const SizedBox(height: 9),
-                    _EatingChipGroup(
-                      label: 'Goal',
-                      children: [
-                        for (final option in const [
-                          _EatingModeOption('gain', 'Gain'),
-                          _EatingModeOption('lose', 'Lose'),
-                          _EatingModeOption('maintain', 'Maintain'),
-                        ])
-                          _EatingPreferenceChip(
-                            label: option.label,
-                            selected: bodyGoal == option.key,
-                            accent: OptivusColors.roseAccent,
-                            onTap: () => _updateCreateDraft(
-                              ref,
-                              (base) =>
-                                  base.copyWith(mealPlanningGoal: option.key),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 7),
-                    _EatingChipGroup(
-                      label: 'Meals',
-                      children: [
-                        for (final count in const [3, 4, 5])
-                          _EatingPreferenceChip(
-                            label: '$count',
-                            selected: mealsPerDay == count,
-                            accent: OptivusColors.roseAccent,
-                            onTap: () => _updateCreateDraft(
-                              ref,
-                              (base) => base.copyWith(mealsPerDay: count),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 7),
-                    _EatingChipGroup(
-                      label: 'Style',
-                      children: [
-                        for (final option in const [
-                          _EatingModeOption('india', 'India'),
-                          _EatingModeOption('us', 'US'),
-                          _EatingModeOption('germany', 'Germany'),
-                          _EatingModeOption('mixed', 'Mixed'),
-                          _EatingModeOption('custom', 'Custom'),
-                        ])
-                          _EatingPreferenceChip(
-                            label: option.label,
-                            selected:
-                                (base.eatingMode ?? 'india') == option.key,
-                            accent: OptivusColors.roseAccent,
-                            onTap: () => _updateCreateDraft(
-                              ref,
-                              (base) => base.copyWith(eatingMode: option.key),
-                            ),
-                          ),
-                      ],
-                    ),
-                    if ((base.eatingMode ?? 'india') == 'custom') ...[
-                      const SizedBox(height: 7),
-                      _EatingCustomStyleField(base: base),
-                    ],
-                    const SizedBox(height: 7),
-                    _EatingChipGroup(
-                      label: 'Type',
-                      children: [
-                        for (final option in const [
-                          _EatingModeOption('veg', 'Veg'),
-                          _EatingModeOption('non_veg', 'Non-veg'),
-                          _EatingModeOption('mixed', 'Mixed'),
-                        ])
-                          _EatingPreferenceChip(
-                            label: option.label,
-                            selected: (base.foodType ?? 'mixed') == option.key,
-                            accent: OptivusColors.roseAccent,
-                            onTap: () => _updateCreateDraft(
-                              ref,
-                              (base) => base.copyWith(foodType: option.key),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _CompactMealTimeRows(base: base, mealsPerDay: mealsPerDay),
-                    const SizedBox(height: 9),
-                    _EatingGenerateRoutineButton(
-                      isGenerating: isGenerating,
-                      onTap: onGenerate,
-                    ),
-                    if (isGenerating ||
-                        lifecycle.phase == AiGenerationPhase.error) ...[
-                      const SizedBox(height: 14),
-                      AiThinkingCard(
-                        state: lifecycle,
-                        title: 'AI is creating your weekly meal plan',
-                        detail: 'Planning meals around your daily routine',
-                        accent: OptivusColors.roseAccent,
-                        onRetry: onGenerate,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+    return OnboardingGlassCard(
+      tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
+      padding: const EdgeInsets.all(12),
+      radius: 20,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Create your meal intelligence',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 3),
+          const Text(
+            'Optivus will build a weekly meal timeline using your body goal, calorie need, food culture, and usual meal times.',
+            style: TextStyle(
+              fontSize: 10.5,
+              height: 1.25,
+              fontWeight: FontWeight.w700,
+              color: OptivusColors.textSecondary,
             ),
           ),
-        if (error != null && lifecycle.phase != AiGenerationPhase.error) ...[
           const SizedBox(height: 8),
-          _EatingInlineMessage(message: error!),
-        ],
-        if (generated) ...[
-          const SizedBox(height: 10),
-          _EatingTimelineSection(
-            selectedDay: selectedDay,
-            blocks: blocks,
-            onDayChanged: onDayChanged,
-            emptyLabel: 'Generate your meal routine to preview the week.',
+          _EatingBodyContextLine(hasBodyBasics: bodyContext.hasBodyBasics),
+          const SizedBox(height: 9),
+          _EatingChipGroup(
+            label: 'Goal',
+            children: [
+              for (final option in const [
+                _EatingModeOption('gain', 'Gain'),
+                _EatingModeOption('lose', 'Lose'),
+                _EatingModeOption('maintain', 'Maintain'),
+              ])
+                _EatingPreferenceChip(
+                  label: option.label,
+                  selected: bodyGoal == option.key,
+                  accent: OptivusColors.roseAccent,
+                  onTap: () => _updateCreateDraft(
+                    ref,
+                    (base) => base.copyWith(mealPlanningGoal: option.key),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          _EatingChipGroup(
+            label: 'Meals',
+            children: [
+              for (final count in const [3, 4, 5])
+                _EatingPreferenceChip(
+                  label: '$count',
+                  selected: mealsPerDay == count,
+                  accent: OptivusColors.roseAccent,
+                  onTap: () => _updateCreateDraft(
+                    ref,
+                    (base) => base.copyWith(mealsPerDay: count),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          _EatingChipGroup(
+            label: 'Style',
+            children: [
+              for (final option in const [
+                _EatingModeOption('india', 'India'),
+                _EatingModeOption('us', 'US'),
+                _EatingModeOption('germany', 'Germany'),
+                _EatingModeOption('mixed', 'Mixed'),
+                _EatingModeOption('custom', 'Custom'),
+              ])
+                _EatingPreferenceChip(
+                  label: option.label,
+                  selected: (base.eatingMode ?? 'india') == option.key,
+                  accent: OptivusColors.roseAccent,
+                  onTap: () => _updateCreateDraft(
+                    ref,
+                    (base) => base.copyWith(eatingMode: option.key),
+                  ),
+                ),
+            ],
+          ),
+          if ((base.eatingMode ?? 'india') == 'custom') ...[
+            const SizedBox(height: 7),
+            _EatingCustomStyleField(base: base),
+          ],
+          const SizedBox(height: 7),
+          _EatingChipGroup(
+            label: 'Type',
+            children: [
+              for (final option in const [
+                _EatingModeOption('veg', 'Veg'),
+                _EatingModeOption('non_veg', 'Non-veg'),
+                _EatingModeOption('mixed', 'Mixed'),
+              ])
+                _EatingPreferenceChip(
+                  label: option.label,
+                  selected: (base.foodType ?? 'mixed') == option.key,
+                  accent: OptivusColors.roseAccent,
+                  onTap: () => _updateCreateDraft(
+                    ref,
+                    (base) => base.copyWith(foodType: option.key),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _CompactMealTimeRows(base: base, mealsPerDay: mealsPerDay),
+          const SizedBox(height: 9),
+          _EatingGenerateRoutineButton(
+            isGenerating: isGenerating,
+            onTap: onGenerate,
           ),
         ],
-      ],
+      ),
     );
   }
 }
@@ -1072,74 +1137,6 @@ class _EatingBodyContextLine extends StatelessWidget {
         height: 1.2,
         fontWeight: FontWeight.w800,
         color: OptivusColors.textSecondary,
-      ),
-    );
-  }
-}
-
-class _EatingGeneratedSummaryRow extends StatelessWidget {
-  final String bodyGoal;
-  final String style;
-  final String eatingType;
-  final int mealsPerDay;
-  final int? targetCalories;
-  final VoidCallback onEdit;
-
-  const _EatingGeneratedSummaryRow({
-    required this.bodyGoal,
-    required this.style,
-    required this.eatingType,
-    required this.mealsPerDay,
-    required this.targetCalories,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final summary =
-        '${_goalLabel(bodyGoal)} · ${_styleLabel(style)} · ${_typeLabel(eatingType)} · $mealsPerDay meals · ${targetCalories == null ? 'calorie target unavailable' : '~$targetCalories kcal'}';
-    return OnboardingGlassCard(
-      tint: Colors.white.withValues(alpha: 0.10),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      radius: 18,
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              summary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w900,
-                color: OptivusColors.textPrimary,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onEdit,
-            child: Container(
-              height: 30,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: OptivusColors.roseAccent.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                'Edit',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.roseAccent,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -1653,33 +1650,35 @@ class _EatingTimelineSection extends ConsumerWidget {
       );
     }
 
-    return Expanded(
-      child: FullScreenTimelineScaffold(
-        key: const ValueKey('onboarding-step5-full-screen-timeline'),
-        entries: entries,
-        selectedDay: selectedDay,
-        onDayChanged: onDayChanged,
+    return FullScreenTimelineScaffold(
+      key: const ValueKey('onboarding-step5-full-screen-timeline'),
+      entries: entries,
+      selectedDay: selectedDay,
+      onDayChanged: onDayChanged,
+      title: 'Set Your Weekly Meal',
+      headerBanner: const _EatingHeader(
         title: 'Set Your Weekly Meal',
-        emptyDayMessage: emptyLabel,
-        accent: OptivusColors.roseAccent,
-        styleBuilder: adapter.styleForEntry,
-        blockBuilder: (context, positioned) {
-          final block = blocks
-              .where((candidate) => candidate.id == positioned.entry.sourceId)
-              .first;
-          return _EatingTimelineBlock(
-            block: block,
-            onEditRequested: () => openMealEditor(block),
-          );
-        },
-        onEntryTapped: (entry) {
-          final block = blocks
-              .where((candidate) => candidate.id == entry.sourceId)
-              .firstOrNull;
-          if (block == null) return;
-          openMealEditor(block);
-        },
+        subtitle: 'Review your meal times and dishes for the week.',
       ),
+      emptyDayMessage: emptyLabel,
+      accent: OptivusColors.roseAccent,
+      styleBuilder: adapter.styleForEntry,
+      blockBuilder: (context, positioned) {
+        final block = blocks
+            .where((candidate) => candidate.id == positioned.entry.sourceId)
+            .first;
+        return _EatingTimelineBlock(
+          block: block,
+          onEditRequested: () => openMealEditor(block),
+        );
+      },
+      onEntryTapped: (entry) {
+        final block = blocks
+            .where((candidate) => candidate.id == entry.sourceId)
+            .firstOrNull;
+        if (block == null) return;
+        openMealEditor(block);
+      },
     );
   }
 }
@@ -2837,24 +2836,6 @@ String _goalLabel(String value) {
                 : '${word[0].toUpperCase()}${word.substring(1)}',
           )
           .join(' '),
-  };
-}
-
-String _styleLabel(String value) {
-  return switch (value) {
-    'us' => 'US',
-    'germany' => 'Germany',
-    'mixed' => 'Mixed',
-    'custom' => 'Custom',
-    _ => 'India',
-  };
-}
-
-String _typeLabel(String value) {
-  return switch (value) {
-    'veg' => 'Veg',
-    'non_veg' => 'Non-veg',
-    _ => 'Mixed',
   };
 }
 

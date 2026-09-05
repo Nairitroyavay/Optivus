@@ -772,6 +772,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     List<ClassRoutineBlock> classBlocks,
     List<ClassRoutineBlock> workBlocks,
   ) {
+    if (draft.baseTimeline.classJobSetupStep <= 0) {
+      return false;
+    }
     final role = draft.lifeRole.lifeRole;
     final classesRequired =
         role == LifeRoleDraft.studentKey ||
@@ -851,10 +854,37 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
           uploadMap: uploadMap,
           draft: onboardingState.draft,
         );
-    final classJobReviewReady =
-        step == onboardingClassJobStepIndex && onboardingState.stepDirty[step]
-        ? _classJobReviewReady(onboardingState.draft, classBlocks, workBlocks)
-        : null;
+    final bool? classJobReviewReady;
+    if (step == onboardingClassJobStepIndex) {
+      if (onboardingState.draft.baseTimeline.classJobSetupStep <= 0) {
+        classJobReviewReady = false;
+      } else if (onboardingState.stepDirty[step]) {
+        classJobReviewReady = _classJobReviewReady(
+          onboardingState.draft,
+          classBlocks,
+          workBlocks,
+        );
+      } else {
+        classJobReviewReady = null;
+      }
+    } else {
+      classJobReviewReady = null;
+    }
+
+    final bool? eatingReviewReady;
+    if (step == onboardingEatingStepIndex) {
+      if (onboardingState.draft.baseTimeline.eatingSetupStep != 2) {
+        eatingReviewReady = false;
+      } else {
+        final eatingBlocks = onboardingState.draft.baseTimeline
+            .confirmedBlocksForSection('eating');
+        eatingReviewReady =
+            eatingBlocks.isNotEmpty &&
+            onboardingState.draft.baseTimeline.validateEatingSetup() == null;
+      }
+    } else {
+      eatingReviewReady = null;
+    }
 
     return evaluateOnboardingStepReadiness(
       draft: onboardingState.draft,
@@ -865,6 +895,7 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         asyncIdle: asyncIdle,
         saveIdle: !_isSaving && !_isNavigating,
         classJobReviewReady: classJobReviewReady,
+        eatingReviewReady: eatingReviewReady,
       ),
     );
   }
@@ -1072,17 +1103,31 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
   }
 
   bool _backClassesJob(OnboardingDraft draft) {
-    // Simplified: no internal stages, always go back to previous step.
-    return false;
+    final base = draft.baseTimeline;
+    if (base.classJobSetupStep <= 0) return false;
+    _stepsWithRevealedPrimaryCta.remove(onboardingClassJobStepIndex);
+    _updateBaseTimelineStage(
+      onboardingClassJobStepIndex,
+      (base) => base.copyWith(classJobSetupStep: 0),
+    );
+    if (ref.read(routineImportAiControllerProvider).isExtracting) {
+      ref.read(routineImportAiControllerProvider.notifier).reset();
+    }
+    return true;
   }
 
   bool _backEating(OnboardingDraft draft) {
     final base = draft.baseTimeline;
     if (base.eatingSetupStep <= 0) return false;
+    _stepsWithRevealedPrimaryCta.remove(onboardingEatingStepIndex);
+    final nextStep = base.eatingSetupStep == 2 ? 1 : 0;
     _updateBaseTimelineStage(
       onboardingEatingStepIndex,
-      (base) => base.copyWith(eatingSetupStep: 0),
+      (base) => base.copyWith(eatingSetupStep: nextStep),
     );
+    if (ref.read(routineImportAiControllerProvider).isExtracting) {
+      ref.read(routineImportAiControllerProvider.notifier).reset();
+    }
     return true;
   }
 
@@ -1330,6 +1375,9 @@ bool onboardingShouldShowTopLeftBackButton({
   required int currentPage,
   required BaseTimelineDraft baseTimeline,
 }) {
+  if (currentPage == onboardingClassJobStepIndex) {
+    return baseTimeline.classJobSetupStep > 0;
+  }
   if (currentPage == onboardingEatingStepIndex) {
     return baseTimeline.eatingSetupStep > 0;
   }
