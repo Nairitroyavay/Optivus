@@ -772,9 +772,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     List<ClassRoutineBlock> classBlocks,
     List<ClassRoutineBlock> workBlocks,
   ) {
-    if (draft.baseTimeline.classJobSetupStep <= 0) {
-      return false;
-    }
     final role = draft.lifeRole.lifeRole;
     final classesRequired =
         role == LifeRoleDraft.studentKey ||
@@ -783,6 +780,12 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         role == LifeRoleDraft.workingKey ||
         role == LifeRoleDraft.studentWorkingKey ||
         role == LifeRoleDraft.businessKey;
+    if (!classesRequired && !workRequired) {
+      return draft.baseTimeline.validateClassesAndWorkForRole(role) == null;
+    }
+    if (draft.baseTimeline.classJobSetupStep <= 0) {
+      return false;
+    }
     final classesReady = _timelineBlocksFromLocalSchedule(
       classBlocks,
       'classes',
@@ -856,7 +859,21 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         );
     final bool? classJobReviewReady;
     if (step == onboardingClassJobStepIndex) {
-      if (onboardingState.draft.baseTimeline.classJobSetupStep <= 0) {
+      final role = onboardingState.draft.lifeRole.lifeRole;
+      final classesRequired =
+          role == LifeRoleDraft.studentKey ||
+          role == LifeRoleDraft.studentWorkingKey;
+      final workRequired =
+          role == LifeRoleDraft.workingKey ||
+          role == LifeRoleDraft.studentWorkingKey ||
+          role == LifeRoleDraft.businessKey;
+      if (!classesRequired && !workRequired) {
+        classJobReviewReady =
+            onboardingState.draft.baseTimeline.validateClassesAndWorkForRole(
+              role,
+            ) ==
+            null;
+      } else if (onboardingState.draft.baseTimeline.classJobSetupStep <= 0) {
         classJobReviewReady = false;
       } else if (onboardingState.stepDirty[step]) {
         classJobReviewReady = _classJobReviewReady(

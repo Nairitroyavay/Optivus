@@ -13,8 +13,18 @@ import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
 import 'package:optivus/services/routine_import_ai_client.dart';
 import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
+import 'package:optivus/features/uploads/controllers/upload_interaction_controller.dart';
+import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
+import 'package:optivus/features/uploads/providers/onboarding_upload_interaction_provider.dart';
+import 'package:optivus/features/uploads/services/upload_permission_service.dart';
+import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/repositories/auth_repository.dart';
+import 'package:optivus/repositories/uploaded_asset_repository.dart';
+import 'package:optivus/services/cloudflare/cloudflare_clients.dart';
+import 'package:optivus/services/uploads/image_prepare_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/routine_import_ai_state.dart';
+import 'package:optivus/state/upload_state.dart';
 
 TimelineBlockDraft _makeEatingBlock({
   required String id,
@@ -319,6 +329,394 @@ void main() {
     );
 
     testWidgets(
+      'Step 4: not-student/not-working requires no upload, AI, or review before continuing',
+      (tester) async {
+        final draft = _buildDraftForStep(
+          targetStep: onboardingClassJobStepIndex,
+          role: LifeRoleDraft.notStudentNotWorkingKey,
+          baseTimeline: const BaseTimelineDraft(classJobSetupStep: 0),
+        );
+        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        late _CompleterRoutineImportAiController aiController;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mockOnboardingProvider.overrideWith((_) => notifier),
+              routineImportAiControllerProvider.overrideWith((ref) {
+                aiController = _CompleterRoutineImportAiController(ref);
+                return aiController;
+              }),
+              onboardingClassTimelineProvider.overrideWith((_) => []),
+              onboardingWorkTimelineProvider.overrideWith((_) => []),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await _settle(tester, 500);
+
+        expect(
+          onboarding4UploadTargetsForRole(
+            LifeRoleDraft.notStudentNotWorkingKey,
+          ),
+          isEmpty,
+        );
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-upload-card')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-generate-button')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-review-screen')),
+          findsNothing,
+        );
+        expect(find.byType(AiThinkingCard), findsNothing);
+        expect(find.byKey(const ValueKey('timeline-day-chip-1')), findsNothing);
+        expect(_isPrimaryCtaVisible(tester), isTrue);
+
+        await tester.tap(find.text('Next Step').last);
+        await _settle(tester, 700);
+
+        expect(notifier.state.draft.currentStep, onboardingEatingStepIndex);
+        expect(notifier.state.draft.baseTimeline.blocks, isEmpty);
+        expect(aiController.callCount, 0);
+      },
+    );
+
+    testWidgets(
+      'Step 4: actual Generate button transitions setup to AI then review',
+      (tester) async {
+        final asset = _uploadedAsset(
+          uid: 'test-user-ux',
+          purpose: UploadedAssetPurpose.classTimetable,
+          assetId: 'class_asset_a',
+        );
+        final draft = _buildDraftForStep(
+          targetStep: onboardingClassJobStepIndex,
+          role: LifeRoleDraft.studentKey,
+          baseTimeline: BaseTimelineDraft(
+            classJobSetupStep: 0,
+            classLogicalAssetId: asset.assetId,
+            classLogicalAssetR2Key: asset.r2Key,
+          ),
+        );
+        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        late _CompleterRoutineImportAiController aiController;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mockOnboardingProvider.overrideWith((_) => notifier),
+              restoredUploadsProvider.overrideWith(
+                (_) => _SeededRestoredUploadsController(
+                  uid: 'test-user-ux',
+                  assets: {
+                    UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
+                      asset: asset,
+                    ),
+                  },
+                ),
+              ),
+              routineImportAiControllerProvider.overrideWith((ref) {
+                aiController = _CompleterRoutineImportAiController(ref);
+                return aiController;
+              }),
+              onboardingClassTimelineProvider.overrideWith((_) => []),
+              onboardingWorkTimelineProvider.overrideWith((_) => []),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await _settle(tester, 500);
+
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-setup-screen')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step4-generate-button')),
+        );
+        await tester.pump();
+
+        expect(notifier.state.draft.baseTimeline.classJobSetupStep, 1);
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-ai-screen')),
+          findsOneWidget,
+        );
+        expect(find.byType(AiThinkingCard), findsOneWidget);
+        expect(find.byKey(const Key('onboarding-step4-back')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-upload-card')),
+          findsNothing,
+        );
+        expect(_isPrimaryCtaVisible(tester), isFalse);
+
+        aiController.completeSuccess(
+          RoutineImportExtractionResult(
+            id: 'result-class-a',
+            uid: 'test-user-ux',
+            source: RoutineImportReviewSource.classes,
+            sourceAssetId: asset.assetId,
+            sourceR2Key: asset.r2Key,
+            candidates: [
+              RoutineImportCandidateBlock(
+                id: 'class-a-block',
+                title: 'Math Lab',
+                startMinute: 9 * 60,
+                endMinute: 10 * 60,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+                category: 'classes',
+                hardBlock: true,
+              ),
+            ],
+            createdAt: DateTime.now(),
+          ),
+        );
+        await _settle(tester, 700);
+
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-review-screen')),
+          findsOneWidget,
+        );
+        expect(find.byType(AiThinkingCard), findsNothing);
+        expect(
+          find.byKey(const ValueKey('timeline-day-chip-1')),
+          findsOneWidget,
+        );
+        expect(find.text('Math Lab'), findsOneWidget);
+        expect(_isPrimaryCtaVisible(tester), isTrue);
+      },
+    );
+
+    testWidgets(
+      'Step 4: Schedule A survives Back during same-source regeneration and late success is ignored',
+      (tester) async {
+        final asset = _uploadedAsset(
+          uid: 'test-user-ux',
+          purpose: UploadedAssetPurpose.classTimetable,
+          assetId: 'class_asset_a',
+        );
+        final oldBlock = _makeClassBlock(
+          id: 'old-class',
+          title: 'Old Math',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+        );
+        final draft = _buildDraftForStep(
+          targetStep: onboardingClassJobStepIndex,
+          role: LifeRoleDraft.studentKey,
+          baseTimeline: BaseTimelineDraft(
+            classJobSetupStep: 1,
+            classLogicalAssetId: asset.assetId,
+            classLogicalAssetR2Key: asset.r2Key,
+            blocks: [oldBlock],
+          ),
+        );
+        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        late _CompleterRoutineImportAiController aiController;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mockOnboardingProvider.overrideWith((_) => notifier),
+              restoredUploadsProvider.overrideWith(
+                (_) => _SeededRestoredUploadsController(
+                  uid: 'test-user-ux',
+                  assets: {
+                    UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
+                      asset: asset,
+                    ),
+                  },
+                ),
+              ),
+              routineImportAiControllerProvider.overrideWith((ref) {
+                aiController = _CompleterRoutineImportAiController(ref);
+                return aiController;
+              }),
+              onboardingClassTimelineProvider.overrideWith(
+                (_) => [
+                  ClassRoutineBlock(
+                    id: 'old-class',
+                    subject: 'Old Math',
+                    startMinute: 9 * 60,
+                    endMinute: 10 * 60,
+                    repeatDays: const [1],
+                    icon: Icons.school_rounded,
+                    color: Colors.blue,
+                  ),
+                ],
+              ),
+              onboardingWorkTimelineProvider.overrideWith((_) => []),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await _settle(tester, 500);
+
+        await tester.tap(find.byKey(const Key('onboarding-step4-back')));
+        await _settle(tester, 400);
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-setup-screen')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step4-generate-button')),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-ai-screen')),
+          findsOneWidget,
+        );
+        expect(aiController.callCount, 1);
+
+        await tester.tap(find.byKey(const Key('onboarding-step4-back')));
+        await _settle(tester, 500);
+        expect(notifier.state.draft.baseTimeline.classJobSetupStep, 0);
+
+        aiController.completeSuccessAt(
+          1,
+          RoutineImportExtractionResult(
+            id: 'late-result-class-a',
+            uid: 'test-user-ux',
+            source: RoutineImportReviewSource.classes,
+            sourceAssetId: asset.assetId,
+            sourceR2Key: asset.r2Key,
+            candidates: [
+              RoutineImportCandidateBlock(
+                id: 'late-class-block',
+                title: 'Late Algebra',
+                startMinute: 11 * 60,
+                endMinute: 12 * 60,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+                category: 'classes',
+                hardBlock: true,
+              ),
+            ],
+            createdAt: DateTime.now(),
+          ),
+          publishState: false,
+        );
+        await _settle(tester, 700);
+
+        final classTitles = notifier.state.draft.baseTimeline.blocks
+            .where((block) => block.section == 'classes')
+            .map((block) => block.title)
+            .toList();
+        expect(classTitles, contains('Old Math'));
+        expect(classTitles, isNot(contains('Late Algebra')));
+        expect(find.text('Late Algebra'), findsNothing);
+
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step4-view-current-schedule')),
+        );
+        await _settle(tester, 400);
+        expect(find.text('Old Math'), findsOneWidget);
+        expect(find.text('Late Algebra'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'Step 4: failed same-source rebuild keeps Schedule A visible with retained-schedule error',
+      (tester) async {
+        final asset = _uploadedAsset(
+          uid: 'test-user-ux',
+          purpose: UploadedAssetPurpose.classTimetable,
+          assetId: 'class_asset_a',
+        );
+        final oldBlock = _makeClassBlock(
+          id: 'old-class',
+          title: 'Old Math',
+          startMinute: 9 * 60,
+          endMinute: 10 * 60,
+        );
+        final draft = _buildDraftForStep(
+          targetStep: onboardingClassJobStepIndex,
+          role: LifeRoleDraft.studentKey,
+          baseTimeline: BaseTimelineDraft(
+            classJobSetupStep: 1,
+            classLogicalAssetId: asset.assetId,
+            classLogicalAssetR2Key: asset.r2Key,
+            blocks: [oldBlock],
+          ),
+        );
+        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        late _CompleterRoutineImportAiController aiController;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mockOnboardingProvider.overrideWith((_) => notifier),
+              restoredUploadsProvider.overrideWith(
+                (_) => _SeededRestoredUploadsController(
+                  uid: 'test-user-ux',
+                  assets: {
+                    UploadedAssetPurpose.classTimetable: RestoredUploadedAsset(
+                      asset: asset,
+                    ),
+                  },
+                ),
+              ),
+              routineImportAiControllerProvider.overrideWith((ref) {
+                aiController = _CompleterRoutineImportAiController(ref);
+                return aiController;
+              }),
+              onboardingClassTimelineProvider.overrideWith(
+                (_) => [
+                  ClassRoutineBlock(
+                    id: 'old-class',
+                    subject: 'Old Math',
+                    startMinute: 9 * 60,
+                    endMinute: 10 * 60,
+                    repeatDays: const [1],
+                    icon: Icons.school_rounded,
+                    color: Colors.blue,
+                  ),
+                ],
+              ),
+              onboardingWorkTimelineProvider.overrideWith((_) => []),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await _settle(tester, 500);
+
+        await tester.tap(find.byKey(const Key('onboarding-step4-back')));
+        await _settle(tester, 400);
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step4-generate-button')),
+        );
+        await tester.pump();
+
+        aiController.completeFailureAt(1);
+        await _settle(tester, 800);
+
+        expect(
+          find.byKey(const ValueKey('onboarding-step4-review-screen')),
+          findsOneWidget,
+        );
+        expect(find.text('Old Math'), findsOneWidget);
+        expect(
+          find.text(
+            "Couldn't update this schedule. Your previous schedule is still in place.",
+          ),
+          findsOneWidget,
+        );
+        expect(_isPrimaryCtaVisible(tester), isTrue);
+        final classTitles = notifier.state.draft.baseTimeline.blocks
+            .where((block) => block.section == 'classes')
+            .map((block) => block.title)
+            .toList();
+        expect(classTitles, contains('Old Math'));
+      },
+    );
+
+    testWidgets(
       'Step 5: Choice stage renders two path cards, hides timeline & primary CTA',
       (tester) async {
         final draft = _buildDraftForStep(
@@ -590,6 +988,143 @@ void main() {
         );
         expect(find.text('Dinner'), findsOneWidget);
         expect(_isPrimaryCtaVisible(tester), isTrue);
+      },
+    );
+
+    testWidgets(
+      'Step 5: old same-photo operation cannot mutate after Back or interfere with a new operation',
+      (tester) async {
+        final asset = _uploadedAsset(
+          uid: 'test-user-ux',
+          purpose: UploadedAssetPurpose.eatingMenu,
+          assetId: 'eating_asset_a',
+        );
+        final draft = _buildDraftForStep(
+          targetStep: onboardingEatingStepIndex,
+          baseTimeline: BaseTimelineDraft(
+            eatingSetupPath: onboardingEatingPathHasRoutine,
+            eatingSetupStep: 1,
+          ),
+        );
+        final notifier = MockOnboardingNotifier()..loadSeedData(draft);
+        late _CompleterRoutineImportAiController aiController;
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mockOnboardingProvider.overrideWith((_) => notifier),
+              onboardingUploadInteractionProvider.overrideWith(
+                (_) => _SeededUploadInteractionController(
+                  slotKey: onboardingEatingUploadSlot,
+                  purpose: UploadedAssetPurpose.eatingMenu,
+                  asset: asset,
+                ),
+              ),
+              routineImportAiControllerProvider.overrideWith((ref) {
+                aiController = _CompleterRoutineImportAiController(ref);
+                return aiController;
+              }),
+            ],
+            child: const MaterialApp(home: OnboardingFlow()),
+          ),
+        );
+        await _settle(tester, 500);
+
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step5-photo-generate-button')),
+        );
+        await tester.pump();
+        expect(notifier.state.draft.baseTimeline.eatingSetupStep, 2);
+        expect(
+          find.byKey(const ValueKey('onboarding-step5-ai-screen')),
+          findsOneWidget,
+        );
+        expect(aiController.callCount, 1);
+
+        await tester.tap(find.byKey(const Key('onboarding-step5-back')));
+        await _settle(tester, 500);
+        expect(notifier.state.draft.baseTimeline.eatingSetupStep, 1);
+
+        await tester.tap(
+          find.byKey(const ValueKey('onboarding-step5-photo-generate-button')),
+        );
+        await tester.pump();
+        expect(notifier.state.draft.baseTimeline.eatingSetupStep, 2);
+        expect(aiController.callCount, 2);
+
+        aiController.completeSuccessAt(
+          1,
+          RoutineImportExtractionResult(
+            id: 'late-eating-a',
+            uid: 'test-user-ux',
+            source: RoutineImportReviewSource.eating,
+            sourceAssetId: asset.assetId,
+            sourceR2Key: asset.r2Key,
+            candidates: [
+              RoutineImportCandidateBlock(
+                id: 'late-breakfast',
+                title: 'Late Breakfast',
+                startMinute: 8 * 60,
+                endMinute: 8 * 60 + 30,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.softBlockKey,
+                category: 'eating',
+                hardBlock: false,
+                mealCategory: 'breakfast',
+                steps: const ['Late Oats'],
+              ),
+            ],
+            createdAt: DateTime.now(),
+          ),
+          publishState: false,
+        );
+        await _settle(tester, 500);
+
+        expect(
+          notifier.state.draft.baseTimeline.confirmedBlocksForSection('eating'),
+          isEmpty,
+        );
+        expect(find.text('Late Breakfast'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('onboarding-step5-ai-screen')),
+          findsOneWidget,
+        );
+
+        aiController.completeSuccessAt(
+          2,
+          RoutineImportExtractionResult(
+            id: 'current-eating-b',
+            uid: 'test-user-ux',
+            source: RoutineImportReviewSource.eating,
+            sourceAssetId: asset.assetId,
+            sourceR2Key: asset.r2Key,
+            candidates: [
+              RoutineImportCandidateBlock(
+                id: 'current-lunch',
+                title: 'Current Lunch',
+                startMinute: 12 * 60,
+                endMinute: 12 * 60 + 30,
+                repeatDays: const [1],
+                blockType: TimelineBlockDraft.softBlockKey,
+                category: 'eating',
+                hardBlock: false,
+                mealCategory: 'lunch',
+                steps: const ['Rice bowl'],
+              ),
+            ],
+            createdAt: DateTime.now(),
+          ),
+        );
+        await _settle(tester, 800);
+
+        final eatingTitles = notifier.state.draft.baseTimeline
+            .confirmedBlocksForSection('eating')
+            .map((block) => block.title)
+            .toList();
+        expect(eatingTitles, contains('Current Lunch'));
+        expect(eatingTitles, isNot(contains('Late Breakfast')));
+        expect(find.text('Current Lunch'), findsWidgets);
+        expect(find.text('Late Breakfast'), findsNothing);
       },
     );
 
@@ -1492,4 +2027,167 @@ class _FakeDelayedRoutineImportAiClient implements RoutineImportAiClient {
   }) async {
     return Completer<RoutineImportExtractionResult>().future;
   }
+}
+
+class _CompleterRoutineImportAiController extends RoutineImportAiController {
+  _CompleterRoutineImportAiController(Ref ref)
+    : super(ref, _NeverRoutineImportAiClient());
+
+  final Map<int, Completer<RoutineImportExtractionResult?>> _pending = {};
+  int callCount = 0;
+
+  @override
+  Future<RoutineImportExtractionResult?> runExtraction(
+    RoutineImportReviewDraft review,
+  ) {
+    callCount++;
+    final completer = Completer<RoutineImportExtractionResult?>();
+    _pending[callCount] = completer;
+    state = RoutineImportAiState(
+      lifecycle: AiGenerationState(
+        phase: AiGenerationPhase.generating,
+        operationId: 'test-photo-ai-$callCount',
+        attempt: callCount,
+      ),
+    );
+    return completer.future;
+  }
+
+  void completeSuccess(RoutineImportExtractionResult result) {
+    completeSuccessAt(callCount, result);
+  }
+
+  void completeSuccessAt(
+    int attempt,
+    RoutineImportExtractionResult result, {
+    bool publishState = true,
+  }) {
+    final completer = _pending[attempt];
+    if (completer == null || completer.isCompleted) return;
+    if (publishState) {
+      state = RoutineImportAiState(
+        lifecycle: AiGenerationState(
+          phase: AiGenerationPhase.success,
+          operationId: 'test-photo-ai-$attempt',
+          attempt: attempt,
+        ),
+        result: result,
+      );
+    }
+    completer.complete(result);
+  }
+
+  void completeFailure() {
+    completeFailureAt(callCount);
+  }
+
+  void completeFailureAt(int attempt, {bool publishState = true}) {
+    final completer = _pending[attempt];
+    if (completer == null || completer.isCompleted) return;
+    if (publishState) {
+      state = RoutineImportAiState(
+        lifecycle: AiGenerationState(
+          phase: AiGenerationPhase.error,
+          operationId: 'test-photo-ai-$attempt',
+          attempt: attempt,
+          error: const AiGenerationError(
+            category: AiGenerationErrorCategory.serviceUnavailable,
+            message: 'AI import failed. Please try again.',
+            canRetry: true,
+          ),
+        ),
+        errorMessage: 'AI import failed. Please try again.',
+      );
+    }
+    completer.complete(null);
+  }
+}
+
+class _NeverRoutineImportAiClient implements RoutineImportAiClient {
+  @override
+  Future<RoutineImportExtractionResult> extract({
+    required String uid,
+    required String idToken,
+    required RoutineImportReviewDraft review,
+  }) {
+    return Completer<RoutineImportExtractionResult>().future;
+  }
+}
+
+class _SeededRestoredUploadsController extends RestoredUploadsController {
+  _SeededRestoredUploadsController({
+    required String uid,
+    required Map<UploadedAssetPurpose, RestoredUploadedAsset> assets,
+  }) : super(
+         assetRepository: _NoopUploadedAssetRepository(),
+         previewResolver: const UnavailableUploadedAssetPreviewResolver(),
+       ) {
+    state = RestoredUploadsState(uid: uid, assetsByPurpose: assets);
+  }
+}
+
+class _NoopUploadedAssetRepository implements UploadedAssetRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _SeededUploadInteractionController extends UploadInteractionController {
+  _SeededUploadInteractionController({
+    required String slotKey,
+    required UploadedAssetPurpose purpose,
+    required UploadedAsset asset,
+  }) : super(
+         shellConfig: onboardingUploadShellConfig,
+         assetRepository: _NoopUploadedAssetRepository(),
+         authRepository: _NoopAuthRepository(),
+         imagePrepareService: ImagePrepareService(),
+         r2UploadClient: _NoopR2UploadClient(),
+         permissionService: _NoopUploadPermissionService(),
+       ) {
+    state = Map.unmodifiable({
+      ...state,
+      slotKey: UploadSlotRuntimeState(
+        slotKey: slotKey,
+        purpose: purpose,
+        phase: UploadInteractionPhase.restored,
+        durableAsset: asset,
+      ),
+    });
+  }
+}
+
+class _NoopAuthRepository implements AuthRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _NoopR2UploadClient implements R2UploadClient {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _NoopUploadPermissionService implements UploadPermissionService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+UploadedAsset _uploadedAsset({
+  required String uid,
+  required UploadedAssetPurpose purpose,
+  required String assetId,
+}) {
+  final now = DateTime(2026, 9, 5, 12);
+  return UploadedAsset(
+    assetId: assetId,
+    ownerUid: uid,
+    r2Key: 'users/$uid/onboarding/${purpose.wireName}/$assetId.jpg',
+    fileName: '$assetId.jpg',
+    purpose: purpose,
+    sourceFeature: OnboardingDraft.sourceOnboarding,
+    sizeBytes: 1024,
+    contentType: 'image/jpeg',
+    createdAt: now,
+    updatedAt: now,
+    status: UploadedAssetStatus.uploaded,
+  );
 }

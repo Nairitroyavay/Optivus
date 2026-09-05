@@ -1399,7 +1399,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Oatmeal & Fruit'), findsOneWidget);
-        expect(find.text('Set Your Weekly Meal'), findsOneWidget);
+        expect(find.text('Eating Setup'), findsOneWidget);
       },
     );
 

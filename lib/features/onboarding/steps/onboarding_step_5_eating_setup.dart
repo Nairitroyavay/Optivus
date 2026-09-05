@@ -43,6 +43,7 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   String? _generationError;
   String? _createError;
   late final AiGenerationController _createLifecycle;
+  int _photoAiRequestGeneration = 0;
   bool _didInitFromDraft = false;
 
   @override
@@ -103,6 +104,19 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     return mounted &&
         currentUid == uid &&
         ref.read(authGenerationProvider) == authGeneration;
+  }
+
+  bool get _hasRetainedEatingBlocks => ref
+      .read(mockOnboardingProvider)
+      .draft
+      .baseTimeline
+      .confirmedBlocksForSection('eating')
+      .isNotEmpty;
+
+  String _retainedRoutineFailureMessage(String fallback) {
+    return _hasRetainedEatingBlocks
+        ? "Couldn't update this meal routine. Your previous routine is still in place."
+        : fallback;
   }
 
   Widget _buildViewCurrentRoutineButton() {
@@ -308,6 +322,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           child: _EatingTimelineSection(
             selectedDay: _selectedDay,
             blocks: eatingBlocks,
+            retainedError: path == onboardingEatingPathHasRoutine
+                ? _generationError
+                : _createError,
             onDayChanged: (day) => setState(() => _selectedDay = day),
             emptyLabel: 'Generate your weekly meal routine first.',
           ),
@@ -452,11 +469,16 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
 
     final capturedAssetId = asset.assetId;
     final capturedR2Key = asset.r2Key;
+    final requestGeneration = ++_photoAiRequestGeneration;
     bool sourceIsCurrent() {
       final current = ref
           .read(onboardingUploadInteractionProvider)[onboardingEatingUploadSlot]
           ?.durableAsset;
+      final base = ref.read(mockOnboardingProvider).draft.baseTimeline;
       return _isCurrentSession(uid, authGeneration) &&
+          _photoAiRequestGeneration == requestGeneration &&
+          base.eatingSetupPath == onboardingEatingPathHasRoutine &&
+          base.eatingSetupStep >= 2 &&
           current?.assetId == capturedAssetId &&
           current?.r2Key == capturedR2Key;
     }
@@ -492,9 +514,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     );
     if (result == null) {
       setState(
-        () => _generationError = onboarding5FriendlyAiMessage(
-          aiState.errorMessage,
-          const [],
+        () => _generationError = _retainedRoutineFailureMessage(
+          onboarding5FriendlyAiMessage(aiState.errorMessage, const []),
         ),
       );
       return;
@@ -517,12 +538,14 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     );
     if (blocks.isEmpty) {
       setState(
-        () => _generationError = mapped.droppedNoDishes > 0
-            ? 'AI did not return specific dishes. Please upload a clearer photo.'
-            : onboarding5FriendlyAiMessage(
-                aiState.errorMessage,
-                result.warnings,
-              ),
+        () => _generationError = _retainedRoutineFailureMessage(
+          mapped.droppedNoDishes > 0
+              ? 'AI did not return specific dishes. Please upload a clearer photo.'
+              : onboarding5FriendlyAiMessage(
+                  aiState.errorMessage,
+                  result.warnings,
+                ),
+        ),
       );
       return;
     }
@@ -663,7 +686,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
     if (run.isSuccess) {
       _replaceEatingBlocks(run.value!);
     } else if (run.error != null) {
-      setState(() => _createError = run.error!.message);
+      setState(() {
+        _createError = _retainedRoutineFailureMessage(run.error!.message);
+      });
     }
   }
 
@@ -1258,6 +1283,7 @@ class _EatingGenerateButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     return GestureDetector(
+      key: const ValueKey('onboarding-step5-photo-generate-button'),
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Opacity(
@@ -1617,12 +1643,14 @@ class _Onboarding5StaleOperation implements Exception {
 class _EatingTimelineSection extends ConsumerWidget {
   final int selectedDay;
   final List<TimelineBlockDraft> blocks;
+  final String? retainedError;
   final ValueChanged<int> onDayChanged;
   final String emptyLabel;
 
   const _EatingTimelineSection({
     required this.selectedDay,
     required this.blocks,
+    required this.retainedError,
     required this.onDayChanged,
     required this.emptyLabel,
   });
@@ -1650,35 +1678,50 @@ class _EatingTimelineSection extends ConsumerWidget {
       );
     }
 
-    return FullScreenTimelineScaffold(
-      key: const ValueKey('onboarding-step5-full-screen-timeline'),
-      entries: entries,
-      selectedDay: selectedDay,
-      onDayChanged: onDayChanged,
-      title: 'Set Your Weekly Meal',
-      headerBanner: const _EatingHeader(
-        title: 'Set Your Weekly Meal',
-        subtitle: 'Review your meal times and dishes for the week.',
-      ),
-      emptyDayMessage: emptyLabel,
-      accent: OptivusColors.roseAccent,
-      styleBuilder: adapter.styleForEntry,
-      blockBuilder: (context, positioned) {
-        final block = blocks
-            .where((candidate) => candidate.id == positioned.entry.sourceId)
-            .first;
-        return _EatingTimelineBlock(
-          block: block,
-          onEditRequested: () => openMealEditor(block),
-        );
-      },
-      onEntryTapped: (entry) {
-        final block = blocks
-            .where((candidate) => candidate.id == entry.sourceId)
-            .firstOrNull;
-        if (block == null) return;
-        openMealEditor(block);
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (retainedError != null) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+            child: _EatingInlineMessage(message: retainedError!),
+          ),
+        ],
+        Expanded(
+          child: FullScreenTimelineScaffold(
+            key: const ValueKey('onboarding-step5-full-screen-timeline'),
+            entries: entries,
+            selectedDay: selectedDay,
+            onDayChanged: onDayChanged,
+            title: 'Eating Setup',
+            headerBanner: const _EatingHeader(
+              title: 'Eating Setup',
+              subtitle: 'Review your meal times and dishes for the week.',
+            ),
+            emptyDayMessage: emptyLabel,
+            accent: OptivusColors.roseAccent,
+            styleBuilder: adapter.styleForEntry,
+            blockBuilder: (context, positioned) {
+              final block = blocks
+                  .where(
+                    (candidate) => candidate.id == positioned.entry.sourceId,
+                  )
+                  .first;
+              return _EatingTimelineBlock(
+                block: block,
+                onEditRequested: () => openMealEditor(block),
+              );
+            },
+            onEntryTapped: (entry) {
+              final block = blocks
+                  .where((candidate) => candidate.id == entry.sourceId)
+                  .firstOrNull;
+              if (block == null) return;
+              openMealEditor(block);
+            },
+          ),
+        ),
+      ],
     );
   }
 }

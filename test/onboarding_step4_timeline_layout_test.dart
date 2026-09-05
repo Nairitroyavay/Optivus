@@ -523,7 +523,7 @@ void main() {
     expect(find.text('Upload your work schedule'), findsNothing);
   });
 
-  testWidgets('reopened saved schedule shows generated card and timeline', (
+  testWidgets('reopened saved schedule shows compact status and timeline', (
     tester,
   ) async {
     final draft = OnboardingDraft(
@@ -567,19 +567,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Class and work schedule generated'), findsOneWidget);
-    expect(
-      find.text(
-        'Your class and work blocks are ready. Use each block menu to edit or remove them.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Current schedule'), findsOneWidget);
+    expect(find.text('Replace'), findsOneWidget);
+    expect(find.text('Class and work schedule generated'), findsNothing);
     expect(find.text('Upload your class and work timetable'), findsNothing);
     expect(find.text('Saved Class'), findsOneWidget);
     expect(find.text('Saved Work'), findsOneWidget);
   });
 
-  testWidgets('student only generated card shows correct copy', (tester) async {
+  testWidgets('student only saved schedule shows compact status', (
+    tester,
+  ) async {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentKey),
       baseTimeline: BaseTimelineDraft(
@@ -611,16 +609,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Class schedule generated'), findsOneWidget);
-    expect(
-      find.text(
-        'Your weekly class timeline is ready. Use each block menu to edit or remove it.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Current schedule'), findsOneWidget);
+    expect(find.text('Replace'), findsOneWidget);
+    expect(find.text('Class schedule generated'), findsNothing);
   });
 
-  testWidgets('work only generated card shows correct copy', (tester) async {
+  testWidgets('work only saved schedule shows compact status', (tester) async {
     final draft = OnboardingDraft(
       lifeRole: const LifeRoleDraft(
         lifeRole: LifeRoleDraft.workingKey,
@@ -655,13 +649,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Work schedule generated'), findsOneWidget);
-    expect(
-      find.text(
-        'Your weekly work timeline is ready. Use each block menu to edit or remove it.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Current schedule'), findsOneWidget);
+    expect(find.text('Replace'), findsOneWidget);
+    expect(find.text('Work schedule generated'), findsNothing);
   });
 
   testWidgets(
@@ -722,8 +712,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Class and work schedule generated'), findsOneWidget);
-      await tester.tap(find.text('Replace schedule'));
+      expect(find.text('Current schedule'), findsOneWidget);
+      await tester.tap(find.text('Replace'));
       await tester.pumpAndSettle();
       expect(find.text('Replace saved schedule?'), findsOneWidget);
       await tester.tap(
@@ -1946,7 +1936,7 @@ void main() {
       find.text('Review your meal times and dishes for the week.'),
       findsOneWidget,
     );
-    expect(find.text('Set Your Weekly Meal'), findsOneWidget);
+    expect(find.text('Eating Setup'), findsWidgets);
     expect(find.text('Breakfast'), findsOneWidget);
     expect(find.text('Oatmeal'), findsOneWidget);
 

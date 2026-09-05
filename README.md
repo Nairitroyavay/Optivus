@@ -10,16 +10,18 @@ Coach preferences, notification preferences, and reviewed AI-import data.
 
 ## Current project status
 
-The Phase 0 documentation foundation is complete. Active development remains
-in **Phase 3 Stabilization**. The stale Eating test contract is resolved and
-the automated Flutter/Worker gates are green, but physical-Android onboarding
-QA and authorized staging verification remain open; do not start Phase 4 yet.
+Auth and Onboarding pages 0-14 are now a frozen source/code baseline after the
+2026-09-05 final pre-Routine closure gate. Step 4/5 now use the Step 7-style
+focused setup → AI → internal review pattern, Step 7 remains frozen and
+regression-only, and the next product engineering phase is **Routine Production
+Closure**.
 
-This repository is not production-ready. At the Phase 0 close-out audit, the
-[data-source inventory](docs/DATA_SOURCE_CONTRACT.md) classified 0 capabilities
-as Live, 40 as Local, 14 as Seeded, and 18 as Unavailable. Firebase/Worker
-implementations exist in source, but that does not make their deployments or
-active flows production-ready.
+This repository is not production-ready. The
+[data-source inventory](docs/DATA_SOURCE_CONTRACT.md) still classifies no
+capability as **Live** under the repository's deployment/device standard.
+Firebase, Firestore, Worker, and R2 implementations exist in source, but local
+automated tests do not prove deployed staging, physical-device, or cross-device
+acceptance.
 
 Important warnings:
 
@@ -41,6 +43,20 @@ Important warnings:
 
 See the [technical-debt register](docs/TECHNICAL_DEBT.md), especially TD-035
 and TD-036, before preparing any release build.
+
+### Current verification snapshot
+
+Local verification from 2026-09-05:
+
+- `flutter analyze`: PASS, no issues found.
+- Focused Auth/Onboarding/Step 4/5/Step 7 matrix: PASS, 408 tests.
+- Full `flutter test`: PASS, 1733 tests.
+- Firestore rules emulator: PASS, 130 Jest tests.
+- Worker typecheck + request tests: PASS, 121 tests total — R2 Upload 19,
+  Routine Import 13, Nutrition 12, Skin Care 66, Coach 11.
+
+Live-device/staging acceptance remains pending; no Firebase, Firestore rules,
+Worker, R2, APK, or Play deployment was performed for this closure pass.
 
 ## Supported platforms
 
@@ -308,12 +324,12 @@ for worker in coach-worker nutrition-worker r2-upload-worker routine-import-work
 done
 ```
 
-All five Workers define request-level suites. On 2026-07-23 they passed 102
-tests total: R2 Upload 14, Routine Import 13, Nutrition 12, Skin Care 52, and
-Coach 11. A passing local suite does not replace authenticated
-deployed-environment smoke tests.
+All five Workers define request-level suites. On 2026-09-05 they passed 121
+tests total after typecheck: R2 Upload 19, Routine Import 13, Nutrition 12,
+Skin Care 66, and Coach 11. A passing local suite does not replace
+authenticated deployed-environment smoke tests.
 
-### Phase 3 automated and device gates
+### Auth/Onboarding freeze and device gates
 
 The former Eating mismatch can be rechecked with:
 
@@ -325,11 +341,12 @@ flutter test test/onboarding_step4_timeline_layout_test.dart \
 The test now verifies visible generated meals, saved Eating blocks, completion
 and dirty state, advancement to Fixed Schedule, and serialization restoration;
 it no longer depends on the removed `onboarding-step5-timeline-scroll` key.
-On 2026-07-23, `flutter analyze`, the 268-test focused Phase 3 matrix, and all
-392 Flutter tests passed. A complete physical-Android onboarding pass is still
-required by TD-044, and exact staging targets, deploy authorization, versions,
-and smoke results remain unresolved. See
-[PHASE_3_QA.md](docs/PHASE_3_QA.md).
+On 2026-09-05, `flutter analyze`, the 408-test focused Auth/Onboarding matrix,
+and the full 1733-test Flutter suite passed. This freezes Auth and Onboarding
+source/code for regression-only changes. A complete physical-Android onboarding
+pass is still required by TD-044, and exact staging targets, deploy
+authorization, versions, and smoke results remain unresolved. See
+[PHASE_3_QA.md](docs/PHASE_3_QA.md) for historical Phase 3 QA context.
 
 ## Security and secret handling
 
@@ -356,7 +373,11 @@ The full prohibited-service and integration rules are in
 
 - No capability currently meets the repository's strict **Live** definition.
 - Production Firebase, Worker, and R2 deployments are not verified.
-- Routine has duplicate state owners and fake CRUD/history/habit repositories.
+- Routine has one canonical `routineNotifierProvider` owner with
+  Firebase-capable template, occurrence/history, transaction, onboarding
+  projection, and Habit Systems repositories; full Routine production UX,
+  remote acceptance, and the older overlapping `habitRepositoryProvider`
+  remain next-phase work.
 - Goals and Tracker are local/fake; Tracker native sources are unavailable.
 - Home dashboards and several histories/insights contain seeded values.
 - Coach Worker/client exists, but the active chat path is local/seeded.
@@ -364,12 +385,13 @@ The full prohibited-service and integration rules are in
   notification scheduling are unavailable.
 - Profile photo lifecycle, export, selected-data deletion, and account deletion
   are incomplete.
-- The broad Firestore development catch-all remains.
+- Firestore rules have a 130-test emulator harness, but the broad development
+  catch-all and deployed-rule verification remain open debt.
 - Client crash reporting, analytics consent, CI/release automation, deployment
   verification, rate limiting, and R2 cleanup policy remain open debt.
 - Physical-device onboarding and authorized staging deployment/smoke testing
-  have not completed their Phase 3 gates.
+  have not completed their release gates.
 
-Do not begin Phase 4 durable Routine work until Phase 3 Stabilization closes
-TD-044, completes the staging/manual QA matrix, and records the required
-account-separation and restoration evidence.
+The next product engineering phase is **Routine Production Closure**. Do not
+reopen Auth/Onboarding for cleanup, modernization, or file-size refactors
+unless the freeze rule in [AGENTS.md](AGENTS.md) is satisfied.

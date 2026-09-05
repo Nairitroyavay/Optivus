@@ -1,10 +1,10 @@
 # Optivus Routine Data Contract
 
-Status date: 2026-07-23
+Status date: 2026-09-05
 
 Schema version: 1
 
-Scope: Phase 4, Steps 4.1 and 4.2
+Scope: Routine Production Closure preparation after the Auth/Onboarding source freeze
 
 This document is the authoritative persistence contract for Routine. If a
 Routine model, repository, screen, onboarding snapshot, or older document
@@ -12,15 +12,16 @@ disagrees with this contract, the canonical Firestore codecs and this document
 control new durable writes.
 
 Routine is not classified as **Live** yet. The Firebase-capable implementation,
-rules, and local automated tests exist, but Firestore emulator coverage,
-deployed Firebase verification, physical-device restoration, and
-another-device acceptance are still required.
+collection-specific rules, Firestore emulator rules tests, and local automated
+tests exist, but deployed Firebase verification, physical-device restoration,
+another-device acceptance, and full Routine UX acceptance are still required.
 
 ## 1. Ownership
 
-`routineNotifierProvider` is the one active in-app owner of Routine templates
-and their loaded occurrence records. It loads and writes through
-`RoutineRepository` and `RoutineHistoryRepository`.
+`routineNotifierProvider` is the one active in-app owner of Routine templates,
+their loaded occurrence records, loading/refresh state, mutations, and retry
+state. It loads and writes through `RoutineRepository`,
+`RoutineHistoryRepository`, and `RoutineTransactionRepository`.
 
 `mockRoutineProvider` remains only as a fake-development compatibility store.
 Firebase mode does not put onboarding or import output into it, and Profile
@@ -30,6 +31,21 @@ completion bundle is a bootstrap snapshot; it is not a live Routine store.
 The authenticated Firebase UID is passed explicitly to repository methods and
 retained by `RoutineNotifier.loadForOwner`. Firebase Routine writes never
 derive identity from `mockUserProfileProvider`.
+
+`habitSystemsRepositoryProvider` is the owner boundary for Routine Habit
+Systems. Firebase mode selects `FirestoreHabitSystemsRepository`, while fake
+mode selects `FakeHabitSystemsRepository`. The older
+`habitRepositoryProvider` is still an overlapping compatibility/debt surface:
+in Firebase mode it returns `UnavailableFirebaseHabitRepository` rather than a
+production store. Routine Production Closure must either remove or retire that
+legacy abstraction from active paths before Habit Systems can be considered
+fully accepted.
+
+Routine still has one known cross-feature ownership debt: some Routine-driven
+money/tracker launch or completion paths directly touch `mockTrackerProvider`.
+That is not durable Tracker ownership. Routine Production Closure must close or
+isolate that boundary before Routine can be accepted as a production feature;
+Tracker production persistence itself remains owned by the later Tracker phase.
 
 ## 2. Two kinds of Routine data
 
@@ -297,18 +313,30 @@ users/{uid}/routineProjections/onboarding-initial-v1
 
 Fields:
 
-| Field | Type |
-| --- | --- |
-| `id` | `onboarding-initial-v1` |
-| `ownerUid` | string |
-| `source` | `onboarding` |
-| `sourceBundleSchemaVersion` | integer |
-| `sourceBundleId` | stable string |
-| `sourceBundleFingerprint` | 64-character SHA-256 hex string |
-| `projectedItemIds` | list of canonical Routine template IDs |
-| `status` | `completed` |
-| `createdAt`, `completedAt` | Firestore timestamp |
-| `schemaVersion` | `1` |
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | `onboarding-initial-v1` | Must equal the projection document ID |
+| `ownerUid` | string | Must equal authenticated/path UID |
+| `slot` | `onboarding-initial` | Projection slot family |
+| `revision` | integer | Slot revision; current value is `1` |
+| `source` | `onboarding` | Projection source |
+| `sourceBundleSchemaVersion` | integer | Completion bundle schema version |
+| `sourceBundleId` | stable string | Source completion bundle ID |
+| `sourceBundleFingerprint` | 64-character SHA-256 hex string | Canonical source fingerprint |
+| `expectedItemIds` | list of canonical Routine template IDs | All item IDs expected from the bundle |
+| `createdItemIds` | list of canonical Routine template IDs | Items newly created by this projection |
+| `existingItemIds` | list of canonical Routine template IDs | Existing valid items preserved |
+| `repairedItemIds` | list of canonical Routine template IDs | Items repaired by an explicit recovery path |
+| `failedItemIds` | list of canonical Routine template IDs | Items not applied during a partial/retry state |
+| `projectedItemIds` | list of canonical Routine template IDs | Backward-compatible applied item list |
+| `eventSchemaVersion` | integer | Projection event schema version; current value is `1` |
+| `totalCount` | integer | Count of expected or applied projection items |
+| `cursor` | integer | Progress cursor; completed receipts have `cursor == totalCount` |
+| `status` | `pending` or `completed` | Projection status |
+| `createdAt`, `updatedAt` | Firestore timestamp | Audit instants |
+| `completedAt` | Firestore timestamp | Required when `status == completed` |
+| `lastSafeError` | string | Optional sanitized retry/error message |
+| `schemaVersion` | `1` | Receipt schema version |
 
 The receipt is create-only. Normal clients cannot update or delete it.
 
@@ -334,11 +362,18 @@ Transaction failure exposes `RoutineProjectionOutcome.retryRequired` through a
 typed retry-required exception; a successful first commit returns `projected`
 and an existing receipt returns `noOp`.
 
-No onboarding occurrence/history record or habit link is created by this
-projection. The completion bundle already normalizes class, work, eating,
-fixed, skin-care, approved habit, identity-system, money, and check-in schedule
-items into `routineItemsForApp`; only the eligible Routine templates in that
-list are projected.
+No onboarding occurrence/history record is created by this projection. The
+completion bundle already normalizes class, work, eating, fixed, skin-care,
+approved habit, identity-system, money, and check-in schedule items into
+`routineItemsForApp`; only the eligible Routine templates in that list are
+projected.
+
+Habit System projection is handled by the Habit Systems owner boundary through
+`HabitSystemsRepository.reconcileProjectedSystems`, which uses owner-scoped
+documents and a projection receipt. Tracker, Goals, Coach, and Home owner
+projection remains outside this contract and belongs to their later feature
+phases; current local hydration into those areas is not durable production
+ownership.
 
 ## 10. Protection of user edits and deletion
 
@@ -377,6 +412,12 @@ It has no whole-list replacement operation.
 
 `RoutineHistoryRepository` fetches and idempotently upserts owner-scoped
 occurrences.
+
+`RoutineTransactionRepository` owns multi-record Routine transactions such as
+template/history/projection operations that must commit atomically.
+
+`HabitSystemsRepository` owns Habit System create/update/archive/restore,
+owner-scoped reads, projection reconciliation, and watch streams.
 
 Firebase mode selects the Firestore implementations. Fake mode selects
 in-memory implementations and keeps seeded/test behavior available.
@@ -420,14 +461,15 @@ unknown newer versions.
 ## 13. Security and verification status
 
 Collection-specific rules exist for templates, occurrences, and projection
-receipts. They enforce verified authenticated ownership, path/data ID
-agreement, expected keys, enum/type/time/repeat constraints, immutable
-creation identity on updates, and exclusion from the broad development
-catch-all.
+receipts, plus Habit Systems. They enforce verified authenticated ownership,
+path/data ID agreement, expected keys, enum/type/time/repeat constraints,
+immutable creation identity on updates, and exclusion from the broad
+development catch-all.
 
-There is no checked-in Firestore emulator or rules-unit-testing harness.
-Source-level rule gates verify that the strict matches and catch-all exclusions
-remain present, but cross-account and malformed remote rule behavior still
-requires emulator coverage before Routine can become Live. This is an open
-Phase 4 security gate, alongside real Firebase/device and cross-device
-acceptance.
+A checked-in Firebase emulator/Jest harness now exercises Firestore rules
+locally. On 2026-09-05, `firebase emulators:exec --only firestore "npm test"`
+passed 130 tests. That closes the former "no emulator harness" gap for local
+rules coverage, but it does not prove deployed Firebase configuration,
+physical-device restoration, another-device acceptance, CI execution, or full
+Routine UX acceptance. Those remain open Routine Production Closure gates
+before any Live claim.

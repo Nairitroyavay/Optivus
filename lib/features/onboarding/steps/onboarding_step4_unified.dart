@@ -217,14 +217,17 @@ List<Onboarding4UploadTargetSpec> onboarding4UploadTargetsForRole(
       ),
     ];
   }
-  return const [
-    Onboarding4UploadTargetSpec(
-      source: RoutineImportReviewSource.work,
-      purpose: UploadedAssetPurpose.workSchedule,
-      thumbnailLabel: 'Work',
-      title: 'Work schedule',
-    ),
-  ];
+  if (role == LifeRoleDraft.workingKey) {
+    return const [
+      Onboarding4UploadTargetSpec(
+        source: RoutineImportReviewSource.work,
+        purpose: UploadedAssetPurpose.workSchedule,
+        thumbnailLabel: 'Work',
+        title: 'Work schedule',
+      ),
+    ];
+  }
+  return const [];
 }
 
 @visibleForTesting
@@ -794,6 +797,7 @@ class _OnboardingStep4UnifiedState
       _role == LifeRoleDraft.businessKey;
 
   bool get _needsBothPhotos => _classesRequired && _workRequired;
+  bool get _requiresAnySchedule => _classesRequired || _workRequired;
   List<_UploadTarget> get _uploadTargets {
     return onboarding4UploadTargetsForRole(
       _role,
@@ -802,6 +806,7 @@ class _OnboardingStep4UnifiedState
 
   int get _maxPhotos => _uploadTargets.length;
   bool get _hasAllPhotos =>
+      _uploadTargets.isNotEmpty &&
       _uploadTargets.every((target) => _photoForSource(target.source) != null);
 
   bool get _canTapGenerate => _hasAllPhotos && !_isUploading && !_isGenerating;
@@ -810,10 +815,14 @@ class _OnboardingStep4UnifiedState
     if (_needsBothPhotos) return 'Classes & Work';
     if (_classesRequired) return 'Classes';
     if (_role == LifeRoleDraft.businessKey) return 'Work & Business';
-    return 'Work';
+    if (_workRequired) return 'Work';
+    return 'Classes & Work';
   }
 
   String get _step4HeaderSubtitle {
+    if (!_requiresAnySchedule) {
+      return "You don't have a class or work schedule to add.";
+    }
     return 'Add your schedule and let AI build your week.';
   }
 
@@ -909,32 +918,6 @@ class _OnboardingStep4UnifiedState
       return 'Looking for subjects, rooms, days, and time blocks';
     }
     return 'Checking for shifts, fixed times, and weekly patterns';
-  }
-
-  String get _generatedScheduleTitle {
-    if (_needsBothPhotos) {
-      return 'Class and work schedule generated';
-    }
-    if (_classesRequired) {
-      return 'Class schedule generated';
-    }
-    if (_workRequired) {
-      return 'Work schedule generated';
-    }
-    return 'Schedule generated';
-  }
-
-  String get _generatedScheduleBody {
-    if (_needsBothPhotos) {
-      return 'Your class and work blocks are ready. Use each block menu to edit or remove them.';
-    }
-    if (_classesRequired) {
-      return 'Your weekly class timeline is ready. Use each block menu to edit or remove it.';
-    }
-    if (_workRequired) {
-      return 'Your weekly work timeline is ready. Use each block menu to edit or remove it.';
-    }
-    return 'Your weekly schedule is ready. Use each block menu to edit or remove it.';
   }
 
   // ---- Accent for the combined view (class-primary) ----
@@ -1940,11 +1923,6 @@ class _OnboardingStep4UnifiedState
 
         for (final photo in photosToProcess) {
           if (!scope.isCurrent) return false;
-          if (photo.source == RoutineImportReviewSource.classes) {
-            ref.read(onboardingClassTimelineProvider.notifier).state = const [];
-          } else {
-            ref.read(onboardingWorkTimelineProvider.notifier).state = const [];
-          }
           _debugLogExtractionStart(photo);
 
           if (!uploadedAssetIsDurablyUploadedForSlot(
@@ -2056,7 +2034,9 @@ class _OnboardingStep4UnifiedState
         _markClassJobDirty();
       } else if (run.error != null) {
         setState(() {
-          _generationError = run.error!.message;
+          _generationError = _hasValidReviewBlocks
+              ? "Couldn't update this schedule. Your previous schedule is still in place."
+              : run.error!.message;
         });
       }
     }
@@ -2638,7 +2618,10 @@ class _OnboardingStep4UnifiedState
                 subtitle: _step4HeaderSubtitle,
               ),
               const SizedBox(height: 18),
-              _buildUploadCard(),
+              if (_requiresAnySchedule)
+                _buildUploadCard()
+              else
+                _buildNoScheduleRequiredCard(),
               if (_hasValidReviewBlocks) ...[
                 const SizedBox(height: 14),
                 _buildViewCurrentScheduleButton(),
@@ -2693,38 +2676,15 @@ class _OnboardingStep4UnifiedState
               subtitle: 'Review your weekly schedule.',
             ),
           ),
+          if (_generationError != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: _buildScheduleErrorRow(_generationError!),
+            ),
           if (hasConfirmedSchedule)
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
               child: _buildSavedScheduleCard(),
-            )
-          else if (_generationError != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: OptivusColors.warning,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _generationError!,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: OptivusColors.warning,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _runGeneration,
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
             ),
           const SizedBox(height: 6),
           _buildDayChips(),
@@ -2752,6 +2712,31 @@ class _OnboardingStep4UnifiedState
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 220),
         child: reviewBody,
+      ),
+    );
+  }
+
+  Widget _buildNoScheduleRequiredCard() {
+    return OnboardingGlassCard(
+      tint: _accent.withValues(alpha: 0.07),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_circle_outline_rounded, color: _accent, size: 20),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'You can continue and build the rest of your routine.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.3,
+                fontWeight: FontWeight.w800,
+                color: OptivusColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2913,54 +2898,32 @@ class _OnboardingStep4UnifiedState
   }
 
   Widget _buildSavedScheduleCard() {
-    return OnboardingGlassCard(
-      tint: _accent.withValues(alpha: 0.07),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.48)),
+      ),
+      child: Row(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.check_circle_outline_rounded,
-                color: _accent,
-                size: 22,
+          Icon(Icons.check_circle_outline_rounded, color: _accent, size: 18),
+          const SizedBox(width: 7),
+          const Expanded(
+            child: Text(
+              'Current schedule',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _generatedScheduleTitle,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: OptivusColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      _generatedScheduleBody,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        height: 1.35,
-                        fontWeight: FontWeight.w700,
-                        color: OptivusColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 8),
           TextButton.icon(
             onPressed: _confirmReplaceSchedule,
             icon: Icon(Icons.refresh_rounded, size: 16, color: _accent),
             label: const Text(
-              'Replace schedule',
+              'Replace',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
             ),
             style: TextButton.styleFrom(
@@ -2973,6 +2936,30 @@ class _OnboardingStep4UnifiedState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildScheduleErrorRow(String message) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.warning_amber_rounded,
+          color: OptivusColors.warning,
+          size: 18,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            message,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: OptivusColors.warning,
+            ),
+          ),
+        ),
+        TextButton(onPressed: _runGeneration, child: const Text('Retry')),
+      ],
     );
   }
 
@@ -3550,7 +3537,8 @@ class _OnboardingStep4UnifiedState
   // ======================================================================
   Widget _buildTimelineArea(List<ClassRoutineBlock> allBlocks, bool hasBlocks) {
     // Generating state: show AI reading message
-    if (_isGenerating || _lifecycle.state.phase == AiGenerationPhase.error) {
+    if (_isGenerating ||
+        (_lifecycle.state.phase == AiGenerationPhase.error && !hasBlocks)) {
       return SizedBox.expand(
         child: Center(
           child: Padding(

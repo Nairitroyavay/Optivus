@@ -1,13 +1,15 @@
 # Optivus Product Blueprint — As Built
 
-Status date: 2026-07-23
+Status date: 2026-09-05
 
 Inspection baseline: `main` at
-`b1372a2fbbbf6605dd6afd4586fa6ce48c36d70a`, plus the documented uncommitted
-Phase 3 stabilization working tree
+`481601ccb5174478cde6bc4ac5494560b94eb306`, plus the documented final
+pre-Routine closure working tree
 
-Phase status: **Phase 4 Steps 4.1 and 4.2 implemented locally**; Phase 3 remote
-staging/device gates and Phase 4 Firebase/emulator acceptance remain open
+Phase status: **Auth and Onboarding 0-14 source/code frozen**; Step 7 frozen
+and regression-only; next product engineering phase is **Routine Production
+Closure**. Remote staging/device gates remain open and no capability is
+promoted to Live by this local automated gate.
 
 Product: Optivus 1.0.0+1
 
@@ -73,7 +75,7 @@ command, but must not create a competing source of truth.
 | Area | Owns | Does not own | Current data-source status |
 | --- | --- | --- | --- |
 | **Home** | Concise daily summary, Now/Next, Today's Mission, Coming Up, Mind Timeline, Mind Notes/Notebook, and derived cross-feature insights | Routine schedules, Tracker measurements/sessions, Goal records, or Coach conversations | **Production Live:** none. **Local/in-memory:** active Mind Note UI and selected money values. **Seeded/demo:** most dashboard values and insights. **Pending/unavailable:** durable Mind Notes and the production aggregation contract. |
-| **Routine** | Schedules, timeline and base-timeline items, movement/editing, conflicts, habit-system scheduling, occurrence status/history, and Tracker launch requests | Tracker measurement/session records, Goal meaning/proofs, or Home summaries | **Production Live:** none. **Configurable Firebase:** canonical templates, dated occurrences, per-document writes, and atomic onboarding projection/receipt. **Local/in-memory:** the same owner through fake repositories. **Seeded/demo:** fake-only compatibility data. **Pending/unavailable:** habit-system durability, complete Phase 4 UX, emulator/deployed/device/cross-device acceptance. |
+| **Routine** | Schedules, timeline and base-timeline items, movement/editing, conflicts, habit-system scheduling, occurrence status/history, and Tracker launch requests | Tracker measurement/session records, Goal meaning/proofs, or Home summaries | **Production Live:** none. **Configurable Firebase:** canonical templates, dated occurrences, transaction writes, Habit Systems, and atomic onboarding projection/receipt. **Local/in-memory:** the same owners through fake repositories. **Seeded/demo:** fake-only compatibility data. **Pending/unavailable:** full Routine production UX, deployed/device/cross-device acceptance, and the older overlapping `habitRepositoryProvider`. |
 | **Tracker** | Measurements, timers, sessions, health/behavior logs, money, focus, hydration, sleep, nutrition, meditation, fitness, bad-habit tracking, history, and connected/native ingestion | Routine schedules or occurrence policy; identity/Goal definitions | **Production Live:** none. **Local/in-memory:** manual actions in `mockTrackerProvider`; Fitness has additional feature-local state. **Seeded/demo:** screen-time, meditation, Fitness history/metrics, and some tracker summaries. **Pending/unavailable:** durable sessions/history and native Usage Access, Health Connect, GPS, and Mapbox ingestion. |
 | **Goals** | Identities, goals, systems, milestones, proofs, streaks, weekly reviews, progress history, archive, and restore | Routine scheduling or Tracker session records | **Production Live:** none. **Local/in-memory:** goal/proof/archive interactions in `mockGoalProvider`. **Seeded/demo:** sample goals and calculated presentation values where loaded. **Pending/unavailable:** durable proofs, reviews, milestones, evidence consumption, and progress aggregation. |
 | **Coach** | Conversation sessions/messages, advice, explanations, suggestions, recovery guidance, and explicitly permitted context assembly | Silent writes to Routine, Tracker, Goals, Home/Mind, Profile, or any Mind Note that was not explicitly shared | **Production Live:** none. **Local/in-memory:** `mockCoachProvider` sessions and messages. **Seeded/demo:** local reply content. **Pending/unavailable:** active `CoachAiClient` wiring, durable sessions/messages, and enforced context grants. |
@@ -298,14 +300,24 @@ These are simple product estimates, not a medical assessment.
 
 **Implemented flow:**
 
-- upload the required timetable image or images;
+- show a focused setup screen for the role-required timetable image or images;
 - persist upload metadata and private R2 object references when configured;
-- run Routine Import AI;
+- tap Generate to enter an internal AI review screen;
+- show `AiThinkingCard` while Routine Import AI reads the current source;
 - convert safe timed candidates into class/work schedule blocks;
-- display them on a weekly, minute-based timeline;
+- display weekday chips and a weekly, minute-based timeline for review;
 - allow block edits and day selection;
 - require all role-required sections before continuing; and
 - allow an existing saved schedule to be explicitly replaced.
+
+For **Not Student + Not Working**, no upload target, photo, AI run, or timeline
+review is required. The page shows that no class/work schedule is needed and
+the normal primary CTA can advance to Eating Setup.
+
+Regeneration preserves the previous valid same-source schedule until a
+replacement succeeds. Failed or cancelled rebuilds leave the old timeline
+visible with a compact retained-schedule error; replacing/removing a source
+still invalidates the source-dependent blocks and cannot resurrect stale data.
 
 AI output never directly becomes production Routine data. It must pass Worker
 validation, Flutter mapping/validation, timeline review, and user confirmation.
@@ -333,6 +345,15 @@ validation, Flutter mapping/validation, timeline review, and user confirmation.
 
 **Output:** confirmed `eating` timeline blocks with meal category, dishes,
 calorie estimate, protein estimate, repeat days, and AI/import source.
+
+**Implemented flow:** choice → setup → Generate → internal AI review →
+weekday chips and timeline review. Internal Back returns AI/review to setup,
+and View current meal routine returns to the retained timeline without running
+AI. Photo-based extraction is fenced by account, auth generation, asset
+identity, local request generation, and current review context; late cancelled
+same-photo operations cannot mutate the current routine or interfere with a
+new operation. Failed photo or create rebuilds retain the previous routine and
+show a compact error.
 
 **Status:** Nutrition Worker client is actively used by this page when its URL
 is configured. Fake deterministic AI is test-only; missing configuration must
@@ -409,7 +430,9 @@ replaced with a fake routine. Flutter bounds Worker requests and retains a
 previous valid routine when a request times out; the Worker rejects a JSON
 primitive or array instead of accepting it as an object payload.
 
-**Status:** implemented with the Skin Care Worker when configured.
+**Status:** source/code frozen and regression-only with the Skin Care Worker
+when configured. Local automated coverage remains green; deployed Skin Worker
+verification is not claimed here.
 
 ### Page 8 — Drop Bad Habits
 
@@ -682,10 +705,11 @@ is not written to repeating templates. Onboarding projection is atomic and
 idempotent with a fixed receipt, so sign-in preserves later edits and
 deletions.
 
-This is not yet **Live**: Firestore emulator tests, deployed-rule verification,
-physical-device restart, another-device restore, full Routine CRUD acceptance,
-and habit-system durability remain pending. The authoritative schema is
-[the Routine data contract](ROUTINE_DATA_CONTRACT.md).
+This is not yet **Live**: Firestore emulator tests now exist and pass locally,
+but deployed-rule verification, physical-device restart, another-device
+restore, full Routine CRUD acceptance, and the older overlapping habit
+abstraction remain pending. The authoritative schema is [the Routine data
+contract](ROUTINE_DATA_CONTRACT.md).
 
 ## 11. Tracker — Track, Measure, Improve
 
@@ -892,9 +916,9 @@ checks, owner-scoped R2 keys, upload size/type restrictions, request schema
 validation, bounded AI payloads, explicit CORS allowlists, context-permission
 enforcement in Coach, and sanitized output.
 
-All five Workers now have exported-handler coverage. On 2026-07-23, every
-typecheck and 102 Worker tests passed: R2 Upload 14, Routine Import 13,
-Nutrition 12, Skin Care 52, and Coach 11.
+All five Workers now have exported-handler coverage. On 2026-09-05, every
+typecheck and 121 Worker tests passed: R2 Upload 19, Routine Import 13,
+Nutrition 12, Skin Care 66, and Coach 11.
 
 Each Wrangler project also has a separate named staging template with
 environment-specific bindings and explicit origin configuration. The templates
@@ -1077,21 +1101,16 @@ Before any build is called production-ready, verify all of the following:
 
 ## 22. Verification snapshot
 
-Verification performed on 2026-07-23 against the inspection baseline and
-Phase 3 working tree named at the top of this document:
+Current verification performed on 2026-09-05 against the final pre-Routine
+closure working tree named at the top of this document:
 
 - `flutter analyze`: passed with no issues.
-- Focused Phase 3 Flutter matrix: all 268 tests passed across authentication,
-  router, persistence/restore, upload, Routine Import, Nutrition, Skin Care,
-  AI configuration, and fail-closed runtime configuration.
-- `flutter test`: all 392 tests passed.
-- Phase 4 Steps 4.1/4.2 verification: `flutter analyze` passed, all 31 focused
-  Routine contract/state tests passed, all 80 focused onboarding regression
-  tests passed, all 19 backend/runtime configuration tests passed, and the
-  complete `flutter test` suite passed all 414 tests.
-- All five Workers passed TypeScript typechecking and all 102 request tests.
-- Wrangler staging environment type generation and non-deploying dry runs
-  passed for all five Worker templates.
+- Focused Auth/Onboarding/Step 4/5/Step 7 matrix: all 408 tests passed.
+- `flutter test`: all 1733 tests passed.
+- Firestore rules emulator: all 130 Jest tests passed.
+- All five Workers passed TypeScript typechecking and all 121 request tests.
+- No Wrangler dry run, deployment, APK build, or remote smoke test was run in
+  this closure pass.
 - Startup configuration coverage proves staging/release rejects fake backend,
   fake upload, fake/disabled AI, missing/mismatched Firebase project,
   missing/non-HTTPS/placeholder/development URLs, and production use of
@@ -1099,10 +1118,9 @@ Phase 3 working tree named at the top of this document:
 - TD-043 is resolved: the Eating test asserts visible generated content,
   saving, completion/dirty state, Fixed Schedule advancement, and draft
   serialization restoration without restoring the removed structural key.
-- A physical Realme RMX2001 running Android 11 (API 30) was connected on
-  2026-07-23, but no staging APK was built or run because staging deployment
-  authorization and exact targets were not supplied. TD-044 remains open,
-  staging was not smoke-tested, and no integration is promoted to Live.
+- Live device/staging acceptance remains pending: no safe staging backend or
+  deployment target was verified in this closure pass, and no integration is
+  promoted to Live.
 - The complete automated evidence, Worker readiness review, Android manual
   matrix, and remaining gates are in [PHASE_3_QA.md](PHASE_3_QA.md).
 - Phase 0 navigation, design-token, documentation whitespace, heading, and
