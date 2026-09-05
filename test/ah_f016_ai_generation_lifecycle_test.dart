@@ -20,14 +20,17 @@ void main() {
 
       final runResult = await controller.run<String>(
         operationType: 'test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           expect(controller.state.phase, AiGenerationPhase.preparing);
           expect(controller.state.isActive, isTrue);
 
-          scope.transition(AiGenerationPhase.generating,
-              message: 'Generating...');
+          scope.transition(
+            AiGenerationPhase.generating,
+            message: 'Generating...',
+          );
           expect(controller.state.phase, AiGenerationPhase.generating);
           expect(controller.state.message, 'Generating...');
 
@@ -42,33 +45,40 @@ void main() {
     });
 
     test(
-        'B. idle → preparing → uploading → analyzing → generating → success (full photo path)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'B. idle → preparing → uploading → analyzing → generating → success (full photo path)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final phases = <AiGenerationPhase>[];
-      controller.addListener(() => phases.add(controller.state.phase));
+        final phases = <AiGenerationPhase>[];
+        controller.addListener(() => phases.add(controller.state.phase));
 
-      final runResult = await controller.run<String>(
-        operationType: 'photo-ai',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.uploading,
-              message: 'Uploading photo...');
-          scope.transition(AiGenerationPhase.analyzing,
-              message: 'Analyzing image...');
-          scope.transition(AiGenerationPhase.generating,
-              message: 'Synthesizing output...');
-          return 'photo-result';
-        },
-      );
+        final runResult = await controller.run<String>(
+          operationType: 'photo-ai',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          operation: (scope) async {
+            scope.transition(
+              AiGenerationPhase.uploading,
+              message: 'Uploading photo...',
+            );
+            scope.transition(
+              AiGenerationPhase.analyzing,
+              message: 'Analyzing image...',
+            );
+            scope.transition(
+              AiGenerationPhase.generating,
+              message: 'Synthesizing output...',
+            );
+            return 'photo-result';
+          },
+        );
 
-      expect(runResult.isSuccess, isTrue);
-      expect(runResult.value, 'photo-result');
-      expect(controller.state.phase, AiGenerationPhase.success);
-      expect(
+        expect(runResult.isSuccess, isTrue);
+        expect(runResult.value, 'photo-result');
+        expect(controller.state.phase, AiGenerationPhase.success);
+        expect(
           phases,
           containsAllInOrder([
             AiGenerationPhase.preparing,
@@ -76,71 +86,81 @@ void main() {
             AiGenerationPhase.analyzing,
             AiGenerationPhase.generating,
             AiGenerationPhase.success,
-          ]));
-    });
+          ]),
+        );
+      },
+    );
 
     test(
-        'C. phase skipping: preparing → generating (text-only skips upload/analyze)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'C. phase skipping: preparing → generating (text-only skips upload/analyze)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final phases = <AiGenerationPhase>[];
-      controller.addListener(() => phases.add(controller.state.phase));
+        final phases = <AiGenerationPhase>[];
+        controller.addListener(() => phases.add(controller.state.phase));
 
-      final runResult = await controller.run<int>(
-        operationType: 'direct',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.generating);
-          return 42;
-        },
-      );
+        final runResult = await controller.run<int>(
+          operationType: 'direct',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          operation: (scope) async {
+            scope.transition(AiGenerationPhase.generating);
+            return 42;
+          },
+        );
 
-      expect(runResult.isSuccess, isTrue);
-      expect(runResult.value, 42);
-      // No uploading or analyzing phases were emitted
-      expect(phases.contains(AiGenerationPhase.uploading), isFalse);
-      expect(phases.contains(AiGenerationPhase.analyzing), isFalse);
-      expect(
+        expect(runResult.isSuccess, isTrue);
+        expect(runResult.value, 42);
+        // No uploading or analyzing phases were emitted
+        expect(phases.contains(AiGenerationPhase.uploading), isFalse);
+        expect(phases.contains(AiGenerationPhase.analyzing), isFalse);
+        expect(
           phases,
           containsAllInOrder([
             AiGenerationPhase.preparing,
             AiGenerationPhase.generating,
             AiGenerationPhase.success,
-          ]));
-    });
+          ]),
+        );
+      },
+    );
 
-    test('C2. phase skipping: preparing → analyzing (skip uploading)', () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+    test(
+      'C2. phase skipping: preparing → analyzing (skip uploading)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final phases = <AiGenerationPhase>[];
-      controller.addListener(() => phases.add(controller.state.phase));
+        final phases = <AiGenerationPhase>[];
+        controller.addListener(() => phases.add(controller.state.phase));
 
-      final result = await controller.run<String>(
-        operationType: 'analyze-only',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.analyzing);
-          scope.transition(AiGenerationPhase.generating);
-          return 'ok';
-        },
-      );
+        final result = await controller.run<String>(
+          operationType: 'analyze-only',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          operation: (scope) async {
+            scope.transition(AiGenerationPhase.analyzing);
+            scope.transition(AiGenerationPhase.generating);
+            return 'ok';
+          },
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(phases.contains(AiGenerationPhase.uploading), isFalse);
-      expect(
+        expect(result.isSuccess, isTrue);
+        expect(phases.contains(AiGenerationPhase.uploading), isFalse);
+        expect(
           phases,
           containsAllInOrder([
             AiGenerationPhase.preparing,
             AiGenerationPhase.analyzing,
             AiGenerationPhase.generating,
             AiGenerationPhase.success,
-          ]));
-    });
+          ]),
+        );
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────
@@ -153,8 +173,9 @@ void main() {
 
       final runResult = await controller.run<String>(
         operationType: 'prep-fail',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           throw const FormatException('Corrupt inputs');
         },
@@ -166,8 +187,7 @@ void main() {
       );
 
       expect(runResult.isSuccess, isFalse);
-      expect(
-          runResult.error?.category, AiGenerationErrorCategory.invalidInput);
+      expect(runResult.error?.category, AiGenerationErrorCategory.invalidInput);
       expect(runResult.error?.message, 'Invalid input format');
       expect(controller.state.phase, AiGenerationPhase.error);
       expect(controller.state.canRetry, isFalse);
@@ -180,8 +200,9 @@ void main() {
 
       final runResult = await controller.run<String>(
         operationType: 'upload-fail',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.uploading);
           throw Exception('Upload connection lost');
@@ -208,8 +229,9 @@ void main() {
 
       final runResult = await controller.run<String>(
         operationType: 'gen-fail',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
           throw Exception('Worker returned 503');
@@ -222,8 +244,10 @@ void main() {
       );
 
       expect(runResult.isSuccess, isFalse);
-      expect(runResult.error?.category,
-          AiGenerationErrorCategory.serviceUnavailable);
+      expect(
+        runResult.error?.category,
+        AiGenerationErrorCategory.serviceUnavailable,
+      );
       expect(controller.state.phase, AiGenerationPhase.error);
       expect(controller.state.canRetry, isTrue);
     });
@@ -234,8 +258,9 @@ void main() {
 
       final runResult = await controller.run<Map<String, dynamic>>(
         operationType: 'parse-fail',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
           // Simulate malformed AI response parse failure
@@ -249,37 +274,41 @@ void main() {
       );
 
       expect(runResult.isSuccess, isFalse);
-      expect(runResult.error?.category,
-          AiGenerationErrorCategory.responseInvalid);
+      expect(
+        runResult.error?.category,
+        AiGenerationErrorCategory.responseInvalid,
+      );
       expect(controller.state.phase, AiGenerationPhase.error);
     });
 
     test(
-        'H. persistence failure (Firestore save) → error, not false durable success',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'H. persistence failure (Firestore save) → error, not false durable success',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final runResult = await controller.run<String>(
-        operationType: 'save-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.generating);
-          // AI response received successfully, but persistence fails
-          throw Exception('Firestore write rejected: offline');
-        },
-        mapError: (e) => const AiGenerationError(
-          category: AiGenerationErrorCategory.network,
-          message: 'Failed to save meal routine.',
-          canRetry: true,
-        ),
-      );
+        final runResult = await controller.run<String>(
+          operationType: 'save-test',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          operation: (scope) async {
+            scope.transition(AiGenerationPhase.generating);
+            // AI response received successfully, but persistence fails
+            throw Exception('Firestore write rejected: offline');
+          },
+          mapError: (e) => const AiGenerationError(
+            category: AiGenerationErrorCategory.network,
+            message: 'Failed to save meal routine.',
+            canRetry: true,
+          ),
+        );
 
-      expect(runResult.isSuccess, isFalse);
-      expect(controller.state.phase, AiGenerationPhase.error);
-      expect(controller.state.error?.message, 'Failed to save meal routine.');
-    });
+        expect(runResult.isSuccess, isFalse);
+        expect(controller.state.phase, AiGenerationPhase.error);
+        expect(controller.state.error?.message, 'Failed to save meal routine.');
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────
@@ -293,7 +322,8 @@ void main() {
       final runResult = await controller.run<String>(
         operationType: 'timeout-test',
         timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 30)),
+          operationTimeout: Duration(milliseconds: 30),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
           await Future.delayed(const Duration(milliseconds: 100));
@@ -303,98 +333,123 @@ void main() {
 
       expect(runResult.isSuccess, isFalse);
       expect(runResult.error?.category, AiGenerationErrorCategory.timeout);
-      expect(runResult.error?.message,
-          'That took longer than expected. Try again.');
+      expect(
+        runResult.error?.message,
+        'That took longer than expected. Try again.',
+      );
       expect(controller.state.phase, AiGenerationPhase.error);
       expect(controller.state.canRetry, isTrue);
     });
 
-    test('AE. operation timeout policies are configured for 180 seconds', () {
-      expect(AiOperationTimeouts.routineImport.operationTimeout,
-          const Duration(seconds: 180));
-      expect(AiOperationTimeouts.nutrition.operationTimeout,
-          const Duration(seconds: 180));
-      expect(AiOperationTimeouts.skinCare.operationTimeout,
-          const Duration(seconds: 180));
-      expect(AiOperationTimeouts.coach.operationTimeout,
-          const Duration(seconds: 180));
-    });
-
-    test('J. late result after timeout is ignored (stale success dropped)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
-
-      final completer = Completer<String>();
-      final runResult = await controller.run<String>(
-        operationType: 'late-test',
-        timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 20)),
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.generating);
-          return completer.future;
-        },
+    test('AE. skin care is bounded to 60 seconds without changing peers', () {
+      expect(
+        AiOperationTimeouts.routineImport.operationTimeout,
+        const Duration(seconds: 180),
       );
-
-      expect(runResult.error?.category, AiGenerationErrorCategory.timeout);
-      expect(controller.state.phase, AiGenerationPhase.error);
-
-      // Late completion after timeout
-      completer.complete('late-response');
-      await Future.delayed(const Duration(milliseconds: 10));
-
-      // State remains in error
-      expect(controller.state.phase, AiGenerationPhase.error);
-    });
-
-    test('K. success before timeout → timeout cannot override success state',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
-
-      final result = await controller.run<String>(
-        operationType: 'fast-op',
-        timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 200)),
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.generating);
-          return 'fast-result';
-        },
+      expect(
+        AiOperationTimeouts.nutrition.operationTimeout,
+        const Duration(seconds: 180),
       );
-
-      expect(result.isSuccess, isTrue);
-      expect(controller.state.phase, AiGenerationPhase.success);
-
-      // Advance past where timeout would have fired
-      await Future.delayed(const Duration(milliseconds: 250));
-      expect(controller.state.phase, AiGenerationPhase.success,
-          reason: 'Timeout must not retroactively override success');
-    });
-
-    test('L. timeout timer after back/cancel does not mutate abandoned screen',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
-
-      final completer = Completer<String>();
-      controller.run<String>(
-        operationType: 'cancel-timeout',
-        timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 100)),
-        operation: (scope) => completer.future,
+      expect(
+        AiOperationTimeouts.skinCare.operationTimeout,
+        const Duration(seconds: 60),
       );
-
-      expect(controller.state.isActive, isTrue);
-
-      // User cancels immediately (simulating back)
-      controller.cancel();
-      expect(controller.state.phase, AiGenerationPhase.idle);
-
-      // Wait past timeout duration
-      await Future.delayed(const Duration(milliseconds: 150));
-      expect(controller.state.phase, AiGenerationPhase.idle,
-          reason: 'Timeout must not fire after cancel');
+      expect(
+        AiOperationTimeouts.coach.operationTimeout,
+        const Duration(seconds: 180),
+      );
     });
+
+    test(
+      'J. late result after timeout is ignored (stale success dropped)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
+
+        final completer = Completer<String>();
+        final runResult = await controller.run<String>(
+          operationType: 'late-test',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(milliseconds: 20),
+          ),
+          operation: (scope) async {
+            scope.transition(AiGenerationPhase.generating);
+            return completer.future;
+          },
+        );
+
+        expect(runResult.error?.category, AiGenerationErrorCategory.timeout);
+        expect(controller.state.phase, AiGenerationPhase.error);
+
+        // Late completion after timeout
+        completer.complete('late-response');
+        await Future.delayed(const Duration(milliseconds: 10));
+
+        // State remains in error
+        expect(controller.state.phase, AiGenerationPhase.error);
+      },
+    );
+
+    test(
+      'K. success before timeout → timeout cannot override success state',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
+
+        final result = await controller.run<String>(
+          operationType: 'fast-op',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(milliseconds: 200),
+          ),
+          operation: (scope) async {
+            scope.transition(AiGenerationPhase.generating);
+            return 'fast-result';
+          },
+        );
+
+        expect(result.isSuccess, isTrue);
+        expect(controller.state.phase, AiGenerationPhase.success);
+
+        // Advance past where timeout would have fired
+        await Future.delayed(const Duration(milliseconds: 250));
+        expect(
+          controller.state.phase,
+          AiGenerationPhase.success,
+          reason: 'Timeout must not retroactively override success',
+        );
+      },
+    );
+
+    test(
+      'L. timeout timer after back/cancel does not mutate abandoned screen',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
+
+        final completer = Completer<String>();
+        controller.run<String>(
+          operationType: 'cancel-timeout',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(milliseconds: 100),
+          ),
+          operation: (scope) => completer.future,
+        );
+
+        expect(controller.state.isActive, isTrue);
+
+        // User cancels immediately (simulating back)
+        controller.cancel();
+        expect(controller.state.phase, AiGenerationPhase.idle);
+
+        // Wait past timeout duration
+        await Future.delayed(const Duration(milliseconds: 150));
+        expect(
+          controller.state.phase,
+          AiGenerationPhase.idle,
+          reason: 'Timeout must not fire after cancel',
+        );
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────
@@ -411,8 +466,9 @@ void main() {
       // Attempt 1: fails
       await controller.run<String>(
         operationType: 'retry-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           throw Exception('network error');
         },
@@ -425,8 +481,9 @@ void main() {
       // Attempt 2: retry
       final retryResult = await controller.run<String>(
         operationType: 'retry-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         retry: true,
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
@@ -456,8 +513,9 @@ void main() {
 
       final run1 = controller.run<String>(
         operationType: 'dedup',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           executionCount++;
           return completer.future;
@@ -467,8 +525,9 @@ void main() {
       // Rapid tap 2 and 3 while active
       final run2 = controller.run<String>(
         operationType: 'dedup',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           executionCount++;
           return 'second';
@@ -477,8 +536,9 @@ void main() {
 
       final run3 = controller.run<String>(
         operationType: 'dedup',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           executionCount++;
           return 'third';
@@ -500,8 +560,9 @@ void main() {
       // First: error
       await controller.run<String>(
         operationType: 'retry-dedup',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async => throw Exception('fail'),
       );
       expect(controller.state.phase, AiGenerationPhase.error);
@@ -511,8 +572,9 @@ void main() {
 
       final retry1 = controller.run<String>(
         operationType: 'retry-dedup',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         retry: true,
         operation: (scope) async {
           retryCount++;
@@ -522,8 +584,9 @@ void main() {
 
       final retry2 = controller.run<String>(
         operationType: 'retry-dedup',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         retry: true,
         operation: (scope) async {
           retryCount++;
@@ -543,180 +606,198 @@ void main() {
   // GROUP F — Stale Result Protection
   // ───────────────────────────────────────────────────────────────────
   group('AH-F016 Stale Result Protection', () {
-    test('O. same-UID stale: A starts, B starts, A completes late → B remains',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+    test(
+      'O. same-UID stale: A starts, B starts, A completes late → B remains',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      var currentInputId = 'input-A';
-      final completerA = Completer<String>();
+        var currentInputId = 'input-A';
+        final completerA = Completer<String>();
 
-      final runAFuture = controller.run<String>(
-        operationType: 'input-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        isSessionCurrent: () => currentInputId == 'input-A',
-        operation: (scope) => completerA.future,
-      );
+        final runAFuture = controller.run<String>(
+          operationType: 'input-test',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          isSessionCurrent: () => currentInputId == 'input-A',
+          operation: (scope) => completerA.future,
+        );
 
-      // User changes input → cancel old, start new
-      currentInputId = 'input-B';
-      controller.cancel();
+        // User changes input → cancel old, start new
+        currentInputId = 'input-B';
+        controller.cancel();
 
-      final runBFuture = controller.run<String>(
-        operationType: 'input-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        isSessionCurrent: () => currentInputId == 'input-B',
-        operation: (scope) async => 'result-for-B',
-      );
+        final runBFuture = controller.run<String>(
+          operationType: 'input-test',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          isSessionCurrent: () => currentInputId == 'input-B',
+          operation: (scope) async => 'result-for-B',
+        );
 
-      final runB = await runBFuture;
-      expect(runB.value, 'result-for-B');
-      expect(controller.state.phase, AiGenerationPhase.success);
+        final runB = await runBFuture;
+        expect(runB.value, 'result-for-B');
+        expect(controller.state.phase, AiGenerationPhase.success);
 
-      // Late A completes
-      completerA.complete('result-for-A');
-      final runA = await runAFuture;
-      expect(runA.ignored, isTrue);
-      expect(controller.state.phase, AiGenerationPhase.success);
-    });
-
-    test('P. account switch: UID_A active, switch to UID_B, A completes → B unaffected',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
-
-      var currentUid = 'user-A';
-      final completerA = Completer<String>();
-
-      final runAFuture = controller.run<String>(
-        operationType: 'auth-switch',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        isSessionCurrent: () => currentUid == 'user-A',
-        operation: (scope) => completerA.future,
-      );
-
-      // User switches to B
-      currentUid = 'user-B';
-
-      // A returns
-      completerA.complete('result-A');
-      final runA = await runAFuture;
-
-      expect(runA.ignored, isTrue);
-      // Controller did NOT become success for user-A's result
-    });
+        // Late A completes
+        completerA.complete('result-for-A');
+        final runA = await runAFuture;
+        expect(runA.ignored, isTrue);
+        expect(controller.state.phase, AiGenerationPhase.success);
+      },
+    );
 
     test(
-        'Q. same-UID auth refresh: token refreshes mid-flight → operation continues',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'P. account switch: UID_A active, switch to UID_B, A completes → B unaffected',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final currentUid = 'user-A';
-      var authVersion = 1;
+        var currentUid = 'user-A';
+        final completerA = Completer<String>();
 
-      final runFuture = controller.run<String>(
-        operationType: 'refresh-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        isSessionCurrent: () => currentUid == 'user-A',
-        operation: (scope) async {
-          authVersion = 2; // Token refreshes mid-flight
-          return 'valid-result';
-        },
-      );
+        final runAFuture = controller.run<String>(
+          operationType: 'auth-switch',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          isSessionCurrent: () => currentUid == 'user-A',
+          operation: (scope) => completerA.future,
+        );
 
-      final run = await runFuture;
-      expect(authVersion, 2);
-      expect(run.value, 'valid-result');
-      expect(controller.state.phase, AiGenerationPhase.success);
-    });
+        // User switches to B
+        currentUid = 'user-B';
+
+        // A returns
+        completerA.complete('result-A');
+        final runA = await runAFuture;
+
+        expect(runA.ignored, isTrue);
+        // Controller did NOT become success for user-A's result
+      },
+    );
 
     test(
-        'O2. timed-out A + successful retry B + late A → B remains authoritative',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'Q. same-UID auth refresh: token refreshes mid-flight → operation continues',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final completerA = Completer<String>();
-      await controller.run<String>(
-        operationType: 'op',
-        timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 20)),
-        operation: (scope) => completerA.future,
-      );
-      expect(controller.state.phase, AiGenerationPhase.error);
+        final currentUid = 'user-A';
+        var authVersion = 1;
 
-      final runB = await controller.run<String>(
-        operationType: 'op',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 2)),
-        retry: true,
-        operation: (scope) async => 'result-B',
-      );
-      expect(runB.value, 'result-B');
+        final runFuture = controller.run<String>(
+          operationType: 'refresh-test',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          isSessionCurrent: () => currentUid == 'user-A',
+          operation: (scope) async {
+            authVersion = 2; // Token refreshes mid-flight
+            return 'valid-result';
+          },
+        );
 
-      completerA.complete('result-A');
-      await Future.delayed(const Duration(milliseconds: 10));
-      expect(controller.state.phase, AiGenerationPhase.success);
-    });
+        final run = await runFuture;
+        expect(authVersion, 2);
+        expect(run.value, 'valid-result');
+        expect(controller.state.phase, AiGenerationPhase.success);
+      },
+    );
+
+    test(
+      'O2. timed-out A + successful retry B + late A → B remains authoritative',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
+
+        final completerA = Completer<String>();
+        await controller.run<String>(
+          operationType: 'op',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(milliseconds: 20),
+          ),
+          operation: (scope) => completerA.future,
+        );
+        expect(controller.state.phase, AiGenerationPhase.error);
+
+        final runB = await controller.run<String>(
+          operationType: 'op',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 2),
+          ),
+          retry: true,
+          operation: (scope) async => 'result-B',
+        );
+        expect(runB.value, 'result-B');
+
+        completerA.complete('result-A');
+        await Future.delayed(const Duration(milliseconds: 10));
+        expect(controller.state.phase, AiGenerationPhase.success);
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────
   // GROUP G — Cancel / Back / Dispose
   // ───────────────────────────────────────────────────────────────────
   group('AH-F016 Cancel / Back / Dispose', () {
-    test('R. back/cancel → idle, late result ignored, no ghost state',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+    test(
+      'R. back/cancel → idle, late result ignored, no ghost state',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final completer = Completer<String>();
-      final runFuture = controller.run<String>(
-        operationType: 'back-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-        operation: (scope) => completer.future,
-      );
+        final completer = Completer<String>();
+        final runFuture = controller.run<String>(
+          operationType: 'back-test',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(seconds: 5),
+          ),
+          operation: (scope) => completer.future,
+        );
 
-      expect(controller.state.isActive, isTrue);
+        expect(controller.state.isActive, isTrue);
 
-      controller.cancel();
-      expect(controller.state.phase, AiGenerationPhase.idle);
-      expect(controller.state.isActive, isFalse);
+        controller.cancel();
+        expect(controller.state.phase, AiGenerationPhase.idle);
+        expect(controller.state.isActive, isFalse);
 
-      completer.complete('late');
-      final run = await runFuture;
-      expect(run.ignored, isTrue);
-      expect(controller.state.phase, AiGenerationPhase.idle);
-    });
+        completer.complete('late');
+        final run = await runFuture;
+        expect(run.ignored, isTrue);
+        expect(controller.state.phase, AiGenerationPhase.idle);
+      },
+    );
 
-    test('S. dispose during active operation → no exception on completion',
-        () async {
-      final controller = AiGenerationController();
-      final hangingCompleter = Completer<String>();
+    test(
+      'S. dispose during active operation → no exception on completion',
+      () async {
+        final controller = AiGenerationController();
+        final hangingCompleter = Completer<String>();
 
-      controller.run<String>(
-        operationType: 'hanging-op',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(minutes: 5)),
-        operation: (scope) => hangingCompleter.future,
-      );
+        controller.run<String>(
+          operationType: 'hanging-op',
+          timeoutPolicy: const AiTimeoutPolicy(
+            operationTimeout: Duration(minutes: 5),
+          ),
+          operation: (scope) => hangingCompleter.future,
+        );
 
-      expect(controller.state.isActive, isTrue);
+        expect(controller.state.isActive, isTrue);
 
-      // Dispose while active (simulating widget dispose)
-      controller.dispose();
-      expect(controller.isDisposed, isTrue);
+        // Dispose while active (simulating widget dispose)
+        controller.dispose();
+        expect(controller.isDisposed, isTrue);
 
-      // Late completion should not throw
-      hangingCompleter.complete('late-value');
-      await Future.delayed(const Duration(milliseconds: 10));
-      // No exception proves dispose race safety
-    });
+        // Late completion should not throw
+        hangingCompleter.complete('late-value');
+        await Future.delayed(const Duration(milliseconds: 10));
+        // No exception proves dispose race safety
+      },
+    );
 
     test('T. timers cleaned after every terminal path', () async {
       final controller = AiGenerationController();
@@ -726,7 +807,8 @@ void main() {
       await controller.run<String>(
         operationType: 'cleanup-success',
         timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 500)),
+          operationTimeout: Duration(milliseconds: 500),
+        ),
         operation: (scope) async => 'done',
       );
       expect(controller.state.phase, AiGenerationPhase.success);
@@ -735,7 +817,8 @@ void main() {
       await controller.run<String>(
         operationType: 'cleanup-error',
         timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 500)),
+          operationTimeout: Duration(milliseconds: 500),
+        ),
         operation: (scope) async => throw Exception('fail'),
       );
       expect(controller.state.phase, AiGenerationPhase.error);
@@ -745,7 +828,8 @@ void main() {
       controller.run<String>(
         operationType: 'cleanup-cancel',
         timeoutPolicy: const AiTimeoutPolicy(
-            operationTimeout: Duration(milliseconds: 500)),
+          operationTimeout: Duration(milliseconds: 500),
+        ),
         operation: (scope) => c.future,
       );
       controller.cancel();
@@ -759,33 +843,36 @@ void main() {
   // GROUP H — Validation & Retry Semantics
   // ───────────────────────────────────────────────────────────────────
   group('AH-F016 Validation & Retry Semantics', () {
-    test('U. validation error does not enter lifecycle (no Worker call)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+    test(
+      'U. validation error does not enter lifecycle (no Worker call)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      // Simulate validation that rejects before entering lifecycle
-      var workerCallCount = 0;
-      bool validateInput(bool hasInput) => hasInput;
+        // Simulate validation that rejects before entering lifecycle
+        var workerCallCount = 0;
+        bool validateInput(bool hasInput) => hasInput;
 
-      // With invalid input: no lifecycle run happens
-      final isValid = validateInput(false);
-      if (isValid) {
-        await controller.run<String>(
-          operationType: 'validation-test',
-          timeoutPolicy:
-              const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
-          operation: (scope) async {
-            workerCallCount++;
-            return 'result';
-          },
-        );
-      }
+        // With invalid input: no lifecycle run happens
+        final isValid = validateInput(false);
+        if (isValid) {
+          await controller.run<String>(
+            operationType: 'validation-test',
+            timeoutPolicy: const AiTimeoutPolicy(
+              operationTimeout: Duration(seconds: 5),
+            ),
+            operation: (scope) async {
+              workerCallCount++;
+              return 'result';
+            },
+          );
+        }
 
-      expect(workerCallCount, 0);
-      expect(controller.state.phase, AiGenerationPhase.idle);
-      expect(controller.state.isActive, isFalse);
-    });
+        expect(workerCallCount, 0);
+        expect(controller.state.phase, AiGenerationPhase.idle);
+        expect(controller.state.isActive, isFalse);
+      },
+    );
 
     test('V. durable upload reused on retry (no re-upload)', () async {
       var uploadCallCount = 0;
@@ -808,8 +895,9 @@ void main() {
       String? durableR2Key;
       await controller.run<String>(
         operationType: 'durable-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.uploading);
           durableR2Key = await uploadAsset();
@@ -825,8 +913,9 @@ void main() {
       // Retry: reuse existing durable asset
       final retryResult = await controller.run<String>(
         operationType: 'durable-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         retry: true,
         operation: (scope) async {
           durableR2Key ??= await uploadAsset();
@@ -853,8 +942,9 @@ void main() {
 
       final result = await controller.run<String>(
         operationType: 'null-path-test',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           // Use durable asset identity, not local path
           final r2Key = durableAssetKey;
@@ -880,8 +970,9 @@ void main() {
       // First attempt with input A fails
       await controller.run<String>(
         operationType: 'input-freshness',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
           throw Exception('fail');
@@ -895,8 +986,9 @@ void main() {
       String? submittedInput;
       final retryResult = await controller.run<String>(
         operationType: 'input-freshness',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         retry: true,
         operation: (scope) async {
           submittedInput = currentInput; // Read fresh input
@@ -936,9 +1028,7 @@ void main() {
       expect(generatingState.isActive, isTrue);
       expect(generatingState.canRetry, isFalse);
 
-      const successState = AiGenerationState(
-        phase: AiGenerationPhase.success,
-      );
+      const successState = AiGenerationState(phase: AiGenerationPhase.success);
       expect(successState.isActive, isFalse);
       expect(successState.canRetry, isFalse);
     });
@@ -950,8 +1040,9 @@ void main() {
       Object? caughtError;
       await controller.run<String>(
         operationType: 'invalid-transition',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
           try {
@@ -976,8 +1067,11 @@ void main() {
         AiGenerationPhase.retrying,
       ]) {
         final state = AiGenerationState(phase: phase);
-        expect(state.isActive, isTrue,
-            reason: '${phase.name} should be active');
+        expect(
+          state.isActive,
+          isTrue,
+          reason: '${phase.name} should be active',
+        );
       }
     });
 
@@ -988,8 +1082,11 @@ void main() {
         AiGenerationPhase.error,
       ]) {
         final state = AiGenerationState(phase: phase);
-        expect(state.isActive, isFalse,
-            reason: '${phase.name} should not be active');
+        expect(
+          state.isActive,
+          isFalse,
+          reason: '${phase.name} should not be active',
+        );
       }
     });
 
@@ -1006,9 +1103,7 @@ void main() {
       expect(noRetryError.canRetry, isFalse);
 
       // Error with no error object
-      const noErrorObj = AiGenerationState(
-        phase: AiGenerationPhase.error,
-      );
+      const noErrorObj = AiGenerationState(phase: AiGenerationPhase.error);
       expect(noErrorObj.canRetry, isFalse);
 
       // Non-error phase with canRetry shouldn't be retryable
@@ -1034,27 +1129,35 @@ void main() {
       // Step 4 starts
       step4Controller.run<String>(
         operationType: 'step4',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) => completer4.future,
       );
 
       expect(step4Controller.state.isActive, isTrue);
-      expect(step5Controller.state.isActive, isFalse,
-          reason: 'Step 5 must not be affected by Step 4');
+      expect(
+        step5Controller.state.isActive,
+        isFalse,
+        reason: 'Step 5 must not be affected by Step 4',
+      );
 
       // Step 5 operates independently
       final result5 = await step5Controller.run<String>(
         operationType: 'step5',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async => 'step5-result',
       );
 
       expect(result5.isSuccess, isTrue);
       expect(step5Controller.state.phase, AiGenerationPhase.success);
-      expect(step4Controller.state.isActive, isTrue,
-          reason: 'Step 4 still active after Step 5 completes');
+      expect(
+        step4Controller.state.isActive,
+        isTrue,
+        reason: 'Step 4 still active after Step 5 completes',
+      );
 
       completer4.complete('step4-result');
     });
@@ -1068,14 +1171,18 @@ void main() {
       // A fails
       await controllerA.run<String>(
         operationType: 'a-fail',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 5)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 5),
+        ),
         operation: (scope) async => throw Exception('A fails'),
       );
 
       expect(controllerA.state.phase, AiGenerationPhase.error);
-      expect(controllerB.state.phase, AiGenerationPhase.idle,
-          reason: 'B must not inherit A error');
+      expect(
+        controllerB.state.phase,
+        AiGenerationPhase.idle,
+        reason: 'B must not inherit A error',
+      );
     });
   });
 
@@ -1094,20 +1201,21 @@ void main() {
     });
 
     test(
-        'AC. fresh controller does not automatically regenerate (no auto-retry)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'AC. fresh controller does not automatically regenerate (no auto-retry)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      // Simulate: prior in-memory operation disappeared after process death
-      // Fresh controller should not auto-start any operation
-      var operationRan = false;
+        // Simulate: prior in-memory operation disappeared after process death
+        // Fresh controller should not auto-start any operation
+        var operationRan = false;
 
-      // No one calls run() → operation stays idle
-      await Future.delayed(const Duration(milliseconds: 50));
-      expect(operationRan, isFalse);
-      expect(controller.state.phase, AiGenerationPhase.idle);
-    });
+        // No one calls run() → operation stays idle
+        await Future.delayed(const Duration(milliseconds: 50));
+        expect(operationRan, isFalse);
+        expect(controller.state.phase, AiGenerationPhase.idle);
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────
@@ -1148,111 +1256,130 @@ void main() {
   // GROUP M — Feature-Specific Integration
   // ───────────────────────────────────────────────────────────────────
   group('AH-F016 Feature-Specific Lifecycle Tests', () {
-    test('Step 4: preparing → generating → success (timetable extraction)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+    test(
+      'Step 4: preparing → generating → success (timetable extraction)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final phases = <AiGenerationPhase>[];
-      controller.addListener(() => phases.add(controller.state.phase));
+        final phases = <AiGenerationPhase>[];
+        controller.addListener(() => phases.add(controller.state.phase));
 
-      final result = await controller.run<bool>(
-        operationType: 'onboarding-step4-timetable',
-        timeoutPolicy: AiOperationTimeouts.routineImport,
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.generating,
-              message: 'AI is reading your class timetable…');
-          return true;
-        },
-      );
+        final result = await controller.run<bool>(
+          operationType: 'onboarding-step4-timetable',
+          timeoutPolicy: AiOperationTimeouts.routineImport,
+          operation: (scope) async {
+            scope.transition(
+              AiGenerationPhase.generating,
+              message: 'AI is reading your class timetable…',
+            );
+            return true;
+          },
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(controller.state.phase, AiGenerationPhase.success);
-      expect(phases.contains(AiGenerationPhase.uploading), isFalse,
-          reason: 'Text-only operation must not fake uploading');
-    });
+        expect(result.isSuccess, isTrue);
+        expect(controller.state.phase, AiGenerationPhase.success);
+        expect(
+          phases.contains(AiGenerationPhase.uploading),
+          isFalse,
+          reason: 'Text-only operation must not fake uploading',
+        );
+      },
+    );
 
     test(
-        'Step 5: preparing → generating → success (nutrition creation, no upload)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'Step 5: preparing → generating → success (nutrition creation, no upload)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final phases = <AiGenerationPhase>[];
-      controller.addListener(() => phases.add(controller.state.phase));
+        final phases = <AiGenerationPhase>[];
+        controller.addListener(() => phases.add(controller.state.phase));
 
-      final result = await controller.run<bool>(
-        operationType: 'nutrition-routine',
-        timeoutPolicy: AiOperationTimeouts.nutrition,
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.generating,
-              message: 'Building your meal plan…');
-          return true;
-        },
-      );
+        final result = await controller.run<bool>(
+          operationType: 'nutrition-routine',
+          timeoutPolicy: AiOperationTimeouts.nutrition,
+          operation: (scope) async {
+            scope.transition(
+              AiGenerationPhase.generating,
+              message: 'Building your meal plan…',
+            );
+            return true;
+          },
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(phases.contains(AiGenerationPhase.uploading), isFalse);
-      expect(phases.contains(AiGenerationPhase.analyzing), isFalse);
-    });
+        expect(result.isSuccess, isTrue);
+        expect(phases.contains(AiGenerationPhase.uploading), isFalse);
+        expect(phases.contains(AiGenerationPhase.analyzing), isFalse);
+      },
+    );
 
     test(
-        'Step 7 photo analysis: preparing → analyzing → success (skips generating)',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+      'Step 7 photo analysis: preparing → analyzing → success (skips generating)',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final phases = <AiGenerationPhase>[];
-      controller.addListener(() => phases.add(controller.state.phase));
+        final phases = <AiGenerationPhase>[];
+        controller.addListener(() => phases.add(controller.state.phase));
 
-      final result = await controller.run<List<String>>(
-        operationType: 'skin-care-analyze',
-        timeoutPolicy: AiOperationTimeouts.skinCare,
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.analyzing,
-              message: 'Analyzing skin care products…');
-          return ['Cleanser', 'SPF 50 Sunscreen'];
-        },
-      );
+        final result = await controller.run<List<String>>(
+          operationType: 'skin-care-analyze',
+          timeoutPolicy: AiOperationTimeouts.skinCare,
+          operation: (scope) async {
+            scope.transition(
+              AiGenerationPhase.analyzing,
+              message: 'Analyzing skin care products…',
+            );
+            return ['Cleanser', 'SPF 50 Sunscreen'];
+          },
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(result.value, ['Cleanser', 'SPF 50 Sunscreen']);
-      expect(
+        expect(result.isSuccess, isTrue);
+        expect(result.value, ['Cleanser', 'SPF 50 Sunscreen']);
+        expect(
           phases,
           containsAllInOrder([
             AiGenerationPhase.preparing,
             AiGenerationPhase.analyzing,
             AiGenerationPhase.success,
-          ]));
-    });
+          ]),
+        );
+      },
+    );
 
-    test('Step 7 routine generation: preparing → generating → success',
-        () async {
-      final controller = AiGenerationController();
-      addTearDown(controller.dispose);
+    test(
+      'Step 7 routine generation: preparing → generating → success',
+      () async {
+        final controller = AiGenerationController();
+        addTearDown(controller.dispose);
 
-      final phases = <AiGenerationPhase>[];
-      controller.addListener(() => phases.add(controller.state.phase));
+        final phases = <AiGenerationPhase>[];
+        controller.addListener(() => phases.add(controller.state.phase));
 
-      final result = await controller.run<int>(
-        operationType: 'skin-care-routine',
-        timeoutPolicy: AiOperationTimeouts.skinCare,
-        operation: (scope) async {
-          scope.transition(AiGenerationPhase.generating,
-              message: 'Building routine…');
-          return 3;
-        },
-      );
+        final result = await controller.run<int>(
+          operationType: 'skin-care-routine',
+          timeoutPolicy: AiOperationTimeouts.skinCare,
+          operation: (scope) async {
+            scope.transition(
+              AiGenerationPhase.generating,
+              message: 'Building routine…',
+            );
+            return 3;
+          },
+        );
 
-      expect(result.isSuccess, isTrue);
-      expect(
+        expect(result.isSuccess, isTrue);
+        expect(
           phases,
           containsAllInOrder([
             AiGenerationPhase.preparing,
             AiGenerationPhase.generating,
             AiGenerationPhase.success,
-          ]));
-    });
+          ]),
+        );
+      },
+    );
 
     test('Step 7 find-products: preparing → analyzing → success', () async {
       final controller = AiGenerationController();
@@ -1262,8 +1389,10 @@ void main() {
         operationType: 'skin-care-find-products',
         timeoutPolicy: AiOperationTimeouts.skinCare,
         operation: (scope) async {
-          scope.transition(AiGenerationPhase.analyzing,
-              message: 'Finding useful products…');
+          scope.transition(
+            AiGenerationPhase.analyzing,
+            message: 'Finding useful products…',
+          );
           return true;
         },
       );
@@ -1301,22 +1430,26 @@ void main() {
       );
 
       // Orb region is stable with ValueKey
-      expect(find.byKey(const ValueKey('ai-generation-status-region')),
-          findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('ai-generation-status-region')),
+        findsOneWidget,
+      );
       expect(find.textContaining('Building your routine'), findsOneWidget);
       expect(find.text('Organizing daily schedule'), findsOneWidget);
 
       await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Detailed photos can take a little longer'),
-          findsOneWidget);
+      expect(
+        find.text('Detailed photos can take a little longer'),
+        findsOneWidget,
+      );
 
       await tester.pump(const Duration(seconds: 1));
-      expect(
-          find.text('Still working. Keep this screen open'), findsOneWidget);
+      expect(find.text('Still working. Keep this screen open'), findsOneWidget);
     });
 
-    testWidgets('error shows message and accessible retry button',
-        (tester) async {
+    testWidgets('error shows message and accessible retry button', (
+      tester,
+    ) async {
       var retryTapped = false;
       const errorState = AiGenerationState(
         phase: AiGenerationPhase.error,
@@ -1343,8 +1476,10 @@ void main() {
         ),
       );
 
-      expect(find.text('AI is temporarily unavailable. Try again.'),
-          findsOneWidget);
+      expect(
+        find.text('AI is temporarily unavailable. Try again.'),
+        findsOneWidget,
+      );
       expect(find.text('Retry'), findsOneWidget);
 
       await tester.tap(find.text('Retry'));
@@ -1378,8 +1513,11 @@ void main() {
       );
 
       expect(find.text('Missing required photo.'), findsOneWidget);
-      expect(find.text('Retry'), findsNothing,
-          reason: 'Non-retryable error should not show Retry');
+      expect(
+        find.text('Retry'),
+        findsNothing,
+        reason: 'Non-retryable error should not show Retry',
+      );
     });
 
     testWidgets('idle state shows nothing', (tester) async {
@@ -1400,14 +1538,14 @@ void main() {
         ),
       );
 
-      expect(find.byKey(const ValueKey('ai-generation-status-region')),
-          findsNothing);
+      expect(
+        find.byKey(const ValueKey('ai-generation-status-region')),
+        findsNothing,
+      );
     });
 
     testWidgets('success state shows nothing (orb collapses)', (tester) async {
-      const successState = AiGenerationState(
-        phase: AiGenerationPhase.success,
-      );
+      const successState = AiGenerationState(phase: AiGenerationPhase.success);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -1424,102 +1562,124 @@ void main() {
         ),
       );
 
-      expect(find.byKey(const ValueKey('ai-generation-status-region')),
-          findsNothing);
+      expect(
+        find.byKey(const ValueKey('ai-generation-status-region')),
+        findsNothing,
+      );
     });
 
     testWidgets(
-        'AiThinkingCard compatibility mode (isActive bool) works without state',
-        (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: AiThinkingCard(
-                isActive: true,
-                title: 'Legacy mode',
-                detail: 'Still supported',
-                accent: OptivusColors.aquaAccent,
+      'AiThinkingCard compatibility mode (isActive bool) works without state',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: AiThinkingCard(
+                  isActive: true,
+                  title: 'Legacy mode',
+                  detail: 'Still supported',
+                  accent: OptivusColors.aquaAccent,
+                ),
               ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.textContaining('Legacy mode'), findsOneWidget);
-    });
+        expect(find.textContaining('Legacy mode'), findsOneWidget);
+      },
+    );
   });
 
   // ───────────────────────────────────────────────────────────────────
   // GROUP O — Infinite Spinner Fault Sweep
   // ───────────────────────────────────────────────────────────────────
   group('AH-F016 Infinite Spinner Fault Sweep', () {
-    test('exception at every async boundary terminates active state',
-        () async {
+    test('exception at every async boundary terminates active state', () async {
       final controller = AiGenerationController();
       addTearDown(controller.dispose);
 
       // Preparation failure
       await controller.run<String>(
         operationType: 'prep-exc',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 2)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 2),
+        ),
         operation: (scope) async => throw Exception('prep'),
       );
-      expect(controller.state.isActive, isFalse,
-          reason: 'prep exception must terminate');
+      expect(
+        controller.state.isActive,
+        isFalse,
+        reason: 'prep exception must terminate',
+      );
 
       // Upload failure
       await controller.run<String>(
         operationType: 'upload-exc',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 2)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 2),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.uploading);
           throw Exception('upload');
         },
       );
-      expect(controller.state.isActive, isFalse,
-          reason: 'upload exception must terminate');
+      expect(
+        controller.state.isActive,
+        isFalse,
+        reason: 'upload exception must terminate',
+      );
 
       // Analyze failure
       await controller.run<String>(
         operationType: 'analyze-exc',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 2)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 2),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.analyzing);
           throw Exception('analyze');
         },
       );
-      expect(controller.state.isActive, isFalse,
-          reason: 'analyze exception must terminate');
+      expect(
+        controller.state.isActive,
+        isFalse,
+        reason: 'analyze exception must terminate',
+      );
 
       // Generate failure
       await controller.run<String>(
         operationType: 'gen-exc',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 2)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 2),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
           throw Exception('generate');
         },
       );
-      expect(controller.state.isActive, isFalse,
-          reason: 'generate exception must terminate');
+      expect(
+        controller.state.isActive,
+        isFalse,
+        reason: 'generate exception must terminate',
+      );
 
       // Parse failure (after receiving response)
       await controller.run<String>(
         operationType: 'parse-exc',
-        timeoutPolicy:
-            const AiTimeoutPolicy(operationTimeout: Duration(seconds: 2)),
+        timeoutPolicy: const AiTimeoutPolicy(
+          operationTimeout: Duration(seconds: 2),
+        ),
         operation: (scope) async {
           scope.transition(AiGenerationPhase.generating);
           throw const FormatException('malformed JSON');
         },
       );
-      expect(controller.state.isActive, isFalse,
-          reason: 'parse exception must terminate');
+      expect(
+        controller.state.isActive,
+        isFalse,
+        reason: 'parse exception must terminate',
+      );
 
       // For EACH: phase is error, not stuck in active
       expect(controller.state.phase, AiGenerationPhase.error);

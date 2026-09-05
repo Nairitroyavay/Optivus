@@ -3,7 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 const ROUTINE_GENERATE_JSON_MAX_BYTES = 64 * 1024;
 const IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 const GEMINI_RESPONSE_MAX_BYTES = 1024 * 1024;
-const GEMINI_REQUEST_TIMEOUT_MS = 180_000;
+const GEMINI_REQUEST_TIMEOUT_MS = 50_000;
 
 type OwnedSkinCareProduct = {
   name: string;
@@ -134,17 +134,23 @@ async function readSmallJson(
 }
 
 function assertOwnedSkinCareObjectKey(uid: string, key: string, allowedPurposes: string[]): void {
-  const normalized = key.replace(/\\/g, "/");
-  if (normalized.includes("../") || normalized.includes("..\\")) {
-    throw new HttpError(403, "forbidden", "Path traversal detected.");
-  }
-  
-  const purposePattern = allowedPurposes.join("|");
-  const regex = new RegExp(
-    `^users/${uid}/onboarding/(${purposePattern})/[a-zA-Z0-9_-]+\\.(jpg|jpeg|png|webp|heic|heif|gif|pdf)$`,
-  );
-  if (!regex.test(normalized)) {
+  if (!key || key.includes("\\") || key.includes("//") || key.includes("..")) {
     throw new HttpError(403, "forbidden", "Unauthorized R2 key access.");
+  }
+  const parts = key.split("/");
+  if (parts.length !== 5 ||
+      parts[0] !== "users" ||
+      parts[1] !== uid ||
+      parts[2] !== "onboarding" ||
+      !allowedPurposes.includes(parts[3])) {
+    throw new HttpError(403, "forbidden", "Unauthorized R2 key access.");
+  }
+  const fileMatch = /^([a-zA-Z0-9_-]+)\.([a-zA-Z0-9]+)$/.exec(parts[4]);
+  if (!fileMatch) {
+    throw new HttpError(403, "forbidden", "Unauthorized R2 key access.");
+  }
+  if (!["jpg", "jpeg", "png", "webp"].includes(fileMatch[2].toLowerCase())) {
+    throw new HttpError(415, "unsupported_content_type", "This photo format is not supported. Please upload JPEG, PNG, or WEBP.");
   }
 }
 
@@ -392,10 +398,8 @@ function missingRecommendedProductCategories(
     "cleanser",
     "moisturizer",
     "sunscreen",
-    "vitamin_c_serum",
-    "treatment_serum",
   ].filter(
-    (category) => (categoryCounts.get(category) || 0) < 2,
+    (category) => (categoryCounts.get(category) || 0) < 1,
   );
 }
 
@@ -410,9 +414,23 @@ function mergeRecommendedProducts(
     if (!key || seen.has(key)) continue;
     seen.add(key);
     merged.push(product);
-    if (merged.length >= 12) break;
   }
   return merged;
+}
+
+function capRecommendedProducts(
+  products: RecommendedSkinCareProduct[],
+  maximum = 10,
+): RecommendedSkinCareProduct[] {
+  const result: RecommendedSkinCareProduct[] = [];
+  for (const category of ["cleanser", "moisturizer", "sunscreen"]) {
+    result.push(...products.filter((product) => product.category === category).slice(0, 2));
+  }
+  for (const product of products) {
+    if (result.length >= maximum) break;
+    if (!result.includes(product)) result.push(product);
+  }
+  return result.slice(0, maximum);
 }
 
 function normalizedProductKey(value: string): string {
@@ -1449,7 +1467,7 @@ function shouldTryFallback(failure: ProviderFailure): boolean {
     failure.errorCode !== "provider_invalid_request";
 }
 
-async function callGeminiWithFallback(prompt: string, imageParts: any[], env: Env): Promise<string> {
+async function callGeminiWithFallback(prompt: string, imageParts: any[], env: Env, deadline = Date.now() + GEMINI_REQUEST_TIMEOUT_MS): Promise<string> {
   const provider = env.AI_PROVIDER || "gemini";
   if (provider !== "gemini") {
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
@@ -1465,6 +1483,10 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
       `https://generativelanguage.googleapis.com/v1beta/models/` +
       `${encodeURIComponent(modelId)}:generateContent`;
     try {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new ProviderRequestError({ errorCode: "provider_timeout", providerCode: "request_timeout" });
+      }
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -1479,7 +1501,7 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
             temperature: 0,
           },
         }),
-        signal: AbortSignal.timeout(GEMINI_REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(Math.max(1, remaining)),
       });
       const responseText = await readBoundedResponseText(response);
       if (!response.ok) {
@@ -1569,8 +1591,8 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
   if (!body.productPhotos || !Array.isArray(body.productPhotos) || body.productPhotos.length === 0) {
     throw new HttpError(400, "invalid_skin_care_request", "Missing product photos.");
   }
-  if (body.productPhotos.length > 10) {
-    throw new HttpError(400, "too_many_photos", "Upload your main 10 products first. You can add more later.");
+  if (body.productPhotos.length !== 1) {
+    throw new HttpError(400, "too_many_photos", "Upload one photo containing the products you want reviewed.");
   }
 
   const imageParts: any[] = [];
@@ -1583,6 +1605,9 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
       throw new HttpError(404, "r2_image_missing", `Could not find uploaded image: ${photoKey}`);
     }
     const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType, photoKey);
+    if (object.size > IMAGE_MAX_BYTES) {
+      throw new HttpError(413, "image_payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
+    }
     const buffer = await object.arrayBuffer();
     if (buffer.byteLength > IMAGE_MAX_BYTES) {
       throw new HttpError(413, "image_payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
@@ -1599,8 +1624,9 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
     throw new HttpError(400, "invalid_skin_care_request", "No valid images could be loaded.");
   }
 
-  const prompt = `You are a dermatology and skin-care expert analyzing user-uploaded product photos. 
+  const prompt = `You are a cosmetic skin-care routine assistant reviewing a user-uploaded product photo.
 Identify the skin care products in the provided images.
+Do not diagnose a medical condition, prescribe medication, or claim treatment or cure. For concerning or persistent symptoms, give neutral guidance to seek qualified professional care.
 Return a JSON object:
 {
   "products": [
@@ -1636,6 +1662,7 @@ Return a JSON object:
 }
 
 async function handleRoutineGenerate(request: Request, env: Env): Promise<Response> {
+  const deadline = Date.now() + GEMINI_REQUEST_TIMEOUT_MS;
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request, ROUTINE_GENERATE_JSON_MAX_BYTES);
   const recommendationOnly = body.recommendationOnly === true;
@@ -1649,12 +1676,15 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
 
   const imageParts: any[] = [];
   
-  if (body.facePhotoR2Key && typeof body.facePhotoR2Key === "string") {
+  if (recommendationOnly && body.facePhotoR2Key && typeof body.facePhotoR2Key === "string") {
     try {
       assertOwnedSkinCareObjectKey(user.uid, body.facePhotoR2Key, ["skin_face", "skin_care"]);
       const object = await env.UPLOAD_BUCKET.get(body.facePhotoR2Key);
       if (object) {
         const contentType = supportedGeminiImageContentType(object.httpMetadata?.contentType, body.facePhotoR2Key);
+        if (object.size > IMAGE_MAX_BYTES) {
+          throw new HttpError(413, "image_payload_too_large", `Image ${body.facePhotoR2Key} exceeds 15MB limit.`);
+        }
         const buffer = await object.arrayBuffer();
         if (buffer.byteLength > IMAGE_MAX_BYTES) {
           throw new HttpError(413, "image_payload_too_large", `Image ${body.facePhotoR2Key} exceeds 15MB limit.`);
@@ -1746,14 +1776,13 @@ Strong-active split is only a variation of the night slot, not an extra slot.
 Split night routine when needed: normal night without strong active repeatDays [1,2,4,5,7], active night with strong active repeatDays [3,6].
 This must not increase the number of blocks on any day. For 3/day with a strong active, valid routinePlans are morning [1,2,3,4,5,6,7], midday [1,2,3,4,5,6,7], night normal [1,2,4,5,7], night active [3,6]. Per-day count remains 3.`
     : recommendationOnly
-      ? `The user owns no products. Recommend 10 to 12 real, commonly available products in ${countryName} (${countryCode}) that match the user's skin details and budget.
+      ? `The user owns no products. Recommend 6 to 10 real, commonly available products in ${countryName} (${countryCode}) that match the user's skin details and budget.
 Return exact company/brand and product names, category, a realistic estimated local price or price range in ${currencyCode}, and one short usefulness reason.
-Cover all five required categories: cleanser, moisturizer, sunscreen, vitamin_c_serum, and treatment_serum. Return at least two alternatives in each category so the user can choose one product per category within budget.
-For India, brands such as Minimalist, Mamaearth, Cetaphil, Neutrogena, Plum, and Re'equil may be considered only when the specific product is suitable. For other countries, prefer brands normally sold in that country.
+Cover the three required core categories: cleanser, moisturizer, and sunscreen. Aim for at least two alternatives in each core category when valid products are available. Optional targeted products such as serums or exfoliants may be included only when useful for the stated cosmetic concerns; do not pad the list with questionable actives.
 Do not invent brands, products, prices, medical diagnoses, or guaranteed availability. Do not generate routinePlans in recommendation-only mode.`
       : `No owned products were provided. Build a general safe starter routine from the user's skin details.`;
 
-  const recommendationPrompt = `You recommend a small, safe skin-care shopping list. The user owns no products.
+  const recommendationPrompt = `You are a cosmetic skin-care routine assistant recommending a small, safe shopping list. The user owns no products.
 Use the face photo only for broad cosmetic personalization. Do not diagnose a disease or claim certainty from the photo.
 Skin Type: ${body.skinType || "unknown"}
 Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
@@ -1762,12 +1791,10 @@ Country: ${countryName} (${countryCode})
 Currency: ${currencyCode}
 Desired Applications Per Day: ${desiredApplicationsPerDay}
 
-Return 10 to 12 real products commonly sold in ${countryName}. The response must contain at least two alternatives in every required category: cleanser, moisturizer, sunscreen, vitamin_c_serum, and treatment_serum.
-Use only these exact category values: "cleanser", "moisturizer", "sunscreen", "vitamin_c_serum", "treatment_serum".
-The vitamin_c_serum choices must be genuine leave-on Vitamin C or Vitamin C-derivative serums for morning antioxidant/brightening use. Do not count a Vitamin C cleanser or cream.
-The treatment_serum choices must be different products from the Vitamin C choices and must target the user's stated concerns. Prefer beginner-safe, concern-matched ingredients such as niacinamide, alpha arbutin, or azelaic acid when suitable. Do not recommend prescription products, and do not recommend a strong retinoid or exfoliating treatment unless the user's details clearly make it appropriate and the reason includes a safety caveat.
+Return 6 to 10 real products commonly sold in ${countryName}. Aim for at least two alternatives in each required core category: cleanser, moisturizer, and sunscreen, when valid products are available.
+Use canonical category values such as "cleanser", "moisturizer", "sunscreen", "vitamin_c_serum", "treatment_serum", "serum", "exfoliant", and "toner". The latter categories are optional targeted recommendations and must never be forced.
+Do not recommend prescription products. Avoid strong retinoids or exfoliating treatments unless clearly useful for the user's stated cosmetic concerns and accompanied by a safety caveat.
 Every product must have an exact brand, exact product name, realistic local price or price range, ${currencyCode}, and one short usefulness reason.
-For India, consider suitable specific products from brands such as Minimalist, Mamaearth, Cetaphil, Neutrogena, Plum, and Re'equil. For other countries, use brands normally sold there.
 Do not invent brands, products, prices, medical diagnoses, or guaranteed availability.
 
 Return ONLY this strict JSON object:
@@ -1787,7 +1814,7 @@ Return ONLY this strict JSON object:
 
   const prompt = recommendationOnly
     ? recommendationPrompt
-    : `You are an expert dermatologist. Generate skin-care routine plans. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
+    : `You are a cosmetic skin-care routine assistant. Organize products using the user's declared skin type and cosmetic concerns. Do not diagnose, prescribe medication, claim treatment or cure, or act as a dermatologist. For concerning or persistent symptoms, give neutral guidance to seek qualified professional care. Flutter owns all schedule placement and duration. Do NOT choose final schedule times.
 Skin Type: ${body.skinType || "unknown"}
 Main Problem: ${body.mainProblem || "none"}
 Skin Concerns: ${JSON.stringify(stringList(body.skinConcerns))}
@@ -1798,7 +1825,6 @@ Routine Preference: ${body.routinePreference || "balanced"}
 Desired Applications Per Day: ${desiredApplicationsPerDay}
 ${ownedProductInstruction}
 Use warningIfAny and possibleActives to avoid unsafe conflicts. E.g. avoid Retinol + AHA/BHA in the same routine block, sunscreen in morning when appropriate.
-If a face photo is provided, use it to personalize the routine and suggested products.
 Use slot labels from: morning, midday, afternoon, night, custom.
 For 2/day prefer morning + night.
 For 3/day use morning + midday + night.
@@ -1852,7 +1878,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   "warnings": ["Patch test new products", "Any other warnings"]
 }`;
 
-  const text = await callGeminiWithFallback(prompt, imageParts, env);
+  const text = await callGeminiWithFallback(prompt, imageParts, env, deadline);
 
   const parsed = parseAiJsonText(text);
   if (!parsed) {
@@ -1916,9 +1942,8 @@ Currency: ${currencyCode}
 Missing essential categories: ${JSON.stringify(initiallyMissing)}
 Already accepted products: ${JSON.stringify(recommendedProducts)}
 
-Return real, commonly sold products only for the missing categories. Return at least two alternatives for every missing category.
-Use only these exact category values: "cleanser", "moisturizer", "sunscreen", "vitamin_c_serum", "treatment_serum".
-For vitamin_c_serum, return genuine leave-on Vitamin C or Vitamin C-derivative serums. For treatment_serum, return a different concern-matched leave-on serum and prefer a beginner-safe active when suitable.
+Return real, commonly sold products only for the missing required core categories. Return at least two alternatives for every missing category when valid products are available.
+Use only these exact category values: "cleanser", "moisturizer", "sunscreen".
 Every product must contain exact name, brand, realistic local price or range, currencyCode "${currencyCode}", and a short usefulness reason.
 Do not invent products, prices, diagnoses, or guaranteed availability.
 Return ONLY strict JSON:
@@ -1940,6 +1965,7 @@ Return ONLY strict JSON:
           repairPrompt,
           imageParts,
           env,
+          deadline,
         );
         const repairParsed = parseAiJsonText(repairText);
         const repairedProducts = usableRecommendedProducts(
@@ -1969,6 +1995,7 @@ Return ONLY strict JSON:
       }
     }
   }
+  recommendedProducts = capRecommendedProducts(recommendedProducts);
   if (recommendationOnly && recommendedProducts.length === 0) {
     warnings.push("ai_returned_no_product_recommendations");
   }

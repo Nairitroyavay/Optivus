@@ -415,12 +415,7 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
     wakingRange: wakingRange,
   );
   Onboarding7SkinCareScheduleResult? lastFailure;
-  for (final minimumGapMinutes in const [
-    onboarding7SkinCareMinimumGapMinutes,
-    30,
-    15,
-    0,
-  ]) {
+  for (final flexiblePlacement in const [false, true]) {
     final result = _attemptSkinCareSchedule(
       baseTimeline: baseTimeline,
       plans: adaptedPlans.plans,
@@ -430,38 +425,15 @@ Onboarding7SkinCareScheduleResult onboarding7ScheduleSkinCareRoutine({
       slotSpecs: slotSpecs,
       timestamp: timestamp,
       desiredApplicationsPerDay: desired,
-      minimumGapMinutes: minimumGapMinutes,
-      flexiblePlacement: false,
+      minimumGapMinutes: onboarding7SkinCareMinimumGapMinutes,
+      flexiblePlacement: flexiblePlacement,
     );
     if (!result.hasError) {
       if (kDebugMode) {
         debugPrint(
-          '[Onboarding7Scheduler] accepted gap=$minimumGapMinutes '
-          'flexible=false blocks=${result.blocks.length}',
-        );
-      }
-      return result;
-    }
-    lastFailure = result;
-  }
-  for (final minimumGapMinutes in const [30, 15, 0]) {
-    final result = _attemptSkinCareSchedule(
-      baseTimeline: baseTimeline,
-      plans: adaptedPlans.plans,
-      bathBlock: bathBlock,
-      occupied: occupied,
-      wakingRange: wakingRange,
-      slotSpecs: slotSpecs,
-      timestamp: timestamp,
-      desiredApplicationsPerDay: desired,
-      minimumGapMinutes: minimumGapMinutes,
-      flexiblePlacement: true,
-    );
-    if (!result.hasError) {
-      if (kDebugMode) {
-        debugPrint(
-          '[Onboarding7Scheduler] accepted gap=$minimumGapMinutes '
-          'flexible=true blocks=${result.blocks.length}',
+          '[Onboarding7Scheduler] accepted gap='
+          '$onboarding7SkinCareMinimumGapMinutes '
+          'flexible=$flexiblePlacement blocks=${result.blocks.length}',
         );
       }
       return result;

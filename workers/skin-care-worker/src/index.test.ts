@@ -13,6 +13,8 @@ import worker from "./index";
 type StoredObject = {
   body?: string;
   contentType?: string;
+  size?: number;
+  onRead?: () => void;
 };
 
 type FetchCall = {
@@ -22,10 +24,14 @@ type FetchCall = {
 
 class MockR2Object {
   httpMetadata?: { contentType?: string };
+  readonly size: number;
   private readonly body: string;
+  private readonly onRead?: () => void;
 
   constructor(object: StoredObject = {}) {
     this.body = object.body ?? "image";
+    this.size = object.size ?? new TextEncoder().encode(this.body).byteLength;
+    this.onRead = object.onRead;
     this.httpMetadata =
       object.contentType === undefined
         ? {}
@@ -33,6 +39,7 @@ class MockR2Object {
   }
 
   async arrayBuffer(): Promise<ArrayBuffer> {
+    this.onRead?.();
     const bytes = new TextEncoder().encode(this.body);
     return bytes.buffer.slice(
       bytes.byteOffset,
@@ -370,13 +377,7 @@ describe("Skin-care Worker", () => {
     expect(response.status).toBe(200);
     expect(json.routinePlans).toEqual([]);
     expect(json.recommendedProducts).toEqual(products);
-    for (const category of [
-      "cleanser",
-      "moisturizer",
-      "sunscreen",
-      "vitamin_c_serum",
-      "treatment_serum",
-    ]) {
+    for (const category of ["cleanser", "moisturizer", "sunscreen"]) {
       expect(
         json.recommendedProducts.filter((item: any) => item.category === category),
       ).toHaveLength(2);
@@ -384,8 +385,8 @@ describe("Skin-care Worker", () => {
     }
     const promptBody = JSON.stringify(calls[0].body);
     expect(promptBody).toContain("India (IN)");
-    expect(promptBody).toContain("Minimalist");
-    expect(promptBody).toContain("Mamaearth");
+    expect(promptBody).not.toContain("Minimalist");
+    expect(promptBody).not.toContain("Mamaearth");
     expect(promptBody).toContain("vitamin_c_serum");
     expect(promptBody).toContain("treatment_serum");
   });
@@ -438,13 +439,7 @@ describe("Skin-care Worker", () => {
     const json = await response.json() as any;
 
     expect(response.status).toBe(200);
-    for (const category of [
-      "cleanser",
-      "moisturizer",
-      "sunscreen",
-      "vitamin_c_serum",
-      "treatment_serum",
-    ]) {
+    for (const category of ["cleanser", "moisturizer", "sunscreen"]) {
       expect(
         json.recommendedProducts.filter((item: any) => item.category === category)
           .length,
@@ -453,8 +448,8 @@ describe("Skin-care Worker", () => {
     expect(json.warnings).toContain("ai_product_recommendations_repaired");
     expect(calls).toHaveLength(2);
     expect(JSON.stringify(calls[1].body)).toContain("Missing essential categories");
-    expect(JSON.stringify(calls[1].body)).toContain("vitamin_c_serum");
-    expect(JSON.stringify(calls[1].body)).toContain("treatment_serum");
+    expect(JSON.stringify(calls[1].body)).not.toContain("vitamin_c_serum");
+    expect(JSON.stringify(calls[1].body)).not.toContain("treatment_serum");
   });
 
   test("incomplete product recommendations are removed before returning", async () => {
@@ -519,6 +514,28 @@ describe("Skin-care Worker", () => {
     expect(json.products[0].name).toBe("UV Aqua Gel");
   });
 
+  test.each([
+    ["jpg", "image/jpeg"],
+    ["jpeg", "image/jpeg"],
+    ["png", "image/png"],
+    ["webp", "image/webp"],
+  ])("product analysis accepts the supported .%s format", async (extension, contentType) => {
+    const key = `users/uid-1/onboarding/skin_products/products.${extension}`;
+    stubGemini(JSON.stringify({
+      products: [{ name: "Daily Product", category: "cleanser" }],
+      warnings: [],
+    }));
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/products/analyze", {
+        productPhotos: [key],
+      }),
+      makeEnv({ [key]: { contentType } }) as any,
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   test("product analysis invalid JSON returns provider_invalid_json", async () => {
     const key = "users/uid-1/onboarding/skin_products/products.jpg";
     stubGemini("not-json");
@@ -552,10 +569,54 @@ describe("Skin-care Worker", () => {
     expect(json.error).toBe("image_payload_too_large");
   });
 
-  test("invalid R2 key is rejected", async () => {
+  test("oversize image metadata is rejected before reading the body", async () => {
+    const key = "users/uid-1/onboarding/skin_products/products.jpg";
+    const onRead = vi.fn();
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/products/analyze", {
-        productPhotos: ["users/other/onboarding/skin_products/products.jpg"],
+        productPhotos: [key],
+      }),
+      makeEnv({
+        [key]: {
+          contentType: "image/jpeg",
+          size: 15 * 1024 * 1024 + 1,
+          onRead,
+        },
+      }) as any,
+    );
+
+    expect(response.status).toBe(413);
+    expect(onRead).not.toHaveBeenCalled();
+  });
+
+  test("product analysis accepts exactly one image", async () => {
+    const key = "users/uid-1/onboarding/skin_products/products.jpg";
+    const zero = await worker.fetch(
+      jsonRequest("/v1/skin-care/products/analyze", { productPhotos: [] }),
+      makeEnv() as any,
+    );
+    const multiple = await worker.fetch(
+      jsonRequest("/v1/skin-care/products/analyze", {
+        productPhotos: [key, key],
+      }),
+      makeEnv({ [key]: { contentType: "image/jpeg" } }) as any,
+    );
+
+    expect(zero.status).toBe(400);
+    expect(multiple.status).toBe(400);
+    expect((await multiple.json() as any).error).toBe("too_many_photos");
+  });
+
+  test.each([
+    "users/other/onboarding/skin_products/products.jpg",
+    "users/uid-1/onboarding/skin_products/../products.jpg",
+    "users/uid-1/onboarding//skin_products.jpg",
+    "users\\uid-1\\onboarding\\skin_products\\products.jpg",
+    "users/uid-1/onboarding/skin_products/not safe.jpg",
+  ])("invalid R2 key is rejected: %s", async (key) => {
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/products/analyze", {
+        productPhotos: [key],
       }),
       makeEnv() as any,
     );
@@ -564,6 +625,23 @@ describe("Skin-care Worker", () => {
     expect(response.status).toBe(403);
     expect(json.error).toBe("forbidden");
   });
+
+  test.each(["gif", "heic", "heif", "pdf"])(
+    "unsupported .%s product image is rejected",
+    async (extension) => {
+      const key = `users/uid-1/onboarding/skin_products/products.${extension}`;
+      const response = await worker.fetch(
+        jsonRequest("/v1/skin-care/products/analyze", {
+          productPhotos: [key],
+        }),
+        makeEnv() as any,
+      );
+      const json = await response.json() as any;
+
+      expect(response.status).toBe(415);
+      expect(json.error).toBe("unsupported_content_type");
+    },
+  );
 
   test("missing Gemini key returns internal error", async () => {
     const key = "users/uid-1/onboarding/skin_products/products.jpg";

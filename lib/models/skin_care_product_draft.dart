@@ -136,7 +136,13 @@ class SkinCareDetectedProduct {
 }
 
 bool _metadataLooksLikeSunscreen(SkinCareDetectedProduct product) {
-  final text = product.searchableFields.join(' ').toLowerCase();
+  final text = [
+    product.name,
+    product.brand,
+    product.category,
+    ...product.keyIngredients,
+    ...product.possibleActives,
+  ].join(' ').toLowerCase();
   return text.contains('sunscreen') ||
       text.contains('spf') ||
       text.contains('sun protection') ||
@@ -145,7 +151,13 @@ bool _metadataLooksLikeSunscreen(SkinCareDetectedProduct product) {
 }
 
 bool _metadataLooksLikeCleanser(SkinCareDetectedProduct product) {
-  final text = product.searchableFields.join(' ').toLowerCase();
+  final text = [
+    product.name,
+    product.brand,
+    product.category,
+    ...product.keyIngredients,
+    ...product.possibleActives,
+  ].join(' ').toLowerCase();
   return text.contains('cleanser') ||
       text.contains('face wash') ||
       text.contains('foaming wash') ||
@@ -154,7 +166,13 @@ bool _metadataLooksLikeCleanser(SkinCareDetectedProduct product) {
 }
 
 bool _metadataLooksLikeMoisturizer(SkinCareDetectedProduct product) {
-  final text = product.searchableFields.join(' ').toLowerCase();
+  final text = [
+    product.name,
+    product.brand,
+    product.category,
+    ...product.keyIngredients,
+    ...product.possibleActives,
+  ].join(' ').toLowerCase();
   return text.contains('moisturizer') ||
       text.contains('moisturiser') ||
       text.contains('cream') ||

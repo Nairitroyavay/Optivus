@@ -64,7 +64,7 @@ abstract final class AiOperationTimeouts {
     operationTimeout: Duration(seconds: 180),
   );
   static const skinCare = AiTimeoutPolicy(
-    operationTimeout: Duration(seconds: 180),
+    operationTimeout: Duration(seconds: 60),
   );
   static const coach = AiTimeoutPolicy(
     operationTimeout: Duration(seconds: 180),
@@ -100,7 +100,8 @@ class AiGenerationState {
     _ => false,
   };
 
-  bool get canRetry => phase == AiGenerationPhase.error && (error?.canRetry ?? false);
+  bool get canRetry =>
+      phase == AiGenerationPhase.error && (error?.canRetry ?? false);
 }
 
 class AiGenerationScope {
@@ -228,17 +229,20 @@ class AiGenerationController extends ChangeNotifier {
     _activeTimeoutTimer = timeoutTimer;
 
     try {
-      operation(scope).then((val) {
-        timeoutTimer.cancel();
-        if (!completer.isCompleted) {
-          completer.complete(val);
-        }
-      }, onError: (e, st) {
-        timeoutTimer.cancel();
-        if (!completer.isCompleted) {
-          completer.completeError(e, st);
-        }
-      });
+      operation(scope).then(
+        (val) {
+          timeoutTimer.cancel();
+          if (!completer.isCompleted) {
+            completer.complete(val);
+          }
+        },
+        onError: (e, st) {
+          timeoutTimer.cancel();
+          if (!completer.isCompleted) {
+            completer.completeError(e, st);
+          }
+        },
+      );
 
       final value = await completer.future;
       if (!isCurrent()) return const AiGenerationRunResult.ignored();

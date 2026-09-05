@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -28,6 +30,7 @@ class SkinCareAiProductResult {
   final List<dynamic> products;
   final List<String> warnings;
   final String? errorMessage;
+  final String? errorCode;
 
   bool get hasError => errorMessage != null;
   List<SkinCareDetectedProduct> get detectedProducts => products
@@ -39,10 +42,15 @@ class SkinCareAiProductResult {
     required this.products,
     this.warnings = const [],
     this.errorMessage,
+    this.errorCode,
   });
 
-  factory SkinCareAiProductResult.error(String msg) {
-    return SkinCareAiProductResult(products: [], errorMessage: msg);
+  factory SkinCareAiProductResult.error(String msg, {String? errorCode}) {
+    return SkinCareAiProductResult(
+      products: [],
+      errorMessage: msg,
+      errorCode: errorCode ?? msg,
+    );
   }
 }
 
@@ -440,9 +448,9 @@ class FakeSkinCareAiClient implements SkinCareAiClient {
     required String idToken,
     required List<String> productPhotos,
   }) async {
-    if (productPhotos.length > 10) {
+    if (productPhotos.length != 1) {
       return SkinCareAiProductResult.error(
-        'Upload your main 10 products first. You can add more later.',
+        'Upload one photo containing the products you want reviewed.',
       );
     }
     return const SkinCareAiProductResult(
@@ -603,7 +611,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
   WorkerSkinCareAiClient({
     String? baseUrl,
     http.Client? client,
-    this.requestTimeout = const Duration(seconds: 180),
+    this.requestTimeout = const Duration(seconds: 55),
   }) : baseUrl = baseUrl ?? OptivusAiWorkersConfig.skinCareWorkerUrl,
        _client = client ?? http.Client();
 
@@ -644,6 +652,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
             body,
             endpoint: _SkinCareWorkerEndpoint.productAnalyze,
           ),
+          errorCode: body['error'] as String?,
         );
       }
 
@@ -656,10 +665,16 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
             ? warnings.map((e) => e.toString()).toList()
             : [],
       );
+    } on FormatException {
+      return SkinCareAiProductResult.error('provider_invalid_json');
+    } on TimeoutException {
+      return SkinCareAiProductResult.error('provider_timeout');
+    } on SocketException {
+      return SkinCareAiProductResult.error('network_unavailable');
+    } on http.ClientException {
+      return SkinCareAiProductResult.error('network_unavailable');
     } catch (_) {
-      return SkinCareAiProductResult.error(
-        'AI skin care service is unavailable. Try again later.',
-      );
+      return SkinCareAiProductResult.error('provider_unavailable');
     }
   }
 
@@ -753,9 +768,30 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
             ? rejectedPlanReasons.map((e) => e.toString()).toList()
             : [],
       );
+    } on FormatException {
+      return SkinCareAiRoutineResult.error(
+        'provider_invalid_json',
+        errorCode: 'provider_invalid_json',
+      );
+    } on TimeoutException {
+      return SkinCareAiRoutineResult.error(
+        'provider_timeout',
+        errorCode: 'provider_timeout',
+      );
+    } on SocketException {
+      return SkinCareAiRoutineResult.error(
+        'network_unavailable',
+        errorCode: 'network_unavailable',
+      );
+    } on http.ClientException {
+      return SkinCareAiRoutineResult.error(
+        'network_unavailable',
+        errorCode: 'network_unavailable',
+      );
     } catch (_) {
       return SkinCareAiRoutineResult.error(
-        'AI skin care service is unavailable. Try again later.',
+        'provider_unavailable',
+        errorCode: 'provider_unavailable',
       );
     }
   }
@@ -768,15 +804,9 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
   }
 
   Map<String, dynamic> _jsonObject(String source) {
-    if (source.trim().isEmpty) return const {};
-    try {
-      final decoded = jsonDecode(source);
-      if (decoded is Map<String, dynamic>) return decoded;
-      if (decoded is Map) return Map<String, dynamic>.from(decoded);
-      return const {};
-    } on FormatException {
-      return const {};
-    }
+    final decoded = jsonDecode(source);
+    if (decoded is Map<String, dynamic>) return decoded;
+    throw const FormatException('Expected a JSON object');
   }
 
   String _friendlyErrorMessage(
@@ -805,7 +835,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       return 'AI is busy right now. Try again in a moment.';
     }
     if (rawError == 'too_many_photos') {
-      return 'Upload your main 10 products first. You can add more later.';
+      return 'Upload one photo containing the products you want reviewed.';
     }
     if (rawError == 'provider_invalid_response' ||
         rawError == 'provider_invalid_json') {
@@ -984,7 +1014,7 @@ class SkinCarePayloadValidationResult {
 }
 
 class SkinCareWorkerPayloadValidator {
-  static const int maxProductPhotos = 10;
+  static const int maxProductPhotos = 1;
   static const int maxTypedProducts = 20;
   static const Set<String> validSkinTypes = {
     'normal',
@@ -1011,7 +1041,7 @@ class SkinCareWorkerPayloadValidator {
     }
     if (productPhotos.length > maxProductPhotos) {
       return const SkinCarePayloadValidationResult.invalid(
-        'Upload your main 10 products first. You can add more later.',
+        'Upload one photo containing the products you want reviewed.',
       );
     }
     for (final photo in productPhotos) {
@@ -1032,7 +1062,7 @@ class SkinCareWorkerPayloadValidator {
       if (photos is List) {
         if (photos.length > maxProductPhotos) {
           return const SkinCarePayloadValidationResult.invalid(
-            'Upload your main 10 products first. You can add more later.',
+            'Upload one photo containing the products you want reviewed.',
           );
         }
         for (final photo in photos) {

@@ -356,9 +356,18 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
   Future<bool> remove(String slotKey, {required String uid}) async {
     final current = state[slotKey];
     if (current == null) return false;
-    if (!current.hasDurableAsset) {
-      dismissAttemptError(slotKey);
-      return true;
+    UploadedAsset? removalAsset = current.durableAsset;
+    if (removalAsset == null) {
+      final pending = await _assetRepository.fetchRecentAssets(
+        uid: uid, purpose: current.purpose, limit: 100,
+      );
+      removalAsset = pending.where((asset) =>
+        asset.status == UploadedAssetStatus.deleted &&
+        asset.errorMessage == 'private_cleanup_pending').firstOrNull;
+      if (removalAsset == null) {
+        dismissAttemptError(slotKey);
+        return true;
+      }
     }
 
     // Invariant 25: Rapid remove lock
@@ -367,7 +376,7 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
 
     final sessionGeneration = _sessionGeneration;
     final slotGeneration = _nextSlotGeneration(slotKey);
-    final asset = current.durableAsset!;
+    final asset = removalAsset;
 
     _setSlotState(
       slotKey,
@@ -381,7 +390,11 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
       // Durable metadata is terminalized first. Firestore can therefore never
       // point at an object that this client already deleted when metadata
       // mutation fails.
-      await _assetRepository.markDeleted(uid: uid, assetId: asset.assetId);
+      await _assetRepository.saveAsset(asset.copyWith(
+        status: UploadedAssetStatus.deleted,
+        updatedAt: DateTime.now(),
+        errorMessage: 'private_cleanup_pending',
+      ));
 
       if (!_isCurrentOperation(
         slotKey,
@@ -394,27 +407,17 @@ class UploadInteractionController extends StateNotifier<UploadInteractionMap> {
 
       _restoredController?.removePurpose(uid: uid, purpose: current.purpose);
 
-      // Byte cleanup is best-effort after metadata is authoritative.
+      // Keep a durable exact key until explicit privacy cleanup succeeds.
       if (asset.r2Key.trim().isNotEmpty) {
-        try {
-          final idToken = await _authRepository.currentIdToken();
-          if (_isCurrentOperation(
-                slotKey,
-                uid,
-                sessionGeneration,
-                slotGeneration,
-              ) &&
-              idToken != null &&
-              idToken.trim().isNotEmpty) {
-            await _r2UploadClient.deleteUpload(
-              objectKey: asset.r2Key,
-              idToken: idToken,
-            );
-          }
-        } catch (_) {
-          // A deleted metadata record is truthful; orphan cleanup can retry.
+        final idToken = await _authRepository.currentIdToken();
+        if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) return false;
+        if (idToken == null || idToken.trim().isEmpty) {
+          throw StateError('Private cleanup requires authentication');
         }
+        await _r2UploadClient.deleteUpload(objectKey: asset.r2Key, idToken: idToken);
       }
+      if (!_isCurrentOperation(slotKey, uid, sessionGeneration, slotGeneration)) return false;
+      await _assetRepository.markDeleted(uid: uid, assetId: asset.assetId);
 
       if (!_isCurrentOperation(
         slotKey,

@@ -32,7 +32,7 @@ const String onboarding7CompactPayloadFinalMessage =
     'AI read too much product detail. Try typing only your main products or upload a clearer single photo.';
 const int _onboarding7SpecialCareNoteMaxLength = 180;
 const String _onboarding7NoTypedProductsMessage =
-    'Type one product per line, for example "Minimalist SPF 50 - sunscreen".';
+    'Type one product per line, for example "Daily SPF 50 - sunscreen".';
 const String _onboarding7AiEmptyMessage =
     'AI returned no usable routine. Try clearer product names or 2 times/day.';
 const String _onboarding7NoProductsAiEmptyMessage =
@@ -106,6 +106,53 @@ List<SkinCareDetectedProduct> onboarding7ParseTypedProductDetails(
   }
 
   return products;
+}
+
+@visibleForTesting
+List<SkinCareDetectedProduct> onboarding7ReconcileReviewedProducts(
+  String? value,
+  Iterable<SkinCareDetectedProduct> existing,
+) {
+  final parsed = onboarding7ParseTypedProductDetails(value);
+  final remaining = existing.toList(growable: true);
+  return parsed
+      .map((typed) {
+        final typedName = _reviewedProductIdentity(typed);
+        final typedCategory = typed.category.trim().toLowerCase();
+        final index = remaining.indexWhere((candidate) {
+          if (_reviewedProductIdentity(candidate) != typedName) return false;
+          final candidateCategory = candidate.category.trim().toLowerCase();
+          return typedCategory.isEmpty ||
+              candidateCategory.isEmpty ||
+              typedCategory == candidateCategory;
+        });
+        if (index < 0) return typed;
+        final matched = remaining.removeAt(index);
+        return SkinCareDetectedProduct(
+          name: typed.name,
+          brand: typed.brand.isNotEmpty ? typed.brand : matched.brand,
+          category: typed.category.isNotEmpty
+              ? typed.category
+              : matched.category,
+          source: matched.source.isNotEmpty ? matched.source : typed.source,
+          keyIngredients: matched.keyIngredients,
+          possibleActives: matched.possibleActives,
+          usageHint: matched.usageHint,
+          warningIfAny: matched.warningIfAny,
+          confidence: matched.confidence,
+        );
+      })
+      .toList(growable: false);
+}
+
+String _reviewedProductIdentity(SkinCareDetectedProduct product) {
+  return (product.displayName.trim().isNotEmpty
+          ? product.displayName
+          : product.fallbackLabel)
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ');
 }
 
 Iterable<String> _typedProductEntryStrings(String text) sync* {
@@ -750,9 +797,56 @@ const List<String> _onboarding7EssentialProductCategories = [
   'cleanser',
   'moisturizer',
   'sunscreen',
-  'vitamin_c_serum',
-  'treatment_serum',
 ];
+
+const int _onboarding7MaximumRecommendations = 10;
+
+@visibleForTesting
+List<SkinCareProductRecommendation> onboarding7NormalizeRecommendations(
+  Iterable<SkinCareProductRecommendation> products,
+) {
+  final valid = <SkinCareProductRecommendation>[];
+  final seen = <String>{};
+  for (final product in products) {
+    if (product.name.trim().isEmpty ||
+        product.brand.trim().isEmpty ||
+        product.category.trim().isEmpty ||
+        product.estimatedPrice.trim().isEmpty ||
+        product.currencyCode.trim().isEmpty ||
+        product.reason.trim().isEmpty) {
+      continue;
+    }
+    final key = product.displayName.trim().toLowerCase();
+    if (key.isNotEmpty && seen.add(key)) valid.add(product);
+  }
+
+  final grouped = <String, List<SkinCareProductRecommendation>>{};
+  for (final product in valid) {
+    final draft = SkinCareProductRecommendationDraft(
+      name: product.name,
+      brand: product.brand,
+      category: product.category,
+      estimatedPrice: product.estimatedPrice,
+      currencyCode: product.currencyCode,
+      reason: product.reason,
+    );
+    grouped
+        .putIfAbsent(onboarding7RecommendationCategory(draft), () => [])
+        .add(product);
+  }
+
+  final result = <SkinCareProductRecommendation>[];
+  for (final category in _onboarding7EssentialProductCategories) {
+    result.addAll((grouped[category] ?? const []).take(2));
+  }
+  for (final product in valid) {
+    if (result.length >= _onboarding7MaximumRecommendations) break;
+    if (!result.contains(product)) result.add(product);
+  }
+  return result
+      .take(_onboarding7MaximumRecommendations)
+      .toList(growable: false);
+}
 
 @visibleForTesting
 String onboarding7RecommendationCategory(
@@ -1322,35 +1416,34 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
                 await controller.remove(slot, uid: uid) && cleanupSucceeded;
           }
         }
-        final legacy = restored
-            .forPurpose(UploadedAssetPurpose.skinCare)
-            ?.asset;
-        if (legacy != null) {
-          try {
-            await ref
-                .read(uploadedAssetRepositoryProvider)
-                .markDeleted(uid: uid, assetId: legacy.assetId);
-            ref
-                .read(restoredUploadsProvider.notifier)
-                .removePurpose(
-                  uid: uid,
-                  purpose: UploadedAssetPurpose.skinCare,
-                );
-            try {
-              final token = await ref
-                  .read(authRepositoryProvider)
-                  .currentIdToken();
-              if (token != null && token.trim().isNotEmpty) {
-                await ref
-                    .read(r2UploadClientProvider)
-                    .deleteUpload(objectKey: legacy.r2Key, idToken: token);
-              }
-            } catch (error) {
-              // Metadata is already terminal; byte cleanup is retryable.
+        final repository = ref.read(uploadedAssetRepositoryProvider);
+        final cleanupAssets = <String, UploadedAsset>{};
+        final legacy = restored.forPurpose(UploadedAssetPurpose.skinCare)?.asset;
+        if (legacy != null) cleanupAssets[legacy.assetId] = legacy;
+        try {
+          for (final asset in await repository.fetchRecentAssets(uid: uid, sourceFeature: 'onboarding', limit: 100)) {
+            if (asset.errorMessage == 'private_cleanup_pending' &&
+                const [UploadedAssetPurpose.skinCare, UploadedAssetPurpose.skinFace, UploadedAssetPurpose.skinProducts].contains(asset.purpose)) {
+              cleanupAssets[asset.assetId] = asset;
             }
-          } catch (error) {
-            cleanupSucceeded = false;
           }
+          for (final asset in cleanupAssets.values) {
+            await repository.saveAsset(asset.copyWith(
+              status: UploadedAssetStatus.deleted,
+              updatedAt: DateTime.now(),
+              errorMessage: 'private_cleanup_pending',
+            ));
+            final token = await ref.read(authRepositoryProvider).currentIdToken();
+            if (token == null || token.trim().isEmpty ||
+                (ref.read(authProvider).user?.uid ?? ref.read(mockOnboardingProvider).draft.uid) != uid) {
+              throw StateError('Private cleanup requires the same account');
+            }
+            await ref.read(r2UploadClientProvider).deleteUpload(objectKey: asset.r2Key, idToken: token);
+            await repository.markDeleted(uid: uid, assetId: asset.assetId);
+            ref.read(restoredUploadsProvider.notifier).removePurpose(uid: uid, purpose: asset.purpose);
+          }
+        } catch (_) {
+          cleanupSucceeded = false;
         }
         ref
             .read(mockOnboardingProvider.notifier)
@@ -1370,7 +1463,8 @@ class _SkinCareChoiceScreen extends ConsumerWidget {
         final legacyR2Key = base.skinCareProductPhotoR2Key?.trim() ?? '';
         final migrateLegacyFace =
             value == 'no_products' &&
-            base.skinCareSetupPath == 'no_products' &&
+            (base.skinCareSetupPath == 'has_products' ||
+                base.skinCareSetupPath == 'no_products') &&
             (base.skinCareFacePhotoAssetId?.trim().isEmpty ?? true) &&
             (base.skinCareProductPhotoAssetId?.trim().isNotEmpty ?? false) &&
             legacyR2Key.contains('/skin_care/');
@@ -1638,9 +1732,10 @@ class _HasProductsModeScreenState
     _inputSource = _uploadedAsset != null
         ? _ProductInputSource.photo
         : _initialProductInputSource(widget.base);
+    _reviewedPhotoDetails = widget.base.skinCareReviewedProducts;
     _photoProductsReviewed =
         _inputSource == _ProductInputSource.photo &&
-        _controller.text.trim().isNotEmpty;
+        _reviewedPhotoDetails.isNotEmpty;
   }
 
   void _onLifecycleChanged() {
@@ -1657,7 +1752,6 @@ class _HasProductsModeScreenState
   }
 
   Future<void> _startUpload() async {
-    if (_inputSource == _ProductInputSource.typed) return;
     final initialUploadState = ref.read(
       onboardingUploadInteractionProvider,
     )[onboardingSkinProductsUploadSlot];
@@ -1733,6 +1827,14 @@ class _HasProductsModeScreenState
       _generationError = null;
     });
     if (latestAsset != null) {
+      updateBaseTimelineDraft(
+        ref,
+        onboardingSkinCareStepIndex,
+        (base) => base.copyWith(
+          clearSkinCareReviewedProducts: true,
+          skinCareSkipped: false,
+        ),
+      );
       ref.read(restoredUploadsProvider.notifier).registerUploaded(latestAsset);
     }
   }
@@ -1777,6 +1879,25 @@ class _HasProductsModeScreenState
       }
     }
     final hasTypedProducts = _controller.text.trim().isNotEmpty;
+    final manuallyReviewed =
+        onboarding7ReconcileReviewedProducts(
+              _controller.text,
+              _reviewedPhotoDetails,
+            )
+            .map(
+              (product) => SkinCareDetectedProduct(
+                name: product.name,
+                brand: product.brand,
+                category: product.category,
+                source: 'user_reviewed',
+                keyIngredients: product.keyIngredients,
+                possibleActives: product.possibleActives,
+                usageHint: product.usageHint,
+                warningIfAny: product.warningIfAny,
+                confidence: product.confidence,
+              ),
+            )
+            .toList(growable: false);
     setState(() {
       _uploadedAsset = null;
       _removingPhoto = false;
@@ -1793,6 +1914,7 @@ class _HasProductsModeScreenState
       onboardingSkinCareStepIndex,
       (base) => base.copyWith(
         clearSkinCareProductPhoto: true,
+        skinCareReviewedProducts: manuallyReviewed,
         skinCareSkipped: false,
       ),
     );
@@ -1985,6 +2107,7 @@ class _HasProductsModeScreenState
             onboardingSkinCareStepIndex,
             (base) => base.copyWith(
               skinCareProductNames: _controller.text,
+              skinCareReviewedProducts: photoProductDetails,
               skinCareSkipped: false,
             ),
           );
@@ -1996,29 +2119,14 @@ class _HasProductsModeScreenState
             AiGenerationPhase.generating,
             message: 'Building your skin care routine…',
           );
-          var typedProductDetails = onboarding7ParseTypedProductDetails(
+          final typedProductDetails = onboarding7ReconcileReviewedProducts(
             _controller.text,
+            ref
+                .read(mockOnboardingProvider)
+                .draft
+                .baseTimeline
+                .skinCareReviewedProducts,
           );
-          if (_inputSource == _ProductInputSource.photo &&
-              _reviewedPhotoDetails.isNotEmpty) {
-            typedProductDetails = typedProductDetails
-                .map((typed) {
-                  final typedName = typed.displayName.trim().toLowerCase();
-                  final typedCategory = typed.category.trim().toLowerCase();
-                  return _reviewedPhotoDetails.firstWhere(
-                    (detected) =>
-                        (detected.displayName.trim().toLowerCase() ==
-                                typedName ||
-                            detected.fallbackLabel.trim().toLowerCase() ==
-                                typedName) &&
-                        (typedCategory.isEmpty ||
-                            detected.category.trim().toLowerCase() ==
-                                typedCategory),
-                    orElse: () => typed,
-                  );
-                })
-                .toList(growable: false);
-          }
           final ownedProductDetails = typedProductDetails;
           final ownedProductNames = typedProductDetails
               .map((product) => product.displayName.trim())
@@ -2059,21 +2167,7 @@ class _HasProductsModeScreenState
           }
           if (!scope.isCurrent) return false;
 
-          var routinePlans = result.routinePlans;
-          final isExplicitError =
-              result.errorCode == 'missing_worker_url' ||
-              result.errorMessage == 'missing_worker_url' ||
-              result.errorCode == 'client_payload_validation_error' ||
-              result.errorCode == 'too_many_photos' ||
-              (didCompactPayloadRetry &&
-                  result.errorCode == 'json_payload_too_large');
-
-          if (result.hasError && !isExplicitError) {
-            result = OfflineSkinCareRoutineGenerator.generateFallbackRoutine(
-              routineParams,
-            );
-            routinePlans = result.routinePlans;
-          }
+          final routinePlans = result.routinePlans;
 
           if (result.hasError || routinePlans.isEmpty) {
             final errMsg = routinePlans.isEmpty && !result.hasError
@@ -2244,8 +2338,7 @@ class _HasProductsModeScreenState
         ? 'Review detected products before building'
         : _productInputSourceLabel(_inputSource);
     final textInputEnabled = !_lifecycle.state.isActive;
-    final photoUploadEnabled =
-        !busy && _inputSource != _ProductInputSource.typed;
+    final photoUploadEnabled = !busy;
     final typedPreviewProducts = onboarding7ParseTypedProductDetails(
       _controller.text,
     );
@@ -2266,6 +2359,14 @@ class _HasProductsModeScreenState
 
     void handleProductNamesChanged(String value) {
       final hasText = value.trim().isNotEmpty;
+      final canonical = onboarding7ReconcileReviewedProducts(
+        value,
+        ref
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .skinCareReviewedProducts,
+      );
       setState(() {
         _generationError = null;
         if (_inputSource == _ProductInputSource.none && hasText) {
@@ -2273,12 +2374,19 @@ class _HasProductsModeScreenState
         } else if (_inputSource == _ProductInputSource.typed && !hasText) {
           _inputSource = _ProductInputSource.none;
         }
+        if (_inputSource == _ProductInputSource.photo &&
+            _photoProductsReviewed) {
+          _reviewedPhotoDetails = canonical;
+        }
       });
       updateBaseTimelineDraft(
         ref,
         onboardingSkinCareStepIndex,
-        (base) =>
-            base.copyWith(skinCareProductNames: value, skinCareSkipped: false),
+        (base) => base.copyWith(
+          skinCareProductNames: value,
+          skinCareReviewedProducts: canonical,
+          skinCareSkipped: false,
+        ),
       );
     }
 
@@ -2304,7 +2412,7 @@ class _HasProductsModeScreenState
       photoEnabled: photoUploadEnabled,
       textInputEnabled: textInputEnabled,
       photoHelper: _inputSource == _ProductInputSource.typed
-          ? 'Clear product names to upload a photo.'
+          ? 'Or add one photo, then review the detected products.'
           : null,
       textHelper: textHelper,
       onUpload: photoUploadEnabled ? _startUpload : null,
@@ -2400,6 +2508,10 @@ class _HasProductsModeScreenState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (_editingExisting) ...[
+            const _SkinCareInlineMessage(
+              message: 'Changes not applied yet. Your last routine is kept.',
+            ),
+            const SizedBox(height: 4),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -3582,30 +3694,20 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         if (!scope.isCurrent) return false;
         final client = ref.read(skinCareAiClientProvider);
         var region = ref.read(regionSettingsProvider);
-        final detectedCountry = await ref
-            .read(deviceCountryServiceProvider)
-            .detectCountry();
-        if (detectedCountry != null &&
-            (detectedCountry.fromDeviceLocation ||
-                region.countryCode.trim().isEmpty ||
-                region.countryCode == 'ZZ')) {
-          final detectedRegion = RegionSettings.forCountry(
-            userId: uid,
-            countryCode: detectedCountry.countryCode,
-            countryName: detectedCountry.countryName,
-          ).copyWith(createdAt: region.createdAt);
-          region = detectedRegion;
-          try {
-            await ref
-                .read(regionSettingsProvider.notifier)
-                .save(detectedRegion);
-          } catch (error) {
-            ref
-                .read(regionSettingsProvider.notifier)
-                .loadSettings(detectedRegion);
-            debugPrint(
-              '[Onboarding7] Detected region could not be persisted; '
-              'using it for this request (${error.runtimeType}).',
+        final hasExplicitRegion =
+            region.countryCode.trim().isNotEmpty && region.countryCode != 'ZZ';
+        if (!hasExplicitRegion) {
+          final detectedCountry = await ref
+              .read(deviceCountryServiceProvider)
+              .detectCountry();
+          if (!scope.isCurrent) return false;
+          if (detectedCountry != null) {
+            // Device detection is a request-scoped default. Finding products
+            // must not mutate the user's explicit global region setting.
+            region = RegionSettings.forCountry(
+              userId: uid,
+              countryCode: detectedCountry.countryCode,
+              countryName: detectedCountry.countryName,
             );
           }
         }
@@ -3636,22 +3738,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         );
         if (!scope.isCurrent) return false;
 
-        final recommendations = result.recommendedProducts.where(
-          (product) =>
-              product.name.trim().isNotEmpty &&
-              product.brand.trim().isNotEmpty &&
-              product.category.trim().isNotEmpty &&
-              product.estimatedPrice.trim().isNotEmpty &&
-              product.currencyCode.trim().isNotEmpty &&
-              product.reason.trim().isNotEmpty,
+        final deduped = onboarding7NormalizeRecommendations(
+          result.recommendedProducts,
         );
-        final deduped = <SkinCareProductRecommendation>[];
-        final seen = <String>{};
-        for (final product in recommendations) {
-          final key = product.displayName.trim().toLowerCase();
-          if (key.isNotEmpty && seen.add(key)) deduped.add(product);
-          if (deduped.length == 12) break;
-        }
 
         final recommendationDrafts = deduped
             .map(
@@ -3675,7 +3764,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             missingEssentialCategories.isNotEmpty) {
           throw _SkinCareResponseException(
             !result.hasError
-                ? 'AI could not provide a complete branded cleanser, moisturizer, sunscreen, Vitamin C serum, and treatment serum set with local prices. Please try again.'
+                ? 'AI could not provide a complete branded cleanser, moisturizer, and sunscreen set with local prices. Please try again.'
                 : onboarding7FriendlyAiMessage(
                     result.errorCode == 'json_payload_too_large'
                         ? 'json_payload_too_large'
@@ -3858,7 +3947,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                 'budget': currentBase.skinCareBudget,
                 'routinePreference': currentBase.skinCarePreference,
                 'desiredApplicationsPerDay': desiredApplicationsPerDay,
-                'facePhotoR2Key': asset.r2Key,
                 'countryCode': region.countryCode,
                 'countryName': region.countryName,
                 'currencyCode': region.currencyCode,
@@ -4094,6 +4182,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         base.skinCareBudget != null;
     final message = uploadError ?? _generationError;
     final region = ref.watch(regionSettingsProvider);
+    final recommendationCountryName =
+        base.skinCareRecommendationCountryCode?.trim().isNotEmpty == true
+        ? RegionSettings.forCountry(
+            userId: draft.uid,
+            countryCode: base.skinCareRecommendationCountryCode!,
+          ).countryName
+        : region.countryName;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(base);
 
     if (_lifecycle.state.isActive) {
@@ -4260,7 +4355,7 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Choose products available in ${region.countryName}',
+                      'Choose products available in $recommendationCountryName',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w900,
@@ -4443,22 +4538,30 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (_editingExisting)
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              key: const ValueKey(
-                'onboarding-step7-no-products-cancel-rebuild',
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SkinCareInlineMessage(
+                message: 'Changes not applied yet. Your last routine is kept.',
               ),
-              onPressed: busy
-                  ? null
-                  : () => setState(() {
-                      _editingExisting = false;
-                      _pendingDesiredApplicationsPerDay = null;
-                      _generationError = null;
-                    }),
-              icon: const Icon(Icons.close_rounded, size: 18),
-              label: const Text('Cancel edit'),
-            ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  key: const ValueKey(
+                    'onboarding-step7-no-products-cancel-rebuild',
+                  ),
+                  onPressed: busy
+                      ? null
+                      : () => setState(() {
+                          _editingExisting = false;
+                          _pendingDesiredApplicationsPerDay = null;
+                          _generationError = null;
+                        }),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  label: const Text('Cancel edit'),
+                ),
+              ),
+            ],
           ),
         Expanded(
           child: Padding(
@@ -4687,9 +4790,12 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                       ],
                     ],
                   );
-                  return FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.topCenter,
+                  return SingleChildScrollView(
+                    key: const ValueKey(
+                      'onboarding-step7-no-products-scroll-view',
+                    ),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
                     child: SizedBox(
                       width: constraints.maxWidth,
                       child: content,
@@ -4794,7 +4900,7 @@ class _SkinCarePhotoTarget extends ConsumerWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
                     child: ColoredBox(
-                      color: Colors.white.withValues(alpha: 0.78),
+                      color: Colors.white.withValues(alpha: 0.38),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

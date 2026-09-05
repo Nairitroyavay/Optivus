@@ -1125,6 +1125,30 @@ class BodyBasicsDraft {
   }
 }
 
+String normalizeSkinCareSelectionKey(String value) =>
+    value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+String normalizeSkinCareProductCategory(String value) {
+  final key = value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[_-]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ');
+  return switch (key) {
+    'face wash' || 'facewash' || 'cleansing gel' || 'cleanser' => 'cleanser',
+    'moisturiser' ||
+    'moisturizer' ||
+    'moisturizing cream' ||
+    'moisturising cream' => 'moisturizer',
+    'sun screen' ||
+    'sunblock' ||
+    'sun protection' ||
+    'spf' ||
+    'sunscreen' => 'sunscreen',
+    _ => key.replaceAll(' ', '_'),
+  };
+}
+
 class SkinCareProductRecommendationDraft {
   final String name;
   final String brand;
@@ -1160,7 +1184,9 @@ class SkinCareProductRecommendationDraft {
     return '$brand $name';
   }
 
-  String get selectionKey => displayName.toLowerCase();
+  String get selectionKey => normalizeSkinCareSelectionKey(displayName);
+
+  String get canonicalCategory => normalizeSkinCareProductCategory(category);
 
   Map<String, dynamic> toMap() => {
     'name': name,
@@ -2325,6 +2351,12 @@ class BaseTimelineDraft {
       final canonicalMap = <String, dynamic>{
         'mode': 'has_products',
         'products': canonicalProducts,
+        // Keep the editable projection in the fingerprint as an integrity
+        // check. UI writes update this text and the canonical rich list
+        // atomically, so a legacy or interrupted split state is always stale.
+        'productText': _normalizedSkinCareFingerprintList(
+          (skinCareProductNames ?? '').split(RegExp(r'[\n;,]+')),
+        ),
         'productPhotoAssetId': skinCareProductPhotoAssetId?.trim() ?? '',
         'productPhotoR2Key': skinCareProductPhotoR2Key?.trim() ?? '',
         'skinType': _normalizedSkinCareFingerprintText(skinCareSkinType),
@@ -2389,6 +2421,10 @@ class BaseTimelineDraft {
         return 'Add products or upload a photo to build your routine.';
       }
 
+      if (skinCareReviewedProducts.isEmpty ||
+          skinCareReviewedProducts.any((p) => p.displayName.trim().isEmpty)) {
+        return 'Review your current products and build routine again.';
+      }
       final expectedFingerprint = computeSkinCareRoutineFingerprint();
       if (skinCareRoutineFingerprint != expectedFingerprint ||
           !_skinCareBlocksMatchFingerprint(expectedFingerprint)) {
@@ -2422,6 +2458,35 @@ class BaseTimelineDraft {
 
       if (skinCareSelectedProductNames.isEmpty) {
         return 'Find and select products before building your routine.';
+      }
+
+      final recommendations = <String, SkinCareProductRecommendationDraft>{};
+      for (final product in skinCareProductRecommendations) {
+        if (product.name.trim().isEmpty ||
+            product.brand.trim().isEmpty ||
+            product.category.trim().isEmpty ||
+            product.estimatedPrice.trim().isEmpty ||
+            product.currencyCode.trim().isEmpty ||
+            product.reason.trim().isEmpty)
+          continue;
+        recommendations[product.selectionKey] = product;
+      }
+      final categories = <String>{};
+      final selectionKeys = skinCareSelectedProductNames
+          .map(normalizeSkinCareSelectionKey)
+          .toSet();
+      for (final key in selectionKeys) {
+        final product = recommendations[key];
+        if (product == null) {
+          return 'Selected products are no longer current. Find and select products again.';
+        }
+        if (!categories.add(product.canonicalCategory)) {
+          return 'Select only one product per category.';
+        }
+      }
+      for (final category in const ['cleanser', 'moisturizer', 'sunscreen']) {
+        if (!categories.contains(category))
+          return 'Select a $category before building your routine.';
       }
 
       final expectedRecFingerprint = computeSkinCareRecommendationFingerprint();
