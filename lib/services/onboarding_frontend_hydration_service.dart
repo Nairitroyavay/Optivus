@@ -106,6 +106,19 @@ class OnboardingFrontendHydrationService {
       read(routineNotifierProvider.notifier).loadForOwner(bundle.uid),
       read(habitSystemsNotifierProvider.notifier).loadForOwner(bundle.uid),
     ]);
+    // Goals, tracker, coach preferences and notification preferences are
+    // transitional local owners.  A verified completion bundle is their
+    // read-only cold-start source until each feature has a durable owner.
+    // These merge/update operations are deterministic and intentionally do
+    // not replay durable Routine or Habit System projections.
+    read(mockGoalProvider.notifier).mergeMissing(bundle.identityGoalSystems);
+    read(mockTrackerProvider.notifier).applyOnboardingBundle(bundle);
+    read(
+      mockCoachPreferencesProvider.notifier,
+    ).updatePreferences(bundle.coachPreferences);
+    read(
+      mockNotificationPreferencesProvider.notifier,
+    ).updatePreferences(bundle.notificationPreferences);
     verifyFrontendState(read: read, bundle: bundle);
   }
 
