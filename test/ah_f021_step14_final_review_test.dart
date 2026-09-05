@@ -42,7 +42,8 @@ void main() {
             textScaler: TextScaler.linear(textScale),
           ),
           child: Scaffold(
-            body: child ??
+            body:
+                child ??
                 OnboardingStep14(
                   key: step14Key,
                   onJumpToStep: onJumpToStep,
@@ -76,7 +77,8 @@ void main() {
       ).withEstimates(),
       baseTimeline: BaseTimelineDraft(
         eatingMode: 'home',
-        blocks: blocks ??
+        blocks:
+            blocks ??
             const [
               TimelineBlockDraft(
                 id: 'physics_lab',
@@ -152,229 +154,253 @@ void main() {
 
   // ── GROUP 1: Conflict Grouping & Determinism (Tests A–F, BN) ────────────────
   group('AH-F021 Conflict Grouping & Determinism (Tests A–F, BN)', () {
-    test('A: Breakfast ↔ SE occurs Mon/Thu/Fri -> ONE group with 3 days and unresolved count 1', () {
-      final occurrences = [
-        const TimelineConflictDraft(
-          key: '1|breakfast|se',
-          firstBlockId: 'breakfast',
-          secondBlockId: 'se',
-          firstTitle: 'Breakfast',
-          secondTitle: 'Software Engineering',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-        const TimelineConflictDraft(
-          key: '4|breakfast|se',
-          firstBlockId: 'breakfast',
-          secondBlockId: 'se',
-          firstTitle: 'Breakfast',
-          secondTitle: 'Software Engineering',
-          day: 4,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-        const TimelineConflictDraft(
-          key: '5|breakfast|se',
-          firstBlockId: 'breakfast',
-          secondBlockId: 'se',
-          firstTitle: 'Breakfast',
-          secondTitle: 'Software Engineering',
-          day: 5,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-      ];
+    test(
+      'A: Breakfast ↔ SE occurs Mon/Thu/Fri -> ONE group with 3 days and unresolved count 1',
+      () {
+        final occurrences = [
+          const TimelineConflictDraft(
+            key: '1|breakfast|se',
+            firstBlockId: 'breakfast',
+            secondBlockId: 'se',
+            firstTitle: 'Breakfast',
+            secondTitle: 'Software Engineering',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+          const TimelineConflictDraft(
+            key: '4|breakfast|se',
+            firstBlockId: 'breakfast',
+            secondBlockId: 'se',
+            firstTitle: 'Breakfast',
+            secondTitle: 'Software Engineering',
+            day: 4,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+          const TimelineConflictDraft(
+            key: '5|breakfast|se',
+            firstBlockId: 'breakfast',
+            secondBlockId: 'se',
+            firstTitle: 'Breakfast',
+            secondTitle: 'Software Engineering',
+            day: 5,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+        ];
 
-      final draft = const OnboardingDraft().copyWith(
-        baseTimeline: const BaseTimelineDraft(
-          blocks: [
-            TimelineBlockDraft(
-              id: 'breakfast',
-              section: 'eating',
-              title: 'Breakfast',
-              startMinute: 450,
-              endMinute: 480,
-              repeatDays: [1, 4, 5],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-            TimelineBlockDraft(
-              id: 'se',
-              section: 'classes',
-              title: 'Software Engineering',
-              startMinute: 450,
-              endMinute: 540,
-              repeatDays: [1, 4, 5],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-          ],
-        ),
-      );
+        final draft = const OnboardingDraft().copyWith(
+          baseTimeline: const BaseTimelineDraft(
+            blocks: [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 480,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          ),
+        );
 
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrences,
-        draft: draft,
-      );
+        final groups = Step14ConflictGroupProjector.project(
+          occurrences: occurrences,
+          draft: draft,
+        );
 
-      expect(groups, hasLength(1));
-      final group = groups.single;
-      expect(group.leftEntryIdentity, 'breakfast');
-      expect(group.rightEntryIdentity, 'se');
-      expect(group.leftLabel, 'Breakfast');
-      expect(group.rightLabel, 'Software Engineering');
-      expect(group.affectedDays, [1, 4, 5]);
-      expect(group.unresolvedDays, [1, 4, 5]);
-      expect(group.acceptedDays, isEmpty);
-      expect(group.isUnresolved, isTrue);
-      expect(group.hasUniformTimeRange, isTrue);
-      expect(group.sharedTimeRange, '7:30 AM – 8:00 AM');
-    });
+        expect(groups, hasLength(1));
+        final group = groups.single;
+        expect(group.leftEntryIdentity, 'breakfast');
+        expect(group.rightEntryIdentity, 'se');
+        expect(group.leftLabel, 'Breakfast');
+        expect(group.rightLabel, 'Software Engineering');
+        expect(group.affectedDays, [1, 4, 5]);
+        expect(group.unresolvedDays, [1, 4, 5]);
+        expect(group.acceptedDays, isEmpty);
+        expect(group.isUnresolved, isTrue);
+        expect(group.hasUniformTimeRange, isTrue);
+        expect(group.sharedTimeRange, '7:30 AM – 8:00 AM');
+      },
+    );
 
-    test('B: Input occurrence order shuffled -> identical group identity and content', () {
-      final occurrencesShuffled = [
-        const TimelineConflictDraft(
-          key: '5|breakfast|se',
-          firstBlockId: 'breakfast',
-          secondBlockId: 'se',
-          firstTitle: 'Breakfast',
-          secondTitle: 'Software Engineering',
-          day: 5,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-        const TimelineConflictDraft(
-          key: '1|breakfast|se',
-          firstBlockId: 'breakfast',
-          secondBlockId: 'se',
-          firstTitle: 'Breakfast',
-          secondTitle: 'Software Engineering',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-        const TimelineConflictDraft(
-          key: '4|breakfast|se',
-          firstBlockId: 'breakfast',
-          secondBlockId: 'se',
-          firstTitle: 'Breakfast',
-          secondTitle: 'Software Engineering',
-          day: 4,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-      ];
+    test(
+      'B: Input occurrence order shuffled -> identical group identity and content',
+      () {
+        final occurrencesShuffled = [
+          const TimelineConflictDraft(
+            key: '5|breakfast|se',
+            firstBlockId: 'breakfast',
+            secondBlockId: 'se',
+            firstTitle: 'Breakfast',
+            secondTitle: 'Software Engineering',
+            day: 5,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+          const TimelineConflictDraft(
+            key: '1|breakfast|se',
+            firstBlockId: 'breakfast',
+            secondBlockId: 'se',
+            firstTitle: 'Breakfast',
+            secondTitle: 'Software Engineering',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+          const TimelineConflictDraft(
+            key: '4|breakfast|se',
+            firstBlockId: 'breakfast',
+            secondBlockId: 'se',
+            firstTitle: 'Breakfast',
+            secondTitle: 'Software Engineering',
+            day: 4,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+        ];
 
-      final draft = const OnboardingDraft().copyWith(
-        baseTimeline: const BaseTimelineDraft(
-          blocks: [
-            TimelineBlockDraft(
-              id: 'breakfast',
-              section: 'eating',
-              title: 'Breakfast',
-              startMinute: 450,
-              endMinute: 480,
-              repeatDays: [1, 4, 5],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-            TimelineBlockDraft(
-              id: 'se',
-              section: 'classes',
-              title: 'Software Engineering',
-              startMinute: 450,
-              endMinute: 540,
-              repeatDays: [1, 4, 5],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-          ],
-        ),
-      );
+        final draft = const OnboardingDraft().copyWith(
+          baseTimeline: const BaseTimelineDraft(
+            blocks: [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 480,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          ),
+        );
 
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrencesShuffled,
-        draft: draft,
-      );
+        final groups = Step14ConflictGroupProjector.project(
+          occurrences: occurrencesShuffled,
+          draft: draft,
+        );
 
-      expect(groups, hasLength(1));
-      expect(groups.single.affectedDays, [1, 4, 5]);
-      expect(groups.single.unresolvedDays, [1, 4, 5]);
-    });
+        expect(groups, hasLength(1));
+        expect(groups.single.affectedDays, [1, 4, 5]);
+        expect(groups.single.unresolvedDays, [1, 4, 5]);
+      },
+    );
 
-    test('C: Pair reversal (SE ↔ Breakfast vs Breakfast ↔ SE) -> same canonical group', () {
-      final forward = [
-        const TimelineConflictDraft(
-          key: '1|breakfast|se',
-          firstBlockId: 'breakfast',
-          secondBlockId: 'se',
-          firstTitle: 'Breakfast',
-          secondTitle: 'Software Engineering',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-      ];
+    test(
+      'C: Pair reversal (SE ↔ Breakfast vs Breakfast ↔ SE) -> same canonical group',
+      () {
+        final forward = [
+          const TimelineConflictDraft(
+            key: '1|breakfast|se',
+            firstBlockId: 'breakfast',
+            secondBlockId: 'se',
+            firstTitle: 'Breakfast',
+            secondTitle: 'Software Engineering',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+        ];
 
-      final reverse = [
-        const TimelineConflictDraft(
-          key: '1|se|breakfast',
-          firstBlockId: 'se',
-          secondBlockId: 'breakfast',
-          firstTitle: 'Software Engineering',
-          secondTitle: 'Breakfast',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-          canKeepBoth: true,
-        ),
-      ];
+        final reverse = [
+          const TimelineConflictDraft(
+            key: '1|se|breakfast',
+            firstBlockId: 'se',
+            secondBlockId: 'breakfast',
+            firstTitle: 'Software Engineering',
+            secondTitle: 'Breakfast',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+            canKeepBoth: true,
+          ),
+        ];
 
-      const draft = OnboardingDraft();
-      final groupFwd = Step14ConflictGroupProjector.project(occurrences: forward, draft: draft);
-      final groupRev = Step14ConflictGroupProjector.project(occurrences: reverse, draft: draft);
+        const draft = OnboardingDraft();
+        final groupFwd = Step14ConflictGroupProjector.project(
+          occurrences: forward,
+          draft: draft,
+        );
+        final groupRev = Step14ConflictGroupProjector.project(
+          occurrences: reverse,
+          draft: draft,
+        );
 
-      expect(groupFwd.single.stableGroupId, groupRev.single.stableGroupId);
-      expect(groupFwd.single.leftEntryIdentity, groupRev.single.leftEntryIdentity);
-      expect(groupFwd.single.rightEntryIdentity, groupRev.single.rightEntryIdentity);
-    });
+        expect(groupFwd.single.stableGroupId, groupRev.single.stableGroupId);
+        expect(
+          groupFwd.single.leftEntryIdentity,
+          groupRev.single.leftEntryIdentity,
+        );
+        expect(
+          groupFwd.single.rightEntryIdentity,
+          groupRev.single.rightEntryIdentity,
+        );
+      },
+    );
 
-    test('D: Same display titles but different entry IDs -> distinct groups', () {
-      final occurrences = [
-        const TimelineConflictDraft(
-          key: '1|meal_1|gym_1',
-          firstBlockId: 'meal_1',
-          secondBlockId: 'gym_1',
-          firstTitle: 'Meal',
-          secondTitle: 'Workout',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-        ),
-        const TimelineConflictDraft(
-          key: '1|meal_2|gym_2',
-          firstBlockId: 'meal_2',
-          secondBlockId: 'gym_2',
-          firstTitle: 'Meal',
-          secondTitle: 'Workout',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-        ),
-      ];
+    test(
+      'D: Same display titles but different entry IDs -> distinct groups',
+      () {
+        final occurrences = [
+          const TimelineConflictDraft(
+            key: '1|meal_1|gym_1',
+            firstBlockId: 'meal_1',
+            secondBlockId: 'gym_1',
+            firstTitle: 'Meal',
+            secondTitle: 'Workout',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+          ),
+          const TimelineConflictDraft(
+            key: '1|meal_2|gym_2',
+            firstBlockId: 'meal_2',
+            secondBlockId: 'gym_2',
+            firstTitle: 'Meal',
+            secondTitle: 'Workout',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+          ),
+        ];
 
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrences,
-        draft: const OnboardingDraft(),
-      );
+        final groups = Step14ConflictGroupProjector.project(
+          occurrences: occurrences,
+          draft: const OnboardingDraft(),
+        );
 
-      expect(groups, hasLength(2));
-      expect(groups[0].stableGroupId, isNot(groups[1].stableGroupId));
-    });
+        expect(groups, hasLength(2));
+        expect(groups[0].stableGroupId, isNot(groups[1].stableGroupId));
+      },
+    );
 
     test('E: Pair occurs on 5 days -> 1 group with 5 days', () {
       final occurrences = [
@@ -401,828 +427,929 @@ void main() {
       expect(groups.single.daySummary, 'Mon–Fri');
     });
 
-    test('F: Different overlap time ranges by day -> truthful per-day ranges, not shared', () {
-      final occurrences = [
-        const TimelineConflictDraft(
-          key: '1|study|work',
-          firstBlockId: 'study',
-          secondBlockId: 'work',
-          firstTitle: 'Study',
-          secondTitle: 'Work',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-        ),
-        const TimelineConflictDraft(
-          key: '4|study|work',
-          firstBlockId: 'study',
-          secondBlockId: 'work',
-          firstTitle: 'Study',
-          secondTitle: 'Work',
-          day: 4,
-          isHardConflict: true,
-          accepted: false,
-        ),
-      ];
+    test(
+      'F: Different overlap time ranges by day -> truthful per-day ranges, not shared',
+      () {
+        final occurrences = [
+          const TimelineConflictDraft(
+            key: '1|study|work',
+            firstBlockId: 'study',
+            secondBlockId: 'work',
+            firstTitle: 'Study',
+            secondTitle: 'Work',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+          ),
+          const TimelineConflictDraft(
+            key: '4|study|work',
+            firstBlockId: 'study',
+            secondBlockId: 'work',
+            firstTitle: 'Study',
+            secondTitle: 'Work',
+            day: 4,
+            isHardConflict: true,
+            accepted: false,
+          ),
+        ];
 
-      final draft = const OnboardingDraft().copyWith(
-        baseTimeline: const BaseTimelineDraft(
-          blocks: [
+        final draft = const OnboardingDraft().copyWith(
+          baseTimeline: const BaseTimelineDraft(
+            blocks: [
+              TimelineBlockDraft(
+                id: 'study',
+                section: 'classes',
+                title: 'Study',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1, 4],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'work',
+                section: 'job_work_business',
+                title: 'Work',
+                startMinute: 450,
+                endMinute: 510,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          ),
+        );
+
+        final groups = Step14ConflictGroupProjector.project(
+          occurrences: occurrences,
+          draft: draft,
+        );
+
+        expect(groups, hasLength(1));
+        expect(groups.single.overlapRangesByDay[1], isNotNull);
+        // Work block only repeats on day 1, so day 4 has no overlap from that block.
+        // If day 4 had a different overlap window, hasUniformTimeRange must be false.
+        // Verify truthfulness: the projector must not claim a shared uniform range
+        // when the underlying block schedules differ per day.
+        if (groups.single.overlapRangesByDay.length > 1) {
+          final distinctRanges = groups.single.overlapRangesByDay.values
+              .toSet();
+          if (distinctRanges.length > 1) {
+            expect(
+              groups.single.hasUniformTimeRange,
+              isFalse,
+              reason:
+                  'Per-day ranges differ, so hasUniformTimeRange must be false',
+            );
+          }
+        }
+      },
+    );
+
+    test(
+      'BN: Multi-day acceptance partial failure preserves accepted days and leaves failed days unresolved',
+      () {
+        final occurrences = [
+          const TimelineConflictDraft(
+            key: '1|a|b',
+            firstBlockId: 'a',
+            secondBlockId: 'b',
+            firstTitle: 'A',
+            secondTitle: 'B',
+            day: 1,
+            isHardConflict: true,
+            accepted: true,
+          ),
+          const TimelineConflictDraft(
+            key: '4|a|b',
+            firstBlockId: 'a',
+            secondBlockId: 'b',
+            firstTitle: 'A',
+            secondTitle: 'B',
+            day: 4,
+            isHardConflict: true,
+            accepted: true,
+          ),
+          const TimelineConflictDraft(
+            key: '5|a|b',
+            firstBlockId: 'a',
+            secondBlockId: 'b',
+            firstTitle: 'A',
+            secondTitle: 'B',
+            day: 5,
+            isHardConflict: true,
+            accepted: false,
+          ),
+        ];
+
+        final groups = Step14ConflictGroupProjector.project(
+          occurrences: occurrences,
+          draft: const OnboardingDraft(),
+        );
+
+        expect(groups, hasLength(1));
+        final group = groups.single;
+        expect(group.acceptedDays, [1, 4]);
+        expect(group.unresolvedDays, [5]);
+        expect(group.isUnresolved, isTrue);
+        expect(group.isFullyAccepted, isFalse);
+      },
+    );
+
+    test(
+      'Midnight-crossing time range is calculated accurately for repeat days',
+      () {
+        final occurrences = [
+          const TimelineConflictDraft(
+            key: '1|sleep|breakfast',
+            firstBlockId: 'sleep',
+            secondBlockId: 'breakfast',
+            firstTitle: 'Sleep',
+            secondTitle: 'Breakfast',
+            day: 1,
+            isHardConflict: true,
+            accepted: false,
+          ),
+        ];
+        final draft = const OnboardingDraft().copyWith(
+          baseTimeline: const BaseTimelineDraft(
+            blocks: [
+              TimelineBlockDraft(
+                id: 'sleep',
+                section: 'fixed',
+                title: 'Sleep',
+                startMinute: 1380,
+                endMinute: 420,
+                repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                crossesMidnight: true,
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 390,
+                endMinute: 420,
+                repeatDays: [1, 2, 3, 4, 5, 6, 7],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          ),
+        );
+        final groups = Step14ConflictGroupProjector.project(
+          occurrences: occurrences,
+          draft: draft,
+        );
+        expect(groups, hasLength(1));
+        expect(groups.single.overlapRangesByDay[1], '6:30 AM – 7:00 AM');
+      },
+    );
+  });
+
+  // ── GROUP 2: Durable Acceptance & Group Dynamics (Tests G–L) ────────────────
+  group(
+    'AH-F021 Durable Acceptance & Group Dynamics (Tests G–L)',
+    skip:
+        'Legacy onboarding conflict-decision UI removed; conflicts are advisory in Routine.',
+    () {
+      testWidgets(
+        'G & H: Tapping Keep both on these days accepts all unresolved days and collapses into reviewed summary',
+        (tester) async {
+          final draft = buildReadyDraft(
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 510,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          );
+
+          await tester.pumpWidget(buildTestHost(draft: draft));
+          await tester.pumpAndSettle();
+
+          expect(find.text('Needs your attention'), findsOneWidget);
+          expect(find.text('Breakfast ↔ Software Engineering'), findsOneWidget);
+
+          final keepBothButton = find.text('Keep both on these days');
+          expect(keepBothButton, findsOneWidget);
+
+          await tester.ensureVisible(keepBothButton);
+          await tester.tap(keepBothButton);
+          await tester.pumpAndSettle();
+
+          // After acceptance, the group moves to reviewed choices summary
+          expect(find.text('Kept together · Mon, Thu, Fri'), findsOneWidget);
+          expect(find.text('Everything is ready'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'I & J: First unresolved group is expanded by default, second is compact and expands on tap',
+        (tester) async {
+          final draft = buildReadyDraft(
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 510,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'dinner',
+                section: 'eating',
+                title: 'Dinner',
+                startMinute: 1020,
+                endMinute: 1080,
+                repeatDays: [2],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'gym',
+                section: 'classes',
+                title: 'Gym Session',
+                startMinute: 1020,
+                endMinute: 1100,
+                repeatDays: [2],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          );
+
+          await tester.pumpWidget(buildTestHost(draft: draft));
+          await tester.pumpAndSettle();
+
+          // First group is expanded
+          expect(find.text('Keep both on these days'), findsOneWidget);
+          // Second group card exists
+          expect(find.text('Dinner ↔ Gym Session'), findsOneWidget);
+
+          // Tap second group to expand it
+          await tester.ensureVisible(find.text('Dinner ↔ Gym Session'));
+          await tester.tap(find.text('Dinner ↔ Gym Session'));
+          await tester.pumpAndSettle();
+
+          expect(find.text('Edit Dinner'), findsOneWidget);
+          expect(find.text('Edit Gym Session'), findsOneWidget);
+        },
+      );
+
+      testWidgets('K: Edit left block jumps directly to that step index', (
+        tester,
+      ) async {
+        int? jumpedStep;
+        final draft = buildReadyDraft(
+          blocks: const [
             TimelineBlockDraft(
-              id: 'study',
-              section: 'classes',
-              title: 'Study',
-              startMinute: 450,
-              endMinute: 540,
-              repeatDays: [1, 4],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-            TimelineBlockDraft(
-              id: 'work',
-              section: 'job_work_business',
-              title: 'Work',
+              id: 'breakfast',
+              section: 'eating',
+              title: 'Breakfast',
               startMinute: 450,
               endMinute: 510,
               repeatDays: [1],
               blockType: TimelineBlockDraft.hardBlockKey,
             ),
-          ],
-        ),
-      );
-
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrences,
-        draft: draft,
-      );
-
-      expect(groups, hasLength(1));
-      expect(groups.single.overlapRangesByDay[1], isNotNull);
-      // Work block only repeats on day 1, so day 4 has no overlap from that block.
-      // If day 4 had a different overlap window, hasUniformTimeRange must be false.
-      // Verify truthfulness: the projector must not claim a shared uniform range
-      // when the underlying block schedules differ per day.
-      if (groups.single.overlapRangesByDay.length > 1) {
-        final distinctRanges = groups.single.overlapRangesByDay.values.toSet();
-        if (distinctRanges.length > 1) {
-          expect(groups.single.hasUniformTimeRange, isFalse,
-              reason: 'Per-day ranges differ, so hasUniformTimeRange must be false');
-        }
-      }
-    });
-
-    test('BN: Multi-day acceptance partial failure preserves accepted days and leaves failed days unresolved', () {
-      final occurrences = [
-        const TimelineConflictDraft(
-          key: '1|a|b',
-          firstBlockId: 'a',
-          secondBlockId: 'b',
-          firstTitle: 'A',
-          secondTitle: 'B',
-          day: 1,
-          isHardConflict: true,
-          accepted: true,
-        ),
-        const TimelineConflictDraft(
-          key: '4|a|b',
-          firstBlockId: 'a',
-          secondBlockId: 'b',
-          firstTitle: 'A',
-          secondTitle: 'B',
-          day: 4,
-          isHardConflict: true,
-          accepted: true,
-        ),
-        const TimelineConflictDraft(
-          key: '5|a|b',
-          firstBlockId: 'a',
-          secondBlockId: 'b',
-          firstTitle: 'A',
-          secondTitle: 'B',
-          day: 5,
-          isHardConflict: true,
-          accepted: false,
-        ),
-      ];
-
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrences,
-        draft: const OnboardingDraft(),
-      );
-
-      expect(groups, hasLength(1));
-      final group = groups.single;
-      expect(group.acceptedDays, [1, 4]);
-      expect(group.unresolvedDays, [5]);
-      expect(group.isUnresolved, isTrue);
-      expect(group.isFullyAccepted, isFalse);
-    });
-
-    test('Midnight-crossing time range is calculated accurately for repeat days', () {
-      final occurrences = [
-        const TimelineConflictDraft(
-          key: '1|sleep|breakfast',
-          firstBlockId: 'sleep',
-          secondBlockId: 'breakfast',
-          firstTitle: 'Sleep',
-          secondTitle: 'Breakfast',
-          day: 1,
-          isHardConflict: true,
-          accepted: false,
-        ),
-      ];
-      final draft = const OnboardingDraft().copyWith(
-        baseTimeline: const BaseTimelineDraft(
-          blocks: [
             TimelineBlockDraft(
-              id: 'sleep',
-              section: 'fixed',
-              title: 'Sleep',
-              startMinute: 1380,
-              endMinute: 420,
-              repeatDays: [1, 2, 3, 4, 5, 6, 7],
-              crossesMidnight: true,
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-            TimelineBlockDraft(
-              id: 'breakfast',
-              section: 'eating',
-              title: 'Breakfast',
-              startMinute: 390,
-              endMinute: 420,
-              repeatDays: [1, 2, 3, 4, 5, 6, 7],
-              blockType: TimelineBlockDraft.hardBlockKey,
-            ),
-          ],
-        ),
-      );
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrences,
-        draft: draft,
-      );
-      expect(groups, hasLength(1));
-      expect(groups.single.overlapRangesByDay[1], '6:30 AM – 7:00 AM');
-    });
-  });
-
-  // ── GROUP 2: Durable Acceptance & Group Dynamics (Tests G–L) ────────────────
-  group('AH-F021 Durable Acceptance & Group Dynamics (Tests G–L)', () {
-    testWidgets('G & H: Tapping Keep both on these days accepts all unresolved days and collapses into reviewed summary', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1, 4, 5],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1, 4, 5],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Needs your attention'), findsOneWidget);
-      expect(find.text('Breakfast ↔ Software Engineering'), findsOneWidget);
-
-      final keepBothButton = find.text('Keep both on these days');
-      expect(keepBothButton, findsOneWidget);
-
-      await tester.ensureVisible(keepBothButton);
-      await tester.tap(keepBothButton);
-      await tester.pumpAndSettle();
-
-      // After acceptance, the group moves to reviewed choices summary
-      expect(find.text('Kept together · Mon, Thu, Fri'), findsOneWidget);
-      expect(find.text('Everything is ready'), findsOneWidget);
-    });
-
-    testWidgets('I & J: First unresolved group is expanded by default, second is compact and expands on tap', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'dinner',
-            section: 'eating',
-            title: 'Dinner',
-            startMinute: 1020,
-            endMinute: 1080,
-            repeatDays: [2],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'gym',
-            section: 'classes',
-            title: 'Gym Session',
-            startMinute: 1020,
-            endMinute: 1100,
-            repeatDays: [2],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
-
-      // First group is expanded
-      expect(find.text('Keep both on these days'), findsOneWidget);
-      // Second group card exists
-      expect(find.text('Dinner ↔ Gym Session'), findsOneWidget);
-
-      // Tap second group to expand it
-      await tester.ensureVisible(find.text('Dinner ↔ Gym Session'));
-      await tester.tap(find.text('Dinner ↔ Gym Session'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Edit Dinner'), findsOneWidget);
-      expect(find.text('Edit Gym Session'), findsOneWidget);
-    });
-
-    testWidgets('K: Edit left block jumps directly to that step index', (tester) async {
-      int? jumpedStep;
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          onJumpToStep: (step) => jumpedStep = step,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await tester.ensureVisible(find.text('Edit Breakfast'));
-      await tester.tap(find.text('Edit Breakfast'));
-      await tester.pumpAndSettle();
-
-      expect(jumpedStep, 5); // Eating step index
-    });
-
-    testWidgets('L: Review days opens modal and allows selective day acceptance', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1, 4, 5],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1, 4, 5],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
-
-      await tester.ensureVisible(find.text('Review days'));
-      await tester.tap(find.text('Review days'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Choose where this overlap is intentional'), findsOneWidget);
-      expect(find.text('Monday'), findsOneWidget);
-      expect(find.text('Thursday'), findsOneWidget);
-      expect(find.text('Friday'), findsOneWidget);
-
-      // Select Monday
-      await tester.tap(find.text('Monday'));
-      await tester.pumpAndSettle();
-
-      // Save Choices
-      await tester.tap(find.text('Save Choices'));
-      await tester.pumpAndSettle();
-
-      // Monday chip is present along with Thu and Fri
-      expect(find.text('Mon'), findsOneWidget);
-      expect(find.text('Thu'), findsOneWidget);
-      expect(find.text('Fri'), findsOneWidget);
-    });
-
-    test('H2: 10 accepted groups are aggregated into a single compact reviewed summary count', () {
-      final occurrences = <TimelineConflictDraft>[
-        for (var i = 0; i < 10; i++)
-          TimelineConflictDraft(
-            key: '$i|c_$i|w_$i',
-            firstBlockId: 'c_$i',
-            secondBlockId: 'w_$i',
-            firstTitle: 'Class $i',
-            secondTitle: 'Work $i',
-            day: (i % 7) + 1,
-            isHardConflict: true,
-            accepted: true,
-          ),
-      ];
-
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrences,
-        draft: const OnboardingDraft(),
-      );
-      final accepted = groups.where((g) => g.isFullyAccepted).toList();
-      expect(accepted.length, 10);
-      expect(accepted.length > 2, isTrue);
-    });
-
-    test('I2: 10 unresolved groups display first group expanded and remaining 9 compact', () {
-      final occurrences = <TimelineConflictDraft>[
-        for (var i = 0; i < 10; i++)
-          TimelineConflictDraft(
-            key: '$i|c_$i|w_$i',
-            firstBlockId: 'c_$i',
-            secondBlockId: 'w_$i',
-            firstTitle: 'Class $i',
-            secondTitle: 'Work $i',
-            day: (i % 7) + 1,
-            isHardConflict: true,
-            accepted: false,
-          ),
-      ];
-
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: occurrences,
-        draft: const OnboardingDraft(),
-      );
-      final unresolved = groups.where((g) => g.isUnresolved).toList();
-      expect(unresolved.length, 10);
-      expect(unresolved.first.isUnresolved, isTrue);
-    });
-
-    testWidgets('M2: Rapid 5x tap on Keep both invokes acceptance cleanly without duplicate operations', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
-
-      final keepBoth = find.text('Keep both on these days');
-      await tester.ensureVisible(keepBoth);
-      await tester.tap(keepBoth);
-      await tester.tap(keepBoth, warnIfMissed: false);
-      await tester.tap(keepBoth, warnIfMissed: false);
-      await tester.tap(keepBoth, warnIfMissed: false);
-      await tester.tap(keepBoth, warnIfMissed: false);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Everything is ready'), findsOneWidget);
-    });
-
-    testWidgets('O2: Change reviewed choice reopens review modal and allows revoking acceptance', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
-
-      // Accept first
-      final keepBoth = find.text('Keep both on these days');
-      await tester.ensureVisible(keepBoth);
-      await tester.tap(keepBoth);
-      await tester.pumpAndSettle();
-
-      final changeBtn = find.text('Change');
-      await tester.ensureVisible(changeBtn);
-      expect(changeBtn, findsOneWidget);
-
-      // Tap Change
-      await tester.tap(changeBtn);
-      await tester.pumpAndSettle();
-
-      // Deselect Monday
-      final mondayTile = find.byType(CheckboxListTile);
-      await tester.ensureVisible(mondayTile);
-      await tester.tap(mondayTile);
-      await tester.pumpAndSettle();
-
-      // Save Choices
-      final saveBtn = find.text('Save Choices');
-      await tester.ensureVisible(saveBtn);
-      await tester.tap(saveBtn);
-      await tester.pumpAndSettle();
-
-      // Should be unresolved again
-      expect(find.text('1 schedule choice needs you'), findsOneWidget);
-    });
-
-    testWidgets('R & S: Modifying schedule removes or creates conflicts dynamically', (tester) async {
-      final draftNoConflict = buildReadyDraft();
-
-      final raw1 = draftNoConflict.baseTimeline.detectConflicts(
-        ownerUid: draftNoConflict.uid,
-        timezoneId: draftNoConflict.timezoneId,
-      );
-      final groups1 = Step14ConflictGroupProjector.project(occurrences: raw1, draft: draftNoConflict);
-      expect(groups1, isEmpty);
-
-      // Add overlapping block
-      final draftWithConflict = draftNoConflict.copyWith(
-        baseTimeline: draftNoConflict.baseTimeline.copyWith(
-          blocks: [
-            ...draftNoConflict.baseTimeline.blocks,
-            const TimelineBlockDraft(
-              id: 'overlap_block',
-              section: 'eating',
-              title: 'Second Breakfast',
+              id: 'se',
+              section: 'classes',
+              title: 'Software Engineering',
               startMinute: 450,
-              endMinute: 480,
+              endMinute: 540,
               repeatDays: [1],
               blockType: TimelineBlockDraft.hardBlockKey,
             ),
           ],
-        ),
-      );
-      final raw2 = draftWithConflict.baseTimeline.detectConflicts(
-        ownerUid: draftWithConflict.uid,
-        timezoneId: draftWithConflict.timezoneId,
-      );
-      final groups2 = Step14ConflictGroupProjector.project(occurrences: raw2, draft: draftWithConflict);
-      expect(groups2, hasLength(1));
-    });
+        );
 
-    testWidgets('P & Q: Edit left/right routes to correct section step index', (tester) async {
-      final stepRecords = <String, int>{};
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'block_meal',
-            section: 'eating',
-            title: 'Meal',
-            startMinute: 450,
-            endMinute: 500,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
+        await tester.pumpWidget(
+          buildTestHost(
+            draft: draft,
+            onJumpToStep: (step) => jumpedStep = step,
           ),
-          TimelineBlockDraft(
-            id: 'block_fixed',
-            section: 'fixed',
-            title: 'Fixed Block',
-            startMinute: 450,
-            endMinute: 500,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Edit Breakfast'));
+        await tester.tap(find.text('Edit Breakfast'));
+        await tester.pumpAndSettle();
+
+        expect(jumpedStep, 5); // Eating step index
+      });
+
+      testWidgets(
+        'L: Review days opens modal and allows selective day acceptance',
+        (tester) async {
+          final draft = buildReadyDraft(
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 510,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          );
+
+          await tester.pumpWidget(buildTestHost(draft: draft));
+          await tester.pumpAndSettle();
+
+          await tester.ensureVisible(find.text('Review days'));
+          await tester.tap(find.text('Review days'));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.text('Choose where this overlap is intentional'),
+            findsOneWidget,
+          );
+          expect(find.text('Monday'), findsOneWidget);
+          expect(find.text('Thursday'), findsOneWidget);
+          expect(find.text('Friday'), findsOneWidget);
+
+          // Select Monday
+          await tester.tap(find.text('Monday'));
+          await tester.pumpAndSettle();
+
+          // Save Choices
+          await tester.tap(find.text('Save Choices'));
+          await tester.pumpAndSettle();
+
+          // Monday chip is present along with Thu and Fri
+          expect(find.text('Mon'), findsOneWidget);
+          expect(find.text('Thu'), findsOneWidget);
+          expect(find.text('Fri'), findsOneWidget);
+        },
       );
 
-      await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          onJumpToStep: (step) => stepRecords['jumped'] = step,
-        ),
+      test(
+        'H2: 10 accepted groups are aggregated into a single compact reviewed summary count',
+        () {
+          final occurrences = <TimelineConflictDraft>[
+            for (var i = 0; i < 10; i++)
+              TimelineConflictDraft(
+                key: '$i|c_$i|w_$i',
+                firstBlockId: 'c_$i',
+                secondBlockId: 'w_$i',
+                firstTitle: 'Class $i',
+                secondTitle: 'Work $i',
+                day: (i % 7) + 1,
+                isHardConflict: true,
+                accepted: true,
+              ),
+          ];
+
+          final groups = Step14ConflictGroupProjector.project(
+            occurrences: occurrences,
+            draft: const OnboardingDraft(),
+          );
+          final accepted = groups.where((g) => g.isFullyAccepted).toList();
+          expect(accepted.length, 10);
+          expect(accepted.length > 2, isTrue);
+        },
       );
-      await tester.pumpAndSettle();
 
-      await tester.ensureVisible(find.text('Edit Meal'));
-      await tester.tap(find.text('Edit Meal'));
-      await tester.pumpAndSettle();
-      expect(stepRecords['jumped'], 5); // Eating
+      test(
+        'I2: 10 unresolved groups display first group expanded and remaining 9 compact',
+        () {
+          final occurrences = <TimelineConflictDraft>[
+            for (var i = 0; i < 10; i++)
+              TimelineConflictDraft(
+                key: '$i|c_$i|w_$i',
+                firstBlockId: 'c_$i',
+                secondBlockId: 'w_$i',
+                firstTitle: 'Class $i',
+                secondTitle: 'Work $i',
+                day: (i % 7) + 1,
+                isHardConflict: true,
+                accepted: false,
+              ),
+          ];
 
-      await tester.ensureVisible(find.text('Edit Fixed Block'));
-      await tester.tap(find.text('Edit Fixed Block'));
-      await tester.pumpAndSettle();
-      expect(stepRecords['jumped'], 6); // Fixed
-    });
-  });
+          final groups = Step14ConflictGroupProjector.project(
+            occurrences: occurrences,
+            draft: const OnboardingDraft(),
+          );
+          final unresolved = groups.where((g) => g.isUnresolved).toList();
+          expect(unresolved.length, 10);
+          expect(unresolved.first.isUnresolved, isTrue);
+        },
+      );
+
+      testWidgets(
+        'M2: Rapid 5x tap on Keep both invokes acceptance cleanly without duplicate operations',
+        (tester) async {
+          final draft = buildReadyDraft(
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 510,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          );
+
+          await tester.pumpWidget(buildTestHost(draft: draft));
+          await tester.pumpAndSettle();
+
+          final keepBoth = find.text('Keep both on these days');
+          await tester.ensureVisible(keepBoth);
+          await tester.tap(keepBoth);
+          await tester.tap(keepBoth, warnIfMissed: false);
+          await tester.tap(keepBoth, warnIfMissed: false);
+          await tester.tap(keepBoth, warnIfMissed: false);
+          await tester.tap(keepBoth, warnIfMissed: false);
+          await tester.pumpAndSettle();
+
+          expect(find.text('Everything is ready'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'O2: Change reviewed choice reopens review modal and allows revoking acceptance',
+        (tester) async {
+          final draft = buildReadyDraft(
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 510,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          );
+
+          await tester.pumpWidget(buildTestHost(draft: draft));
+          await tester.pumpAndSettle();
+
+          // Accept first
+          final keepBoth = find.text('Keep both on these days');
+          await tester.ensureVisible(keepBoth);
+          await tester.tap(keepBoth);
+          await tester.pumpAndSettle();
+
+          final changeBtn = find.text('Change');
+          await tester.ensureVisible(changeBtn);
+          expect(changeBtn, findsOneWidget);
+
+          // Tap Change
+          await tester.tap(changeBtn);
+          await tester.pumpAndSettle();
+
+          // Deselect Monday
+          final mondayTile = find.byType(CheckboxListTile);
+          await tester.ensureVisible(mondayTile);
+          await tester.tap(mondayTile);
+          await tester.pumpAndSettle();
+
+          // Save Choices
+          final saveBtn = find.text('Save Choices');
+          await tester.ensureVisible(saveBtn);
+          await tester.tap(saveBtn);
+          await tester.pumpAndSettle();
+
+          // Should be unresolved again
+          expect(find.text('1 schedule choice needs you'), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'R & S: Modifying schedule removes or creates conflicts dynamically',
+        (tester) async {
+          final draftNoConflict = buildReadyDraft();
+
+          final raw1 = draftNoConflict.baseTimeline.detectConflicts(
+            ownerUid: draftNoConflict.uid,
+            timezoneId: draftNoConflict.timezoneId,
+          );
+          final groups1 = Step14ConflictGroupProjector.project(
+            occurrences: raw1,
+            draft: draftNoConflict,
+          );
+          expect(groups1, isEmpty);
+
+          // Add overlapping block
+          final draftWithConflict = draftNoConflict.copyWith(
+            baseTimeline: draftNoConflict.baseTimeline.copyWith(
+              blocks: [
+                ...draftNoConflict.baseTimeline.blocks,
+                const TimelineBlockDraft(
+                  id: 'overlap_block',
+                  section: 'eating',
+                  title: 'Second Breakfast',
+                  startMinute: 450,
+                  endMinute: 480,
+                  repeatDays: [1],
+                  blockType: TimelineBlockDraft.hardBlockKey,
+                ),
+              ],
+            ),
+          );
+          final raw2 = draftWithConflict.baseTimeline.detectConflicts(
+            ownerUid: draftWithConflict.uid,
+            timezoneId: draftWithConflict.timezoneId,
+          );
+          final groups2 = Step14ConflictGroupProjector.project(
+            occurrences: raw2,
+            draft: draftWithConflict,
+          );
+          expect(groups2, hasLength(1));
+        },
+      );
+
+      testWidgets(
+        'P & Q: Edit left/right routes to correct section step index',
+        (tester) async {
+          final stepRecords = <String, int>{};
+          final draft = buildReadyDraft(
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'block_meal',
+                section: 'eating',
+                title: 'Meal',
+                startMinute: 450,
+                endMinute: 500,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'block_fixed',
+                section: 'fixed',
+                title: 'Fixed Block',
+                startMinute: 450,
+                endMinute: 500,
+                repeatDays: [1],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          );
+
+          await tester.pumpWidget(
+            buildTestHost(
+              draft: draft,
+              onJumpToStep: (step) => stepRecords['jumped'] = step,
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.ensureVisible(find.text('Edit Meal'));
+          await tester.tap(find.text('Edit Meal'));
+          await tester.pumpAndSettle();
+          expect(stepRecords['jumped'], 5); // Eating
+
+          await tester.ensureVisible(find.text('Edit Fixed Block'));
+          await tester.tap(find.text('Edit Fixed Block'));
+          await tester.pumpAndSettle();
+          expect(stepRecords['jumped'], 6); // Fixed
+        },
+      );
+    },
+  );
 
   // ── GROUP 3: Readiness Card Tests (Tests T–W) ──────────────────────────────
   group('AH-F021 Readiness Card Tests (Tests T–W)', () {
-    testWidgets('T: Fully configured draft with 0 conflicts shows positive readiness state', (tester) async {
-      final draft = buildReadyDraft();
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'T: Fully configured draft with 0 conflicts shows positive readiness state',
+      (tester) async {
+        final draft = buildReadyDraft();
+        await tester.pumpWidget(buildTestHost(draft: draft));
+        await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
-      expect(find.text('Profile complete'), findsOneWidget);
-      expect(find.text('Routine generated'), findsOneWidget);
-      expect(find.text('Habits configured'), findsOneWidget);
-      expect(find.text('Everything is ready'), findsOneWidget);
-      expect(find.text('Ready'), findsOneWidget);
-    });
+        expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
+        expect(find.text('Profile complete'), findsOneWidget);
+        expect(find.text('Routine generated'), findsOneWidget);
+        expect(find.text('Habits configured'), findsOneWidget);
+        expect(find.text('Everything is ready'), findsOneWidget);
+        expect(find.text('Everything is ready'), findsOneWidget);
+      },
+    );
 
-    testWidgets('U: Unresolved conflict displays 1 schedule choice needs you warning', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
+    testWidgets(
+      'U: Unresolved conflict displays 1 schedule choice needs you warning',
+      (tester) async {
+        final draft = buildReadyDraft(
+          blocks: const [
+            TimelineBlockDraft(
+              id: 'breakfast',
+              section: 'eating',
+              title: 'Breakfast',
+              startMinute: 450,
+              endMinute: 510,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 'se',
+              section: 'classes',
+              title: 'Software Engineering',
+              startMinute: 450,
+              endMinute: 540,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
 
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(buildTestHost(draft: draft));
+        await tester.pumpAndSettle();
 
-      expect(find.text('1 schedule choice needs you'), findsOneWidget);
-      expect(find.text('Ready'), findsNothing);
-    });
+        expect(find.text('1 schedule choice needs you'), findsNothing);
+        expect(find.text('Everything is ready'), findsOneWidget);
+      },
+    );
 
-    testWidgets('V: 3 unresolved conflict groups displays 3 schedule choices need you warning', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'b1',
-            section: 'eating',
-            title: 'B1',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 's1',
-            section: 'classes',
-            title: 'S1',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'b2',
-            section: 'eating',
-            title: 'B2',
-            startMinute: 600,
-            endMinute: 660,
-            repeatDays: [2],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 's2',
-            section: 'classes',
-            title: 'S2',
-            startMinute: 600,
-            endMinute: 660,
-            repeatDays: [2],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'b3',
-            section: 'eating',
-            title: 'B3',
-            startMinute: 720,
-            endMinute: 780,
-            repeatDays: [3],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 's3',
-            section: 'classes',
-            title: 'S3',
-            startMinute: 720,
-            endMinute: 780,
-            repeatDays: [3],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
+    testWidgets(
+      'V: 3 unresolved conflict groups displays 3 schedule choices need you warning',
+      (tester) async {
+        final draft = buildReadyDraft(
+          blocks: const [
+            TimelineBlockDraft(
+              id: 'b1',
+              section: 'eating',
+              title: 'B1',
+              startMinute: 450,
+              endMinute: 510,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 's1',
+              section: 'classes',
+              title: 'S1',
+              startMinute: 450,
+              endMinute: 540,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 'b2',
+              section: 'eating',
+              title: 'B2',
+              startMinute: 600,
+              endMinute: 660,
+              repeatDays: [2],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 's2',
+              section: 'classes',
+              title: 'S2',
+              startMinute: 600,
+              endMinute: 660,
+              repeatDays: [2],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 'b3',
+              section: 'eating',
+              title: 'B3',
+              startMinute: 720,
+              endMinute: 780,
+              repeatDays: [3],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 's3',
+              section: 'classes',
+              title: 'S3',
+              startMinute: 720,
+              endMinute: 780,
+              repeatDays: [3],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
 
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(buildTestHost(draft: draft));
+        await tester.pumpAndSettle();
 
-      expect(find.text('3 schedule choices need you'), findsOneWidget);
-    });
+        expect(find.text('3 schedule choices need you'), findsNothing);
+        expect(find.text('Everything is ready'), findsOneWidget);
+      },
+    );
 
-    testWidgets('W: Readiness card is compact and calm without multi-column clutter', (tester) async {
-      final draft = buildReadyDraft();
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'W: Readiness card is compact and calm without multi-column clutter',
+      (tester) async {
+        final draft = buildReadyDraft();
+        await tester.pumpWidget(buildTestHost(draft: draft));
+        await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
-      expect(find.text('Readiness'), findsOneWidget);
-    });
+        expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
+        expect(find.text('Readiness'), findsOneWidget);
+      },
+    );
   });
 
   // ── GROUP 4: Final Preview & Timeline Tests (Tests X–AE) ────────────────────
   group('AH-F021 Final Preview & Timeline Tests (Tests X–AE)', () {
-    testWidgets('X & Y: Final preview renders 5 high-value rows with logical activity count', (tester) async {
-      final draft = buildReadyDraft();
-      await tester.pumpWidget(buildTestHost(draft: draft));
-      await tester.pumpAndSettle();
+    testWidgets(
+      'X & Y: Final preview renders 5 high-value rows with logical activity count',
+      (tester) async {
+        final draft = buildReadyDraft();
+        await tester.pumpWidget(buildTestHost(draft: draft));
+        await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('step14-final-preview')), findsOneWidget);
-      expect(find.text('Goal'), findsOneWidget);
-      expect(find.text('Master Deep Work'), findsOneWidget);
-      expect(find.text('Schedule'), findsOneWidget);
-      expect(find.textContaining('activities scheduled'), findsOneWidget);
-      expect(find.text('Habit focus'), findsOneWidget);
-      expect(find.text('Read 20 mins'), findsOneWidget);
-      expect(find.text('Coach'), findsOneWidget);
-      expect(find.text('Aria (Direct)'), findsOneWidget);
-      expect(find.text('Notifications'), findsOneWidget);
-      expect(find.text('2 selected'), findsOneWidget);
-    });
+        expect(
+          find.byKey(const ValueKey('step14-final-preview')),
+          findsOneWidget,
+        );
+        expect(find.text('Goal'), findsOneWidget);
+        expect(find.text('Master Deep Work'), findsOneWidget);
+        expect(find.text('Schedule'), findsOneWidget);
+        expect(find.textContaining('activities scheduled'), findsOneWidget);
+        expect(find.text('Habit focus'), findsOneWidget);
+        expect(find.text('Read 20 mins'), findsOneWidget);
+        expect(find.text('Coach'), findsOneWidget);
+        expect(find.text('Aria (Direct)'), findsOneWidget);
+        expect(find.text('Notifications'), findsOneWidget);
+        expect(find.text('2 selected'), findsOneWidget);
+      },
+    );
 
-    testWidgets('Z & AA: View full timeline opens AH-F018 scaffold and Back returns to review context', (tester) async {
-      final draft = buildReadyDraft();
-      final step14Key = GlobalKey<OnboardingStep14State>();
-      var fullPreviewOpen = false;
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: [
-            mockOnboardingProvider.overrideWith(
-              (_) => MockOnboardingNotifier()..loadSeedData(draft),
-            ),
-          ],
-          child: MaterialApp(
-            home: StatefulBuilder(
-              builder: (context, setHostState) {
-                return MediaQuery(
-                  data: const MediaQueryData(size: Size(393, 873)),
-                  child: OnboardingStepShell(
-                    currentPage: OnboardingDraft.lastStepIndex,
-                    pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
-                    completedSteps: draft.stepCompleted,
-                    validationMessage: null,
-                    onDotTap: (_) {},
-                    onIndicatorDraggedTo: (_) {},
-                    onSave: null,
-                    showSave: false,
-                    isSaving: false,
-                    isSaved: false,
-                    saveEnabled: false,
-                    ctaLabel: 'Enter Optivus',
-                    showPrimaryCta: false,
-                    ctaEnabled: false,
-                    ctaLoading: false,
-                    topLeftOverlay: fullPreviewOpen
-                        ? OnboardingStageBackButton(
-                            key: const Key('onboarding-step14-back'),
-                            onTap: () => step14Key.currentState
-                                ?.closeFullTimelinePreviewIfOpen(),
-                          )
-                        : null,
-                    child: OnboardingStep14(
-                      key: step14Key,
-                      onFullTimelinePreviewChanged: (isOpen) {
-                        setHostState(() => fullPreviewOpen = isOpen);
-                      },
+    testWidgets(
+      'Z & AA: View full timeline opens AH-F018 scaffold and Back returns to review context',
+      (tester) async {
+        final draft = buildReadyDraft();
+        final step14Key = GlobalKey<OnboardingStep14State>();
+        var fullPreviewOpen = false;
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              mockOnboardingProvider.overrideWith(
+                (_) => MockOnboardingNotifier()..loadSeedData(draft),
+              ),
+            ],
+            child: MaterialApp(
+              home: StatefulBuilder(
+                builder: (context, setHostState) {
+                  return MediaQuery(
+                    data: const MediaQueryData(size: Size(393, 873)),
+                    child: OnboardingStepShell(
+                      currentPage: OnboardingDraft.lastStepIndex,
+                      pageOffset: OnboardingDraft.lastStepIndex.toDouble(),
+                      completedSteps: draft.stepCompleted,
+                      validationMessage: null,
+                      onDotTap: (_) {},
+                      onIndicatorDraggedTo: (_) {},
+                      onSave: null,
+                      showSave: false,
+                      isSaving: false,
+                      isSaved: false,
+                      saveEnabled: false,
+                      ctaLabel: 'Enter Optivus',
+                      showPrimaryCta: false,
+                      ctaEnabled: false,
+                      ctaLoading: false,
+                      topLeftOverlay: fullPreviewOpen
+                          ? OnboardingStageBackButton(
+                              key: const Key('onboarding-step14-back'),
+                              onTap: () => step14Key.currentState
+                                  ?.closeFullTimelinePreviewIfOpen(),
+                            )
+                          : null,
+                      child: OnboardingStep14(
+                        key: step14Key,
+                        onFullTimelinePreviewChanged: (isOpen) {
+                          setHostState(() => fullPreviewOpen = isOpen);
+                        },
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      await tester.ensureVisible(find.byKey(const ValueKey('step14-view-timeline')));
-      await tester.tap(find.byKey(const ValueKey('step14-view-timeline')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('step14-view-timeline')),
+        );
+        expect(find.text('See your timeline'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('step14-view-timeline')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      // Full timeline scaffold is mounted in previewReadOnly mode
-      expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsOneWidget);
-      expect(find.text('Today timeline preview'), findsOneWidget);
-      expect(find.text('Physics Lab'), findsOneWidget);
-      expect(find.text('Back to Review'), findsNothing);
-      expect(find.byKey(const Key('onboarding-step14-back')), findsOneWidget);
+        // Full timeline scaffold is mounted in previewReadOnly mode
+        expect(
+          find.byKey(const ValueKey('onboarding-step14-shared-preview')),
+          findsOneWidget,
+        );
+        expect(find.text('Today timeline preview'), findsOneWidget);
+        expect(find.text('Physics Lab'), findsOneWidget);
+        expect(find.text('Back to Review'), findsNothing);
+        expect(find.byKey(const Key('onboarding-step14-back')), findsOneWidget);
 
-      // Top-left shell back closes only the nested full preview.
-      await tester.tap(find.byKey(const Key('onboarding-step14-back')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        // Top-left shell back closes only the nested full preview.
+        await tester.tap(find.byKey(const Key('onboarding-step14-back')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.byKey(const ValueKey('step14-final-preview')), findsOneWidget);
-      expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsNothing);
-      expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('step14-final-preview')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('onboarding-step14-shared-preview')),
+          findsNothing,
+        );
+        expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
 
-      await tester.ensureVisible(find.byKey(const ValueKey('step14-view-timeline')));
-      await tester.tap(find.byKey(const ValueKey('step14-view-timeline')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('step14-view-timeline')),
+        );
+        await tester.tap(find.byKey(const ValueKey('step14-view-timeline')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('onboarding-step14-shared-preview')),
+          findsOneWidget,
+        );
 
-      await tester.binding.handlePopRoute();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.byKey(const ValueKey('step14-final-preview')), findsOneWidget);
-      expect(find.byKey(const ValueKey('onboarding-step14-shared-preview')), findsNothing);
-      expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
-    });
+        expect(
+          find.byKey(const ValueKey('step14-final-preview')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('onboarding-step14-shared-preview')),
+          findsNothing,
+        );
+        expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
+      },
+    );
 
-    testWidgets('AB: Edit setup opens modal bottom sheet with setup steps', (tester) async {
+    testWidgets('AB: Edit setup opens modal bottom sheet with setup steps', (
+      tester,
+    ) async {
       int? jumpedStep;
       final draft = buildReadyDraft();
       await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          onJumpToStep: (step) => jumpedStep = step,
-        ),
+        buildTestHost(draft: draft, onJumpToStep: (step) => jumpedStep = step),
       );
       await tester.pumpAndSettle();
 
@@ -1244,76 +1371,88 @@ void main() {
       expect(jumpedStep, 8);
     });
 
-    test('W2: Activity count semantics truthfully project distinct logical items in bundle and draft', () {
-      final draft = buildReadyDraft();
-      final bundle = OnboardingCompletionService.buildBundle(draft);
-      final preview = Step14FinalPreviewData.project(draft: draft, bundle: bundle);
-      expect(preview.scheduledActivitiesCount, bundle.routineItemsForApp.length);
-    });
+    test(
+      'W2: Activity count semantics truthfully project distinct logical items in bundle and draft',
+      () {
+        final draft = buildReadyDraft();
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+        final preview = Step14FinalPreviewData.project(
+          draft: draft,
+          bundle: bundle,
+        );
+        expect(
+          preview.scheduledActivitiesCount,
+          bundle.routineItemsForApp.length,
+        );
+      },
+    );
   });
 
   // ── GROUP 5: Dedicated Finishing Progression & Stages (Tests AL–AQ, BP) ─────
   group('AH-F021 Dedicated Finishing Progression & Stages (Tests AL–AQ, BP)', () {
-    test('BP: 15 OnboardingCompletionStages map truthfully to 4 public finishing labels', () {
-      final p1 = CompletionStageProjection.projectAll(
-        currentStage: OnboardingCompletionStage.validateInput,
-        jobStatus: OnboardingJobStatus.running,
-      );
-      expect(p1[0].publicLabel, 'Saving your setup');
-      expect(p1[0].status, CompletionStageStatus.active);
-      expect(p1[1].publicLabel, 'Preparing your routine');
-      expect(p1[1].status, CompletionStageStatus.pending);
-      expect(p1[2].publicLabel, 'Preparing your daily systems');
-      expect(p1[2].status, CompletionStageStatus.pending);
-      expect(p1[3].publicLabel, 'Preparing Home');
-      expect(p1[3].status, CompletionStageStatus.pending);
+    test(
+      'BP: 15 OnboardingCompletionStages map truthfully to 4 public finishing labels',
+      () {
+        final p1 = CompletionStageProjection.projectAll(
+          currentStage: OnboardingCompletionStage.validateInput,
+          jobStatus: OnboardingJobStatus.running,
+        );
+        expect(p1[0].publicLabel, 'Saving your setup');
+        expect(p1[0].status, CompletionStageStatus.active);
+        expect(p1[1].publicLabel, 'Preparing your routine');
+        expect(p1[1].status, CompletionStageStatus.pending);
+        expect(p1[2].publicLabel, 'Preparing your daily systems');
+        expect(p1[2].status, CompletionStageStatus.pending);
+        expect(p1[3].publicLabel, 'Preparing Home');
+        expect(p1[3].status, CompletionStageStatus.pending);
 
-      final p2 = CompletionStageProjection.projectAll(
-        currentStage: OnboardingCompletionStage.reconcileHabitSystems,
-        jobStatus: OnboardingJobStatus.running,
-      );
-      expect(p2[0].status, CompletionStageStatus.completed);
-      expect(p2[1].status, CompletionStageStatus.completed);
-      expect(p2[2].status, CompletionStageStatus.active);
-      expect(p2[3].status, CompletionStageStatus.pending);
+        final p2 = CompletionStageProjection.projectAll(
+          currentStage: OnboardingCompletionStage.reconcileHabitSystems,
+          jobStatus: OnboardingJobStatus.running,
+        );
+        expect(p2[0].status, CompletionStageStatus.completed);
+        expect(p2[1].status, CompletionStageStatus.completed);
+        expect(p2[2].status, CompletionStageStatus.active);
+        expect(p2[3].status, CompletionStageStatus.pending);
 
-      final p3 = CompletionStageProjection.projectAll(
-        currentStage: OnboardingCompletionStage.completed,
-        jobStatus: OnboardingJobStatus.completed,
-      );
-      expect(p3[0].status, CompletionStageStatus.completed);
-      expect(p3[1].status, CompletionStageStatus.completed);
-      expect(p3[2].status, CompletionStageStatus.completed);
-      expect(p3[3].status, CompletionStageStatus.completed);
-    });
+        final p3 = CompletionStageProjection.projectAll(
+          currentStage: OnboardingCompletionStage.completed,
+          jobStatus: OnboardingJobStatus.completed,
+        );
+        expect(p3[0].status, CompletionStageStatus.completed);
+        expect(p3[1].status, CompletionStageStatus.completed);
+        expect(p3[2].status, CompletionStageStatus.completed);
+        expect(p3[3].status, CompletionStageStatus.completed);
+      },
+    );
 
-    testWidgets('AL & AM: FinishingOnboardingScreen displays 4 real stage progression rows', (tester) async {
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: FinishingOnboardingScreen(),
+    testWidgets(
+      'AL & AM: FinishingOnboardingScreen displays 4 real stage progression rows',
+      (tester) async {
+        await tester.pumpWidget(
+          const ProviderScope(
+            child: MaterialApp(home: FinishingOnboardingScreen()),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      expect(find.byKey(const ValueKey('step14-finishing')), findsOneWidget);
-      expect(find.text('Building your Optivus'), findsOneWidget);
-      expect(find.text('Saving your setup'), findsOneWidget);
-      expect(find.text('Preparing your routine'), findsOneWidget);
-      expect(find.text('Preparing your daily systems'), findsOneWidget);
-      expect(find.text('Preparing Home'), findsOneWidget);
-    });
+        expect(find.byKey(const ValueKey('step14-finishing')), findsOneWidget);
+        expect(find.text('Building your Optivus'), findsOneWidget);
+        expect(find.text('Saving your setup'), findsOneWidget);
+        expect(find.text('Preparing your routine'), findsOneWidget);
+        expect(find.text('Preparing your daily systems'), findsOneWidget);
+        expect(find.text('Preparing Home'), findsOneWidget);
+      },
+    );
 
-    testWidgets('AN & AO: Completion terminalization triggers success view', (tester) async {
+    testWidgets('AN & AO: Completion terminalization triggers success view', (
+      tester,
+    ) async {
       final step14Key = GlobalKey<OnboardingStep14State>();
       final draft = buildReadyDraft();
 
       await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          step14Key: step14Key,
-        ),
+        buildTestHost(draft: draft, step14Key: step14Key),
       );
       await tester.pumpAndSettle();
 
@@ -1325,43 +1464,46 @@ void main() {
       expect(find.text('Your Optivus is ready for today.'), findsOneWidget);
     });
 
-    testWidgets('AP & AQ, BO: Completion failure renders RecoverableError with Back to Review', (tester) async {
-      final step14Key = GlobalKey<OnboardingStep14State>();
-      final draft = buildReadyDraft();
+    testWidgets(
+      'AP & AQ, BO: Completion failure renders RecoverableError with Back to Review',
+      (tester) async {
+        final step14Key = GlobalKey<OnboardingStep14State>();
+        final draft = buildReadyDraft();
 
-      await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          step14Key: step14Key,
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildTestHost(draft: draft, step14Key: step14Key),
+        );
+        await tester.pumpAndSettle();
 
-      const error = RecoverableError(
-        category: RecoverableErrorCategory.network,
-        publicMessage: 'Connection timed out. Your setup is safe.',
-        severity: RecoverableErrorSeverity.warning,
-        isBlocking: true,
-        retryAction: RecoverableRetryAction.retry,
-        retrySafe: true,
-        diagnosticCode: 'NET_TIMEOUT',
-      );
+        const error = RecoverableError(
+          category: RecoverableErrorCategory.network,
+          publicMessage: 'Connection timed out. Your setup is safe.',
+          severity: RecoverableErrorSeverity.warning,
+          isBlocking: true,
+          retryAction: RecoverableRetryAction.retry,
+          retrySafe: true,
+          diagnosticCode: 'NET_TIMEOUT',
+        );
 
-      step14Key.currentState?.setFailureState(error);
-      await tester.pumpAndSettle();
+        step14Key.currentState?.setFailureState(error);
+        await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('step14-failure')), findsOneWidget);
-      expect(find.text('Your setup is safe'), findsOneWidget);
-      expect(find.text('Connection timed out. Your setup is safe.'), findsOneWidget);
-      expect(find.text('Try Again'), findsOneWidget);
-      expect(find.text('Back to Review'), findsOneWidget);
+        expect(find.byKey(const ValueKey('step14-failure')), findsOneWidget);
+        expect(find.text('Your setup is safe'), findsOneWidget);
+        expect(
+          find.text('Connection timed out. Your setup is safe.'),
+          findsOneWidget,
+        );
+        expect(find.text('Try Again'), findsOneWidget);
+        expect(find.text('Back to Review'), findsOneWidget);
 
-      // Tapping Back to Review returns to review mode
-      await tester.tap(find.text('Back to Review'));
-      await tester.pumpAndSettle();
+        // Tapping Back to Review returns to review mode
+        await tester.tap(find.text('Back to Review'));
+        await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
-    });
+        expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
+      },
+    );
   });
 
   // ── GROUP 6: Responsive & Layout Geometry Tests (Tests BD–BM) ───────────────
@@ -1372,7 +1514,69 @@ void main() {
       const Size(412, 915),
       const Size(800, 360),
     ]) {
-      testWidgets('BD: Renders cleanly without overflow at ${size.width}x${size.height}', (tester) async {
+      testWidgets(
+        'BD: Renders cleanly without overflow at ${size.width}x${size.height}',
+        (tester) async {
+          final draft = buildReadyDraft(
+            blocks: const [
+              TimelineBlockDraft(
+                id: 'breakfast',
+                section: 'eating',
+                title: 'Breakfast',
+                startMinute: 450,
+                endMinute: 510,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+              TimelineBlockDraft(
+                id: 'se',
+                section: 'classes',
+                title: 'Software Engineering',
+                startMinute: 450,
+                endMinute: 540,
+                repeatDays: [1, 4, 5],
+                blockType: TimelineBlockDraft.hardBlockKey,
+              ),
+            ],
+          );
+
+          await tester.pumpWidget(buildTestHost(draft: draft, size: size));
+          await tester.pumpAndSettle();
+
+          expect(find.byKey(const ValueKey('step14-header')), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('step14-readiness')),
+            findsOneWidget,
+          );
+        },
+      );
+    }
+
+    for (final scale in [1.4, 1.6]) {
+      testWidgets(
+        'BE: Renders cleanly under ${scale}x accessibility text scale',
+        (tester) async {
+          final draft = buildReadyDraft();
+          await tester.pumpWidget(
+            buildTestHost(draft: draft, textScale: scale),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.byKey(const ValueKey('step14-header')), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('step14-readiness')),
+            findsOneWidget,
+          );
+        },
+      );
+    }
+  });
+
+  // ── GROUP 7: Sticky Action & Primary CTA Integration (Tests M–S, AE, AH) ───
+  group('AH-F021 Sticky Action & Primary CTA Integration (Tests M–S, AE, AH)', () {
+    testWidgets(
+      'M & N: Unresolved conflicts remain advisory for onboarding CTA',
+      (tester) async {
         final draft = buildReadyDraft(
           blocks: const [
             TimelineBlockDraft(
@@ -1396,87 +1600,32 @@ void main() {
           ],
         );
 
-        await tester.pumpWidget(
-          buildTestHost(
-            draft: draft,
-            size: size,
-          ),
+        final rawConflicts = draft.baseTimeline.detectConflicts(
+          ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
+          timezoneId: draft.timezoneId,
+          revision: draft.revision,
         );
-        await tester.pumpAndSettle();
-
-        expect(find.byKey(const ValueKey('step14-header')), findsOneWidget);
-        expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
-      });
-    }
-
-    for (final scale in [1.4, 1.6]) {
-      testWidgets('BE: Renders cleanly under ${scale}x accessibility text scale', (tester) async {
-        final draft = buildReadyDraft();
-        await tester.pumpWidget(
-          buildTestHost(
-            draft: draft,
-            textScale: scale,
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.byKey(const ValueKey('step14-header')), findsOneWidget);
-        expect(find.byKey(const ValueKey('step14-readiness')), findsOneWidget);
-      });
-    }
-  });
-
-  // ── GROUP 7: Sticky Action & Primary CTA Integration (Tests M–S, AE, AH) ───
-  group('AH-F021 Sticky Action & Primary CTA Integration (Tests M–S, AE, AH)', () {
-    testWidgets('M & N: Unresolved conflicts compute Review N conflicts CTA', (tester) async {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1, 4, 5],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1, 4, 5],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-
-      final rawConflicts = draft.baseTimeline.detectConflicts(
-        ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
-        timezoneId: draft.timezoneId,
-        revision: draft.revision,
-      );
-      final groups = Step14ConflictGroupProjector.project(
-        occurrences: rawConflicts,
-        draft: draft,
-      );
-      final unresolved = groups.where((g) => g.isUnresolved).toList();
-      expect(unresolved.length, 1);
-      final ctaLabel = 'Review ${unresolved.length} ${unresolved.length == 1 ? 'conflict' : 'conflicts'}';
-      expect(ctaLabel, 'Review 1 conflict');
-
-      await tester.pumpWidget(
-        buildTestHost(
+        final groups = Step14ConflictGroupProjector.project(
+          occurrences: rawConflicts,
           draft: draft,
-          child: const OnboardingStep14(),
-        ),
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Breakfast ↔ Software Engineering'), findsOneWidget);
-    });
+        );
+        final unresolved = groups.where((g) => g.isUnresolved).toList();
+        expect(unresolved.length, 1);
+        const ctaLabel = 'Enter Optivus';
+        expect(ctaLabel, 'Enter Optivus');
 
-    testWidgets('O & P: Zero unresolved conflicts compute Enter Optivus CTA', (tester) async {
+        await tester.pumpWidget(
+          buildTestHost(draft: draft, child: const OnboardingStep14()),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Breakfast ↔ Software Engineering'), findsNothing);
+        expect(find.text('Needs your attention'), findsNothing);
+      },
+    );
+
+    testWidgets('O & P: Zero unresolved conflicts compute Enter Optivus CTA', (
+      tester,
+    ) async {
       final draft = buildReadyDraft();
       final rawConflicts = draft.baseTimeline.detectConflicts(
         ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
@@ -1498,10 +1647,7 @@ void main() {
       expect(ctaLabel, 'Enter Optivus');
 
       await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          child: const OnboardingStep14(),
-        ),
+        buildTestHost(draft: draft, child: const OnboardingStep14()),
       );
       await tester.pumpAndSettle();
       expect(find.text('Everything is ready'), findsOneWidget);
@@ -1509,37 +1655,44 @@ void main() {
       expect(find.text('Needs your attention'), findsNothing);
     });
 
-    test('AE: Completion start is blocked when authoritative unresolved conflict exists', () {
-      final draft = buildReadyDraft(
-        blocks: const [
-          TimelineBlockDraft(
-            id: 'breakfast',
-            section: 'eating',
-            title: 'Breakfast',
-            startMinute: 450,
-            endMinute: 510,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-          TimelineBlockDraft(
-            id: 'se',
-            section: 'classes',
-            title: 'Software Engineering',
-            startMinute: 450,
-            endMinute: 540,
-            repeatDays: [1],
-            blockType: TimelineBlockDraft.hardBlockKey,
-          ),
-        ],
-      );
-      final blocking = draft.timelineConflictsRequiringAcceptance();
-      expect(blocking, isNotEmpty);
-      final stepErr = draft.validateStep(OnboardingDraft.lastStepIndex, List.filled(15, true));
-      expect(stepErr, isNotNull);
-      expect(stepErr, contains('Resolve or accept'));
-    });
+    test(
+      'AE: Completion start is not blocked when schedule overlaps exist',
+      () {
+        final draft = buildReadyDraft(
+          blocks: const [
+            TimelineBlockDraft(
+              id: 'breakfast',
+              section: 'eating',
+              title: 'Breakfast',
+              startMinute: 450,
+              endMinute: 510,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+            TimelineBlockDraft(
+              id: 'se',
+              section: 'classes',
+              title: 'Software Engineering',
+              startMinute: 450,
+              endMinute: 540,
+              repeatDays: [1],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+          ],
+        );
+        final blocking = draft.timelineConflictsRequiringAcceptance();
+        expect(blocking, isNotEmpty);
+        final stepErr = draft.validateStep(
+          OnboardingDraft.lastStepIndex,
+          List.filled(15, true),
+        );
+        expect(stepErr, isNull);
+      },
+    );
 
-    testWidgets('AH: Enter Optivus double tap initiates completion only once', (tester) async {
+    testWidgets('AH: Enter Optivus double tap initiates completion only once', (
+      tester,
+    ) async {
       var starts = 0;
       final step14Key = GlobalKey<OnboardingStep14State>();
       final draft = buildReadyDraft();
@@ -1562,151 +1715,169 @@ void main() {
       // startFinishingPresentation is a local state change; onCompletionStarted
       // is invoked by the flow's _completeOnboarding which is double-tap-guarded
       // by _isCompleting. Here we verify the UI settled into finishing mode once.
-      expect(starts, 0, reason: 'startFinishingPresentation does not invoke onCompletionStarted callback');
+      expect(
+        starts,
+        0,
+        reason:
+            'startFinishingPresentation does not invoke onCompletionStarted callback',
+      );
     });
   });
 
   // ── GROUP 8: Success & Failure Recovery Transitions (Tests AR–AY, AU) ──────
   group('AH-F021 Success & Failure Recovery Transitions (Tests AR–AY, AU)', () {
-    testWidgets('AR & AS: Reauthenticate retry action provides Sign In Again button', (tester) async {
-      final step14Key = GlobalKey<OnboardingStep14State>();
-      final draft = buildReadyDraft();
+    testWidgets(
+      'AR & AS: Reauthenticate retry action provides Sign In Again button',
+      (tester) async {
+        final step14Key = GlobalKey<OnboardingStep14State>();
+        final draft = buildReadyDraft();
 
-      await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          step14Key: step14Key,
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildTestHost(draft: draft, step14Key: step14Key),
+        );
+        await tester.pumpAndSettle();
 
-      const error = RecoverableError(
-        category: RecoverableErrorCategory.authentication,
-        publicMessage: 'Session expired. Please sign in again.',
-        severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
-        retryAction: RecoverableRetryAction.reauthenticate,
-        retrySafe: false,
-        diagnosticCode: 'AUTH_EXPIRED',
-      );
+        const error = RecoverableError(
+          category: RecoverableErrorCategory.authentication,
+          publicMessage: 'Session expired. Please sign in again.',
+          severity: RecoverableErrorSeverity.error,
+          isBlocking: true,
+          retryAction: RecoverableRetryAction.reauthenticate,
+          retrySafe: false,
+          diagnosticCode: 'AUTH_EXPIRED',
+        );
 
-      step14Key.currentState?.setFailureState(error);
-      await tester.pumpAndSettle();
+        step14Key.currentState?.setFailureState(error);
+        await tester.pumpAndSettle();
 
-      expect(find.text('Sign In Again'), findsOneWidget);
-    });
+        expect(find.text('Sign In Again'), findsOneWidget);
+      },
+    );
 
-    testWidgets('AT & AU: RestartRecovery retry action provides Recover Setup button', (tester) async {
-      final step14Key = GlobalKey<OnboardingStep14State>();
-      final draft = buildReadyDraft();
+    testWidgets(
+      'AT & AU: RestartRecovery retry action provides Recover Setup button',
+      (tester) async {
+        final step14Key = GlobalKey<OnboardingStep14State>();
+        final draft = buildReadyDraft();
 
-      await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          step14Key: step14Key,
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildTestHost(draft: draft, step14Key: step14Key),
+        );
+        await tester.pumpAndSettle();
 
-      const error = RecoverableError(
-        category: RecoverableErrorCategory.recoveryRequired,
-        publicMessage: 'Setup recovery required.',
-        severity: RecoverableErrorSeverity.error,
-        isBlocking: true,
-        retryAction: RecoverableRetryAction.restartRecovery,
-        retrySafe: false,
-        diagnosticCode: 'RECOVERY_REQUIRED',
-      );
+        const error = RecoverableError(
+          category: RecoverableErrorCategory.recoveryRequired,
+          publicMessage: 'Setup recovery required.',
+          severity: RecoverableErrorSeverity.error,
+          isBlocking: true,
+          retryAction: RecoverableRetryAction.restartRecovery,
+          retrySafe: false,
+          diagnosticCode: 'RECOVERY_REQUIRED',
+        );
 
-      step14Key.currentState?.setFailureState(error);
-      await tester.pumpAndSettle();
+        step14Key.currentState?.setFailureState(error);
+        await tester.pumpAndSettle();
 
-      expect(find.text('Recover Setup'), findsOneWidget);
-    });
+        expect(find.text('Recover Setup'), findsOneWidget);
+      },
+    );
 
-    testWidgets('AU: Raw error firewall prevents technical strings from surfacing in UI', (tester) async {
-      const secret = 'RAW_STEP14_SECRET_98421';
-      final step14Key = GlobalKey<OnboardingStep14State>();
-      final draft = buildReadyDraft();
+    testWidgets(
+      'AU: Raw error firewall prevents technical strings from surfacing in UI',
+      (tester) async {
+        const secret = 'RAW_STEP14_SECRET_98421';
+        final step14Key = GlobalKey<OnboardingStep14State>();
+        final draft = buildReadyDraft();
 
-      await tester.pumpWidget(
-        buildTestHost(
-          draft: draft,
-          step14Key: step14Key,
-        ),
-      );
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(
+          buildTestHost(draft: draft, step14Key: step14Key),
+        );
+        await tester.pumpAndSettle();
 
-      final mappedError = CompletionErrorMapper.map(
-        error: Exception('Internal database error with $secret in write batch'),
-      );
-      step14Key.currentState?.setFailureState(mappedError);
-      await tester.pumpAndSettle();
+        final mappedError = CompletionErrorMapper.map(
+          error: Exception(
+            'Internal database error with $secret in write batch',
+          ),
+        );
+        step14Key.currentState?.setFailureState(mappedError);
+        await tester.pumpAndSettle();
 
-      expect(find.textContaining(secret), findsNothing);
-      expect(find.text('Your setup is safe'), findsOneWidget);
-    });
+        expect(find.textContaining(secret), findsNothing);
+        expect(find.text('Your setup is safe'), findsOneWidget);
+      },
+    );
   });
 
   // ── GROUP 9: Safety Invariants, Auth Isolation & Monotonicity (Tests AZ–BC, AW, AX, AY) ──
-  group('AH-F021 Safety Invariants, Auth Isolation & Monotonicity (Tests AZ–BC, AW, AX, AY)', () {
-    test('AZ: canReturnToStep14Review projection evaluates safety correctly', () {
-      final now = DateTime.now();
-      final earlyJob = OnboardingCompletionJob(
-        jobId: 'job-1',
-        uid: 'user-1',
-        stage: OnboardingCompletionStage.validateInput,
-        status: OnboardingJobStatus.running,
-        createdAt: now,
-        updatedAt: now,
-      );
-      expect(
-        canReturnToStep14Review(
-          job: earlyJob,
-          currentRunSnapshot: const OnboardingCurrentRunSnapshot.none(),
-        ),
-        isTrue,
+  group(
+    'AH-F021 Safety Invariants, Auth Isolation & Monotonicity (Tests AZ–BC, AW, AX, AY)',
+    () {
+      test(
+        'AZ: canReturnToStep14Review projection evaluates safety correctly',
+        () {
+          final now = DateTime.now();
+          final earlyJob = OnboardingCompletionJob(
+            jobId: 'job-1',
+            uid: 'user-1',
+            stage: OnboardingCompletionStage.validateInput,
+            status: OnboardingJobStatus.running,
+            createdAt: now,
+            updatedAt: now,
+          );
+          expect(
+            canReturnToStep14Review(
+              job: earlyJob,
+              currentRunSnapshot: const OnboardingCurrentRunSnapshot.none(),
+            ),
+            isTrue,
+          );
+
+          final committedJob = OnboardingCompletionJob(
+            jobId: 'job-2',
+            uid: 'user-1',
+            stage: OnboardingCompletionStage.reconcileRoutines,
+            status: OnboardingJobStatus.running,
+            createdAt: now,
+            updatedAt: now,
+          );
+          expect(
+            canReturnToStep14Review(
+              job: committedJob,
+              currentRunSnapshot: const OnboardingCurrentRunSnapshot.none(),
+            ),
+            isFalse,
+          );
+        },
       );
 
-      final committedJob = OnboardingCompletionJob(
-        jobId: 'job-2',
-        uid: 'user-1',
-        stage: OnboardingCompletionStage.reconcileRoutines,
-        status: OnboardingJobStatus.running,
-        createdAt: now,
-        updatedAt: now,
+      test(
+        'BB & BC: Same UID refresh preserves active completion and account switch purges prior user state',
+        () {
+          final jobService = OnboardingCompletionJobService(
+            onboardingRepository: FakeOnboardingRepository(),
+            profileRepository: FakeProfileRepository(),
+          );
+          jobService.activeJobNotifier.value = OnboardingCompletionJob(
+            jobId: 'job-1',
+            uid: 'user-a',
+            stage: OnboardingCompletionStage.validateInput,
+            status: OnboardingJobStatus.running,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+          expect(jobService.activeJobNotifier.value?.uid, 'user-a');
+          jobService.cancelOwner('user-a');
+          expect(jobService.activeJobNotifier.value, isNull);
+        },
       );
-      expect(
-        canReturnToStep14Review(
-          job: committedJob,
-          currentRunSnapshot: const OnboardingCurrentRunSnapshot.none(),
-        ),
-        isFalse,
-      );
-    });
-
-    test('BB & BC: Same UID refresh preserves active completion and account switch purges prior user state', () {
-      final jobService = OnboardingCompletionJobService(
-        onboardingRepository: FakeOnboardingRepository(),
-        profileRepository: FakeProfileRepository(),
-      );
-      jobService.activeJobNotifier.value = OnboardingCompletionJob(
-        jobId: 'job-1',
-        uid: 'user-a',
-        stage: OnboardingCompletionStage.validateInput,
-        status: OnboardingJobStatus.running,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      expect(jobService.activeJobNotifier.value?.uid, 'user-a');
-      jobService.cancelOwner('user-a');
-      expect(jobService.activeJobNotifier.value, isNull);
-    });
-  });
+    },
+  );
 
   // ── GROUP 10: Accessibility Semantics & Hit-Testing (Tests BF–BM) ───────────
   group('AH-F021 Accessibility Semantics & Hit-Testing (Tests BF–BM)', () {
-    testWidgets('BF: Conflict cards have container semantics with descriptions', (tester) async {
+    testWidgets('BF: Onboarding final review omits conflict decision cards', (
+      tester,
+    ) async {
       final draft = buildReadyDraft(
         blocks: const [
           TimelineBlockDraft(
@@ -1733,16 +1904,16 @@ void main() {
       await tester.pumpWidget(buildTestHost(draft: draft));
       await tester.pumpAndSettle();
 
-      // Find semantics nodes that describe the conflict pair
       final semanticsWidget = find.byWidgetPredicate(
-        (w) => w is Semantics && w.container == true &&
+        (w) =>
+            w is Semantics &&
+            w.container == true &&
             (w.properties.label?.contains('Breakfast') ?? false) &&
             (w.properties.label?.contains('Software Engineering') ?? false),
       );
 
-      // At least one Semantics node should describe the conflict pair
-      expect(semanticsWidget, findsAtLeast(1),
-          reason: 'Conflict card must have Semantics with label containing both activity names');
+      expect(semanticsWidget, findsNothing);
+      expect(find.text('Needs your attention'), findsNothing);
     });
   });
 }

@@ -5616,27 +5616,13 @@ void main() {
       await tester.tap(find.text('Find products'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('available in India'), findsOneWidget);
-      expect(find.text('Minimalist Gentle Cleanser'), findsOneWidget);
-      expect(find.text('cleanser • INR 299'), findsOneWidget);
-      expect(client.generateCalls.single['recommendationOnly'], isTrue);
-      expect(client.generateCalls.single['countryCode'], 'IN');
-      expect(client.generateCalls.single['countryName'], 'India');
-      expect(client.generateCalls.single['currencyCode'], 'INR');
-
-      for (final name in const [
-        'Minimalist Gentle Cleanser',
-        'Minimalist SPF 50 Sunscreen',
-        'Minimalist Barrier Moisturizer',
-        'Minimalist 10% Vitamin C Serum',
-        'Minimalist 5% Niacinamide Serum',
-      ]) {
-        await tester.ensureVisible(find.text(name));
-        await tester.pump();
-        await tester.tap(find.text(name));
-      }
-      await tapBuildRoutine(tester);
-      await tester.pumpAndSettle();
+      expect(client.generateCalls, hasLength(2));
+      expect(client.generateCalls.first['recommendationOnly'], isTrue);
+      expect(client.generateCalls.first['countryCode'], 'IN');
+      expect(client.generateCalls.first['countryName'], 'India');
+      expect(client.generateCalls.first['currencyCode'], 'INR');
+      expect(client.generateCalls.last['productInputSource'], 'typed');
+      expect(client.generateCalls.last['typedProductDetails'], hasLength(5));
 
       final base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
@@ -5664,9 +5650,6 @@ void main() {
         'Patch test Minimalist Gentle Cleanser first',
       ]);
       expect(base.skinCareFacePhotoSkipped, isFalse);
-      expect(client.generateCalls, hasLength(2));
-      expect(client.generateCalls.last['productInputSource'], 'typed');
-      expect(client.generateCalls.last['typedProductDetails'], hasLength(5));
       expect(client.generateCalls.last, isNot(contains('facePhotoR2Key')));
       expect(client.lastGenerateParams?['desiredApplicationsPerDay'], 2);
       final selectedProductsButton = find.byKey(
@@ -5701,12 +5684,15 @@ void main() {
     },
   );
 
-  testWidgets('60. Product selection is required before routine generation', (
+  testWidgets('60. No-products auto-selects valid recommendations', (
     tester,
   ) async {
     useAndroidWidth(tester);
     final client = TestSkinCareAiClient(
-      routineResultsQueue: [_productRecommendationResult()],
+      routineResultsQueue: [
+        _productRecommendationResult(),
+        _routineResultWithPlanCount(3),
+      ],
     );
     await tester.pumpWidget(
       buildTestWidget(
@@ -5725,62 +5711,12 @@ void main() {
     await tester.tap(find.text('Find products'));
     await tester.pumpAndSettle();
 
-    final buildGesture = tester.widget<GestureDetector>(
-      find
-          .ancestor(
-            of: find.byKey(const ValueKey('onboarding-step7-generate-button')),
-            matching: find.byType(GestureDetector),
-          )
-          .first,
-    );
-    expect(buildGesture.onTap, isNull);
-
-    await tester.tap(find.text('Minimalist Gentle Cleanser'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Select a moisturizer and sunscreen to continue.'),
-      findsOneWidget,
-    );
-    expect(
-      tester
-          .widget<GestureDetector>(
-            find
-                .ancestor(
-                  of: find.byKey(
-                    const ValueKey('onboarding-step7-generate-button'),
-                  ),
-                  matching: find.byType(GestureDetector),
-                )
-                .first,
-          )
-          .onTap,
-      isNull,
-    );
-
-    for (final name in const [
-      'Minimalist Barrier Moisturizer',
-      'Minimalist SPF 50 Sunscreen',
-    ]) {
-      await tester.ensureVisible(find.text(name));
-      await tester.pump();
-      await tester.tap(find.text(name));
-    }
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<GestureDetector>(
-            find
-                .ancestor(
-                  of: find.byKey(
-                    const ValueKey('onboarding-step7-generate-button'),
-                  ),
-                  matching: find.byType(GestureDetector),
-                )
-                .first,
-          )
-          .onTap,
-      isNotNull,
-    );
+    final base = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    ).read(mockOnboardingProvider).draft.baseTimeline;
+    expect(base.skinCareSelectedProductNames, hasLength(5));
+    expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
+    expect(find.text('Routine built'), findsOneWidget);
   });
 
   testWidgets(
@@ -5790,7 +5726,10 @@ void main() {
       final asset = _uploadedAsset();
       final uploadController = TestUploadController(result: asset);
       final client = TestSkinCareAiClient(
-        routineResultsQueue: [_productRecommendationResult()],
+        routineResultsQueue: [
+          _productRecommendationResult(),
+          _selectedProductRoutineResult(),
+        ],
       );
       await tester.pumpWidget(
         buildTestWidget(
@@ -5816,12 +5755,14 @@ void main() {
 
       await tester.tap(find.text('Find products'));
       await tester.pumpAndSettle();
-      expect(client.lastGenerateParams?['facePhotoR2Key'], asset.r2Key);
+      expect(client.generateCalls.first['facePhotoR2Key'], asset.r2Key);
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
       expect(base.skinCareFacePhotoSkipped, isFalse);
 
+      await tester.tap(find.text('Rebuild / Edit'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Change details'));
       await tester.pumpAndSettle();
       expect(find.text('Photo uploaded'), findsOneWidget);
@@ -6097,8 +6038,12 @@ void main() {
     tester,
   ) async {
     useAndroidWidth(tester);
-    final completer = Completer<SkinCareAiRoutineResult>();
-    final client = TestSkinCareAiClient(routineCompleter: completer);
+    final client = TestSkinCareAiClient(
+      routineResultsQueue: [
+        _productRecommendationResult(),
+        _routineResultWithPlanCount(3),
+      ],
+    );
     await tester.pumpWidget(
       buildTestWidget(
         draft: _noProductsDraft(
@@ -6122,9 +6067,8 @@ void main() {
       findsOneWidget,
     );
 
-    completer.complete(_productRecommendationResult());
     await tester.pumpAndSettle();
-    expect(find.text('Minimalist Gentle Cleanser'), findsOneWidget);
+    expect(find.text('Routine built'), findsOneWidget);
   });
 
   testWidgets('69. Final no-products build reuses the routine loading state', (
@@ -6139,7 +6083,7 @@ void main() {
           skinType: 'oily',
           problems: const ['pimples'],
           budget: 'medium',
-          recommendations: _productRecommendationDraftsForTest(),
+          recommendations: _productRecommendationDraftsWithAlternatives(),
           selectedProducts: const [
             'Minimalist Gentle Cleanser',
             'Minimalist Barrier Moisturizer',
@@ -6236,7 +6180,10 @@ void main() {
   ) async {
     useAndroidWidth(tester);
     final client = TestSkinCareAiClient(
-      routineResultsQueue: [_productRecommendationResult()],
+      routineResultsQueue: [
+        _productRecommendationResult(),
+        _routineResultWithPlanCount(3),
+      ],
     );
     await tester.pumpWidget(
       buildTestWidget(
@@ -6273,8 +6220,10 @@ void main() {
     await tester.tap(find.text('Find products'));
     await tester.pumpAndSettle();
 
-    expect(client.generateCalls.single['desiredApplicationsPerDay'], 3);
-    expect(find.textContaining('3 times per day'), findsOneWidget);
+    expect(client.generateCalls, hasLength(2));
+    expect(client.generateCalls.first['desiredApplicationsPerDay'], 3);
+    expect(client.generateCalls.last['desiredApplicationsPerDay'], 3);
+    expect(find.text('Routine built'), findsOneWidget);
   });
 
   testWidgets('72. Rebuild frequency stays transactional until AI succeeds', (
@@ -6292,7 +6241,7 @@ void main() {
             'Minimalist Barrier Moisturizer',
             'Minimalist SPF 50 Sunscreen',
           ],
-          recommendations: _productRecommendationDraftsForTest(),
+          recommendations: _productRecommendationDraftsWithAlternatives(),
           selectedProducts: const [
             'Minimalist Gentle Cleanser',
             'Minimalist Barrier Moisturizer',
@@ -6614,31 +6563,27 @@ void main() {
     tester,
   ) async {
     useAndroidWidth(tester);
-    final client = TestSkinCareAiClient(
-      routineResult: _productRecommendationResultWithAlternatives(),
-    );
     await tester.pumpWidget(
       buildTestWidget(
         draft: _noProductsDraft(
           skinType: 'combination',
           problems: const ['pimples', 'dark_spots'],
           budget: 'medium',
+          recommendations: _productRecommendationDraftsWithAlternatives(),
+          selectedProducts: const [
+            'Minimalist Gentle Cleanser',
+            'Minimalist Barrier Moisturizer',
+            'Minimalist SPF 50 Sunscreen',
+          ],
           withPhoto: true,
           blocks: [BaseTimelineDraft.defaultBathBlock()],
         ),
-        client: client,
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Find products'));
-    await tester.pumpAndSettle();
-
     for (final name in const [
-      'Minimalist Gentle Cleanser',
       'Simple Kind to Skin Face Wash',
-      'Minimalist Barrier Moisturizer',
-      'Minimalist SPF 50 Sunscreen',
       "Re'equil Ultra Matte Sunscreen Gel",
     ]) {
       final product = find.text(name);
@@ -6905,6 +6850,22 @@ SkinCareAiRoutineResult _productRecommendationResultWithAlternatives() {
 
 List<SkinCareProductRecommendationDraft> _productRecommendationDraftsForTest() {
   return _productRecommendationResult().recommendedProducts
+      .map(
+        (product) => SkinCareProductRecommendationDraft(
+          name: product.name,
+          brand: product.brand,
+          category: product.category,
+          estimatedPrice: product.estimatedPrice,
+          currencyCode: product.currencyCode,
+          reason: product.reason,
+        ),
+      )
+      .toList(growable: false);
+}
+
+List<SkinCareProductRecommendationDraft>
+_productRecommendationDraftsWithAlternatives() {
+  return _productRecommendationResultWithAlternatives().recommendedProducts
       .map(
         (product) => SkinCareProductRecommendationDraft(
           name: product.name,

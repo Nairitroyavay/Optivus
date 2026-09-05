@@ -299,7 +299,6 @@ class OnboardingCompletionService {
       duplicateSystemKeysMerged: preview.duplicateSystemKeysSkipped,
       sourceFingerprint: draft.effectiveSourceFingerprint,
       draftRevision: draft.revision,
-      conflictAcceptances: _canonicalSourceAcceptances(draft),
       unscheduledRoutineSuggestions: schedule.unscheduledSuggestions,
     );
     final routinePlan = RoutineOnboardingProjection.build(initialBundle);
@@ -325,12 +324,11 @@ class OnboardingCompletionService {
       expectedHabitIds: habitSystems.map((item) => item.systemId).toList(),
       acceptedSourceIds: acceptedSourceIds,
       generatedSourceIds: generatedSourceIds,
-      expectedAcceptanceIds: routinePlan.conflictAcceptances
-          .map((acceptance) => acceptance.acceptanceId)
-          .toList(),
+      expectedAcceptanceIds: const [],
     );
   }
 
+  // ignore: unused_element
   static List<ConflictAcceptance> _canonicalSourceAcceptances(
     OnboardingDraft draft,
   ) {

@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,11 +71,20 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
     final displayEmail = email == null || email.isEmpty
         ? 'Email address unavailable'
         : email;
-    final actionsEnabled =
-        !auth.isLoading && !lifecycle.checking && !lifecycle.resendInFlight;
+    final actionsEnabled = !auth.isLoading && !lifecycle.resendInFlight;
     final isError =
         lifecycle.messageKind != null &&
         lifecycle.messageKind != VerificationMessageKind.success;
+    final deliveryFailed =
+        auth.verificationEmailSendStatus == VerificationEmailSendStatus.failed;
+    final titleCopy = deliveryFailed
+        ? 'We couldn\'t send the verification link'
+        : 'We sent you a verification link';
+    final messageError = isError
+        ? lifecycle.message
+        : deliveryFailed
+        ? auth.errorMessage
+        : null;
 
     return PopScope(
       // The auth router owns this destination. System Back stays here; the
@@ -97,106 +104,94 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
               ),
             ),
             child: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  key: const Key('verify-email-scroll-view'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AuthLayout.horizontalPadding,
-                    vertical: 16,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight - 32,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    key: const Key('verify-email-scroll-view'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AuthLayout.horizontalPadding,
+                      vertical: 16,
                     ),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 400),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const SizedBox(height: 8),
-                            const _HeroIcon(),
-                            const SizedBox(height: 14),
-                            const Text(
-                              'Verify your email',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                                color: _ink,
-                                letterSpacing: -0.7,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight - 32,
+                      ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(height: 8),
+                              const _HeroIcon(),
+                              const SizedBox(height: 14),
+                              const Text(
+                                'Verify your email',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  color: _ink,
+                                  letterSpacing: -0.7,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 6),
-                            const Text(
-                              'We sent you a verification link',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: _sub,
+                              const SizedBox(height: 6),
+                              Text(
+                                titleCopy,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: _sub,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 18),
-                            _VerificationCard(email: displayEmail),
-                            const SizedBox(height: 10),
-                            _StableMessageRegion(
-                              error: isError ? lifecycle.message : null,
-                              success: isError ? null : lifecycle.message,
-                            ),
-                            const SizedBox(height: 8),
-                            _CheckVerificationButton(
-                              key: const Key('verify-email-check'),
-                              checking: lifecycle.checking,
-                              enabled: actionsEnabled,
-                              onPressed: actionsEnabled
-                                  ? () => ref
-                                        .read(
-                                          verificationLifecycleProvider
-                                              .notifier,
-                                        )
-                                        .checkNow(manual: true)
-                                  : null,
-                            ),
-                            const SizedBox(height: 14),
-                            _ResendAction(
-                              key: const Key('verify-email-resend'),
-                              cooldown: lifecycle.resendSecondsRemaining,
-                              resending: lifecycle.resendInFlight,
-                              enabled: actionsEnabled,
-                              onResend: () => ref
-                                  .read(verificationLifecycleProvider.notifier)
-                                  .resend(),
-                            ),
-                            const SizedBox(height: 18),
-                            _TextAction(
-                              key: const Key('verify-email-use-another'),
-                              label: 'Use another email',
-                              enabled: actionsEnabled,
-                              onTap: _logout,
-                            ),
-                            const SizedBox(height: 6),
-                            _TextAction(
-                              key: const Key('verify-email-sign-out'),
-                              label: 'Sign out',
-                              enabled: actionsEnabled,
-                              muted: true,
-                              onTap: _logout,
-                            ),
-                            const SizedBox(height: 8),
-                          ],
+                              const SizedBox(height: 18),
+                              _VerificationCard(email: displayEmail),
+                              const SizedBox(height: 10),
+                              _StableMessageRegion(
+                                error: messageError,
+                                success: isError ? null : lifecycle.message,
+                              ),
+                              const SizedBox(height: 14),
+                              _ResendAction(
+                                key: const Key('verify-email-resend'),
+                                cooldown: lifecycle.resendSecondsRemaining,
+                                resending: lifecycle.resendInFlight,
+                                enabled: actionsEnabled,
+                                onResend: () => ref
+                                    .read(
+                                      verificationLifecycleProvider.notifier,
+                                    )
+                                    .resend(),
+                              ),
+                              const SizedBox(height: 18),
+                              _TextAction(
+                                key: const Key('verify-email-use-another'),
+                                label: 'Use another email',
+                                enabled: actionsEnabled,
+                                onTap: _logout,
+                              ),
+                              const SizedBox(height: 6),
+                              _TextAction(
+                                key: const Key('verify-email-sign-out'),
+                                label: 'Sign out',
+                                enabled: actionsEnabled,
+                                muted: true,
+                                onTap: _logout,
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -548,192 +543,6 @@ class _StableMessageRegion extends StatelessWidget {
                   ),
                 ),
               ),
-      ),
-    );
-  }
-}
-
-class _CheckVerificationButton extends StatefulWidget {
-  final bool checking;
-  final bool enabled;
-  final VoidCallback? onPressed;
-
-  const _CheckVerificationButton({
-    super.key,
-    required this.checking,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  @override
-  State<_CheckVerificationButton> createState() =>
-      _CheckVerificationButtonState();
-}
-
-class _CheckVerificationButtonState extends State<_CheckVerificationButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _pressController;
-
-  @override
-  void initState() {
-    super.initState();
-    _pressController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 120),
-    );
-  }
-
-  @override
-  void dispose() {
-    _pressController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final label = widget.checking ? 'Checking...' : 'Check verification';
-    final isInteractive = widget.enabled && widget.onPressed != null;
-
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 340),
-      child: FractionallySizedBox(
-        widthFactor: 0.84,
-        child: Semantics(
-          button: true,
-          enabled: isInteractive,
-          label: label,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 180),
-            opacity: isInteractive ? 1.0 : 0.48,
-            child: GestureDetector(
-              onTapDown: isInteractive
-                  ? (_) => _pressController.forward()
-                  : null,
-              onTapUp: isInteractive
-                  ? (_) async {
-                      await _pressController.reverse();
-                      widget.onPressed?.call();
-                    }
-                  : null,
-              onTapCancel: isInteractive
-                  ? () => _pressController.reverse()
-                  : null,
-              child: AnimatedBuilder(
-                animation: _pressController,
-                builder: (context, child) {
-                  final scale = 1.0 - (_pressController.value * 0.03);
-                  return Transform.scale(scale: scale, child: child);
-                },
-                child: Container(
-                  height: 56,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28),
-                    color: Colors.white.withValues(alpha: 0.45),
-                    border: Border.all(
-                      color:
-                          OptivusColors.borderNeutral.withValues(alpha: 0.50),
-                      width: 1.0,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.07),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                      BoxShadow(
-                        color: const Color(0xFF92E0FF).withValues(alpha: 0.12),
-                        blurRadius: 12,
-                        offset: const Offset(0, 1),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(28),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Translucent liquid glass highlight blobs (no rainbow border)
-                        ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                left: 20,
-                                top: -10,
-                                child: Container(
-                                  width: 140,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white.withValues(alpha: 0.85),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                right: 10,
-                                bottom: -10,
-                                child: Container(
-                                  width: 100,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: const Color(
-                                      0xFF92E0FF,
-                                    ).withValues(alpha: 0.35),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                left: 80,
-                                bottom: -15,
-                                child: Container(
-                                  width: 90,
-                                  height: 45,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: const Color(
-                                      0xFFFFC6BA,
-                                    ).withValues(alpha: 0.35),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Top convex sheen reflection
-                        Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(28),
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              stops: const [0.0, 0.35, 1.0],
-                              colors: [
-                                Colors.white.withValues(alpha: 0.70),
-                                Colors.white.withValues(alpha: 0.15),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                        // Button Text
-                        Text(
-                          label,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: _ink,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

@@ -29,7 +29,6 @@ import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timelin
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
-import 'package:optivus/features/onboarding/presentation/step14_presentation_models.dart';
 
 // ── Main Onboarding Flow Wizard ──────────────────────────────────────────────
 class OnboardingFlow extends ConsumerStatefulWidget {
@@ -395,14 +394,6 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     // `_onEnterOptivusPressed` owns the completion guard. Keeping this method
     // unguarded lets the initial CTA and the Step 14 recovery retry converge.
     final onboarding = ref.read(mockOnboardingProvider);
-    if (onboarding.draft.timelineConflictsRequiringAcceptance().isNotEmpty) {
-      ref
-          .read(mockOnboardingProvider.notifier)
-          .setValidationMessage(
-            'Resolve or accept all schedule conflicts before finishing onboarding.',
-          );
-      return;
-    }
     for (var step = 0; step <= OnboardingDraft.lastStepIndex; step++) {
       final error = onboarding.draft.validateStep(
         step,
@@ -984,42 +975,17 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_currentPage == 0) {
       ctaLabel = 'Get Started';
     } else if (_currentPage == OnboardingDraft.lastStepIndex) {
-      final rawConflicts = onboardingState.draft.baseTimeline.detectConflicts(
-        ownerUid: onboardingState.draft.uid.isEmpty
-            ? 'local-onboarding-owner'
-            : onboardingState.draft.uid,
-        timezoneId: onboardingState.draft.timezoneId,
-        revision: onboardingState.draft.revision,
+      ctaLabel = 'Enter Optivus';
+      ctaKind = OnboardingActionKind.enterOptivus;
+      final bundleResult = OnboardingCompletionService.projectBundleResult(
+        onboardingState.draft,
       );
-      final conflictGroups = Step14ConflictGroupProjector.project(
-        occurrences: rawConflicts,
-        draft: onboardingState.draft,
-      );
-      final unresolvedGroups = conflictGroups
-          .where((g) => g.isUnresolved)
-          .toList();
-
-      if (unresolvedGroups.isNotEmpty) {
-        final count = unresolvedGroups.length;
-        ctaLabel = 'Review $count ${count == 1 ? 'conflict' : 'conflicts'}';
-        ctaKind = OnboardingActionKind.next;
-        ctaEnabled = true;
-        ctaOnPressed = () {
-          _step14Key.currentState?.focusFirstUnresolvedConflict();
-        };
-      } else {
-        ctaLabel = 'Enter Optivus';
-        ctaKind = OnboardingActionKind.enterOptivus;
-        final bundleResult = OnboardingCompletionService.projectBundleResult(
-          onboardingState.draft,
-        );
-        ctaEnabled =
-            !_isCompleting &&
-            !_isNavigating &&
-            !_isSaving &&
-            bundleResult is Step14BundleBuildSuccess;
-        ctaOnPressed = _onEnterOptivusPressed;
-      }
+      ctaEnabled =
+          !_isCompleting &&
+          !_isNavigating &&
+          !_isSaving &&
+          bundleResult is Step14BundleBuildSuccess;
+      ctaOnPressed = _onEnterOptivusPressed;
     }
     ctaEnabled = ctaEnabled && readiness.canSubmit;
     if (_currentPage >= 1 && _currentPage <= 13 && readiness.canRevealPrimary) {

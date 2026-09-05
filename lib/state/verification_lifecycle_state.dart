@@ -85,8 +85,10 @@ class VerificationLifecyclePolicy {
 
   const VerificationLifecyclePolicy({
     this.pollIntervals = const [
+      Duration(seconds: 2),
+      Duration(seconds: 3),
+      Duration(seconds: 5),
       Duration(seconds: 8),
-      Duration(seconds: 12),
       Duration(seconds: 20),
       Duration(seconds: 30),
     ],
@@ -176,8 +178,12 @@ class VerificationLifecycleController
   }
 
   void resume() {
-    if (_disposed || state.foreground) return;
-    activate();
+    if (_disposed || !_isEligible) return;
+    if (!state.foreground) {
+      activate();
+      return;
+    }
+    unawaited(checkNow());
   }
 
   /// Synchronously abandons the screen-owned session without notifying a

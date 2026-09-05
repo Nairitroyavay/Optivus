@@ -394,11 +394,7 @@ class OnboardingDraft {
   }
 
   FinalTimelinePreview buildFinalPreview() {
-    final conflicts = timelineConflictsRequiringAcceptance();
-    final warnings = <String>[
-      for (final conflict in conflicts)
-        'Resolve or accept the conflict between ${conflict.firstTitle} and ${conflict.secondTitle}.',
-    ];
+    final warnings = <String>[];
 
     final baseItems = baseTimeline.blocks
         .where((block) => !block.needsTimeConfirmation)

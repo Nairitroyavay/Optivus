@@ -357,12 +357,13 @@ class OnboardingCompletionJobService {
             );
             final receipt = result.receipt;
             final acceptancePlan = RoutineOnboardingProjection.build(bundle);
-            final storedAcceptances =
-                await (reader == null
-                        ? conflictAcceptanceRepository
-                        : reader(conflictAcceptanceRepositoryProvider))
-                    ?.fetchForOwner(uid);
             final expectedAcceptances = acceptancePlan.conflictAcceptances;
+            final storedAcceptances = expectedAcceptances.isEmpty
+                ? const <ConflictAcceptance>[]
+                : await (reader == null
+                          ? conflictAcceptanceRepository
+                          : reader(conflictAcceptanceRepositoryProvider))
+                      ?.fetchForOwner(uid);
             final validAcceptanceIds = <String>[];
             final failedAcceptanceIds = <String>[];
             for (final expected in expectedAcceptances) {
@@ -825,6 +826,12 @@ class OnboardingCompletionJobService {
       _memoryStore.jobs['$uid:$expectedRunId'] = completedJob;
       _memoryStore.currentRunIds[uid] = expectedRunId;
       _memoryStore.currentRunStatuses[uid] = 'completed';
+      _logCompletionTiming(
+        'total',
+        (completedJob.completedAt ?? DateTime.now()).difference(
+          completedJob.createdAt,
+        ),
+      );
       return completedJob;
     }
 
@@ -913,6 +920,12 @@ class OnboardingCompletionJobService {
           tx.set(runRef, completedJob.toFirestoreMap());
         }
         tx.set(pointerRef, _runPointerMap(completedJob, status: 'completed'));
+        _logCompletionTiming(
+          'total',
+          (completedJob.completedAt ?? DateTime.now()).difference(
+            completedJob.createdAt,
+          ),
+        );
         return completedJob;
       });
     } catch (_) {
@@ -1122,7 +1135,13 @@ class OnboardingCompletionJobService {
   ) async {
     final next = _stageCompletedCopy(job, stage);
     await _saveJobStatus(next);
+    _logCompletionTiming(stage.name, next.updatedAt.difference(job.updatedAt));
     return next;
+  }
+
+  void _logCompletionTiming(String label, Duration elapsed) {
+    if (!kDebugMode) return;
+    debugPrint('[CompletionTiming] $label=${elapsed.inMilliseconds}ms');
   }
 
   Future<OnboardingCompletionJob> _loadOrCreateJob({
@@ -1494,5 +1513,7 @@ final onboardingCompletionJobProvider =
 
 final activeOnboardingCompletionJobProvider =
     ChangeNotifierProvider<ValueNotifier<OnboardingCompletionJob?>>((ref) {
-      return ref.watch(onboardingCompletionJobServiceProvider).activeJobNotifier;
+      return ref
+          .watch(onboardingCompletionJobServiceProvider)
+          .activeJobNotifier;
     });

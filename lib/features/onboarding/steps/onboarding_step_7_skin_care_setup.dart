@@ -9,6 +9,7 @@ import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/onboarding/timeline/onboarding_timeline.dart';
 import 'package:optivus/features/uploads/models/upload_interaction_models.dart';
@@ -3900,9 +3901,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           final hasExistingRoutine = base.blocks.any(
             (block) => block.section == 'skin_care',
           );
+          final selectedNames = recommendationDrafts
+              .map((product) => product.displayName)
+              .where((name) => name.isNotEmpty)
+              .toList(growable: false);
           final draftForFingerprint = base.copyWith(
             skinCareProductRecommendations: recommendationDrafts,
-            skinCareSelectedProductNames: const [],
+            skinCareSelectedProductNames: selectedNames,
             skinCareRecommendationCountryCode: region.countryCode,
             skinCareRecommendationCurrencyCode: region.currencyCode,
             clearSkinCareSuggestedProducts: !hasExistingRoutine,
@@ -3916,6 +3921,126 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           );
         });
 
+        final selectedNames = recommendationDrafts
+            .map((product) => product.displayName)
+            .where((name) => name.isNotEmpty)
+            .toList(growable: false);
+
+        scope.transition(
+          AiGenerationPhase.generating,
+          message: 'Building your skin care routine…',
+        );
+
+        final routineResult = await client.generateRoutine(
+          uid: uid,
+          idToken: idToken,
+          params: {
+            'sourceFeature': OnboardingDraft.sourceOnboarding,
+            'productInputSource': 'typed',
+            'typedProductDetails': recommendationDrafts
+                .map(
+                  (product) => {
+                    'name': product.name,
+                    'brand': product.brand,
+                    'category': product.category,
+                    'source': 'ai_recommended',
+                  },
+                )
+                .toList(growable: false),
+            'skinType': currentBase.skinCareSkinType,
+            'mainProblem': currentBase.skinCareProblems.firstOrNull ?? 'none',
+            'skinConcerns': currentBase.skinCareProblems,
+            'budget': currentBase.skinCareBudget,
+            'routinePreference': currentBase.skinCarePreference,
+            'desiredApplicationsPerDay': desiredApplicationsPerDay,
+            'countryCode': region.countryCode,
+            'countryName': region.countryName,
+            'currencyCode': region.currencyCode,
+          },
+        );
+        if (!scope.isCurrent) return false;
+
+        if (routineResult.hasError || routineResult.routinePlans.isEmpty) {
+          throw _SkinCareResponseException(
+            routineResult.routinePlans.isEmpty && !routineResult.hasError
+                ? _onboarding7NoProductsAiEmptyMessage
+                : onboarding7FriendlyAiMessage(
+                    routineResult.errorCode == 'json_payload_too_large'
+                        ? 'json_payload_too_large'
+                        : routineResult.errorMessage,
+                    routineResult.warnings,
+                  ),
+            errorCode: routineResult.errorCode,
+          );
+        }
+        if (routineResult.warnings.any(
+          (warning) =>
+              warning.contains('ai_wrong_daily_slot_count') ||
+              warning.contains('ai_missing_required_slot:') ||
+              warning.contains('ai_extra_daily_slot_count'),
+        )) {
+          throw _SkinCareResponseException(
+            onboarding7FriendlyAiMessage(null, routineResult.warnings),
+          );
+        }
+
+        final partitioned = onboarding7PartitionRoutinePlans(
+          routineResult.routinePlans,
+        );
+        final schedule = onboarding7ScheduleSkinCareRoutine(
+          baseTimeline: ref.read(mockOnboardingProvider).draft.baseTimeline,
+          routinePlans: partitioned.dailyPlans,
+          desiredApplicationsPerDay: desiredApplicationsPerDay,
+          ownedProductNames: selectedNames,
+          forceEveryDay: true,
+        );
+        if (schedule.hasError || schedule.blocks.isEmpty) {
+          throw _SkinCareResponseException(
+            schedule.errorMessage ?? _onboarding7NoProductsAiEmptyMessage,
+          );
+        }
+
+        final specialCareNotes = onboarding7SpecialCareNotesFromAiResult(
+          suggestedProducts: routineResult.suggestedProducts,
+          weeklyRoutine: routineResult.weeklyRoutine,
+          specialCarePlans: partitioned.specialCarePlans,
+          ownedProductNames: selectedNames,
+        );
+        updateBaseTimelineDraft(ref, onboardingSkinCareStepIndex, (base) {
+          final draftForFingerprint = base.copyWith(
+            skinCareProductNames: selectedNames.join('\n'),
+            skinCareSpecialCareNotes: specialCareNotes,
+            skinCareSuggestedProducts: selectedNames,
+            skinCareDesiredApplicationsPerDay: desiredApplicationsPerDay,
+            skinCareFacePhotoSkipped: false,
+            skinCareSkipped: false,
+          );
+          final routineFingerprint = draftForFingerprint
+              .computeSkinCareRoutineFingerprint();
+          final taggedBlocks = schedule.blocks.map((block) {
+            final prov = List<String>.from(block.provenanceSourceIds);
+            final token = 'skin-care-generation:$routineFingerprint';
+            if (!prov.contains(token)) prov.add(token);
+            if (asset.assetId.isNotEmpty && !prov.contains(asset.assetId)) {
+              prov.add(asset.assetId);
+            }
+            if (asset.r2Key.isNotEmpty && !prov.contains(asset.r2Key)) {
+              prov.add(asset.r2Key);
+            }
+            return block.copyWith(provenanceSourceIds: prov);
+          }).toList();
+
+          final nextBlocks =
+              base.blocks
+                  .where((block) => block.section != 'skin_care')
+                  .toList()
+                ..addAll(taggedBlocks);
+          return draftForFingerprint.copyWith(
+            blocks: nextBlocks,
+            skinCareRoutineFingerprint: routineFingerprint,
+          );
+        });
+
         return true;
       },
     );
@@ -3926,11 +4051,19 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           .setStepLoading(onboardingSkinCareStepIndex, false);
       if (run.isSuccess) {
         setState(() {
-          _showProductSelection = true;
+          _editingExisting = false;
+          _showProductSelection = false;
+          _pendingDesiredApplicationsPerDay = null;
           _generationError = null;
         });
       } else if (run.error != null) {
         setState(() {
+          _showProductSelection = ref
+              .read(mockOnboardingProvider)
+              .draft
+              .baseTimeline
+              .skinCareProductRecommendations
+              .isNotEmpty;
           _generationError = run.error!.message;
         });
       }
@@ -4787,6 +4920,10 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           color: OptivusColors.textSecondary,
                         ),
                       ),
+                      if (message != null) ...[
+                        SizedBox(height: sectionGap),
+                        _SkinCareInlineMessage(message: message, compact: true),
+                      ],
                       SizedBox(height: dense ? 6 : 8),
                       SizedBox(
                         height:
@@ -5003,10 +5140,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                 },
                           child: const Text('Retry private cleanup'),
                         ),
-                      if (message != null) ...[
-                        const SizedBox(height: 6),
-                        _SkinCareInlineMessage(message: message, compact: true),
-                      ],
                     ],
                   );
                   return SingleChildScrollView(
@@ -5015,6 +5148,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                     ),
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.only(
+                      bottom: OnboardingFooterMetrics.resolve(
+                        context,
+                      ).requiredContentInset,
+                    ),
                     child: SizedBox(
                       width: constraints.maxWidth,
                       child: content,

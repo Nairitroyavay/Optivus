@@ -81,6 +81,8 @@ enum AuthFlowStatus {
   backendRestoreFailed,
 }
 
+enum VerificationEmailSendStatus { notAttempted, sent, failed }
+
 class AuthState {
   final AuthUser? user;
   final AuthFlowStatus status;
@@ -89,6 +91,7 @@ class AuthState {
   final OnboardingFailureReason? onboardingFailureReason;
   final List<OnboardingRecoveryAction> recoveryActions;
   final DateTime? lastVerificationEmailSent;
+  final VerificationEmailSendStatus verificationEmailSendStatus;
   final int? resumeStep;
   final String? completionRunId;
   final String? startupReasonCode;
@@ -102,6 +105,7 @@ class AuthState {
     this.onboardingFailureReason,
     this.recoveryActions = const [],
     this.lastVerificationEmailSent,
+    this.verificationEmailSendStatus = VerificationEmailSendStatus.notAttempted,
     this.resumeStep,
     this.completionRunId,
     this.startupReasonCode,
@@ -183,12 +187,14 @@ class AuthState {
     OnboardingFailureReason? onboardingFailureReason,
     List<OnboardingRecoveryAction>? recoveryActions,
     DateTime? lastVerificationEmailSent,
+    VerificationEmailSendStatus? verificationEmailSendStatus,
     int? resumeStep,
     String? completionRunId,
     String? startupReasonCode,
     ReconstructionResult? reconstructionResult,
     bool clearUser = false,
     bool clearError = false,
+    bool clearVerificationEmailState = false,
     bool clearStartupDestination = false,
     bool clearReconstructionResult = false,
   }) {
@@ -207,8 +213,12 @@ class AuthState {
       recoveryActions: clearError && recoveryActions == null
           ? const []
           : (recoveryActions ?? this.recoveryActions),
-      lastVerificationEmailSent:
-          lastVerificationEmailSent ?? this.lastVerificationEmailSent,
+      lastVerificationEmailSent: clearVerificationEmailState
+          ? null
+          : (lastVerificationEmailSent ?? this.lastVerificationEmailSent),
+      verificationEmailSendStatus: clearVerificationEmailState
+          ? VerificationEmailSendStatus.notAttempted
+          : (verificationEmailSendStatus ?? this.verificationEmailSendStatus),
       resumeStep: clearStartupDestination && resumeStep == null
           ? null
           : (resumeStep ?? this.resumeStep),
@@ -235,6 +245,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   bool _googleAuthInFlight = false;
   final Set<Timer> _startupTimers = <Timer>{};
   final Map<String, Future<void>> _reconstructionInFlightByUid = {};
+  final Set<String> _verificationHandoffUids = <String>{};
 
   AuthNotifier(this._repository, Ref ref)
     : _ref = ref,
@@ -259,6 +270,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
     _startupTimers.clear();
     _reconstructionInFlightByUid.clear();
+    _verificationHandoffUids.clear();
     _authSubscription.cancel();
     super.dispose();
   }
@@ -402,9 +414,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
           clearError: true,
-          lastVerificationEmailSent: DateTime.now(),
         );
-        await _repository.sendEmailVerification();
+        try {
+          await _repository.sendEmailVerification();
+          if (!_isCurrentAuthOperation(operation)) return;
+          state = state.copyWith(
+            clearError: true,
+            lastVerificationEmailSent: DateTime.now(),
+            verificationEmailSendStatus: VerificationEmailSendStatus.sent,
+          );
+        } catch (error) {
+          if (!_isCurrentAuthOperation(operation)) rethrow;
+          final mapped = mapAuthError(error);
+          state = state.copyWith(
+            user: user,
+            status: AuthFlowStatus.signedInEmailUnverified,
+            errorMessage:
+                'We couldn\'t send the verification email. Please resend it.',
+            failureReason: mapped.reason,
+            verificationEmailSendStatus: VerificationEmailSendStatus.failed,
+          );
+          return;
+        }
         if (!_isCurrentAuthOperation(operation)) return;
         return;
       }
@@ -486,9 +517,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
           user: user,
           status: AuthFlowStatus.signedInEmailUnverified,
           clearError: true,
-          lastVerificationEmailSent: DateTime.now(),
         );
-        await _repository.sendEmailVerification();
+        try {
+          await _repository.sendEmailVerification();
+          if (!_isCurrentAuthOperation(operation)) return;
+          state = state.copyWith(
+            clearError: true,
+            lastVerificationEmailSent: DateTime.now(),
+            verificationEmailSendStatus: VerificationEmailSendStatus.sent,
+          );
+        } catch (error) {
+          if (!_isCurrentAuthOperation(operation)) rethrow;
+          final mapped = mapAuthError(error);
+          state = state.copyWith(
+            user: user,
+            status: AuthFlowStatus.signedInEmailUnverified,
+            errorMessage:
+                'We couldn\'t send the verification email. Please resend it.',
+            failureReason: mapped.reason,
+            verificationEmailSendStatus: VerificationEmailSendStatus.failed,
+          );
+          return;
+        }
         if (!_isCurrentAuthOperation(operation)) return;
         return;
       }
@@ -537,6 +587,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         clearError: true,
         lastVerificationEmailSent: DateTime.now(),
+        verificationEmailSendStatus: VerificationEmailSendStatus.sent,
       );
     } catch (error) {
       final mapped = mapAuthError(error);
@@ -580,6 +631,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     if (targetUid == null) return;
 
     try {
+      _verificationHandoffUids.add(targetUid);
       final user = await _repository.reloadCurrentUser();
       if (!_isCurrentAuthOperation(operation)) return;
       if (user == null) {
@@ -602,7 +654,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // user confirms verification. Unverified polling does not churn tokens.
       await _repository.currentIdToken();
       if (!_isCurrentAuthOperation(operation)) return;
-      await _loadOrCreateBackendUserState(user);
+      await _loadBackendWithTimeout(user);
     } catch (error) {
       if (!_isCurrentAuthOperation(operation)) rethrow;
       final mapped = mapAuthError(error);
@@ -612,6 +664,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         failureReason: mapped.reason,
       );
       rethrow;
+    } finally {
+      _verificationHandoffUids.remove(targetUid);
     }
   }
 
@@ -856,6 +910,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // navigation providers must retain the established authenticated URI.
       // Genuine reconstruction retries enter through retryBackendRestore;
       // verification changes continue below and reconstruct authoritatively.
+      state = state.copyWith(user: user);
+      return;
+    }
+
+    if (isSameUidRefresh &&
+        _needsEmailVerification(previousUser!) &&
+        !_needsEmailVerification(user) &&
+        _verificationHandoffUids.contains(user.uid)) {
       state = state.copyWith(user: user);
       return;
     }
@@ -1531,6 +1593,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _resetSignedOutState(
       preserveOnboardingUid: previousUid == null ? nextUser.uid : null,
     );
+    state = state.copyWith(clearVerificationEmailState: true);
   }
 
   Future<void> executeRecoveryAction(OnboardingRecoveryAction action) async {

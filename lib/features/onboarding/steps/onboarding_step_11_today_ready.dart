@@ -136,35 +136,9 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
       _ => null,
     };
 
-    final rawConflicts = draft.baseTimeline.detectConflicts(
-      ownerUid: draft.uid.isEmpty ? 'local-onboarding-owner' : draft.uid,
-      timezoneId: draft.timezoneId,
-      revision: draft.revision,
-    );
-    final conflictGroups = Step14ConflictGroupProjector.project(
-      occurrences: rawConflicts,
-      draft: draft,
-    );
-    final unresolvedGroups = conflictGroups
-        .where((g) => g.isUnresolved)
-        .toList();
-    final acceptedGroups = conflictGroups
-        .where((g) => g.isFullyAccepted)
-        .toList();
-
-    // Default expanded group to first unresolved if not set or invalid
-    if (_expandedGroupId == null && unresolvedGroups.isNotEmpty) {
-      _expandedGroupId = unresolvedGroups.first.stableGroupId;
-    } else if (_expandedGroupId != null &&
-        !unresolvedGroups.any((g) => g.stableGroupId == _expandedGroupId)) {
-      _expandedGroupId = unresolvedGroups.isNotEmpty
-          ? unresolvedGroups.first.stableGroupId
-          : null;
-    }
-
     final projectedReadiness = Step14ReadinessSummary.project(
       draft: draft,
-      unresolvedConflictGroupCount: unresolvedGroups.length,
+      unresolvedConflictGroupCount: 0,
     );
     final readiness = corruptBundle == null
         ? projectedReadiness
@@ -172,8 +146,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
             profileComplete: projectedReadiness.profileComplete,
             routineGenerated: false,
             habitsConfigured: projectedReadiness.habitsConfigured,
-            unresolvedConflictGroupCount:
-                projectedReadiness.unresolvedConflictGroupCount,
+            unresolvedConflictGroupCount: 0,
           );
 
     final previewData = bundle != null
@@ -232,17 +205,6 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
 
             if (corruptBundle != null) ...[
               _buildBundleRecoveryCard(corruptBundle.error),
-              const SizedBox(height: 16),
-            ],
-
-            // Section 2: Needs your attention (only if conflicts exist)
-            if (conflictGroups.isNotEmpty) ...[
-              _buildAttentionSection(
-                unresolvedGroups: unresolvedGroups,
-                acceptedGroups: acceptedGroups,
-                rawConflicts: rawConflicts,
-                draft: draft,
-              ),
               const SizedBox(height: 16),
             ],
 
@@ -524,6 +486,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
   }
 
   // ── Section 2: Needs your attention ─────────────────────────────────────────
+  // ignore: unused_element
   Widget _buildAttentionSection({
     required List<Step14ConflictGroup> unresolvedGroups,
     required List<Step14ConflictGroup> acceptedGroups,
@@ -998,7 +961,7 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
               key: const ValueKey('step14-view-timeline'),
               onPressed: () => _setFullTimelinePreviewOpen(true),
               icon: const Icon(Icons.calendar_month_rounded, size: 16),
-              label: const Text('View full timeline'),
+              label: const Text('See your timeline'),
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 textStyle: const TextStyle(

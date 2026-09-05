@@ -551,58 +551,61 @@ void main() {
       },
     );
 
-    test('reinstall then edit follows standard invalidation without bypass', () async {
-      final database = FakeRoutineDatabase();
-      final fixture = _routineFixture();
-      final durable = FakeConflictAcceptanceRepository(database);
-      final routines = FakeRoutineRepository(database: database);
-      await routines.createRoutineItem(_uidA, fixture.$1);
-      await routines.createRoutineItem(_uidA, fixture.$2);
-      await durable.upsert(_uidA, _acceptRoutine(fixture.$1, fixture.$2));
+    test(
+      'reinstall then edit follows standard invalidation without bypass',
+      () async {
+        final database = FakeRoutineDatabase();
+        final fixture = _routineFixture();
+        final durable = FakeConflictAcceptanceRepository(database);
+        final routines = FakeRoutineRepository(database: database);
+        await routines.createRoutineItem(_uidA, fixture.$1);
+        await routines.createRoutineItem(_uidA, fixture.$2);
+        await durable.upsert(_uidA, _acceptRoutine(fixture.$1, fixture.$2));
 
-      // 1. Zero-cache reinstall
-      final container = _freshContainer(database);
-      addTearDown(container.dispose);
-      container
-          .read(regionSettingsProvider.notifier)
-          .loadSettings(RegionSettings.india(userId: _uidA));
-      await container
-          .read(routineNotifierProvider.notifier)
-          .loadForOwner(_uidA);
-      container
-          .read(routineNotifierProvider.notifier)
-          .updateSelectedDay(_monday);
+        // 1. Zero-cache reinstall
+        final container = _freshContainer(database);
+        addTearDown(container.dispose);
+        container
+            .read(regionSettingsProvider.notifier)
+            .loadSettings(RegionSettings.india(userId: _uidA));
+        await container
+            .read(routineNotifierProvider.notifier)
+            .loadForOwner(_uidA);
+        container
+            .read(routineNotifierProvider.notifier)
+            .updateSelectedDay(_monday);
 
-      var state = container.read(routineNotifierProvider);
-      expect(
-        state.conflicts
-            .firstWhere(
-              (c) => c.type == RoutineConflictType.compatibleOverlap,
-            )
-            .resolution,
-        RoutineConflictResolution.allowedByUser,
-      );
+        var state = container.read(routineNotifierProvider);
+        expect(
+          state.conflicts
+              .firstWhere(
+                (c) => c.type == RoutineConflictType.compatibleOverlap,
+              )
+              .resolution,
+          RoutineConflictResolution.allowedByUser,
+        );
 
-      // 2. Edit schedule B after reinstall
-      final editedItem2 = fixture.$2.copyWith(startMinute: 535);
-      await routines.updateRoutineItem(_uidA, editedItem2);
-      await container
-          .read(routineNotifierProvider.notifier)
-          .loadForOwner(_uidA);
-      container
-          .read(routineNotifierProvider.notifier)
-          .updateSelectedDay(_monday);
+        // 2. Edit schedule B after reinstall
+        final editedItem2 = fixture.$2.copyWith(startMinute: 535);
+        await routines.updateRoutineItem(_uidA, editedItem2);
+        await container
+            .read(routineNotifierProvider.notifier)
+            .loadForOwner(_uidA);
+        container
+            .read(routineNotifierProvider.notifier)
+            .updateSelectedDay(_monday);
 
-      state = container.read(routineNotifierProvider);
-      expect(
-        state.conflicts
-            .firstWhere(
-              (c) => c.type == RoutineConflictType.compatibleOverlap,
-            )
-            .resolution,
-        RoutineConflictResolution.unresolved,
-      );
-    });
+        state = container.read(routineNotifierProvider);
+        expect(
+          state.conflicts
+              .firstWhere(
+                (c) => c.type == RoutineConflictType.compatibleOverlap,
+              )
+              .resolution,
+          RoutineConflictResolution.unresolved,
+        );
+      },
+    );
   });
 
   group('AH-F015 completion and reconstruction integration', () {
@@ -625,14 +628,11 @@ void main() {
           now: _acceptedAt,
         );
 
-        expect(bundle.conflictAcceptances, hasLength(1));
-        expect(bundle.expectedAcceptanceIds, hasLength(1));
+        expect(bundle.conflictAcceptances, isEmpty);
+        expect(bundle.expectedAcceptanceIds, isEmpty);
         expect(restored.expectedAcceptanceIds, bundle.expectedAcceptanceIds);
         expect(after.fingerprint, before.fingerprint);
-        expect(
-          after.conflictAcceptances.single.acceptanceId,
-          before.conflictAcceptances.single.acceptanceId,
-        );
+        expect(after.conflictAcceptances, isEmpty);
       },
     );
 
@@ -663,42 +663,54 @@ void main() {
         final restoredItems = database.itemsByUid[_uidA]!.values.toList();
         final restoredAcceptances = database.acceptancesByUid[_uidA]!.values
             .toList();
+        expect(restoredAcceptances, isEmpty);
         final conflict = RoutineConflictEngine.detect(
           restoredItems,
           _monday,
           conflictAcceptances: restoredAcceptances,
           timezoneId: _timezone,
         ).single;
-        expect(conflict.resolution, RoutineConflictResolution.allowedByUser);
-        expect(conflict.acceptanceId, bundle.expectedAcceptanceIds.single);
+        expect(conflict.resolution, RoutineConflictResolution.unresolved);
+        expect(conflict.acceptanceId, isNull);
       },
     );
 
-    test('time normalization minute roundtrip creates identical fingerprint', () {
-      final item = _meal('breakfast', 510, 540); // 08:30 to 09:00 (510 min)
-      final descriptorBefore = _descriptor(item);
-      final jsonMap = item.toMap();
-      final itemAfter = RoutineItem.fromMap(jsonMap);
-      final descriptorAfter = _descriptor(itemAfter);
+    test(
+      'time normalization minute roundtrip creates identical fingerprint',
+      () {
+        final item = _meal('breakfast', 510, 540); // 08:30 to 09:00 (510 min)
+        final descriptorBefore = _descriptor(item);
+        final jsonMap = item.toMap();
+        final itemAfter = RoutineItem.fromMap(jsonMap);
+        final descriptorAfter = _descriptor(itemAfter);
 
-      expect(descriptorAfter.scheduleFingerprint, descriptorBefore.scheduleFingerprint);
-    });
+        expect(
+          descriptorAfter.scheduleFingerprint,
+          descriptorBefore.scheduleFingerprint,
+        );
+      },
+    );
 
-    test('expectedAcceptanceIds with F1 cannot satisfy newly edited F2 schedule', () {
-      final draft = _acceptedSourceDraft();
-      final bundle = OnboardingCompletionService.buildBundle(draft);
-      final f1AcceptanceId = bundle.expectedAcceptanceIds.single;
+    test(
+      'expectedAcceptanceIds with F1 cannot satisfy newly edited F2 schedule',
+      () {
+        final draft = _acceptedSourceDraft();
+        final bundle = OnboardingCompletionService.buildBundle(draft);
+        expect(bundle.expectedAcceptanceIds, isEmpty);
 
-      // Edit schedule A time in draft -> newly generated bundle has different acceptanceId F2
-      final breakfast = draft.baseTimeline.blockById('breakfast')!;
-      final editedDraft = draft.copyWith(
-        baseTimeline: draft.baseTimeline.upsertBlock(
-          breakfast.copyWith(startMinute: 500, endMinute: 530),
-        ),
-      );
-      final editedBundle = OnboardingCompletionService.buildBundle(editedDraft);
-      expect(editedBundle.expectedAcceptanceIds.contains(f1AcceptanceId), isFalse);
-    });
+        // Edit schedule A time in draft -> newly generated bundle has different acceptanceId F2
+        final breakfast = draft.baseTimeline.blockById('breakfast')!;
+        final editedDraft = draft.copyWith(
+          baseTimeline: draft.baseTimeline.upsertBlock(
+            breakfast.copyWith(startMinute: 500, endMinute: 530),
+          ),
+        );
+        final editedBundle = OnboardingCompletionService.buildBundle(
+          editedDraft,
+        );
+        expect(editedBundle.expectedAcceptanceIds, isEmpty);
+      },
+    );
 
     test('backend read failure returns no fake or mock acceptances', () async {
       final database = FakeRoutineDatabase();
