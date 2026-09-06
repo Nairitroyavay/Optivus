@@ -2222,6 +2222,94 @@ void main() {
         17 * 60,
         20 * 60 + 30,
       ]);
+      expect(mapped.blocks.map((block) => block.id), [
+        'eating-ai-breakfast',
+        'eating-ai-morning_snack',
+        'eating-ai-lunch',
+        'eating-ai-afternoon_snack',
+        'eating-ai-dinner',
+      ]);
+    },
+  );
+
+  test(
+    'Eating generation derives unique slot identities when all remote ids are empty',
+    () {
+      const base = BaseTimelineDraft(
+        mealsPerDay: 4,
+        breakfastMinute: 8 * 60,
+        lunchMinute: 13 * 60,
+        snackMinute: 17 * 60,
+        dinnerMinute: 20 * 60 + 30,
+      );
+      RoutineImportCandidateBlock candidate({
+        required String id,
+        required String slot,
+        required String title,
+        required String category,
+        required List<String> dishes,
+      }) => RoutineImportCandidateBlock(
+        id: id,
+        mealSlot: slot,
+        title: title,
+        startMinute: 0,
+        endMinute: 1,
+        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+        blockType: TimelineBlockDraft.softBlockKey,
+        category: 'eating',
+        hardBlock: false,
+        mealCategory: category,
+        steps: dishes,
+      );
+
+      final mapped = mapOnboarding5MealCandidates(
+        [
+          candidate(
+            id: '',
+            slot: 'breakfast',
+            title: 'Breakfast',
+            category: 'breakfast',
+            dishes: const ['Upma', 'Egg'],
+          ),
+          candidate(
+            id: '',
+            slot: 'lunch',
+            title: 'Lunch',
+            category: 'lunch',
+            dishes: const ['Rice', 'Dal'],
+          ),
+          candidate(
+            id: '',
+            slot: 'afternoon_snack',
+            title: 'Snack',
+            category: 'snack',
+            dishes: const ['Fruit', 'Yogurt'],
+          ),
+          candidate(
+            id: '',
+            slot: 'dinner',
+            title: 'Dinner',
+            category: 'dinner',
+            dishes: const ['Roti', 'Paneer'],
+          ),
+        ],
+        now: DateTime.utc(2026, 6, 9),
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: base,
+      );
+
+      expect(mapped.blocks, hasLength(4));
+      expect(mapped.blocks.map((block) => block.id).toSet(), hasLength(4));
+      expect(mapped.blocks.map((block) => block.id), [
+        'eating-ai-breakfast',
+        'eating-ai-lunch',
+        'eating-ai-afternoon_snack',
+        'eating-ai-dinner',
+      ]);
+      expect(
+        mapped.blocks.map((block) => block.mealSlot).toSet(),
+        hasLength(4),
+      );
     },
   );
 

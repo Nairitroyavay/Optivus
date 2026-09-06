@@ -1666,6 +1666,21 @@ class _EatingTimelineSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     const adapter = MealTimelineAdapter();
     final entries = [for (final block in blocks) ...adapter.toEntries(block)];
+    final blocksById = <String, TimelineBlockDraft>{};
+    for (final block in blocks) {
+      if (blocksById.containsKey(block.id)) {
+        // A corrupt draft must not be resolved by choosing whichever duplicate
+        // happened to be first in the list.
+        assert(() {
+          debugPrint(
+            '[Onboarding5] Duplicate eating timeline block id: ${block.id}',
+          );
+          return true;
+        }());
+        continue;
+      }
+      blocksById[block.id] = block;
+    }
 
     Future<void> openMealEditor(TimelineBlockDraft block) {
       return MealTimelineAdapter.showMealEditSheet(
@@ -1709,20 +1724,15 @@ class _EatingTimelineSection extends ConsumerWidget {
             accent: OptivusColors.roseAccent,
             styleBuilder: adapter.styleForEntry,
             blockBuilder: (context, positioned) {
-              final block = blocks
-                  .where(
-                    (candidate) => candidate.id == positioned.entry.sourceId,
-                  )
-                  .first;
+              final block = blocksById[positioned.entry.sourceId];
+              if (block == null) return const SizedBox.shrink();
               return _EatingTimelineBlock(
                 block: block,
                 onEditRequested: () => openMealEditor(block),
               );
             },
             onEntryTapped: (entry) {
-              final block = blocks
-                  .where((candidate) => candidate.id == entry.sourceId)
-                  .firstOrNull;
+              final block = blocksById[entry.sourceId];
               if (block == null) return;
               openMealEditor(block);
             },
@@ -2361,7 +2371,12 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
 
     blocks.add(
       TimelineBlockDraft(
-        id: 'eating-ai-${candidate.id}-${timestamp.millisecondsSinceEpoch}',
+        // The remote candidate id is deliberately not used: provider output
+        // may omit it or repeat it. A canonical meal slot is the durable
+        // identity of one generated plan entry.
+        id: slot == null
+            ? 'eating-ai-${candidate.id}-${timestamp.millisecondsSinceEpoch}'
+            : _onboarding5GeneratedMealBlockId(slot.id),
         section: 'eating',
         title: title,
         startMinute: startMinute,
@@ -2389,6 +2404,25 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
   }
 
   final mergedBlocks = mergeOverlappingEatingBlocks(blocks);
+  final blockIds = mergedBlocks.map((block) => block.id).toSet();
+  final mealSlots = mergedBlocks
+      .map((block) => block.mealSlot?.trim())
+      .whereType<String>()
+      .where((slot) => slot.isNotEmpty)
+      .toSet();
+  final hasUniqueBlockIds = blockIds.length == mergedBlocks.length;
+  final hasExpectedSlotCoverage =
+      expectedSlots.isEmpty ||
+      (mealSlots.length == expectedSlots.length &&
+          expectedSlots.every((slot) => mealSlots.contains(slot.id)));
+  if (!hasUniqueBlockIds ||
+      (source == onboardingEatingGeneratedSource && !hasExpectedSlotCoverage)) {
+    assert(() {
+      debugPrint('[Onboarding5] Refusing invalid generated meal identities.');
+      return true;
+    }());
+    mergedBlocks.clear();
+  }
 
   return Onboarding5MealCandidateMappingResult(
     blocks: mergedBlocks,
@@ -2398,6 +2432,9 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
     droppedNoDishes: droppedNoDishes,
   );
 }
+
+String _onboarding5GeneratedMealBlockId(String mealSlot) =>
+    'eating-ai-$mealSlot';
 
 String? _normalizedBodyGoal(String? value) {
   final lower = value?.trim().toLowerCase();

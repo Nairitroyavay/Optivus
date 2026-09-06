@@ -231,6 +231,7 @@ describe("Nutrition Worker request boundary", () => {
     expect(json.uid).toBe("uid-1");
     expect(json.candidates).toHaveLength(3);
     expect(json.candidates[0]).toMatchObject({
+      id: "meal_breakfast",
       title: "Breakfast",
       mealCategory: "breakfast",
       startMinute: 480,
@@ -287,6 +288,30 @@ describe("Nutrition Worker request boundary", () => {
       780,
       1020,
       1230,
+    ]);
+    expect(json.candidates.map((candidate) => candidate.id)).toEqual([
+      "meal_breakfast",
+      "meal_morning_snack",
+      "meal_lunch",
+      "meal_afternoon_snack",
+      "meal_dinner",
+    ]);
+  });
+
+  test("canonical meal slots replace missing, duplicate, and wrong provider ids", async () => {
+    stubProviderText(JSON.stringify({
+      candidates: [
+        validCandidate({ id: "", mealSlot: "breakfast" }),
+        validCandidate({ id: "breakfast", mealSlot: "lunch", title: "Lunch", mealCategory: "lunch", steps: ["Rice", "Dal"] }),
+        validCandidate({ id: "same", mealSlot: "dinner", title: "Dinner", mealCategory: "dinner", steps: ["Roti", "Curry"] }),
+      ],
+    }));
+    const response = await worker.fetch(request(validRequestBody()), makeEnv() as never);
+    const json = await response.json() as { candidates: Array<Record<string, unknown>> };
+
+    expect(response.status).toBe(200);
+    expect(json.candidates.map((candidate) => candidate.id)).toEqual([
+      "meal_breakfast", "meal_lunch", "meal_dinner",
     ]);
   });
 

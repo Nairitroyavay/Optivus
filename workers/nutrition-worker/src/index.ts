@@ -417,6 +417,9 @@ function sanitizeMealCandidate(
     ? Math.max(0, Math.min(1, block.confidenceScore))
     : 0.8;
   return {
+    // Schedule identity belongs to Optivus, not the provider.  This is derived
+    // only after the candidate has been assigned its canonical slot.
+    id: `meal_${inferredSlot.slot}`,
     title: inferredSlot.title,
     mealSlot: inferredSlot.slot,
     startMinute: inferredSlot.startMinute,

@@ -3,9 +3,80 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_5_eating_setup.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/state/app_state.dart';
 
 void main() {
+  testWidgets(
+    'Onboarding 5 renders each canonical meal card with its matching position and dishes',
+    (tester) async {
+      final mapped = mapOnboarding5MealCandidates(
+        [
+          _mealCandidate('', 'breakfast', 'Breakfast', 'breakfast', [
+            'Upma',
+            'Egg',
+          ]),
+          _mealCandidate('same', 'lunch', 'Lunch', 'lunch', ['Rice', 'Dal']),
+          _mealCandidate('same', 'afternoon_snack', 'Snack', 'snack', [
+            'Fruit',
+            'Yogurt',
+          ]),
+          _mealCandidate('', 'dinner', 'Dinner', 'dinner', ['Roti', 'Paneer']),
+        ],
+        source: onboardingEatingGeneratedSource,
+        baseTimeline: const BaseTimelineDraft(
+          mealsPerDay: 4,
+          breakfastMinute: 8 * 60,
+          lunchMinute: 13 * 60,
+          snackMinute: 17 * 60,
+          dinnerMinute: 20 * 60 + 30,
+        ),
+      );
+      final draft = OnboardingDraft(
+        baseTimeline: BaseTimelineDraft(
+          eatingSetupStep: 1,
+          eatingSetupPath: 'create',
+          blocks: mapped.blocks,
+        ),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mockOnboardingProvider.overrideWith(
+              (_) => MockOnboardingNotifier()..loadSeedData(draft),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: SizedBox.expand(child: OnboardingStep5())),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final dish in [
+        'Upma',
+        'Egg',
+        'Rice',
+        'Dal',
+        'Fruit',
+        'Yogurt',
+        'Roti',
+        'Paneer',
+      ]) {
+        expect(find.text(dish), findsOneWidget);
+      }
+      expect(find.text('Breakfast'), findsOneWidget);
+      expect(find.text('Lunch'), findsOneWidget);
+      expect(find.text('Snack'), findsOneWidget);
+      expect(find.text('Dinner'), findsOneWidget);
+      expect(find.text('8:00 AM - 8:30 AM'), findsOneWidget);
+      expect(find.text('1:00 PM - 1:45 PM'), findsOneWidget);
+      expect(find.text('5:00 PM - 5:20 PM'), findsOneWidget);
+      expect(find.text('8:30 PM - 9:15 PM'), findsOneWidget);
+    },
+  );
+
   testWidgets('Onboarding 5 short meal timeline alignment test', (
     tester,
   ) async {
@@ -108,3 +179,23 @@ void main() {
     );
   });
 }
+
+RoutineImportCandidateBlock _mealCandidate(
+  String id,
+  String slot,
+  String title,
+  String category,
+  List<String> dishes,
+) => RoutineImportCandidateBlock(
+  id: id,
+  mealSlot: slot,
+  title: title,
+  startMinute: 0,
+  endMinute: 1,
+  repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+  blockType: TimelineBlockDraft.softBlockKey,
+  category: 'eating',
+  hardBlock: false,
+  mealCategory: category,
+  steps: dishes,
+);
