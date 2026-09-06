@@ -28,6 +28,7 @@ typedef OnboardingActionCallback = FutureOr<void> Function();
 
 @immutable
 class OnboardingAction {
+  final Key? key;
   final OnboardingActionKind kind;
   final String label;
   final bool enabled;
@@ -38,6 +39,7 @@ class OnboardingAction {
   final OnboardingActionCallback? onPressed;
 
   const OnboardingAction({
+    this.key,
     required this.kind,
     required this.label,
     required this.onPressed,
@@ -260,7 +262,7 @@ class _PrimaryAction extends StatelessWidget {
       label: action.semanticLabel,
       value: action.isLoading ? 'In progress' : null,
       child: LiquidBlobButton(
-        key: ValueKey('onboarding-action-${action.kind.name}'),
+        key: action.key ?? ValueKey('onboarding-action-${action.kind.name}'),
         label: action.label,
         onPressed: () => invoke(action),
         isLoading: action.isLoading,

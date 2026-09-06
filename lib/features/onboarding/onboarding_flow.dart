@@ -26,6 +26,7 @@ import 'package:optivus/features/uploads/providers/onboarding_upload_interaction
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_steps.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_class_setup_timeline.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_7_primary_action.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/onboarding_step_readiness.dart';
@@ -964,6 +965,9 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       classBlocks: classBlocks,
       workBlocks: workBlocks,
     );
+    final step7Action = _currentPage == onboardingSkinCareStepIndex
+        ? ref.watch(onboardingStep7PrimaryActionProvider)
+        : null;
 
     String ctaLabel = 'Next Step';
     OnboardingActionKind ctaKind = OnboardingActionKind.next;
@@ -991,13 +995,21 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
     if (_currentPage >= 1 && _currentPage <= 13 && readiness.canRevealPrimary) {
       _stepsWithRevealedPrimaryCta.add(_currentPage);
     }
-    final showPrimaryCta = shouldShowOnboardingPrimaryCta(
+    final defaultShowPrimaryCta = shouldShowOnboardingPrimaryCta(
       step: _currentPage,
       readiness: readiness,
       revealedDuringInteraction: _stepsWithRevealedPrimaryCta.contains(
         _currentPage,
       ),
     );
+
+    final showPrimaryCta = step7Action != null || defaultShowPrimaryCta;
+    if (step7Action != null) {
+      ctaLabel = step7Action.label;
+      ctaKind = OnboardingActionKind.generate;
+      ctaOnPressed = step7Action.onPressed;
+      ctaEnabled = step7Action.enabled;
+    }
 
     return PopScope(
       canPop: false,
@@ -1028,13 +1040,17 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
         onIndicatorDraggedTo: _onIndicatorDraggedTo,
         actions: [
           OnboardingAction(
+            key: step7Action == null
+                ? null
+                : const ValueKey('onboarding-step7-generate-button'),
             kind: ctaKind,
             label: ctaLabel,
             semanticLabel: ctaLabel,
             onPressed: ctaOnPressed,
             visible: showPrimaryCta,
             enabled: ctaEnabled,
-            operationState: (_isNavigating || _isCompleting)
+            operationState:
+                step7Action?.loading == true || _isNavigating || _isCompleting
                 ? OnboardingActionOperationState.active
                 : OnboardingActionOperationState.idle,
           ),

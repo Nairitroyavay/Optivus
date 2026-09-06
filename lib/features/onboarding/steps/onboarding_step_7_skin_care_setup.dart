@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/ai/ai_generation_lifecycle.dart';
 import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
+import 'package:optivus/features/onboarding/steps/onboarding_step_7_primary_action.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_7_skin_care_scheduler.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_action_bar.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
@@ -1774,10 +1776,28 @@ class _HasProductsModeScreenState
   late _ProductInputSource _inputSource;
   int _selectedDay = DateTime.now().weekday;
   final _productNamesTargetKey = GlobalKey();
+  String? _publishedActionSignature;
+  late final StateController<OnboardingStep7PrimaryAction?>
+  _primaryActionController;
+
+  void _publishPrimaryAction(OnboardingStep7PrimaryAction? action) {
+    final signature = action == null
+        ? null
+        : '${action.label}|${action.enabled}|${action.loading}';
+    if (_publishedActionSignature == signature) return;
+    _publishedActionSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _publishedActionSignature != signature) return;
+      _primaryActionController.state = action;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    _primaryActionController = ref.read(
+      onboardingStep7PrimaryActionProvider.notifier,
+    );
     _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
     _controller = TextEditingController(text: widget.base.skinCareProductNames);
     _focusNode = FocusNode();
@@ -2431,6 +2451,20 @@ class _HasProductsModeScreenState
             effectiveAsset != null &&
                 (!_photoProductsReviewed || typedPreviewProducts.isNotEmpty),
         });
+    final usesGlobalBuildAction =
+        _inputSource != _ProductInputSource.photo || _photoProductsReviewed;
+    final hasSharedFooter =
+        context.findAncestorWidgetOfExactType<OnboardingStepShell>() != null;
+    _publishPrimaryAction(
+      usesGlobalBuildAction && hasSharedFooter
+          ? OnboardingStep7PrimaryAction(
+              label: 'Build skin routine',
+              enabled: canGenerate,
+              loading: _lifecycle.state.isActive,
+              onPressed: _generate,
+            )
+          : null,
+    );
     final textHelper =
         _inputSource == _ProductInputSource.photo && !_photoProductsReviewed
         ? 'Read labels to review and correct detected products.'
@@ -2496,6 +2530,7 @@ class _HasProductsModeScreenState
       textHelper: textHelper,
       onUpload: photoUploadEnabled ? _startUpload : null,
       onRemove: busy ? null : _removeUploadedAsset,
+      showGenerateAction: !usesGlobalBuildAction || !hasSharedFooter,
       generateLabel:
           _inputSource == _ProductInputSource.photo && !_photoProductsReviewed
           ? 'Read product labels'
@@ -2771,6 +2806,7 @@ class _HasProductsSetupCard extends StatelessWidget {
   final VoidCallback? onUpload;
   final VoidCallback? onRemove;
   final VoidCallback? onGenerate;
+  final bool showGenerateAction;
   final String generateLabel;
   final ValueChanged<String>? onSkinTypeChanged;
   final ValueChanged<String>? onConcernChanged;
@@ -2800,6 +2836,7 @@ class _HasProductsSetupCard extends StatelessWidget {
     required this.onUpload,
     required this.onRemove,
     required this.onGenerate,
+    this.showGenerateAction = true,
     required this.generateLabel,
     required this.onSkinTypeChanged,
     required this.onConcernChanged,
@@ -2936,13 +2973,15 @@ class _HasProductsSetupCard extends StatelessWidget {
               value: desiredApplicationsPerDay,
               onChanged: onFrequencyChanged,
             ),
-            const SizedBox(height: 12),
-            _SkinCareGenerateRoutineButton(
-              label: uploadBusy ? 'Please wait...' : generateLabel,
-              busy: generating,
-              onTap: onGenerate,
-              accent: OptivusColors.roseAccent,
-            ),
+            if (showGenerateAction) ...[
+              const SizedBox(height: 12),
+              _SkinCareGenerateRoutineButton(
+                label: uploadBusy ? 'Please wait...' : generateLabel,
+                busy: generating,
+                onTap: onGenerate,
+                accent: OptivusColors.roseAccent,
+              ),
+            ],
           ],
         ],
       ),
@@ -3548,10 +3587,28 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
   bool _recommendationRetryAvailable = false;
   bool _routineRetryAvailable = false;
   int _selectedDay = DateTime.now().weekday;
+  String? _publishedActionSignature;
+  late final StateController<OnboardingStep7PrimaryAction?>
+  _primaryActionController;
+
+  void _publishPrimaryAction(OnboardingStep7PrimaryAction? action) {
+    final signature = action == null
+        ? null
+        : '${action.label}|${action.enabled}|${action.loading}';
+    if (_publishedActionSignature == signature) return;
+    _publishedActionSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _publishedActionSignature != signature) return;
+      _primaryActionController.state = action;
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    _primaryActionController = ref.read(
+      onboardingStep7PrimaryActionProvider.notifier,
+    );
     _lifecycle = AiGenerationController()..addListener(_onLifecycleChanged);
     final draft = ref.read(mockOnboardingProvider).draft;
     final restored = ref.read(restoredUploadsProvider);
@@ -4340,6 +4397,29 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
         : region.countryName;
     final desiredApplicationsPerDay = _effectiveDesiredApplications(base);
 
+    final hasProductSelection =
+        _showProductSelection && base.skinCareProductRecommendations.isNotEmpty;
+    final hasSharedFooter =
+        context.findAncestorWidgetOfExactType<OnboardingStepShell>() != null;
+    if (hasProductSelection && hasSharedFooter) {
+      final missing = onboarding7MissingEssentialRecommendationCategories(
+        base.skinCareProductRecommendations,
+        selectedProductNames: base.skinCareSelectedProductNames,
+      );
+      _publishPrimaryAction(
+        OnboardingStep7PrimaryAction(
+          label: _routineRetryAvailable
+              ? 'Retry routine'
+              : 'Build skin routine',
+          enabled: !busy && missing.isEmpty,
+          loading: busy,
+          onPressed: _generate,
+        ),
+      );
+    } else {
+      _publishPrimaryAction(null);
+    }
+
     if (_lifecycle.state.isActive) {
       final isFindProducts =
           _lifecycle.state.operationId?.contains('find-products') ?? false;
@@ -4577,7 +4657,16 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: EdgeInsets.only(
+                // The shell overlays its shared CTA. Reserve its measured
+                // obstruction so the final product card can scroll entirely
+                // above both the CTA and Android navigation.
+                bottom: hasSharedFooter
+                    ? OnboardingFooterMetrics.resolve(
+                        context,
+                      ).requiredContentInset
+                    : 8,
+              ),
               child: OnboardingGlassCard(
                 tint: OptivusColors.purpleAccent.withValues(alpha: 0.06),
                 padding: const EdgeInsets.all(12),
@@ -4604,7 +4693,19 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           color: OptivusColors.textSecondary,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      if (!hasSharedFooter) ...[
+                        const SizedBox(height: 10),
+                        _SkinCareGenerateRoutineButton(
+                          label: _routineRetryAvailable
+                              ? 'Retry routine'
+                              : 'Build skin routine',
+                          busy: busy,
+                          accent: OptivusColors.purpleAccent,
+                          onTap: !busy && missingEssentialSelections.isEmpty
+                              ? _generate
+                              : null,
+                        ),
+                      ],
                       ListView.separated(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -4758,31 +4859,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 10),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final tightActions =
-                              constraints.maxWidth < 360 ||
-                              MediaQuery.textScalerOf(context).scale(14) > 18;
-                          final buildButton = _SkinCareGenerateRoutineButton(
-                            label: _routineRetryAvailable
-                                ? 'Retry routine'
-                                : 'Build skin routine',
-                            busy: busy,
-                            accent: OptivusColors.purpleAccent,
-                            onTap: !busy && missingEssentialSelections.isEmpty
-                                ? _generate
-                                : null,
-                          );
-                          return tightActions
-                              ? Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [buildButton],
-                                )
-                              : Row(children: [Expanded(child: buildButton)]);
-                        },
-                      ),
                     ],
                   ),
                 ),
