@@ -185,36 +185,40 @@ class OnboardingStep14State extends ConsumerState<OnboardingStep14> {
           setState(() => _viewingFullTimeline = false);
         }
       },
-      child: OnboardingScrollView(
-        controller: _scrollController,
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            _buildHeader(),
-            const SizedBox(height: 18),
-
-            // Section 1: Readiness Card
-            _buildReadinessCard(
-              readiness,
-              invalidBundle: invalidBundle,
-              bundleUnavailable: invalidBundle != null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+            child: _buildHeader(),
+          ),
+          const SizedBox(height: 18),
+          Expanded(
+            child: OnboardingScrollView(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildReadinessCard(
+                    readiness,
+                    invalidBundle: invalidBundle,
+                    bundleUnavailable: invalidBundle != null,
+                  ),
+                  const SizedBox(height: 16),
+                  if (corruptBundle != null) ...[
+                    _buildBundleRecoveryCard(corruptBundle.error),
+                    const SizedBox(height: 16),
+                  ],
+                  if (previewData != null) ...[
+                    _buildFinalPreviewCard(previewData, draft),
+                    const SizedBox(height: 24),
+                  ],
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-
-            if (corruptBundle != null) ...[
-              _buildBundleRecoveryCard(corruptBundle.error),
-              const SizedBox(height: 16),
-            ],
-
-            // Section 3: Final Preview
-            if (previewData != null) ...[
-              _buildFinalPreviewCard(previewData, draft),
-              const SizedBox(height: 24),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

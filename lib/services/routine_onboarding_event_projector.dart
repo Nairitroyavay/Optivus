@@ -304,23 +304,35 @@ class RoutineOnboardingEventProjector {
     final existing = <String>[];
     final repaired = <String>[];
     final failed = <String>[];
+    final writes = <RoutineOccurrenceRecord>[];
     for (final record in expected) {
       final current = before[record.id];
       if (current != null && _matchesHistoryRecord(current, record)) {
         existing.add(record.id);
         continue;
       }
+      if (current != null) {
+        // This is the documented onboarding-only repair path: the stable
+        // occurrence identity is retained while projection metadata is
+        // advanced to the current authoritative bundle.
+        writes.add(
+          record.copyWith(
+            action: 'repair',
+            operationKey: '${record.operationKey}_repair',
+            createdAt: current.createdAt,
+          ),
+        );
+        repaired.add(record.id);
+        continue;
+      }
+      writes.add(record);
+      created.add(record.id);
+    }
+    if (writes.isNotEmpty) {
       try {
-        final write = current == null
-            ? record
-            : record.copyWith(
-                action: 'repair',
-                operationKey: '${record.operationKey}_repair',
-              );
-        await repository.appendHistory(bundle.uid, write);
-        (current == null ? created : repaired).add(record.id);
+        await repository.appendHistoryBatch(bundle.uid, writes);
       } catch (_) {
-        failed.add(record.id);
+        failed.addAll(writes.map((record) => record.id));
       }
     }
 

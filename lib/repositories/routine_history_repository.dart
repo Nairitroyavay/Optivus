@@ -241,6 +241,15 @@ abstract class RoutineHistoryRepository {
   Future<List<RoutineOccurrenceRecord>> fetchHistory(String uid);
 
   Future<void> appendHistory(String uid, RoutineOccurrenceRecord record);
+  Future<void> appendHistoryBatch(
+    String uid,
+    List<RoutineOccurrenceRecord> records,
+  ) async {
+    for (final record in records) {
+      await appendHistory(uid, record);
+    }
+  }
+
   Future<void> deleteHistory(String uid, String occurrenceId);
 }
 
@@ -268,6 +277,16 @@ class FakeRoutineHistoryRepository implements RoutineHistoryRepository {
     }
     codec.toFirestore(record);
     _history.putIfAbsent(uid, () => {})[record.id] = record;
+  }
+
+  @override
+  Future<void> appendHistoryBatch(
+    String uid,
+    List<RoutineOccurrenceRecord> records,
+  ) async {
+    for (final record in records) {
+      await appendHistory(uid, record);
+    }
   }
 
   @override
@@ -327,6 +346,36 @@ class FirestoreRoutineHistoryRepository implements RoutineHistoryRepository {
       data['updatedAt'] = FieldValue.serverTimestamp();
       transaction.set(reference, data);
     });
+  }
+
+  @override
+  Future<void> appendHistoryBatch(
+    String uid,
+    List<RoutineOccurrenceRecord> records,
+  ) async {
+    validateOwnerUid(uid);
+    if (records.isEmpty) return;
+    if (records.length > 450) {
+      throw ArgumentError('Routine History batch is too large.');
+    }
+    final batch = _firestore.batch();
+    for (final record in records) {
+      if (record.ownerUid != uid) {
+        throw ArgumentError('Routine occurrence owner mismatch.');
+      }
+      final data = _codec.toFirestore(record);
+      // Onboarding repairs retain the immutable occurrence creation time.
+      // New deterministic projections receive their authoritative server time.
+      data['createdAt'] = record.action == 'repair'
+          ? data['createdAt']
+          : FieldValue.serverTimestamp();
+      data['updatedAt'] = FieldValue.serverTimestamp();
+      batch.set(
+        _firestore.doc(FirestoreUserPaths.routineHistoryEvent(uid, record.id)),
+        data,
+      );
+    }
+    await batch.commit();
   }
 
   @override

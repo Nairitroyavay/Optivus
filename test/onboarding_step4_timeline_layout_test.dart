@@ -896,45 +896,53 @@ void main() {
     );
   });
 
-  test('final preview blocks incompatible class and work overlaps', () {
-    final draft = OnboardingDraft(
-      lifeRole: const LifeRoleDraft(lifeRole: LifeRoleDraft.studentWorkingKey),
-      baseTimeline: BaseTimelineDraft(
-        skinCareSkipped: true,
-        blocks: [
-          _timelineBlock(
-            id: 'data-structures',
-            section: 'classes',
-            title: 'Data Structures',
-            startMinute: 9 * 60,
-            endMinute: 10 * 60,
-          ),
-          _timelineBlock(
-            id: 'part-time-job',
-            section: 'job_work_business',
-            title: 'Part-Time Job',
-            startMinute: 9 * 60 + 30,
-            endMinute: 13 * 60,
-          ),
-        ],
-      ),
-    );
+  test(
+    'final preview preserves class and work overlaps for Routine review',
+    () {
+      final draft = OnboardingDraft(
+        lifeRole: const LifeRoleDraft(
+          lifeRole: LifeRoleDraft.studentWorkingKey,
+        ),
+        baseTimeline: BaseTimelineDraft(
+          skinCareSkipped: true,
+          blocks: [
+            _timelineBlock(
+              id: 'data-structures',
+              section: 'classes',
+              title: 'Data Structures',
+              startMinute: 9 * 60,
+              endMinute: 10 * 60,
+            ),
+            _timelineBlock(
+              id: 'part-time-job',
+              section: 'job_work_business',
+              title: 'Part-Time Job',
+              startMinute: 9 * 60 + 30,
+              endMinute: 13 * 60,
+            ),
+          ],
+        ),
+      );
 
-    final preview = draft.buildFinalPreview();
+      final preview = draft.buildFinalPreview();
 
-    expect(preview.blockingWarnings, hasLength(1));
-    expect(preview.warnings.join('\n'), contains('Resolve or accept'));
-    expect(
-      draft.validateStep(
-        OnboardingDraft.lastStepIndex,
-        List<bool>.filled(OnboardingDraft.stepCount, true),
-      ),
-      isNotNull,
-    );
-  });
+      expect(preview.blockingWarnings, isEmpty);
+      expect(
+        preview.items.map((item) => item.id),
+        containsAll(<String>['data-structures', 'part-time-job']),
+      );
+      expect(
+        draft.validateStep(
+          OnboardingDraft.lastStepIndex,
+          List<bool>.filled(OnboardingDraft.stepCount, true),
+        ),
+        isNull,
+      );
+    },
+  );
 
   testWidgets(
-    'final preview lets the user keep class and breakfast and projects both Routine cards',
+    'final preview projects overlapping class and breakfast as Routine conflict intelligence',
     (tester) async {
       late MockOnboardingNotifier notifier;
       final classBlock = _timelineBlock(
@@ -962,12 +970,10 @@ void main() {
       );
 
       final unresolvedPreview = draft.buildFinalPreview();
-      expect(unresolvedPreview.blockingWarnings, hasLength(1));
+      expect(unresolvedPreview.blockingWarnings, isEmpty);
       expect(
-        unresolvedPreview.warnings.where(
-          (warning) => warning.startsWith('Resolve or accept'),
-        ),
-        hasLength(1),
+        unresolvedPreview.items.map((item) => item.id),
+        containsAll(<String>[classBlock.id, breakfastBlock.id]),
       );
 
       tester.view.physicalSize = const Size(400, 900);
@@ -988,31 +994,17 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Needs your attention'), findsOneWidget);
-      expect(find.text('Breakfast ↔ Morning Class'), findsOneWidget);
-
-      final keepBoth = find.text('Keep both on these days');
-      await tester.ensureVisible(keepBoth);
-      await tester.tap(keepBoth);
-      await tester.pumpAndSettle();
-
-      final acceptedDraft = notifier.state.draft;
-      expect(acceptedDraft.baseTimeline.conflictAcceptances, hasLength(1));
+      final advisoryDraft = notifier.state.draft;
+      expect(advisoryDraft.baseTimeline.conflictAcceptances, isEmpty);
       expect(
-        acceptedDraft
-            .baseTimeline
-            .conflictAcceptances
-            .single
-            .applicableWeekdays,
-        contains(1),
+        advisoryDraft.timelineConflictsRequiringAcceptance(),
+        hasLength(1),
       );
-      expect(acceptedDraft.timelineConflictsRequiringAcceptance(), isEmpty);
-      expect(acceptedDraft.buildFinalPreview().blockingWarnings, isEmpty);
-      expect(find.text('Needs your attention'), findsNothing);
+      expect(advisoryDraft.buildFinalPreview().blockingWarnings, isEmpty);
 
-      final completedDraft = acceptedDraft.copyWith(onboardingCompleted: true);
+      final completedDraft = advisoryDraft.copyWith(onboardingCompleted: true);
       final bundle = OnboardingCompletionService.buildBundle(completedDraft);
-      expect(bundle.conflictAcceptances, hasLength(1));
+      expect(bundle.conflictAcceptances, isEmpty);
       expect(
         bundle.routineItemsForApp.map((item) => item.id),
         containsAll(<String>[classBlock.id, breakfastBlock.id]),
@@ -1047,18 +1039,22 @@ void main() {
       final restoredItems = await restartedRoutineRepository.fetchRoutineItems(
         completedDraft.uid,
       );
-      final restoredAcceptances = database
-          .acceptancesByUid[completedDraft.uid]!
-          .values
-          .toList(growable: false);
+      final restoredAcceptances =
+          database.acceptancesByUid[completedDraft.uid]?.values.toList(
+            growable: false,
+          ) ??
+          const [];
 
-      expect(restoredDraft.baseTimeline.conflictAcceptances, hasLength(1));
-      expect(restoredDraft.timelineConflictsRequiringAcceptance(), isEmpty);
+      expect(restoredDraft.baseTimeline.conflictAcceptances, isEmpty);
+      expect(
+        restoredDraft.timelineConflictsRequiringAcceptance(),
+        hasLength(1),
+      );
       expect(
         restoredItems.map((item) => item.onboardingSourceItemId),
         containsAll(<String>[classBlock.id, breakfastBlock.id]),
       );
-      expect(restoredAcceptances, hasLength(1));
+      expect(restoredAcceptances, isEmpty);
 
       final restoredConflicts = RoutineConflictEngine.detect(
         restoredItems,
@@ -1067,8 +1063,8 @@ void main() {
         timezoneId: completedDraft.timezoneId,
       );
       expect(restoredConflicts, hasLength(1));
-      expect(restoredConflicts.single.blocking, isFalse);
-      expect(restoredConflicts.single.acceptanceId, isNotNull);
+      expect(restoredConflicts.single.blocking, isTrue);
+      expect(restoredConflicts.single.acceptanceId, isNull);
     },
   );
 
@@ -1641,7 +1637,7 @@ void main() {
         OnboardingDraft.lastStepIndex,
         nextDraft.stepCompleted,
       ),
-      contains('Resolve or accept'),
+      isNull,
     );
   });
 

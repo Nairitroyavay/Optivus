@@ -1490,7 +1490,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('View full timeline'));
+      await tester.tap(find.text('See your timeline'));
       await tester.pumpAndSettle();
 
       expect(find.text('Today timeline preview'), findsOneWidget);

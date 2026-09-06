@@ -495,6 +495,50 @@ describe("Skin-care Worker", () => {
     expect(json.warnings).toContain("ai_returned_no_product_recommendations");
   });
 
+  test("recommendation repair failure is identified without reporting routine success", async () => {
+    const key = "users/uid-1/onboarding/skin_face/face.jpg";
+    const calls: FetchCall[] = [];
+    stubGeminiResponses([
+      geminiSuccess(JSON.stringify({
+        recommendedProducts: [{
+          name: "Gentle Wash",
+          brand: "Example",
+          category: "cleanser",
+          estimatedPrice: "₹300",
+          currencyCode: "INR",
+          reason: "Gentle cleanser",
+        }],
+        warnings: [],
+      })),
+      {
+        status: 503,
+        body: { error: { status: "UNAVAILABLE", message: "high demand" } },
+      },
+    ], calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        recommendationOnly: true,
+        facePhotoR2Key: key,
+        skinType: "oily",
+        skinConcerns: ["pimples"],
+        budget: "low",
+        countryCode: "IN",
+        countryName: "India",
+        currencyCode: "INR",
+      }),
+      makeEnv({ [key]: { contentType: "image/jpeg" } }) as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toEqual([]);
+    expect(json.warnings).toContain(
+      "ai_recommendation_repair_failed:provider_high_demand",
+    );
+    expect(calls).toHaveLength(3);
+  });
+
   test("missing metadata with .jpg key is accepted", async () => {
     const key = "users/uid-1/onboarding/skin_products/products.jpg";
     stubGemini(JSON.stringify({

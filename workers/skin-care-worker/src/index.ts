@@ -1371,21 +1371,42 @@ function geminiCandidateText(providerBody: unknown): string {
 }
 
 function logProviderFailure(
+  requestId: string,
+  stage: string,
   model: string,
   failure: ProviderFailure,
   attempt: "primary" | "fallback",
+  elapsedMs: number,
 ): void {
   console.warn(JSON.stringify({
-    event: "skin_care_provider_request_failed",
-    provider: "gemini",
+    event: "SkinCareAI",
+    requestId,
+    stage,
     model: compactProviderToken(model, "unknown"),
     attempt,
     status: failure.providerStatus ?? null,
-    providerCode: compactProviderToken(
-      failure.providerCode,
-      failure.errorCode,
-    ),
-    errorCode: failure.errorCode,
+    failureKind: failure.errorCode,
+    elapsedMs,
+  }));
+}
+
+function logProviderSuccess(
+  requestId: string,
+  stage: string,
+  model: string,
+  attempt: "primary" | "fallback",
+  status: number,
+  elapsedMs: number,
+): void {
+  console.log(JSON.stringify({
+    event: "SkinCareAI",
+    requestId,
+    stage,
+    model: compactProviderToken(model, "unknown"),
+    attempt,
+    status,
+    failureKind: null,
+    elapsedMs,
   }));
 }
 
@@ -1467,7 +1488,16 @@ function shouldTryFallback(failure: ProviderFailure): boolean {
     failure.errorCode !== "provider_invalid_request";
 }
 
-async function callGeminiWithFallback(prompt: string, imageParts: any[], env: Env, deadline = Date.now() + GEMINI_REQUEST_TIMEOUT_MS): Promise<string> {
+async function callGeminiWithFallback(
+  prompt: string,
+  imageParts: any[],
+  env: Env,
+  deadline = Date.now() + GEMINI_REQUEST_TIMEOUT_MS,
+  diagnostics: { requestId: string; stage: string } = {
+    requestId: crypto.randomUUID().slice(0, 8),
+    stage: "unspecified",
+  },
+): Promise<string> {
   const provider = env.AI_PROVIDER || "gemini";
   if (provider !== "gemini") {
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
@@ -1477,7 +1507,11 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
   const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash";
   const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-3.5-flash";
 
-  const fetchGemini = async (model: string): Promise<string> => {
+  const fetchGemini = async (
+    model: string,
+    attempt: "primary" | "fallback",
+  ): Promise<string> => {
+    const attemptStartedAt = Date.now();
     const modelId = model.replace(/^models\//, "");
     const url =
       `https://generativelanguage.googleapis.com/v1beta/models/` +
@@ -1537,6 +1571,14 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
           providerCode: "invalid_model_json",
         });
       }
+      logProviderSuccess(
+        diagnostics.requestId,
+        diagnostics.stage,
+        model,
+        attempt,
+        response.status,
+        Date.now() - attemptStartedAt,
+      );
       return text;
     } catch (error) {
       if (error instanceof ProviderRequestError) throw error;
@@ -1553,7 +1595,26 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
   };
 
   try {
-    return await fetchGemini(primaryModel);
+    const startedAt = Date.now();
+    try {
+      return await fetchGemini(primaryModel, "primary");
+    } catch (error) {
+      const primaryFailure = error instanceof ProviderRequestError
+        ? error.failure
+        : {
+            errorCode: "provider_unavailable" as const,
+            providerCode: "unknown_failure",
+          };
+      logProviderFailure(
+        diagnostics.requestId,
+        diagnostics.stage,
+        primaryModel,
+        primaryFailure,
+        "primary",
+        Date.now() - startedAt,
+      );
+      throw error;
+    }
   } catch (error) {
     const primaryFailure = error instanceof ProviderRequestError
       ? error.failure
@@ -1561,14 +1622,32 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
           errorCode: "provider_unavailable" as const,
           providerCode: "unknown_failure",
         };
-    logProviderFailure(primaryModel, primaryFailure, "primary");
     if (
       fallbackModel &&
       fallbackModel !== primaryModel &&
       shouldTryFallback(primaryFailure)
     ) {
       try {
-        return await fetchGemini(fallbackModel);
+        const fallbackStartedAt = Date.now();
+        try {
+          return await fetchGemini(fallbackModel, "fallback");
+        } catch (fallbackError) {
+          const fallbackFailure = fallbackError instanceof ProviderRequestError
+            ? fallbackError.failure
+            : {
+                errorCode: "provider_unavailable" as const,
+                providerCode: "unknown_failure",
+              };
+          logProviderFailure(
+            diagnostics.requestId,
+            diagnostics.stage,
+            fallbackModel,
+            fallbackFailure,
+            "fallback",
+            Date.now() - fallbackStartedAt,
+          );
+          throw fallbackError;
+        }
       } catch (fallbackError) {
         const fallbackFailure = fallbackError instanceof ProviderRequestError
           ? fallbackError.failure
@@ -1576,7 +1655,6 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
               errorCode: "provider_unavailable" as const,
               providerCode: "unknown_failure",
             };
-        logProviderFailure(fallbackModel, fallbackFailure, "fallback");
         throw providerFailureToHttpError(fallbackFailure);
       }
     }
@@ -1585,6 +1663,7 @@ async function callGeminiWithFallback(prompt: string, imageParts: any[], env: En
 }
 
 async function handleProductAnalyze(request: Request, env: Env): Promise<Response> {
+  const requestId = crypto.randomUUID().slice(0, 8);
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
 
@@ -1644,7 +1723,13 @@ Return a JSON object:
   "warnings": []
 }`;
 
-  const text = await callGeminiWithFallback(prompt, imageParts, env);
+  const text = await callGeminiWithFallback(
+    prompt,
+    imageParts,
+    env,
+    undefined,
+    { requestId, stage: "product_analysis" },
+  );
   
   const parsed = parseAiJsonText(text);
   if (!parsed) {
@@ -1662,6 +1747,7 @@ Return a JSON object:
 }
 
 async function handleRoutineGenerate(request: Request, env: Env): Promise<Response> {
+  const requestId = crypto.randomUUID().slice(0, 8);
   const deadline = Date.now() + GEMINI_REQUEST_TIMEOUT_MS;
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request, ROUTINE_GENERATE_JSON_MAX_BYTES);
@@ -1878,7 +1964,16 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
   "warnings": ["Patch test new products", "Any other warnings"]
 }`;
 
-  const text = await callGeminiWithFallback(prompt, imageParts, env, deadline);
+  const text = await callGeminiWithFallback(
+    prompt,
+    imageParts,
+    env,
+    deadline,
+    {
+      requestId,
+      stage: recommendationOnly ? "recommendation" : "routine_generation",
+    },
+  );
 
   const parsed = parseAiJsonText(text);
   if (!parsed) {
@@ -1966,6 +2061,7 @@ Return ONLY strict JSON:
           imageParts,
           env,
           deadline,
+          { requestId, stage: "recommendation_repair" },
         );
         const repairParsed = parseAiJsonText(repairText);
         const repairedProducts = usableRecommendedProducts(
@@ -1984,13 +2080,17 @@ Return ONLY strict JSON:
           warnings.push("ai_product_recommendations_repaired");
         }
       } catch (error) {
+        const failureKind = error instanceof HttpError
+          ? error.errorCode
+          : error instanceof Error
+            ? error.name
+            : "unknown";
+        warnings.push(`ai_recommendation_repair_failed:${failureKind}`);
         console.warn(JSON.stringify({
           event: "skin_care_product_recommendation_repair_failed",
-          errorType: error instanceof HttpError
-            ? error.errorCode
-            : error instanceof Error
-              ? error.name
-              : "unknown",
+          requestId,
+          stage: "recommendation_repair",
+          errorType: failureKind,
         }));
       }
     }

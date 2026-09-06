@@ -7,6 +7,7 @@ import 'package:optivus/features/onboarding/presentation/step14_presentation_mod
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_step_11_today_ready.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_step_shell.dart';
+import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/features/recovery/screens/onboarding_startup_status_screens.dart';
 import 'package:optivus/models/onboarding_completion_job.dart';
 import 'package:optivus/models/onboarding_draft.dart';
@@ -1508,6 +1509,47 @@ void main() {
 
   // ── GROUP 6: Responsive & Layout Geometry Tests (Tests BD–BM) ───────────────
   group('AH-F021 Responsive & Layout Geometry Tests (Tests BD–BM)', () {
+    testWidgets('Step 14 header stays fixed while review body scrolls', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(393, 500);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final draft = buildReadyDraft(
+        blocks: [
+          for (var index = 0; index < 18; index++)
+            TimelineBlockDraft(
+              id: 'scroll-block-$index',
+              section: 'classes',
+              title: 'Scheduled activity $index',
+              startMinute: 420 + index * 20,
+              endMinute: 435 + index * 20,
+              repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+              blockType: TimelineBlockDraft.hardBlockKey,
+            ),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestHost(draft: draft, size: const Size(393, 500)),
+      );
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const ValueKey('step14-header'));
+      final readiness = find.byKey(const ValueKey('step14-readiness'));
+      final headerTopBefore = tester.getTopLeft(header).dy;
+      final readinessTopBefore = tester.getTopLeft(readiness).dy;
+
+      await tester.drag(
+        find.byType(OnboardingScrollView),
+        const Offset(0, -220),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.getTopLeft(header).dy, closeTo(headerTopBefore, 0.01));
+      expect(tester.getTopLeft(readiness).dy, lessThan(readinessTopBefore));
+    });
+
     for (final size in [
       const Size(360, 800),
       const Size(393, 873),

@@ -42,6 +42,8 @@ void main() {
     TestUploadInteractionController? interactionController,
     DeviceCountry? detectedCountry,
     RegionSettings? regionSettings,
+    UploadedAssetRepository? assetRepository,
+    ValueNotifier<bool>? showStep,
     bool overrideSkinCareClient = true,
   }) {
     final effectiveInteraction =
@@ -68,6 +70,8 @@ void main() {
         onboardingUploadInteractionProvider.overrideWith(
           (ref) => effectiveInteraction,
         ),
+        if (assetRepository != null)
+          uploadedAssetRepositoryProvider.overrideWithValue(assetRepository),
         deviceCountryServiceProvider.overrideWithValue(
           TestDeviceCountryService(detectedCountry),
         ),
@@ -80,7 +84,17 @@ void main() {
             return notifier;
           }),
       ],
-      child: const MaterialApp(home: Scaffold(body: OnboardingStep7())),
+      child: MaterialApp(
+        home: Scaffold(
+          body: showStep == null
+              ? const OnboardingStep7()
+              : ValueListenableBuilder<bool>(
+                  valueListenable: showStep,
+                  builder: (_, visible, _) =>
+                      visible ? const OnboardingStep7() : const SizedBox(),
+                ),
+        ),
+      ),
     );
   }
 
@@ -451,6 +465,29 @@ void main() {
           .skinCareSetupStep,
       1,
     );
+  });
+
+  testWidgets('choice disposal during async skip cleanup does not mutate', (
+    tester,
+  ) async {
+    final repository = _DelayedAssetRepository();
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: const OnboardingDraft(uid: 'uid-1', currentStep: 7),
+        assetRepository: repository,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Skip'));
+    await tester.pump();
+    expect(repository.fetchStarted, isTrue);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    repository.fetchGate.complete(const []);
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -862,6 +899,12 @@ void main() {
     expect(
       onboarding7FriendlyAiMessage('provider_invalid_image_payload', const []),
       'AI could not process this photo. Upload a clearer JPEG, PNG, or WEBP image.',
+    );
+    expect(
+      onboarding7FriendlyAiMessage(null, const [
+        'ai_recommendation_repair_failed:provider_high_demand',
+      ]),
+      "We found some products, but couldn't complete the required product set right now. Retry product recommendations.",
     );
   });
 
@@ -5720,6 +5763,106 @@ void main() {
   });
 
   testWidgets(
+    '60b. Routine retry reuses retained recommendations without face analysis',
+    (tester) async {
+      useAndroidWidth(tester);
+      final client = TestSkinCareAiClient(
+        routineResultsQueue: [
+          _productRecommendationResult(),
+          SkinCareAiRoutineResult.error(
+            'AI is busy right now. Try again in a moment.',
+            errorCode: 'provider_high_demand',
+          ),
+          _selectedProductRoutineResult(),
+        ],
+      );
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _noProductsDraft(
+            skinType: 'oily',
+            problems: const ['pimples'],
+            budget: 'medium',
+            withPhoto: true,
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Find products'));
+      await tester.pumpAndSettle();
+
+      expect(client.generateCalls, hasLength(2));
+      expect(find.text('Retry routine'), findsOneWidget);
+      expect(find.textContaining('Products are ready'), findsOneWidget);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .skinCareProductRecommendations,
+        isNotEmpty,
+      );
+
+      await tester.ensureVisible(find.text('Retry routine'));
+      await tester.tap(find.text('Retry routine'));
+      await tester.pumpAndSettle();
+
+      expect(client.generateCalls, hasLength(3));
+      expect(
+        client.generateCalls.where(
+          (call) => call['recommendationOnly'] == true,
+        ),
+        hasLength(1),
+      );
+      expect(find.text('Routine built'), findsOneWidget);
+    },
+  );
+
+  testWidgets('60c. Recommendation retry reruns only recommendation stage', (
+    tester,
+  ) async {
+    useAndroidWidth(tester);
+    final client = TestSkinCareAiClient(
+      routineResultsQueue: [
+        SkinCareAiRoutineResult.error(
+          'AI is busy right now. Try again in a moment.',
+          errorCode: 'provider_high_demand',
+        ),
+        _productRecommendationResult(),
+        _selectedProductRoutineResult(),
+      ],
+    );
+    await tester.pumpWidget(
+      buildTestWidget(
+        draft: _noProductsDraft(
+          skinType: 'oily',
+          problems: const ['pimples'],
+          budget: 'medium',
+          withPhoto: true,
+          blocks: [BaseTimelineDraft.defaultBathBlock()],
+        ),
+        client: client,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Find products'));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry recommendation'), findsOneWidget);
+    expect(client.generateCalls, hasLength(1));
+
+    await tester.tap(find.text('Retry recommendation'));
+    await tester.pumpAndSettle();
+    expect(client.generateCalls, hasLength(3));
+    expect(find.text('Routine built'), findsOneWidget);
+  });
+
+  testWidgets(
     '61. No-products face photo persists, restores, reaches AI, and deletes',
     (tester) async {
       useAndroidWidth(tester);
@@ -6119,6 +6262,106 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    '69b. Disposing during recommendation prevents stale draft mutation',
+    (tester) async {
+      useAndroidWidth(tester);
+      final completer = Completer<SkinCareAiRoutineResult>();
+      final client = TestSkinCareAiClient(routineCompleter: completer);
+      final showStep = ValueNotifier(true);
+      addTearDown(showStep.dispose);
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _noProductsDraft(
+            skinType: 'oily',
+            problems: const ['pimples'],
+            budget: 'medium',
+            withPhoto: true,
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          showStep: showStep,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      await tester.tap(find.text('Find products'));
+      await tester.pump(const Duration(milliseconds: 100));
+      showStep.value = false;
+      await tester.pump();
+      completer.complete(_productRecommendationResult());
+      await tester.pump();
+
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .skinCareProductRecommendations,
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    '69c. Disposing during routine generation prevents stale schedule insertion',
+    (tester) async {
+      useAndroidWidth(tester);
+      final completer = Completer<SkinCareAiRoutineResult>();
+      final client = TestSkinCareAiClient(routineCompleter: completer);
+      final showStep = ValueNotifier(true);
+      addTearDown(showStep.dispose);
+      await tester.pumpWidget(
+        buildTestWidget(
+          draft: _noProductsDraft(
+            skinType: 'oily',
+            problems: const ['pimples'],
+            budget: 'medium',
+            recommendations: _productRecommendationDraftsWithAlternatives(),
+            selectedProducts: const [
+              'Minimalist Gentle Cleanser',
+              'Minimalist Barrier Moisturizer',
+              'Minimalist SPF 50 Sunscreen',
+            ],
+            withPhoto: true,
+            blocks: [BaseTimelineDraft.defaultBathBlock()],
+          ),
+          client: client,
+          showStep: showStep,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(OnboardingStep7)),
+      );
+      final buildButton = find.byKey(
+        const ValueKey('onboarding-step7-generate-button'),
+      );
+      await tester.ensureVisible(buildButton);
+      await tester.tap(buildButton);
+      await tester.pump(const Duration(milliseconds: 100));
+      showStep.value = false;
+      await tester.pump();
+      completer.complete(_selectedProductRoutineResult());
+      await tester.pump();
+
+      expect(
+        container
+            .read(mockOnboardingProvider)
+            .draft
+            .baseTimeline
+            .confirmedBlocksForSection('skin_care'),
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   test('70. Sun cream is sunscreen and not moisturizer', () {
     final result = onboarding7ScheduleSkinCareRoutine(
@@ -6544,7 +6787,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Skin Care'), findsOneWidget);
-    expect(find.text('Find products'), findsOneWidget);
+    expect(find.text('Retry recommendation'), findsOneWidget);
     expect(find.text('How many times per day?'), findsOneWidget);
     await tester.ensureVisible(
       find.byKey(const ValueKey('onboarding-step7-generate-button')),
@@ -7363,6 +7606,25 @@ class TestUploadController extends UploadController {
 }
 
 class DummyAssetRepo implements UploadedAssetRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _DelayedAssetRepository implements UploadedAssetRepository {
+  final Completer<List<UploadedAsset>> fetchGate = Completer();
+  bool fetchStarted = false;
+
+  @override
+  Future<List<UploadedAsset>> fetchRecentAssets({
+    required String uid,
+    String? sourceFeature,
+    UploadedAssetPurpose? purpose,
+    int limit = 50,
+  }) {
+    fetchStarted = true;
+    return fetchGate.future;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

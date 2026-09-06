@@ -24,6 +24,7 @@ class _TestAuthRepo implements AuthRepository {
   Object? signOutError;
   Completer<void>? reloadGate;
   Completer<void>? resendGate;
+  Completer<void>? signupGate;
   final authEvents = StreamController<AuthUser?>.broadcast();
 
   _TestAuthRepo({required this.user});
@@ -41,11 +42,10 @@ class _TestAuthRepo implements AuthRepository {
   Future<AuthUser?> signInWithGoogle() async => null;
 
   @override
-  Future<AuthUser> signUp(
-    String email,
-    String password, {
-    String? name,
-  }) async => user!;
+  Future<AuthUser> signUp(String email, String password, {String? name}) async {
+    await signupGate?.future;
+    return user!;
+  }
 
   @override
   Future<AuthUser> signInAnonymously() async => user!;
@@ -221,6 +221,71 @@ void main() {
     expect(auth.lastVerificationEmailSent, isNotNull);
     expect(auth.verificationEmailSendStatus, VerificationEmailSendStatus.sent);
     expect(repo.verificationEmailSendCount, 1);
+  });
+
+  test(
+    'signup owns Firebase initial auth event until verification is sent once',
+    () async {
+      final repo = _TestAuthRepo(user: _defaultUser)
+        ..signupGate = Completer<void>();
+      final container = ProviderContainer(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repo),
+          mockUserProfileProvider.overrideWith(
+            (ref) => MockUserProfileNotifier()
+              ..loadSeedData(
+                UserProfile.empty(
+                  uid: _defaultUser.uid,
+                  email: _defaultUser.email ?? '',
+                ),
+              ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final signup = container
+          .read(authProvider.notifier)
+          .signup('Test User', 'testuser@example.com', 'Password123!');
+      repo.authEvents.add(_defaultUser);
+      await Future<void>.delayed(Duration.zero);
+      repo.authEvents.add(_defaultUser);
+      await Future<void>.delayed(Duration.zero);
+      repo.signupGate!.complete();
+      await signup;
+
+      expect(repo.verificationEmailSendCount, 1);
+      expect(
+        container.read(authProvider).verificationEmailSendStatus,
+        VerificationEmailSendStatus.sent,
+      );
+    },
+  );
+
+  test('unrelated UID auth event invalidates an in-flight signup', () async {
+    final repo = _TestAuthRepo(user: _defaultUser)
+      ..signupGate = Completer<void>();
+    final container = ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    final signup = container
+        .read(authProvider.notifier)
+        .signup('Test User', 'testuser@example.com', 'Password123!');
+    repo.authEvents.add(
+      const AuthUser(
+        uid: 'other-user',
+        email: 'other@example.com',
+        emailVerified: false,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    repo.signupGate!.complete();
+    await signup;
+
+    expect(repo.verificationEmailSendCount, 0);
+    expect(container.read(authProvider).user?.uid, 'other-user');
   });
 
   test(

@@ -35,6 +35,18 @@ void main() {
   });
 
   group('AH-F014 clean oracle and deterministic identity', () {
+    test('history projection uses one bounded batch call', () async {
+      final harness = _ColdRestartHarness('ah-f014-history-batch');
+      await harness.completeFromFreshProcess();
+
+      expect(harness.history.appendCalls, 1);
+      expect(
+        harness.history.logicalInsertCount,
+        cleanFingerprint.historyIds.length,
+      );
+      harness.dispose();
+    });
+
     test('clean uninterrupted completion creates the durable oracle', () {
       expect(cleanFingerprint.routineIds, hasLength(greaterThanOrEqualTo(5)));
       expect(cleanFingerprint.receiptIds, hasLength(1));
@@ -537,8 +549,8 @@ void main() {
         harness.routineDatabase.itemsByUid[harness.uid] = {
           for (final item in harness.plan.items) item.id: item,
         };
-        final expectedIds =
-            harness.plan.items.map((i) => i.id).toList()..sort();
+        final expectedIds = harness.plan.items.map((i) => i.id).toList()
+          ..sort();
         // Construct a pending receipt with cursor at 2 of N items
         final partialReceipt = routineProjectionReceiptForCategories(
           harness.plan.receipt,
@@ -547,11 +559,7 @@ void main() {
           existingItemIds: const [],
           repairedItemIds: const [],
           failedItemIds: const [],
-        ).copyWith(
-          status: 'pending',
-          cursor: 2,
-          projectedItemIds: expectedIds,
-        );
+        ).copyWith(status: 'pending', cursor: 2, projectedItemIds: expectedIds);
         harness.routineDatabase.receiptsByUid[harness.uid] = {
           harness.plan.projectionId: partialReceipt,
         };
@@ -1066,6 +1074,20 @@ class _CrashableHistoryRepository implements RoutineHistoryRepository {
     final before = await _delegate.fetchHistory(uid);
     await _delegate.appendHistory(uid, record);
     if (!before.any((item) => item.id == record.id)) logicalInsertCount++;
+  }
+
+  @override
+  Future<void> appendHistoryBatch(
+    String uid,
+    List<RoutineOccurrenceRecord> records,
+  ) async {
+    appendCalls++;
+    final before = await _delegate.fetchHistory(uid);
+    await _delegate.appendHistoryBatch(uid, records);
+    final existingIds = before.map((item) => item.id).toSet();
+    logicalInsertCount += records
+        .where((record) => !existingIds.contains(record.id))
+        .length;
   }
 
   @override

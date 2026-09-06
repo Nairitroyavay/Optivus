@@ -235,6 +235,17 @@ class AuthState {
   }
 }
 
+class _SignupCredentialHandoff {
+  final int operation;
+  final String normalizedEmail;
+  String? observedUid;
+
+  _SignupCredentialHandoff({
+    required this.operation,
+    required this.normalizedEmail,
+  });
+}
+
 class AuthNotifier extends StateNotifier<AuthState> {
   static const Duration _startupResolutionTimeout = Duration(seconds: 30);
   final AuthRepository _repository;
@@ -246,6 +257,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final Set<Timer> _startupTimers = <Timer>{};
   final Map<String, Future<void>> _reconstructionInFlightByUid = {};
   final Set<String> _verificationHandoffUids = <String>{};
+  _SignupCredentialHandoff? _signupCredentialHandoff;
 
   AuthNotifier(this._repository, Ref ref)
     : _ref = ref,
@@ -271,6 +283,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     _startupTimers.clear();
     _reconstructionInFlightByUid.clear();
     _verificationHandoffUids.clear();
+    _signupCredentialHandoff = null;
     _authSubscription.cancel();
     super.dispose();
   }
@@ -401,12 +414,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> signup(String name, String email, String password) async {
     final operation = ++_authOperationGeneration;
+    final handoff = _SignupCredentialHandoff(
+      operation: operation,
+      normalizedEmail: email.trim().toLowerCase(),
+    );
+    _signupCredentialHandoff = handoff;
     final previousUser = state.user;
     state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
     AuthUser? createdUser;
     try {
       final user = await _repository.signUp(email, password, name: name);
       if (!_isCurrentAuthOperation(operation)) return;
+      if (handoff.observedUid case final observedUid?
+          when observedUid != user.uid) {
+        _authOperationGeneration++;
+        return;
+      }
       createdUser = user;
       if (_needsEmailVerification(user)) {
         _clearStateForIdentityBoundary(user);
@@ -416,8 +439,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
           clearError: true,
         );
         try {
+          debugPrint('[EmailVerification] source=signup action=send attempt=1');
           await _repository.sendEmailVerification();
           if (!_isCurrentAuthOperation(operation)) return;
+          debugPrint('[EmailVerification] source=signup result=sent attempt=1');
           state = state.copyWith(
             clearError: true,
             lastVerificationEmailSent: DateTime.now(),
@@ -426,6 +451,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         } catch (error) {
           if (!_isCurrentAuthOperation(operation)) rethrow;
           final mapped = mapAuthError(error);
+          debugPrint(
+            '[EmailVerification] source=signup result=failed '
+            'reason=${mapped.reason.name} attempt=1',
+          );
           state = state.copyWith(
             user: user,
             status: AuthFlowStatus.signedInEmailUnverified,
@@ -454,6 +483,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       rethrow;
     } finally {
+      if (identical(_signupCredentialHandoff, handoff)) {
+        _signupCredentialHandoff = null;
+      }
       if (_isCurrentAuthOperation(operation) && state.isAuthenticating) {
         state = state.copyWith(
           status: statusFor(
@@ -889,6 +921,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final previousUser = state.user;
 
     if (user == null) {
+      _signupCredentialHandoff = null;
       _authOperationGeneration++;
       _backendRestoreGeneration++;
       _resetSignedOutState();
@@ -900,6 +933,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         previousUser != null && previousUser.uid != user.uid;
     final isInitialSignIn = previousUser == null;
     final isSameUidRefresh = previousUser?.uid == user.uid;
+    final signupOwnsAuthEvent = _claimExpectedSignupAuthEvent(user);
 
     if (isSameUidRefresh &&
         _needsEmailVerification(previousUser!) ==
@@ -922,7 +956,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    if (isAccountSwitch || isInitialSignIn) {
+    if ((isAccountSwitch || isInitialSignIn) && !signupOwnsAuthEvent) {
+      _signupCredentialHandoff = null;
       _authOperationGeneration++;
     }
 
@@ -1396,6 +1431,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   bool _isCurrentAuthOperation(int operation) {
     return mounted && operation == _authOperationGeneration;
+  }
+
+  bool _claimExpectedSignupAuthEvent(AuthUser user) {
+    final handoff = _signupCredentialHandoff;
+    if (handoff == null ||
+        handoff.operation != _authOperationGeneration ||
+        user.email?.trim().toLowerCase() != handoff.normalizedEmail ||
+        (handoff.observedUid != null && handoff.observedUid != user.uid)) {
+      return false;
+    }
+    handoff.observedUid = user.uid;
+    return true;
   }
 
   bool get _useFirebaseBackend {
