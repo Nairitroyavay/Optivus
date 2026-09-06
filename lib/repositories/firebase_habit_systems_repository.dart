@@ -392,118 +392,100 @@ class FirestoreHabitSystemsRepository implements HabitSystemsRepository {
         .collection('habitSystemProjections')
         .doc(projectionId);
 
-    final expectedIds = systems.map((s) => s.systemId).toList();
+    final expectedIds = systems.map((s) => s.systemId).toList()..sort();
 
     try {
-      final outcome = await _firestore.runTransaction((tx) async {
-        final projSnap = await tx.get(projectionRef);
-        final systemSnaps = <String, DocumentSnapshot<Map<String, dynamic>>>{};
-        for (final sys in systems) {
-          final docRef = _firestore.doc(
-            FirestoreUserPaths.habitSystem(ownerUid, sys.systemId),
-          );
-          final sysSnap = await tx.get(docRef);
-          systemSnaps[sys.systemId] = sysSnap;
-        }
+      // A collection read is one bounded RPC.  The prior transaction issued a
+      // dependent tx.get for every expected system, turning a large onboarding
+      // bundle into an N-round-trip operation.  Deterministic IDs make it safe
+      // to compare the complete owner projection locally and then write only
+      // missing or repairable records in bounded batches.
+      // These reads have no dependency on one another.  Reading the existing
+      // receipt preserves its creation time without reintroducing per-system
+      // transaction reads.
+      final initialState = await Future.wait<Object>([
+        fetchHabitSystems(ownerUid),
+        projectionRef.get(),
+      ]);
+      final existingSystems = initialState[0] as List<HabitSystemRecord>;
+      final existingReceipt =
+          initialState[1] as DocumentSnapshot<Map<String, dynamic>>;
+      final existingById = {
+        for (final system in existingSystems) system.systemId: system,
+      };
+      final createdSystemIds = <String>[];
+      final existingSystemIds = <String>[];
+      final repairedSystemIds = <String>[];
+      final failedSystemIds = <String>[];
+      final writes = <_HabitSystemProjectionWrite>[];
 
-        final createdSystemIds = <String>[];
-        final existingSystemIds = <String>[];
-        final repairedSystemIds = <String>[];
-        final failedSystemIds = <String>[];
-
-        for (final sys in systems) {
-          final docRef = _firestore.doc(
-            FirestoreUserPaths.habitSystem(ownerUid, sys.systemId),
-          );
-          final sysSnap = systemSnaps[sys.systemId];
-          final exists = sysSnap != null && sysSnap.exists;
-
-          if (exists) {
-            final existing = HabitSystemRecord.fromMap(
-              sysSnap.data()!,
-              documentId: sysSnap.id,
-            );
-            if (!_sameProjectionIdentity(existing, sys)) {
-              failedSystemIds.add(sys.systemId);
-              continue;
-            }
-            if (_sameProjectedSystem(existing, sys)) {
-              existingSystemIds.add(sys.systemId);
-            } else {
-              final repaired = sys.copyWith(
-                createdAt: existing.createdAt,
-                version: existing.version + 1,
-              );
-              final repairedData = _systemToFirestoreMap(repaired);
-              repairedData['createdAt'] = sysSnap.data()!['createdAt'];
-              repairedData['updatedAt'] = FieldValue.serverTimestamp();
-              tx.set(docRef, repairedData);
-              repairedSystemIds.add(sys.systemId);
-            }
-          } else {
-            final sysData = _systemToFirestoreMap(sys);
-            sysData['createdAt'] = FieldValue.serverTimestamp();
-            sysData['updatedAt'] = FieldValue.serverTimestamp();
-            sysData['version'] = 1;
-            tx.set(docRef, sysData);
-            createdSystemIds.add(sys.systemId);
-          }
-        }
-
-        final appliedSystemIds = <String>{
-          ...createdSystemIds,
-          ...existingSystemIds,
-          ...repairedSystemIds,
-        }.toList()..sort();
-
-        final existingApplied = projSnap.exists
-            ? List<String>.from(projSnap.data()?['appliedSystemIds'] ?? [])
-            : <String>[];
-        for (final id in appliedSystemIds) {
-          if (!existingApplied.contains(id)) {
-            existingApplied.add(id);
-          }
-        }
-
-        final status = failedSystemIds.isNotEmpty ? 'partial' : 'completed';
-
-        if (!projSnap.exists) {
-          final receipt = {
-            'projectionId': projectionId,
-            'ownerUid': ownerUid,
-            'sourceVersion': '1',
-            'expectedSystemIds': expectedIds,
-            'appliedSystemIds': existingApplied,
-            'failedSystemIds': failedSystemIds,
-            'status': status,
-            'createdAt': FieldValue.serverTimestamp(),
-            'updatedAt': FieldValue.serverTimestamp(),
-            if (status == 'completed')
-              'completedAt': FieldValue.serverTimestamp(),
-            'schemaVersion': 1,
-          };
-          tx.set(projectionRef, receipt);
+      for (final system in systems) {
+        final existing = existingById[system.systemId];
+        if (existing == null) {
+          writes.add(_HabitSystemProjectionWrite.create(system));
+          createdSystemIds.add(system.systemId);
+        } else if (!_sameProjectionIdentity(existing, system)) {
+          failedSystemIds.add(system.systemId);
+        } else if (_sameProjectedSystem(existing, system)) {
+          existingSystemIds.add(system.systemId);
         } else {
-          tx.update(projectionRef, {
-            'expectedSystemIds': expectedIds,
-            'appliedSystemIds': existingApplied,
-            'failedSystemIds': failedSystemIds,
-            'status': status,
-            'updatedAt': FieldValue.serverTimestamp(),
-            if (status == 'completed')
-              'completedAt': FieldValue.serverTimestamp(),
-          });
+          writes.add(_HabitSystemProjectionWrite.repair(existing, system));
+          repairedSystemIds.add(system.systemId);
         }
+      }
 
-        return _HabitProjectionBatchOutcome(
-          appliedSystemIds: appliedSystemIds,
-          createdSystemIds: createdSystemIds,
-          existingSystemIds: existingSystemIds,
-          repairedSystemIds: repairedSystemIds,
-          failedSystemIds: failedSystemIds,
-          status: status,
-        );
-      });
+      // Stay below Firestore's 500-write limit and leave the receipt until all
+      // item batches have committed. A process death before that receipt is
+      // harmless: a retry rereads the deterministic IDs and converges.
+      for (var start = 0; start < writes.length; start += 450) {
+        final batch = _firestore.batch();
+        for (final write in writes.skip(start).take(450)) {
+          final ref = _firestore.doc(
+            FirestoreUserPaths.habitSystem(ownerUid, write.system.systemId),
+          );
+          final data = _systemToFirestoreMap(write.system);
+          data['updatedAt'] = FieldValue.serverTimestamp();
+          if (write.existing == null) {
+            data['createdAt'] = FieldValue.serverTimestamp();
+            data['version'] = 1;
+          } else {
+            data['createdAt'] = write.existingCreatedAt;
+          }
+          batch.set(ref, data);
+        }
+        await batch.commit();
+      }
+
+      final appliedSystemIds = <String>{
+        ...createdSystemIds,
+        ...existingSystemIds,
+        ...repairedSystemIds,
+      }.toList()..sort();
+      final status = failedSystemIds.isNotEmpty ? 'partial' : 'completed';
+      final receipt = {
+        'projectionId': projectionId,
+        'ownerUid': ownerUid,
+        'sourceVersion': '1',
+        'expectedSystemIds': expectedIds,
+        'appliedSystemIds': appliedSystemIds,
+        'failedSystemIds': failedSystemIds..sort(),
+        'status': status,
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (status == 'completed') 'completedAt': FieldValue.serverTimestamp(),
+        'schemaVersion': 1,
+      };
+      await projectionRef.set({
+        ...receipt,
+        if (!existingReceipt.exists) 'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      final outcome = _HabitProjectionBatchOutcome(
+        appliedSystemIds: appliedSystemIds,
+        createdSystemIds: createdSystemIds,
+        existingSystemIds: existingSystemIds,
+        repairedSystemIds: repairedSystemIds,
+        failedSystemIds: failedSystemIds,
+        status: status,
+      );
       if (outcome.failedSystemIds.isNotEmpty) {
         return HabitSystemWriteResult.failure(
           'Habit system projection partially failed',
@@ -561,6 +543,31 @@ class _HabitProjectionBatchOutcome {
     required this.failedSystemIds,
     required this.status,
   });
+}
+
+class _HabitSystemProjectionWrite {
+  final HabitSystemRecord system;
+  final HabitSystemRecord? existing;
+
+  const _HabitSystemProjectionWrite._(this.system, this.existing);
+
+  factory _HabitSystemProjectionWrite.create(HabitSystemRecord system) =>
+      _HabitSystemProjectionWrite._(system, null);
+
+  factory _HabitSystemProjectionWrite.repair(
+    HabitSystemRecord existing,
+    HabitSystemRecord expected,
+  ) {
+    return _HabitSystemProjectionWrite._(
+      expected.copyWith(
+        createdAt: existing.createdAt,
+        version: existing.version + 1,
+      ),
+      existing,
+    );
+  }
+
+  DateTime? get existingCreatedAt => existing?.createdAt;
 }
 
 bool _sameProjectionIdentity(

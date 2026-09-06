@@ -105,6 +105,12 @@ class OnboardingCompletionJobService {
   final ValueNotifier<OnboardingCompletionJob?> activeJobNotifier =
       ValueNotifier<OnboardingCompletionJob?>(null);
 
+  /// Durable completion-job document writes issued by this service instance.
+  /// Tests use this operation counter to protect macro checkpointing without
+  /// coupling the contract to wall-clock network latency.
+  @visibleForTesting
+  int jobStatusWriteCount = 0;
+
   void cancelAll() {
     for (final owner in _operationGenerationByOwner.keys.toList()) {
       _operationGenerationByOwner[owner] =
@@ -229,11 +235,11 @@ class OnboardingCompletionJobService {
         }
         if (job.status == OnboardingJobStatus.completed &&
             job.stage == OnboardingCompletionStage.completed) {
-          await _verifyDurableCompletionOutputs(
-            uid: uid,
-            bundle: bundle,
-            reader: reader,
-          );
+          // A terminal job already contains the durable output accounting and
+          // was admitted only after the final authoritative proof below.  Do
+          // not rescan every projected collection on an idempotent repeat;
+          // terminalization still reads the profile/run/draft/bundle control
+          // documents atomically and rejects any non-terminal mismatch.
           return await _terminalizeCompletion(
             uid: uid,
             expectedRunId: runId,
@@ -340,6 +346,7 @@ class OnboardingCompletionJobService {
             job = await _markStageCompleted(
               job,
               OnboardingCompletionStage.verifyBundle,
+              persist: true,
             );
           }
 
@@ -407,14 +414,17 @@ class OnboardingCompletionJobService {
 
           checkSession();
           if (!job.isStageCompleted(OnboardingCompletionStage.verifyRoutines)) {
+            // Older persisted jobs may have been interrupted at this former
+            // micro-checkpoint. Preserve their recovery contract: validate
+            // the already-claimed routine projection before advancing. Fresh
+            // runs arrive directly from reconcileRoutines and defer the one
+            // full scan to the terminal proof below.
+            final requiresLegacyRoutineReadback =
+                job.stage.index >=
+                OnboardingCompletionStage.verifyRoutines.index;
             job = await _beginStage(
               job,
               OnboardingCompletionStage.verifyRoutines,
-            );
-            await _verifyRoutineProjection(
-              uid: uid,
-              bundle: bundle,
-              reader: reader,
             );
             if (job.failedRoutineIds.isNotEmpty ||
                 !_sameIds(job.expectedRoutineIds, <String>{
@@ -430,9 +440,21 @@ class OnboardingCompletionJobService {
                 })) {
               throw StateError('Routine accounting verification failed.');
             }
+            if (requiresLegacyRoutineReadback) {
+              await _verifyRoutineProjectionReadOnly(
+                uid: uid,
+                bundle: bundle,
+                reader: reader,
+              );
+            }
+            // projectRoutineHistory performs the receipt/item validation it
+            // needs before writing history. Fresh runs defer the single full
+            // routine scan to _verifyDurableCompletionOutputs at the terminal
+            // proof boundary, rather than doing the same scan twice.
             job = await _markStageCompleted(
               job,
               OnboardingCompletionStage.verifyRoutines,
+              persist: true,
             );
           }
 
@@ -443,6 +465,16 @@ class OnboardingCompletionJobService {
             job = await _beginStage(
               job,
               OnboardingCompletionStage.projectRoutineHistory,
+            );
+            // A legacy/interrupted producer can leave the routine receipt in
+            // a pending state after its item batch is durable.  History
+            // events may only advance a completed routine receipt. This is a
+            // receipt-only check (not a second item collection scan); normal
+            // completed receipts flow straight through.
+            await _finalizePendingRoutineReceiptForHistory(
+              uid: uid,
+              bundle: bundle,
+              reader: reader,
             );
             final historyResult = await _projectRoutineHistory(
               bundle: bundle,
@@ -482,6 +514,7 @@ class OnboardingCompletionJobService {
             job = await _markStageCompleted(
               job,
               OnboardingCompletionStage.verifyRoutineHistory,
+              persist: true,
             );
           }
 
@@ -573,6 +606,7 @@ class OnboardingCompletionJobService {
             job = await _markStageCompleted(
               job,
               OnboardingCompletionStage.verifyFrontendState,
+              persist: true,
             );
           }
 
@@ -583,6 +617,7 @@ class OnboardingCompletionJobService {
             job = await _beginStage(
               job,
               OnboardingCompletionStage.finalizeProfile,
+              persist: true,
             );
             _verifyFinalizationAccounting(job);
           }
@@ -730,22 +765,44 @@ class OnboardingCompletionJobService {
       }
       return;
     }
-    final receipt = await activeRepository.fetchProjectionReceipt(
+    var receipt = await activeRepository.fetchProjectionReceipt(
       uid,
       plan.projectionId,
     );
     final items = await activeRepository.fetchRoutineItems(uid);
-    final validation = const RoutineProjectionReceiptValidator().validate(
+    var validation = const RoutineProjectionReceiptValidator().validate(
       receipt: receipt,
       actualItems: items,
       ownerUid: uid,
       plan: plan,
     );
-    if (receipt == null ||
-        receipt.status != 'completed' ||
-        receipt.cursor != receipt.totalCount ||
-        !validation.isValid) {
+    if (receipt == null || !validation.isValid) {
       throw StateError('Routine projection terminal verification failed.');
+    }
+    if (receipt.status != 'completed' || receipt.cursor != receipt.totalCount) {
+      final finalizer = onboardingRepository;
+      if (receipt.status != 'pending' ||
+          finalizer is! RoutineProjectionReceiptFinalizer) {
+        throw StateError('Routine projection terminal verification failed.');
+      }
+      await (finalizer as RoutineProjectionReceiptFinalizer)
+          .finalizeRoutineProjectionReceipt(bundle: bundle);
+      receipt = await activeRepository.fetchProjectionReceipt(
+        uid,
+        plan.projectionId,
+      );
+      validation = const RoutineProjectionReceiptValidator().validate(
+        receipt: receipt,
+        actualItems: items,
+        ownerUid: uid,
+        plan: plan,
+      );
+      if (receipt == null ||
+          receipt.status != 'completed' ||
+          receipt.cursor != receipt.totalCount ||
+          !validation.isValid) {
+        throw StateError('Routine projection terminal verification failed.');
+      }
     }
     final acceptanceRepository = reader != null
         ? reader(conflictAcceptanceRepositoryProvider)
@@ -768,6 +825,41 @@ class OnboardingCompletionJobService {
         throw StateError('Conflict acceptance terminal verification failed.');
       }
     }
+  }
+
+  /// Completes a pending routine receipt before history event projection.
+  ///
+  /// This retains recovery for old micro-checkpoint jobs while allowing fresh
+  /// completions to avoid an additional routine-item readback before history
+  /// and the final terminal proof.
+  Future<void> _finalizePendingRoutineReceiptForHistory({
+    required String uid,
+    required OnboardingCompletionBundle bundle,
+    Reader? reader,
+  }) async {
+    final activeRepository = reader != null
+        ? reader(routineRepositoryProvider)
+        : routineRepository;
+    if (activeRepository == null) {
+      if (requireRoutineVerification) {
+        throw StateError('Routine repository is required for verification.');
+      }
+      return;
+    }
+    final plan = RoutineOnboardingProjection.build(bundle);
+    final receipt = await activeRepository.fetchProjectionReceipt(
+      uid,
+      plan.projectionId,
+    );
+    if (receipt?.status != 'pending') return;
+    final finalizer = onboardingRepository;
+    if (finalizer is! RoutineProjectionReceiptFinalizer) {
+      throw StateError(
+        'Pending routine projection receipt cannot be finalized.',
+      );
+    }
+    await (finalizer as RoutineProjectionReceiptFinalizer)
+        .finalizeRoutineProjectionReceipt(bundle: bundle);
   }
 
   Future<OnboardingCompletionJob> _terminalizeCompletion({
@@ -823,6 +915,9 @@ class OnboardingCompletionJobService {
         updatedAt: now,
       );
       await profileRepository.saveUserProfile(completedProfile);
+      if (persistedJob.status != OnboardingJobStatus.completed) {
+        jobStatusWriteCount += 1;
+      }
       _memoryStore.jobs['$uid:$expectedRunId'] = completedJob;
       _memoryStore.currentRunIds[uid] = expectedRunId;
       _memoryStore.currentRunStatuses[uid] = 'completed';
@@ -918,6 +1013,7 @@ class OnboardingCompletionJobService {
         if (persistedJob.status != OnboardingJobStatus.completed) {
           tx.set(profileRef, completedProfile.toFirestoreMap());
           tx.set(runRef, completedJob.toFirestoreMap());
+          jobStatusWriteCount += 1;
         }
         tx.set(pointerRef, _runPointerMap(completedJob, status: 'completed'));
         _logCompletionTiming(
@@ -967,88 +1063,6 @@ class OnboardingCompletionJobService {
       clearLastError: true,
       clearLastFailure: true,
     );
-  }
-
-  Future<void> _verifyRoutineProjection({
-    required String uid,
-    required OnboardingCompletionBundle bundle,
-    Reader? reader,
-  }) async {
-    final plan = RoutineOnboardingProjection.build(bundle);
-    final activeRepository = reader != null
-        ? reader(routineRepositoryProvider)
-        : routineRepository;
-    if (activeRepository == null) {
-      if (requireRoutineVerification) {
-        throw StateError('Routine repository is required for verification.');
-      }
-      return;
-    }
-    var receipt = await activeRepository.fetchProjectionReceipt(
-      uid,
-      plan.projectionId,
-    );
-    if (receipt == null ||
-        receipt.sourceBundleFingerprint != plan.fingerprint) {
-      throw StateError('Routine projection receipt verification failed.');
-    }
-    final items = await activeRepository.fetchRoutineItems(uid);
-    var validation = const RoutineProjectionReceiptValidator().validate(
-      receipt: receipt,
-      actualItems: items,
-      ownerUid: uid,
-      plan: plan,
-    );
-    if (!validation.isValid) {
-      throw StateError('Routine projection document verification failed.');
-    }
-    final acceptanceRepository = reader != null
-        ? reader(conflictAcceptanceRepositoryProvider)
-        : conflictAcceptanceRepository;
-    if (acceptanceRepository == null) {
-      if (bundle.expectedAcceptanceIds.isNotEmpty) {
-        throw StateError(
-          'Conflict acceptance repository is required for verification.',
-        );
-      }
-      return;
-    }
-    final storedAcceptances = await acceptanceRepository.fetchForOwner(uid);
-    final storedById = {
-      for (final acceptance in storedAcceptances)
-        acceptance.acceptanceId: acceptance,
-    };
-    for (final expected in plan.conflictAcceptances) {
-      final actual = storedById[expected.acceptanceId];
-      if (actual == null || !_matchesExpectedAcceptance(actual, expected)) {
-        throw StateError('Conflict acceptance read-back verification failed.');
-      }
-    }
-    if (receipt.status != 'completed' || receipt.cursor != receipt.totalCount) {
-      final finalizer = onboardingRepository;
-      if (receipt.status != 'pending' ||
-          finalizer is! RoutineProjectionReceiptFinalizer) {
-        throw StateError('Routine projection receipt verification failed.');
-      }
-      await (finalizer as RoutineProjectionReceiptFinalizer)
-          .finalizeRoutineProjectionReceipt(bundle: bundle);
-      receipt = await activeRepository.fetchProjectionReceipt(
-        uid,
-        plan.projectionId,
-      );
-      validation = const RoutineProjectionReceiptValidator().validate(
-        receipt: receipt,
-        actualItems: items,
-        ownerUid: uid,
-        plan: plan,
-      );
-      if (receipt == null ||
-          receipt.status != 'completed' ||
-          receipt.cursor != receipt.totalCount ||
-          !validation.isValid) {
-        throw StateError('Routine projection receipt verification failed.');
-      }
-    }
   }
 
   Future<RoutineOnboardingEventProjectionResult> _projectRoutineHistory({
@@ -1131,10 +1145,13 @@ class OnboardingCompletionJobService {
 
   Future<OnboardingCompletionJob> _markStageCompleted(
     OnboardingCompletionJob job,
-    OnboardingCompletionStage stage,
-  ) async {
+    OnboardingCompletionStage stage, {
+    bool persist = false,
+  }) async {
     final next = _stageCompletedCopy(job, stage);
-    await _saveJobStatus(next);
+    if (persist) {
+      await _saveJobStatus(next);
+    }
     _logCompletionTiming(stage.name, next.updatedAt.difference(job.updatedAt));
     return next;
   }
@@ -1184,8 +1201,9 @@ class OnboardingCompletionJobService {
 
   Future<OnboardingCompletionJob> _beginStage(
     OnboardingCompletionJob job,
-    OnboardingCompletionStage stage,
-  ) async {
+    OnboardingCompletionStage stage, {
+    bool persist = false,
+  }) async {
     if (job.stage.index > stage.index &&
         job.stage != OnboardingCompletionStage.completed) {
       throw StateError(
@@ -1206,7 +1224,9 @@ class OnboardingCompletionJobService {
       updatedAt: DateTime.now(),
       clearLastError: true,
     );
-    await _saveJobStatus(next);
+    if (persist) {
+      await _saveJobStatus(next);
+    }
     return next;
   }
 
@@ -1308,6 +1328,7 @@ class OnboardingCompletionJobService {
     bool activate = false,
   }) async {
     activeJobNotifier.value = job;
+    jobStatusWriteCount += 1;
     if (firestore != null) {
       if (activate) {
         final batch = firestore!.batch();

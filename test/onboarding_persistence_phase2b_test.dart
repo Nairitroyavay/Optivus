@@ -293,6 +293,10 @@ void main() {
       read: container.read,
       bundle: bundle,
     );
+    await const OnboardingFrontendHydrationService().reloadControllers(
+      read: container.read,
+      bundle: bundle,
+    );
 
     expect(result.changed, isTrue);
     expect(container.read(mockRoutineProvider), isNotEmpty);

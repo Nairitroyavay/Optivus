@@ -139,19 +139,10 @@ class OnboardingFrontendHydrationService {
         .map((system) => system.systemId)
         .toSet();
     final firebaseMode = !read(fakeDataAllowedProvider);
-    final routineBefore = read(
-      routineNotifierProvider,
-    ).items.map((item) => item.id).toSet();
-
     read(mockUserProfileProvider.notifier).applyOnboardingBundle(bundle);
     final mockRoutineIds = firebaseMode
         ? const <String>[]
         : read(mockRoutineProvider.notifier).mergeMissing(routineItems);
-    await read(routineNotifierProvider.notifier).loadForOwner(bundle.uid);
-    final routineIds = read(routineNotifierProvider).items
-        .map((item) => item.id)
-        .where((id) => !routineBefore.contains(id))
-        .toList(growable: false);
     final goalIds = read(
       mockGoalProvider.notifier,
     ).mergeMissing(bundle.identityGoalSystems);
@@ -184,18 +175,13 @@ class OnboardingFrontendHydrationService {
       repairedHabitSystemIds = result.repairedSystemIds;
       failedHabitSystemIds = result.failedSystemIds;
       _verifyHabitProjectionWriteResult(result, expectedHabitSystemIds);
-      final persistedSystems = await repo.fetchHabitSystems(bundle.uid);
-      _verifyProjectedHabitSystemsPersisted(
-        persistedSystems,
-        habitSystemProjections,
-      );
     }
 
-    await reloadControllers(read: read, bundle: bundle);
-    verifyFrontendState(read: read, bundle: bundle);
-
     return OnboardingFrontendHydrationResult(
-      routineItemIds: routineIds,
+      // Remote controller hydration is owned by the later single
+      // reloadControllers checkpoint. Keeping this phase projection-only
+      // avoids loading the routine controller before all outputs exist.
+      routineItemIds: const [],
       mockRoutineItemIds: mockRoutineIds,
       goalIds: goalIds,
       expectedHabitSystemIds: expectedHabitSystemIds.toList()..sort(),

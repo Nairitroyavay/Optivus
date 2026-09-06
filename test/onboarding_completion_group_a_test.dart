@@ -274,6 +274,20 @@ void main() {
         expect(savedProfile!.onboardingInputCompleted, isTrue);
         expect(savedProfile.onboardingProjectionStatus, equals('completed'));
         expect(savedProfile.onboardingCompleted, isTrue);
+        // Activation, four completed macro checkpoints, a finalization-ready
+        // checkpoint, and terminalization. Micro-stage timing must never turn
+        // back into a durable write before and after each stage.
+        expect(jobService.jobStatusWriteCount, equals(7));
+
+        // A completed rerun is a terminal-proof check, not a second
+        // projection pipeline or another completion-job write.
+        final repeatedJob = await jobService.runCompletionJob(
+          uid: uid,
+          finalDraft: draft,
+          bundle: bundle,
+        );
+        expect(repeatedJob.status, equals(OnboardingJobStatus.completed));
+        expect(jobService.jobStatusWriteCount, equals(7));
       },
     );
   });

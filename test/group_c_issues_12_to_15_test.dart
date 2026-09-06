@@ -223,6 +223,7 @@ void main() {
 
         const service = OnboardingFrontendHydrationService();
         await service.hydrate(read: container.read, bundle: bundle);
+        await service.reloadControllers(read: container.read, bundle: bundle);
 
         final repo = container.read(habitSystemsRepositoryProvider);
         final systems = await repo.fetchHabitSystems('user_hydration');
@@ -273,10 +274,7 @@ void main() {
         expect(created.success, isTrue);
 
         await const OnboardingFrontendHydrationService()
-            .restoreVerifiedFrontendState(
-              read: container.read,
-              bundle: bundle,
-            );
+            .restoreVerifiedFrontendState(read: container.read, bundle: bundle);
 
         expect(habitRepo.reconcileCalled, isFalse);
         expect(
@@ -287,7 +285,7 @@ void main() {
     );
 
     test(
-      'OnboardingFrontendHydrationService reloads Habit Systems after reconcile',
+      'completion owns one controller reload after habit reconciliation',
       () async {
         final habitRepo = _DelayedVisibilityHabitSystemsRepository();
         final routineRepo = FakeRoutineRepository();
@@ -324,6 +322,10 @@ void main() {
           read: container.read,
           bundle: bundle,
         );
+        await const OnboardingFrontendHydrationService().reloadControllers(
+          read: container.read,
+          bundle: bundle,
+        );
 
         final expectedIds = HabitSystemOnboardingProjection.build(
           bundle,
@@ -337,7 +339,7 @@ void main() {
 
         expect(habitRepo.reconcileCalled, isTrue);
         expect(habitRepo.fetchBeforeReconcileCount, equals(0));
-        expect(habitRepo.fetchAfterReconcileCount, greaterThanOrEqualTo(2));
+        expect(habitRepo.fetchAfterReconcileCount, equals(1));
         expect(visibleIds, containsAll(expectedIds));
       },
     );
