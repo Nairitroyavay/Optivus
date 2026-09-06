@@ -3818,6 +3818,49 @@ void main() {
     }
   });
 
+  test('27bb. Worker client preserves safe stage diagnostics', () async {
+    final cases = <(String, String)>[
+      ('recommendation', "We couldn't find products right now. Try again."),
+      (
+        'recommendation_repair',
+        "We found products, but couldn't complete the required set.",
+      ),
+      (
+        'routine_generation',
+        "Products are ready, but we couldn't build your routine right now.",
+      ),
+    ];
+
+    for (final (stage, message) in cases) {
+      final client = WorkerSkinCareAiClient(
+        baseUrl: 'https://skin-care-worker.test',
+        client: MockClient(
+          (_) async => http.Response(
+            jsonEncode({
+              'error': 'provider_high_demand',
+              'message': 'Provider failure.',
+              'stage': stage,
+              'requestId': 'req-1234',
+            }),
+            503,
+          ),
+        ),
+      );
+      final result = await client.generateRoutine(
+        uid: 'uid-1',
+        idToken: 'token',
+        params: const {
+          'typedProductNames': ['Cleanser'],
+        },
+      );
+
+      expect(result.errorCode, 'provider_high_demand');
+      expect(result.errorStage, stage);
+      expect(result.requestId, 'req-1234');
+      expect(result.errorMessage, message);
+    }
+  });
+
   test(
     '27c. Worker client times out safely without fabricating output',
     () async {

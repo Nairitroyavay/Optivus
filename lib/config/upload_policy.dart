@@ -1,6 +1,6 @@
 import 'package:optivus/models/uploaded_asset.dart';
 
-enum UploadImageProfileKind { normal, routineAiImport }
+enum UploadImageProfileKind { normal, routineAiImport, skinFaceAi }
 
 class UploadImagePolicy {
   final UploadImageProfileKind kind;
@@ -27,6 +27,7 @@ class UploadImagePolicy {
 
   static const int profilePhotoMaxBytes = 5 * 1024 * 1024;
   static const int routineAiImportMaxBytes = 15 * 1024 * 1024;
+  static const int skinFaceAiMaxBytes = 4 * 1024 * 1024;
 
   static const normal = UploadImagePolicy(
     kind: UploadImageProfileKind.normal,
@@ -55,13 +56,26 @@ class UploadImagePolicy {
     unsupportedContentTypeMessage: 'Please upload JPEG, PNG, or WEBP for now.',
   );
 
+  static const skinFaceAi = UploadImagePolicy(
+    kind: UploadImageProfileKind.skinFaceAi,
+    maxBytes: skinFaceAiMaxBytes,
+    maxLongestSide: 2048,
+    minLongestSideAfterResize: 1200,
+    initialJpegQuality: 92,
+    minJpegQuality: 82,
+    supportedContentTypes: {'image/jpeg', 'image/png', 'image/webp'},
+    tooLargeMessage:
+        'This face photo is too large. Please upload a clearer photo under 4 MB.',
+    unsupportedContentTypeMessage: 'Please upload JPEG, PNG, or WEBP for now.',
+  );
+
   static UploadImagePolicy forPurpose(UploadedAssetPurpose purpose) {
     return switch (purpose) {
+      UploadedAssetPurpose.skinFace => skinFaceAi,
       UploadedAssetPurpose.classTimetable ||
       UploadedAssetPurpose.workSchedule ||
       UploadedAssetPurpose.eatingMenu ||
       UploadedAssetPurpose.skinCare ||
-      UploadedAssetPurpose.skinFace ||
       UploadedAssetPurpose.skinProducts => routineAiImport,
       UploadedAssetPurpose.profilePhoto => normal,
     };

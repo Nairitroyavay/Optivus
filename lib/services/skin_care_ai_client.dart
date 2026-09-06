@@ -31,6 +31,8 @@ class SkinCareAiProductResult {
   final List<String> warnings;
   final String? errorMessage;
   final String? errorCode;
+  final String? errorStage;
+  final String? requestId;
 
   bool get hasError => errorMessage != null;
   List<SkinCareDetectedProduct> get detectedProducts => products
@@ -43,13 +45,22 @@ class SkinCareAiProductResult {
     this.warnings = const [],
     this.errorMessage,
     this.errorCode,
+    this.errorStage,
+    this.requestId,
   });
 
-  factory SkinCareAiProductResult.error(String msg, {String? errorCode}) {
+  factory SkinCareAiProductResult.error(
+    String msg, {
+    String? errorCode,
+    String? errorStage,
+    String? requestId,
+  }) {
     return SkinCareAiProductResult(
       products: [],
       errorMessage: msg,
       errorCode: errorCode ?? msg,
+      errorStage: errorStage,
+      requestId: requestId,
     );
   }
 }
@@ -265,6 +276,8 @@ class SkinCareAiRoutineResult {
   final List<SkinCareRejectionExplanation> rejectionExplanations;
   final String? errorMessage;
   final String? errorCode;
+  final String? errorStage;
+  final String? requestId;
 
   final SkinCareRoutineResultStatus? _explicitResultStatus;
   final int? _explicitGeneratedCount;
@@ -288,6 +301,8 @@ class SkinCareAiRoutineResult {
     this.rejectionExplanations = const [],
     this.errorMessage,
     this.errorCode,
+    this.errorStage,
+    this.requestId,
     SkinCareRoutineResultStatus? resultStatus,
     int? generatedCount,
     int? acceptedCount,
@@ -321,7 +336,12 @@ class SkinCareAiRoutineResult {
     return SkinCareRoutineResultStatus.accepted;
   }
 
-  factory SkinCareAiRoutineResult.error(String msg, {String? errorCode}) {
+  factory SkinCareAiRoutineResult.error(
+    String msg, {
+    String? errorCode,
+    String? errorStage,
+    String? requestId,
+  }) {
     return SkinCareAiRoutineResult(
       routinePlans: [],
       morningRoutine: [],
@@ -334,6 +354,8 @@ class SkinCareAiRoutineResult {
       rejectionExplanations: [],
       errorMessage: msg,
       errorCode: errorCode,
+      errorStage: errorStage,
+      requestId: requestId,
       resultStatus: SkinCareRoutineResultStatus.rejected,
       generatedCount: 0,
       acceptedCount: 0,
@@ -653,6 +675,8 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
             endpoint: _SkinCareWorkerEndpoint.productAnalyze,
           ),
           errorCode: body['error'] as String?,
+          errorStage: body['stage'] as String?,
+          requestId: body['requestId'] as String?,
         );
       }
 
@@ -721,6 +745,8 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
             endpoint: _SkinCareWorkerEndpoint.routineGenerate,
           ),
           errorCode: rawError,
+          errorStage: body['stage'] as String?,
+          requestId: body['requestId'] as String?,
         );
       }
 
@@ -815,6 +841,7 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
     required _SkinCareWorkerEndpoint endpoint,
   }) {
     final rawError = body['error'] as String?;
+    final stage = body['stage'] as String?;
     final rawMessage = _stringValue(body['message']).toLowerCase();
 
     if (rawError == 'provider_unauthorized') {
@@ -832,6 +859,15 @@ class WorkerSkinCareAiClient implements SkinCareAiClient {
       return 'AI usage limit reached. Try again later.';
     }
     if (statusCode == 503 || rawError == 'provider_high_demand') {
+      if (stage == 'recommendation') {
+        return "We couldn't find products right now. Try again.";
+      }
+      if (stage == 'recommendation_repair') {
+        return "We found products, but couldn't complete the required set.";
+      }
+      if (stage == 'routine_generation') {
+        return "Products are ready, but we couldn't build your routine right now.";
+      }
       return 'AI is busy right now. Try again in a moment.';
     }
     if (rawError == 'too_many_photos') {

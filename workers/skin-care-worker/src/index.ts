@@ -4,6 +4,8 @@ const ROUTINE_GENERATE_JSON_MAX_BYTES = 64 * 1024;
 const IMAGE_MAX_BYTES = 15 * 1024 * 1024;
 const GEMINI_RESPONSE_MAX_BYTES = 1024 * 1024;
 const GEMINI_REQUEST_TIMEOUT_MS = 50_000;
+const GEMINI_PRIMARY_ATTEMPT_TIMEOUT_MS = 25_000;
+const GEMINI_FALLBACK_ATTEMPT_TIMEOUT_MS = 20_000;
 
 type OwnedSkinCareProduct = {
   name: string;
@@ -34,10 +36,19 @@ type ProviderFailure = {
 class HttpError extends Error {
   status: number;
   errorCode: string;
-  constructor(status: number, errorCode: string, message: string) {
+  stage?: string;
+  requestId?: string;
+  constructor(
+    status: number,
+    errorCode: string,
+    message: string,
+    diagnostics?: { stage?: string; requestId?: string },
+  ) {
     super(message);
     this.status = status;
     this.errorCode = errorCode;
+    this.stage = diagnostics?.stage;
+    this.requestId = diagnostics?.requestId;
   }
 }
 
@@ -1410,55 +1421,102 @@ function logProviderSuccess(
   }));
 }
 
-function providerFailureToHttpError(failure: ProviderFailure): HttpError {
+function logSkinCareImagePayload(
+  requestId: string,
+  stage: string,
+  bytes: number,
+  mimeType: string,
+  base64Length?: number,
+): void {
+  console.log(JSON.stringify({
+    event: "SkinCareImagePayload",
+    requestId,
+    stage,
+    bytes,
+    mimeType,
+    base64Length: base64Length ?? null,
+  }));
+}
+
+function logSkinCareRequestSummary(
+  requestId: string,
+  stage: string,
+  providerAttemptCount: number,
+  elapsedMs: number,
+  result: "success" | "error",
+  imageBytes?: number,
+): void {
+  console.log(JSON.stringify({
+    event: "SkinCareAIRequest",
+    requestId,
+    stage,
+    imageBytes: imageBytes ?? null,
+    providerAttemptCount,
+    elapsedMs,
+    result,
+  }));
+}
+
+function providerFailureToHttpError(
+  failure: ProviderFailure,
+  diagnostics?: { requestId: string; stage: string },
+): HttpError {
   switch (failure.errorCode) {
     case "provider_unauthorized":
       return new HttpError(
         502,
         failure.errorCode,
         "AI provider authorization failed.",
+        diagnostics,
       );
     case "provider_model_not_found":
       return new HttpError(
         502,
         failure.errorCode,
         "AI provider model is unavailable.",
+        diagnostics,
       );
     case "provider_quota_exceeded":
       return new HttpError(
         429,
         failure.errorCode,
         "AI provider quota was exceeded.",
+        diagnostics,
       );
     case "provider_timeout":
       return new HttpError(
         504,
         failure.errorCode,
         "AI provider request timed out.",
+        diagnostics,
       );
     case "provider_high_demand":
       return new HttpError(
         503,
         failure.errorCode,
         "AI provider is temporarily unavailable.",
+        diagnostics,
       );
     case "provider_invalid_image_payload":
       return new HttpError(
         502,
         failure.errorCode,
         "AI provider rejected the image payload.",
+        diagnostics,
       );
     case "provider_invalid_request":
       return new HttpError(
         502,
         failure.errorCode,
         "AI provider rejected the request.",
+        diagnostics,
       );
     case "provider_empty_candidates":
       return new HttpError(
         502,
         failure.errorCode,
         "AI provider returned no usable response.",
+        diagnostics,
       );
     case "provider_invalid_response":
     case "provider_invalid_json":
@@ -1466,18 +1524,21 @@ function providerFailureToHttpError(failure: ProviderFailure): HttpError {
         502,
         failure.errorCode,
         "AI provider returned an invalid response.",
+        diagnostics,
       );
     case "provider_unavailable":
       return new HttpError(
         503,
         failure.errorCode,
         "AI provider could not be reached.",
+        diagnostics,
       );
     default:
       return new HttpError(
         502,
         "provider_request_failed",
         "AI provider request failed.",
+        diagnostics,
       );
   }
 }
@@ -1486,6 +1547,47 @@ function shouldTryFallback(failure: ProviderFailure): boolean {
   return failure.errorCode !== "provider_unauthorized" &&
     failure.errorCode !== "provider_invalid_image_payload" &&
     failure.errorCode !== "provider_invalid_request";
+}
+
+type SkinCareAiStage =
+  | "product_analysis"
+  | "recommendation"
+  | "recommendation_repair"
+  | "routine_generation"
+  | "recommend_and_build"
+  | string;
+
+function generationConfigForStage(stage: SkinCareAiStage): Record<string, unknown> {
+  const maxOutputTokens = (() => {
+    if (stage === "recommendation_repair") return 1536;
+    if (stage === "product_analysis") return 2048;
+    if (stage === "recommendation") return 3072;
+    if (stage === "recommend_and_build") return 6144;
+    return 4096;
+  })();
+  return {
+    maxOutputTokens,
+    responseMimeType: "application/json",
+    temperature: 0,
+  };
+}
+
+function attemptTimeoutMs(
+  attempt: "primary" | "fallback",
+  deadline: number,
+  hasFallback: boolean,
+): number {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) return 0;
+  if (attempt === "fallback") {
+    return Math.max(1, Math.min(GEMINI_FALLBACK_ATTEMPT_TIMEOUT_MS, remaining));
+  }
+  const reservedForFallback = hasFallback ? GEMINI_FALLBACK_ATTEMPT_TIMEOUT_MS : 0;
+  const boundedPrimary = Math.min(GEMINI_PRIMARY_ATTEMPT_TIMEOUT_MS, remaining);
+  if (!hasFallback || remaining <= reservedForFallback) {
+    return Math.max(1, boundedPrimary);
+  }
+  return Math.max(1, Math.min(boundedPrimary, remaining - reservedForFallback));
 }
 
 async function callGeminiWithFallback(
@@ -1497,7 +1599,16 @@ async function callGeminiWithFallback(
     requestId: crypto.randomUUID().slice(0, 8),
     stage: "unspecified",
   },
+  options: { onProviderAttempt?: () => void } = {},
 ): Promise<string> {
+  const callStartedAt = Date.now();
+  let localProviderAttemptCount = 0;
+  const imageBytes = imageParts.reduce((sum, part) => {
+    const data = typeof part?.inlineData?.data === "string"
+      ? part.inlineData.data
+      : "";
+    return sum + Math.floor((data.length * 3) / 4);
+  }, 0);
   const provider = env.AI_PROVIDER || "gemini";
   if (provider !== "gemini") {
     throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
@@ -1506,6 +1617,7 @@ async function callGeminiWithFallback(
   const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
   const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash";
   const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-3.5-flash";
+  const hasFallback = Boolean(fallbackModel && fallbackModel !== primaryModel);
 
   const fetchGemini = async (
     model: string,
@@ -1517,10 +1629,12 @@ async function callGeminiWithFallback(
       `https://generativelanguage.googleapis.com/v1beta/models/` +
       `${encodeURIComponent(modelId)}:generateContent`;
     try {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
+      const timeoutMs = attemptTimeoutMs(attempt, deadline, hasFallback);
+      if (timeoutMs <= 0) {
         throw new ProviderRequestError({ errorCode: "provider_timeout", providerCode: "request_timeout" });
       }
+      localProviderAttemptCount += 1;
+      options.onProviderAttempt?.();
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -1529,13 +1643,9 @@ async function callGeminiWithFallback(
         },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }, ...imageParts] }],
-          generationConfig: {
-            maxOutputTokens: 8192,
-            responseMimeType: "application/json",
-            temperature: 0,
-          },
+          generationConfig: generationConfigForStage(diagnostics.stage),
         }),
-        signal: AbortSignal.timeout(Math.max(1, remaining)),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       const responseText = await readBoundedResponseText(response);
       if (!response.ok) {
@@ -1623,8 +1733,7 @@ async function callGeminiWithFallback(
           providerCode: "unknown_failure",
         };
     if (
-      fallbackModel &&
-      fallbackModel !== primaryModel &&
+      hasFallback &&
       shouldTryFallback(primaryFailure)
     ) {
       try {
@@ -1655,15 +1764,43 @@ async function callGeminiWithFallback(
               errorCode: "provider_unavailable" as const,
               providerCode: "unknown_failure",
             };
-        throw providerFailureToHttpError(fallbackFailure);
+        console.warn(JSON.stringify({
+          event: "SkinCareAIProviderFailurePair",
+          requestId: diagnostics.requestId,
+          stage: diagnostics.stage,
+          primaryFailureKind: primaryFailure.errorCode,
+          primaryStatus: primaryFailure.providerStatus ?? null,
+          fallbackFailureKind: fallbackFailure.errorCode,
+          fallbackStatus: fallbackFailure.providerStatus ?? null,
+        }));
+        logSkinCareRequestSummary(
+          diagnostics.requestId,
+          diagnostics.stage,
+          localProviderAttemptCount,
+          Date.now() - callStartedAt,
+          "error",
+          imageBytes,
+        );
+        throw providerFailureToHttpError(fallbackFailure, diagnostics);
       }
     }
-    throw providerFailureToHttpError(primaryFailure);
+    logSkinCareRequestSummary(
+      diagnostics.requestId,
+      diagnostics.stage,
+      localProviderAttemptCount,
+      Date.now() - callStartedAt,
+      "error",
+      imageBytes,
+    );
+    throw providerFailureToHttpError(primaryFailure, diagnostics);
   }
 }
 
 async function handleProductAnalyze(request: Request, env: Env): Promise<Response> {
   const requestId = crypto.randomUUID().slice(0, 8);
+  const startedAt = Date.now();
+  let providerAttemptCount = 0;
+  let imageBytes = 0;
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request);
 
@@ -1691,10 +1828,19 @@ async function handleProductAnalyze(request: Request, env: Env): Promise<Respons
     if (buffer.byteLength > IMAGE_MAX_BYTES) {
       throw new HttpError(413, "image_payload_too_large", `Image ${photoKey} exceeds 15MB limit.`);
     }
+    imageBytes += buffer.byteLength;
+    const base64 = arrayBufferToBase64(buffer);
+    logSkinCareImagePayload(
+      requestId,
+      "product_analysis",
+      buffer.byteLength,
+      contentType,
+      base64.length,
+    );
     imageParts.push({
       inlineData: {
         mimeType: contentType,
-        data: arrayBufferToBase64(buffer)
+        data: base64
       }
     });
   }
@@ -1729,6 +1875,7 @@ Return a JSON object:
     env,
     undefined,
     { requestId, stage: "product_analysis" },
+    { onProviderAttempt: () => { providerAttemptCount += 1; } },
   );
   
   const parsed = parseAiJsonText(text);
@@ -1740,6 +1887,14 @@ Return a JSON object:
     throw new HttpError(400, "no_products_detected", "We couldn't clearly identify any skin care products in the photos.");
   }
 
+  logSkinCareRequestSummary(
+    requestId,
+    "product_analysis",
+    providerAttemptCount,
+    Date.now() - startedAt,
+    "success",
+    imageBytes,
+  );
   return jsonResponse(request, env, { 
     products: parsed.products,
     warnings: parsed.warnings || []
@@ -1748,6 +1903,9 @@ Return a JSON object:
 
 async function handleRoutineGenerate(request: Request, env: Env): Promise<Response> {
   const requestId = crypto.randomUUID().slice(0, 8);
+  const startedAt = Date.now();
+  let providerAttemptCount = 0;
+  let imageBytes = 0;
   const deadline = Date.now() + GEMINI_REQUEST_TIMEOUT_MS;
   const user = await requireVerifiedFirebaseUser(request, env);
   const body = await readSmallJson(request, ROUTINE_GENERATE_JSON_MAX_BYTES);
@@ -1775,10 +1933,19 @@ async function handleRoutineGenerate(request: Request, env: Env): Promise<Respon
         if (buffer.byteLength > IMAGE_MAX_BYTES) {
           throw new HttpError(413, "image_payload_too_large", `Image ${body.facePhotoR2Key} exceeds 15MB limit.`);
         }
+        imageBytes += buffer.byteLength;
+        const base64 = arrayBufferToBase64(buffer);
+        logSkinCareImagePayload(
+          requestId,
+          "recommendation",
+          buffer.byteLength,
+          contentType,
+          base64.length,
+        );
         imageParts.push({
           inlineData: {
             mimeType: contentType,
-            data: arrayBufferToBase64(buffer)
+            data: base64
           }
         });
       }
@@ -1973,6 +2140,7 @@ Return ONLY a strict JSON object. routinePlans are authoritative. timelineBlocks
       requestId,
       stage: recommendationOnly ? "recommendation" : "routine_generation",
     },
+    { onProviderAttempt: () => { providerAttemptCount += 1; } },
   );
 
   const parsed = parseAiJsonText(text);
@@ -2058,10 +2226,11 @@ Return ONLY strict JSON:
       try {
         const repairText = await callGeminiWithFallback(
           repairPrompt,
-          imageParts,
+          [],
           env,
           deadline,
           { requestId, stage: "recommendation_repair" },
+          { onProviderAttempt: () => { providerAttemptCount += 1; } },
         );
         const repairParsed = parseAiJsonText(repairText);
         const repairedProducts = usableRecommendedProducts(
@@ -2147,6 +2316,14 @@ Return ONLY strict JSON:
         };
       });
   
+  logSkinCareRequestSummary(
+    requestId,
+    recommendationOnly ? "recommendation" : "routine_generation",
+    providerAttemptCount,
+    Date.now() - startedAt,
+    "success",
+    imageBytes,
+  );
   return jsonResponse(request, env, { 
     routinePlans,
     morningRoutine: parsed.morningRoutine || [],
@@ -2193,7 +2370,12 @@ export default {
     } catch (error) {
       const httpError = error instanceof HttpError ? error : null;
       if (httpError) {
-        return jsonResponse(request, env, { error: httpError.errorCode, message: httpError.message }, httpError.status);
+        return jsonResponse(request, env, {
+          error: httpError.errorCode,
+          message: httpError.message,
+          ...(httpError.stage ? { stage: httpError.stage } : {}),
+          ...(httpError.requestId ? { requestId: httpError.requestId } : {}),
+        }, httpError.status);
       }
       console.error(JSON.stringify({
         event: "skin_care_unexpected_error",

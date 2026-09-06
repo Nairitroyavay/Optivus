@@ -208,10 +208,25 @@ void main() {
   test('upload image policy sets profile and routine limits', () {
     expect(UploadImagePolicy.normal.maxBytes, 5 * 1024 * 1024);
     expect(UploadImagePolicy.routineAiImport.maxBytes, 15 * 1024 * 1024);
+    expect(UploadImagePolicy.skinFaceAi.maxBytes, 4 * 1024 * 1024);
     expect(UploadImagePolicy.normal.initialJpegQuality, 95);
     expect(UploadImagePolicy.normal.minJpegQuality, 80);
     expect(UploadImagePolicy.routineAiImport.initialJpegQuality, 100);
     expect(UploadImagePolicy.routineAiImport.minJpegQuality, 88);
+    expect(UploadImagePolicy.skinFaceAi.initialJpegQuality, 92);
+    expect(UploadImagePolicy.skinFaceAi.minJpegQuality, 82);
+    expect(
+      UploadImagePolicy.forPurpose(UploadedAssetPurpose.skinFace),
+      same(UploadImagePolicy.skinFaceAi),
+    );
+    expect(
+      UploadImagePolicy.forPurpose(UploadedAssetPurpose.skinProducts),
+      same(UploadImagePolicy.routineAiImport),
+    );
+    expect(
+      UploadImagePolicy.forPurpose(UploadedAssetPurpose.eatingMenu),
+      same(UploadImagePolicy.routineAiImport),
+    );
   });
 
   test('upload policy keeps Gemini inline cap below routine upload max', () {
@@ -274,6 +289,25 @@ void main() {
       expect(decoded, isNotNull);
       expect(decoded!.width, 4096);
       expect(decoded.height, closeTo(819, 1));
+    },
+  );
+
+  test(
+    'skin face image uses smaller AI face policy while preserving orientation bake',
+    () async {
+      final bytes = _jpegBytes(width: 5000, height: 3000);
+      final prepared = await ImagePrepareService().preparePickedFile(
+        XFile.fromData(bytes, name: 'face.jpg', mimeType: 'image/jpeg'),
+        purpose: UploadedAssetPurpose.skinFace,
+      );
+
+      expect(prepared, isNotNull);
+      expect(prepared!.contentType, 'image/jpeg');
+      expect(prepared.sizeBytes, lessThanOrEqualTo(4 * 1024 * 1024));
+      final decoded = image_lib.decodeImage(prepared.bytes);
+      expect(decoded, isNotNull);
+      expect(decoded!.width, 2048);
+      expect(decoded.height, closeTo(1229, 1));
     },
   );
 

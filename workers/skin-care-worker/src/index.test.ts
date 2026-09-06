@@ -22,6 +22,11 @@ type FetchCall = {
   body: any;
 };
 
+function hasInlineImagePart(call: FetchCall): boolean {
+  const parts = call.body?.contents?.[0]?.parts;
+  return Array.isArray(parts) && parts.some((part: any) => part?.inlineData);
+}
+
 class MockR2Object {
   httpMetadata?: { contentType?: string };
   readonly size: number;
@@ -126,6 +131,14 @@ function geminiSuccess(text: string) {
       candidates: [{ content: { parts: [{ text }] } }],
     },
   };
+}
+
+function installAbortTimeoutRecorder(recorded: number[]) {
+  const original = AbortSignal.timeout;
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+    recorded.push(ms);
+    return original.call(AbortSignal, ms);
+  });
 }
 
 function richProductPayload(size: number) {
@@ -389,6 +402,8 @@ describe("Skin-care Worker", () => {
     expect(promptBody).not.toContain("Mamaearth");
     expect(promptBody).toContain("vitamin_c_serum");
     expect(promptBody).toContain("treatment_serum");
+    expect(hasInlineImagePart(calls[0])).toBe(true);
+    expect(calls[0].body.generationConfig.maxOutputTokens).toBe(3072);
   });
 
   test("incomplete recommendations are repaired and common categories are canonicalized", async () => {
@@ -450,6 +465,9 @@ describe("Skin-care Worker", () => {
     expect(JSON.stringify(calls[1].body)).toContain("Missing essential categories");
     expect(JSON.stringify(calls[1].body)).not.toContain("vitamin_c_serum");
     expect(JSON.stringify(calls[1].body)).not.toContain("treatment_serum");
+    expect(hasInlineImagePart(calls[0])).toBe(true);
+    expect(hasInlineImagePart(calls[1])).toBe(false);
+    expect(calls[1].body.generationConfig.maxOutputTokens).toBe(1536);
   });
 
   test("incomplete product recommendations are removed before returning", async () => {
@@ -537,14 +555,17 @@ describe("Skin-care Worker", () => {
       "ai_recommendation_repair_failed:provider_high_demand",
     );
     expect(calls).toHaveLength(3);
+    expect(hasInlineImagePart(calls[1])).toBe(false);
+    expect(hasInlineImagePart(calls[2])).toBe(false);
   });
 
   test("missing metadata with .jpg key is accepted", async () => {
     const key = "users/uid-1/onboarding/skin_products/products.jpg";
+    const calls: FetchCall[] = [];
     stubGemini(JSON.stringify({
       products: [{ name: "UV Aqua Gel", category: "sunscreen" }],
       warnings: [],
-    }));
+    }), calls);
 
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/products/analyze", {
@@ -556,6 +577,7 @@ describe("Skin-care Worker", () => {
 
     expect(response.status).toBe(200);
     expect(json.products[0].name).toBe("UV Aqua Gel");
+    expect(calls[0].body.generationConfig.maxOutputTokens).toBe(2048);
   });
 
   test.each([
@@ -735,6 +757,168 @@ describe("Skin-care Worker", () => {
     expect(response.status).toBe(502);
     expect(json.error).toBe("provider_unauthorized");
     expect(calls).toHaveLength(1);
+  });
+
+  test("primary recommendation succeeds without fallback", async () => {
+    const key = "users/uid-1/onboarding/skin_face/face.jpg";
+    const calls: FetchCall[] = [];
+    stubGemini(JSON.stringify({
+      recommendedProducts: completeIndianRecommendationProducts(),
+      warnings: [],
+    }), calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        recommendationOnly: true,
+        facePhotoR2Key: key,
+        skinType: "oily",
+        skinConcerns: ["pimples"],
+        budget: "low",
+        countryCode: "IN",
+        countryName: "India",
+        currencyCode: "INR",
+      }),
+      {
+        ...makeEnv({ [key]: { contentType: "image/jpeg" } }),
+        AI_FALLBACK_MODEL: "gemini-fallback",
+      } as any,
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain("gemini-test");
+  });
+
+  test("primary high demand falls back once and succeeds", async () => {
+    const calls: FetchCall[] = [];
+    stubGeminiResponses([
+      {
+        status: 503,
+        body: { error: { status: "UNAVAILABLE", message: "high demand" } },
+      },
+      geminiSuccess(JSON.stringify({
+        routinePlans: [
+          {
+            slotLabel: "morning",
+            title: "Morning",
+            steps: ["Cleanse"],
+            productNames: ["Cleanser"],
+          },
+        ],
+      })),
+    ], calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      {
+        ...makeEnv(),
+        AI_FALLBACK_MODEL: "gemini-fallback",
+      } as any,
+    );
+
+    expect(response.status).toBe(200);
+    expect(calls).toHaveLength(2);
+    expect(calls[0].url).toContain("gemini-test");
+    expect(calls[1].url).toContain("gemini-fallback");
+  });
+
+  test("primary cannot consume the fallback reserved attempt budget", async () => {
+    const calls: FetchCall[] = [];
+    const timeoutMs: number[] = [];
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    installAbortTimeoutRecorder(timeoutMs);
+    stubGeminiResponses([
+      {
+        status: 503,
+        body: { error: { status: "UNAVAILABLE", message: "high demand" } },
+      },
+      geminiSuccess(JSON.stringify({
+        routinePlans: [
+          {
+            slotLabel: "morning",
+            title: "Morning",
+            steps: ["Cleanse"],
+            productNames: ["Cleanser"],
+          },
+        ],
+      })),
+    ], calls);
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
+      const response = calls.length === 1
+        ? {
+            status: 503,
+            body: { error: { status: "UNAVAILABLE", message: "high demand" } },
+          }
+        : geminiSuccess(JSON.stringify({
+            routinePlans: [
+              {
+                slotLabel: "morning",
+                title: "Morning",
+                steps: ["Cleanse"],
+                productNames: ["Cleanser"],
+              },
+            ],
+          }));
+      if (calls.length === 1) now += 24_000;
+      return new Response(JSON.stringify(response.body), {
+        status: response.status,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      {
+        ...makeEnv(),
+        AI_FALLBACK_MODEL: "gemini-fallback",
+      } as any,
+    );
+
+    expect(response.status).toBe(200);
+    expect(timeoutMs[0]).toBeLessThanOrEqual(25_000);
+    expect(timeoutMs[1]).toBe(20_000);
+    expect(calls).toHaveLength(2);
+  });
+
+  test("both models high demand fail bounded without retry storm", async () => {
+    const calls: FetchCall[] = [];
+    stubGeminiResponses([
+      {
+        status: 503,
+        body: { error: { status: "UNAVAILABLE", message: "high demand" } },
+      },
+      {
+        status: 503,
+        body: { error: { status: "UNAVAILABLE", message: "still high demand" } },
+      },
+    ], calls);
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      {
+        ...makeEnv(),
+        AI_FALLBACK_MODEL: "gemini-fallback",
+      } as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(503);
+    expect(json.error).toBe("provider_high_demand");
+    expect(json.stage).toBe("routine_generation");
+    expect(json.requestId).toMatch(/^[a-f0-9-]{8}$/i);
+    expect(calls).toHaveLength(2);
   });
 
   test("provider quota failure is preserved after fallback also fails", async () => {
@@ -968,6 +1152,7 @@ describe("Skin-care Worker", () => {
   });
 
   test("routine generate returns routinePlans and compatibility timeline", async () => {
+    const calls: FetchCall[] = [];
     stubGemini(JSON.stringify({
       routinePlans: [
         {
@@ -978,7 +1163,7 @@ describe("Skin-care Worker", () => {
         },
       ],
       warnings: [],
-    }));
+    }), calls);
 
     const response = await worker.fetch(
       jsonRequest("/v1/skin-care/routine/generate", {
@@ -1004,6 +1189,7 @@ describe("Skin-care Worker", () => {
     expect(json.warnings).toContain("ai_returned_fewer_routines");
     expect(json.timelineBlocks).toHaveLength(1);
     expect(json.timelineBlocks[0].endMinute - json.timelineBlocks[0].startMinute).toBe(15);
+    expect(calls[0].body.generationConfig.maxOutputTokens).toBe(4096);
   });
 
   test("typed source prompt uses typedProductDetails and excludes photo products", async () => {
