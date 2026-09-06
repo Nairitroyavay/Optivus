@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/utils/auth_error_mapper.dart';
 import 'package:optivus/state/auth_state.dart';
@@ -89,8 +90,8 @@ class VerificationLifecyclePolicy {
       Duration(seconds: 3),
       Duration(seconds: 5),
       Duration(seconds: 8),
-      Duration(seconds: 20),
-      Duration(seconds: 30),
+      Duration(seconds: 10),
+      Duration(seconds: 10),
     ],
     this.resendCooldown = const Duration(seconds: 60),
     this.throttleBackoff = const [
@@ -135,6 +136,8 @@ class VerificationLifecycleController
   Future<void>? _checkInFlight;
   Future<void>? _resendInFlight;
   int _pollIndex = 0;
+  int _freshnessEpoch = 0;
+  int? _queuedFreshnessEpoch;
   bool _disposed = false;
   bool _detached = false;
 
@@ -173,20 +176,21 @@ class VerificationLifecycleController
     });
   }
 
-  void activate() {
+  void activate({bool check = true}) {
     if (_disposed || state.foreground || !_isEligible) return;
     _detached = false;
     state = state.copyWith(foreground: true);
     _pollIndex = 0;
     _reconcileResendDeadline();
     _startCountdownIfNeeded();
-    unawaited(checkNow());
+    if (check) unawaited(checkNow());
   }
 
   void pause() {
     if (_disposed || !state.foreground) return;
     _pollTimer?.cancel();
     _pollTimer = null;
+    _log('event=poll_cancelled reason=background');
     _countdownTimer?.cancel();
     _countdownTimer = null;
     state = state.copyWith(foreground: false);
@@ -194,11 +198,16 @@ class VerificationLifecycleController
 
   void resume() {
     if (_disposed || !_isEligible) return;
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    final epoch = ++_freshnessEpoch;
+    _log(
+      'event=resume freshnessEpoch=$epoch inFlight=${_checkInFlight != null}',
+    );
     if (!state.foreground) {
-      activate();
-      return;
+      activate(check: false);
     }
-    unawaited(checkNow());
+    unawaited(_requestCheck(reason: 'resume', epoch: epoch));
   }
 
   /// Synchronously abandons the screen-owned session without notifying a
@@ -212,6 +221,18 @@ class VerificationLifecycleController
   }
 
   Future<void> checkNow({bool manual = false}) {
+    return _requestCheck(
+      reason: manual ? 'manual' : 'poll',
+      epoch: _freshnessEpoch,
+      manual: manual,
+    );
+  }
+
+  Future<void> _requestCheck({
+    required String reason,
+    required int epoch,
+    bool manual = false,
+  }) {
     if (_disposed || !_canPoll || state.verificationConfirmed) {
       return Future.value();
     }
@@ -220,30 +241,63 @@ class VerificationLifecycleController
       return Future.value();
     }
     final existing = _checkInFlight;
-    if (existing != null) return existing;
+    if (existing != null) {
+      if (reason == 'resume' && !state.verificationConfirmed) {
+        _queuedFreshnessEpoch = _freshnessEpoch;
+        _log(
+          'event=fresh_followup_queued requestedEpoch=$_queuedFreshnessEpoch',
+        );
+      }
+      return existing;
+    }
 
     _pollTimer?.cancel();
     _pollTimer = null;
-    final future = _performCheck(manual: manual);
+    final future = _performCheck(manual: manual, reason: reason, epoch: epoch);
     _checkInFlight = future;
     future.whenComplete(() {
-      if (identical(_checkInFlight, future)) _checkInFlight = null;
+      if (!identical(_checkInFlight, future)) return;
+      _checkInFlight = null;
+      final queuedEpoch = _queuedFreshnessEpoch;
+      _queuedFreshnessEpoch = null;
+      if (queuedEpoch != null &&
+          _canPoll &&
+          state.foreground &&
+          !state.verificationConfirmed &&
+          queuedEpoch > epoch) {
+        _log('event=fresh_followup_started');
+        unawaited(
+          _requestCheck(reason: 'post_resume_freshness', epoch: queuedEpoch),
+        );
+      }
     });
     return future;
   }
 
-  Future<void> _performCheck({required bool manual}) async {
+  Future<void> _performCheck({
+    required bool manual,
+    required String reason,
+    required int epoch,
+  }) async {
     final uid = _expectedUid;
     if (uid == null) return;
+    final stopwatch = Stopwatch()..start();
+    _log('event=check_started reason=$reason epoch=$epoch attempt=$_pollIndex');
     state = state.copyWith(checking: true, clearMessage: manual);
     try {
       await _ref.read(authProvider.notifier).checkEmailVerification();
       if (!_canApply(uid)) return;
       final auth = _ref.read(authProvider);
       if (auth.user?.emailVerified == true || !auth.emailUnverified) {
+        _log(
+          'event=check_completed epoch=$epoch verified=true elapsedMs=${stopwatch.elapsedMilliseconds}',
+        );
         _stopAfterVerification();
         return;
       }
+      _log(
+        'event=check_completed epoch=$epoch verified=false elapsedMs=${stopwatch.elapsedMilliseconds}',
+      );
 
       // A successful authoritative reload that is still unverified is the
       // normal waiting state, never an invalid-link or credential error.
@@ -326,6 +380,7 @@ class VerificationLifecycleController
         messageKind: VerificationMessageKind.success,
       );
       _startCountdownIfNeeded();
+      _pollIndex = 0;
       _scheduleNextPoll();
     } catch (error) {
       if (!_canApply(uid)) return;
@@ -467,6 +522,8 @@ class VerificationLifecycleController
   void _stopAfterVerification() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    _queuedFreshnessEpoch = null;
+    _log('event=poll_cancelled reason=verified');
     _countdownTimer?.cancel();
     _countdownTimer = null;
     if (!_disposed) {
@@ -484,6 +541,8 @@ class VerificationLifecycleController
   void _stopSession() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    _queuedFreshnessEpoch = null;
+    _log('event=poll_cancelled reason=signout');
     _countdownTimer?.cancel();
     _countdownTimer = null;
     if (!_disposed) {
@@ -500,6 +559,12 @@ class VerificationLifecycleController
     _disposed = true;
     _pollTimer?.cancel();
     _countdownTimer?.cancel();
+    _queuedFreshnessEpoch = null;
+    _log('event=poll_cancelled reason=dispose');
     super.dispose();
+  }
+
+  void _log(String event) {
+    if (kDebugMode) debugPrint('[VerificationLifecycle] $event');
   }
 }

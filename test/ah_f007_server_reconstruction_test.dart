@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -232,7 +233,7 @@ void main() {
       'J transient backend read failure is retryable bootstrap failure',
       () async {
         final reconstructor = ServerReconstructor(
-          source: _ThrowingSource(StateError('network unavailable')),
+          source: _ThrowingSource(const SocketException('offline')),
         );
         await expectLater(
           reconstructor.reconstruct(uid: uid),
@@ -263,6 +264,22 @@ void main() {
             (error) => error.reason,
             'reason',
             ReconstructionBootstrapFailureReason.permissionDenied,
+          ),
+        ),
+      );
+    });
+
+    test('unknown bootstrap errors fail closed', () async {
+      final reconstructor = ServerReconstructor(
+        source: _ThrowingSource(StateError('unexpected local failure')),
+      );
+      await expectLater(
+        reconstructor.reconstruct(uid: uid),
+        throwsA(
+          isA<ReconstructionBootstrapException>().having(
+            (error) => error.reason,
+            'reason',
+            ReconstructionBootstrapFailureReason.unknown,
           ),
         ),
       );
@@ -969,25 +986,22 @@ void main() {
         );
         final source = _FailableSnapshotSource(
           snapshot,
-          error: FirebaseException(
-            plugin: 'cloud_firestore',
-            code: 'unavailable',
+          errorSequence: [
+            FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
+          ],
+        );
+        final container = _authContainer(
+          auth,
+          source,
+          reconstructionRetryPolicy: const ReconstructionRetryPolicy(
+            retryDelays: [Duration.zero, Duration.zero],
           ),
         );
-        final container = _authContainer(auth, source);
         addTearDown(container.dispose);
         addTearDown(auth.dispose);
 
         auth.emit(user);
         await pumpEventQueue(times: 20);
-        expect(
-          container.read(authProvider).status,
-          AuthFlowStatus.reconnectRequired,
-        );
-        expect(container.read(authProvider).reconstructionResult, isNull);
-
-        source.error = null;
-        await container.read(authProvider.notifier).retryBackendRestore();
         await pumpEventQueue(times: 20);
 
         expect(
@@ -1230,6 +1244,7 @@ ProviderContainer _authContainer(
   RoutineRepository? routineRepository,
   HabitSystemsRepository? habitSystemsRepository,
   RestoredUploadsController? restoredUploadsController,
+  ReconstructionRetryPolicy? reconstructionRetryPolicy,
 }) {
   return ProviderContainer(
     overrides: [
@@ -1267,6 +1282,10 @@ ProviderContainer _authContainer(
       serverReconstructorProvider.overrideWithValue(
         ServerReconstructor(source: source),
       ),
+      if (reconstructionRetryPolicy != null)
+        reconstructionRetryPolicyProvider.overrideWithValue(
+          reconstructionRetryPolicy,
+        ),
     ],
   )..read(authProvider);
 }
@@ -1364,16 +1383,19 @@ class _StreamAuthRepository implements AuthRepository {
 
 class _FailableSnapshotSource implements ServerReconstructionSource {
   final ServerReconstructionSnapshot snapshot;
-  Object? error;
+  final List<Object?> errorSequence;
 
-  _FailableSnapshotSource(this.snapshot, {this.error});
+  _FailableSnapshotSource(
+    this.snapshot, {
+    List<Object?> errorSequence = const [],
+  }) : errorSequence = List<Object?>.from(errorSequence);
 
   @override
   Future<ServerReconstructionSnapshot> load(
     String uid, {
     void Function(UserProfile? profile)? onProfileLoaded,
   }) async {
-    final err = error;
+    final err = errorSequence.isNotEmpty ? errorSequence.removeAt(0) : null;
     if (err != null) {
       throw err;
     }

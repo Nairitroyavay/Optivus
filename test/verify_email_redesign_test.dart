@@ -21,6 +21,7 @@ class _TestAuthRepo implements AuthRepository, AuthProfileEnrichmentRepository {
   int verificationEmailSendCount = 0;
   int displayNameUpdateCount = 0;
   bool verifyOnReload = false;
+  int? verifyOnReloadNumber;
   Object? reloadError;
   Object? resendError;
   Object? signOutError;
@@ -84,7 +85,8 @@ class _TestAuthRepo implements AuthRepository, AuthProfileEnrichmentRepository {
     reloadCount++;
     await reloadGate?.future;
     if (reloadError case final error?) throw error;
-    if (verifyOnReload && user != null) {
+    if ((verifyOnReload || verifyOnReloadNumber == reloadCount) &&
+        user != null) {
       user = AuthUser(
         uid: user!.uid,
         email: user!.email,
@@ -896,6 +898,44 @@ void main() {
       expect(repo.reloadCount, 6);
       await tester.pump(const Duration(milliseconds: 110));
       expect(repo.reloadCount, 7);
+    },
+  );
+
+  testWidgets(
+    'resume during an old check queues one fresh follow-up without concurrent reloads',
+    (tester) async {
+      await _setLogicalViewport(tester);
+      final firstReload = Completer<void>();
+      final repo = _TestAuthRepo(user: _defaultUser)..reloadGate = firstReload;
+      await tester.pumpWidget(
+        _buildScreen(repo: repo, policy: _fastPollingPolicy),
+      );
+      await tester.pump();
+      expect(repo.reloadCount, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(repo.reloadCount, 1);
+
+      repo
+        ..reloadGate = null
+        ..verifyOnReloadNumber = 2;
+      firstReload.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(repo.reloadCount, 2);
+      expect(repo.tokenRefreshCount, 1);
+      expect(
+        _container(
+          tester,
+        ).read(verificationLifecycleProvider).verificationConfirmed,
+        isTrue,
+      );
     },
   );
 

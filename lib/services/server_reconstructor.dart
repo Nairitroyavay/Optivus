@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
@@ -263,7 +266,7 @@ class ServerReconstructor {
       final reason = switch (error.code) {
         'permission-denied' =>
           ReconstructionBootstrapFailureReason.permissionDenied,
-        'unavailable' || 'deadline-exceeded' || 'network-request-failed' =>
+        'unavailable' || 'deadline-exceeded' =>
           ReconstructionBootstrapFailureReason.backendUnavailable,
         _ => ReconstructionBootstrapFailureReason.unknown,
       };
@@ -272,9 +275,19 @@ class ServerReconstructor {
         diagnosticCode: 'firestore_${error.code}',
         cause: error,
       );
+    } on TimeoutException {
+      throw const ReconstructionBootstrapException(
+        reason: ReconstructionBootstrapFailureReason.timeout,
+        diagnosticCode: 'server_read_timeout',
+      );
+    } on SocketException {
+      throw const ReconstructionBootstrapException(
+        reason: ReconstructionBootstrapFailureReason.backendUnavailable,
+        diagnosticCode: 'server_read_socket_failure',
+      );
     } catch (error) {
       throw ReconstructionBootstrapException(
-        reason: ReconstructionBootstrapFailureReason.backendUnavailable,
+        reason: ReconstructionBootstrapFailureReason.unknown,
         diagnosticCode: 'server_read_failed_${error.runtimeType}',
         cause: error,
       );

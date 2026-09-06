@@ -83,6 +83,25 @@ enum AuthFlowStatus {
 
 enum VerificationEmailSendStatus { pending, sent, failed }
 
+/// Bounded recovery for server-authoritative session reconstruction. The
+/// delays are injectable so the policy is testable without wall-clock waits.
+class ReconstructionRetryPolicy {
+  final List<Duration> retryDelays;
+
+  const ReconstructionRetryPolicy({
+    this.retryDelays = const [
+      Duration(milliseconds: 750),
+      Duration(milliseconds: 1750),
+    ],
+  });
+
+  int get maxAttempts => retryDelays.length + 1;
+}
+
+final reconstructionRetryPolicyProvider = Provider<ReconstructionRetryPolicy>(
+  (ref) => const ReconstructionRetryPolicy(),
+);
+
 void _logEmailVerificationDebug(String message) {
   if (kDebugMode) {
     debugPrint(message);
@@ -268,6 +287,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final Set<Timer> _startupTimers = <Timer>{};
   final Map<String, Future<void>> _reconstructionInFlightByUid = {};
   final Set<String> _verificationHandoffUids = <String>{};
+  int _reconstructionOperationSequence = 0;
   _SignupCredentialHandoff? _signupCredentialHandoff;
 
   AuthNotifier(this._repository, Ref ref)
@@ -1034,35 +1054,131 @@ class AuthNotifier extends StateNotifier<AuthState> {
     AuthUser user, {
     bool isAnonymousLink = false,
   }) async {
-    final existing = _reconstructionInFlightByUid[user.uid];
+    final authGeneration = _authOperationGeneration;
+    final reconstructionKey = _reconstructionKey(user.uid, authGeneration);
+    final existing = _reconstructionInFlightByUid[reconstructionKey];
     if (existing != null) {
       await existing;
       return;
     }
-    final operation = _loadOrCreateBackendUserState(
+    final operationId = ++_reconstructionOperationSequence;
+    _logReconstruction('event=operation_started operationId=$operationId');
+    final operation = _runReconstructionOperation(
       user,
+      authGeneration: authGeneration,
+      operationId: operationId,
       isAnonymousLink: isAnonymousLink,
     );
-    _reconstructionInFlightByUid[user.uid] = operation;
+    _reconstructionInFlightByUid[reconstructionKey] = operation;
     try {
-      await _bounded(operation, _startupResolutionTimeout);
-    } on TimeoutException {
-      _backendRestoreGeneration++;
-      if (!mounted || (state.user?.uid ?? user.uid) != user.uid) return;
-      state = state.copyWith(
-        user: user,
-        status: AuthFlowStatus.reconnectRequired,
-        errorMessage: "We couldn't reconnect yet.",
-        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
-        recoveryActions: const [RetryNetworkAction(), SignOutAction()],
-        startupReasonCode: 'startup_timeout',
-        clearStartupDestination: true,
-      );
+      await operation;
     } finally {
-      if (identical(_reconstructionInFlightByUid[user.uid], operation)) {
-        _reconstructionInFlightByUid.remove(user.uid);
+      if (identical(
+        _reconstructionInFlightByUid[reconstructionKey],
+        operation,
+      )) {
+        _reconstructionInFlightByUid.remove(reconstructionKey);
       }
     }
+  }
+
+  String _reconstructionKey(String uid, int authGeneration) {
+    return '$uid@$authGeneration';
+  }
+
+  Future<void> _runReconstructionOperation(
+    AuthUser user, {
+    required int authGeneration,
+    required int operationId,
+    required bool isAnonymousLink,
+  }) async {
+    final policy = _ref.read(reconstructionRetryPolicyProvider);
+    final started = Stopwatch()..start();
+
+    bool isCurrentOwner() {
+      // Auth events call this before they publish the new user into state.
+      // The operation generation is the identity boundary; a later sign-out
+      // or account switch increments it before any stale retry can apply.
+      return mounted && _authOperationGeneration == authGeneration;
+    }
+
+    for (var attempt = 1; attempt <= policy.maxAttempts; attempt++) {
+      if (!isCurrentOwner()) return;
+      _logReconstruction(
+        'event=attempt_started operationId=$operationId attempt=$attempt',
+      );
+      final attemptTimer = Stopwatch()..start();
+      try {
+        await _bounded(
+          _loadOrCreateBackendUserState(user, isAnonymousLink: isAnonymousLink),
+          _startupResolutionTimeout,
+        );
+        if (isCurrentOwner()) {
+          _logReconstruction(
+            'event=classified operationId=$operationId '
+            'attempt=$attempt totalElapsedMs=${started.elapsedMilliseconds}',
+          );
+        }
+        return;
+      } catch (error) {
+        if (!isCurrentOwner()) return;
+        final transient = _isTransientReconstructionFailure(error);
+        _logReconstruction(
+          'event=attempt_failed operationId=$operationId attempt=$attempt '
+          'failureKind=${_reconstructionFailureKind(error)} '
+          'elapsedMs=${attemptTimer.elapsedMilliseconds}',
+        );
+        if (!transient || attempt == policy.maxAttempts) {
+          _publishReconstructionFailure(user, error, attempts: attempt);
+          return;
+        }
+        final delay = policy.retryDelays[attempt - 1];
+        _logReconstruction(
+          'event=retry_scheduled operationId=$operationId '
+          'attempt=${attempt + 1} delayMs=${delay.inMilliseconds}',
+        );
+        await Future<void>.delayed(delay);
+      }
+    }
+  }
+
+  bool _isTransientReconstructionFailure(Object error) {
+    return error is TimeoutException ||
+        (error is ReconstructionBootstrapException &&
+            (error.reason ==
+                    ReconstructionBootstrapFailureReason.backendUnavailable ||
+                error.reason == ReconstructionBootstrapFailureReason.timeout));
+  }
+
+  String _reconstructionFailureKind(Object error) {
+    if (error is ReconstructionBootstrapException) {
+      return error.diagnosticCode;
+    }
+    if (error is TimeoutException) return 'timeout';
+    return 'unclassified_${error.runtimeType}';
+  }
+
+  void _publishReconstructionFailure(
+    AuthUser user,
+    Object error, {
+    required int attempts,
+  }) {
+    if (!mounted || state.user?.uid != user.uid) return;
+    _backendRestoreGeneration++;
+    _logReconstruction('event=retry_exhausted attempts=$attempts');
+    final bootstrap = error is ReconstructionBootstrapException ? error : null;
+    state = state.copyWith(
+      user: user,
+      status: AuthFlowStatus.reconnectRequired,
+      errorMessage: "We couldn't reconnect yet.",
+      onboardingFailureReason: OnboardingFailureReason.networkTimeout,
+      recoveryActions: const [RetryNetworkAction(), SignOutAction()],
+      startupReasonCode: bootstrap == null
+          ? 'startup_timeout'
+          : 'reconstruction_${bootstrap.reason.name}',
+      clearStartupDestination: true,
+      clearReconstructionResult: true,
+    );
   }
 
   Future<void> _loadOrCreateBackendUserState(
@@ -1415,19 +1531,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
           startupReasonCode: 'reconstruction_${reason.name}',
         );
       }
-    } on ReconstructionBootstrapException catch (error) {
+    } on ReconstructionBootstrapException {
       if (!_isCurrentRestore(restoreGeneration)) return;
-      state = state.copyWith(
-        user: user,
-        status: AuthFlowStatus.reconnectRequired,
-        errorMessage: "We couldn't reconnect yet.",
-        onboardingFailureReason: OnboardingFailureReason.networkTimeout,
-        recoveryActions: const [RetryNetworkAction(), SignOutAction()],
-        startupReasonCode: 'reconstruction_${error.reason.name}',
-        clearStartupDestination: true,
-        clearReconstructionResult: true,
-      );
+      // The UID-owned logical operation classifies and, when appropriate,
+      // retries this before publishing any router-visible recovery state.
+      rethrow;
     }
+  }
+
+  void _logReconstruction(String event) {
+    if (kDebugMode) debugPrint('[Reconstruction] $event');
   }
 
   bool _isCurrentRestore(int restoreGeneration) {
