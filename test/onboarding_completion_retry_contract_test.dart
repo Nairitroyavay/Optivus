@@ -9,6 +9,7 @@ import 'package:optivus/repositories/onboarding_repository.dart';
 import 'package:optivus/repositories/profile_repository.dart';
 import 'package:optivus/services/onboarding_completion_job_service.dart';
 import 'package:optivus/services/onboarding_completion_service.dart';
+import 'package:optivus/services/onboarding_run_identity.dart';
 
 void main() {
   test(
@@ -23,6 +24,21 @@ void main() {
           uid: uid,
           draft: draft,
           bundle: bundle,
+        ),
+        isTrue,
+      );
+      expect(
+        OnboardingCompletionService.bundleMatchesFinalDraft(
+          uid: uid,
+          draft: draft,
+          bundle: OnboardingCompletionBundle.fromMap(
+            Map<String, dynamic>.from(bundle.toMap())
+              ..['runId'] = legacyOnboardingRunId(
+                ownerUid: uid,
+                sourceFingerprint: draft.effectiveSourceFingerprint,
+                draftRevision: draft.revision,
+              ),
+          ),
         ),
         isTrue,
       );
@@ -91,7 +107,7 @@ void main() {
       final stored = await repository.fetchCompletionBundle(uid);
       expect(stored, isNotNull);
       expect(stored!.toFirestoreMap()['schemaVersion'], 2);
-      expect(stored.runId, matches(RegExp(r'^run_[a-f0-9]{40}$')));
+      expect(stored.runId, 'run_${draft.effectiveSourceFingerprint}');
     },
   );
 
@@ -179,6 +195,81 @@ void main() {
       expect(completed.ownerUid, firstFailure.ownerUid);
       expect(completed.sourceFingerprint, firstFailure.sourceFingerprint);
       expect(completed.draftRevision, firstFailure.draftRevision);
+    },
+  );
+
+  test(
+    'failed run can be replaced after edit while stale reclaim is denied and restart restores B',
+    () async {
+      const uid = 'completion-edit-replacement-user';
+      final repository = _ControlledBundleRepository();
+      final profileRepository = FakeProfileRepository();
+      final memoryStore = OnboardingCompletionMemoryStore();
+      final firstProcess = OnboardingCompletionJobService(
+        onboardingRepository: repository,
+        profileRepository: profileRepository,
+        memoryStore: memoryStore,
+      );
+      final draftA = _completedDraft(uid);
+      final bundleA = OnboardingCompletionService.buildBundle(draftA);
+      await profileRepository.saveUserProfile(
+        UserProfile.empty(uid: uid, email: 'replacement@example.com'),
+      );
+      repository.failAttempt(1, _failure(code: 'persist_bundle_failure'));
+
+      await expectLater(
+        firstProcess.runCompletionJob(
+          uid: uid,
+          finalDraft: draftA,
+          bundle: bundleA,
+        ),
+        throwsA(isA<OnboardingCompletionFailureException>()),
+      );
+      final failedA = await firstProcess.loadCurrentJob(uid);
+      expect(failedA?.status, OnboardingJobStatus.retryableFailure);
+
+      final draftB = draftA.copyWith(updatedAt: DateTime.utc(2026, 8, 29));
+      final bundleB = OnboardingCompletionService.buildBundle(draftB);
+      final completedB = await firstProcess.runCompletionJob(
+        uid: uid,
+        finalDraft: draftB,
+        bundle: bundleB,
+      );
+      expect(completedB.status, OnboardingJobStatus.completed);
+      expect(completedB.jobId, isNot(bundleA.runId));
+      expect(completedB.jobId, 'run_${draftB.effectiveSourceFingerprint}');
+
+      final restartedProcess = OnboardingCompletionJobService(
+        onboardingRepository: repository,
+        profileRepository: profileRepository,
+        memoryStore: memoryStore,
+      );
+      final restored = await restartedProcess.loadCurrentRunSnapshot(uid);
+      expect(restored.runId, completedB.jobId);
+      expect(restored.pointerStatus, 'completed');
+      expect(restored.job?.jobId, completedB.jobId);
+
+      final duplicateB = await restartedProcess.runCompletionJob(
+        uid: uid,
+        finalDraft: draftB,
+        bundle: bundleB,
+      );
+      expect(duplicateB.jobId, completedB.jobId);
+      expect(duplicateB.status, OnboardingJobStatus.completed);
+
+      await expectLater(
+        restartedProcess.runCompletionJob(
+          uid: uid,
+          finalDraft: draftA,
+          bundle: bundleA,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      expect(
+        (await restartedProcess.loadCurrentJob(uid))?.jobId,
+        completedB.jobId,
+      );
+      expect(failedA?.jobId, bundleA.runId);
     },
   );
 }

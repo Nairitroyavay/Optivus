@@ -5701,12 +5701,9 @@ void main() {
             blocks: [BaseTimelineDraft.defaultBathBlock()],
           ),
           client: client,
-          detectedCountry: const DeviceCountry(
-            countryCode: 'IN',
-            countryName: 'India',
-            fromDeviceLocation: true,
-          ),
-          regionSettings: RegionSettings.other(userId: 'uid-1'),
+          regionSettings: RegionSettings.india(
+            userId: 'uid-1',
+          ).copyWith(source: RegionSource.deviceDetected),
         ),
       );
       await tester.pumpAndSettle();

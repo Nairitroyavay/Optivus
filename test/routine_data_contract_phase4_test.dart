@@ -526,8 +526,14 @@ void main() {
           bundle: harness.bundle,
         );
 
-        expect(first.routineItemIds, hasLength(1));
+        // Projection hydration does not load remote controllers mid-job; the
+        // dedicated reload checkpoint owns that read.
+        expect(first.routineItemIds, isEmpty);
         expect(second.routineItemIds, isEmpty);
+        await const OnboardingFrontendHydrationService().reloadControllers(
+          read: container.read,
+          bundle: harness.bundle,
+        );
         expect(container.read(routineNotifierProvider).items, hasLength(1));
         expect(container.read(mockRoutineProvider), isEmpty);
         expect(first.mockRoutineItemIds, isEmpty);

@@ -220,6 +220,7 @@ class OnboardingCompletionJobService {
       tag: 'onboarding_completion_$uid',
       wakeLock: wakeLock,
       syncTask: () async {
+        _validateCompletionInput(uid, finalDraft, bundle);
         final now = DateTime.now();
         var job = await _loadOrCreateJob(
           uid: uid,
@@ -255,7 +256,7 @@ class OnboardingCompletionJobService {
           clearLastError: true,
           clearLastFailure: true,
         );
-        await _saveJobStatus(job, activate: true);
+        await _saveJobStatus(job, activate: true, activationDraft: finalDraft);
 
         void checkSession() {
           if (operationGeneration != _operationGenerationByOwner[uid]) {
@@ -1340,12 +1341,26 @@ class OnboardingCompletionJobService {
   Future<void> _saveJobStatus(
     OnboardingCompletionJob job, {
     bool activate = false,
+    OnboardingDraft? activationDraft,
   }) async {
     activeJobNotifier.value = job;
     jobStatusWriteCount += 1;
     if (firestore != null) {
       if (activate) {
+        if (activationDraft == null ||
+            activationDraft.uid != job.uid ||
+            activationDraft.revision != job.draftRevision ||
+            activationDraft.effectiveSourceFingerprint !=
+                job.sourceFingerprint) {
+          throw StateError(
+            'Run activation requires its matching authoritative draft.',
+          );
+        }
         final batch = firestore!.batch();
+        batch.set(
+          firestore!.doc(FirestoreUserPaths.onboardingDraft(job.uid)),
+          activationDraft.toFirestoreMap(),
+        );
         batch.set(
           firestore!.doc(FirestoreUserPaths.onboardingRun(job.uid, job.jobId)),
           job.toFirestoreMap(),
@@ -1367,10 +1382,54 @@ class OnboardingCompletionJobService {
         'Firebase onboarding completion requires persistent job storage.',
       );
     }
+    if (activate) {
+      if (activationDraft == null ||
+          activationDraft.uid != job.uid ||
+          activationDraft.revision != job.draftRevision ||
+          activationDraft.effectiveSourceFingerprint != job.sourceFingerprint) {
+        throw StateError(
+          'Run activation requires its matching authoritative draft.',
+        );
+      }
+      _validateInMemoryRunActivation(job, activationDraft);
+    }
     _memoryStore.jobs['${job.uid}:${job.jobId}'] = job;
     if (activate) {
       _memoryStore.currentRunIds[job.uid] = job.jobId;
       _memoryStore.currentRunStatuses[job.uid] = 'active';
+    }
+  }
+
+  void _validateInMemoryRunActivation(
+    OnboardingCompletionJob candidate,
+    OnboardingDraft authoritativeDraft,
+  ) {
+    final currentRunId = _memoryStore.currentRunIds[candidate.uid];
+    if (currentRunId == null || currentRunId == candidate.jobId) return;
+
+    final pointerStatus = _memoryStore.currentRunStatuses[candidate.uid];
+    final prior = _memoryStore.jobs['${candidate.uid}:$currentRunId'];
+    final priorFailed =
+        prior?.status == OnboardingJobStatus.retryableFailure ||
+        prior?.status == OnboardingJobStatus.fatalFailure;
+    final candidateIsCanonical =
+        candidate.jobId ==
+        stableOnboardingRunId(
+          ownerUid: candidate.uid,
+          sourceFingerprint: candidate.sourceFingerprint,
+          draftRevision: candidate.draftRevision,
+        );
+    if (pointerStatus == 'completed' ||
+        prior == null ||
+        !priorFailed ||
+        prior.ownerUid != candidate.uid ||
+        prior.sourceFingerprint == candidate.sourceFingerprint ||
+        candidate.draftRevision <= prior.draftRevision ||
+        !candidateIsCanonical ||
+        authoritativeDraft.revision != candidate.draftRevision ||
+        authoritativeDraft.effectiveSourceFingerprint !=
+            candidate.sourceFingerprint) {
+      throw StateError('Illegal onboarding current-run replacement.');
     }
   }
 

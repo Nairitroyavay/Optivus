@@ -1347,13 +1347,17 @@ class OnboardingStep7 extends ConsumerWidget {
         base.skinCareSetupPath == 'skip' ||
         base.skinCareSkipped;
     final isChoice = base.skinCareSetupStep <= 0 || !hasActivePath;
-    final hasCurrentRoutine =
-        base.isSkinCareRoutineCurrent(draft.uid) &&
-        base.blocks.any((block) => block.section == 'skin_care');
+    // Keep the review subtree mounted while a retained routine is edited.
+    // The edit is intentionally transactional: changing a selection makes the
+    // fingerprint stale, but must not re-parent this stateful editor and lose
+    // its pending rebuild state before a replacement succeeds or is cancelled.
+    final hasRetainedRoutine = base.blocks.any(
+      (block) => block.section == 'skin_care',
+    );
 
     // Review mode is structurally parallel to Steps 4 and 5: the timeline
     // owns the onboarding body rather than living inside setup padding.
-    if (hasCurrentRoutine) {
+    if (hasRetainedRoutine && !isChoice) {
       return _SkinCareSelectedModeScreen(base: base);
     }
 
@@ -4467,15 +4471,28 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+            child: Text(
+              base.isSkinCareRoutineCurrent(draft.uid)
+                  ? 'Routine built'
+                  : 'Changes not applied yet',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: OptivusColors.textPrimary,
+              ),
+            ),
+          ),
           if (!base.isSkinCareRoutineCurrent(draft.uid))
             const Padding(
-              padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+              padding: EdgeInsets.fromLTRB(24, 2, 24, 0),
               child: Text(
-                'Changes not applied yet',
+                'Your last routine is kept until a replacement succeeds.',
                 style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: OptivusColors.textPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: OptivusColors.textSecondary,
                 ),
               ),
             ),

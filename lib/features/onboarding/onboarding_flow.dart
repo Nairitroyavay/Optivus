@@ -434,21 +434,33 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
       final storedBundle = await onboardingRepository.fetchCompletionBundle(
         uid,
       );
+      if (!mounted || !_stillOwnsDraft(uid)) return;
       if (storedBundle != null) {
         if (!OnboardingCompletionService.bundleMatchesFinalDraft(
           uid: uid,
           draft: finalDraft,
           bundle: storedBundle,
         )) {
-          ref
-              .read(mockOnboardingProvider.notifier)
-              .setValidationMessage(
-                'Saved completion state does not match this setup. '
-                'Please try again after it finishes syncing.',
-              );
-          return;
+          final currentRun = await ref
+              .read(onboardingCompletionJobServiceProvider)
+              .loadCurrentRunSnapshot(uid);
+          if (!mounted || !_stillOwnsDraft(uid)) return;
+          final failedRun =
+              currentRun.job?.status == OnboardingJobStatus.retryableFailure ||
+              currentRun.job?.status == OnboardingJobStatus.fatalFailure;
+          if (!failedRun) {
+            ref
+                .read(mockOnboardingProvider.notifier)
+                .setValidationMessage(
+                  'Saved completion state does not match this setup. '
+                  'Please try again after it finishes syncing.',
+                );
+            return;
+          }
+          bundle = OnboardingCompletionService.buildBundle(finalDraft);
+        } else {
+          bundle = storedBundle;
         }
-        bundle = storedBundle;
       } else {
         bundle = OnboardingCompletionService.buildBundle(finalDraft);
       }

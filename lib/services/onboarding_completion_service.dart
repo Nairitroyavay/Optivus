@@ -101,12 +101,12 @@ class OnboardingCompletionService {
         bundle.draftRevision != draft.revision) {
       return false;
     }
-    return bundle.runId ==
-        stableOnboardingRunId(
-          ownerUid: uid,
-          sourceFingerprint: draft.effectiveSourceFingerprint,
-          draftRevision: draft.revision,
-        );
+    return matchesOnboardingRunIdentity(
+      runId: bundle.runId,
+      ownerUid: uid,
+      sourceFingerprint: draft.effectiveSourceFingerprint,
+      draftRevision: draft.revision,
+    );
   }
 
   static Future<OnboardingCompletionResult> recoverCompletionState({

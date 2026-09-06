@@ -159,6 +159,9 @@ function userData(uid = "user123", overrides = {}) {
 const fingerprint =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const canonicalRunId = `run_${"1".repeat(40)}`;
+const verifiableRunId = `run_${fingerprint}`;
+const replacementFingerprint = "f".repeat(64);
+const replacementRunId = `run_${replacementFingerprint}`;
 const canonicalProjectionId = `onboarding-${canonicalRunId}-v1`;
 const canonicalAcceptanceId = `ca_${"a".repeat(40)}`;
 
@@ -230,6 +233,7 @@ function regionData(uid = "user123", overrides = {}) {
     weekStartDay: "monday",
     foodVocabularyMode: "international",
     paymentRegion: "IN",
+    source: "userSaved",
     createdAt,
     updatedAt,
     ...overrides,
@@ -282,6 +286,15 @@ function onboardingDraftData(uid = "user123", overrides = {}) {
     updatedAt,
     ...overrides,
   };
+}
+
+function completedOnboardingDraftData(uid = "user123", overrides = {}) {
+  return onboardingDraftData(uid, {
+    currentStep: 14,
+    stepCompleted: Array(15).fill(true),
+    onboardingCompleted: true,
+    ...overrides,
+  });
 }
 
 function completionBundleData(uid = "user123", overrides = {}) {
@@ -1199,6 +1212,7 @@ describe("Phase 4.6.4 canonical production contracts", () => {
     const ref = db.collection("users").doc("user123").collection("settings").doc("regionLocalization");
     await assertSucceeds(ref.set(regionData()));
     await assertFails(ref.set(regionData("user123", { schemaVersion: 2 })));
+    await assertFails(ref.set(regionData("user123", { source: "client_guessed" })));
     await assertFails(ref.set(regionData("user123", { unknown: true })));
   });
 
@@ -1588,8 +1602,10 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       const runRef = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
       const pointerRef = db.collection("users").doc("user123").collection("onboarding").doc("currentRun");
       await testEnv.withSecurityRulesDisabled(async (context) => {
-        const adminRef = context.firestore().collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
-        await adminRef.set(failedOnboardingRunData());
+        const admin = context.firestore();
+        await admin.doc("users/user123/onboarding/draft").set(completedOnboardingDraftData());
+        await admin.doc(runRef.path).set(failedOnboardingRunData());
+        await admin.doc(pointerRef.path).set(currentRunData());
       });
 
       const batch = db.batch();
@@ -1828,15 +1844,226 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await assertFails(completedRef.update({ retryCount: 1, updatedAt: completedAt }));
     });
 
-    it("allows creation but rejects replacing the authoritative current-run identity", async () => {
+    it("allows no pointer to create a server-verifiable fresh run", async () => {
       const db = ownerDb();
-      const ref = db.collection("users").doc("user123").collection("onboarding").doc("currentRun");
-      await assertSucceeds(ref.set(currentRunData()));
-      await assertSucceeds(ref.get());
-      await assertFails(ref.set(currentRunData("user123", "run-002", {
-        sourceFingerprint: "f".repeat(64),
+      const draftRef = db.doc("users/user123/onboarding/draft");
+      const runRef = db.doc(`users/user123/onboardingRuns/${verifiableRunId}`);
+      const pointerRef = db.doc("users/user123/onboarding/currentRun");
+      const batch = db.batch();
+      batch.set(draftRef, completedOnboardingDraftData());
+      batch.set(runRef, onboardingRunData("user123", verifiableRunId));
+      batch.set(pointerRef, currentRunData("user123", verifiableRunId));
+      await assertSucceeds(batch.commit());
+      await assertSucceeds(pointerRef.get());
+    });
+
+    it("allows failed A plus a changed authoritative draft to atomically create B", async () => {
+      const db = ownerDb();
+      const draftRef = db.doc("users/user123/onboarding/draft");
+      const priorRunRef = db.doc("users/user123/onboardingRuns/run-001");
+      const replacementRunRef = db.doc(`users/user123/onboardingRuns/${replacementRunId}`);
+      const pointerRef = db.doc("users/user123/onboarding/currentRun");
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(draftRef.path).set(completedOnboardingDraftData());
+        await admin.doc(priorRunRef.path).set(failedOnboardingRunData());
+        await admin.doc(pointerRef.path).set(currentRunData());
+      });
+
+      const batch = db.batch();
+      batch.set(draftRef, completedOnboardingDraftData("user123", {
+        revision: 8,
+        sourceFingerprint: replacementFingerprint,
+        updatedAt: completedAt,
+      }));
+      batch.set(replacementRunRef, onboardingRunData("user123", replacementRunId, {
+        draftRevision: 8,
+        sourceFingerprint: replacementFingerprint,
+        updatedAt: completedAt,
+      }));
+      batch.set(pointerRef, currentRunData("user123", replacementRunId, {
+        draftRevision: 8,
+        sourceFingerprint: replacementFingerprint,
+        updatedAt: completedAt,
+      }));
+      await assertSucceeds(batch.commit());
+
+      expect((await pointerRef.get()).data().currentRunId).toBe(replacementRunId);
+      expect((await priorRunRef.get()).data().status).toBe("retryableFailure");
+    });
+
+    it("makes a duplicate replacement safe and rejects stale A reclaiming B", async () => {
+      const db = ownerDb();
+      const draftRef = db.doc("users/user123/onboarding/draft");
+      const priorRunRef = db.doc("users/user123/onboardingRuns/run-001");
+      const replacementRunRef = db.doc(`users/user123/onboardingRuns/${replacementRunId}`);
+      const pointerRef = db.doc("users/user123/onboarding/currentRun");
+      const replacementDraft = completedOnboardingDraftData("user123", {
+        revision: 8,
+        sourceFingerprint: replacementFingerprint,
+        updatedAt: completedAt,
+      });
+      const replacementRun = onboardingRunData("user123", replacementRunId, {
+        draftRevision: 8,
+        sourceFingerprint: replacementFingerprint,
+        updatedAt: completedAt,
+      });
+      const replacementPointer = currentRunData("user123", replacementRunId, {
+        draftRevision: 8,
+        sourceFingerprint: replacementFingerprint,
+        updatedAt: completedAt,
+      });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(draftRef.path).set(replacementDraft);
+        await admin.doc(priorRunRef.path).set(failedOnboardingRunData());
+        await admin.doc(replacementRunRef.path).set(replacementRun);
+        await admin.doc(pointerRef.path).set(replacementPointer);
+      });
+
+      const duplicate = db.batch();
+      duplicate.set(draftRef, replacementDraft);
+      duplicate.set(replacementRunRef, replacementRun);
+      duplicate.set(pointerRef, replacementPointer);
+      await assertSucceeds(duplicate.commit());
+
+      const stale = db.batch();
+      stale.set(priorRunRef, onboardingRunData("user123", "run-001", {
+        retryCount: 1,
+        updatedAt: completedAt,
+      }));
+      stale.set(pointerRef, currentRunData());
+      await assertFails(stale.commit());
+      expect((await pointerRef.get()).data().currentRunId).toBe(replacementRunId);
+    });
+
+    it("rejects active or completed replacement, arbitrary ids, and owner mismatch", async () => {
+      const cases = [
+        { priorStatus: "running", pointerStatus: "active" },
+        { priorStatus: "completed", pointerStatus: "completed" },
+      ];
+      for (let index = 0; index < cases.length; index++) {
+        const uid = `replacement-state-${index}`;
+        const db = ownerDb(uid);
+        const draftRef = db.doc(`users/${uid}/onboarding/draft`);
+        const priorRunRef = db.doc(`users/${uid}/onboardingRuns/run-001`);
+        const replacementRunRef = db.doc(`users/${uid}/onboardingRuns/${replacementRunId}`);
+        const pointerRef = db.doc(`users/${uid}/onboarding/currentRun`);
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+          const admin = context.firestore();
+          await admin.doc(draftRef.path).set(completedOnboardingDraftData(uid));
+          await admin.doc(priorRunRef.path).set(onboardingRunData(uid, "run-001", {
+            status: cases[index].priorStatus,
+            ...(cases[index].priorStatus === "completed" ? {
+              stage: "completed",
+              stagesCompleted: { finalizeProfile: true },
+              completedAt,
+            } : {}),
+          }));
+          await admin.doc(pointerRef.path).set(currentRunData(uid, "run-001", {
+            status: cases[index].pointerStatus,
+          }));
+        });
+        const batch = db.batch();
+        batch.set(draftRef, completedOnboardingDraftData(uid, {
+          revision: 8,
+          sourceFingerprint: replacementFingerprint,
+          updatedAt: completedAt,
+        }));
+        batch.set(replacementRunRef, onboardingRunData(uid, replacementRunId, {
+          draftRevision: 8,
+          sourceFingerprint: replacementFingerprint,
+          updatedAt: completedAt,
+        }));
+        batch.set(pointerRef, currentRunData(uid, replacementRunId, {
+          draftRevision: 8,
+          sourceFingerprint: replacementFingerprint,
+          updatedAt: completedAt,
+        }));
+        await assertFails(batch.commit());
+      }
+
+      const arbitraryUid = "replacement-arbitrary";
+      const arbitraryDb = ownerDb(arbitraryUid);
+      const arbitraryDraftRef = arbitraryDb.doc(`users/${arbitraryUid}/onboarding/draft`);
+      const arbitraryPriorRef = arbitraryDb.doc(`users/${arbitraryUid}/onboardingRuns/run-001`);
+      const arbitraryCandidateId = `run_${"e".repeat(64)}`;
+      const arbitraryCandidateRef = arbitraryDb.doc(
+        `users/${arbitraryUid}/onboardingRuns/${arbitraryCandidateId}`,
+      );
+      const arbitraryPointerRef = arbitraryDb.doc(`users/${arbitraryUid}/onboarding/currentRun`);
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(arbitraryDraftRef.path).set(completedOnboardingDraftData(arbitraryUid));
+        await admin.doc(arbitraryPriorRef.path).set(failedOnboardingRunData(arbitraryUid));
+        await admin.doc(arbitraryPointerRef.path).set(currentRunData(arbitraryUid));
+      });
+      const arbitrary = arbitraryDb.batch();
+      arbitrary.set(arbitraryDraftRef, completedOnboardingDraftData(arbitraryUid, {
+        revision: 8,
+        sourceFingerprint: replacementFingerprint,
+        updatedAt: completedAt,
+      }));
+      arbitrary.set(arbitraryCandidateRef, onboardingRunData(
+        arbitraryUid,
+        arbitraryCandidateId,
+        {
+          draftRevision: 8,
+          sourceFingerprint: replacementFingerprint,
+          updatedAt: completedAt,
+        },
+      ));
+      arbitrary.set(arbitraryPointerRef, currentRunData(
+        arbitraryUid,
+        arbitraryCandidateId,
+        {
+          draftRevision: 8,
+          sourceFingerprint: replacementFingerprint,
+          updatedAt: completedAt,
+        },
+      ));
+      await assertFails(arbitrary.commit());
+
+      const owner = ownerDb();
+      const ownerMismatchRef = owner.doc("users/user123/onboarding/currentRun");
+      await assertFails(ownerMismatchRef.set(currentRunData("other-user", replacementRunId, {
+        sourceFingerprint: replacementFingerprint,
         draftRevision: 8,
       })));
+    });
+
+    it("rejects replacement run fingerprint and revision mismatches", async () => {
+      for (const mismatch of ["fingerprint", "revision"]) {
+        const uid = `replacement-${mismatch}`;
+        const db = ownerDb(uid);
+        const draftRef = db.doc(`users/${uid}/onboarding/draft`);
+        const priorRunRef = db.doc(`users/${uid}/onboardingRuns/run-001`);
+        const replacementRunRef = db.doc(`users/${uid}/onboardingRuns/${replacementRunId}`);
+        const pointerRef = db.doc(`users/${uid}/onboarding/currentRun`);
+        await testEnv.withSecurityRulesDisabled(async (context) => {
+          const admin = context.firestore();
+          await admin.doc(draftRef.path).set(completedOnboardingDraftData(uid));
+          await admin.doc(priorRunRef.path).set(failedOnboardingRunData(uid));
+          await admin.doc(pointerRef.path).set(currentRunData(uid));
+        });
+        const batch = db.batch();
+        batch.set(draftRef, completedOnboardingDraftData(uid, {
+          revision: 8,
+          sourceFingerprint: replacementFingerprint,
+          updatedAt: completedAt,
+        }));
+        batch.set(replacementRunRef, onboardingRunData(uid, replacementRunId, {
+          draftRevision: mismatch === "revision" ? 9 : 8,
+          sourceFingerprint: mismatch === "fingerprint" ? "e".repeat(64) : replacementFingerprint,
+          updatedAt: completedAt,
+        }));
+        batch.set(pointerRef, currentRunData(uid, replacementRunId, {
+          draftRevision: 8,
+          sourceFingerprint: replacementFingerprint,
+          updatedAt: completedAt,
+        }));
+        await assertFails(batch.commit());
+      }
     });
 
     it("allows only an atomic profile + run + currentRun completion boundary", async () => {
@@ -1867,6 +2094,7 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await testEnv.withSecurityRulesDisabled(async (context) => {
         const admin = context.firestore();
         await admin.doc(profileRef.path).set(userData());
+        await admin.doc("users/user123/onboarding/draft").set(completedOnboardingDraftData());
         await admin.doc(runRef.path).set(activeRun);
         await admin.doc(pointerRef.path).set(currentRunData());
       });

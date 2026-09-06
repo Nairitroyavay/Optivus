@@ -574,19 +574,10 @@ void main() {
           fail('Should have thrown an exception');
         } catch (_) {}
 
+        // Invalid cross-owner input is rejected before any run or currentRun
+        // state can be activated for the target account.
         final failedJob = await jobService.loadCurrentJob('target_uid');
-        expect(failedJob, isNotNull);
-        expect(failedJob!.status, equals(OnboardingJobStatus.fatalFailure));
-        expect(failedJob.lastError, isNotNull);
-        expect(failedJob.lastError, contains('"type":"ArgumentError"'));
-        expect(
-          failedJob.lastError,
-          contains('"diagnosticCategory":"validation_failed"'),
-        );
-        expect(failedJob.lastFailureCode, equals('argument_error'));
-        expect(failedJob.lastFailureStage, equals('validateInput'));
-        expect(failedJob.retryable, isFalse);
-        expect(failedJob.diagnosticCategory, equals('validation_failed'));
+        expect(failedJob, isNull);
       },
     );
 
@@ -673,6 +664,7 @@ void main() {
             'weekStartDay',
             'foodVocabularyMode',
             'paymentRegion',
+            'source',
             'createdAt',
             'updatedAt',
           };

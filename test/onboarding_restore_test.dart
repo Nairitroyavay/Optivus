@@ -24,6 +24,7 @@ import 'package:optivus/repositories/routine_repository.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/services/routine_onboarding_projection.dart';
+import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/views/screens/app_shell.dart';
 
 void main() {
@@ -448,6 +449,9 @@ List<Override> _firebaseOverrides({
     regionSettingsRepositoryProvider.overrideWithValue(
       FakeRegionSettingsRepository(),
     ),
+    deviceCountryServiceProvider.overrideWithValue(
+      const _NoDeviceCountryService(),
+    ),
     appPreferencesRepositoryProvider.overrideWithValue(
       FakeAppPreferencesRepository(),
     ),
@@ -466,6 +470,13 @@ List<Override> _firebaseOverrides({
       ),
     ),
   ];
+}
+
+class _NoDeviceCountryService implements DeviceCountryService {
+  const _NoDeviceCountryService();
+
+  @override
+  Future<DeviceCountry?> detectCountry() async => null;
 }
 
 Future<FakeProfileRepository> _profileRepositoryFor(

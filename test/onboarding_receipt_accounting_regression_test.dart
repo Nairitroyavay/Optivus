@@ -168,7 +168,9 @@ void main() {
       );
       final failedJob = await service.loadCurrentJob(fixture.uid);
       expect(failedJob?.status, OnboardingJobStatus.fatalFailure);
-      expect(failedJob?.lastFailureStage, 'verifyRoutines');
+      // Fresh runs perform the sole collection read-back at the terminal
+      // durable-output proof instead of scanning twice at verifyRoutines.
+      expect(failedJob?.lastFailureStage, 'finalizeProfile');
     });
 
     test('legacy pending receipt finalization is retry-idempotent', () async {

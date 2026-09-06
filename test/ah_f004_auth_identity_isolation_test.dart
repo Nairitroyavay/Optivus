@@ -489,8 +489,7 @@ void main() {
       expect(bGoals, isEmpty);
       expect(bProfile, isNull);
       expect(bPrefs?.theme, isNot('dark'));
-      expect(bRegion?.userId, 'user-b');
-      expect(bRegion?.countryCode, isNot('CA'));
+      expect(bRegion, isNull);
 
       // User A reads return User A data
       final aGoals = await goalRepo.fetchGoals('user-a');
