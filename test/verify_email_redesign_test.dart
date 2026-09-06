@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,13 +12,14 @@ import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/verification_lifecycle_state.dart';
 import 'package:optivus/views/screens/verify_email_screen.dart';
 
-class _TestAuthRepo implements AuthRepository {
+class _TestAuthRepo implements AuthRepository, AuthProfileEnrichmentRepository {
   AuthUser? user;
   bool verificationEmailSent = false;
   int reloadCount = 0;
   int signOutCount = 0;
   int tokenRefreshCount = 0;
   int verificationEmailSendCount = 0;
+  int displayNameUpdateCount = 0;
   bool verifyOnReload = false;
   Object? reloadError;
   Object? resendError;
@@ -25,6 +27,8 @@ class _TestAuthRepo implements AuthRepository {
   Completer<void>? reloadGate;
   Completer<void>? resendGate;
   Completer<void>? signupGate;
+  Completer<void>? displayNameUpdateGate;
+  Object? displayNameUpdateError;
   final authEvents = StreamController<AuthUser?>.broadcast();
 
   _TestAuthRepo({required this.user});
@@ -63,6 +67,16 @@ class _TestAuthRepo implements AuthRepository {
     await resendGate?.future;
     if (resendError case final error?) throw error;
     verificationEmailSent = true;
+  }
+
+  @override
+  Future<void> updateDisplayName({
+    required String uid,
+    required String displayName,
+  }) async {
+    displayNameUpdateCount++;
+    await displayNameUpdateGate?.future;
+    if (displayNameUpdateError case final error?) throw error;
   }
 
   @override
@@ -124,6 +138,7 @@ Widget _buildScreen({
       const AuthState(
         user: _defaultUser,
         status: AuthFlowStatus.signedInEmailUnverified,
+        verificationEmailSendStatus: VerificationEmailSendStatus.sent,
       );
   return ProviderScope(
     overrides: [
@@ -262,6 +277,113 @@ void main() {
     },
   );
 
+  test(
+    'initial verification send completes before a hanging display-name update',
+    () async {
+      final repo = _TestAuthRepo(user: _defaultUser)
+        ..displayNameUpdateGate = Completer<void>();
+      final container = ProviderContainer(
+        overrides: [authRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      await container
+          .read(authProvider.notifier)
+          .signup('Test User', 'testuser@example.com', 'Password123!');
+
+      expect(repo.verificationEmailSendCount, 1);
+      expect(repo.displayNameUpdateCount, 1);
+      expect(
+        container.read(authProvider).verificationEmailSendStatus,
+        VerificationEmailSendStatus.sent,
+      );
+    },
+  );
+
+  test(
+    'display-name failure preserves the completed verification-email flow',
+    () async {
+      final repo = _TestAuthRepo(user: _defaultUser)
+        ..displayNameUpdateError = Exception('profile-update-failed');
+      final container = ProviderContainer(
+        overrides: [authRepositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      await container
+          .read(authProvider.notifier)
+          .signup('Test User', 'testuser@example.com', 'Password123!');
+      await Future<void>.delayed(Duration.zero);
+
+      final auth = container.read(authProvider);
+      expect(repo.verificationEmailSendCount, 1);
+      expect(repo.displayNameUpdateCount, 1);
+      expect(auth.status, AuthFlowStatus.signedInEmailUnverified);
+      expect(auth.lastVerificationEmailSent, isNotNull);
+      expect(
+        auth.verificationEmailSendStatus,
+        VerificationEmailSendStatus.sent,
+      );
+      expect(auth.errorMessage, isNull);
+    },
+  );
+
+  test(
+    'signup ignores stale signed-out auth event and still sends email',
+    () async {
+      final repo = _TestAuthRepo(user: _defaultUser)
+        ..signupGate = Completer<void>();
+      final container = ProviderContainer(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(repo),
+          mockUserProfileProvider.overrideWith(
+            (ref) => MockUserProfileNotifier()
+              ..loadSeedData(
+                UserProfile.empty(
+                  uid: _defaultUser.uid,
+                  email: _defaultUser.email ?? '',
+                ),
+              ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final signup = container
+          .read(authProvider.notifier)
+          .signup('Test User', 'testuser@example.com', 'Password123!');
+      repo.authEvents.add(null);
+      await Future<void>.delayed(Duration.zero);
+      repo.signupGate!.complete();
+      await signup;
+
+      expect(repo.verificationEmailSendCount, 1);
+      expect(
+        container.read(authProvider).verificationEmailSendStatus,
+        VerificationEmailSendStatus.sent,
+      );
+    },
+  );
+
+  test('email verification source instrumentation is debug-only', () {
+    final authStateSource = File(
+      'lib/state/auth_state.dart',
+    ).readAsStringSync();
+    final repositorySource = File(
+      'lib/repositories/auth_repository.dart',
+    ).readAsStringSync();
+    final verifyScreenSource = File(
+      'lib/views/screens/verify_email_screen.dart',
+    ).readAsStringSync();
+
+    expect(authStateSource, contains('[OptivusBuild] commit='));
+    expect(authStateSource, contains('stage=before_initial_send'));
+    expect(repositorySource, contains('stage=before_firebase_send'));
+    expect(repositorySource, contains('stage=firebase_send_success'));
+    expect(verifyScreenSource, contains('stage=verify_screen_entered'));
+    expect(repositorySource, contains('if (kDebugMode)'));
+  });
+
   test('unrelated UID auth event invalidates an in-flight signup', () async {
     final repo = _TestAuthRepo(user: _defaultUser)
       ..signupGate = Completer<void>();
@@ -372,7 +494,7 @@ void main() {
     expect(auth.lastVerificationEmailSent, isNull);
     expect(
       auth.verificationEmailSendStatus,
-      VerificationEmailSendStatus.notAttempted,
+      VerificationEmailSendStatus.pending,
     );
   });
 
@@ -471,6 +593,29 @@ void main() {
         ),
       );
       expect(scrollable.position.maxScrollExtent, 0);
+    },
+  );
+
+  testWidgets(
+    'pending initial send does not claim verification link was sent',
+    (tester) async {
+      await _setLogicalViewport(tester, logicalSize: const Size(393, 873));
+      final repo = _TestAuthRepo(user: _defaultUser);
+      await tester.pumpWidget(
+        _buildScreen(
+          repo: repo,
+          state: const AuthState(
+            user: _defaultUser,
+            status: AuthFlowStatus.signedInEmailUnverified,
+            verificationEmailSendStatus: VerificationEmailSendStatus.pending,
+          ),
+        ),
+      );
+
+      expect(find.text('Sending your verification link...'), findsOneWidget);
+      expect(find.text('We sent you a verification link'), findsNothing);
+      await tester.pump();
+      expect(repo.reloadCount, 0);
     },
   );
 

@@ -3920,13 +3920,9 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           final hasExistingRoutine = base.blocks.any(
             (block) => block.section == 'skin_care',
           );
-          final selectedNames = recommendationDrafts
-              .map((product) => product.displayName)
-              .where((name) => name.isNotEmpty)
-              .toList(growable: false);
           final draftForFingerprint = base.copyWith(
             skinCareProductRecommendations: recommendationDrafts,
-            skinCareSelectedProductNames: selectedNames,
+            clearSkinCareSelectedProductNames: !hasExistingRoutine,
             skinCareRecommendationCountryCode: region.countryCode,
             skinCareRecommendationCurrencyCode: region.currencyCode,
             clearSkinCareSuggestedProducts: !hasExistingRoutine,
@@ -3954,7 +3950,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
           _generationError = null;
           _recommendationRetryAvailable = false;
         });
-        await _generate();
       } else if (run.error != null) {
         setState(() {
           _showProductSelection = false;
@@ -4397,79 +4392,101 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OnboardingGlassCard(
-            tint: OptivusColors.purpleAccent.withValues(alpha: 0.12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            radius: 20,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.auto_awesome_rounded,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final statusLabel = base.isSkinCareRoutineCurrent(draft.uid)
+                  ? 'Routine built'
+                  : 'Changes not applied yet';
+              final selectedProductsButton =
+                  base.skinCareSuggestedProducts.isEmpty
+                  ? null
+                  : IconButton(
+                      key: const ValueKey(
+                        'onboarding-step7-selected-products-button',
+                      ),
+                      tooltip: 'Selected products',
+                      onPressed: () => _showSkinCareSelectedProductsSheet(
+                        context,
+                        products: base.skinCareSuggestedProducts,
+                        recommendations: base.skinCareProductRecommendations,
+                        accent: OptivusColors.purpleAccent,
+                      ),
+                      icon: const Icon(Icons.info_outline_rounded, size: 18),
                       color: OptivusColors.purpleAccent,
-                      size: 19,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        base.isSkinCareRoutineCurrent(draft.uid)
-                            ? 'Routine built'
-                            : 'Changes not applied yet',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                          color: OptivusColors.textPrimary,
-                        ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 32,
+                        height: 32,
                       ),
-                    ),
-                    if (base.skinCareSuggestedProducts.isNotEmpty) ...[
-                      const SizedBox(width: 2),
-                      IconButton(
-                        key: const ValueKey(
-                          'onboarding-step7-selected-products-button',
-                        ),
-                        tooltip: 'Selected products',
-                        onPressed: () => _showSkinCareSelectedProductsSheet(
-                          context,
-                          products: base.skinCareSuggestedProducts,
-                          recommendations: base.skinCareProductRecommendations,
-                          accent: OptivusColors.purpleAccent,
-                        ),
-                        icon: const Icon(Icons.info_outline_rounded, size: 18),
-                        color: OptivusColors.purpleAccent,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(
-                          width: 28,
-                          height: 28,
-                        ),
-                        splashRadius: 15,
+                      splashRadius: 16,
+                    );
+              final rebuildAction = OnboardingActionPill(
+                label: 'Rebuild / Edit',
+                icon: Icons.edit_rounded,
+                accent: OptivusColors.purpleAccent,
+                compact: true,
+                onTap: () => setState(() {
+                  _editingExisting = true;
+                  _pendingDesiredApplicationsPerDay = null;
+                  _showProductSelection =
+                      base.skinCareProductRecommendations.isNotEmpty;
+                  _generationError = null;
+                }),
+              );
+              final compactHeader =
+                  constraints.maxWidth < 360 ||
+                  MediaQuery.textScalerOf(context).scale(14) > 18;
+
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 6),
+                child: compactHeader
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  statusLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: OptivusColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              ?selectedProductsButton,
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: rebuildAction,
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              statusLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                color: OptivusColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          ?selectedProductsButton,
+                          rebuildAction,
+                        ],
                       ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: OnboardingActionPill(
-                    label: 'Rebuild / Edit',
-                    icon: Icons.edit_rounded,
-                    accent: OptivusColors.purpleAccent,
-                    compact: true,
-                    onTap: () => setState(() {
-                      _editingExisting = true;
-                      _pendingDesiredApplicationsPerDay = null;
-                      _showProductSelection =
-                          base.skinCareProductRecommendations.isNotEmpty;
-                      _generationError = null;
-                    }),
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
           if (uploadState?.cleanupPending == true)
             TextButton(
@@ -4491,7 +4508,6 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             const SizedBox(height: 10),
             _SkinCareInlineMessage(message: message),
           ],
-          const SizedBox(height: 12),
           _SkinCareTimelineSection(
             selectedDay: _selectedDay,
             blocks: widget.blocks,
@@ -5412,6 +5428,8 @@ void _showSkinCareSelectedProductsSheet(
                         SizedBox(height: 2),
                         Text(
                           'Products used to build your routine',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -5419,24 +5437,6 @@ void _showSkinCareSelectedProductsSheet(
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${products.length}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: accent,
-                      ),
                     ),
                   ),
                   IconButton(
@@ -5512,6 +5512,8 @@ void _showSkinCareSelectedProductsSheet(
                             children: [
                               Text(
                                 productName,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 12.5,
                                   height: 1.25,
@@ -5523,6 +5525,8 @@ void _showSkinCareSelectedProductsSheet(
                                 const SizedBox(height: 4),
                                 Text(
                                   details,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w800,
@@ -5662,7 +5666,6 @@ class _SkinCareTimelineSection extends ConsumerWidget {
         entries: entries,
         selectedDay: selectedDay,
         onDayChanged: onDayChanged,
-        title: 'Your Routine',
         emptyDayMessage: emptyLabel,
         accent: accent,
         styleBuilder: adapter.styleForEntry,

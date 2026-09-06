@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/core/theme/auth_layout.dart';
@@ -23,6 +24,7 @@ class VerifyEmailScreen extends ConsumerStatefulWidget {
 class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
     with WidgetsBindingObserver {
   late final VerificationLifecycleController _lifecycleController;
+  bool _loggedScreenEntry = false;
 
   @override
   void initState() {
@@ -67,6 +69,19 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final lifecycle = ref.watch(verificationLifecycleProvider);
+    if (!_loggedScreenEntry) {
+      _loggedScreenEntry = true;
+      if (kDebugMode) {
+        final state = switch (auth.verificationEmailSendStatus) {
+          VerificationEmailSendStatus.sent => 'sent',
+          VerificationEmailSendStatus.failed => 'failed',
+          VerificationEmailSendStatus.pending => 'pending',
+        };
+        debugPrint(
+          '[EmailVerification] stage=verify_screen_entered initialSendState=$state',
+        );
+      }
+    }
     final email = auth.user?.email?.trim();
     final displayEmail = email == null || email.isEmpty
         ? 'Email address unavailable'
@@ -77,9 +92,13 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
         lifecycle.messageKind != VerificationMessageKind.success;
     final deliveryFailed =
         auth.verificationEmailSendStatus == VerificationEmailSendStatus.failed;
-    final titleCopy = deliveryFailed
-        ? 'We couldn\'t send the verification link'
-        : 'We sent you a verification link';
+    final titleCopy = switch (auth.verificationEmailSendStatus) {
+      VerificationEmailSendStatus.sent => 'We sent you a verification link',
+      VerificationEmailSendStatus.failed =>
+        'We couldn\'t send the verification link',
+      VerificationEmailSendStatus.pending =>
+        'Sending your verification link...',
+    };
     final messageError = isError
         ? lifecycle.message
         : deliveryFailed

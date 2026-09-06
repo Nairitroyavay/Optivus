@@ -30,6 +30,7 @@ class RoutineTemplateFirestoreCodec {
     'subtasks',
     'steps',
     'mealCategory',
+    'mealSlot',
     'dishes',
     'caloriesEstimate',
     'proteinEstimate',
@@ -81,6 +82,7 @@ class RoutineTemplateFirestoreCodec {
       if (item.steps != null) 'steps': List<String>.from(item.steps!),
       if (_notBlank(item.mealCategory))
         'mealCategory': item.mealCategory!.trim(),
+      if (_notBlank(item.mealSlot)) 'mealSlot': item.mealSlot!.trim(),
       if (item.dishes != null) 'dishes': List<String>.from(item.dishes!),
       if (item.caloriesEstimate != null)
         'caloriesEstimate': item.caloriesEstimate,
@@ -209,6 +211,7 @@ class RoutineTemplateFirestoreCodec {
           _readStringList(data['steps']) ??
           _readStringList(data['skincareProducts']),
       mealCategory: _optionalString(data['mealCategory']),
+      mealSlot: _optionalString(data['mealSlot']),
       dishes: _readStringList(data['dishes']),
       caloriesEstimate:
           (data['caloriesEstimate'] as num?)?.toDouble() ??

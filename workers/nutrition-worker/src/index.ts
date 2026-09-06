@@ -123,7 +123,64 @@ function parseAiJsonText(text: string): any {
   }
 }
 
+type MealSlot = {
+  slot: string;
+  category: "breakfast" | "lunch" | "snack" | "dinner";
+  title: string;
+  startMinute: number;
+  durationMinutes: number;
+};
+
+function expectedMealSlots(context: any): MealSlot[] {
+  const slots: MealSlot[] = [
+    {
+      slot: "breakfast",
+      category: "breakfast",
+      title: "Breakfast",
+      startMinute: context.breakfastMinute,
+      durationMinutes: 30,
+    },
+  ];
+  if (context.mealsPerDay === 5) {
+    slots.push({
+      slot: "morning_snack",
+      category: "snack",
+      title: "Morning Snack",
+      startMinute: context.extraSnackMinute ?? 11 * 60,
+      durationMinutes: 20,
+    });
+  }
+  slots.push({
+    slot: "lunch",
+    category: "lunch",
+    title: "Lunch",
+    startMinute: context.lunchMinute,
+    durationMinutes: 45,
+  });
+  if (context.mealsPerDay >= 4) {
+    slots.push({
+      slot: "afternoon_snack",
+      category: "snack",
+      title: "Snack",
+      startMinute: context.snackMinute ?? 17 * 60,
+      durationMinutes: 20,
+    });
+  }
+  slots.push({
+    slot: "dinner",
+    category: "dinner",
+    title: "Dinner",
+    startMinute: context.dinnerMinute,
+    durationMinutes: 45,
+  });
+  return slots;
+}
+
 function buildEatingGeneratePrompt(context: any): string {
+  const slots = expectedMealSlots(context);
+  const slotLines = slots
+    .map((slot) => `- ${slot.slot}: title "${slot.title}", mealCategory "${slot.category}", startMinute ${slot.startMinute}`)
+    .join("\n");
   return `You are a nutrition expert generating a weekly meal routine JSON.
 User Context:
 - Height: ${context.heightCm ? context.heightCm + " cm" : "Unknown"}
@@ -144,7 +201,8 @@ User Context:
 - Country: ${context.country ?? "Unknown"}
 
 Return ONLY a JSON object containing a "candidates" array of meal blocks. Each block MUST have:
-- "title": e.g. "Breakfast"
+- "mealSlot": one of exactly ${slots.map((slot) => `"${slot.slot}"`).join(", ")}
+- "title": the canonical title for that mealSlot
 - "startMinute": integer (minutes from midnight)
 - "endMinute": integer (minutes from midnight)
 - "repeatDays": array of integers 1-7 (1=Monday)
@@ -155,14 +213,11 @@ Return ONLY a JSON object containing a "candidates" array of meal blocks. Each b
 - "confidenceScore": 0.95
 
 You MUST schedule the generated meals EXACTLY at these requested start times (minutes from midnight):
-- Breakfast start: ${context.breakfastMinute}
-- Lunch start: ${context.lunchMinute}
-- Dinner start: ${context.dinnerMinute}
-${context.snackMinute ? `- Snack start: ${context.snackMinute}` : ""}
-${context.extraSnackMinute ? `- Extra Snack start: ${context.extraSnackMinute}` : ""}
+${slotLines}
 
+Return exactly one candidate per mealSlot, no missing slots, no duplicate slots, and no unexpected slots. AI owns the dish names in "steps"; the schedule slot, title, and time are fixed by the requested mealSlot.
 For each day (1 to 7), generate the required meals. Vary the dishes slightly by day to match the specified Diet Type and Style.
-Output format exactly: { "candidates": [ { "title": "Breakfast", "startMinute": 480, "endMinute": 510, "repeatDays": [1,2,3,4,5,6,7], "mealCategory": "breakfast", "steps": ["Oatmeal with Almonds", "Fresh Apple Slice"], "blockType": "soft_block", "candidateType": "block" } ] }`;
+Output format exactly: { "candidates": [ { "mealSlot": "breakfast", "title": "Breakfast", "startMinute": 480, "endMinute": 510, "repeatDays": [1,2,3,4,5,6,7], "mealCategory": "breakfast", "steps": ["Oatmeal with Almonds", "Fresh Apple Slice"], "blockType": "soft_block", "candidateType": "block" } ] }`;
 }
 
 async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<Response> {
@@ -270,24 +325,45 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
 
   const genericTerms = new Set(["breakfast", "lunch", "snack", "dinner", "food", "meal", "eat", "dish"]);
 
+  const slots = expectedMealSlots(context);
   const validBlocks = blocks
-    .map((block: unknown) => sanitizeMealCandidate(block, genericTerms))
+    .map((block: unknown) => sanitizeMealCandidate(block, genericTerms, slots))
     .filter((block: Record<string, unknown> | null): block is Record<string, unknown> => block !== null);
 
   if (validBlocks.length === 0) {
     throw new HttpError(500, "provider_empty_candidates", "AI returned no valid meals.");
   }
 
+  const bySlot = new Map<string, Record<string, unknown>>();
+  const expectedSlotIds = new Set(slots.map((slot) => slot.slot));
+  for (const block of validBlocks) {
+    const slot = String(block.mealSlot || "");
+    if (!expectedSlotIds.has(slot)) {
+      throw new HttpError(500, "provider_unexpected_meal_slot", "AI returned an unexpected meal slot.");
+    }
+    if (bySlot.has(slot)) {
+      throw new HttpError(500, "provider_duplicate_meal_slot", "AI returned a duplicate meal slot.");
+    }
+    bySlot.set(slot, block);
+  }
+  for (const slot of slots) {
+    if (!bySlot.has(slot.slot)) {
+      throw new HttpError(500, "provider_missing_meal_slot", "AI missed a required meal slot.");
+    }
+  }
+  const orderedBlocks = slots.map((slot) => bySlot.get(slot.slot)!);
+
   return jsonResponse(request, env, { 
     id: `eat-gen-${Date.now()}`,
     uid: user.uid,
-    candidates: validBlocks 
+    candidates: orderedBlocks
   });
 }
 
 function sanitizeMealCandidate(
   value: unknown,
   genericTerms: Set<string>,
+  expectedSlots: MealSlot[],
 ): Record<string, unknown> | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -297,8 +373,10 @@ function sanitizeMealCandidate(
   const mealCategory = typeof block.mealCategory === "string"
     ? block.mealCategory.trim().toLowerCase()
     : "";
+  const rawMealSlot = typeof block.mealSlot === "string"
+    ? block.mealSlot.trim().toLowerCase().replace(/-/g, "_")
+    : "";
   const startMinute = block.startMinute;
-  const endMinute = block.endMinute;
   const repeatDays = Array.isArray(block.repeatDays)
     ? [...new Set(
         block.repeatDays
@@ -316,21 +394,17 @@ function sanitizeMealCandidate(
         .filter((step) => step !== "" && !genericTerms.has(step.toLowerCase()))
         .slice(0, 12)
     : [];
-  const validCategory = ["breakfast", "lunch", "snack", "dinner"].includes(mealCategory);
-  const validTime = typeof startMinute === "number" &&
-    Number.isInteger(startMinute) &&
-    startMinute >= 0 &&
-    startMinute < 1440 &&
-    typeof endMinute === "number" &&
-    Number.isInteger(endMinute) &&
-    endMinute > startMinute &&
-    endMinute <= 1440;
-
+  const inferredSlot = inferMealSlot(rawMealSlot || mealCategory || title, block.startMinute, expectedSlots);
+  if (!inferredSlot) {
+    console.warn("[NutritionWorker] Dropping meal candidate without stable slot identity.");
+    return null;
+  }
+  const validCategory = inferredSlot.category === mealCategory ||
+    (inferredSlot.category === "snack" && (mealCategory === "snack" || mealCategory === "snacks"));
   if (
     title === "" ||
     title.length > 120 ||
     !validCategory ||
-    !validTime ||
     repeatDays.length === 0 ||
     cleanSteps.length < 2
   ) {
@@ -343,16 +417,44 @@ function sanitizeMealCandidate(
     ? Math.max(0, Math.min(1, block.confidenceScore))
     : 0.8;
   return {
-    title,
-    startMinute,
-    endMinute,
+    title: inferredSlot.title,
+    mealSlot: inferredSlot.slot,
+    startMinute: inferredSlot.startMinute,
+    endMinute: inferredSlot.startMinute + inferredSlot.durationMinutes,
     repeatDays,
-    mealCategory,
+    mealCategory: inferredSlot.category,
     steps: cleanSteps,
     blockType: "soft_block",
     candidateType: "block",
     confidenceScore: confidence,
   };
+}
+
+function inferMealSlot(raw: string, startMinute: unknown, expectedSlots: MealSlot[]): MealSlot | null {
+  const normalized = raw.trim().toLowerCase().replace(/-/g, "_").replace(/\s+/g, "_");
+  const direct = expectedSlots.find((slot) => slot.slot === normalized);
+  if (direct) return direct;
+  if (normalized.includes("morning") && normalized.includes("snack")) {
+    return expectedSlots.find((slot) => slot.slot === "morning_snack") ?? null;
+  }
+  if ((normalized.includes("afternoon") || normalized.includes("evening")) && normalized.includes("snack")) {
+    return expectedSlots.find((slot) => slot.slot === "afternoon_snack") ?? null;
+  }
+  if (normalized.includes("extra") && normalized.includes("snack")) {
+    return expectedSlots.find((slot) => slot.slot === "morning_snack") ?? null;
+  }
+  for (const slot of expectedSlots) {
+    if (slot.category !== "snack" && normalized.includes(slot.category)) return slot;
+  }
+  if (normalized === "snack" || normalized === "snacks") {
+    const snackSlots = expectedSlots.filter((slot) => slot.category === "snack");
+    if (typeof startMinute === "number" && Number.isInteger(startMinute)) {
+      const exact = snackSlots.find((slot) => slot.startMinute === startMinute);
+      if (exact) return exact;
+    }
+    return snackSlots.length === 1 ? snackSlots[0] : null;
+  }
+  return null;
 }
 
 export default {

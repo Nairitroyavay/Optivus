@@ -532,6 +532,7 @@ class OnboardingCompletionService {
         hardBlock: blockType == RoutineBlockType.hardBlock,
         location: b.location,
         mealCategory: b.mealCategory,
+        mealSlot: b.mealSlot,
         dishes: b.dishes,
         caloriesEstimate: b.calories,
         proteinEstimate: b.protein,

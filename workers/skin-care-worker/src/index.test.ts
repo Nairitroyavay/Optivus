@@ -1043,6 +1043,41 @@ describe("Skin-care Worker", () => {
     expect(calls).toHaveLength(2);
   });
 
+  test("primary routine generation accepts fenced JSON without fallback", async () => {
+    const calls: FetchCall[] = [];
+    stubGemini(
+      "```json\n" +
+        JSON.stringify({
+          routinePlans: [
+            {
+              slotLabel: "morning",
+              title: "Morning",
+              steps: ["Cleanse"],
+              productNames: ["Cleanser"],
+            },
+          ],
+        }) +
+        "\n```",
+      calls,
+    );
+
+    const response = await worker.fetch(
+      jsonRequest("/v1/skin-care/routine/generate", {
+        typedProductNames: ["Cleanser"],
+        desiredApplicationsPerDay: 2,
+      }),
+      {
+        ...makeEnv(),
+        AI_FALLBACK_MODEL: "gemini-fallback",
+      } as any,
+    );
+    const json = await response.json() as any;
+
+    expect(response.status).toBe(200);
+    expect(json.routinePlans).toHaveLength(1);
+    expect(calls).toHaveLength(1);
+  });
+
   test("empty provider candidates return provider_empty_candidates", async () => {
     stubGeminiResponses([
       {

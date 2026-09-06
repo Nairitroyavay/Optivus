@@ -274,6 +274,7 @@ class RoutineImportCandidateBlock {
   final String? location;
   final String? notes;
   final String? mealCategory;
+  final String? mealSlot;
   final List<String> steps;
 
   RoutineImportCandidateBlock({
@@ -307,6 +308,7 @@ class RoutineImportCandidateBlock {
     this.location,
     this.notes,
     this.mealCategory,
+    this.mealSlot,
     this.steps = const [],
   }) : needsManualReview =
            needsManualReview ||
@@ -357,6 +359,7 @@ class RoutineImportCandidateBlock {
       'location': location,
       'notes': notes,
       'mealCategory': mealCategory,
+      'mealSlot': mealSlot,
       'steps': steps,
     };
   }
@@ -395,6 +398,7 @@ class RoutineImportCandidateBlock {
       location: map['location'] as String?,
       notes: map['notes'] as String?,
       mealCategory: map['mealCategory'] as String?,
+      mealSlot: map['mealSlot'] as String?,
       steps: _readStringList(map['steps']),
     );
   }
@@ -438,6 +442,7 @@ class RoutineImportCandidateBlock {
     String? location,
     String? notes,
     String? mealCategory,
+    String? mealSlot,
     List<String>? steps,
     bool clearConfidenceScore = false,
     bool clearConfidenceLabel = false,
@@ -455,6 +460,7 @@ class RoutineImportCandidateBlock {
     bool clearLocation = false,
     bool clearNotes = false,
     bool clearMealCategory = false,
+    bool clearMealSlot = false,
   }) {
     return RoutineImportCandidateBlock(
       id: id ?? this.id,
@@ -513,6 +519,7 @@ class RoutineImportCandidateBlock {
       mealCategory: clearMealCategory
           ? null
           : (mealCategory ?? this.mealCategory),
+      mealSlot: clearMealSlot ? null : (mealSlot ?? this.mealSlot),
       steps: steps ?? this.steps,
     );
   }

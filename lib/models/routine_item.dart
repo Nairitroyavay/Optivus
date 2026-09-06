@@ -123,6 +123,7 @@ class RoutineItem {
 
   // Eating / Meal specific lists
   final String? mealCategory; // Breakfast, Lunch, Snacks, Dinner
+  final String? mealSlot;
   final List<String>? dishes;
   final double? caloriesEstimate;
   final double? proteinEstimate;
@@ -178,6 +179,7 @@ class RoutineItem {
     this.subtasksCompleted,
     this.steps,
     this.mealCategory,
+    this.mealSlot,
     this.dishes,
     this.caloriesEstimate,
     this.proteinEstimate,
@@ -310,6 +312,7 @@ class RoutineItem {
     List<bool>? subtasksCompleted,
     List<String>? steps,
     String? mealCategory,
+    String? mealSlot,
     List<String>? dishes,
     double? caloriesEstimate,
     double? proteinEstimate,
@@ -361,6 +364,7 @@ class RoutineItem {
       subtasksCompleted: subtasksCompleted ?? this.subtasksCompleted,
       steps: steps ?? this.steps,
       mealCategory: mealCategory ?? this.mealCategory,
+      mealSlot: mealSlot ?? this.mealSlot,
       dishes: dishes ?? this.dishes,
       caloriesEstimate: caloriesEstimate ?? this.caloriesEstimate,
       proteinEstimate: proteinEstimate ?? this.proteinEstimate,
@@ -415,6 +419,7 @@ class RoutineItem {
       'subtasksCompleted': subtasksCompleted,
       'steps': steps,
       'mealCategory': mealCategory,
+      'mealSlot': mealSlot,
       'dishes': dishes,
       'caloriesEstimate': caloriesEstimate,
       'proteinEstimate': proteinEstimate,
@@ -555,6 +560,7 @@ class RoutineItem {
       subtasksCompleted: (map['subtasksCompleted'] as List?)?.cast<bool>(),
       steps: (map['steps'] as List?)?.cast<String>(),
       mealCategory: map['mealCategory'] as String?,
+      mealSlot: map['mealSlot'] as String?,
       dishes: (map['dishes'] as List?)?.cast<String>(),
       caloriesEstimate: (map['caloriesEstimate'] as num?)?.toDouble(),
       proteinEstimate: (map['proteinEstimate'] as num?)?.toDouble(),

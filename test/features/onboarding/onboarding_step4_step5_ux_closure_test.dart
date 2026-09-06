@@ -1247,9 +1247,9 @@ void main() {
             .confirmedBlocksForSection('eating')
             .map((block) => block.title)
             .toList();
-        expect(eatingTitles, contains('Current Lunch'));
+        expect(eatingTitles, contains('Lunch'));
         expect(eatingTitles, isNot(contains('Late Breakfast')));
-        expect(find.text('Current Lunch'), findsWidgets);
+        expect(find.text('Lunch'), findsWidgets);
         expect(find.text('Late Breakfast'), findsNothing);
       },
     );

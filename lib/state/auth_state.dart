@@ -81,7 +81,18 @@ enum AuthFlowStatus {
   backendRestoreFailed,
 }
 
-enum VerificationEmailSendStatus { notAttempted, sent, failed }
+enum VerificationEmailSendStatus { pending, sent, failed }
+
+void _logEmailVerificationDebug(String message) {
+  if (kDebugMode) {
+    debugPrint(message);
+  }
+}
+
+String _maskedUid(String uid) {
+  if (uid.length <= 6) return 'uid_${uid.length}';
+  return '${uid.substring(0, 3)}...${uid.substring(uid.length - 3)}';
+}
 
 class AuthState {
   final AuthUser? user;
@@ -105,7 +116,7 @@ class AuthState {
     this.onboardingFailureReason,
     this.recoveryActions = const [],
     this.lastVerificationEmailSent,
-    this.verificationEmailSendStatus = VerificationEmailSendStatus.notAttempted,
+    this.verificationEmailSendStatus = VerificationEmailSendStatus.pending,
     this.resumeStep,
     this.completionRunId,
     this.startupReasonCode,
@@ -217,7 +228,7 @@ class AuthState {
           ? null
           : (lastVerificationEmailSent ?? this.lastVerificationEmailSent),
       verificationEmailSendStatus: clearVerificationEmailState
-          ? VerificationEmailSendStatus.notAttempted
+          ? VerificationEmailSendStatus.pending
           : (verificationEmailSendStatus ?? this.verificationEmailSendStatus),
       resumeStep: clearStartupDestination && resumeStep == null
           ? null
@@ -414,17 +425,32 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> signup(String name, String email, String password) async {
     final operation = ++_authOperationGeneration;
+    _logEmailVerificationDebug(
+      '[OptivusBuild] commit=${const String.fromEnvironment('OPTIVUS_BUILD_COMMIT', defaultValue: 'source-email-verification-v1')}',
+    );
+    _logEmailVerificationDebug('[EmailVerification] stage=signup_started');
     final handoff = _SignupCredentialHandoff(
       operation: operation,
       normalizedEmail: email.trim().toLowerCase(),
     );
     _signupCredentialHandoff = handoff;
     final previousUser = state.user;
-    state = state.copyWith(status: AuthFlowStatus.loading, clearError: true);
+    state = state
+        .copyWith(
+          status: AuthFlowStatus.loading,
+          clearError: true,
+          clearVerificationEmailState: true,
+        )
+        .copyWith(
+          verificationEmailSendStatus: VerificationEmailSendStatus.pending,
+        );
     AuthUser? createdUser;
     try {
       final user = await _repository.signUp(email, password, name: name);
       if (!_isCurrentAuthOperation(operation)) return;
+      _logEmailVerificationDebug(
+        '[EmailVerification] stage=firebase_account_created uid=${_maskedUid(user.uid)}',
+      );
       if (handoff.observedUid case final observedUid?
           when observedUid != user.uid) {
         _authOperationGeneration++;
@@ -439,21 +465,29 @@ class AuthNotifier extends StateNotifier<AuthState> {
           clearError: true,
         );
         try {
-          debugPrint('[EmailVerification] source=signup action=send attempt=1');
+          _logEmailVerificationDebug(
+            '[EmailVerification] stage=before_initial_send',
+          );
           await _repository.sendEmailVerification();
           if (!_isCurrentAuthOperation(operation)) return;
-          debugPrint('[EmailVerification] source=signup result=sent attempt=1');
+          _logEmailVerificationDebug(
+            '[EmailVerification] stage=after_initial_send',
+          );
           state = state.copyWith(
             clearError: true,
             lastVerificationEmailSent: DateTime.now(),
             verificationEmailSendStatus: VerificationEmailSendStatus.sent,
           );
+          _startDisplayNameEnrichment(
+            operation: operation,
+            user: user,
+            name: name,
+          );
         } catch (error) {
           if (!_isCurrentAuthOperation(operation)) rethrow;
           final mapped = mapAuthError(error);
-          debugPrint(
-            '[EmailVerification] source=signup result=failed '
-            'reason=${mapped.reason.name} attempt=1',
+          _logEmailVerificationDebug(
+            '[EmailVerification] stage=initial_send_failed code=${mapped.reason.name}',
           );
           state = state.copyWith(
             user: user,
@@ -614,14 +648,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> resendEmailVerification() async {
+    final targetUid = state.user?.uid;
+    if (targetUid == null) return;
     try {
       await _repository.sendEmailVerification();
+      if (!mounted || state.user?.uid != targetUid) return;
       state = state.copyWith(
         clearError: true,
         lastVerificationEmailSent: DateTime.now(),
         verificationEmailSendStatus: VerificationEmailSendStatus.sent,
       );
     } catch (error) {
+      if (!mounted || state.user?.uid != targetUid) return;
       final mapped = mapAuthError(error);
       state = state.copyWith(
         status: AuthFlowStatus.signedInEmailUnverified,
@@ -921,6 +959,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final previousUser = state.user;
 
     if (user == null) {
+      if (_signupCredentialHandoff?.operation == _authOperationGeneration) {
+        return;
+      }
       _signupCredentialHandoff = null;
       _authOperationGeneration++;
       _backendRestoreGeneration++;
@@ -1431,6 +1472,56 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   bool _isCurrentAuthOperation(int operation) {
     return mounted && operation == _authOperationGeneration;
+  }
+
+  void _startDisplayNameEnrichment({
+    required int operation,
+    required AuthUser user,
+    required String name,
+  }) {
+    final displayName = name.trim();
+    final repository = _repository;
+    if (displayName.isEmpty) return;
+    if (repository is! AuthProfileEnrichmentRepository) return;
+    final enrichmentRepository = repository as AuthProfileEnrichmentRepository;
+    unawaited(
+      _enrichDisplayName(
+        repository: enrichmentRepository,
+        operation: operation,
+        user: user,
+        displayName: displayName,
+      ),
+    );
+  }
+
+  Future<void> _enrichDisplayName({
+    required AuthProfileEnrichmentRepository repository,
+    required int operation,
+    required AuthUser user,
+    required String displayName,
+  }) async {
+    _logEmailVerificationDebug(
+      '[EmailVerification] stage=display_name_update_started uid=${_maskedUid(user.uid)}',
+    );
+    try {
+      await repository.updateDisplayName(
+        uid: user.uid,
+        displayName: displayName,
+      );
+      if (!_isCurrentAuthOperation(operation) || state.user?.uid != user.uid) {
+        return;
+      }
+      _logEmailVerificationDebug(
+        '[EmailVerification] stage=display_name_update_success uid=${_maskedUid(user.uid)}',
+      );
+    } catch (error) {
+      // Profile metadata is optional. Its failure never changes the completed
+      // verification-email result or the current auth destination.
+      final mapped = mapAuthError(error);
+      _logEmailVerificationDebug(
+        '[EmailVerification] stage=display_name_update_failure code=${mapped.reason.name}',
+      );
+    }
   }
 
   bool _claimExpectedSignupAuthEvent(AuthUser user) {

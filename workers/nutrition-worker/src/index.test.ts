@@ -199,8 +199,21 @@ describe("Nutrition Worker request boundary", () => {
     stubProviderText(JSON.stringify({
       candidates: [
         validCandidate({
+          mealSlot: "breakfast",
           providerDebug: "must-not-be-returned",
           apiToken: "must-not-be-returned",
+        }),
+        validCandidate({
+          mealSlot: "lunch",
+          title: "Lunch",
+          mealCategory: "lunch",
+          steps: ["Rice", "Dal"],
+        }),
+        validCandidate({
+          mealSlot: "dinner",
+          title: "Dinner",
+          mealCategory: "dinner",
+          steps: ["Roti", "Curry"],
         }),
       ],
     }));
@@ -216,7 +229,7 @@ describe("Nutrition Worker request boundary", () => {
 
     expect(response.status).toBe(200);
     expect(json.uid).toBe("uid-1");
-    expect(json.candidates).toHaveLength(1);
+    expect(json.candidates).toHaveLength(3);
     expect(json.candidates[0]).toMatchObject({
       title: "Breakfast",
       mealCategory: "breakfast",
@@ -228,6 +241,89 @@ describe("Nutrition Worker request boundary", () => {
     expect(text).not.toContain("providerDebug");
     expect(text).not.toContain("apiToken");
     expect(text).not.toContain("must-not-be-returned");
+  });
+
+  test("five requested meal slots are returned once with canonical title and time", async () => {
+    stubProviderText(JSON.stringify({
+      candidates: [
+        validCandidate({ mealSlot: "breakfast", title: "Breakfast", mealCategory: "breakfast", startMinute: 100 }),
+        validCandidate({ mealSlot: "morning_snack", title: "Breakfast", mealCategory: "snack", startMinute: 200 }),
+        validCandidate({ mealSlot: "lunch", title: "Lunch", mealCategory: "lunch", startMinute: 300 }),
+        validCandidate({ mealSlot: "afternoon_snack", title: "Snack", mealCategory: "snack", startMinute: 400 }),
+        validCandidate({ mealSlot: "dinner", title: "Dinner", mealCategory: "dinner", startMinute: 500 }),
+      ],
+    }));
+    const response = await worker.fetch(
+      request(validRequestBody({
+        mealsPerDay: 5,
+        breakfastMinute: 480,
+        extraSnackMinute: 660,
+        lunchMinute: 780,
+        snackMinute: 1020,
+        dinnerMinute: 1230,
+      })),
+      makeEnv() as never,
+    );
+    const json = await response.json() as { candidates: Array<Record<string, unknown>> };
+
+    expect(response.status).toBe(200);
+    expect(json.candidates.map((candidate) => candidate.mealSlot)).toEqual([
+      "breakfast",
+      "morning_snack",
+      "lunch",
+      "afternoon_snack",
+      "dinner",
+    ]);
+    expect(json.candidates.map((candidate) => candidate.title)).toEqual([
+      "Breakfast",
+      "Morning Snack",
+      "Lunch",
+      "Snack",
+      "Dinner",
+    ]);
+    expect(json.candidates.map((candidate) => candidate.startMinute)).toEqual([
+      480,
+      660,
+      780,
+      1020,
+      1230,
+    ]);
+  });
+
+  test("duplicate meal slot is a contract failure", async () => {
+    stubProviderText(JSON.stringify({
+      candidates: [
+        validCandidate({ mealSlot: "breakfast" }),
+        validCandidate({ mealSlot: "breakfast" }),
+        validCandidate({ mealSlot: "lunch", mealCategory: "lunch" }),
+        validCandidate({ mealSlot: "dinner", mealCategory: "dinner" }),
+      ],
+    }));
+    const response = await worker.fetch(
+      request(validRequestBody()),
+      makeEnv() as never,
+    );
+    const json = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe("provider_duplicate_meal_slot");
+  });
+
+  test("missing meal slot is a contract failure", async () => {
+    stubProviderText(JSON.stringify({
+      candidates: [
+        validCandidate({ mealSlot: "breakfast" }),
+        validCandidate({ mealSlot: "lunch", mealCategory: "lunch" }),
+      ],
+    }));
+    const response = await worker.fetch(
+      request(validRequestBody()),
+      makeEnv() as never,
+    );
+    const json = await response.json() as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe("provider_missing_meal_slot");
   });
 
   test("invalid generated plan returns an error with no fake meal plan", async () => {

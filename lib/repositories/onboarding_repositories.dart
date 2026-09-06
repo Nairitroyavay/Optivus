@@ -270,6 +270,7 @@ Map<String, dynamic> _routineItemToMap(String uid, RoutineItem item) {
     'notes': item.notes,
     'subtasks': item.subtasks,
     'mealCategory': item.mealCategory,
+    'mealSlot': item.mealSlot,
     'dishes': item.dishes,
     'calories': item.caloriesEstimate,
     'protein': item.proteinEstimate,

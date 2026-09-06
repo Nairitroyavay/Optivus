@@ -81,6 +81,18 @@ abstract class AuthRepository {
   Future<void> signOut();
 }
 
+/// Optional, non-critical Firebase profile enrichment.
+///
+/// Account creation and email-verification delivery deliberately do not depend
+/// on this capability. Keeping it separate prevents profile metadata work from
+/// delaying the first verification email.
+abstract interface class AuthProfileEnrichmentRepository {
+  Future<void> updateDisplayName({
+    required String uid,
+    required String displayName,
+  });
+}
+
 AuthUser _authUserFromFirebase(firebase_auth.User user) {
   return authUserFromProviderFacts(
     uid: user.uid,
@@ -388,7 +400,8 @@ class FirebaseGoogleAuthenticationFlow {
   }
 }
 
-class FirebaseAuthRepository implements AuthRepository {
+class FirebaseAuthRepository
+    implements AuthRepository, AuthProfileEnrichmentRepository {
   final firebase_auth.FirebaseAuth _auth;
   final GoogleIdentityClient _googleIdentityClient;
   late final FirebaseGoogleAuthenticationFlow _googleAuthenticationFlow;
@@ -465,6 +478,11 @@ class FirebaseAuthRepository implements AuthRepository {
   @override
   Future<AuthUser> signUp(String email, String password, {String? name}) async {
     try {
+      if (kDebugMode) {
+        debugPrint(
+          '[EmailVerificationRepository] stage=account_create_started',
+        );
+      }
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
@@ -476,16 +494,31 @@ class FirebaseAuthRepository implements AuthRepository {
           message: 'Firebase sign-up did not return a user.',
         );
       }
-      final trimmedName = name?.trim();
-      if (trimmedName != null && trimmedName.isNotEmpty) {
-        await user.updateDisplayName(trimmedName);
-        await user.reload();
-        final refreshed = _auth.currentUser;
-        return refreshed == null
-            ? _authUserFromFirebase(user)
-            : _authUserFromFirebase(refreshed);
+      if (kDebugMode) {
+        debugPrint(
+          '[EmailVerificationRepository] stage=account_create_success',
+        );
       }
       return _authUserFromFirebase(user);
+    } catch (e) {
+      throw mapAuthError(e);
+    }
+  }
+
+  @override
+  Future<void> updateDisplayName({
+    required String uid,
+    required String displayName,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null || user.uid != uid) {
+        throw firebase_auth.FirebaseAuthException(
+          code: 'missing-user',
+          message: 'The original signed-in user is no longer available.',
+        );
+      }
+      await user.updateDisplayName(displayName);
     } catch (e) {
       throw mapAuthError(e);
     }
@@ -550,8 +583,20 @@ class FirebaseAuthRepository implements AuthRepository {
           message: 'No signed-in user for email verification.',
         );
       }
+      if (kDebugMode) {
+        debugPrint('[EmailVerificationRepository] stage=before_firebase_send');
+      }
       await user.sendEmailVerification();
+      if (kDebugMode) {
+        debugPrint('[EmailVerificationRepository] stage=firebase_send_success');
+      }
     } catch (e) {
+      if (kDebugMode) {
+        final mapped = mapAuthError(e);
+        debugPrint(
+          '[EmailVerificationRepository] stage=firebase_send_failure code=${mapped.reason.name}',
+        );
+      }
       throw mapAuthError(e);
     }
   }

@@ -154,6 +154,21 @@ class VerificationLifecycleController
       }
       if (next.user?.emailVerified == true || !next.emailUnverified) {
         _stopAfterVerification();
+        return;
+      }
+      if (next.verificationEmailSendStatus !=
+          VerificationEmailSendStatus.sent) {
+        _pollTimer?.cancel();
+        _pollTimer = null;
+        if (state.checking) state = state.copyWith(checking: false);
+        return;
+      }
+      if (previous?.verificationEmailSendStatus !=
+              VerificationEmailSendStatus.sent &&
+          state.foreground) {
+        _reconcileResendDeadline();
+        _startCountdownIfNeeded();
+        unawaited(checkNow());
       }
     });
   }
@@ -197,7 +212,7 @@ class VerificationLifecycleController
   }
 
   Future<void> checkNow({bool manual = false}) {
-    if (_disposed || !_isEligible || state.verificationConfirmed) {
+    if (_disposed || !_canPoll || state.verificationConfirmed) {
       return Future.value();
     }
     final throttledUntil = state.nextVerificationCheckAllowedAt;
@@ -311,6 +326,7 @@ class VerificationLifecycleController
         messageKind: VerificationMessageKind.success,
       );
       _startCountdownIfNeeded();
+      _scheduleNextPoll();
     } catch (error) {
       if (!_canApply(uid)) return;
       final mapped = mapAuthError(error);
@@ -402,7 +418,7 @@ class VerificationLifecycleController
   }
 
   void _scheduleNextPoll({Duration? delay}) {
-    if (!_isEligible || !state.foreground || state.verificationConfirmed) {
+    if (!_canPoll || !state.foreground || state.verificationConfirmed) {
       return;
     }
     _pollTimer?.cancel();
@@ -433,6 +449,12 @@ class VerificationLifecycleController
         auth.user?.uid == _expectedUid &&
         auth.emailUnverified &&
         auth.user?.emailVerified != true;
+  }
+
+  bool get _canPoll {
+    return _isEligible &&
+        _ref.read(authProvider).verificationEmailSendStatus ==
+            VerificationEmailSendStatus.sent;
   }
 
   bool _canApply(String uid) {

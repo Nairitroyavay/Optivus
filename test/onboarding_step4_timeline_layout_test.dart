@@ -2119,6 +2119,165 @@ void main() {
   });
 
   test(
+    'Eating AI mapping uses canonical five meal slots and configured times',
+    () {
+      const base = BaseTimelineDraft(
+        mealsPerDay: 5,
+        breakfastMinute: 8 * 60,
+        extraSnackMinute: 11 * 60,
+        lunchMinute: 13 * 60,
+        snackMinute: 17 * 60,
+        dinnerMinute: 20 * 60 + 30,
+      );
+      final mapped = mapOnboarding5MealCandidates(
+        [
+          RoutineImportCandidateBlock(
+            id: 'breakfast',
+            mealSlot: 'breakfast',
+            title: 'Wrong title',
+            startMinute: 9 * 60,
+            endMinute: 9 * 60 + 30,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.softBlockKey,
+            category: 'eating',
+            hardBlock: false,
+            mealCategory: 'breakfast',
+            steps: const ['Poha', 'Curd'],
+          ),
+          RoutineImportCandidateBlock(
+            id: 'morning',
+            mealSlot: 'morning_snack',
+            title: 'Breakfast',
+            startMinute: 8 * 60,
+            endMinute: 8 * 60 + 20,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.softBlockKey,
+            category: 'eating',
+            hardBlock: false,
+            mealCategory: 'snack',
+            steps: const ['Fruit', 'Nuts'],
+          ),
+          RoutineImportCandidateBlock(
+            id: 'lunch',
+            mealSlot: 'lunch',
+            title: 'Lunch',
+            startMinute: 12 * 60,
+            endMinute: 12 * 60 + 45,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.softBlockKey,
+            category: 'eating',
+            hardBlock: false,
+            mealCategory: 'lunch',
+            steps: const ['Rice', 'Dal'],
+          ),
+          RoutineImportCandidateBlock(
+            id: 'afternoon',
+            mealSlot: 'afternoon_snack',
+            title: 'Breakfast',
+            startMinute: 18 * 60,
+            endMinute: 18 * 60 + 20,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.softBlockKey,
+            category: 'eating',
+            hardBlock: false,
+            mealCategory: 'snack',
+            steps: const ['Sandwich', 'Tea'],
+          ),
+          RoutineImportCandidateBlock(
+            id: 'dinner',
+            mealSlot: 'dinner',
+            title: 'Dinner',
+            startMinute: 19 * 60,
+            endMinute: 19 * 60 + 45,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.softBlockKey,
+            category: 'eating',
+            hardBlock: false,
+            mealCategory: 'dinner',
+            steps: const ['Roti', 'Paneer'],
+          ),
+        ],
+        now: DateTime.utc(2026, 6, 9),
+        baseTimeline: base,
+      );
+
+      expect(mapped.blocks.map((block) => block.mealSlot), [
+        'breakfast',
+        'morning_snack',
+        'lunch',
+        'afternoon_snack',
+        'dinner',
+      ]);
+      expect(mapped.blocks.map((block) => block.title), [
+        'Breakfast',
+        'Morning Snack',
+        'Lunch',
+        'Snack',
+        'Dinner',
+      ]);
+      expect(mapped.blocks.map((block) => block.startMinute), [
+        8 * 60,
+        11 * 60,
+        13 * 60,
+        17 * 60,
+        20 * 60 + 30,
+      ]);
+    },
+  );
+
+  test(
+    'Eating AI mapping rejects duplicate slots and keeps partial imports',
+    () {
+      const base = BaseTimelineDraft(
+        mealsPerDay: 3,
+        breakfastMinute: 8 * 60,
+        lunchMinute: 13 * 60,
+        dinnerMinute: 20 * 60 + 30,
+      );
+      RoutineImportCandidateBlock meal(String id, String slot) =>
+          RoutineImportCandidateBlock(
+            id: id,
+            mealSlot: slot,
+            title: slot,
+            startMinute: 8 * 60,
+            endMinute: 8 * 60 + 30,
+            repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+            blockType: TimelineBlockDraft.softBlockKey,
+            category: 'eating',
+            hardBlock: false,
+            mealCategory: slot == 'breakfast' ? 'breakfast' : slot,
+            steps: const ['Dish one', 'Dish two'],
+          );
+
+      final duplicate = mapOnboarding5MealCandidates(
+        [
+          meal('a', 'breakfast'),
+          meal('b', 'breakfast'),
+          meal('c', 'lunch'),
+          meal('d', 'dinner'),
+        ],
+        now: DateTime.utc(2026, 6, 9),
+        baseTimeline: base,
+      );
+      final missing = mapOnboarding5MealCandidates(
+        [meal('a', 'breakfast'), meal('c', 'lunch')],
+        now: DateTime.utc(2026, 6, 9),
+        baseTimeline: base,
+      );
+
+      expect(duplicate.blocks, isEmpty);
+      expect(missing.blocks.map((block) => block.mealSlot), [
+        'breakfast',
+        'lunch',
+      ]);
+      expect(missing.blocks.map((block) => block.title), [
+        'Breakfast',
+        'Lunch',
+      ]);
+    },
+  );
+
+  test(
     'Eating mess menu candidates derive day labels and default meal times',
     () {
       final mapped = mapOnboarding5MealCandidates([

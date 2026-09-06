@@ -1598,6 +1598,11 @@ void main() {
   testWidgets('11. Step 7 uses full timeline instead of mini block list', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(393, 873);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       buildTestWidget(
         draft: _hasProductsDraft(
@@ -1622,6 +1627,13 @@ void main() {
       find.byKey(const ValueKey('onboarding-step7-full-timeline')),
       findsOneWidget,
     );
+    expect(find.text('Your Routine'), findsNothing);
+    final timelineRect = tester.getRect(
+      find.byKey(const ValueKey('onboarding-step7-full-timeline')),
+    );
+    final stepRect = tester.getRect(find.byType(OnboardingStep7));
+    expect(timelineRect.height, greaterThan(stepRect.height * 0.62));
+    expect(timelineRect.bottom, closeTo(stepRect.bottom, 2));
     final fileContent = File(
       'lib/features/onboarding/steps/onboarding_step_7_skin_care_setup.dart',
     ).readAsStringSync();
@@ -5702,13 +5714,20 @@ void main() {
       await tester.tap(find.text('Find products'));
       await tester.pumpAndSettle();
 
-      expect(client.generateCalls, hasLength(2));
+      expect(client.generateCalls, hasLength(1));
       expect(client.generateCalls.first['recommendationOnly'], isTrue);
       expect(client.generateCalls.first['countryCode'], 'IN');
       expect(client.generateCalls.first['countryName'], 'India');
       expect(client.generateCalls.first['currencyCode'], 'INR');
+      expect(find.text('Build skin routine'), findsOneWidget);
+
+      await _selectCoreRecommendedProducts(tester);
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
+
+      expect(client.generateCalls, hasLength(2));
       expect(client.generateCalls.last['productInputSource'], 'typed');
-      expect(client.generateCalls.last['typedProductDetails'], hasLength(5));
+      expect(client.generateCalls.last['typedProductDetails'], hasLength(3));
 
       final base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
@@ -5729,8 +5748,6 @@ void main() {
         'Minimalist Gentle Cleanser',
         'Minimalist Barrier Moisturizer',
         'Minimalist SPF 50 Sunscreen',
-        'Minimalist 10% Vitamin C Serum',
-        'Minimalist 5% Niacinamide Serum',
       ]);
       expect(base.skinCareSpecialCareNotes, [
         'Patch test Minimalist Gentle Cleanser first',
@@ -5770,7 +5787,7 @@ void main() {
     },
   );
 
-  testWidgets('60. No-products auto-selects valid recommendations', (
+  testWidgets('60. No-products recommendations stop at product selection', (
     tester,
   ) async {
     useAndroidWidth(tester);
@@ -5797,10 +5814,26 @@ void main() {
     await tester.tap(find.text('Find products'));
     await tester.pumpAndSettle();
 
-    final base = ProviderScope.containerOf(
+    var base = ProviderScope.containerOf(
       tester.element(find.byType(OnboardingStep7)),
     ).read(mockOnboardingProvider).draft.baseTimeline;
-    expect(base.skinCareSelectedProductNames, hasLength(5));
+    expect(client.generateCalls, hasLength(1));
+    expect(client.generateCalls.single['recommendationOnly'], isTrue);
+    expect(base.skinCareProductRecommendations, hasLength(5));
+    expect(base.skinCareSelectedProductNames, isEmpty);
+    expect(base.confirmedBlocksForSection('skin_care'), isEmpty);
+    expect(find.text('Build skin routine'), findsOneWidget);
+    expect(find.text('Routine built'), findsNothing);
+
+    await _selectCoreRecommendedProducts(tester);
+    await tester.tap(find.text('Build skin routine'));
+    await tester.pumpAndSettle();
+
+    base = ProviderScope.containerOf(
+      tester.element(find.byType(OnboardingStep7)),
+    ).read(mockOnboardingProvider).draft.baseTimeline;
+    expect(client.generateCalls, hasLength(2));
+    expect(base.skinCareSelectedProductNames, hasLength(3));
     expect(base.confirmedBlocksForSection('skin_care'), isNotEmpty);
     expect(find.text('Routine built'), findsOneWidget);
   });
@@ -5834,6 +5867,11 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Find products'));
+      await tester.pumpAndSettle();
+
+      expect(client.generateCalls, hasLength(1));
+      await _selectCoreRecommendedProducts(tester);
+      await tester.tap(find.text('Build skin routine'));
       await tester.pumpAndSettle();
 
       expect(client.generateCalls, hasLength(2));
@@ -5901,6 +5939,14 @@ void main() {
 
     await tester.tap(find.text('Retry recommendation'));
     await tester.pumpAndSettle();
+    expect(client.generateCalls, hasLength(2));
+    expect(find.text('Build skin routine'), findsOneWidget);
+    expect(find.text('Routine built'), findsNothing);
+
+    await _selectCoreRecommendedProducts(tester);
+    await tester.tap(find.text('Build skin routine'));
+    await tester.pumpAndSettle();
+
     expect(client.generateCalls, hasLength(3));
     expect(find.text('Routine built'), findsOneWidget);
   });
@@ -5942,6 +5988,9 @@ void main() {
       await tester.tap(find.text('Find products'));
       await tester.pumpAndSettle();
       expect(client.generateCalls.first['facePhotoR2Key'], asset.r2Key);
+      await _selectCoreRecommendedProducts(tester);
+      await tester.tap(find.text('Build skin routine'));
+      await tester.pumpAndSettle();
       base = ProviderScope.containerOf(
         tester.element(find.byType(OnboardingStep7)),
       ).read(mockOnboardingProvider).draft.baseTimeline;
@@ -6254,7 +6303,8 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    expect(find.text('Routine built'), findsOneWidget);
+    expect(find.text('Build skin routine'), findsOneWidget);
+    expect(find.text('Routine built'), findsNothing);
   });
 
   testWidgets('69. Final no-products build reuses the routine loading state', (
@@ -6506,8 +6556,13 @@ void main() {
     await tester.tap(find.text('Find products'));
     await tester.pumpAndSettle();
 
-    expect(client.generateCalls, hasLength(2));
+    expect(client.generateCalls, hasLength(1));
     expect(client.generateCalls.first['desiredApplicationsPerDay'], 3);
+    await _selectCoreRecommendedProducts(tester);
+    await tester.tap(find.text('Build skin routine'));
+    await tester.pumpAndSettle();
+
+    expect(client.generateCalls, hasLength(2));
     expect(client.generateCalls.last['desiredApplicationsPerDay'], 3);
     expect(find.text('Routine built'), findsOneWidget);
   });
@@ -7174,7 +7229,6 @@ SkinCareAiRoutineResult _selectedProductRoutineResult() {
         steps: ['Cleanse', 'Apply sunscreen'],
         productNames: [
           'Minimalist Gentle Cleanser',
-          'Minimalist 10% Vitamin C Serum',
           'Minimalist SPF 50 Sunscreen',
         ],
       ),
@@ -7184,7 +7238,6 @@ SkinCareAiRoutineResult _selectedProductRoutineResult() {
         steps: ['Cleanse', 'Moisturize'],
         productNames: [
           'Minimalist Gentle Cleanser',
-          'Minimalist 5% Niacinamide Serum',
           'Minimalist Barrier Moisturizer',
         ],
       ),
@@ -7460,6 +7513,29 @@ class TestSkinCareAiClient implements SkinCareAiClient {
       return routineResultsQueue!.removeAt(0);
     }
     return routineResult;
+  }
+}
+
+Future<void> _selectCoreRecommendedProducts(WidgetTester tester) async {
+  for (final name in const [
+    'Minimalist Gentle Cleanser',
+    'Minimalist Barrier Moisturizer',
+    'Minimalist SPF 50 Sunscreen',
+  ]) {
+    final product = find.text(name);
+    for (
+      var attempt = 0;
+      product.evaluate().isEmpty && attempt < 12;
+      attempt += 1
+    ) {
+      await tester.drag(find.byType(ListView), const Offset(0, -160));
+      await tester.pump();
+    }
+    expect(product, findsOneWidget, reason: name);
+    await tester.ensureVisible(product);
+    await tester.pump();
+    await tester.tap(product);
+    await tester.pump();
   }
 }
 

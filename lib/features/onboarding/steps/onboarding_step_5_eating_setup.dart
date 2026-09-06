@@ -2299,10 +2299,29 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
   var droppedInvalidTime = 0;
   var droppedNoMealTime = 0;
   var droppedNoDishes = 0;
+  var invalidSlotCoverage = false;
+  final expectedSlots = baseTimeline == null
+      ? const <_OnboardingMealSlot>[]
+      : _mealSlotsForBase(
+          baseTimeline,
+          _normalizedMealsPerDay(baseTimeline.mealsPerDay),
+        );
+  final usedSlots = <String>{};
 
   for (final candidate in candidates) {
-    final mealCategory = _inferMealCategoryForCandidate(candidate);
-    final title = _mealCandidateTitle(candidate, mealCategory);
+    final slot = expectedSlots.isEmpty
+        ? null
+        : _inferMealSlotForCandidate(candidate, expectedSlots);
+    if (expectedSlots.isNotEmpty) {
+      if (slot == null || !usedSlots.add(slot.id)) {
+        invalidSlotCoverage = true;
+        droppedNoMealTime++;
+        continue;
+      }
+    }
+    final mealCategory =
+        slot?.category ?? _inferMealCategoryForCandidate(candidate);
+    final title = slot?.title ?? _mealCandidateTitle(candidate, mealCategory);
     if (title.isEmpty) {
       droppedNoTitle++;
       continue;
@@ -2310,37 +2329,19 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
 
     final defaultTime = _defaultMealTimeForCategory(mealCategory);
 
-    int? overrideStart;
-    int? overrideEnd;
-    if (baseTimeline != null) {
-      if (mealCategory == 'breakfast' && baseTimeline.breakfastMinute != null) {
-        overrideStart = baseTimeline.breakfastMinute;
-        overrideEnd = overrideStart! + 30;
-      } else if (mealCategory == 'lunch' && baseTimeline.lunchMinute != null) {
-        overrideStart = baseTimeline.lunchMinute;
-        overrideEnd = overrideStart! + 45;
-      } else if (mealCategory == 'snack' && baseTimeline.snackMinute != null) {
-        overrideStart = baseTimeline.snackMinute;
-        overrideEnd = overrideStart! + 20;
-      } else if (mealCategory == 'extra-snack' &&
-          baseTimeline.extraSnackMinute != null) {
-        overrideStart = baseTimeline.extraSnackMinute;
-        overrideEnd = overrideStart! + 20;
-      } else if (mealCategory == 'dinner' &&
-          baseTimeline.dinnerMinute != null) {
-        overrideStart = baseTimeline.dinnerMinute;
-        overrideEnd = overrideStart! + 45;
-      }
-    }
+    final overrideStart = slot?.startMinute;
+    final overrideEnd = slot == null
+        ? null
+        : slot.startMinute + slot.durationMinutes;
 
     final hasCandidateTime =
         candidate.hasFixedTime && candidate.startMinute < candidate.endMinute;
-    final startMinute = hasCandidateTime
-        ? candidate.startMinute
-        : (overrideStart ?? defaultTime?.$1);
-    final endMinute = hasCandidateTime
-        ? candidate.endMinute
-        : (overrideEnd ?? defaultTime?.$2);
+    final startMinute =
+        overrideStart ??
+        (hasCandidateTime ? candidate.startMinute : defaultTime?.$1);
+    final endMinute =
+        overrideEnd ??
+        (hasCandidateTime ? candidate.endMinute : defaultTime?.$2);
     if (startMinute == null || endMinute == null) {
       droppedNoMealTime++;
       continue;
@@ -2369,6 +2370,7 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
         location: candidate.location,
         blockType: TimelineBlockDraft.hardBlockKey,
         source: source,
+        mealSlot: slot?.id,
         mealCategory: mealCategory,
         dishes: dishes,
       ),
@@ -2381,6 +2383,10 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
     if (day != 0) return day;
     return a.startMinute.compareTo(b.startMinute);
   });
+
+  if (expectedSlots.isNotEmpty && invalidSlotCoverage) {
+    blocks.clear();
+  }
 
   final mergedBlocks = mergeOverlappingEatingBlocks(blocks);
 
@@ -2463,11 +2469,122 @@ int _targetCalories({
 Map<String, int> _mealTimesForBase(BaseTimelineDraft base, int mealsPerDay) {
   return {
     'breakfast': base.breakfastMinute ?? 8 * 60,
-    if (mealsPerDay == 5) 'extra-snack': base.extraSnackMinute ?? 11 * 60,
+    if (mealsPerDay == 5) 'morning_snack': base.extraSnackMinute ?? 11 * 60,
     'lunch': base.lunchMinute ?? 13 * 60,
-    if (mealsPerDay >= 4) 'snack': base.snackMinute ?? 17 * 60,
+    if (mealsPerDay >= 4) 'afternoon_snack': base.snackMinute ?? 17 * 60,
     'dinner': base.dinnerMinute ?? 20 * 60 + 30,
   };
+}
+
+class _OnboardingMealSlot {
+  final String id;
+  final String category;
+  final String title;
+  final int startMinute;
+  final int durationMinutes;
+
+  const _OnboardingMealSlot({
+    required this.id,
+    required this.category,
+    required this.title,
+    required this.startMinute,
+    required this.durationMinutes,
+  });
+}
+
+List<_OnboardingMealSlot> _mealSlotsForBase(
+  BaseTimelineDraft base,
+  int mealsPerDay,
+) {
+  return [
+    _OnboardingMealSlot(
+      id: 'breakfast',
+      category: 'breakfast',
+      title: 'Breakfast',
+      startMinute: base.breakfastMinute ?? 8 * 60,
+      durationMinutes: 30,
+    ),
+    if (mealsPerDay == 5)
+      _OnboardingMealSlot(
+        id: 'morning_snack',
+        category: 'snack',
+        title: 'Morning Snack',
+        startMinute: base.extraSnackMinute ?? 11 * 60,
+        durationMinutes: 20,
+      ),
+    _OnboardingMealSlot(
+      id: 'lunch',
+      category: 'lunch',
+      title: 'Lunch',
+      startMinute: base.lunchMinute ?? 13 * 60,
+      durationMinutes: 45,
+    ),
+    if (mealsPerDay >= 4)
+      _OnboardingMealSlot(
+        id: 'afternoon_snack',
+        category: 'snack',
+        title: 'Snack',
+        startMinute: base.snackMinute ?? 17 * 60,
+        durationMinutes: 20,
+      ),
+    _OnboardingMealSlot(
+      id: 'dinner',
+      category: 'dinner',
+      title: 'Dinner',
+      startMinute: base.dinnerMinute ?? 20 * 60 + 30,
+      durationMinutes: 45,
+    ),
+  ];
+}
+
+_OnboardingMealSlot? _inferMealSlotForCandidate(
+  RoutineImportCandidateBlock candidate,
+  List<_OnboardingMealSlot> slots,
+) {
+  final rawSlot = candidate.mealSlot
+      ?.trim()
+      .toLowerCase()
+      .replaceAll('-', '_')
+      .replaceAll(RegExp(r'\s+'), '_');
+  if (rawSlot != null && rawSlot.isNotEmpty) {
+    for (final slot in slots) {
+      if (slot.id == rawSlot) return slot;
+    }
+  }
+
+  final text = [
+    candidate.mealCategory,
+    candidate.sourceColumnLabel,
+    candidate.title,
+    candidate.category,
+    candidate.sourceTextSnippet,
+  ].whereType<String>().join(' ').toLowerCase();
+  if (text.contains('morning') && text.contains('snack')) {
+    return slots.where((slot) => slot.id == 'morning_snack').firstOrNull;
+  }
+  if ((text.contains('afternoon') || text.contains('evening')) &&
+      text.contains('snack')) {
+    return slots.where((slot) => slot.id == 'afternoon_snack').firstOrNull;
+  }
+  if (text.contains('extra') && text.contains('snack')) {
+    return slots.where((slot) => slot.id == 'morning_snack').firstOrNull;
+  }
+  for (final category in const ['breakfast', 'lunch', 'dinner']) {
+    if (text.contains(category)) {
+      return slots.where((slot) => slot.category == category).firstOrNull;
+    }
+  }
+  if (text.contains('snack') || text.contains('tiffin')) {
+    final snackSlots = slots
+        .where((slot) => slot.category == 'snack')
+        .toList(growable: false);
+    final exact = snackSlots
+        .where((slot) => slot.startMinute == candidate.startMinute)
+        .firstOrNull;
+    if (exact != null) return exact;
+    return snackSlots.length == 1 ? snackSlots.single : null;
+  }
+  return null;
 }
 
 String _inferMealCategoryForCandidate(RoutineImportCandidateBlock candidate) {

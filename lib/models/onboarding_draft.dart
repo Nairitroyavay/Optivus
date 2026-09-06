@@ -2934,6 +2934,7 @@ class TimelineBlockDraft {
   final bool crossesMidnight;
   final bool endsNextDay;
   final String? mealCategory;
+  final String? mealSlot;
   final List<String> dishes;
   final double? calories;
   final double? protein;
@@ -2957,6 +2958,7 @@ class TimelineBlockDraft {
     this.crossesMidnight = false,
     this.endsNextDay = false,
     this.mealCategory,
+    this.mealSlot,
     this.dishes = const [],
     this.calories,
     this.protein,
@@ -2982,6 +2984,7 @@ class TimelineBlockDraft {
       crossesMidnight: map['crossesMidnight'] as bool? ?? false,
       endsNextDay: map['endsNextDay'] as bool? ?? false,
       mealCategory: map['mealCategory'] as String?,
+      mealSlot: map['mealSlot'] as String?,
       dishes: _readStringList(map['dishes']),
       calories: (map['calories'] as num?)?.toDouble(),
       protein: (map['protein'] as num?)?.toDouble(),
@@ -3007,6 +3010,7 @@ class TimelineBlockDraft {
     'crossesMidnight': crossesMidnight,
     'endsNextDay': endsNextDay,
     'mealCategory': mealCategory,
+    'mealSlot': mealSlot,
     'dishes': dishes,
     'calories': calories,
     'protein': protein,
@@ -3031,6 +3035,7 @@ class TimelineBlockDraft {
     bool? crossesMidnight,
     bool? endsNextDay,
     String? mealCategory,
+    String? mealSlot,
     List<String>? dishes,
     double? calories,
     double? protein,
@@ -3055,6 +3060,7 @@ class TimelineBlockDraft {
       crossesMidnight: crossesMidnight ?? this.crossesMidnight,
       endsNextDay: endsNextDay ?? this.endsNextDay,
       mealCategory: mealCategory ?? this.mealCategory,
+      mealSlot: mealSlot ?? this.mealSlot,
       dishes: dishes ?? this.dishes,
       calories: calories ?? this.calories,
       protein: protein ?? this.protein,
@@ -3837,6 +3843,7 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
         crossesMidnight: last.crossesMidnight || block.crossesMidnight,
         endsNextDay: last.endsNextDay || block.endsNextDay,
         mealCategory: last.mealCategory ?? block.mealCategory,
+        mealSlot: last.mealSlot ?? block.mealSlot,
         dishes: combinedDishes,
         calories: _mergeNutrition(last.calories, block.calories),
         protein: _mergeNutrition(last.protein, block.protein),
@@ -3855,6 +3862,8 @@ List<TimelineBlockDraft> mergeOverlappingEatingBlocks(
 }
 
 String _mealSemanticKey(TimelineBlockDraft block) {
+  final slot = block.mealSlot?.trim().toLowerCase() ?? '';
+  if (slot.isNotEmpty) return slot;
   final category = block.mealCategory?.trim().toLowerCase() ?? '';
   if (category.isNotEmpty) return category;
   return block.title.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');

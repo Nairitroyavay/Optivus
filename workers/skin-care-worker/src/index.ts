@@ -179,13 +179,93 @@ function supportedGeminiImageContentType(contentType: string | undefined, object
   throw new HttpError(415, "unsupported_content_type", "This photo format is not supported. Please upload JPEG, PNG, or WEBP.");
 }
 
-function parseAiJsonText(text: string): any {
-  try {
-    const jsonStr = text.replace(/```(?:json)?\n?/g, "").replace(/```/g, "").trim();
-    return JSON.parse(jsonStr);
-  } catch {
-    return null;
+type AiJsonParseDiagnostics = {
+  value: any | null;
+  responseLength: number;
+  hasMarkdownFence: boolean;
+  jsonExtractionSucceeded: boolean;
+  failureCategory: "empty" | "no_json_candidate" | "json_parse_failed" | null;
+};
+
+function parseAiJsonTextWithDiagnostics(text: string): AiJsonParseDiagnostics {
+  const trimmed = text.trim();
+  const hasMarkdownFence = /```/.test(text);
+  if (!trimmed) {
+    return {
+      value: null,
+      responseLength: text.length,
+      hasMarkdownFence,
+      jsonExtractionSucceeded: false,
+      failureCategory: "empty",
+    };
   }
+
+  const candidates: string[] = [
+    trimmed.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim(),
+  ];
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+  if (fenced) candidates.push(fenced);
+  const objectStart = text.indexOf("{");
+  const objectEnd = text.lastIndexOf("}");
+  if (objectStart >= 0 && objectEnd > objectStart) {
+    candidates.push(text.slice(objectStart, objectEnd + 1).trim());
+  }
+  const arrayStart = text.indexOf("[");
+  const arrayEnd = text.lastIndexOf("]");
+  if (arrayStart >= 0 && arrayEnd > arrayStart) {
+    candidates.push(text.slice(arrayStart, arrayEnd + 1).trim());
+  }
+
+  let sawJsonCandidate = false;
+  for (const candidate of [...new Set(candidates)].filter(Boolean)) {
+    if (candidate.startsWith("{") || candidate.startsWith("[")) {
+      sawJsonCandidate = true;
+    }
+    try {
+      return {
+        value: JSON.parse(candidate),
+        responseLength: text.length,
+        hasMarkdownFence,
+        jsonExtractionSucceeded: candidate !== trimmed,
+        failureCategory: null,
+      };
+    } catch {
+      // Try the next bounded candidate without logging raw model output.
+    }
+  }
+
+  return {
+    value: null,
+    responseLength: text.length,
+    hasMarkdownFence,
+    jsonExtractionSucceeded: sawJsonCandidate,
+    failureCategory: sawJsonCandidate ? "json_parse_failed" : "no_json_candidate",
+  };
+}
+
+function parseAiJsonText(text: string): any {
+  return parseAiJsonTextWithDiagnostics(text).value;
+}
+
+function logProviderJsonParseFailure(
+  requestId: string,
+  stage: string,
+  model: string,
+  attempt: "primary" | "fallback",
+  diagnostics: AiJsonParseDiagnostics,
+): void {
+  console.warn(JSON.stringify({
+    event: "skin_care_provider_parse_failed",
+    requestId,
+    stage,
+    provider: "gemini",
+    model: compactProviderToken(model, "unknown"),
+    attempt,
+    responseLength: diagnostics.responseLength,
+    hasMarkdownFence: diagnostics.hasMarkdownFence,
+    jsonExtractionSucceeded: diagnostics.jsonExtractionSucceeded,
+    failureCategory: diagnostics.failureCategory,
+  }));
 }
 
 function stringList(value: any): string[] {
@@ -1674,7 +1754,15 @@ async function callGeminiWithFallback(
           providerCode: "empty_candidates",
         });
       }
-      if (!parseAiJsonText(text)) {
+      const parseDiagnostics = parseAiJsonTextWithDiagnostics(text);
+      if (!parseDiagnostics.value) {
+        logProviderJsonParseFailure(
+          diagnostics.requestId,
+          diagnostics.stage,
+          model,
+          attempt,
+          parseDiagnostics,
+        );
         throw new ProviderRequestError({
           errorCode: "provider_invalid_json",
           providerStatus: response.status,

@@ -1446,7 +1446,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Your Routine'), findsOneWidget);
+        expect(find.text('Your Routine'), findsNothing);
         expect(find.text('Morning Routine'), findsOneWidget);
       },
     );
