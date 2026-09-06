@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Firestore rules tests",
   "scripts": {
-    "test": "jest tests/firestore_rules.test.js"
+    "test": "jest tests/firestore_rules.test.js",
+    "test:firestore": "firebase emulators:exec --only firestore \"npm test -- --runInBand\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.0",

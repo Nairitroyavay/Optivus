@@ -324,6 +324,15 @@ for worker in coach-worker nutrition-worker r2-upload-worker routine-import-work
 done
 ```
 
+Firestore security-rule checks (starts and stops the configured local emulator):
+
+```sh
+npm run test:firestore
+```
+
+This command exercises `firestore.rules` through the Firebase Local Emulator
+Suite; running `npm test` directly requires an emulator that is already active.
+
 All five Workers define request-level suites. On 2026-09-05 they passed 121
 tests total after typecheck: R2 Upload 19, Routine Import 13, Nutrition 12,
 Skin Care 66, and Coach 11. A passing local suite does not replace

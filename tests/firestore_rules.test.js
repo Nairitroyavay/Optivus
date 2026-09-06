@@ -1554,6 +1554,18 @@ describe("Phase 4.6.4 canonical production contracts", () => {
   });
 
   describe("Phase 4.6.7 production onboarding lifecycle paths", () => {
+    it("rejects unverified and unauthenticated completion access", async () => {
+      const unverified = ownerDb("user123", false);
+      const unauthenticated = testEnv.unauthenticatedContext().firestore();
+      const runPath = "users/user123/onboardingRuns/run-001";
+      const pointerPath = "users/user123/onboarding/currentRun";
+
+      await assertFails(unverified.doc(runPath).set(onboardingRunData()));
+      await assertFails(unverified.doc(pointerPath).get());
+      await assertFails(unauthenticated.doc(runPath).get());
+      await assertFails(unauthenticated.doc(pointerPath).set(currentRunData()));
+    });
+
     it("allows canonical failure metadata while retryableFailure", async () => {
       const db = ownerDb();
       const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-001");
@@ -1712,6 +1724,111 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       }
     });
 
+    it("regression A: rejects an early-to-late jump while real draft and bundle writes advance sequentially", async () => {
+      const db = ownerDb();
+      const draftRef = db.doc("users/user123/onboarding/draft");
+      const bundleRef = db.doc("users/user123/onboarding/completionBundle");
+      const runRef = db.doc(`users/user123/onboardingRuns/${verifiableRunId}`);
+      const pointerRef = db.doc("users/user123/onboarding/currentRun");
+
+      const activation = db.batch();
+      activation.set(draftRef, completedOnboardingDraftData());
+      activation.set(runRef, onboardingRunData("user123", verifiableRunId));
+      activation.set(pointerRef, currentRunData("user123", verifiableRunId));
+      await assertSucceeds(activation.commit());
+
+      await assertSucceeds(runRef.update({
+        stage: "validateInput",
+        stagesCompleted: { validateInput: true },
+        updatedAt: completedAt,
+      }));
+
+      // Old bug A issued the equivalent persisted early -> later-stage jump.
+      await assertFails(runRef.update({
+        stage: "persistBundle",
+        stagesCompleted: {
+          validateInput: true,
+          persistDraft: true,
+          verifyDraft: true,
+          persistBundle: true,
+        },
+        updatedAt: completedAt,
+      }));
+
+      await assertSucceeds(draftRef.set(completedOnboardingDraftData("user123", {
+        updatedAt: completedAt,
+      })));
+      await assertSucceeds(runRef.update({
+        stage: "persistDraft",
+        stagesCompleted: { validateInput: true, persistDraft: true },
+        updatedAt: completedAt,
+      }));
+      await assertSucceeds(runRef.update({
+        stage: "verifyDraft",
+        stagesCompleted: {
+          validateInput: true,
+          persistDraft: true,
+          verifyDraft: true,
+        },
+        updatedAt: completedAt,
+      }));
+      await assertSucceeds(bundleRef.set(completionBundleData("user123", {
+        runId: verifiableRunId,
+        updatedAt: completedAt,
+      })));
+      await assertSucceeds(runRef.update({
+        stage: "persistBundle",
+        stagesCompleted: {
+          validateInput: true,
+          persistDraft: true,
+          verifyDraft: true,
+          persistBundle: true,
+        },
+        updatedAt: completedAt,
+      }));
+
+      expect((await draftRef.get()).data().onboardingCompleted).toBe(true);
+      expect((await bundleRef.get()).data().runId).toBe(verifiableRunId);
+      expect((await runRef.get()).data().stage).toBe("persistBundle");
+    });
+
+    it("resumes from an intermediate durable bundle stage in a fresh authenticated context", async () => {
+      const runPath = `users/user123/onboardingRuns/${verifiableRunId}`;
+      const draftPath = "users/user123/onboarding/draft";
+      const bundlePath = "users/user123/onboarding/completionBundle";
+      const pointerPath = "users/user123/onboarding/currentRun";
+      const durablePrefix = {
+        validateInput: true,
+        persistDraft: true,
+        verifyDraft: true,
+        persistBundle: true,
+      };
+
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(draftPath).set(completedOnboardingDraftData());
+        await admin.doc(bundlePath).set(completionBundleData("user123", {
+          runId: verifiableRunId,
+        }));
+        await admin.doc(runPath).set(onboardingRunData("user123", verifiableRunId, {
+          stage: "persistBundle",
+          stagesCompleted: durablePrefix,
+        }));
+        await admin.doc(pointerPath).set(currentRunData("user123", verifiableRunId));
+      });
+
+      const resumedClient = ownerDb();
+      const resumedRun = resumedClient.doc(runPath);
+      expect((await resumedRun.get()).data().stage).toBe("persistBundle");
+      await assertSucceeds(resumedClient.doc(bundlePath).get());
+      await assertSucceeds(resumedRun.update({
+        stage: "verifyBundle",
+        stagesCompleted: { ...durablePrefix, verifyBundle: true },
+        updatedAt: completedAt,
+      }));
+      expect((await resumedRun.get()).data().stage).toBe("verifyBundle");
+    });
+
     it("allows production-sized late-stage checkpoint and failure accounting writes", async () => {
       const db = ownerDb();
       const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-habit-stage");
@@ -1857,7 +1974,7 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await assertSucceeds(pointerRef.get());
     });
 
-    it("allows failed A plus a changed authoritative draft to atomically create B", async () => {
+    it("regression B: failed Run A plus a changed authoritative draft atomically creates Run B", async () => {
       const db = ownerDb();
       const draftRef = db.doc("users/user123/onboarding/draft");
       const priorRunRef = db.doc("users/user123/onboardingRuns/run-001");
@@ -1870,6 +1987,8 @@ describe("Phase 4.6.4 canonical production contracts", () => {
         await admin.doc(pointerRef.path).set(currentRunData());
       });
 
+      // Old bug B rejected this legitimate replacement of a failed run after
+      // the user edited onboarding and produced a new authoritative revision.
       const batch = db.batch();
       batch.set(draftRef, completedOnboardingDraftData("user123", {
         revision: 8,
@@ -2135,6 +2254,76 @@ describe("Phase 4.6.4 canonical production contracts", () => {
 
       await assertFails(pointerRef.set(currentRunData()));
       await assertFails(runRef.update({ status: "running", completedAt: null }));
+    });
+
+    it("treats a duplicate completed attempt as idempotent and keeps the completed run immutable", async () => {
+      const db = ownerDb();
+      const profileRef = db.doc("users/user123");
+      const draftRef = db.doc("users/user123/onboarding/draft");
+      const runRef = db.doc(`users/user123/onboardingRuns/${verifiableRunId}`);
+      const pointerRef = db.doc("users/user123/onboarding/currentRun");
+      const completedStages = {
+        validateInput: true,
+        persistDraft: true,
+        verifyDraft: true,
+        persistBundle: true,
+        verifyBundle: true,
+        reconcileRoutines: true,
+        verifyRoutines: true,
+        projectRoutineHistory: true,
+        verifyRoutineHistory: true,
+        reconcileHabitSystems: true,
+        verifyHabitSystems: true,
+        reloadControllers: true,
+        verifyFrontendState: true,
+      };
+      const running = onboardingRunData("user123", verifiableRunId, {
+        stage: "finalizeProfile",
+        stagesCompleted: completedStages,
+      });
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        const admin = context.firestore();
+        await admin.doc(profileRef.path).set(userData());
+        await admin.doc(draftRef.path).set(completedOnboardingDraftData());
+        await admin.doc(runRef.path).set(running);
+        await admin.doc(pointerRef.path).set(currentRunData("user123", verifiableRunId));
+      });
+
+      const completedProfile = userData("user123", {
+        onboardingInputCompleted: true,
+        onboardingProjectionStatus: "completed",
+        onboardingCompleted: true,
+        updatedAt: completedAt,
+      });
+      const completedRun = {
+        ...running,
+        stage: "completed",
+        status: "completed",
+        stagesCompleted: { ...completedStages, finalizeProfile: true },
+        updatedAt: completedAt,
+        completedAt,
+      };
+      const completedPointer = currentRunData("user123", verifiableRunId, {
+        status: "completed",
+        updatedAt: completedAt,
+      });
+      const terminal = db.batch();
+      terminal.set(profileRef, completedProfile);
+      terminal.set(runRef, completedRun);
+      terminal.set(pointerRef, completedPointer);
+      await assertSucceeds(terminal.commit());
+
+      // A reconstructed client observes the terminal proof and repeats only
+      // the pointer write performed by the production idempotency path.
+      const duplicateClient = ownerDb();
+      expect((await duplicateClient.doc(runRef.path).get()).data().status).toBe("completed");
+      expect((await duplicateClient.doc(pointerRef.path).get()).data().status).toBe("completed");
+      await assertSucceeds(duplicateClient.doc(pointerRef.path).set(completedPointer));
+      await assertFails(duplicateClient.doc(runRef.path).update({
+        retryCount: 1,
+        updatedAt: completedAt,
+      }));
+      await assertFails(duplicateClient.doc(runRef.path).delete());
     });
 
     it("rejects cross-owner and malformed current-run pointers", async () => {
