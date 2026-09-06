@@ -6,6 +6,7 @@ import 'package:optivus/repositories/firestore_paths.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/region_settings_provider.dart';
+import 'package:optivus/services/device_country_service.dart';
 
 void main() {
   group('password policy', () {
@@ -84,6 +85,45 @@ void main() {
     expect(saved.paymentRegion, isNot(PaymentRegion.indiaUpi));
   });
 
+  test('saved region outranks device detection during hydration', () async {
+    final repository = FakeRegionSettingsRepository();
+    await repository.saveRegionSettings(RegionSettings.india(userId: 'u1'));
+    final notifier = RegionSettingsNotifier(
+      repository,
+      const _TestDeviceCountryService(
+        DeviceCountry(
+          countryCode: 'GB',
+          countryName: 'United Kingdom',
+          fromDeviceLocation: true,
+        ),
+      ),
+    );
+
+    await notifier.loadForUser('u1');
+
+    expect(notifier.state.countryCode, 'IN');
+    expect(notifier.state.currencyCode, 'INR');
+    expect(notifier.state.source, RegionSource.userSaved);
+  });
+
+  test('device region is used only when no saved region exists', () async {
+    final notifier = RegionSettingsNotifier(
+      FakeRegionSettingsRepository(),
+      const _TestDeviceCountryService(
+        DeviceCountry(
+          countryCode: 'IN',
+          countryName: 'India',
+          fromDeviceLocation: true,
+        ),
+      ),
+    );
+
+    await notifier.loadForUser('u1');
+
+    expect(notifier.state.countryCode, 'IN');
+    expect(notifier.state.source, RegionSource.deviceDetected);
+  });
+
   test('Firestore path strings remain correct', () {
     expect(FirestoreUserPaths.profile('abc'), 'users/abc/profile/main');
     expect(
@@ -95,4 +135,12 @@ void main() {
       'users/abc/settings/appPreferences',
     );
   });
+}
+
+class _TestDeviceCountryService implements DeviceCountryService {
+  final DeviceCountry? result;
+  const _TestDeviceCountryService(this.result);
+
+  @override
+  Future<DeviceCountry?> detectCountry() async => result;
 }

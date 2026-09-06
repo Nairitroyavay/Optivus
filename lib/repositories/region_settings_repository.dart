@@ -14,7 +14,7 @@ class FakeRegionSettingsRepository implements RegionSettingsRepository {
 
   @override
   Future<RegionSettings?> fetchRegionSettings(String userId) async {
-    return _settingsByUserId[userId] ?? RegionSettings.defaultForUser(userId);
+    return _settingsByUserId[userId];
   }
 
   @override

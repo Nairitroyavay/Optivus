@@ -1200,6 +1200,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       clearReconstructionResult: true,
     );
     final restoreGeneration = ++_backendRestoreGeneration;
+    // Region is global, user-scoped state.  Hydrate it before restoring an
+    // onboarding draft so Step 7 cannot issue a local-pricing request against
+    // a transient locale fallback.
+    await _ref.read(regionSettingsProvider.notifier).loadForUser(user.uid);
+    if (!mounted || !_isCurrentRestore(restoreGeneration)) return;
     if (!_useFirebaseBackend) {
       if (user.uid == 'dev-user-12345') {
         await _loadDevSeedState(user);

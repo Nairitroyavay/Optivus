@@ -1,17 +1,48 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/repositories/region_settings_repository.dart';
+import 'package:optivus/services/device_country_service.dart';
 
 class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
   final RegionSettingsRepository _repository;
+  final DeviceCountryService _deviceCountryService;
 
-  RegionSettingsNotifier(this._repository)
-    : super(RegionSettings.defaultForUser(''));
+  RegionSettingsNotifier(
+    this._repository, [
+    DeviceCountryService? deviceCountryService,
+  ]) : _deviceCountryService =
+           deviceCountryService ?? const GeolocatorDeviceCountryService(),
+       super(RegionSettings.defaultForUser(''));
 
   Future<void> loadForUser(String userId) async {
-    state =
-        await _repository.fetchRegionSettings(userId) ??
-        RegionSettings.defaultForUser(userId);
+    RegionSettings? saved;
+    try {
+      saved = await _repository.fetchRegionSettings(userId);
+    } catch (_) {
+      // Region localization must not prevent an authenticated session from
+      // reconstructing; the safe fallback remains available below.
+    }
+    if (saved != null) {
+      state = saved.copyWith(userId: userId, source: RegionSource.userSaved);
+      return;
+    }
+
+    DeviceCountry? detected;
+    try {
+      detected = await _deviceCountryService.detectCountry();
+    } catch (_) {
+      detected = null;
+    }
+    if (detected != null && detected.fromDeviceLocation) {
+      state = RegionSettings.forCountry(
+        userId: userId,
+        countryCode: detected.countryCode,
+        countryName: detected.countryName,
+        source: RegionSource.deviceDetected,
+      );
+      return;
+    }
+    state = RegionSettings.defaultForUser(userId);
   }
 
   void loadSettings(RegionSettings settings) {
@@ -25,7 +56,7 @@ class RegionSettingsNotifier extends StateNotifier<RegionSettings> {
   Future<void> save(RegionSettings settings) async {
     final updated = _guardPaymentRegion(
       settings,
-    ).copyWith(updatedAt: DateTime.now());
+    ).copyWith(updatedAt: DateTime.now(), source: RegionSource.userSaved);
     state = updated;
     await _repository.saveRegionSettings(updated);
   }
@@ -60,5 +91,6 @@ final regionSettingsProvider =
     StateNotifierProvider<RegionSettingsNotifier, RegionSettings>((ref) {
       return RegionSettingsNotifier(
         ref.watch(regionSettingsRepositoryProvider),
+        ref.watch(deviceCountryServiceProvider),
       );
     });

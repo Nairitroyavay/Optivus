@@ -55,20 +55,13 @@ class GeolocatorDeviceCountryService implements DeviceCountryService {
       }
     } catch (error) {
       debugPrint(
-        '[DeviceCountryService] Detection failed safely; using locale '
-        'fallback (${error.runtimeType}).',
+        '[DeviceCountryService] Detection failed safely '
+        '(${error.runtimeType}).',
       );
     }
-
-    final localeCountryCode =
-        PlatformDispatcher.instance.locale.countryCode?.trim().toUpperCase() ??
-        '';
-    if (localeCountryCode.length != 2) return null;
-    return DeviceCountry(
-      countryCode: localeCountryCode,
-      countryName: '',
-      fromDeviceLocation: false,
-    );
+    // Locale fallback is resolved by RegionSettingsNotifier, where it retains
+    // its lower authority instead of masquerading as device detection.
+    return null;
   }
 
   Future<Position?> _position() async {

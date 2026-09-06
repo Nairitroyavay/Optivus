@@ -20,6 +20,10 @@ enum FoodVocabularyMode { global, india, japan, custom }
 
 enum PaymentRegion { global, indiaUpi, manualOnly }
 
+/// Explains which authority resolved the active region.  A locale is useful
+/// as a safe initial default, but it is never an explicit user preference.
+enum RegionSource { userSaved, deviceDetected, localeFallback, unknown }
+
 class _CurrencyProfile {
   final String code;
   final String symbol;
@@ -176,6 +180,7 @@ class RegionSettings {
   final WeekStartDay weekStartDay;
   final FoodVocabularyMode foodVocabularyMode;
   final PaymentRegion paymentRegion;
+  final RegionSource source;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -197,6 +202,7 @@ class RegionSettings {
     required this.weekStartDay,
     required this.foodVocabularyMode,
     required this.paymentRegion,
+    this.source = RegionSource.unknown,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -205,6 +211,7 @@ class RegionSettings {
     return RegionSettings.forCountry(
       userId: userId,
       countryCode: PlatformDispatcher.instance.locale.countryCode ?? '',
+      source: RegionSource.localeFallback,
     );
   }
 
@@ -212,12 +219,25 @@ class RegionSettings {
     required String userId,
     required String countryCode,
     String countryName = '',
+    RegionSource source = RegionSource.unknown,
   }) {
     final code = countryCode.trim().toUpperCase();
-    if (code == 'IN') return RegionSettings.india(userId: userId);
-    if (code == 'US') return RegionSettings.unitedStates(userId: userId);
-    if (code == 'JP') return RegionSettings.japan(userId: userId);
-    if (code == 'GB') return RegionSettings.unitedKingdom(userId: userId);
+    if (code == 'IN') {
+      return RegionSettings.india(userId: userId).copyWith(source: source);
+    }
+    if (code == 'US') {
+      return RegionSettings.unitedStates(
+        userId: userId,
+      ).copyWith(source: source);
+    }
+    if (code == 'JP') {
+      return RegionSettings.japan(userId: userId).copyWith(source: source);
+    }
+    if (code == 'GB') {
+      return RegionSettings.unitedKingdom(
+        userId: userId,
+      ).copyWith(source: source);
+    }
 
     final now = DateTime.now();
     final resolvedCode = code.length == 2 ? code : 'ZZ';
@@ -249,6 +269,7 @@ class RegionSettings {
       weekStartDay: WeekStartDay.monday,
       foodVocabularyMode: FoodVocabularyMode.global,
       paymentRegion: PaymentRegion.global,
+      source: source,
       createdAt: now,
       updatedAt: now,
     );
@@ -274,6 +295,7 @@ class RegionSettings {
       weekStartDay: WeekStartDay.monday,
       foodVocabularyMode: FoodVocabularyMode.india,
       paymentRegion: PaymentRegion.indiaUpi,
+      source: RegionSource.userSaved,
       createdAt: now,
       updatedAt: now,
     );
@@ -299,6 +321,7 @@ class RegionSettings {
       weekStartDay: WeekStartDay.sunday,
       foodVocabularyMode: FoodVocabularyMode.global,
       paymentRegion: PaymentRegion.global,
+      source: RegionSource.userSaved,
       createdAt: now,
       updatedAt: now,
     );
@@ -324,6 +347,7 @@ class RegionSettings {
       weekStartDay: WeekStartDay.monday,
       foodVocabularyMode: FoodVocabularyMode.japan,
       paymentRegion: PaymentRegion.global,
+      source: RegionSource.userSaved,
       createdAt: now,
       updatedAt: now,
     );
@@ -349,6 +373,7 @@ class RegionSettings {
       weekStartDay: WeekStartDay.monday,
       foodVocabularyMode: FoodVocabularyMode.global,
       paymentRegion: PaymentRegion.global,
+      source: RegionSource.userSaved,
       createdAt: now,
       updatedAt: now,
     );
@@ -374,6 +399,7 @@ class RegionSettings {
       weekStartDay: WeekStartDay.monday,
       foodVocabularyMode: FoodVocabularyMode.global,
       paymentRegion: PaymentRegion.global,
+      source: RegionSource.userSaved,
       createdAt: now,
       updatedAt: now,
     );
@@ -399,6 +425,7 @@ class RegionSettings {
       weekStartDay: WeekStartDay.monday,
       foodVocabularyMode: FoodVocabularyMode.custom,
       paymentRegion: PaymentRegion.manualOnly,
+      source: RegionSource.userSaved,
       createdAt: now,
       updatedAt: now,
     );
@@ -422,6 +449,7 @@ class RegionSettings {
     WeekStartDay? weekStartDay,
     FoodVocabularyMode? foodVocabularyMode,
     PaymentRegion? paymentRegion,
+    RegionSource? source,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -443,6 +471,7 @@ class RegionSettings {
       weekStartDay: weekStartDay ?? this.weekStartDay,
       foodVocabularyMode: foodVocabularyMode ?? this.foodVocabularyMode,
       paymentRegion: paymentRegion ?? this.paymentRegion,
+      source: source ?? this.source,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -468,6 +497,7 @@ class RegionSettings {
       'weekStartDay': weekStartDay.name,
       'foodVocabularyMode': foodVocabularyMode.name,
       'paymentRegion': paymentRegion.name,
+      'source': source.name,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -493,6 +523,7 @@ class RegionSettings {
       'weekStartDay': weekStartDay.name,
       'foodVocabularyMode': foodVocabularyMode.name,
       'paymentRegion': paymentRegion.name,
+      'source': source.name,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -555,6 +586,13 @@ class RegionSettings {
         PaymentRegion.values,
         map['paymentRegion'],
         defaults.paymentRegion,
+      ),
+      // Existing persisted settings predate provenance.  They are necessarily
+      // user-owned settings because they came from that user's document.
+      source: _enumByName(
+        RegionSource.values,
+        map['source'],
+        RegionSource.userSaved,
       ),
       createdAt: _dateTimeFromMapValue(map['createdAt']) ?? defaults.createdAt,
       updatedAt: _dateTimeFromMapValue(map['updatedAt']) ?? defaults.updatedAt,

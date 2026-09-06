@@ -17,7 +17,6 @@ import 'package:optivus/features/uploads/providers/onboarding_upload_interaction
 import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/region_settings.dart';
 import 'package:optivus/features/routine/utils/timeline_utils.dart';
-import 'package:optivus/services/device_country_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/auth_generation.dart';
@@ -1337,7 +1336,8 @@ class OnboardingStep7 extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final base = ref.watch(mockOnboardingProvider).draft.baseTimeline;
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final base = draft.baseTimeline;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     final hasActivePath =
         base.skinCareSetupPath == 'has_products' ||
@@ -1345,6 +1345,15 @@ class OnboardingStep7 extends ConsumerWidget {
         base.skinCareSetupPath == 'skip' ||
         base.skinCareSkipped;
     final isChoice = base.skinCareSetupStep <= 0 || !hasActivePath;
+    final hasCurrentRoutine =
+        base.isSkinCareRoutineCurrent(draft.uid) &&
+        base.blocks.any((block) => block.section == 'skin_care');
+
+    // Review mode is structurally parallel to Steps 4 and 5: the timeline
+    // owns the onboarding body rather than living inside setup padding.
+    if (hasCurrentRoutine) {
+      return _SkinCareSelectedModeScreen(base: base);
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
@@ -3829,24 +3838,10 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
             await ref.read(authRepositoryProvider).currentIdToken() ?? '';
         if (!scope.isCurrent) return false;
         final client = ref.read(skinCareAiClientProvider);
-        var region = ref.read(regionSettingsProvider);
-        final hasExplicitRegion =
-            region.countryCode.trim().isNotEmpty && region.countryCode != 'ZZ';
-        if (!hasExplicitRegion) {
-          final detectedCountry = await ref
-              .read(deviceCountryServiceProvider)
-              .detectCountry();
-          if (!scope.isCurrent) return false;
-          if (detectedCountry != null) {
-            // Device detection is a request-scoped default. Finding products
-            // must not mutate the user's explicit global region setting.
-            region = RegionSettings.forCountry(
-              userId: uid,
-              countryCode: detectedCountry.countryCode,
-              countryName: detectedCountry.countryName,
-            );
-          }
-        }
+        // Region resolution is a hydrated, user-scoped responsibility.  In
+        // particular, a locale fallback must never replace saved settings in
+        // a request assembled by this screen.
+        final region = ref.read(regionSettingsProvider);
         scope.transition(
           AiGenerationPhase.analyzing,
           message:
@@ -4392,11 +4387,20 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!base.isSkinCareRoutineCurrent(draft.uid))
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Text(
+                'Changes not applied yet',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: OptivusColors.textPrimary,
+                ),
+              ),
+            ),
           LayoutBuilder(
             builder: (context, constraints) {
-              final statusLabel = base.isSkinCareRoutineCurrent(draft.uid)
-                  ? 'Routine built'
-                  : 'Changes not applied yet';
               final selectedProductsButton =
                   base.skinCareSuggestedProducts.isEmpty
                   ? null
@@ -4446,11 +4450,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  statusLabel,
+                                child: const Text(
+                                  'Skin Care',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w900,
                                     color: OptivusColors.textPrimary,
@@ -4459,6 +4463,15 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                               ),
                               ?selectedProductsButton,
                             ],
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Review your routine for the week.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: OptivusColors.textSecondary,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Align(
@@ -4470,11 +4483,11 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                     : Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              statusLabel,
+                            child: const Text(
+                              'Skin Care',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w900,
                                 color: OptivusColors.textPrimary,
@@ -4761,13 +4774,13 @@ class _NoProductsModeScreenState extends ConsumerState<_NoProductsModeScreen> {
                                 ? _generate
                                 : null,
                           );
-                          if (tightActions) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [buildButton],
-                            );
-                          }
-                          return Row(children: [Expanded(child: buildButton)]);
+                          return tightActions
+                              ? Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [buildButton],
+                                )
+                              : Row(children: [Expanded(child: buildButton)]);
                         },
                       ),
                     ],
