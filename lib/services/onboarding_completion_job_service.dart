@@ -617,9 +617,12 @@ class OnboardingCompletionJobService {
             job = await _beginStage(
               job,
               OnboardingCompletionStage.finalizeProfile,
-              persist: true,
             );
             _verifyFinalizationAccounting(job);
+            job = await _markStageCompleted(
+              job,
+              OnboardingCompletionStage.finalizeProfile,
+            );
           }
 
           checkSession();
@@ -636,8 +639,19 @@ class OnboardingCompletionJobService {
             durableOutputsVerified: true,
           );
         } catch (e) {
+          // _beginStage is intentionally in-memory only: a failed operation
+          // must not make its stage durable.  Re-read the last durable job so
+          // this failure is attached to the last committed checkpoint, rather
+          // than accidentally advancing it to the operation that failed.
+          final failedStage = job.stage;
+          final persistedJob = await _loadJobStatus(uid, runId);
+          if (persistedJob?.status == OnboardingJobStatus.completed &&
+              persistedJob?.stage == OnboardingCompletionStage.completed) {
+            return persistedJob!;
+          }
+          job = persistedJob ?? job;
           final now = DateTime.now();
-          final failure = _buildSanitizedFailure(e, job.stage);
+          final failure = _buildSanitizedFailure(e, failedStage);
           job = job.copyWith(
             status: failure.retryable
                 ? OnboardingJobStatus.retryableFailure
@@ -1146,7 +1160,7 @@ class OnboardingCompletionJobService {
   Future<OnboardingCompletionJob> _markStageCompleted(
     OnboardingCompletionJob job,
     OnboardingCompletionStage stage, {
-    bool persist = false,
+    bool persist = true,
   }) async {
     final next = _stageCompletedCopy(job, stage);
     if (persist) {

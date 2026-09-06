@@ -1459,6 +1459,22 @@ service cloud.firestore {
         : -1;
     }
 
+    // Completion evidence is append-only. A same-stage retry may add that
+    // stage's successful checkpoint, while an advancing write may add only
+    // its destination checkpoint (or finalizeProfile for terminalization).
+    // Together with the rank check, this inductively requires the exact
+    // ordered true-valued prefix without expensive per-stage branching.
+    function validOnboardingCheckpointTransition(before, after) {
+      let checkpointDiff = after.stagesCompleted.diff(before.stagesCompleted);
+      return checkpointDiff.removedKeys().size() == 0
+        && checkpointDiff.changedKeys().size() == 0
+        && (after.stage == before.stage
+          ? checkpointDiff.addedKeys().hasOnly([after.stage])
+          : after.stage == "completed"
+            ? checkpointDiff.addedKeys().hasOnly(["finalizeProfile"])
+            : checkpointDiff.addedKeys().hasOnly([after.stage]));
+    }
+
     function validOnboardingCompletionJobTransition(before, after, jobId) {
       return validOnboardingCompletionJob(after, jobId)
         && after.ownerUid == before.ownerUid
@@ -1468,8 +1484,12 @@ service cloud.firestore {
         && after.draftRevision == before.draftRevision
         && onboardingJobStageRank(after.stage) >= onboardingJobStageRank(before.stage)
         && onboardingJobStageRank(after.stage) <= onboardingJobStageRank(before.stage) + 1
+        && (after.stage in ["validateInput", "completed"]
+          || after.stagesCompleted[after.stage] == true)
         && (after.stage == before.stage
           || after.stagesCompleted[before.stage] == true)
+        && (after.status == "completed"
+          || validOnboardingCheckpointTransition(before, after))
         && before.status != "completed";
     }
 
@@ -1616,8 +1636,12 @@ service cloud.firestore {
             ]))
         && onboardingJobStageRank(after.stage) >= onboardingJobStageRank(before.stage)
         && onboardingJobStageRank(after.stage) <= onboardingJobStageRank(before.stage) + 1
+        && (after.stage in ["validateInput", "completed"]
+          || after.stagesCompleted[after.stage] == true)
         && (after.stage == before.stage
           || after.stagesCompleted[before.stage] == true)
+        && (after.status == "completed"
+          || validOnboardingCheckpointTransition(before, after))
         && before.status != "completed"
         && (after.status != "completed"
           || validCompletedTerminalState(after.ownerUid, runId));

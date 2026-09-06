@@ -1340,9 +1340,15 @@ describe("Phase 4.6.4 canonical production contracts", () => {
     await assertSucceeds(ref.set(onboardingJobData()));
     await assertFails(ref.update({ stage: "verifyDraft", status: "running", updatedAt: completedAt }));
     await assertSucceeds(ref.update({
-      stage: "persistDraft",
+      stage: "validateInput",
       status: "running",
       stagesCompleted: { validateInput: true },
+      updatedAt: completedAt,
+    }));
+    await assertSucceeds(ref.update({
+      stage: "persistDraft",
+      status: "running",
+      stagesCompleted: { validateInput: true, persistDraft: true },
       updatedAt: completedAt,
     }));
   });
@@ -1627,10 +1633,67 @@ describe("Phase 4.6.4 canonical production contracts", () => {
       await assertSucceeds(ref.set(onboardingRunData()));
       await assertSucceeds(ref.get());
       await assertSucceeds(ref.update({
+        stage: "validateInput",
+        stagesCompleted: { validateInput: true },
+        updatedAt: completedAt,
+      }));
+      await assertSucceeds(ref.update({
+        stage: "persistDraft",
+        stagesCompleted: { validateInput: true, persistDraft: true },
+        updatedAt: completedAt,
+      }));
+    });
+
+    it("requires every persisted run stage to carry its complete true-valued prefix", async () => {
+      const db = ownerDb();
+      const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc("run-prefix");
+      await assertSucceeds(ref.set(onboardingRunData("user123", "run-prefix")));
+
+      await assertSucceeds(ref.update({
+        stage: "validateInput",
+        stagesCompleted: { validateInput: true },
+        updatedAt: completedAt,
+      }));
+
+      await assertFails(ref.update({
         stage: "persistDraft",
         stagesCompleted: { validateInput: true },
         updatedAt: completedAt,
       }));
+
+      await assertSucceeds(ref.update({
+        stage: "persistDraft",
+        stagesCompleted: { validateInput: true, persistDraft: true },
+        updatedAt: completedAt,
+      }));
+
+      await assertFails(ref.update({
+        stage: "verifyDraft",
+        stagesCompleted: { validateInput: true, persistDraft: true },
+        updatedAt: completedAt,
+      }));
+    });
+
+    it("accepts the exact durable onboarding stage order one checkpoint at a time", async () => {
+      const db = ownerDb();
+      const runId = "run-exact-stage-order";
+      const ref = db.collection("users").doc("user123").collection("onboardingRuns").doc(runId);
+      const stages = [
+        "validateInput", "persistDraft", "verifyDraft", "persistBundle", "verifyBundle",
+        "reconcileRoutines", "verifyRoutines", "projectRoutineHistory", "verifyRoutineHistory",
+        "reconcileHabitSystems", "verifyHabitSystems", "reloadControllers", "verifyFrontendState",
+        "finalizeProfile",
+      ];
+      await assertSucceeds(ref.set(onboardingRunData("user123", runId)));
+      const completed = {};
+      for (const stage of stages) {
+        completed[stage] = true;
+        await assertSucceeds(ref.update({
+          stage,
+          stagesCompleted: { ...completed },
+          updatedAt: completedAt,
+        }));
+      }
     });
 
     it("allows production-sized late-stage checkpoint and failure accounting writes", async () => {
@@ -1652,10 +1715,9 @@ describe("Phase 4.6.4 canonical production contracts", () => {
         verifyRoutineHistory: true,
         reconcileHabitSystems: true,
         verifyHabitSystems: true,
-        reloadControllers: true,
       };
       const running = onboardingRunData("user123", "run-habit-stage", {
-        stage: "verifyFrontendState",
+        stage: "reloadControllers",
         stagesCompleted: {
           ...stagesBefore,
         },
@@ -1676,19 +1738,35 @@ describe("Phase 4.6.4 canonical production contracts", () => {
         ...running,
         stagesCompleted: {
           ...stagesBefore,
-          verifyFrontendState: true,
+          reloadControllers: true,
         },
         updatedAt: completedAt,
       }));
 
       await assertSucceeds(ref.set({
         ...running,
-        status: "retryableFailure",
-        retryCount: 1,
+        stage: "verifyFrontendState",
         stagesCompleted: {
           ...stagesBefore,
+          reloadControllers: true,
           verifyFrontendState: true,
         },
+        updatedAt: completedAt,
+      }));
+
+      const verifiedFrontend = {
+        ...running,
+        stage: "verifyFrontendState",
+        stagesCompleted: {
+          ...stagesBefore,
+          reloadControllers: true,
+          verifyFrontendState: true,
+        },
+      };
+      await assertSucceeds(ref.set({
+        ...verifiedFrontend,
+        status: "retryableFailure",
+        retryCount: 1,
         failureCode: "frontend_state_verification_failed",
         failureStage: "verifyFrontendState",
         retryable: true,

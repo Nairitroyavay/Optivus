@@ -203,7 +203,9 @@ void _expectCleanRunningRetry(
   required int expectedRetryCount,
 }) {
   expect(actual.status, OnboardingJobStatus.running);
-  expect(actual.stage, OnboardingCompletionStage.persistBundle);
+  // persistBundle has not succeeded, so retry resumes from the last durable
+  // checkpoint instead of falsely recording the failed operation as progress.
+  expect(actual.stage, OnboardingCompletionStage.verifyDraft);
   expect(actual.retryCount, expectedRetryCount);
   expect(actual.jobId, original.jobId);
   expect(actual.ownerUid, original.ownerUid);
