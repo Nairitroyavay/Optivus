@@ -3205,8 +3205,13 @@ class EatingGenerationInputs {
       targetMode: targetMode,
       targetCalories: t.targetCalories,
       proteinTarget: t.proteinTarget,
-      foodType: base.foodType,
-      eatingMode: base.eatingMode,
+      foodType: (base.foodType != null && base.foodType!.trim().isNotEmpty)
+          ? base.foodType!.trim().toLowerCase()
+          : 'mixed',
+      eatingMode:
+          (base.eatingMode != null && base.eatingMode!.trim().isNotEmpty)
+          ? base.eatingMode!.trim().toLowerCase()
+          : 'india',
       foodStyleCustomText: base.foodStyleCustomText,
       mealsPerDay: meals,
       breakfastMinute: base.breakfastMinute ?? 480,
@@ -3254,8 +3259,13 @@ class EatingGenerationInputs {
       targetMode: targetMode,
       targetCalories: t.targetCalories,
       proteinTarget: t.proteinTarget,
-      foodType: base.foodType,
-      eatingMode: base.eatingMode,
+      foodType: (base.foodType != null && base.foodType!.trim().isNotEmpty)
+          ? base.foodType!.trim().toLowerCase()
+          : 'mixed',
+      eatingMode:
+          (base.eatingMode != null && base.eatingMode!.trim().isNotEmpty)
+          ? base.eatingMode!.trim().toLowerCase()
+          : 'india',
       foodStyleCustomText: base.foodStyleCustomText,
       mealsPerDay: meals,
       breakfastMinute: base.breakfastMinute ?? 480,

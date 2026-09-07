@@ -299,89 +299,138 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     throw new HttpError(400, "invalid_eating_request", "proteinTarget must be positive and finite.");
   }
 
-  const prompt = buildEatingGeneratePrompt(context);
+  const MAX_GENERATION_ATTEMPTS = 2;
+  const genericTerms = new Set(["breakfast", "lunch", "snack", "dinner", "food", "meal", "eat", "dish"]);
+  const slots = expectedMealSlots(context);
   const provider = env.AI_PROVIDER || "gemini";
-  let text = "";
 
-  if (provider === "gemini") {
-    const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
-    const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
-    const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
+  let attempt = 1;
+  let currentPrompt = buildEatingGeneratePrompt(context);
+  let lastValidation: ValidationResult | null = null;
+  let candidateBlocks: Record<string, unknown>[] = [];
 
-    const fetchGemini = async (model: string) => {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
-      });
-      if (!res.ok) {
-        let errJson: any = {};
-        try { errJson = await res.json(); } catch {}
-        if (res.status === 401 || res.status === 403) {
-          throw new HttpError(res.status, "provider_unauthorized", "Provider unauthorized.");
-        }
-        if (res.status === 404) {
-          throw new HttpError(res.status, "provider_model_not_found", "Provider model not found.");
-        }
-        if (res.status === 429) {
-          throw new HttpError(429, "provider_quota_exceeded", "Provider quota exceeded.");
-        }
-        if (res.status === 503 || res.status === 502 || res.status === 504) {
-          throw new HttpError(503, "provider_high_demand", "Provider is busy or in high demand.");
-        }
-        if (res.status >= 400 && res.status < 500) {
-          throw new HttpError(res.status, "provider_request_failed", "Invalid request sent to provider.");
-        }
-        throw new Error(`Provider failed with status ${res.status}`);
-      }
-      let json: any;
-      try {
-        json = await res.json() as any;
-      } catch {
-        throw new HttpError(500, "provider_invalid_json", "Provider returned invalid JSON.");
-      }
-      return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
-    };
+  while (attempt <= MAX_GENERATION_ATTEMPTS) {
+    let text = "";
 
-    try {
-      text = await fetchGemini(primaryModel);
-    } catch (err) {
-      if (err instanceof HttpError && err.status === 429) {
-        throw err; // DO NOT fallback on quota exceeded
-      }
-      if (fallbackModel && fallbackModel !== primaryModel) {
-        console.warn(`[NutritionWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+    if (provider === "gemini") {
+      const apiKey = requiredEnv(env.GEMINI_API_KEY, "GEMINI_API_KEY");
+      const primaryModel = env.AI_MODEL?.trim() || "gemini-2.5-flash-lite";
+      const fallbackModel = env.AI_FALLBACK_MODEL?.trim() || "gemini-2.5-flash";
+
+      const fetchGemini = async (model: string) => {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.replace(/^models\//, "")}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: currentPrompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+        if (!res.ok) {
+          let errJson: any = {};
+          try { errJson = await res.json(); } catch {}
+          if (res.status === 401 || res.status === 403) {
+            throw new HttpError(res.status, "provider_unauthorized", "Provider unauthorized.");
+          }
+          if (res.status === 404) {
+            throw new HttpError(res.status, "provider_model_not_found", "Provider model not found.");
+          }
+          if (res.status === 429) {
+            throw new HttpError(429, "provider_quota_exceeded", "Provider quota exceeded.");
+          }
+          if (res.status === 503 || res.status === 502 || res.status === 504) {
+            throw new HttpError(503, "provider_high_demand", "Provider is busy or in high demand.");
+          }
+          if (res.status >= 400 && res.status < 500) {
+            throw new HttpError(res.status, "provider_request_failed", "Invalid request sent to provider.");
+          }
+          throw new Error(`Provider failed with status ${res.status}`);
+        }
+        let json: any;
         try {
-          text = await fetchGemini(fallbackModel);
-        } catch (fallbackErr) {
-          if (fallbackErr instanceof HttpError) throw fallbackErr;
+          json = await res.json() as any;
+        } catch {
+          throw new HttpError(500, "provider_invalid_json", "Provider returned invalid JSON.");
+        }
+        return json.candidates?.[0]?.content?.parts?.[0]?.text ?? "[]";
+      };
+
+      try {
+        text = await fetchGemini(primaryModel);
+      } catch (err) {
+        if (err instanceof HttpError && err.status === 429) {
+          throw err; // DO NOT fallback on quota exceeded
+        }
+        if (fallbackModel && fallbackModel !== primaryModel) {
+          console.warn(`[NutritionWorker] Primary model ${primaryModel} failed. Attempting fallback ${fallbackModel}.`);
+          try {
+            text = await fetchGemini(fallbackModel);
+          } catch (fallbackErr) {
+            if (fallbackErr instanceof HttpError) throw fallbackErr;
+            throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
+          }
+        } else {
+          if (err instanceof HttpError) throw err;
           throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
         }
-      } else {
-        if (err instanceof HttpError) throw err;
-        throw new HttpError(500, "provider_request_failed", "AI provider request failed.");
       }
+    } else {
+      throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
     }
-  } else {
-    throw new HttpError(400, "ai_disabled", "AI provider is disabled or unsupported.");
+
+    const parsed = parseAiJsonText(text);
+    const blocks = Array.isArray(parsed) ? parsed : (parsed as any)?.candidates ?? [];
+
+    const validBlocks = blocks
+      .map((block: unknown) => sanitizeMealCandidate(block, genericTerms, slots))
+      .filter((block: Record<string, unknown> | null): block is Record<string, unknown> => block !== null);
+
+    const validation = validateWeeklyCandidates(validBlocks, slots, context);
+    if (validation.ok) {
+      candidateBlocks = validation.blocks;
+      break;
+    }
+
+    lastValidation = validation;
+    console.warn(`[NutritionWorker] Attempt ${attempt} failed validation: ${validation.errorCode} - ${validation.message}`);
+
+    attempt++;
+    if (attempt <= MAX_GENERATION_ATTEMPTS) {
+      currentPrompt = buildEatingRepairPrompt(context, validation.repairFeedback);
+    }
   }
 
-  const parsed = parseAiJsonText(text);
-  const blocks = Array.isArray(parsed) ? parsed : (parsed as any)?.candidates ?? [];
-
-  const genericTerms = new Set(["breakfast", "lunch", "snack", "dinner", "food", "meal", "eat", "dish"]);
-
-  const slots = expectedMealSlots(context);
-  const validBlocks = blocks
-    .map((block: unknown) => sanitizeMealCandidate(block, genericTerms, slots))
-    .filter((block: Record<string, unknown> | null): block is Record<string, unknown> => block !== null);
-
-  if (validBlocks.length === 0) {
+  if (candidateBlocks.length === 0) {
+    if (lastValidation && !lastValidation.ok) {
+      throw new HttpError(500, lastValidation.errorCode, lastValidation.message);
+    }
     throw new HttpError(500, "provider_empty_candidates", "AI returned no valid meals.");
+  }
+
+  return jsonResponse(request, env, { 
+    id: `eat-gen-${Date.now()}`,
+    uid: user.uid,
+    candidates: candidateBlocks
+  });
+}
+
+export type ValidationResult =
+  | { ok: true; blocks: Record<string, unknown>[] }
+  | { ok: false; errorCode: string; message: string; repairFeedback: string };
+
+export function validateWeeklyCandidates(
+  validBlocks: Record<string, unknown>[],
+  slots: MealSlot[],
+  context: any,
+): ValidationResult {
+  if (validBlocks.length === 0) {
+    return {
+      ok: false,
+      errorCode: "provider_empty_candidates",
+      message: "AI returned no valid meals.",
+      repairFeedback: "Return a valid JSON array of meal candidates matching all requested days and meal slots.",
+    };
   }
 
   const byDayAndSlot = new Map<string, Record<string, unknown>>();
@@ -390,11 +439,21 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     const slot = String(block.mealSlot || "");
     const day = Number(block.day);
     if (!expectedSlotIds.has(slot)) {
-      throw new HttpError(500, "provider_unexpected_meal_slot", "AI returned an unexpected meal slot.");
+      return {
+        ok: false,
+        errorCode: "provider_unexpected_meal_slot",
+        message: `AI returned an unexpected meal slot "${slot}".`,
+        repairFeedback: `Only output meals with "mealSlot" matching one of: ${slots.map((s) => `"${s.slot}"`).join(", ")}.`,
+      };
     }
     const key = `${day}_${slot}`;
     if (byDayAndSlot.has(key)) {
-      throw new HttpError(500, "provider_duplicate_meal_slot", `AI returned a duplicate meal slot for day ${day}.`);
+      return {
+        ok: false,
+        errorCode: "provider_duplicate_meal_slot",
+        message: `AI returned a duplicate meal slot for day ${day}.`,
+        repairFeedback: `Ensure each day (1 to 7) has exactly one "${slot}". Do not duplicate meal slots for the same day.`,
+      };
     }
     byDayAndSlot.set(key, block);
   }
@@ -402,7 +461,12 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
   for (let day = 1; day <= 7; day++) {
     for (const slot of slots) {
       if (!byDayAndSlot.has(`${day}_${slot.slot}`)) {
-        throw new HttpError(500, "provider_incomplete_week", `AI missed required meal slot "${slot.slot}" on day ${day}.`);
+        return {
+          ok: false,
+          errorCode: "provider_incomplete_week",
+          message: `AI missed required meal slot "${slot.slot}" on day ${day}.`,
+          repairFeedback: `Your previous response was missing required (day, mealSlot) entries, such as day ${day} slot "${slot.slot}". You MUST return meals for all 7 days with all ${slots.length} slots every day (exactly ${7 * slots.length} meal blocks total).`,
+        };
       }
     }
   }
@@ -422,14 +486,24 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
       const calMin = targetCalories * 0.85;
       const calMax = targetCalories * 1.15;
       if (dayCalories < calMin || dayCalories > calMax) {
-        throw new HttpError(500, "provider_target_mismatch", `Generated calories on day ${day} (${dayCalories}) deviated from target (${targetCalories}).`);
+        return {
+          ok: false,
+          errorCode: "provider_target_mismatch",
+          message: `Generated calories on day ${day} (${dayCalories}) deviated from target (${targetCalories}).`,
+          repairFeedback: `Daily calorie totals deviated outside ±15%: on day ${day}, calorie sum was ${dayCalories} kcal (target is ${targetCalories} kcal, allowed range: ${Math.round(calMin)}-${Math.round(calMax)} kcal). Recalculate meal estimates so every day's total calories falls within ±15% of ${targetCalories} kcal.`,
+        };
       }
     }
     if (proteinTarget && proteinTarget > 0) {
       const pMin = proteinTarget * 0.80;
       const pMax = proteinTarget * 1.20;
       if (dayProtein < pMin || dayProtein > pMax) {
-        throw new HttpError(500, "provider_target_mismatch", `Generated protein on day ${day} (${dayProtein}g) deviated from target (${proteinTarget}g).`);
+        return {
+          ok: false,
+          errorCode: "provider_target_mismatch",
+          message: `Generated protein on day ${day} (${dayProtein}g) deviated from target (${proteinTarget}g).`,
+          repairFeedback: `Daily protein totals deviated outside ±20%: on day ${day}, protein sum was ${dayProtein}g (target is ${proteinTarget}g, allowed range: ${Math.round(pMin)}-${Math.round(pMax)}g). Recalculate meal estimates so every day's total protein falls within ±20% of ${proteinTarget}g.`,
+        };
       }
     }
   }
@@ -444,7 +518,12 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     dailySignatures.add(dayMenuSignature);
   }
   if (dailySignatures.size !== 7) {
-    throw new HttpError(500, "provider_insufficient_diversity", "AI generated repetitive meals across days without 7 unique daily menus.");
+    return {
+      ok: false,
+      errorCode: "provider_insufficient_diversity",
+      message: "AI generated repetitive meals across days without 7 unique daily menus.",
+      repairFeedback: "Daily menus across days were repetitive. Ensure that every day has a completely distinct combination of meals across all slots.",
+    };
   }
 
   // Same-slot diversity across days: all 7 days must have distinct full dish-set signatures for each mealSlot
@@ -455,7 +534,12 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
       slotSignatures.add(mealSignature(b.steps as string[]));
     }
     if (slotSignatures.size !== 7) {
-      throw new HttpError(500, "provider_insufficient_diversity", `AI repeated dish combinations for meal slot "${slot.slot}" across the week.`);
+      return {
+        ok: false,
+        errorCode: "provider_insufficient_diversity",
+        message: `AI repeated dish combinations for meal slot "${slot.slot}" across the week.`,
+        repairFeedback: `Dishes for meal slot "${slot.slot}" were repeated across days. Every single day must have a distinct combination of dishes for "${slot.slot}".`,
+      };
     }
   }
 
@@ -466,11 +550,26 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     }
   }
 
-  return jsonResponse(request, env, { 
-    id: `eat-gen-${Date.now()}`,
-    uid: user.uid,
-    candidates: orderedBlocks
-  });
+  return { ok: true, blocks: orderedBlocks };
+}
+
+export function buildEatingRepairPrompt(
+  context: any,
+  repairFeedback: string,
+): string {
+  const basePrompt = buildEatingGeneratePrompt(context);
+  return `${basePrompt}
+
+CRITICAL REPAIR INSTRUCTIONS:
+Your previous attempt failed validation with the following error:
+${repairFeedback}
+
+Please fix this issue completely in your revised JSON response.
+Ensure:
+1. Exactly 7 days × required slots are present.
+2. Every day's calories are strictly within ±15% of ${context.targetCalories} kcal.${context.proteinTarget ? `\n3. Every day's protein is strictly within ±20% of ${context.proteinTarget} g.` : ""}
+4. All dish combinations are 100% unique per slot across days.
+Output ONLY the corrected JSON.`;
 }
 
 function normalizeDish(d: string): string {

@@ -866,4 +866,117 @@ describe("Nutrition Worker request boundary", () => {
       "not_found",
     );
   });
+
+  test("repair loop: succeeds on attempt 2 when attempt 1 misses a meal slot", async () => {
+    const invalidCandidates = buildWeeklyCandidates(3).filter(
+      (c) => !(c.day === 7 && c.mealSlot === "dinner"),
+    );
+    const validCandidates = buildWeeklyCandidates(3);
+
+    const prompts: string[] = [];
+    let callCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init: any) => {
+        callCount++;
+        const body = JSON.parse(init.body);
+        prompts.push(body.contents[0].parts[0].text);
+        const candidates = callCount === 1 ? invalidCandidates : validCandidates;
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates }) }] } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3 })),
+      makeEnv() as never,
+    );
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.candidates).toHaveLength(21);
+    expect(callCount).toBe(2);
+    // Second prompt should contain repair feedback about the missing dinner on day 7
+    expect(prompts[1]).toContain("CRITICAL REPAIR INSTRUCTIONS:");
+    expect(prompts[1]).toContain('day 7 slot "dinner"');
+  });
+
+  test("repair loop: succeeds on attempt 2 when attempt 1 has calorie mismatch", async () => {
+    const invalidCandidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 3 && slot === "breakfast") {
+        return { caloriesEstimate: 200 };
+      }
+      return null;
+    });
+    const validCandidates = buildWeeklyCandidates(3);
+
+    let callCount = 0;
+    const prompts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init: any) => {
+        callCount++;
+        const body = JSON.parse(init.body);
+        prompts.push(body.contents[0].parts[0].text);
+        const candidates = callCount === 1 ? invalidCandidates : validCandidates;
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates }) }] } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3, targetCalories: 2100 })),
+      makeEnv() as never,
+    );
+
+    expect(response.status).toBe(200);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.candidates).toHaveLength(21);
+    expect(callCount).toBe(2);
+    expect(prompts[1]).toContain("CRITICAL REPAIR INSTRUCTIONS:");
+    expect(prompts[1]).toContain("calorie sum was 1700 kcal");
+  });
+
+  test("repair loop: returns safe 500 when both attempt 1 and 2 fail validation", async () => {
+    const invalidCandidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 3 && slot === "breakfast") {
+        return { caloriesEstimate: 200 };
+      }
+      return null;
+    });
+
+    let callCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        callCount++;
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify({ candidates: invalidCandidates }) }] } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3, targetCalories: 2100 })),
+      makeEnv() as never,
+    );
+
+    expect(response.status).toBe(500);
+    const json = (await response.json()) as Record<string, unknown>;
+    expect(json.error).toBe("provider_target_mismatch");
+    expect(json.message).toContain("deviated from target (2100)");
+    expect(json).not.toHaveProperty("candidates");
+    expect(callCount).toBe(2);
+  });
 });

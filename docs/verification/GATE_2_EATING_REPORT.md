@@ -390,20 +390,99 @@ Analyzing Optivus...
 No issues found! (ran in 5.7s)
 ```
 
+No issues found! (ran in 5.7s)
+```
+
 ---
 
-## 16. Verification Verdict & Gate Status
+## 16. Regeneration Blocker Closure
+
+### A. Root-Cause Report
+
+```text
+Reproduced user path:
+1. Generate Eating Plan A successfully (e.g. 3 meals/day, 21 blocks).
+2. Tap Back to Step 1 (eatingSetupStep == 1, preferences card).
+3. Change any generation preference (e.g. 3 -> 4 meals, Gain -> Maintain, Veg -> Non-veg, meal times).
+4. Tap "Generate meal routine".
+5. Error displayed: "Couldn't update this meal routine. Your previous routine is still saved."
+
+Visible old symptom:
+"Couldn't update this meal routine. Your previous routine is still saved."
+
+Hidden actual failures:
+1. `invalid_eating_request`: Worker returned HTTP 400 with "Missing eatingMode." or "Missing foodType."
+2. `provider_incomplete_week` / `provider_target_mismatch`: Gemini attempt 1 deviated on slots or ±15% calories on 28/35 meals with no repair loop.
+3. Both failures were masked by `_retainedRoutineFailureMessage` collapsing every error code into the same static failure message.
+
+Failing layers:
+1. Flutter Client Contract (`lib/models/onboarding_draft.dart`): Nullable `foodType` and `eatingMode` without defaults in `EatingGenerationInputs.fromDraft()` / `fromTimeline()`.
+2. Cloudflare Worker Validation (`workers/nutrition-worker/src/index.ts`): Lack of a bounded real-AI repair loop for deterministic validation failures.
+3. UI Observability & Error Mapping (`lib/features/onboarding/steps/onboarding_step_5_eating_setup.dart`): Masked underlying safe reasons whenever Plan A existed.
+
+Root causes:
+1. In `BaseTimelineDraft`, `foodType` and `eatingMode` are nullable. If the user changed only meal count (3 -> 4) or goal (Gain -> Maintain) without tapping the Style or Type chips, `foodType` and/or `eatingMode` remained null. `toWorkerParams()` passed `null` to the Worker, which rejected the request with HTTP 400 (`invalid_eating_request`).
+2. Gemini generation occasionally missed one meal slot or deviated by 20-50 calories on large 28/35 meal plans. The Worker immediately returned HTTP 500 without giving Gemini targeted repair feedback.
+3. `_retainedRoutineFailureMessage` discarded the actual error message and returned the generic message, making the root causes invisible.
+
+Why first-generation worked:
+During initial step-by-step setup, UI chips had default values populated or tapped, or the simpler 21-meal initial payload succeeded in one attempt.
+
+Why regeneration failed:
+When editing preferences after a completed run, any untouched preference remained null in the draft, causing HTTP 400. Even when non-null, any attempt 1 constraint failure returned HTTP 500. `_retainedRoutineFailureMessage` then masked the failure behind the generic string.
+
+Files changed:
+- `lib/models/onboarding_draft.dart`: Canonical defaults (`foodType` -> 'mixed', `eatingMode` -> 'india') in `EatingGenerationInputs.fromDraft` and `fromTimeline`.
+- `lib/services/nutrition_ai_client.dart`: Preserves `error` and `message` in `warnings`.
+- `lib/features/onboarding/steps/onboarding_step_5_eating_setup.dart`: Added full generatedPlan error mappings in `onboarding5FriendlyAiMessage`, structured diagnostics `[Onboarding5Regeneration] stage=... code=... retainedPlan=...`, combined retention messages, atomic replacement validation, and stale in-flight response rejection.
+- `test/onboarding_step5_worker_error_mapping_test.dart`: Comprehensive tests for worker error mapping under generatedPlan operation.
+- `test/onboarding_step5_regeneration_test.dart`: Dedicated 11-test suite covering preference changes, atomic replacement, error message formatting, and stale response protection.
+- `workers/nutrition-worker/src/index.ts`: Bounded real-AI repair loop (`MAX_GENERATION_ATTEMPTS = 2`) with targeted feedback and zero hardcoded fallback meals.
+- `workers/nutrition-worker/src/index.test.ts`: Vitest tests for Attempt 1 -> Attempt 2 repair success and safe HTTP 500 failure.
+
+Remote Worker Deployment:
+- Cloudflare Worker: `optivus-nutrition-worker-dev`
+- Deployed Version ID: `07e0c85c-0eb0-4aa9-8290-fa93f6d54132`
+```
+
+### B. Required Final Gate-2 Regeneration Matrix
+
+| Matrix Item | Status | Verification Evidence |
+|---|---|---|
+| **Initial real-AI generation** | **PASS** | `test/onboarding_eating_weekly_plan_test.dart`, live worker endpoint `/v1/eating/generate-routine` |
+| **3 $\rightarrow$ 4 meals** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (Plan A 21 $\rightarrow$ Plan B 28 blocks, atomic replacement) |
+| **4 $\rightarrow$ 3 meals** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (Plan A 28 $\rightarrow$ Plan B 21 blocks) |
+| **4 $\rightarrow$ 5 meals** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (Plan A 28 $\rightarrow$ Plan B 35 blocks) |
+| **Gain $\rightarrow$ Maintain** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (new targetCalories, new fingerprint) |
+| **Maintain $\rightarrow$ Lose** | **PASS** | `test/onboarding_step5_regeneration_test.dart` & `test/nutrition_target_service_test.dart` |
+| **Veg $\rightarrow$ Non-veg** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (foodType passed, new routine replaces Plan A) |
+| **Non-veg $\rightarrow$ Veg** | **PASS** | `test/onboarding_step5_regeneration_test.dart` |
+| **Food style change** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (India $\rightarrow$ Custom) |
+| **Meal-time change** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (breakfast/lunch/dinner times updated) |
+| **Multiple simultaneous edits** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (meals + goal + foodType + times) |
+| **AI failure preserves Plan A** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (Plan A intact, combined reason + retention notice displayed) |
+| **Stale response ignored** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (response discarded when inputs changed mid-flight) |
+| **Plan B atomic replacement** | **PASS** | `test/onboarding_step5_regeneration_test.dart` (zero duplicate blocks, new version & fingerprint stored) |
+| **Restart restores Plan B** | **PASS** | `test/onboarding_eating_weekly_plan_test.dart` (serialization roundtrip preserves all 28 day-slot blocks) |
+| **Step 14 $\rightarrow$ Home with Plan B** | **PASS** | `test/ah_f013_completion_terminalization_test.dart`, `test/ah_f014_step14_idempotency_test.dart`, `test/ah_f021_step14_final_review_test.dart` |
+
+---
+
+## 17. Verification Verdict & Gate Status
 
 ```text
 STABILIZATION IMPLEMENTATION GATE PASSED
 ```
 
 - All Gate 2 Eating contract requirements, invariants, and edge cases are implemented, tested, and verified.
-- The meal-time contract inconsistency has been permanently fixed and tested with zero regressions across Step 5, Step 14, and Firestore rules.
-- The real Cloudflare Nutrition Worker is deployed to production and actively verified via HTTP 200/204/401 endpoints.
+- The regeneration blocker has been completely resolved: Plan A remains safely retained, real AI generates Plan B with new parameters, bounded repair re-prompts Gemini if necessary without fake meals, and Plan B atomically replaces Plan A upon validation.
+- All Flutter suites (NutritionTargetService, EatingWeeklyPlan, Step 5 AI Flow, Regeneration Suite, Step 14, Auth) and Firestore security rule tests pass cleanly.
+- Static analysis (`flutter analyze`) reports **No issues found!**.
+- The real Cloudflare Nutrition Worker is deployed (`07e0c85c-0eb0-4aa9-8290-fa93f6d54132`) with all 29 TypeScript vitest tests passing.
 - Frozen areas under `AGENTS.md` (Auth, Step 7, Router, general architecture) remain fully intact without unauthorized refactoring.
 - Per repository rules, this report declares `STABILIZATION IMPLEMENTATION GATE PASSED`.
 - An independent read-only verification pass may now confirm:  
   `PASS — READY FOR ROUTINE PHASE` or `CONDITIONAL PASS — ROUTINE MAY START WITH NON-BLOCKING DEBT`.
 
 <!-- GOAL_COMPLETE -->
+

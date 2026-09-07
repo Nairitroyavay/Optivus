@@ -106,6 +106,8 @@ class WorkerNutritionAiClient implements NutritionAiClient {
       );
       final body = _jsonObject(response.body);
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        final errorCode = body['error'] as String? ?? 'provider_request_failed';
+        final errorMessage = body['message'] as String?;
         return RoutineImportExtractionResult(
           id: 'worker-gen-error',
           uid: uid,
@@ -113,7 +115,13 @@ class WorkerNutritionAiClient implements NutritionAiClient {
           engine: 'worker',
           engineVersion: 'phase2d',
           candidates: const [],
-          warnings: [body['error'] as String? ?? 'provider_request_failed'],
+          warnings: [
+            errorCode,
+            if (errorMessage != null &&
+                errorMessage.trim().isNotEmpty &&
+                errorMessage != errorCode)
+              errorMessage.trim(),
+          ],
           createdAt: DateTime.now(),
         );
       }

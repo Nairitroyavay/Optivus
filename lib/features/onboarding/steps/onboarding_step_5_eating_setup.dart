@@ -46,6 +46,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
   late final AiGenerationController _createLifecycle;
   int _photoAiRequestGeneration = 0;
   bool _didInitFromDraft = false;
+  String _lastRegenerationStage = 'client';
+  String? _lastRegenerationCode;
 
   @override
   void initState() {
@@ -131,10 +133,23 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
       .confirmedBlocksForSection('eating')
       .isNotEmpty;
 
-  String _retainedRoutineFailureMessage(String fallback) {
-    return _hasRetainedEatingBlocks
-        ? "Couldn't update this meal routine. Your previous routine is still saved."
-        : fallback;
+  String _retainedRoutineFailureMessage(
+    String baseError, {
+    String stage = 'client',
+    String? code,
+  }) {
+    final trimmed = baseError.trim();
+    if (kDebugMode) {
+      debugPrint(
+        '[Onboarding5Regeneration] stage=$stage code=${code ?? "none"} retainedPlan=$_hasRetainedEatingBlocks',
+      );
+    }
+    if (!_hasRetainedEatingBlocks) return trimmed;
+    if (trimmed.contains('Your previous routine is still saved.')) {
+      return trimmed;
+    }
+    final cleanBase = trimmed.endsWith('.') ? trimmed : '$trimmed.';
+    return '$cleanBase Your previous routine is still saved.';
   }
 
   Widget _buildViewCurrentRoutineButton() {
@@ -614,25 +629,36 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingEatingStepIndex, true);
 
+    final expectedFingerprint = generationInputs.computeFingerprint();
+
     final run = await _createLifecycle.run<List<TimelineBlockDraft>>(
       operationType: 'nutrition-routine',
       timeoutPolicy: AiOperationTimeouts.nutrition,
       retry: isRetry,
       preparingMessage: 'Getting your meal preferences ready…',
       isSessionCurrent: () => _isCurrentSession(uid, authGeneration),
-      mapError: (error) => AiGenerationError(
-        category: error is _Onboarding5ResponseException
-            ? AiGenerationErrorCategory.responseInvalid
-            : AiGenerationErrorCategory.serviceUnavailable,
-        message: error is _Onboarding5ResponseException
-            ? error.message
-            : onboarding5FriendlyAiMessage(
-                error.toString(),
-                const [],
-                operation: Onboarding5AiOperation.generatedPlan,
-              ),
-        canRetry: true,
-      ),
+      mapError: (error) {
+        if (error is _Onboarding5ResponseException) {
+          _lastRegenerationStage = error.stage;
+          _lastRegenerationCode = error.code;
+          return AiGenerationError(
+            category: AiGenerationErrorCategory.responseInvalid,
+            message: error.message,
+            canRetry: true,
+          );
+        }
+        _lastRegenerationStage = 'client';
+        _lastRegenerationCode = 'service_unavailable';
+        return AiGenerationError(
+          category: AiGenerationErrorCategory.serviceUnavailable,
+          message: onboarding5FriendlyAiMessage(
+            error.toString(),
+            const [],
+            operation: Onboarding5AiOperation.generatedPlan,
+          ),
+          canRetry: true,
+        );
+      },
       operation: (scope) async {
         debugPrint(
           '[Onboarding5] GENERATE source=create '
@@ -655,6 +681,9 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         if (result.id.trim().isEmpty ||
             result.uid != uid ||
             result.candidates.isEmpty) {
+          final rawCode = result.warnings.isNotEmpty
+              ? result.warnings.first
+              : 'provider_empty_candidates';
           throw _Onboarding5ResponseException(
             onboarding5FriendlyAiMessage(
               null,
@@ -663,6 +692,8 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
                   : ['no_blocks_generated'],
               operation: Onboarding5AiOperation.generatedPlan,
             ),
+            code: rawCode,
+            stage: 'worker',
           );
         }
 
@@ -675,10 +706,15 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         final blocks = mapped.blocks;
 
         if (blocks.isEmpty) {
+          final rawCode = mapped.droppedNoDishes > 0
+              ? 'dropped_no_dishes'
+              : 'invalid_slot_coverage';
           throw _Onboarding5ResponseException(
             mapped.droppedNoDishes > 0
                 ? 'AI did not return specific dishes. Please try again.'
                 : 'Generated routine was invalid. Please try again.',
+            code: rawCode,
+            stage: 'flutter_mapper',
           );
         }
 
@@ -687,7 +723,11 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
           targets: targets,
         );
         if (validationErr != null) {
-          throw _Onboarding5ResponseException(validationErr);
+          throw _Onboarding5ResponseException(
+            validationErr,
+            code: 'weekly_plan_validation_failed',
+            stage: 'validator',
+          );
         }
 
         return blocks;
@@ -698,13 +738,32 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
         .read(mockOnboardingProvider.notifier)
         .setStepLoading(onboardingEatingStepIndex, false);
     if (run.isSuccess) {
-      _replaceEatingBlocks(
-        run.value!,
-        generatedFingerprint: generationInputs.computeFingerprint(),
-      );
+      final currentDraft = ref.read(mockOnboardingProvider).draft;
+      final currentInputs = currentDraft.canonicalEatingGenerationInputs();
+      final currentFingerprint = currentInputs.computeFingerprint();
+      final currentPath = currentDraft.baseTimeline.eatingSetupPath;
+
+      if (currentPath == onboardingEatingPathCreate &&
+          currentFingerprint == expectedFingerprint) {
+        _replaceEatingBlocks(
+          run.value!,
+          generatedFingerprint: expectedFingerprint,
+        );
+        setState(() => _createError = null);
+      } else {
+        debugPrint(
+          '[Onboarding5Regeneration] Discarding stale generation response '
+          'currentFingerprint=$currentFingerprint '
+          'expectedFingerprint=$expectedFingerprint',
+        );
+      }
     } else if (run.error != null) {
       setState(() {
-        _createError = _retainedRoutineFailureMessage(run.error!.message);
+        _createError = _retainedRoutineFailureMessage(
+          run.error!.message,
+          stage: _lastRegenerationStage,
+          code: _lastRegenerationCode,
+        );
       });
     }
   }
@@ -1662,7 +1721,13 @@ class _EatingGenerateRoutineButton extends StatelessWidget {
 
 class _Onboarding5ResponseException implements Exception {
   final String message;
-  const _Onboarding5ResponseException(this.message);
+  final String? code;
+  final String stage;
+  const _Onboarding5ResponseException(
+    this.message, {
+    this.code,
+    this.stage = 'client',
+  });
 }
 
 class _Onboarding5StaleOperation implements Exception {
@@ -2934,8 +2999,40 @@ String onboarding5FriendlyAiMessage(
         ? 'AI request format is not supported.'
         : 'This photo format is not supported. Please upload JPEG, PNG, or WEBP.';
   }
-  if (text.contains('provider_empty_candidates') ||
-      text.contains('no_blocks_generated')) {
+  if (text.contains('provider_incomplete_week')) {
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? "AI couldn't complete all 7 days for the updated meal plan."
+        : 'AI could not read all 7 days from the meal photo.';
+  }
+  if (text.contains('provider_duplicate_meal_slot')) {
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI returned duplicate meals for the same day. Try generating again.'
+        : 'Duplicate meals detected in the photo. Try a clearer photo.';
+  }
+  if (text.contains('provider_unexpected_meal_slot')) {
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI returned an invalid meal schedule. Try generating again.'
+        : 'AI found an unexpected meal slot in the photo. Try again.';
+  }
+  if (text.contains('provider_target_mismatch')) {
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? "AI couldn't match your updated calorie and protein targets closely enough."
+        : 'Meal photo nutrition deviated from your targets. Try again.';
+  }
+  if (text.contains('provider_insufficient_diversity')) {
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI repeated meals in the updated weekly routine.'
+        : 'AI detected repetitive meals in the photo. Try again.';
+  }
+  if (text.contains('invalid_eating_request')) {
+    return 'Meal routine preferences were invalid. Try adjusting them and generating again.';
+  }
+  if (text.contains('provider_empty_candidates')) {
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? "AI couldn't build the updated weekly meal routine."
+        : 'AI could not read meals clearly. Try a clearer photo.';
+  }
+  if (text.contains('no_blocks_generated')) {
     return operation == Onboarding5AiOperation.generatedPlan
         ? 'AI could not generate your meal routine. Please try again.'
         : 'AI could not read meals clearly. Try a clearer photo.';
@@ -2958,7 +3055,9 @@ String onboarding5FriendlyAiMessage(
   if (text.contains('invalid structured') ||
       text.contains('could not be read safely') ||
       text.contains('provider_invalid_json')) {
-    return 'AI response could not be read safely. Please try again.';
+    return operation == Onboarding5AiOperation.generatedPlan
+        ? 'AI returned an invalid meal routine.'
+        : 'AI response could not be read safely. Please try again.';
   }
   if (messages.isNotEmpty &&
       !messages.first.startsWith('provider_') &&
