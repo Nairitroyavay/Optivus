@@ -12,16 +12,24 @@ void main() {
     (tester) async {
       final mapped = mapOnboarding5MealCandidates(
         [
-          _mealCandidate('', 'breakfast', 'Breakfast', 'breakfast', [
-            'Upma',
-            'Egg',
-          ]),
-          _mealCandidate('same', 'lunch', 'Lunch', 'lunch', ['Rice', 'Dal']),
-          _mealCandidate('same', 'afternoon_snack', 'Snack', 'snack', [
-            'Fruit',
-            'Yogurt',
-          ]),
-          _mealCandidate('', 'dinner', 'Dinner', 'dinner', ['Roti', 'Paneer']),
+          for (var d = 1; d <= 7; d++) ...[
+            _mealCandidate('', 'breakfast', 'Breakfast', 'breakfast', [
+              'Upma',
+              'Egg',
+            ], day: d),
+            _mealCandidate('same', 'lunch', 'Lunch', 'lunch', [
+              'Rice',
+              'Dal',
+            ], day: d),
+            _mealCandidate('same', 'afternoon_snack', 'Snack', 'snack', [
+              'Fruit',
+              'Yogurt',
+            ], day: d),
+            _mealCandidate('', 'dinner', 'Dinner', 'dinner', [
+              'Roti',
+              'Paneer',
+            ], day: d),
+          ],
         ],
         source: onboardingEatingGeneratedSource,
         baseTimeline: const BaseTimelineDraft(
@@ -185,17 +193,20 @@ RoutineImportCandidateBlock _mealCandidate(
   String slot,
   String title,
   String category,
-  List<String> dishes,
-) => RoutineImportCandidateBlock(
+  List<String> dishes, {
+  int day = 1,
+}) => RoutineImportCandidateBlock(
   id: id,
   mealSlot: slot,
   title: title,
   startMinute: 0,
   endMinute: 1,
-  repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+  repeatDays: [day],
   blockType: TimelineBlockDraft.softBlockKey,
   category: 'eating',
   hardBlock: false,
   mealCategory: category,
   steps: dishes,
+  caloriesEstimate: 500.0,
+  proteinEstimate: 35.0,
 );

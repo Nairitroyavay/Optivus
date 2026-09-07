@@ -275,6 +275,8 @@ class RoutineImportCandidateBlock {
   final String? notes;
   final String? mealCategory;
   final String? mealSlot;
+  final double? caloriesEstimate;
+  final double? proteinEstimate;
   final List<String> steps;
 
   RoutineImportCandidateBlock({
@@ -309,6 +311,8 @@ class RoutineImportCandidateBlock {
     this.notes,
     this.mealCategory,
     this.mealSlot,
+    this.caloriesEstimate,
+    this.proteinEstimate,
     this.steps = const [],
   }) : needsManualReview =
            needsManualReview ||
@@ -360,6 +364,8 @@ class RoutineImportCandidateBlock {
       'notes': notes,
       'mealCategory': mealCategory,
       'mealSlot': mealSlot,
+      'caloriesEstimate': caloriesEstimate,
+      'proteinEstimate': proteinEstimate,
       'steps': steps,
     };
   }
@@ -399,6 +405,8 @@ class RoutineImportCandidateBlock {
       notes: map['notes'] as String?,
       mealCategory: map['mealCategory'] as String?,
       mealSlot: map['mealSlot'] as String?,
+      caloriesEstimate: (map['caloriesEstimate'] as num?)?.toDouble(),
+      proteinEstimate: (map['proteinEstimate'] as num?)?.toDouble(),
       steps: _readStringList(map['steps']),
     );
   }
@@ -443,6 +451,8 @@ class RoutineImportCandidateBlock {
     String? notes,
     String? mealCategory,
     String? mealSlot,
+    double? caloriesEstimate,
+    double? proteinEstimate,
     List<String>? steps,
     bool clearConfidenceScore = false,
     bool clearConfidenceLabel = false,
@@ -461,6 +471,8 @@ class RoutineImportCandidateBlock {
     bool clearNotes = false,
     bool clearMealCategory = false,
     bool clearMealSlot = false,
+    bool clearCaloriesEstimate = false,
+    bool clearProteinEstimate = false,
   }) {
     return RoutineImportCandidateBlock(
       id: id ?? this.id,
@@ -520,6 +532,12 @@ class RoutineImportCandidateBlock {
           ? null
           : (mealCategory ?? this.mealCategory),
       mealSlot: clearMealSlot ? null : (mealSlot ?? this.mealSlot),
+      caloriesEstimate: clearCaloriesEstimate
+          ? null
+          : (caloriesEstimate ?? this.caloriesEstimate),
+      proteinEstimate: clearProteinEstimate
+          ? null
+          : (proteinEstimate ?? this.proteinEstimate),
       steps: steps ?? this.steps,
     );
   }

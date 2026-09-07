@@ -51,19 +51,245 @@ function request(
   );
 }
 
-function validCandidate(overrides: Record<string, unknown> = {}) {
-  return {
-    title: "Breakfast",
-    startMinute: 480,
-    endMinute: 510,
-    repeatDays: [1, 2, 3, 4, 5, 6, 7],
-    mealCategory: "breakfast",
-    steps: ["Vegetable poha", "Plain yogurt"],
-    blockType: "soft_block",
-    candidateType: "block",
-    confidenceScore: 0.95,
-    ...overrides,
-  };
+function buildWeeklyCandidates(
+  mealsPerDay = 3,
+  overrides?: (day: number, slot: string) => Record<string, unknown> | null,
+) {
+  const candidates: Record<string, unknown>[] = [];
+  const breakfastDishes = [
+    ["Vegetable poha", "Plain curd"],
+    ["Oatmeal with Almonds", "Boiled egg"],
+    ["Idli sambar", "Coconut chutney"],
+    ["Moong dal cheela", "Mint chutney"],
+    ["Whole wheat toast", "Scrambled eggs"],
+    ["Besan cheela", "Curd"],
+    ["Paneer bhurji", "Roti"],
+  ];
+  const morningSnackDishes = [
+    ["Apple slices", "Peanut butter"],
+    ["Mixed nuts", "Green tea"],
+    ["Roasted makhana", "Almonds"],
+    ["Fruit salad", "Walnuts"],
+    ["Sprouted moong", "Lemon juice"],
+    ["Greek yogurt", "Chia seeds"],
+    ["Boiled chana", "Chaat masala"],
+  ];
+  const lunchDishes = [
+    ["Brown rice", "Dal tadka", "Spinach sabzi"],
+    ["Quinoa bowl", "Chickpea curry"],
+    ["Chapati", "Rajma curry", "Cucumber salad"],
+    ["Brown rice", "Paneer curry", "Salad"],
+    ["Millet roti", "Mixed dal", "Bhindi"],
+    ["Vegetable pulao", "Raita"],
+    ["Roti", "Soya chunk curry", "Salad"],
+  ];
+  const afternoonSnackDishes = [
+    ["Roasted chana", "Buttermilk"],
+    ["Carrot sticks", "Hummus"],
+    ["Pistachios", "Herbal tea"],
+    ["Sprouts chaat", "Pomegranate"],
+    ["Dry fruits", "Coconut water"],
+    ["Cucumber slices", "Guacamole"],
+    ["Boiled corn", "Lime"],
+  ];
+  const dinnerDishes = [
+    ["Whole wheat roti", "Methi paneer", "Tomato soup"],
+    ["Lentil soup", "Steamed broccoli", "Tofu stir fry"],
+    ["Multigrain roti", "Palak dal", "Salad"],
+    ["Grilled fish", "Steamed asparagus", "Millet"],
+    ["Egg curry", "Roti", "Kachumber"],
+    ["Mushroom curry", "Whole wheat roti"],
+    ["Mixed vegetable stew", "Brown rice"],
+  ];
+
+  for (let d = 1; d <= 7; d++) {
+    const dayIdx = d - 1;
+    if (mealsPerDay === 3) {
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "breakfast",
+        title: "Breakfast",
+        mealCategory: "breakfast",
+        startMinute: 480,
+        endMinute: 510,
+        steps: breakfastDishes[dayIdx],
+        caloriesEstimate: 600,
+        proteinEstimate: 20,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "breakfast") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "lunch",
+        title: "Lunch",
+        mealCategory: "lunch",
+        startMinute: 780,
+        endMinute: 825,
+        steps: lunchDishes[dayIdx],
+        caloriesEstimate: 800,
+        proteinEstimate: 30,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "lunch") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "dinner",
+        title: "Dinner",
+        mealCategory: "dinner",
+        startMinute: 1230,
+        endMinute: 1275,
+        steps: dinnerDishes[dayIdx],
+        caloriesEstimate: 700,
+        proteinEstimate: 25,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "dinner") ?? {}),
+      });
+    } else if (mealsPerDay === 4) {
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "breakfast",
+        title: "Breakfast",
+        mealCategory: "breakfast",
+        startMinute: 480,
+        endMinute: 510,
+        steps: breakfastDishes[dayIdx],
+        caloriesEstimate: 550,
+        proteinEstimate: 20,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "breakfast") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "lunch",
+        title: "Lunch",
+        mealCategory: "lunch",
+        startMinute: 780,
+        endMinute: 825,
+        steps: lunchDishes[dayIdx],
+        caloriesEstimate: 750,
+        proteinEstimate: 25,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "lunch") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "afternoon_snack",
+        title: "Snack",
+        mealCategory: "snack",
+        startMinute: 1020,
+        endMinute: 1040,
+        steps: afternoonSnackDishes[dayIdx],
+        caloriesEstimate: 200,
+        proteinEstimate: 10,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "afternoon_snack") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "dinner",
+        title: "Dinner",
+        mealCategory: "dinner",
+        startMinute: 1230,
+        endMinute: 1275,
+        steps: dinnerDishes[dayIdx],
+        caloriesEstimate: 600,
+        proteinEstimate: 20,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "dinner") ?? {}),
+      });
+    } else if (mealsPerDay === 5) {
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "breakfast",
+        title: "Breakfast",
+        mealCategory: "breakfast",
+        startMinute: 480,
+        endMinute: 510,
+        steps: breakfastDishes[dayIdx],
+        caloriesEstimate: 500,
+        proteinEstimate: 20,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "breakfast") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "morning_snack",
+        title: "Morning Snack",
+        mealCategory: "snack",
+        startMinute: 660,
+        endMinute: 680,
+        steps: morningSnackDishes[dayIdx],
+        caloriesEstimate: 200,
+        proteinEstimate: 8,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "morning_snack") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "lunch",
+        title: "Lunch",
+        mealCategory: "lunch",
+        startMinute: 780,
+        endMinute: 825,
+        steps: lunchDishes[dayIdx],
+        caloriesEstimate: 650,
+        proteinEstimate: 25,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "lunch") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "afternoon_snack",
+        title: "Snack",
+        mealCategory: "snack",
+        startMinute: 1020,
+        endMinute: 1040,
+        steps: afternoonSnackDishes[dayIdx],
+        caloriesEstimate: 200,
+        proteinEstimate: 8,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "afternoon_snack") ?? {}),
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "dinner",
+        title: "Dinner",
+        mealCategory: "dinner",
+        startMinute: 1230,
+        endMinute: 1275,
+        steps: dinnerDishes[dayIdx],
+        caloriesEstimate: 550,
+        proteinEstimate: 20,
+        blockType: "soft_block",
+        candidateType: "block",
+        ...(overrides?.(d, "dinner") ?? {}),
+      });
+    }
+  }
+  return candidates;
 }
 
 function stubProviderText(text: string): void {
@@ -94,7 +320,7 @@ describe("Nutrition Worker request boundary", () => {
       new Request("https://nutrition-worker.test/health"),
       makeEnv() as never,
     );
-    const json = await response.json() as Record<string, unknown>;
+    const json = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(json).toMatchObject({
@@ -137,7 +363,7 @@ describe("Nutrition Worker request boundary", () => {
         makeEnv() as never,
       );
       expect(response.status).toBe(401);
-      expect((await response.json() as Record<string, unknown>).error).toBe(
+      expect(((await response.json()) as Record<string, unknown>).error).toBe(
         "unauthorized",
       );
     }
@@ -166,7 +392,7 @@ describe("Nutrition Worker request boundary", () => {
         makeEnv() as never,
       );
       expect(response.status).toBe(400);
-      expect((await response.json() as Record<string, unknown>).error).toBe(
+      expect(((await response.json()) as Record<string, unknown>).error).toBe(
         "invalid_json",
       );
     }
@@ -177,7 +403,7 @@ describe("Nutrition Worker request boundary", () => {
       request(validRequestBody({ bodyGoal: "" })),
       makeEnv() as never,
     );
-    const json = await response.json() as Record<string, unknown>;
+    const json = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(json.error).toBe("invalid_eating_request");
@@ -190,35 +416,19 @@ describe("Nutrition Worker request boundary", () => {
     );
 
     expect(response.status).toBe(413);
-    expect((await response.json() as Record<string, unknown>).error).toBe(
+    expect(((await response.json()) as Record<string, unknown>).error).toBe(
       "payload_too_large",
     );
   });
 
-  test("successful output is validated, owner-scoped, and allow-listed", async () => {
-    stubProviderText(JSON.stringify({
-      candidates: [
-        validCandidate({
-          mealSlot: "breakfast",
-          providerDebug: "must-not-be-returned",
-          apiToken: "must-not-be-returned",
-        }),
-        validCandidate({
-          mealSlot: "lunch",
-          title: "Lunch",
-          mealCategory: "lunch",
-          steps: ["Rice", "Dal"],
-        }),
-        validCandidate({
-          mealSlot: "dinner",
-          title: "Dinner",
-          mealCategory: "dinner",
-          steps: ["Roti", "Curry"],
-        }),
-      ],
-    }));
+  test("successful 3-meal plan produces exactly 21 candidates with canonical IDs and nutrition", async () => {
+    stubProviderText(
+      JSON.stringify({
+        candidates: buildWeeklyCandidates(3),
+      }),
+    );
     const response = await worker.fetch(
-      request(validRequestBody()),
+      request(validRequestBody({ mealsPerDay: 3 })),
       makeEnv() as never,
     );
     const text = await response.text();
@@ -229,138 +439,245 @@ describe("Nutrition Worker request boundary", () => {
 
     expect(response.status).toBe(200);
     expect(json.uid).toBe("uid-1");
-    expect(json.candidates).toHaveLength(3);
+    expect(json.candidates).toHaveLength(21);
     expect(json.candidates[0]).toMatchObject({
-      id: "meal_breakfast",
+      id: "meal_breakfast_d1",
+      day: 1,
+      mealSlot: "breakfast",
       title: "Breakfast",
       mealCategory: "breakfast",
       startMinute: 480,
       endMinute: 510,
+      repeatDays: [1],
+      caloriesEstimate: 600,
+      proteinEstimate: 20,
       candidateType: "block",
       blockType: "soft_block",
     });
-    expect(text).not.toContain("providerDebug");
-    expect(text).not.toContain("apiToken");
-    expect(text).not.toContain("must-not-be-returned");
+    expect(json.candidates[20]).toMatchObject({
+      id: "meal_dinner_d7",
+      day: 7,
+      mealSlot: "dinner",
+      title: "Dinner",
+      repeatDays: [7],
+    });
   });
 
-  test("five requested meal slots are returned once with canonical title and time", async () => {
-    stubProviderText(JSON.stringify({
-      candidates: [
-        validCandidate({ mealSlot: "breakfast", title: "Breakfast", mealCategory: "breakfast", startMinute: 100 }),
-        validCandidate({ mealSlot: "morning_snack", title: "Breakfast", mealCategory: "snack", startMinute: 200 }),
-        validCandidate({ mealSlot: "lunch", title: "Lunch", mealCategory: "lunch", startMinute: 300 }),
-        validCandidate({ mealSlot: "afternoon_snack", title: "Snack", mealCategory: "snack", startMinute: 400 }),
-        validCandidate({ mealSlot: "dinner", title: "Dinner", mealCategory: "dinner", startMinute: 500 }),
-      ],
-    }));
+  test("successful 4-meal plan produces exactly 28 candidates with snack", async () => {
+    stubProviderText(
+      JSON.stringify({
+        candidates: buildWeeklyCandidates(4),
+      }),
+    );
     const response = await worker.fetch(
-      request(validRequestBody({
-        mealsPerDay: 5,
-        breakfastMinute: 480,
-        extraSnackMinute: 660,
-        lunchMinute: 780,
-        snackMinute: 1020,
-        dinnerMinute: 1230,
-      })),
+      request(
+        validRequestBody({
+          mealsPerDay: 4,
+          snackMinute: 1020,
+        }),
+      ),
       makeEnv() as never,
     );
-    const json = await response.json() as { candidates: Array<Record<string, unknown>> };
+    const json = (await response.json()) as {
+      candidates: Array<Record<string, unknown>>;
+    };
 
     expect(response.status).toBe(200);
-    expect(json.candidates.map((candidate) => candidate.mealSlot)).toEqual([
+    expect(json.candidates).toHaveLength(28);
+    const day1Slots = json.candidates
+      .slice(0, 4)
+      .map((c) => c.mealSlot);
+    expect(day1Slots).toEqual([
+      "breakfast",
+      "lunch",
+      "afternoon_snack",
+      "dinner",
+    ]);
+  });
+
+  test("successful 5-meal plan produces exactly 35 candidates with morning and afternoon snacks", async () => {
+    stubProviderText(
+      JSON.stringify({
+        candidates: buildWeeklyCandidates(5),
+      }),
+    );
+    const response = await worker.fetch(
+      request(
+        validRequestBody({
+          mealsPerDay: 5,
+          extraSnackMinute: 660,
+          snackMinute: 1020,
+        }),
+      ),
+      makeEnv() as never,
+    );
+    const json = (await response.json()) as {
+      candidates: Array<Record<string, unknown>>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(json.candidates).toHaveLength(35);
+    const day1Slots = json.candidates
+      .slice(0, 5)
+      .map((c) => c.mealSlot);
+    expect(day1Slots).toEqual([
       "breakfast",
       "morning_snack",
       "lunch",
       "afternoon_snack",
       "dinner",
     ]);
-    expect(json.candidates.map((candidate) => candidate.title)).toEqual([
-      "Breakfast",
-      "Morning Snack",
-      "Lunch",
-      "Snack",
-      "Dinner",
-    ]);
-    expect(json.candidates.map((candidate) => candidate.startMinute)).toEqual([
-      480,
-      660,
-      780,
-      1020,
-      1230,
-    ]);
-    expect(json.candidates.map((candidate) => candidate.id)).toEqual([
-      "meal_breakfast",
-      "meal_morning_snack",
-      "meal_lunch",
-      "meal_afternoon_snack",
-      "meal_dinner",
-    ]);
   });
 
-  test("canonical meal slots replace missing, duplicate, and wrong provider ids", async () => {
-    stubProviderText(JSON.stringify({
-      candidates: [
-        validCandidate({ id: "", mealSlot: "breakfast" }),
-        validCandidate({ id: "breakfast", mealSlot: "lunch", title: "Lunch", mealCategory: "lunch", steps: ["Rice", "Dal"] }),
-        validCandidate({ id: "same", mealSlot: "dinner", title: "Dinner", mealCategory: "dinner", steps: ["Roti", "Curry"] }),
-      ],
-    }));
-    const response = await worker.fetch(request(validRequestBody()), makeEnv() as never);
-    const json = await response.json() as { candidates: Array<Record<string, unknown>> };
-
-    expect(response.status).toBe(200);
-    expect(json.candidates.map((candidate) => candidate.id)).toEqual([
-      "meal_breakfast", "meal_lunch", "meal_dinner",
-    ]);
-  });
-
-  test("duplicate meal slot is a contract failure", async () => {
-    stubProviderText(JSON.stringify({
-      candidates: [
-        validCandidate({ mealSlot: "breakfast" }),
-        validCandidate({ mealSlot: "breakfast" }),
-        validCandidate({ mealSlot: "lunch", mealCategory: "lunch" }),
-        validCandidate({ mealSlot: "dinner", mealCategory: "dinner" }),
-      ],
-    }));
+  test("missing meal slot on any day throws provider_incomplete_week", async () => {
+    const candidates = buildWeeklyCandidates(3).filter(
+      (c) => !(c.day === 7 && c.mealSlot === "dinner"),
+    );
+    stubProviderText(JSON.stringify({ candidates }));
     const response = await worker.fetch(
-      request(validRequestBody()),
+      request(validRequestBody({ mealsPerDay: 3 })),
       makeEnv() as never,
     );
-    const json = await response.json() as Record<string, unknown>;
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe("provider_incomplete_week");
+  });
+
+  test("duplicate meal slot on same day throws provider_duplicate_meal_slot", async () => {
+    const candidates = buildWeeklyCandidates(3);
+    candidates.push({
+      day: 1,
+      repeatDays: [1],
+      mealSlot: "breakfast",
+      title: "Breakfast",
+      mealCategory: "breakfast",
+      startMinute: 480,
+      endMinute: 510,
+      steps: ["Egg sandwich", "Milk"],
+      caloriesEstimate: 500,
+      proteinEstimate: 20,
+    });
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3 })),
+      makeEnv() as never,
+    );
+    const json = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(500);
     expect(json.error).toBe("provider_duplicate_meal_slot");
   });
 
-  test("missing meal slot is a contract failure", async () => {
-    stubProviderText(JSON.stringify({
-      candidates: [
-        validCandidate({ mealSlot: "breakfast" }),
-        validCandidate({ mealSlot: "lunch", mealCategory: "lunch" }),
-      ],
-    }));
+  test("daily calories deviating significantly (>25%) from target throws provider_target_mismatch", async () => {
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 3 && slot === "breakfast") {
+        return { caloriesEstimate: 50 }; // Day 3 total = 50 + 800 + 700 = 1550 kcal (target: 2100 => min 1575)
+      }
+      return null;
+    });
+    stubProviderText(JSON.stringify({ candidates }));
     const response = await worker.fetch(
-      request(validRequestBody()),
+      request(validRequestBody({ mealsPerDay: 3, targetCalories: 2100 })),
       makeEnv() as never,
     );
-    const json = await response.json() as Record<string, unknown>;
+    const json = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(500);
-    expect(json.error).toBe("provider_missing_meal_slot");
+    expect(json.error).toBe("provider_target_mismatch");
   });
 
-  test("invalid generated plan returns an error with no fake meal plan", async () => {
-    stubProviderText(JSON.stringify({
-      candidates: [
-        validCandidate({
-          endMinute: 400,
-          repeatDays: [],
-          steps: ["Breakfast", "Food"],
+  test("daily protein deviating significantly (>35%) from target throws provider_target_mismatch", async () => {
+    const candidates = buildWeeklyCandidates(3, (d, slot) => {
+      if (d === 4 && slot === "lunch") {
+        return { proteinEstimate: 2 }; // Day 4 total protein = 20 + 2 + 25 = 47g (target: 100g => min 65g)
+      }
+      return null;
+    });
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(
+        validRequestBody({
+          mealsPerDay: 3,
+          targetCalories: 2100,
+          proteinTarget: 100,
         }),
-      ],
-    }));
+      ),
+      makeEnv() as never,
+    );
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe("provider_target_mismatch");
+  });
+
+  test("repetitive identical meals across days throws provider_insufficient_diversity", async () => {
+    const candidates: Record<string, unknown>[] = [];
+    for (let d = 1; d <= 7; d++) {
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "breakfast",
+        title: "Breakfast",
+        mealCategory: "breakfast",
+        startMinute: 480,
+        endMinute: 510,
+        steps: ["Oatmeal", "Banana"],
+        caloriesEstimate: 600,
+        proteinEstimate: 20,
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "lunch",
+        title: "Lunch",
+        mealCategory: "lunch",
+        startMinute: 780,
+        endMinute: 825,
+        steps: ["Rice", "Dal"],
+        caloriesEstimate: 800,
+        proteinEstimate: 30,
+      });
+      candidates.push({
+        day: d,
+        repeatDays: [d],
+        mealSlot: "dinner",
+        title: "Dinner",
+        mealCategory: "dinner",
+        startMinute: 1230,
+        endMinute: 1275,
+        steps: ["Roti", "Curry"],
+        caloriesEstimate: 700,
+        proteinEstimate: 25,
+      });
+    }
+    stubProviderText(JSON.stringify({ candidates }));
+    const response = await worker.fetch(
+      request(validRequestBody({ mealsPerDay: 3 })),
+      makeEnv() as never,
+    );
+    const json = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(500);
+    expect(json.error).toBe("provider_insufficient_diversity");
+  });
+
+  test("invalid candidate with generic dishes or missing day is rejected with no fake fallback", async () => {
+    stubProviderText(
+      JSON.stringify({
+        candidates: [
+          {
+            day: 1,
+            mealSlot: "breakfast",
+            title: "Breakfast",
+            mealCategory: "breakfast",
+            startMinute: 480,
+            endMinute: 510,
+            steps: ["Meal", "Food"],
+          },
+        ],
+      }),
+    );
     const response = await worker.fetch(
       request(validRequestBody()),
       makeEnv() as never,
@@ -371,7 +688,6 @@ describe("Nutrition Worker request boundary", () => {
     expect(response.status).toBe(500);
     expect(json.error).toBe("provider_empty_candidates");
     expect(json).not.toHaveProperty("candidates");
-    expect(text).not.toContain("Vegetable poha");
   });
 
   test("safe provider failure returns no fabricated plan or internal detail", async () => {

@@ -929,7 +929,10 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
             .confirmedBlocksForSection('eating');
         eatingReviewReady =
             eatingBlocks.isNotEmpty &&
-            onboardingState.draft.baseTimeline.validateEatingSetup() == null;
+            onboardingState.draft.baseTimeline.validateEatingSetup(
+                  targets: onboardingState.draft.canonicalNutritionTargets(),
+                ) ==
+                null;
       }
     } else {
       eatingReviewReady = null;

@@ -218,8 +218,8 @@ void main() {
       expect(context.currentWeightKg, 80);
       expect(context.heightCm, 180);
       expect(context.estimatedBmr, isNotNull);
-      expect(context.estimatedMaintenanceCalories, 2496);
-      expect(context.targetCalories, 2496);
+      expect(context.estimatedMaintenanceCalories, 2314);
+      expect(context.targetCalories, 2314);
       expect(context.proteinTarget, 160);
     });
 
@@ -252,8 +252,8 @@ void main() {
       expect(bundle.userProfilePatch['height'], 170);
       expect(bundle.userProfilePatch['weight'], 70);
       expect(bundle.userProfilePatch['bmiEstimate'], body.bmiEstimate);
-      expect(bundle.userProfilePatch['calorieEstimate'], body.calorieEstimate);
-      expect(bundle.userProfilePatch['proteinEstimate'], body.proteinEstimate);
+      expect(bundle.userProfilePatch['calorieEstimate'], 1888.0);
+      expect(bundle.userProfilePatch['proteinEstimate'], 140.0);
     });
   });
 }

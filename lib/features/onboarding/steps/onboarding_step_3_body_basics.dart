@@ -4,6 +4,7 @@ import 'package:optivus/core/theme/optivus_colors.dart';
 import 'package:optivus/core/theme/optivus_spacing.dart';
 import 'package:optivus/features/onboarding/widgets/onboarding_glass_widgets.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/state/app_state.dart';
 
 class OnboardingStep3 extends ConsumerStatefulWidget {
@@ -24,7 +25,15 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
 
   @override
   Widget build(BuildContext context) {
-    final body = ref.watch(mockOnboardingProvider).draft.bodyBasics;
+    final draft = ref.watch(mockOnboardingProvider).draft;
+    final body = draft.bodyBasics;
+    final targets = const NutritionTargetService().calculate(
+      ageRange: body.ageRange,
+      heightCm: body.heightCm,
+      weightKg: body.weightKg,
+      gender: body.gender,
+      exerciseLevel: draft.lifeRole.exerciseLevel,
+    );
     final displayHeightCm =
         body.heightCm ?? (_minimumHeightCm + _maximumHeightCm) / 2;
     final displayWeightKg =
@@ -211,21 +220,21 @@ class _OnboardingStep3State extends ConsumerState<OnboardingStep3> {
                         children: [
                           _Estimate(
                             label: 'BMI estimate',
-                            value: body.bmiEstimate == null
+                            value: targets.bmi == null
                                 ? '--'
-                                : '${body.bmiEstimate}',
+                                : '${targets.bmi}',
                           ),
                           _Estimate(
                             label: 'Calorie estimate',
-                            value: body.calorieEstimate == null
+                            value: targets.estimatedMaintenanceCalories == null
                                 ? '--'
-                                : '${body.calorieEstimate!.toInt()} kcal',
+                                : '${targets.estimatedMaintenanceCalories} kcal',
                           ),
                           _Estimate(
                             label: 'Protein estimate',
-                            value: body.proteinEstimate == null
+                            value: targets.proteinTarget == null
                                 ? '--'
-                                : '${body.proteinEstimate!.toInt()} g',
+                                : '${targets.proteinTarget!.toInt()} g',
                           ),
                         ], // closes Row's children
                       ), // closes Row

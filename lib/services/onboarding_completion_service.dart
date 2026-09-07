@@ -248,7 +248,9 @@ class OnboardingCompletionService {
     if (draft.baseTimeline.eatingSetupPath != null ||
         draft.baseTimeline.eatingMode != null ||
         draft.baseTimeline.shouldPlanMeals != null) {
-      final eatingErr = mergedTimeline.validateEatingSetup();
+      final eatingErr = mergedTimeline.validateEatingSetup(
+        targets: draft.canonicalNutritionTargets(),
+      );
       if (eatingErr != null) {
         throw StateError(eatingErr);
       }
@@ -759,6 +761,7 @@ class OnboardingCompletionService {
 
   static Map<String, dynamic> _userProfilePatch(OnboardingDraft draft) {
     final now = DateTime.now();
+    final targets = draft.canonicalNutritionTargets();
     return {
       'uid': draft.uid,
       'schemaVersion': 1,
@@ -783,11 +786,17 @@ class OnboardingCompletionService {
       if (draft.bodyBasics.weightKg != null)
         'weight': draft.bodyBasics.weightKg,
       'gender': draft.bodyBasics.gender ?? '',
-      if (draft.bodyBasics.bmiEstimate != null)
+      if (targets.bmi != null)
+        'bmiEstimate': targets.bmi
+      else if (draft.bodyBasics.bmiEstimate != null)
         'bmiEstimate': draft.bodyBasics.bmiEstimate,
-      if (draft.bodyBasics.calorieEstimate != null)
+      if (targets.estimatedMaintenanceCalories != null)
+        'calorieEstimate': targets.estimatedMaintenanceCalories!.toDouble()
+      else if (draft.bodyBasics.calorieEstimate != null)
         'calorieEstimate': draft.bodyBasics.calorieEstimate,
-      if (draft.bodyBasics.proteinEstimate != null)
+      if (targets.proteinTarget != null)
+        'proteinEstimate': targets.proteinTarget
+      else if (draft.bodyBasics.proteinEstimate != null)
         'proteinEstimate': draft.bodyBasics.proteinEstimate,
       'coachName': _coachName(draft),
       'coachStyle': draft.coachSetup.coachStyle ?? '',

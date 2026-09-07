@@ -14,6 +14,7 @@ import 'package:optivus/models/permission_status.dart';
 import 'package:optivus/models/onboarding_completion_bundle.dart';
 import 'package:optivus/models/onboarding_state.dart';
 import 'package:optivus/models/onboarding_draft.dart';
+import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/features/onboarding/steps/onboarding_base_timeline_helpers.dart';
 import 'package:optivus/state/mock_seed_data.dart';
 
@@ -69,24 +70,22 @@ class MockUserProfileNotifier extends StateNotifier<UserProfile> {
     double? weight,
     String? gender,
   }) {
-    // Re-calculate mock estimates on body basics changes
-    final double hMeters = (height ?? state.height) / 100.0;
-    final double wKg = weight ?? state.weight;
-    final bool canEstimate = hMeters > 0 && wKg > 0;
-    final double bmi = canEstimate ? wKg / (hMeters * hMeters) : 0.0;
-    final double calories = canEstimate
-        ? wKg * 24.0 * 1.3
-        : 0.0; // Simple Harris-Benedict representation
-    final double protein = canEstimate ? wKg * 2.0 : 0.0;
+    final targets = const NutritionTargetService().calculate(
+      ageRange: ageRange ?? state.ageRange,
+      heightCm: height ?? state.height,
+      weightKg: weight ?? state.weight,
+      gender: gender ?? state.gender,
+      exerciseLevel: state.exerciseLevel,
+    );
 
     state = state.copyWith(
       ageRange: ageRange ?? state.ageRange,
       height: height ?? state.height,
       weight: weight ?? state.weight,
       gender: gender ?? state.gender,
-      bmiEstimate: double.parse(bmi.toStringAsFixed(1)),
-      calorieEstimate: double.parse(calories.toStringAsFixed(0)),
-      proteinEstimate: double.parse(protein.toStringAsFixed(0)),
+      bmiEstimate: targets.bmi ?? 0.0,
+      calorieEstimate: targets.estimatedMaintenanceCalories?.toDouble() ?? 0.0,
+      proteinEstimate: targets.proteinTarget ?? 0.0,
     );
   }
 

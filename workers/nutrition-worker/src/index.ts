@@ -179,9 +179,11 @@ function expectedMealSlots(context: any): MealSlot[] {
 function buildEatingGeneratePrompt(context: any): string {
   const slots = expectedMealSlots(context);
   const slotLines = slots
-    .map((slot) => `- ${slot.slot}: title "${slot.title}", mealCategory "${slot.category}", startMinute ${slot.startMinute}`)
+    .map((slot) => `- ${slot.slot}: title "${slot.title}", mealCategory "${slot.category}", startMinute ${slot.startMinute}, duration ${slot.durationMinutes} min`)
     .join("\n");
-  return `You are a nutrition expert generating a weekly meal routine JSON.
+  const totalMeals = 7 * slots.length;
+
+  return `You are a nutrition expert generating a personalized, highly diverse, 7-day meal routine JSON.
 User Context:
 - Height: ${context.heightCm ? context.heightCm + " cm" : "Unknown"}
 - Weight: ${context.weightKg ? context.weightKg + " kg" : "Unknown"}
@@ -191,33 +193,60 @@ User Context:
 - Estimated BMR: ${context.estimatedBmr ? context.estimatedBmr + " kcal" : "Unknown"}
 - Maintenance Calories: ${context.estimatedMaintenanceCalories ? context.estimatedMaintenanceCalories + " kcal" : "Unknown"}
 - Target Mode: ${context.targetMode ?? "Unknown"}
-- Target Calories: ${context.targetCalories} kcal/day
-- Protein Target: ${context.proteinTarget ? context.proteinTarget + " g" : "Unknown"}
-- Body goal: ${context.bodyGoal}.
-- Diet type: ${context.foodType}.
+- Daily Target Calories: ${context.targetCalories} kcal/day
+- Daily Protein Target: ${context.proteinTarget ? context.proteinTarget + " g" : "Unknown"}
+- Body Goal: ${context.bodyGoal}.
+- Diet Type: ${context.foodType}.
 - Style: ${context.eatingMode} ${context.foodStyleCustomText ? `(${context.foodStyleCustomText})` : ""}.
-- Meals per day: ${context.mealsPerDay}.
+- Meals Per Day: ${context.mealsPerDay}.
 - Lifestyle: ${context.lifestyle ?? "Unknown"}
 - Country: ${context.country ?? "Unknown"}
 
-Return ONLY a JSON object containing a "candidates" array of meal blocks. Each block MUST have:
-- "mealSlot": one of exactly ${slots.map((slot) => `"${slot.slot}"`).join(", ")}
-- "title": the canonical title for that mealSlot
-- "startMinute": integer (minutes from midnight)
-- "endMinute": integer (minutes from midnight)
-- "repeatDays": array of integers 1-7 (1=Monday)
-- "mealCategory": "breakfast", "lunch", "snack", or "dinner"
-- "steps": array of strings containing actual, specific dish names. Do NOT output generic meal names like "Breakfast", "Lunch", "Snack", or "Food" in the steps array. Each steps array MUST contain at least 2 distinct specific dishes (e.g. ["Oatmeal with Almonds", "Fresh Apple Slice"]).
-- "blockType": "soft_block"
-- "candidateType": "block"
-- "confidenceScore": 0.95
-
-You MUST schedule the generated meals EXACTLY at these requested start times (minutes from midnight):
+Meal Slots Per Day (${slots.length} slots):
 ${slotLines}
 
-Return exactly one candidate per mealSlot, no missing slots, no duplicate slots, and no unexpected slots. AI owns the dish names in "steps"; the schedule slot, title, and time are fixed by the requested mealSlot.
-For each day (1 to 7), generate the required meals. Vary the dishes slightly by day to match the specified Diet Type and Style.
-Output format exactly: { "candidates": [ { "mealSlot": "breakfast", "title": "Breakfast", "startMinute": 480, "endMinute": 510, "repeatDays": [1,2,3,4,5,6,7], "mealCategory": "breakfast", "steps": ["Oatmeal with Almonds", "Fresh Apple Slice"], "blockType": "soft_block", "candidateType": "block" } ] }`;
+Generation Requirements:
+1. You MUST generate meals for ALL 7 DAYS of the week (day 1=Monday, day 2=Tuesday, day 3=Wednesday, day 4=Thursday, day 5=Friday, day 6=Saturday, day 7=Sunday).
+2. For EACH day (1 to 7), you MUST provide every required meal slot listed above. Exactly ${totalMeals} meal objects total (${slots.length} meals × 7 days).
+3. Do NOT repeat the same dishes every day. Every day must feel distinct with varied, realistic meal options matching the user's Diet Type and Style. At least 5 of the 7 days must have completely different dish combinations.
+4. Each meal block MUST contain:
+   - "day": integer from 1 to 7 (1=Monday .. 7=Sunday)
+   - "repeatDays": array with exactly that single day, e.g. [1] or [2]
+   - "mealSlot": one of exactly ${slots.map((s) => `"${s.slot}"`).join(", ")}
+   - "title": the canonical title for that slot
+   - "startMinute": integer (the requested startMinute for that slot)
+   - "endMinute": integer (startMinute + durationMinutes)
+   - "mealCategory": category of the slot ("breakfast", "lunch", "snack", or "dinner")
+   - "steps": array of at least 2 specific dish items (e.g. ["Steel Cut Oats with Almond Butter", "Greek Yogurt with Blueberries"]). Do NOT output generic terms like "Food", "Meal", or repeat the meal title.
+   - "caloriesEstimate": realistic integer number of calories for this specific meal.
+   - "proteinEstimate": realistic integer number of grams of protein for this specific meal.
+   - "blockType": "soft_block"
+   - "candidateType": "block"
+   - "confidenceScore": 0.95
+5. Daily Nutrition Target Invariant:
+   - For every single day, the sum of "caloriesEstimate" for all meals of that day MUST be within ±15% of the Daily Target Calories (${context.targetCalories} kcal).
+   ${context.proteinTarget ? `- For every single day, the sum of "proteinEstimate" for all meals of that day MUST be within ±20% of the Daily Protein Target (${context.proteinTarget} g).` : ""}
+
+Return ONLY valid JSON matching this schema:
+{
+  "candidates": [
+    {
+      "day": 1,
+      "repeatDays": [1],
+      "mealSlot": "breakfast",
+      "title": "Breakfast",
+      "startMinute": ${slots[0].startMinute},
+      "endMinute": ${slots[0].startMinute + slots[0].durationMinutes},
+      "mealCategory": "${slots[0].category}",
+      "steps": ["Dish 1", "Dish 2"],
+      "caloriesEstimate": 450,
+      "proteinEstimate": 25,
+      "blockType": "soft_block",
+      "candidateType": "block",
+      "confidenceScore": 0.95
+    }
+  ]
+}`;
 }
 
 async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<Response> {
@@ -334,24 +363,75 @@ async function handleEatingGenerateRoutine(request: Request, env: Env): Promise<
     throw new HttpError(500, "provider_empty_candidates", "AI returned no valid meals.");
   }
 
-  const bySlot = new Map<string, Record<string, unknown>>();
+  const byDayAndSlot = new Map<string, Record<string, unknown>>();
   const expectedSlotIds = new Set(slots.map((slot) => slot.slot));
   for (const block of validBlocks) {
     const slot = String(block.mealSlot || "");
+    const day = Number(block.day);
     if (!expectedSlotIds.has(slot)) {
       throw new HttpError(500, "provider_unexpected_meal_slot", "AI returned an unexpected meal slot.");
     }
-    if (bySlot.has(slot)) {
-      throw new HttpError(500, "provider_duplicate_meal_slot", "AI returned a duplicate meal slot.");
+    const key = `${day}_${slot}`;
+    if (byDayAndSlot.has(key)) {
+      throw new HttpError(500, "provider_duplicate_meal_slot", `AI returned a duplicate meal slot for day ${day}.`);
     }
-    bySlot.set(slot, block);
+    byDayAndSlot.set(key, block);
   }
-  for (const slot of slots) {
-    if (!bySlot.has(slot.slot)) {
-      throw new HttpError(500, "provider_missing_meal_slot", "AI missed a required meal slot.");
+
+  for (let day = 1; day <= 7; day++) {
+    for (const slot of slots) {
+      if (!byDayAndSlot.has(`${day}_${slot.slot}`)) {
+        throw new HttpError(500, "provider_incomplete_week", `AI missed required meal slot "${slot.slot}" on day ${day}.`);
+      }
     }
   }
-  const orderedBlocks = slots.map((slot) => bySlot.get(slot.slot)!);
+
+  // Nutrition targets validation per day
+  const targetCalories = context.targetCalories;
+  const proteinTarget = context.proteinTarget;
+  for (let day = 1; day <= 7; day++) {
+    let dayCalories = 0;
+    let dayProtein = 0;
+    for (const slot of slots) {
+      const b = byDayAndSlot.get(`${day}_${slot.slot}`)!;
+      dayCalories += Number(b.caloriesEstimate ?? 0);
+      dayProtein += Number(b.proteinEstimate ?? 0);
+    }
+    if (targetCalories > 0) {
+      const calMin = targetCalories * 0.75;
+      const calMax = targetCalories * 1.25;
+      if (dayCalories < calMin || dayCalories > calMax) {
+        throw new HttpError(500, "provider_target_mismatch", `Generated calories on day ${day} (${dayCalories}) deviated from target (${targetCalories}).`);
+      }
+    }
+    if (proteinTarget && proteinTarget > 0) {
+      const pMin = proteinTarget * 0.65;
+      const pMax = proteinTarget * 1.35;
+      if (dayProtein < pMin || dayProtein > pMax) {
+        throw new HttpError(500, "provider_target_mismatch", `Generated protein on day ${day} (${dayProtein}g) deviated from target (${proteinTarget}g).`);
+      }
+    }
+  }
+
+  // Weekly diversity validation
+  const dailySignatures = new Set<string>();
+  for (let day = 1; day <= 7; day++) {
+    const dayDishes = slots.map((s) => {
+      const b = byDayAndSlot.get(`${day}_${s.slot}`)!;
+      return (b.steps as string[]).slice().sort().join(",");
+    }).join("|");
+    dailySignatures.add(dayDishes);
+  }
+  if (dailySignatures.size < 4) {
+    throw new HttpError(500, "provider_insufficient_diversity", "AI generated repetitive meals across days without sufficient weekly diversity.");
+  }
+
+  const orderedBlocks: Record<string, unknown>[] = [];
+  for (let day = 1; day <= 7; day++) {
+    for (const slot of slots) {
+      orderedBlocks.push(byDayAndSlot.get(`${day}_${slot.slot}`)!);
+    }
+  }
 
   return jsonResponse(request, env, { 
     id: `eat-gen-${Date.now()}`,
@@ -376,39 +456,64 @@ function sanitizeMealCandidate(
   const rawMealSlot = typeof block.mealSlot === "string"
     ? block.mealSlot.trim().toLowerCase().replace(/-/g, "_")
     : "";
-  const startMinute = block.startMinute;
-  const repeatDays = Array.isArray(block.repeatDays)
-    ? [...new Set(
-        block.repeatDays
-          .filter((day): day is number =>
-            typeof day === "number" &&
-            Number.isInteger(day) &&
-            day >= 1 &&
-            day <= 7
-          ),
-      )].sort((a, b) => a - b)
-    : [];
+
+  let day: number | null = null;
+  if (typeof block.day === "number" && Number.isInteger(block.day) && block.day >= 1 && block.day <= 7) {
+    day = block.day;
+  } else if (Array.isArray(block.repeatDays) && block.repeatDays.length > 0) {
+    const firstDay = block.repeatDays[0];
+    if (typeof firstDay === "number" && Number.isInteger(firstDay) && firstDay >= 1 && firstDay <= 7) {
+      day = firstDay;
+    }
+  }
+
+  if (day === null) {
+    console.warn("[NutritionWorker] Dropping meal candidate without valid day (1-7).");
+    return null;
+  }
+
   const cleanSteps = Array.isArray(block.steps)
     ? block.steps
         .map((step) => typeof step === "string" ? step.trim() : "")
         .filter((step) => step !== "" && !genericTerms.has(step.toLowerCase()))
         .slice(0, 12)
     : [];
+
   const inferredSlot = inferMealSlot(rawMealSlot || mealCategory || title, block.startMinute, expectedSlots);
   if (!inferredSlot) {
     console.warn("[NutritionWorker] Dropping meal candidate without stable slot identity.");
     return null;
   }
+
   const validCategory = inferredSlot.category === mealCategory ||
     (inferredSlot.category === "snack" && (mealCategory === "snack" || mealCategory === "snacks"));
+
   if (
     title === "" ||
     title.length > 120 ||
     !validCategory ||
-    repeatDays.length === 0 ||
     cleanSteps.length < 2
   ) {
     console.warn("[NutritionWorker] Dropping invalid meal candidate.");
+    return null;
+  }
+
+  let caloriesEstimate: number | null = null;
+  if (typeof block.caloriesEstimate === "number" && Number.isFinite(block.caloriesEstimate) && block.caloriesEstimate > 0) {
+    caloriesEstimate = Math.round(block.caloriesEstimate);
+  } else if (typeof block.calories === "number" && Number.isFinite(block.calories) && block.calories > 0) {
+    caloriesEstimate = Math.round(block.calories);
+  }
+
+  let proteinEstimate: number | null = null;
+  if (typeof block.proteinEstimate === "number" && Number.isFinite(block.proteinEstimate) && block.proteinEstimate >= 0) {
+    proteinEstimate = Math.round(block.proteinEstimate);
+  } else if (typeof block.protein === "number" && Number.isFinite(block.protein) && block.protein >= 0) {
+    proteinEstimate = Math.round(block.protein);
+  }
+
+  if (caloriesEstimate === null) {
+    console.warn("[NutritionWorker] Dropping candidate without valid positive caloriesEstimate.");
     return null;
   }
 
@@ -416,17 +521,19 @@ function sanitizeMealCandidate(
       Number.isFinite(block.confidenceScore)
     ? Math.max(0, Math.min(1, block.confidenceScore))
     : 0.8;
+
   return {
-    // Schedule identity belongs to Optivus, not the provider.  This is derived
-    // only after the candidate has been assigned its canonical slot.
-    id: `meal_${inferredSlot.slot}`,
+    id: `meal_${inferredSlot.slot}_d${day}`,
+    day,
     title: inferredSlot.title,
     mealSlot: inferredSlot.slot,
     startMinute: inferredSlot.startMinute,
     endMinute: inferredSlot.startMinute + inferredSlot.durationMinutes,
-    repeatDays,
+    repeatDays: [day],
     mealCategory: inferredSlot.category,
     steps: cleanSteps,
+    caloriesEstimate,
+    proteinEstimate: proteinEstimate ?? 0,
     blockType: "soft_block",
     candidateType: "block",
     confidenceScore: confidence,

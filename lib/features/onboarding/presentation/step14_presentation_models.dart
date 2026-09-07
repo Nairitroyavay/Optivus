@@ -327,7 +327,10 @@ class Step14ReadinessSummary {
               draft.lifeRole.lifeRole,
             ) ==
             null &&
-        draft.baseTimeline.validateEatingSetup() == null &&
+        draft.baseTimeline.validateEatingSetup(
+              targets: draft.canonicalNutritionTargets(),
+            ) ==
+            null &&
         draft.baseTimeline.validateFixedSchedule() == null &&
         (draft.baseTimeline.skinCareSetupPath == null &&
                 !draft.baseTimeline.blocks.any((b) => b.section == 'skin_care')

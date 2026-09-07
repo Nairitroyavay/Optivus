@@ -18,6 +18,7 @@ import 'package:optivus/models/onboarding_draft.dart';
 import 'package:optivus/models/routine_import_review.dart';
 import 'package:optivus/models/uploaded_asset.dart';
 import 'package:optivus/services/nutrition_ai_client.dart';
+import 'package:optivus/services/nutrition_target_service.dart';
 import 'package:optivus/state/app_state.dart';
 import 'package:optivus/state/auth_state.dart';
 import 'package:optivus/state/auth_generation.dart';
@@ -683,6 +684,28 @@ class _OnboardingStep5State extends ConsumerState<OnboardingStep5> {
                 : 'Generated routine was invalid. Please try again.',
           );
         }
+
+        final validationErr = validateGeneratedEatingWeeklyPlan(
+          draft.baseTimeline.copyWith(blocks: blocks),
+          targets: bodyContext.hasBodyBasics
+              ? NutritionTargets(
+                  bmi: bodyContext.bmi,
+                  estimatedAge: bodyContext.age,
+                  estimatedBmr: bodyContext.estimatedBmr,
+                  activityFactor: 1.30,
+                  estimatedMaintenanceCalories:
+                      bodyContext.estimatedMaintenanceCalories,
+                  targetCalories: bodyContext.targetCalories,
+                  proteinTarget: bodyContext.proteinTarget,
+                  bodyGoal: bodyContext.bodyGoal,
+                  hasBodyBasics: true,
+                )
+              : null,
+        );
+        if (validationErr != null) {
+          throw _Onboarding5ResponseException(validationErr);
+        }
+
         return blocks;
       },
     );
@@ -946,7 +969,7 @@ class _EatingCreatePreferencesCard extends ConsumerWidget {
     final draft = ref.watch(mockOnboardingProvider).draft;
     final bodyContext = onboarding5MealBodyContextFromDraft(draft);
     final bodyGoal = onboarding5BodyGoalForBase(base, draft);
-    final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
+    final mealsPerDay = normalizeMealsPerDay(base.mealsPerDay);
 
     return OnboardingGlassCard(
       tint: OptivusColors.roseAccent.withValues(alpha: 0.06),
@@ -1787,6 +1810,43 @@ void _showEatingBlockDetails(BuildContext context, TimelineBlockDraft block) {
                   color: OptivusColors.ink.withValues(alpha: 0.6),
                 ),
               ),
+              if (block.calories != null || block.protein != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (block.calories != null)
+                      Text(
+                        '${block.calories!.round()} kcal',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.ink.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    if (block.calories != null && block.protein != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text(
+                          '•',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: OptivusColors.ink.withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ),
+                    if (block.protein != null)
+                      Text(
+                        '${block.protein!.round()}g protein',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: OptivusColors.ink.withValues(alpha: 0.7),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               if (block.dishes.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 const Text(
@@ -2222,56 +2282,34 @@ Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
   OnboardingDraft draft,
 ) {
   final base = draft.baseTimeline;
-  final body = draft.bodyBasics.withEstimates();
+  final body = draft.bodyBasics;
   final bodyGoal = onboarding5BodyGoalForBase(base, draft);
-  final weight = body.weightKg;
-  final height = body.heightCm;
-  final age = _ageFromRange(body.ageRange);
-  final hasBodyBasics =
-      weight != null &&
-      weight > 0 &&
-      height != null &&
-      height > 0 &&
-      age != null &&
-      body.gender != null;
-  final bmr = hasBodyBasics
-      ? _estimateBmr(
-          weightKg: weight,
-          heightCm: height,
-          age: age,
-          gender: body.gender,
-        )
-      : null;
-  final maintenance = !hasBodyBasics
-      ? null
-      : body.calorieEstimate != null && body.calorieEstimate! > 0
-      ? body.calorieEstimate!.round()
-      : (bmr! * _activityFactorForLifeRole(draft.lifeRole)).round();
-  final target = maintenance == null
-      ? null
-      : _targetCalories(
-          maintenanceCalories: maintenance,
-          bodyGoal: bodyGoal,
-          gender: body.gender,
-        );
-  final mealsPerDay = _normalizedMealsPerDay(base.mealsPerDay);
+  final targets = const NutritionTargetService().calculate(
+    weightKg: body.weightKg,
+    heightCm: body.heightCm,
+    ageRange: body.ageRange,
+    gender: body.gender,
+    exerciseLevel: draft.lifeRole.exerciseLevel,
+    bodyGoal: bodyGoal,
+  );
+  final mealsPerDay = normalizeMealsPerDay(base.mealsPerDay);
 
   return Onboarding5MealBodyContext(
-    bodyGoal: bodyGoal,
-    targetMode: switch (bodyGoal) {
+    bodyGoal: targets.bodyGoal,
+    targetMode: switch (targets.bodyGoal) {
       'gain' => 'mild_surplus',
       'lose' => 'mild_deficit',
       _ => 'maintenance',
     },
-    currentWeightKg: weight,
-    heightCm: height,
-    age: age,
+    currentWeightKg: targets.hasBodyBasics ? body.weightKg : null,
+    heightCm: targets.hasBodyBasics ? body.heightCm : null,
+    age: targets.estimatedAge,
     gender: body.gender,
-    bmi: body.bmiEstimate,
-    estimatedBmr: bmr,
-    estimatedMaintenanceCalories: maintenance,
-    targetCalories: target,
-    proteinTarget: body.proteinEstimate,
+    bmi: targets.bmi,
+    estimatedBmr: targets.estimatedBmr,
+    estimatedMaintenanceCalories: targets.estimatedMaintenanceCalories,
+    targetCalories: targets.targetCalories,
+    proteinTarget: targets.proteinTarget,
     mealsPerDay: mealsPerDay,
     eatingType: _normalizedEatingType(base.foodType),
     foodStyle: _normalizedFoodStyle(base.eatingMode, base.foodStyleCustomText),
@@ -2281,7 +2319,7 @@ Onboarding5MealBodyContext onboarding5MealBodyContextFromDraft(
     mealTimes: _mealTimesForBase(base, mealsPerDay),
     lifestyle: draft.lifeRole.lifeRole,
     country: null, // Country is not captured in the current onboarding draft
-    hasBodyBasics: hasBodyBasics,
+    hasBodyBasics: targets.hasBodyBasics,
   );
 }
 
@@ -2314,21 +2352,58 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
       ? const <_OnboardingMealSlot>[]
       : _mealSlotsForBase(
           baseTimeline,
-          _normalizedMealsPerDay(baseTimeline.mealsPerDay),
+          normalizeMealsPerDay(baseTimeline.mealsPerDay),
         );
-  final usedSlots = <String>{};
+  final isGenerated = source == onboardingEatingGeneratedSource;
+  final usedDaySlots = <String>{};
 
   for (final candidate in candidates) {
+    final repeatDays = _repeatDaysForEatingCandidate(candidate);
+
     final slot = expectedSlots.isEmpty
         ? null
         : _inferMealSlotForCandidate(candidate, expectedSlots);
-    if (expectedSlots.isNotEmpty) {
-      if (slot == null || !usedSlots.add(slot.id)) {
+
+    if (isGenerated) {
+      if (repeatDays.length != 1 ||
+          repeatDays.first < 1 ||
+          repeatDays.first > 7) {
         invalidSlotCoverage = true;
         droppedNoMealTime++;
         continue;
       }
+      final day = repeatDays.first;
+      if (expectedSlots.isNotEmpty) {
+        if (slot == null || !usedDaySlots.add('$day-${slot.id}')) {
+          invalidSlotCoverage = true;
+          droppedNoMealTime++;
+          continue;
+        }
+      }
+    } else {
+      final candidateDays = repeatDays.isEmpty
+          ? onboardingEveryDay()
+          : repeatDays;
+      if (expectedSlots.isNotEmpty) {
+        if (slot == null) {
+          invalidSlotCoverage = true;
+          droppedNoMealTime++;
+          continue;
+        }
+        final hasCollision = candidateDays.any(
+          (d) => usedDaySlots.contains('$d-${slot.id}'),
+        );
+        if (hasCollision) {
+          invalidSlotCoverage = true;
+          droppedNoMealTime++;
+          continue;
+        }
+        for (final d in candidateDays) {
+          usedDaySlots.add('$d-${slot.id}');
+        }
+      }
     }
+
     final mealCategory =
         slot?.category ?? _inferMealCategoryForCandidate(candidate);
     final title = slot?.title ?? _mealCandidateTitle(candidate, mealCategory);
@@ -2361,36 +2436,52 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
       continue;
     }
 
-    final repeatDays = _repeatDaysForEatingCandidate(candidate);
     final dishes = _dishesForEatingCandidate(candidate);
-
     if (dishes.isEmpty) {
       droppedNoDishes++;
       continue;
     }
 
+    final candidateDays = repeatDays.isEmpty
+        ? onboardingEveryDay()
+        : repeatDays;
+
+    final String blockId;
+    if (isGenerated) {
+      final day = repeatDays.first;
+      blockId = slot == null
+          ? 'eating-ai-${candidate.id}-${timestamp.millisecondsSinceEpoch}'
+          : _onboarding5GeneratedMealBlockId(day, slot.id);
+    } else {
+      blockId = slot == null
+          ? 'eating-ai-${candidate.id}-${timestamp.millisecondsSinceEpoch}'
+          : (candidateDays.length == 1
+                ? _onboarding5GeneratedMealBlockId(candidateDays.first, slot.id)
+                : (candidateDays.length == 7
+                      ? 'eating-ai-${slot.id}'
+                      : 'eating-ai-${slot.id}-d${candidateDays.join()}'));
+    }
+
     blocks.add(
       TimelineBlockDraft(
-        // The remote candidate id is deliberately not used: provider output
-        // may omit it or repeat it. A canonical meal slot is the durable
-        // identity of one generated plan entry.
-        id: slot == null
-            ? 'eating-ai-${candidate.id}-${timestamp.millisecondsSinceEpoch}'
-            : _onboarding5GeneratedMealBlockId(slot.id),
+        id: blockId,
         section: 'eating',
         title: title,
         startMinute: startMinute,
         endMinute: endMinute,
-        repeatDays: repeatDays.isEmpty ? onboardingEveryDay() : repeatDays,
+        repeatDays: candidateDays,
         location: candidate.location,
         blockType: TimelineBlockDraft.hardBlockKey,
         source: source,
         mealSlot: slot?.id,
         mealCategory: mealCategory,
         dishes: dishes,
+        calories: candidate.caloriesEstimate,
+        protein: candidate.proteinEstimate,
       ),
     );
   }
+
   blocks.sort((a, b) {
     final aDay = a.repeatDays.isEmpty ? 1 : a.repeatDays.first;
     final bDay = b.repeatDays.isEmpty ? 1 : b.repeatDays.first;
@@ -2405,24 +2496,37 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
 
   final mergedBlocks = mergeOverlappingEatingBlocks(blocks);
   final blockIds = mergedBlocks.map((block) => block.id).toSet();
-  final mealSlots = mergedBlocks
-      .map((block) => block.mealSlot?.trim())
-      .whereType<String>()
-      .where((slot) => slot.isNotEmpty)
-      .toSet();
   final hasUniqueBlockIds = blockIds.length == mergedBlocks.length;
-  final hasExpectedSlotCoverage =
-      expectedSlots.isEmpty ||
-      (mealSlots.length == expectedSlots.length &&
-          expectedSlots.every((slot) => mealSlots.contains(slot.id)));
-  if (!hasUniqueBlockIds ||
-      (source == onboardingEatingGeneratedSource && !hasExpectedSlotCoverage)) {
+
+  final bool hasExpectedSlotCoverage;
+  if (expectedSlots.isEmpty) {
+    hasExpectedSlotCoverage = true;
+  } else if (isGenerated) {
+    hasExpectedSlotCoverage =
+        usedDaySlots.length == 7 * expectedSlots.length &&
+        [
+          for (var d = 1; d <= 7; d++)
+            for (final s in expectedSlots) '$d-${s.id}',
+        ].every(usedDaySlots.contains);
+  } else {
+    hasExpectedSlotCoverage = true;
+  }
+
+  if (!hasUniqueBlockIds || (isGenerated && !hasExpectedSlotCoverage)) {
     assert(() {
       debugPrint('[Onboarding5] Refusing invalid generated meal identities.');
       return true;
     }());
     mergedBlocks.clear();
   }
+
+  mergedBlocks.sort((a, b) {
+    final aDay = a.repeatDays.isEmpty ? 1 : a.repeatDays.first;
+    final bDay = b.repeatDays.isEmpty ? 1 : b.repeatDays.first;
+    final day = aDay.compareTo(bDay);
+    if (day != 0) return day;
+    return a.startMinute.compareTo(b.startMinute);
+  });
 
   return Onboarding5MealCandidateMappingResult(
     blocks: mergedBlocks,
@@ -2433,8 +2537,8 @@ Onboarding5MealCandidateMappingResult mapOnboarding5MealCandidates(
   );
 }
 
-String _onboarding5GeneratedMealBlockId(String mealSlot) =>
-    'eating-ai-$mealSlot';
+String _onboarding5GeneratedMealBlockId(int day, String mealSlot) =>
+    'eating-ai-d$day-$mealSlot';
 
 String? _normalizedBodyGoal(String? value) {
   final lower = value?.trim().toLowerCase();
@@ -2444,63 +2548,6 @@ String? _normalizedBodyGoal(String? value) {
     'maintain' || 'maintenance' || 'eat_healthier' || 'balanced' => 'maintain',
     _ => null,
   };
-}
-
-int? _ageFromRange(String? ageRange) {
-  return switch (ageRange?.trim()) {
-    '<18' => 17,
-    '18-24' => 21,
-    '25-34' => 30,
-    '35-44' => 40,
-    '45+' => 50,
-    _ => null,
-  };
-}
-
-int _estimateBmr({
-  required double weightKg,
-  required double heightCm,
-  required int age,
-  required String? gender,
-}) {
-  final base = 10 * weightKg + 6.25 * heightCm - 5 * age;
-  final adjustment = switch (gender) {
-    'male' => 5.0,
-    'female' => -161.0,
-    _ => -78.0,
-  };
-  return (base + adjustment).round().clamp(1100, 2600);
-}
-
-double _activityFactorForLifeRole(LifeRoleDraft lifeRole) {
-  return switch (lifeRole.exerciseLevel) {
-    'high' || 'active' => 1.45,
-    'medium' || 'moderate' => 1.35,
-    'low' || 'sedentary' => 1.25,
-    _ => 1.30,
-  };
-}
-
-int _targetCalories({
-  required int maintenanceCalories,
-  required String bodyGoal,
-  required String? gender,
-}) {
-  final safeMaintenance = maintenanceCalories.clamp(1500, 4200);
-  if (bodyGoal == 'gain') {
-    return (safeMaintenance + 300).clamp(
-      safeMaintenance,
-      safeMaintenance + 500,
-    );
-  }
-  if (bodyGoal == 'lose') {
-    final floor = gender == 'female' ? 1200 : 1400;
-    return (safeMaintenance - 350).clamp(
-      math.max(floor, (safeMaintenance * 0.75).round()),
-      safeMaintenance,
-    );
-  }
-  return safeMaintenance;
 }
 
 Map<String, int> _mealTimesForBase(BaseTimelineDraft base, int mealsPerDay) {
@@ -2944,13 +2991,6 @@ void _updateCreateDraft(
           .toList(growable: false),
     );
   });
-}
-
-int _normalizedMealsPerDay(int? value) {
-  final count = value ?? 4;
-  if (count <= 3) return 3;
-  if (count >= 5) return 5;
-  return 4;
 }
 
 bool _isSupportedImageContentType(String contentType) {

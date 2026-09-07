@@ -100,26 +100,6 @@ class OnboardingStageBackButton extends StatelessWidget {
   }
 }
 
-BaseTimelineDraft upsertGeneratedEatingImport(
-  BaseTimelineDraft base,
-  BodyBasicsDraft body,
-) {
-  final now = DateTime.now();
-  final existing = base.latestImportForSection(onboardingSectionEating);
-  final blocks = _generatedEatingBlocks(base, body, now);
-  final entry = PendingFutureImportDraft(
-    id: onboardingImportId(onboardingSectionEating, 'ai_generated'),
-    section: onboardingSectionEating,
-    mode: 'AI Generated',
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-    status: PendingFutureImportDraft.needsReviewStatus,
-    parsedBlocks: blocks,
-    confidence: 0.72,
-  );
-  return base.upsertPendingImport(entry);
-}
-
 BaseTimelineDraft upsertGeneratedSkinCareImport(BaseTimelineDraft base) {
   final now = DateTime.now();
   final existing = base.latestImportForSection(onboardingSectionSkinCare);
@@ -135,98 +115,6 @@ BaseTimelineDraft upsertGeneratedSkinCareImport(BaseTimelineDraft base) {
     confidence: 0.70,
   );
   return base.upsertPendingImport(entry);
-}
-
-List<TimelineBlockDraft> _generatedEatingBlocks(
-  BaseTimelineDraft base,
-  BodyBasicsDraft body,
-  DateTime now,
-) {
-  final dailyCalories = body.calorieEstimate ?? 0;
-  final dailyProtein = body.proteinEstimate ?? 0;
-  TimelineBlockDraft meal({
-    required String id,
-    required String title,
-    required int start,
-    required int duration,
-    required String category,
-    required double calorieRatio,
-    required double proteinRatio,
-  }) {
-    return TimelineBlockDraft(
-      id: 'eating-$id-${now.millisecondsSinceEpoch}',
-      section: 'eating',
-      title: title,
-      startMinute: start,
-      endMinute: (start + duration).clamp(1, 24 * 60).toInt(),
-      repeatDays: onboardingEveryDay(),
-      blockType: TimelineBlockDraft.softBlockKey,
-      source: 'ai_generated',
-      mealCategory: category,
-      calories: dailyCalories <= 0
-          ? null
-          : double.parse((dailyCalories * calorieRatio).toStringAsFixed(0)),
-      protein: dailyProtein <= 0
-          ? null
-          : double.parse((dailyProtein * proteinRatio).toStringAsFixed(0)),
-    );
-  }
-
-  final blocks = <TimelineBlockDraft>[
-    meal(
-      id: 'breakfast',
-      title: _mealTitle(base, 'Breakfast'),
-      start: base.breakfastMinute ?? 8 * 60,
-      duration: 30,
-      category: 'Breakfast',
-      calorieRatio: 0.25,
-      proteinRatio: 0.25,
-    ),
-    meal(
-      id: 'lunch',
-      title: _mealTitle(base, 'Lunch'),
-      start: base.lunchMinute ?? 13 * 60,
-      duration: 35,
-      category: 'Lunch',
-      calorieRatio: 0.35,
-      proteinRatio: 0.35,
-    ),
-    meal(
-      id: 'dinner',
-      title: _mealTitle(base, 'Dinner'),
-      start: base.dinnerMinute ?? 20 * 60,
-      duration: 35,
-      category: 'Dinner',
-      calorieRatio: 0.30,
-      proteinRatio: 0.30,
-    ),
-  ];
-  final snack = base.snackMinute;
-  if (snack != null) {
-    blocks.add(
-      meal(
-        id: 'snack',
-        title: _mealTitle(base, 'Snack'),
-        start: snack,
-        duration: 20,
-        category: 'Snack',
-        calorieRatio: 0.10,
-        proteinRatio: 0.10,
-      ),
-    );
-  }
-  return blocks;
-}
-
-String _mealTitle(BaseTimelineDraft base, String slot) {
-  final goal = switch (base.mealPlanningGoal) {
-    'gain_weight' => 'weight gain',
-    'build_muscle' || 'muscle_gain' => 'muscle support',
-    'lose_fat' || 'fat_loss' => 'fat loss',
-    'eat_healthier' => 'healthy',
-    _ => 'balanced',
-  };
-  return '$slot - $goal meal';
 }
 
 List<TimelineBlockDraft> generatedSkinCareBlocks(

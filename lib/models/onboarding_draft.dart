@@ -7,6 +7,7 @@ import 'package:optivus/features/routine/domain/conflict_policy.dart';
 import 'package:optivus/models/conflict_acceptance.dart';
 import 'package:optivus/models/skin_care_product_draft.dart';
 import 'package:optivus/models/uploaded_asset.dart';
+import 'package:optivus/services/nutrition_target_service.dart';
 
 class OnboardingDraft {
   static const int schemaVersion = 3;
@@ -329,6 +330,17 @@ class OnboardingDraft {
     );
   }
 
+  NutritionTargets canonicalNutritionTargets() {
+    return const NutritionTargetService().calculate(
+      weightKg: bodyBasics.weightKg,
+      heightCm: bodyBasics.heightCm,
+      ageRange: bodyBasics.ageRange,
+      gender: bodyBasics.gender,
+      exerciseLevel: lifeRole.exerciseLevel,
+      bodyGoal: baseTimeline.mealPlanningGoal,
+    );
+  }
+
   String? validateStep(int step, List<bool> completedSteps) {
     switch (step) {
       case 0:
@@ -344,7 +356,9 @@ class OnboardingDraft {
       case 4:
         return baseTimeline.validateClassesAndWorkForRole(lifeRole.lifeRole);
       case 5:
-        return baseTimeline.validateEatingSetup();
+        return baseTimeline.validateEatingSetup(
+          targets: canonicalNutritionTargets(),
+        );
       case 6:
         return baseTimeline.validateFixedSchedule();
       case 7:
@@ -381,7 +395,9 @@ class OnboardingDraft {
         if (baseTimeline.eatingSetupPath != null ||
             baseTimeline.eatingMode != null ||
             baseTimeline.shouldPlanMeals != null) {
-          final eatingErr = baseTimeline.validateEatingSetup();
+          final eatingErr = baseTimeline.validateEatingSetup(
+            targets: canonicalNutritionTargets(),
+          );
           if (eatingErr != null) return eatingErr;
         }
         final preview = buildFinalPreview();
@@ -1092,11 +1108,10 @@ class BodyBasicsDraft {
     }
     final meters = height / 100.0;
     final bmi = weight / (meters * meters);
-    final calories = weight * 24.0 * 1.3;
     final protein = weight * 2.0;
     return copyWith(
       bmiEstimate: double.parse(bmi.toStringAsFixed(1)),
-      calorieEstimate: double.parse(calories.toStringAsFixed(0)),
+      clearCalorieEstimate: true,
       proteinEstimate: double.parse(protein.toStringAsFixed(0)),
       bodyDataCompleted:
           ageRange != null &&
@@ -2206,7 +2221,7 @@ class BaseTimelineDraft {
     return null;
   }
 
-  String? validateEatingSetup() {
+  String? validateEatingSetup({NutritionTargets? targets}) {
     if (_hasConfirmedSection('eating')) {
       if (eatingSetupPath == 'has_routine') {
         final eatingImport = latestImportForSection('Eating');
@@ -2232,6 +2247,19 @@ class BaseTimelineDraft {
           )) {
             return 'Your meal routine was generated from a previous menu. Generate your meal routine first.';
           }
+        }
+      } else if (eatingSetupPath == 'create') {
+        if (blocks.any(
+          (b) => b.section == 'eating' && b.source == 'ai_generated_meal_setup',
+        )) {
+          if (isLegacyGeneratedEatingPlan(this)) {
+            return 'Your saved meal plan uses the older weekly format. Please regenerate your meal routine.';
+          }
+          final planError = validateGeneratedEatingWeeklyPlan(
+            this,
+            targets: targets,
+          );
+          if (planError != null) return planError;
         }
       }
       return validateMealScheduleDensity();
@@ -2765,6 +2793,210 @@ class BaseTimelineInvalidationResult {
     required this.timeline,
     required this.warnings,
   });
+}
+
+int normalizeMealsPerDay(int? value) {
+  final count = value ?? 4;
+  if (count <= 3) return 3;
+  if (count >= 5) return 5;
+  return 4;
+}
+
+bool looksLikeNonDishMealToken(String value) {
+  final lower = value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9\s/-]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (lower.isEmpty || !RegExp(r'[a-z]').hasMatch(lower)) return true;
+  if (RegExp(r'\b(meal|part|snack|dish|item)\s*\d+\b').hasMatch(lower)) {
+    return true;
+  }
+  if (RegExp(
+    r'\b(breakfast|lunch|dinner|snack)\s+(item|meal|food|dish)\b',
+  ).hasMatch(lower)) {
+    return true;
+  }
+  const generic = {
+    'breakfast',
+    'lunch',
+    'brunch',
+    'supper',
+    'snack',
+    'snacks',
+    'dinner',
+    'extra snack',
+    'extra-snack',
+    'meal',
+    'meals',
+    'menu',
+    'mess menu',
+    'mess item',
+    'food',
+    'item',
+    'items',
+    'routine',
+  };
+  return generic.contains(lower);
+}
+
+bool isLegacyGeneratedEatingPlan(BaseTimelineDraft base) {
+  final eatingBlocks = base.blocks
+      .where(
+        (b) => b.section == 'eating' && b.source == 'ai_generated_meal_setup',
+      )
+      .toList();
+  if (eatingBlocks.isEmpty) return false;
+  return eatingBlocks.any((b) => b.repeatDays.length > 1) ||
+      eatingBlocks.length < 21;
+}
+
+String? validateGeneratedEatingWeeklyPlan(
+  BaseTimelineDraft base, {
+  NutritionTargets? targets,
+}) {
+  final eatingBlocks = base.blocks
+      .where(
+        (b) => b.section == 'eating' && b.source == 'ai_generated_meal_setup',
+      )
+      .toList();
+
+  if (eatingBlocks.isEmpty) {
+    return 'Generate your meal routine first.';
+  }
+
+  final mealsPerDay = normalizeMealsPerDay(base.mealsPerDay);
+  final expectedSlotIds = switch (mealsPerDay) {
+    4 => const ['breakfast', 'lunch', 'afternoon_snack', 'dinner'],
+    5 => const [
+      'breakfast',
+      'morning_snack',
+      'lunch',
+      'afternoon_snack',
+      'dinner',
+    ],
+    _ => const ['breakfast', 'lunch', 'dinner'],
+  };
+
+  final expectedCount = 7 * expectedSlotIds.length;
+  if (eatingBlocks.length != expectedCount) {
+    return 'Generated meal plan is missing required meals for all 7 days.';
+  }
+
+  final daySlotCoverage = <String>{};
+  for (final block in eatingBlocks) {
+    if (block.repeatDays.length != 1) {
+      return 'Generated meal plan contains invalid multi-day schedule blocks.';
+    }
+    final day = block.repeatDays.first;
+    if (day < 1 || day > 7) {
+      return 'Generated meal plan contains invalid day numbers.';
+    }
+    final slot = block.mealSlot?.trim().toLowerCase();
+    if (slot == null || !expectedSlotIds.contains(slot)) {
+      return 'Generated meal plan contains unrecognized meal slots.';
+    }
+    final key = '$day-$slot';
+    if (!daySlotCoverage.add(key)) {
+      return 'Generated meal plan contains duplicate meal slots.';
+    }
+  }
+
+  for (var day = 1; day <= 7; day++) {
+    for (final slot in expectedSlotIds) {
+      if (!daySlotCoverage.contains('$day-$slot')) {
+        return 'Generated meal plan is missing required meals for all 7 days.';
+      }
+    }
+  }
+
+  for (final block in eatingBlocks) {
+    final validDishes = block.dishes
+        .map((d) => d.trim())
+        .where((d) => d.length >= 2 && !looksLikeNonDishMealToken(d))
+        .toList();
+    if (validDishes.length < 2) {
+      return 'Generated meal plan contains meals without specific dishes.';
+    }
+  }
+
+  for (final block in eatingBlocks) {
+    if (block.calories == null ||
+        block.calories! <= 0 ||
+        block.protein == null ||
+        block.protein! <= 0) {
+      return 'Generated meal plan is missing nutrition estimates.';
+    }
+  }
+
+  if (targets != null && targets.hasBodyBasics) {
+    final targetCal = targets.targetCalories;
+    final targetProt = targets.proteinTarget;
+
+    for (var day = 1; day <= 7; day++) {
+      final dayBlocks = eatingBlocks.where((b) => b.repeatDays.first == day);
+      final dayCalories = dayBlocks.fold<double>(
+        0.0,
+        (acc, b) => acc + (b.calories ?? 0.0),
+      );
+      final dayProtein = dayBlocks.fold<double>(
+        0.0,
+        (acc, b) => acc + (b.protein ?? 0.0),
+      );
+
+      if (targetCal != null && targetCal > 0) {
+        final diff = (dayCalories - targetCal).abs() / targetCal;
+        if (diff > 0.25) {
+          return 'Daily calorie totals deviate significantly from your target.';
+        }
+      }
+
+      if (targetProt != null && targetProt > 0) {
+        final diff = (dayProtein - targetProt).abs() / targetProt;
+        if (diff > 0.35) {
+          return 'Daily protein totals deviate significantly from your target.';
+        }
+      }
+    }
+  }
+
+  for (final slot in expectedSlotIds) {
+    final distinctDishSets = <String>{};
+    for (var day = 1; day <= 7; day++) {
+      final block = eatingBlocks.firstWhere(
+        (b) =>
+            b.repeatDays.first == day &&
+            b.mealSlot?.trim().toLowerCase() == slot,
+      );
+      final signature = ([
+        ...block.dishes.map((d) => d.trim().toLowerCase()),
+      ]..sort()).join('|');
+      distinctDishSets.add(signature);
+    }
+    if (distinctDishSets.length < 3) {
+      return 'Generated meal plan lacks weekly variety across days.';
+    }
+  }
+
+  final distinctDailyMenus = <String>{};
+  for (var day = 1; day <= 7; day++) {
+    final dayDishes = <String>[];
+    for (final slot in expectedSlotIds) {
+      final block = eatingBlocks.firstWhere(
+        (b) =>
+            b.repeatDays.first == day &&
+            b.mealSlot?.trim().toLowerCase() == slot,
+      );
+      dayDishes.addAll(block.dishes.map((d) => d.trim().toLowerCase()));
+    }
+    dayDishes.sort();
+    distinctDailyMenus.add(dayDishes.join('|'));
+  }
+  if (distinctDailyMenus.length < 4) {
+    return 'Generated meal plan lacks weekly variety across days.';
+  }
+
+  return null;
 }
 
 class PendingFutureImportDraft {

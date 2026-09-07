@@ -1911,7 +1911,7 @@ void main() {
             return notifier;
           }),
           nutritionAiClientProvider.overrideWithValue(
-            const FakeNutritionAiClient(),
+            const _Test7DayNutritionAiClient(),
           ),
         ],
         child: const MaterialApp(home: OnboardingFlow()),
@@ -1947,22 +1947,24 @@ void main() {
     expect(nextDraft.currentStep, onboardingFixedStepIndex);
     expect(nextDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
     expect(nextDraft.stepDirty[onboardingEatingStepIndex], isFalse);
-    expect(eatingBlocks.map((b) => b.title).toList(), [
-      'Breakfast',
-      'Lunch',
-      'Snack',
-      'Dinner',
-    ]);
+    expect(eatingBlocks.length, 28);
     expect(
       eatingBlocks.every(
         (block) =>
             block.section == 'eating' &&
             block.source == onboardingEatingGeneratedSource &&
             block.blockType == TimelineBlockDraft.hardBlockKey &&
-            block.repeatDays.length == 7,
+            block.repeatDays.length == 1,
       ),
       isTrue,
     );
+    expect(eatingBlocks.map((b) => b.mealSlot).toSet(), {
+      'breakfast',
+      'lunch',
+      'afternoon_snack',
+      'dinner',
+    });
+    expect(eatingBlocks.map((b) => b.repeatDays.first).toSet().length, 7);
     expect(eatingBlocks.first.dishes, isNotEmpty);
 
     final restoredDraft = OnboardingDraft.fromMap(nextDraft.toMap());
@@ -1971,12 +1973,7 @@ void main() {
     expect(restoredDraft.currentStep, onboardingFixedStepIndex);
     expect(restoredDraft.stepCompleted[onboardingEatingStepIndex], isTrue);
     expect(restoredDraft.stepDirty[onboardingEatingStepIndex], isFalse);
-    expect(restoredEatingBlocks.map((block) => block.title).toList(), [
-      'Breakfast',
-      'Lunch',
-      'Snack',
-      'Dinner',
-    ]);
+    expect(restoredEatingBlocks.length, 28);
   });
 
   testWidgets('Eating has-routine path saves AI blocks without review screen', (
@@ -2243,6 +2240,7 @@ void main() {
         dinnerMinute: 20 * 60 + 30,
       );
       RoutineImportCandidateBlock candidate({
+        required int day,
         required String id,
         required String slot,
         required String title,
@@ -2254,58 +2252,64 @@ void main() {
         title: title,
         startMinute: 0,
         endMinute: 1,
-        repeatDays: const [1, 2, 3, 4, 5, 6, 7],
+        repeatDays: [day],
         blockType: TimelineBlockDraft.softBlockKey,
         category: 'eating',
         hardBlock: false,
         mealCategory: category,
         steps: dishes,
+        caloriesEstimate: 500.0,
+        proteinEstimate: 35.0,
       );
 
-      final mapped = mapOnboarding5MealCandidates(
-        [
+      final candidates = [
+        for (var d = 1; d <= 7; d++) ...[
           candidate(
+            day: d,
             id: '',
             slot: 'breakfast',
             title: 'Breakfast',
             category: 'breakfast',
-            dishes: const ['Upma', 'Egg'],
+            dishes: ['Upma $d', 'Egg $d'],
           ),
           candidate(
+            day: d,
             id: '',
             slot: 'lunch',
             title: 'Lunch',
             category: 'lunch',
-            dishes: const ['Rice', 'Dal'],
+            dishes: ['Rice $d', 'Dal $d'],
           ),
           candidate(
+            day: d,
             id: '',
             slot: 'afternoon_snack',
             title: 'Snack',
             category: 'snack',
-            dishes: const ['Fruit', 'Yogurt'],
+            dishes: ['Fruit $d', 'Yogurt $d'],
           ),
           candidate(
+            day: d,
             id: '',
             slot: 'dinner',
             title: 'Dinner',
             category: 'dinner',
-            dishes: const ['Roti', 'Paneer'],
+            dishes: ['Roti $d', 'Paneer $d'],
           ),
         ],
+      ];
+
+      final mapped = mapOnboarding5MealCandidates(
+        candidates,
         now: DateTime.utc(2026, 6, 9),
         source: onboardingEatingGeneratedSource,
         baseTimeline: base,
       );
 
-      expect(mapped.blocks, hasLength(4));
-      expect(mapped.blocks.map((block) => block.id).toSet(), hasLength(4));
-      expect(mapped.blocks.map((block) => block.id), [
-        'eating-ai-breakfast',
-        'eating-ai-lunch',
-        'eating-ai-afternoon_snack',
-        'eating-ai-dinner',
-      ]);
+      expect(mapped.blocks, hasLength(28));
+      expect(mapped.blocks.map((block) => block.id).toSet(), hasLength(28));
+      expect(mapped.blocks.first.id, 'eating-ai-d1-breakfast');
+      expect(mapped.blocks.last.id, 'eating-ai-d7-dinner');
       expect(
         mapped.blocks.map((block) => block.mealSlot).toSet(),
         hasLength(4),
@@ -2842,4 +2846,147 @@ void _expectBlockAlignedToTicks(
     tester.getBottomLeft(block).dy,
     closeTo(tester.getTopLeft(endTick).dy, 0.5),
   );
+}
+
+class _Test7DayNutritionAiClient implements NutritionAiClient {
+  const _Test7DayNutritionAiClient();
+
+  @override
+  Future<RoutineImportExtractionResult> generateEatingRoutine({
+    required String uid,
+    required String idToken,
+    required Map<String, dynamic> params,
+  }) async {
+    final int mealsPerDay = (params['mealsPerDay'] as num?)?.round() ?? 4;
+    final int targetCalories =
+        (params['targetCalories'] as num?)?.round() ?? 2256;
+    final int proteinTarget = (params['proteinTarget'] as num?)?.round() ?? 144;
+
+    final mealCal = (targetCalories / mealsPerDay).round();
+    final mealPro = (proteinTarget / mealsPerDay).round();
+
+    final slotDefs = [
+      (
+        'breakfast',
+        'Breakfast',
+        (params['breakfastMinute'] as int?) ?? 8 * 60,
+        30,
+      ),
+      ('lunch', 'Lunch', (params['lunchMinute'] as int?) ?? 13 * 60, 45),
+      if (mealsPerDay >= 4)
+        (
+          'afternoon_snack',
+          'Snack',
+          (params['snackMinute'] as int?) ?? 17 * 60,
+          20,
+        ),
+      (
+        'dinner',
+        'Dinner',
+        (params['dinnerMinute'] as int?) ?? 20 * 60 + 30,
+        45,
+      ),
+      if (mealsPerDay >= 5) ('morning_snack', 'Snack', 10 * 60 + 30, 20),
+    ];
+
+    final dishLibrary = {
+      'breakfast': [
+        ['Oatmeal', 'Banana'],
+        ['Avocado Toast', 'Tofu Scramble'],
+        ['Smoothie Bowl', 'Granola'],
+        ['Poha', 'Boiled Sprouts'],
+        ['Besan Chilla', 'Mint Chutney'],
+        ['Idli', 'Coconut Chutney'],
+        ['Oat Pancakes', 'Maple Drizzle'],
+      ],
+      'lunch': [
+        ['Rice Bowl', 'Dal Curry'],
+        ['Quinoa Salad', 'Chickpeas'],
+        ['Whole Wheat Wrap', 'Hummus'],
+        ['Millet Bowl', 'Sambar'],
+        ['Rajma Chawal', 'Cucumber Salad'],
+        ['Curd Rice', 'Stir Fry Beans'],
+        ['Chole', 'Bhature'],
+      ],
+      'afternoon_snack': [
+        ['Greek Yogurt', 'Berries'],
+        ['Apple Slices', 'Peanut Butter'],
+        ['Mixed Nuts', 'Dried Figs'],
+        ['Chia Pudding', 'Walnuts'],
+        ['Roasted Makhana', 'Almonds'],
+        ['Fruit Chaat', 'Pumpkin Seeds'],
+        ['Protein Shake', 'Dates'],
+      ],
+      'morning_snack': [
+        ['Almonds', 'Green Tea'],
+        ['Walnuts', 'Dried Apricots'],
+        ['Fruit Bowl', 'Flax Seeds'],
+        ['Boiled Corn', 'Lemon Juice'],
+        ['Carrot Sticks', 'Hummus'],
+        ['Cucumber Slices', 'Mint Dip'],
+        ['Roasted Chana', 'Herbal Tea'],
+      ],
+      'dinner': [
+        ['Roti', 'Paneer Sabzi'],
+        ['Brown Rice', 'Lentil Soup'],
+        ['Khichdi', 'Roasted Veggies'],
+        ['Chapati', 'Mushroom Curry'],
+        ['Vegetable Stew', 'Appam'],
+        ['Palak Paneer', 'Missi Roti'],
+        ['Veg Biryani', 'Raita'],
+      ],
+    };
+
+    final candidates = <RoutineImportCandidateBlock>[];
+    for (var d = 1; d <= 7; d++) {
+      for (final slot in slotDefs) {
+        final slotId = slot.$1;
+        final title = slot.$2;
+        final start = slot.$3;
+        final duration = slot.$4;
+        final dishes =
+            dishLibrary[slotId]?[d - 1] ?? ['Dish A $d', 'Dish B $d'];
+
+        candidates.add(
+          RoutineImportCandidateBlock(
+            id: 'ai-gen-d$d-$slotId',
+            mealSlot: slotId,
+            title: title,
+            startMinute: start,
+            endMinute: start + duration,
+            hasFixedTime: true,
+            repeatDays: [d],
+            blockType: TimelineBlockDraft.softBlockKey,
+            category: 'eating',
+            hardBlock: false,
+            selected: true,
+            candidateType: RoutineImportCandidateType.block,
+            confidenceScore: 0.95,
+            confidenceLabel: 'high',
+            extractionEngine: 'test',
+            extractionVersion: 'phase2d',
+            needsManualReview: false,
+            steps: dishes,
+            mealCategory:
+                slotId == 'afternoon_snack' || slotId == 'morning_snack'
+                ? 'snack'
+                : slotId,
+            caloriesEstimate: mealCal.toDouble(),
+            proteinEstimate: mealPro.toDouble(),
+          ),
+        );
+      }
+    }
+
+    return RoutineImportExtractionResult(
+      id: 'test-gen-week',
+      uid: uid,
+      source: RoutineImportReviewSource.eating,
+      engine: 'test',
+      engineVersion: 'phase2d',
+      candidates: candidates,
+      warnings: const [],
+      createdAt: DateTime.now(),
+    );
+  }
 }

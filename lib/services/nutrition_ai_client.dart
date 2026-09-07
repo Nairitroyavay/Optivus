@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:optivus/config/ai_workers_config.dart';
-import 'package:optivus/config/backend_config.dart';
 import 'package:optivus/models/routine_import_review.dart';
 
 class MissingConfigException implements Exception {
@@ -14,7 +13,8 @@ class MissingConfigException implements Exception {
 }
 
 class MissingConfigNutritionAiClient implements NutritionAiClient {
-  const MissingConfigNutritionAiClient();
+  final String warning;
+  const MissingConfigNutritionAiClient([this.warning = 'missing_worker_url']);
 
   @override
   Future<RoutineImportExtractionResult> generateEatingRoutine({
@@ -29,29 +29,22 @@ class MissingConfigNutritionAiClient implements NutritionAiClient {
       engine: 'disabled',
       engineVersion: 'none',
       candidates: const [],
-      warnings: const ['missing_worker_url'],
+      warnings: [warning],
       createdAt: DateTime.now(),
     );
   }
 }
 
-enum NutritionAiClientMode { worker, fake, disabled, missingConfig }
+enum NutritionAiClientMode { worker, disabled, missingConfig }
 
 final nutritionAiClientModeProvider = Provider<NutritionAiClientMode>((ref) {
-  if (OptivusAiWorkersConfig.useWorker) {
-    if (OptivusAiWorkersConfig.nutritionWorkerUrl.trim().isEmpty) {
-      return NutritionAiClientMode.missingConfig;
-    }
-    return NutritionAiClientMode.worker;
+  if (OptivusAiWorkersConfig.mode == OptivusAiWorkerMode.disabled) {
+    return NutritionAiClientMode.disabled;
   }
-  if (OptivusAiWorkersConfig.allowFakeAiForTestsOnly &&
-      ref.watch(fakeDataAllowedProvider)) {
-    if (OptivusAiWorkersConfig.mode == OptivusAiWorkerMode.disabled) {
-      return NutritionAiClientMode.disabled;
-    }
-    return NutritionAiClientMode.fake;
+  if (OptivusAiWorkersConfig.nutritionWorkerUrl.trim().isEmpty) {
+    return NutritionAiClientMode.missingConfig;
   }
-  return NutritionAiClientMode.missingConfig;
+  return NutritionAiClientMode.worker;
 });
 
 final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
@@ -59,11 +52,10 @@ final nutritionAiClientProvider = Provider<NutritionAiClient>((ref) {
   switch (mode) {
     case NutritionAiClientMode.worker:
       return WorkerNutritionAiClient();
-    case NutritionAiClientMode.fake:
-      return const FakeNutritionAiClient();
     case NutritionAiClientMode.disabled:
+      return const MissingConfigNutritionAiClient('worker_disabled');
     case NutritionAiClientMode.missingConfig:
-      return const MissingConfigNutritionAiClient();
+      return const MissingConfigNutritionAiClient('missing_worker_url');
   }
 });
 
@@ -73,132 +65,6 @@ abstract class NutritionAiClient {
     required String idToken,
     required Map<String, dynamic> params,
   });
-}
-
-class FakeNutritionAiClient implements NutritionAiClient {
-  const FakeNutritionAiClient();
-
-  @override
-  Future<RoutineImportExtractionResult> generateEatingRoutine({
-    required String uid,
-    required String idToken,
-    required Map<String, dynamic> params,
-  }) async {
-    final start = (params['breakfastMinute'] as int?) ?? 480;
-    final int mealsPerDay = params['mealsPerDay'] as int? ?? 3;
-    final List<RoutineImportCandidateBlock> candidates = [];
-
-    if (mealsPerDay >= 1) {
-      candidates.add(
-        RoutineImportCandidateBlock(
-          id: 'ai_breakfast_gen',
-          title: 'Breakfast',
-          startMinute: start,
-          endMinute: start + 30,
-          hasFixedTime: true,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          blockType: 'soft_block',
-          category: 'eating',
-          hardBlock: false,
-          selected: true,
-          candidateType: RoutineImportCandidateType.block,
-          confidenceScore: 0.90,
-          confidenceLabel: 'high',
-          extractionEngine: 'fake',
-          extractionVersion: 'phase2d',
-          needsManualReview: false,
-          steps: const ['Oatmeal', 'Banana'],
-          mealCategory: 'breakfast',
-        ),
-      );
-    }
-
-    if (mealsPerDay >= 2) {
-      candidates.add(
-        RoutineImportCandidateBlock(
-          id: 'ai_lunch_gen',
-          title: 'Lunch',
-          startMinute: (params['lunchMinute'] as int?) ?? 13 * 60,
-          endMinute: ((params['lunchMinute'] as int?) ?? 13 * 60) + 45,
-          hasFixedTime: true,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          blockType: 'soft_block',
-          category: 'eating',
-          hardBlock: false,
-          selected: true,
-          candidateType: RoutineImportCandidateType.block,
-          confidenceScore: 0.90,
-          confidenceLabel: 'high',
-          extractionEngine: 'fake',
-          extractionVersion: 'phase2d',
-          needsManualReview: false,
-          steps: const ['Rice', 'Dal'],
-          mealCategory: 'lunch',
-        ),
-      );
-    }
-
-    if (mealsPerDay >= 4) {
-      candidates.add(
-        RoutineImportCandidateBlock(
-          id: 'ai_snack_gen',
-          title: 'Snack',
-          startMinute: (params['snackMinute'] as int?) ?? 17 * 60,
-          endMinute: ((params['snackMinute'] as int?) ?? 17 * 60) + 20,
-          hasFixedTime: true,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          blockType: 'soft_block',
-          category: 'eating',
-          hardBlock: false,
-          selected: true,
-          candidateType: RoutineImportCandidateType.block,
-          confidenceScore: 0.90,
-          confidenceLabel: 'high',
-          extractionEngine: 'fake',
-          extractionVersion: 'phase2d',
-          needsManualReview: false,
-          steps: const ['Apple'],
-          mealCategory: 'snack',
-        ),
-      );
-    }
-
-    if (mealsPerDay >= 3) {
-      candidates.add(
-        RoutineImportCandidateBlock(
-          id: 'ai_dinner_gen',
-          title: 'Dinner',
-          startMinute: (params['dinnerMinute'] as int?) ?? 20 * 60 + 30,
-          endMinute: ((params['dinnerMinute'] as int?) ?? 20 * 60 + 30) + 45,
-          hasFixedTime: true,
-          repeatDays: const [1, 2, 3, 4, 5, 6, 7],
-          blockType: 'soft_block',
-          category: 'eating',
-          hardBlock: false,
-          selected: true,
-          candidateType: RoutineImportCandidateType.block,
-          confidenceScore: 0.90,
-          confidenceLabel: 'high',
-          extractionEngine: 'fake',
-          extractionVersion: 'phase2d',
-          needsManualReview: false,
-          steps: const ['Roti', 'Curry'],
-          mealCategory: 'dinner',
-        ),
-      );
-    }
-
-    return RoutineImportExtractionResult(
-      id: 'fake-gen',
-      uid: uid,
-      source: RoutineImportReviewSource.eating,
-      engine: 'fake',
-      engineVersion: 'phase2d',
-      candidates: candidates,
-      warnings: const ['Fake AI generation result. Review manually.'],
-      createdAt: DateTime.now(),
-    );
-  }
 }
 
 class WorkerNutritionAiClient implements NutritionAiClient {
